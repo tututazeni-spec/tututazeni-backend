@@ -1,10 +1,49 @@
-datasource db {
-  provider = "postgresql"
-}
-
 generator client {
   provider = "prisma-client-js"
   output   = "./generated"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          Int          @id @default(autoincrement())
+  name        String
+  password    String
+  email       String       @unique
+  role        Role         @default(COLABORADOR)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  unitId      Int? // FK       
+  unit        Unit?        @relation(fields: [unitId], references: [id])
+  profile     Profile?
+  enrollments Enrollment[]
+  questions   Questions[]
+  answers     Answers[]
+}
+
+model Questions {
+  id        Int       @id @default(autoincrement())
+  title     String
+  body      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  answers   Answers[]
+}
+
+model Answers {
+  id         Int       @id @default(autoincrement())
+  body       String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  userId     Int
+  questionId Int
+  user       User      @relation(fields: [userId], references: [id])
+  question   Questions @relation(fields: [questionId], references: [id])
 }
 
 model Unit {
@@ -15,23 +54,11 @@ model Unit {
   users    User[]
 }
 
-model User {
-  id          Int          @id @default(autoincrement())
-  name        String
-  profile     Profile?
-  email       String       @unique
-  role        Role         @default(COLABORADOR)
-  posts       Post[]
-  unitId      Int?
-  unit        Unit?        @relation(fields: [unitId], references: [id])
-  enrollments Enrollment[]
-}
-
 model Profile {
   id     Int    @id @default(autoincrement())
   bio    String
-  user   User   @relation(fields: [userId], references: [id])
   userId Int    @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Post {
@@ -40,14 +67,12 @@ model Post {
   updatedAt  DateTime   @updatedAt
   title      String
   published  Boolean    @default(false)
-  author     User       @relation(fields: [authorId], references: [id])
-  authorId   Int
   categories Category[]
 }
 
 model Category {
   id    Int    @id @default(autoincrement())
-  name  String
+  name  String @unique
   posts Post[]
 }
 
@@ -71,7 +96,7 @@ model Module {
   title     String
   seq       Int
   createdAt DateTime @default(now())
-  course    Course   @relation(fields: [courseId], references: [id])
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   lessons   Lesson[]
 }
 
@@ -84,24 +109,21 @@ model Lesson {
   pdfUrl      String?
   seq         Int
   createdAt   DateTime          @default(now())
-  module      Module            @relation(fields: [moduleId], references: [id])
+  module      Module            @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   progresses  LessonProgress[]
 }
 
 model Enrollment {
-  id         Int              @id @default(autoincrement())
-  userId     Int
-  courseId   Int
-  status     EnrollmentStatus @default(EM_ANDAMENTO)
-  enrolledAt DateTime         @default(now())
-
-  user       User             @relation(fields: [userId], references: [id])
-  course     Course           @relation(fields: [courseId], references: [id])
-  progresses LessonProgress[]
-
-  attempts      EvaluationAttempt[] @relation("EnrollmentAttempts") // 1 Enrollment → N EvaluationAttempt
-  certificates  Certificate[]
-  certificateId Int?
+  id          Int                 @id @default(autoincrement())
+  userId      Int
+  courseId    Int
+  status      EnrollmentStatus    @default(EM_ANDAMENTO)
+  enrolledAt  DateTime            @default(now())
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progresses  LessonProgress[]
+  attempts    EvaluationAttempt[] @relation("EnrollmentAttempts")
+  certificate Certificate?
 
   @@index([userId])
   @@index([courseId])
@@ -113,8 +135,8 @@ model LessonProgress {
   lessonId     Int
   completed    Boolean    @default(false)
   completedAt  DateTime?
-  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id])
-  lesson       Lesson     @relation(fields: [lessonId], references: [id])
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lesson       Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@unique([enrollmentId, lessonId])
 }
@@ -124,9 +146,9 @@ model Evaluation {
   courseId           Int
   title              String
   question           String
-  options            String[]
+  options            Json
   correctOptionIndex Int
-  course             Course              @relation(fields: [courseId], references: [id])
+  course             Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
   attempts           EvaluationAttempt[]
 }
 
@@ -139,19 +161,19 @@ model EvaluationAttempt {
   attemptedAt    DateTime   @default(now())
   startedAt      DateTime   @default(now())
   finishedAt     DateTime?
-  enrollment     Enrollment @relation("EnrollmentAttempts", fields: [enrollmentId], references: [id])
   evaluationId   Int
-  evaluation     Evaluation @relation(fields: [evaluationId], references: [id])
+  enrollment     Enrollment @relation("EnrollmentAttempts", fields: [enrollmentId], references: [id], onDelete: Cascade)
+  evaluation     Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
 
   @@index([evaluationId])
 }
 
 model Certificate {
   id             Int        @id @default(autoincrement())
-  enrollmentId   Int        @unique // 
+  enrollmentId   Int        @unique
   issuedAt       DateTime   @default(now())
   validationCode String
-  enrollment     Enrollment @relation(fields: [enrollmentId], references: [id])
+  enrollment     Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
 }
 
 enum Role {
