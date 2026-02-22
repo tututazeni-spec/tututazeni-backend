@@ -271,7 +271,7 @@ exports.Prisma.QueryMode = {
   default: 'default',
   insensitive: 'insensitive'
 };
-exports.Role = exports.$Enums.Role = {
+exports.UserRole = exports.$Enums.UserRole = {
   COLABORADOR: 'COLABORADOR',
   LIDER: 'LIDER',
   RH: 'RH',

@@ -9,9 +9,14 @@ import { CoursesModule } from './courses/courses.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { LeaderModule } from './leader/leader.module';
 import { DatabaseModule } from './database/database.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: 'dev.db',
@@ -27,8 +32,7 @@ import { DatabaseModule } from './database/database.module';
     LeaderModule,
   ],
 
-  controllers: [AppController],   
-  providers: [AppService],       
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}
-

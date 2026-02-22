@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "./generated"
 }
 
 datasource db {
@@ -10,10 +9,10 @@ datasource db {
 
 model User {
   id          Int        @id @default(autoincrement())
-  name        String
+  fullName    String
   password    String
   email       String     @unique   
-  role        Role       @default(COLABORADOR)
+  role        UserRole       @default(COLABORADOR)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   unitId      Int?       // FK       
@@ -173,7 +172,7 @@ model Certificate {
   enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
 }
 
-enum Role {
+enum UserRole {
   COLABORADOR
   LIDER
   RH
