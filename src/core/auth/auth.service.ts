@@ -3,11 +3,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
-import { UserRole } from '@prisma/client';
 
 type JwtPayload = {
   sub: string;
-  role: UserRole;
+  role: string; // agora é string (nome da role)
 };
 
 @Injectable()
@@ -28,16 +27,33 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
+    // 🔥 Buscar role dinamicamente
+    const role = await this.prisma.role.findUnique({
+      where: { name: 'COLABORADOR' },
+    });
+
+    if (!role) {
+      throw new UnauthorizedException('Role COLABORADOR não encontrada');
+    }
+
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
         password: passwordHash,
         fullName: dto.fullName,
-        role: UserRole.COLABORADOR,
+        role: {
+          connect: { id: role.id },
+        },
+      },
+      include: {
+        role: true,
       },
     });
 
-    const tokens = await this.generateTokens(user.id.toString(), user.role);
+    const tokens = await this.generateTokens(
+      user.id.toString(),
+      user.role?.name ?? '',
+    );
 
     return {
       user,
@@ -48,6 +64,7 @@ export class AuthService {
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
+      include: { role: true },
     });
 
     if (!user) {
@@ -60,7 +77,10 @@ export class AuthService {
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
-    const tokens = await this.generateTokens(user.id.toString(), user.role);
+    const tokens = await this.generateTokens(
+      user.id.toString(),
+      user.role?.name ?? '',
+    );
 
     return {
       user,
@@ -68,7 +88,7 @@ export class AuthService {
     };
   }
 
-  async generateTokens(userId: string, role: UserRole) {
+  async generateTokens(userId: string, role: string) {
     const payload: JwtPayload = {
       sub: userId,
       role,

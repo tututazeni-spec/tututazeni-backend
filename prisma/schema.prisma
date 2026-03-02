@@ -15,7 +15,8 @@ model User {
   fullName                String
   password                String
   email                   String                  @unique
-  role                    UserRole                @default(COLABORADOR)
+  roleId                  Int?
+  role                    Role?                   @relation(fields: [roleId], references: [id], onDelete: SetNull)
   active                  Boolean                 @default(true)
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
@@ -48,6 +49,10 @@ model User {
   processSteps            ProcessStep[]
   trainings               Training[]
   trainingParticipants    TrainingParticipant[]
+  careers                 UserCareer[]
+  departmentId            Int?
+  department              Department?             @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  historyRecords          HistoryRecord[]
 }
 
 model Answers {
@@ -92,10 +97,27 @@ model Unit {
 }
 
 model Department {
-  id        Int      @id @default(autoincrement())
-  name      String
-  createdAt DateTime @default(now())
-  units     Unit[]   @relation("UnitDepartment")
+  id                 Int                 @id @default(autoincrement())
+  name               String
+  createdAt          DateTime            @default(now())
+  units              Unit[]              @relation("UnitDepartment")
+  users              User[]
+  dashboardSnapshots DashboardSnapshot[]
+
+  @@index([name])
+}
+
+model DashboardSnapshot {
+  id                    Int         @id @default(autoincrement())
+  departmentId          Int?
+  totalUsers            Int
+  totalCoursesCompleted Int
+  averageScore          Float
+  activePlans           Int
+  generatedAt           DateTime    @default(now())
+  department            Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@index([departmentId])
 }
 
 model Post {
@@ -111,6 +133,19 @@ model Category {
   id    Int    @id @default(autoincrement())
   name  String @unique
   posts Post[]
+}
+
+model GlobalSearchIndex {
+  id          Int      @id @default(autoincrement())
+  entityType  String
+  entityId    Int
+  title       String
+  description String?
+  route       String?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType])
+  @@index([title])
 }
 
 enum UserRole {
@@ -465,12 +500,13 @@ model OnboardingPlan {
 }
 
 model Competency {
-  id               Int                @id @default(autoincrement())
-  name             String             @unique
+  id               Int                  @id @default(autoincrement())
+  name             String               @unique
   description      String?
-  createdAt        DateTime           @default(now())
+  createdAt        DateTime             @default(now())
   courses          CourseCompetency[]
   userCompetencies UserCompetency[]
+  positions        PositionCompetency[]
 }
 
 model CourseCompetency {
@@ -588,6 +624,58 @@ model ProcessStep {
   updatedAt     DateTime        @updatedAt
   process       ProcessStandard @relation(fields: [processId], references: [id], onDelete: Cascade)
   responsible   User            @relation(fields: [responsibleId], references: [id], onDelete: Cascade)
+}
+
+model CareerPosition {
+  id           Int                  @id @default(autoincrement())
+  title        String
+  description  String
+  level        String
+  createdAt    DateTime             @default(now())
+  competencies PositionCompetency[]
+  users        UserCareer[]
+
+  @@index([level])
+}
+
+model PositionCompetency {
+  id            Int            @id @default(autoincrement())
+  positionId    Int
+  competencyId  Int
+  requiredLevel Int
+  position      CareerPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  competency    Competency     @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@unique([positionId, competencyId])
+  @@index([positionId])
+  @@index([competencyId])
+}
+
+model UserCareer {
+  id         Int            @id @default(autoincrement())
+  userId     Int
+  positionId Int
+  startedAt  DateTime       @default(now())
+  endedAt    DateTime?
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  position   CareerPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([positionId])
+}
+
+model HistoryRecord {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  action      String
+  entityType  String
+  entityId    Int?
+  description String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([entityType])
 }
 
 //////////////////////////
@@ -729,15 +817,25 @@ model IntegrationConfig {
 // ROLES & PERMISSIONS
 //////////////////////////
 model Role {
-  id          Int              @id @default(autoincrement())
-  name        String           @unique
-  permissions RolePermission[]
+  id              Int              @id @default(autoincrement())
+  name            String           @unique
+  description     String?
+  users           User[]
+  permissions     Permission[]
+  rolePermissions RolePermission[]
 }
 
 model Permission {
   id              Int              @id @default(autoincrement())
   name            String           @unique
+  action          String
+  subject         String
+  roleId          Int
+  role            Role             @relation(fields: [roleId], references: [id], onDelete: Cascade)
   rolePermissions RolePermission[]
+
+  @@index([action])
+  @@index([subject])
 }
 
 model RolePermission {

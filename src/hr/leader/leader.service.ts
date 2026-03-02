@@ -6,16 +6,23 @@ export class LeaderService {
   constructor(private prisma: PrismaService) {}
 
   async getDashboard(userId: string) {
-    const leader = await this.prisma.user.findUnique({
-      where: { id: Number(userId) },
-    });
-    if (!leader || leader.role !== 'LIDER') {
-      throw new Error('Não autorizado');
-    }
+  const leader = await this.prisma.user.findUnique({
+    where: { id: Number(userId) },
+    include: { role: true },
+  });
+
+  if (!leader?.role || leader.role.name !== 'LIDER') {
+    throw new Error('Usuário não é líder');
+  }
 
     const collaborators = await this.prisma.user.findMany({
-      where: { unitId: leader.unitId, role: 'COLABORADOR' },
-    });
+  where: {
+    unitId: leader.unitId,
+    role: {
+      name: 'COLABORADOR', // ✅ filtra pelo name da relação Role
+    },
+  },
+});
 
     const collaboratorIds = collaborators.map((c) => c.id);
 

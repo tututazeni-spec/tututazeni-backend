@@ -10,6 +10,8 @@ import { UsersModule } from './core/users/user.module';
 import { AuthModule } from './core/auth/auth.module';
 import { RolesPermissionsModule } from './core/rolespermissions/rolespermissions.module';
 import { OrganizationModule } from './core/organization/organization.module';
+import { SearchModule } from './core/search/search.module';
+import { AclModule } from './core/acl/acl.module';
 
 // LEARNING
 import { CoursesModule } from './learning/courses/courses.module';
@@ -33,6 +35,9 @@ import { TalentDevelopmentModule } from './hr/talentdevelopment/talentdevelopmen
 import { LeadershipModule } from './hr/leadership/leadership.module';
 import { KnowledgeModule } from './hr/knowledge/knowledge.module';
 import { ProcessStandardModule } from './hr/processstandard/processstandard.module';
+import { CareerModule } from './hr/career/career.module';
+import { DashboardModule } from './hr/dashboard/dashboard.module';
+import { HistoryModule } from './hr/history/history.module';
 
 // INTELLIGENCE
 import { AnalyticsModule } from './intelligence/analytics/analytics.module';
@@ -73,6 +78,8 @@ import { AppService } from './app.service';
     AuthModule,
     RolesPermissionsModule,
     OrganizationModule,
+    SearchModule,
+    AclModule,
 
     // LEARNING
     CoursesModule,
@@ -96,6 +103,9 @@ import { AppService } from './app.service';
     LeadershipModule,
     KnowledgeModule,
     ProcessStandardModule,
+    CareerModule,
+    DashboardModule,
+    HistoryModule,
 
     // INTELLIGENCE
     AnalyticsModule,
