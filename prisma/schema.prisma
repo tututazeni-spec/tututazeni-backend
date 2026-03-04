@@ -60,6 +60,10 @@ model User {
   liveAttendances         LiveAttendance[]
   liveMessages            LiveChatMessage[]
   postClassResponses      PostClassResponse[]
+  instructorProfile       InstructorProfile?
+  instructorReviews       InstructorReview[]
+  events                  Event[]
+  eventParticipants       EventParticipant[]
 }
 
 model Answers {
@@ -1016,4 +1020,102 @@ enum AiRole {
   USER
   ASSISTANT
   SYSTEM
+}
+
+//////////////////////////
+// INSTRUCTOR
+//////////////////////////
+
+model InstructorProfile {
+  id                 Int                 @id @default(autoincrement())
+  userId             Int                 @unique
+  bio                String?
+  expertiseArea      String
+  approved           Boolean             @default(false)
+  ratingAverage      Float               @default(0)
+  totalCourses       Int                 @default(0)
+  createdAt          DateTime            @default(now())
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviews            InstructorReview[]
+  payouts            InstructorPayout[]
+  marketplaceCourses MarketplaceCourse[]
+  courses            InstructorCourse[]  @relation("InstructorProfileCourses")
+  instructorLinks    InstructorCourse[]  @relation("InstructorProfileLinks")
+}
+
+model InstructorCourse {
+  id                    String             @id @default(uuid())
+  instructorId          Int
+  marketplaceCourseId   String
+  instructor            InstructorProfile  @relation(fields: [instructorId], references: [id], name: "InstructorProfileCourses")
+  instructorLinkProfile InstructorProfile? @relation(fields: [instructorId], references: [id], name: "InstructorProfileLinks")
+  marketplaceCourse     MarketplaceCourse  @relation(fields: [marketplaceCourseId], references: [id], onDelete: Cascade)
+
+  @@unique([instructorId, marketplaceCourseId])
+}
+
+model InstructorReview {
+  id           Int               @id @default(autoincrement())
+  instructorId Int
+  userId       Int
+  rating       Int
+  comment      String
+  createdAt    DateTime          @default(now())
+  instructor   InstructorProfile @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([instructorId, userId])
+}
+
+model InstructorPayout {
+  id           String            @id @default(uuid())
+  amount       Float
+  createdAt    DateTime          @default(now())
+  instructorId Int
+  instructor   InstructorProfile @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+}
+
+model MarketplaceCourse {
+  id              String             @id @default(uuid())
+  title           String
+  price           Float
+  createdAt       DateTime           @default(now())
+  instructorId    Int
+  instructor      InstructorProfile  @relation(fields: [instructorId], references: [id])
+  instructorLinks InstructorCourse[]
+}
+
+//////////////////////////
+// EVENTS
+//////////////////////////
+
+model Event {
+  id           Int                @id @default(autoincrement())
+  title        String
+  description  String?
+  startAt      DateTime
+  endAt        DateTime
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  organizerId  Int
+  participants EventParticipant[]
+  location     String?
+  organizer    User               @relation(fields: [organizerId], references: [id])
+}
+
+model EventParticipant {
+  id      Int         @id @default(autoincrement())
+  eventId Int
+  userId  Int
+  status  EventStatus @default(PENDING)
+  event   Event       @relation(fields: [eventId], references: [id])
+  user    User        @relation(fields: [userId], references: [id])
+
+  @@unique([eventId, userId])
+}
+
+enum EventStatus {
+  PENDING
+  CONFIRMED
+  CANCELED
 }

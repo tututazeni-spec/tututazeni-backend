@@ -65,6 +65,12 @@ import { ExecutivePdfModule } from './reporting/executive-pdf/executive-pdf.modu
 // AI
 import { AiTutorModule } from './ai/tutor/ai-tutor.module';
 
+// INSTRUCTOR MARKETPLACE
+import { InstructorMarketplaceModule } from './instructor/instructor-marketplace.module';
+
+// EVENTS
+import { EventsModule } from './events/events.module';
+
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -142,6 +148,12 @@ import { AppService } from './app.service';
 
     // AI
     AiTutorModule,
+
+    // INSTRUCTOR MARKETPLACE
+    InstructorMarketplaceModule,
+
+    // EVENTS
+    EventsModule,
 
   ],
   controllers: [AppController],
