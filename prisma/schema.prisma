@@ -315,6 +315,11 @@ model Evaluation {
   question           String
   options            Json
   correctOptionIndex Int
+  employee           Employee             @relation(fields: [employeeId], references: [id])
+  employeeId         Int
+  score              Float
+  feedback           String
+  evaluatedAt        DateTime
   course             Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
   attempts           EvaluationAttempt[]
   questions          EvaluationQuestion[]
@@ -753,6 +758,67 @@ model HistoryRecord {
 
   @@index([userId])
   @@index([entityType])
+}
+
+model Employee {
+  id          Int           @id @default(autoincrement())
+  name        String
+  email       String        @unique
+  role        String
+  joinedAt    DateTime
+  careerPlans CareerPlan[]
+  feedbacks   Feedback360[]
+  contracts   Contract[]
+  evaluations Evaluation[]
+  attendances Attendance[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Contract {
+  id         Int      @id @default(autoincrement())
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  employeeId Int
+  startDate  DateTime
+  endDate    DateTime
+  status     String // "active", "expired", "pending_renewal"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Attendance {
+  id          Int      @id @default(autoincrement())
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  employeeId  Int
+  date        DateTime
+  hoursWorked Float
+  status      String // "present", "absent", "late"
+  createdAt   DateTime @default(now())
+}
+
+model CareerPlan {
+  id          Int      @id @default(autoincrement())
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  employeeId  Int
+  title       String
+  description String
+  startDate   DateTime
+  endDate     DateTime
+  status      String // "active", "completed", "pending"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Feedback360 {
+  id            Int      @id @default(autoincrement())
+  employee      Employee @relation(fields: [employeeId], references: [id])
+  employeeId    Int
+  evaluatorName String
+  evaluatorRole String
+  score         Float
+  comments      String
+  evaluatedAt   DateTime
+  createdAt     DateTime @default(now())
 }
 
 //////////////////////////

@@ -39,6 +39,8 @@ import { ProcessStandardModule } from './hr/processstandard/processstandard.modu
 import { CareerModule } from './hr/career/career.module';
 import { DashboardModule } from './hr/dashboard/dashboard.module';
 import { HistoryModule } from './hr/history/history.module';
+import { DashboardRhModule } from './hr/dashboard-rh/dashboard-rh.module';
+import { CareerPlansModule } from './hr/career-plans/career-plans.module';
 
 // INTELLIGENCE
 import { AnalyticsModule } from './intelligence/analytics/analytics.module';
@@ -123,6 +125,8 @@ import { AppService } from './app.service';
     CareerModule,
     DashboardModule,
     HistoryModule,
+    DashboardRhModule,
+    CareerPlansModule,
 
     // INTELLIGENCE
     AnalyticsModule,
