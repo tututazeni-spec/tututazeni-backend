@@ -870,6 +870,26 @@ model ScalabilitySnapshot {
   createdAt          DateTime @default(now())
 }
 
+model ExecutiveSnapshot {
+  id                   Int          @id @default(autoincrement())
+  organization         Organization @relation(fields: [organizationId], references: [id])
+  organizationId       Int
+  totalUsers           Int
+  totalEmployees       Int
+  activeCourses        Int
+  courseCompletionRate Float
+  averagePerformance   Float
+  engagementScore      Float
+  roi                  Float
+  createdAt            DateTime     @default(now())
+}
+
+model Organization {
+  id        Int                 @id @default(autoincrement())
+  name      String
+  snapshots ExecutiveSnapshot[]
+}
+
 //////////////////////////
 // ENGAGEMENT
 //////////////////////////

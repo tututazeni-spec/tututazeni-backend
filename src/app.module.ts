@@ -73,6 +73,9 @@ import { InstructorMarketplaceModule } from './instructor/instructor-marketplace
 // EVENTS
 import { EventsModule } from './events/events.module';
 
+// PAINEL FINAL INTEGRADO
+import { PainelFinalIntegradoModule } from './modules/painel-final-integrado/painel-final-integrado.module';
+
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -158,6 +161,9 @@ import { AppService } from './app.service';
 
     // EVENTS
     EventsModule,
+
+    // PAINEL FINAL INTEGRADO
+    PainelFinalIntegradoModule,
 
   ],
   controllers: [AppController],

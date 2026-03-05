@@ -7,5 +7,6 @@ import { PrismaModule } from '../../prisma/prisma.module';
   imports: [PrismaModule],
   providers: [RoiImpactService],
   controllers: [RoiImpactController],
+  exports: [RoiImpactService],
 })
 export class RoiImpactModule {}
