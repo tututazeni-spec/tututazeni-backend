@@ -6,7 +6,7 @@ import { RegisterDto, LoginDto } from './dto/auth.dto';
 
 type JwtPayload = {
   sub: string;
-  role: string; // agora é string (nome da role)
+  role: string;
 };
 
 @Injectable()
@@ -15,6 +15,15 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
   ) {}
+
+  // Helper para garantir que sempre teremos o role "COLABORADOR"
+  private async getOrCreateDefaultRole() {
+    let role = await this.prisma.role.findUnique({ where: { name: 'COLABORADOR' } });
+    if (!role) {
+      role = await this.prisma.role.create({ data: { name: 'COLABORADOR' } });
+    }
+    return role;
+  }
 
   async register(dto: RegisterDto) {
     const existing = await this.prisma.user.findUnique({
@@ -27,36 +36,28 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    // 🔥 Buscar role dinamicamente
-    const role = await this.prisma.role.findUnique({
-      where: { name: 'COLABORADOR' },
-    });
-
-    if (!role) {
-      throw new UnauthorizedException('Role COLABORADOR não encontrada');
-    }
+    // Sempre garante role válido
+    const role = await this.getOrCreateDefaultRole();
 
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
         password: passwordHash,
         fullName: dto.fullName,
-        role: {
-          connect: { id: role.id },
-        },
+        role: { connect: { id: role.id } },
       },
-      include: {
-        role: true,
-      },
+      include: { role: true },
     });
 
-    const tokens = await this.generateTokens(
-      user.id.toString(),
-      user.role?.name ?? '',
-    );
+    const tokens = await this.generateTokens(user.id.toString(), role.name);
 
     return {
-      user,
+      user: {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: role.name,
+      },
       ...tokens,
     };
   }
@@ -67,32 +68,31 @@ export class AuthService {
       include: { role: true },
     });
 
-    if (!user) {
+    if (!user || !user.role) {
+      // Garantimos que user.role nunca é null
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
     const valid = await bcrypt.compare(dto.password, user.password);
-
     if (!valid) {
       throw new UnauthorizedException('Credenciais inválidas');
     }
 
-    const tokens = await this.generateTokens(
-      user.id.toString(),
-      user.role?.name ?? '',
-    );
+    const tokens = await this.generateTokens(user.id.toString(), user.role.name);
 
     return {
-      user,
+      user: {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role.name,
+      },
       ...tokens,
     };
   }
 
   async generateTokens(userId: string, role: string) {
-    const payload: JwtPayload = {
-      sub: userId,
-      role,
-    };
+    const payload: JwtPayload = { sub: userId, role };
 
     const accessToken = await this.jwt.signAsync(payload, {
       secret: process.env.JWT_SECRET ?? 'access-secret',
@@ -104,9 +104,6 @@ export class AuthService {
       expiresIn: '7d',
     });
 
-    return {
-      accessToken,
-      refreshToken,
-    };
+    return { accessToken, refreshToken };
   }
 }
