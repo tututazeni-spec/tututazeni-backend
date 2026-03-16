@@ -1,35 +1,36 @@
 import {
   IsString,
+  IsNotEmpty,
+  IsNumber,
+  IsISO8601,
   IsOptional,
-  IsDateString,
-  IsInt,
   IsArray,
-  ArrayNotEmpty,
 } from 'class-validator';
 
 export class CreateEventDto {
   @IsString()
-  title: string;
+  @IsNotEmpty()
+  title!: string;
 
   @IsOptional()
   @IsString()
   description?: string;
 
-  @IsDateString()
-  startAt: string;
-
-  @IsDateString()
-  endAt: string;
-
   @IsOptional()
   @IsString()
-  location?: string;
+  location?: string; // ✅ corrigido
 
-  @IsInt()
-  organizerId: number;
+  @IsISO8601()
+  startAt!: string;
+
+  @IsISO8601()
+  endAt!: string;
+
+  @IsNumber()
+  organizerId!: number;
 
   @IsOptional()
   @IsArray()
-  @ArrayNotEmpty()
-  participantIds?: number[];
+  participantIds?: number[]; // ✅ corrigido
 }
+

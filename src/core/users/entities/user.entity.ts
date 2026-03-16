@@ -1,17 +1,17 @@
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 
-@Entity('users')
+@Entity()
 export class User {
   @PrimaryGeneratedColumn()
-  id: number;
+  id!: number; // corrigido: adicionando "!"
 
   @Column()
-  name: string;
+  name!: string; // corrigido: adicionando "!"
 
   @Column({ unique: true })
-  email: string;
+  email!: string; // corrigido: adicionando "!"
 
   @Column({ default: true })
-  active: boolean;
+  active!: boolean; // corrigido: adicionando "!"
 }
 

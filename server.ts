@@ -1,5 +1,5 @@
 import express from "express";
-import enrollmentsRoutes from "./routes/enrollmentsRoutes"; // ajuste o caminho conforme seu projeto
+import enrollmentsRoutes from "./src/routes/enrollmentsRoutes"; // ajuste o caminho conforme seu projeto
 
 // Cria a instância do Express
 const app = express();
