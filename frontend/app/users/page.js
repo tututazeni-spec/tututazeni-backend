@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet } from "@/lib/api";
+import { apiRequest } from '../../lib/api'; // caminho relativo correto
 
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
 
   useEffect(() => {
     async function loadUsers() {
-      const data = await apiGet("/users");
-      setUsers(data);
+      try {
+        const data = await apiRequest("/users"); // usar apiRequest, não apiGet
+        setUsers(data);
+      } catch (error) {
+        console.error("Erro ao carregar usuários:", error);
+      }
     }
 
     loadUsers();
@@ -19,15 +23,15 @@ export default function UsersPage() {
     <div className="p-10">
       <h1 className="text-2xl font-bold mb-4">Lista de Utilizadores</h1>
 
-      {users.map((user) => (
-        <div
-          key={user.id}
-          className="p-4 border rounded mb-2"
-        >
-          {user.name}
-        </div>
-      ))}
+      {users.length === 0 ? (
+        <p>Nenhum usuário encontrado.</p>
+      ) : (
+        users.map((user) => (
+          <div key={user.id} className="p-4 border rounded mb-2">
+            {user.name}
+          </div>
+        ))
+      )}
     </div>
   );
 }
-

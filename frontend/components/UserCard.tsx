@@ -4,10 +4,10 @@ interface Props {
   user: User;
 }
 
-export default function UserCard({ user }) {
+export default function UserCard({ user }: Props) {
   return (
-    <div>
-      <h2>{user.name}</h2>
+    <div className="p-4 border rounded mb-2">
+      <h2 className="text-lg font-semibold">{user.name}</h2>
     </div>
   );
 }

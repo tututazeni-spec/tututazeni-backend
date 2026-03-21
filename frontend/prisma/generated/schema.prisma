@@ -1,0 +1,197 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id          Int          @id @default(autoincrement())
+  name        String
+  password    String
+  email       String       @unique
+  role        UserRole     @default(COLABORADOR)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  unitId      Int? // FK       
+  unit        Unit?        @relation(fields: [unitId], references: [id])
+  profile     Profile?
+  enrollments Enrollment[]
+  questions   Questions[]
+  answers     Answers[]
+}
+
+model Questions {
+  id        Int       @id @default(autoincrement())
+  title     String
+  body      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  answers   Answers[]
+}
+
+model Answers {
+  id         Int       @id @default(autoincrement())
+  body       String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  userId     Int
+  questionId Int
+  user       User      @relation(fields: [userId], references: [id])
+  question   Questions @relation(fields: [questionId], references: [id])
+}
+
+model Unit {
+  id       Int     @id @default(autoincrement())
+  name     String
+  tipo     String // Loja, Centro Logístico, Indústria, Escritório
+  province String?
+  users    User[]
+}
+
+model Profile {
+  id     Int    @id @default(autoincrement())
+  bio    String
+  userId Int    @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Post {
+  id         Int        @id @default(autoincrement())
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  title      String
+  published  Boolean    @default(false)
+  categories Category[]
+}
+
+model Category {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  posts Post[]
+}
+
+model Course {
+  id            Int          @id @default(autoincrement())
+  title         String
+  description   String?
+  category      String?
+  workloadHours Int?
+  mandatory     Boolean      @default(false)
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  modules       Module[]
+  enrollments   Enrollment[]
+  evaluations   Evaluation[]
+}
+
+model Module {
+  id        Int      @id @default(autoincrement())
+  courseId  Int
+  title     String
+  seq       Int
+  createdAt DateTime @default(now())
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons   Lesson[]
+}
+
+model Lesson {
+  id          Int               @id @default(autoincrement())
+  moduleId    Int
+  title       String
+  contentType LessonContentType @default(VIDEO)
+  videoUrl    String?
+  pdfUrl      String?
+  seq         Int
+  createdAt   DateTime          @default(now())
+  module      Module            @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  progresses  LessonProgress[]
+}
+
+model Enrollment {
+  id          Int                 @id @default(autoincrement())
+  userId      Int
+  courseId    Int
+  status      EnrollmentStatus    @default(EM_ANDAMENTO)
+  enrolledAt  DateTime            @default(now())
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progresses  LessonProgress[]
+  attempts    EvaluationAttempt[] @relation("EnrollmentAttempts")
+  certificate Certificate?
+
+  @@index([userId])
+  @@index([courseId])
+}
+
+model LessonProgress {
+  id           Int        @id @default(autoincrement())
+  enrollmentId Int
+  lessonId     Int
+  completed    Boolean    @default(false)
+  completedAt  DateTime?
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lesson       Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, lessonId])
+}
+
+model Evaluation {
+  id                 Int                 @id @default(autoincrement())
+  courseId           Int
+  title              String
+  question           String
+  options            Json
+  correctOptionIndex Int
+  course             Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  attempts           EvaluationAttempt[]
+}
+
+model EvaluationAttempt {
+  id             Int        @id @default(autoincrement())
+  enrollmentId   Int
+  validationCode String
+  scorePercent   Float?
+  passed         Boolean?
+  attemptedAt    DateTime   @default(now())
+  startedAt      DateTime   @default(now())
+  finishedAt     DateTime?
+  evaluationId   Int
+  enrollment     Enrollment @relation("EnrollmentAttempts", fields: [enrollmentId], references: [id], onDelete: Cascade)
+  evaluation     Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  @@index([evaluationId])
+}
+
+model Certificate {
+  id             Int        @id @default(autoincrement())
+  enrollmentId   Int        @unique
+  issuedAt       DateTime   @default(now())
+  validationCode String
+  enrollment     Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+}
+
+enum UserRole {
+  COLABORADOR
+  LIDER
+  RH
+  ADMIN
+}
+
+enum EnrollmentStatus {
+  EM_ANDAMENTO
+  CONCLUIDO
+  CANCELADO
+}
+
+enum LessonContentType {
+  VIDEO
+  AVATAR
+  PDF
+  QUIZ
+}

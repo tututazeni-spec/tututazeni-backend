@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiRequest } from "../../../../src/lib/api";
+import { apiRequest } from "../../../lib/api";
 import { useParams } from "next/navigation";
 
 type Lesson = {
