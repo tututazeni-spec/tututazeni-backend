@@ -7,8 +7,8 @@
   "license": "UNLICENSED",
   "scripts": {
     "dev": "next dev",
-    "build": "nest build",
-    "start": "node dist/main.js",
+    "build": "next build",
+    "start": "next start",
     "generate": "prisma generate",
     "prisma:format": "prisma format",
     "prisma:validate": "prisma validate",
