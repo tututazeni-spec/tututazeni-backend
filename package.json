@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node dist/main.js",
     "generate": "prisma generate",
     "prisma:format": "prisma format",
     "prisma:validate": "prisma validate",

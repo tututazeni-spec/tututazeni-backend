@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
-    "module": "CommonJS",
+    "module": "commonjs",
     "target": "ES2020",
-    "moduleResolution": "Node",
+    "moduleResolution": "node",
     "outDir": "./dist",
     "rootDir": "src",
     "strict": true,
@@ -12,13 +12,7 @@
     "allowSyntheticDefaultImports": true,
     "sourceMap": true,
     "resolveJsonModule": true,
-    "skipLibCheck": true,
-
-    // ✅ Alias para Next.js
-    "baseUrl": "frontend",
-    "paths": {
-      "@/*": ["src/*"]
-    }
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules"]
