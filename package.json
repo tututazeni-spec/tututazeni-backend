@@ -6,8 +6,8 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "cd frontend && npm install && npm run build",
-    "start": "node dist/main.js",
+    "build": "tsc",
+    "start": "node dist/index.js",
     "generate": "prisma generate",
     "prisma:format": "prisma format",
     "prisma:validate": "prisma validate",
