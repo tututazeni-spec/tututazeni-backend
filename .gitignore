@@ -2,6 +2,7 @@
 Dependencies
 =========================
 
+frontend/
 node_modules/
 prisma/migrations/*.sql
 
