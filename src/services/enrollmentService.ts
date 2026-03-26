@@ -1,5 +1,7 @@
 import prisma from "../lib/prisma";
-import { EnrollmentStatus, Prisma } from "@prisma/client";
+
+// Definido localmente para não depender do generate em tempo de build
+export type EnrollmentStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "CANCELADO";
 
 export type Enrollment = {
   id: number;
@@ -7,6 +9,12 @@ export type Enrollment = {
   courseId: number;
   status: EnrollmentStatus;
   createdAt: Date;
+};
+
+export type UpdateEnrollmentInput = {
+  status?: EnrollmentStatus;
+  userId?: number;
+  courseId?: number;
 };
 
 // Buscar todos os enrollments
@@ -17,13 +25,15 @@ export async function getEnrollments(): Promise<Enrollment[]> {
     id: e.id,
     userId: e.userId,
     courseId: e.courseId,
-    status: e.status,
+    status: e.status as EnrollmentStatus,
     createdAt: e.enrolledAt,
   }));
 }
 
 // Buscar enrollment por ID
-export async function getEnrollmentById(id: number): Promise<Enrollment | null> {
+export async function getEnrollmentById(
+  id: number
+): Promise<Enrollment | null> {
   const enrollment = await prisma.enrollment.findUnique({
     where: { id },
   });
@@ -34,7 +44,7 @@ export async function getEnrollmentById(id: number): Promise<Enrollment | null> 
     id: enrollment.id,
     userId: enrollment.userId,
     courseId: enrollment.courseId,
-    status: enrollment.status,
+    status: enrollment.status as EnrollmentStatus,
     createdAt: enrollment.enrolledAt,
   };
 }
@@ -43,7 +53,7 @@ export async function getEnrollmentById(id: number): Promise<Enrollment | null> 
 export async function createEnrollment(
   userId: number,
   courseId: number,
-  status: EnrollmentStatus
+  status: EnrollmentStatus = "EM_ANDAMENTO"
 ): Promise<Enrollment> {
   const enrollment = await prisma.enrollment.create({
     data: {
@@ -57,15 +67,15 @@ export async function createEnrollment(
     id: enrollment.id,
     userId: enrollment.userId,
     courseId: enrollment.courseId,
-    status: enrollment.status,
+    status: enrollment.status as EnrollmentStatus,
     createdAt: enrollment.enrolledAt,
   };
 }
 
-// Atualizar enrollment
+// Actualizar enrollment
 export async function updateEnrollment(
   id: number,
-  data: Prisma.EnrollmentUpdateInput
+  data: UpdateEnrollmentInput
 ): Promise<Enrollment> {
   const enrollment = await prisma.enrollment.update({
     where: { id },
@@ -76,15 +86,14 @@ export async function updateEnrollment(
     id: enrollment.id,
     userId: enrollment.userId,
     courseId: enrollment.courseId,
-    status: enrollment.status,
+    status: enrollment.status as EnrollmentStatus,
     createdAt: enrollment.enrolledAt,
   };
 }
 
-// Deletar enrollment
+// Eliminar enrollment
 export async function deleteEnrollment(id: number): Promise<void> {
   await prisma.enrollment.delete({
     where: { id },
   });
 }
-

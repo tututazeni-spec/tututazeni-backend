@@ -1,9 +1,12 @@
 =========================
 Dependencies
 =========================
-
-frontend/
 node_modules/
+
+# Frontend project
+frontend/
+
+# Prisma
 prisma/migrations/*.sql
 
 =========================
