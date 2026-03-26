@@ -25,8 +25,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "render:build": "npm install && npm run db:generate && npm run build",
-    "render:start": "npm run db:generate && npm start"
+    "render:build": "npm install && npm run db:deploy && npm run build",
+    "render:start": "npm start"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
