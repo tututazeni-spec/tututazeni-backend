@@ -1,106 +1,64 @@
-<<<<<<< HEAD
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+=========================
+Dependencies
+=========================
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-=======
-# =========================
-# Dependencies
-# =========================
 node_modules/
 
-# =========================
-# Build files
-# =========================
+=========================
+Build files
+=========================
+
 dist/
 build/
+.next/
+out/
 
-# =========================
-# Environment variables
-# =========================
+=========================
+Environment variables
+=========================
+
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# =========================
-# Database
-# =========================
-dev.db
-db.sqlite
-*.sqlite
-*.db
+=========================
+Logs
+=========================
 
-# =========================
-# Logs
-# =========================
 logs/
-*.log
-npm-debug.log*
+.log
+npm-debug.log
 yarn-debug.log*
 yarn-error.log*
 
-# =========================
-# Coverage
-# =========================
+=========================
+Coverage
+=========================
+
 coverage/
 
-# =========================
-# Temporary files
-# =========================
+=========================
+Temporary files
+=========================
+
 tmp/
 temp/
 *.tmp
 
-# =========================
-# IDE / Editor files
-# =========================
+=========================
+IDE / Editor files
+=========================
+
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# =========================
-# OS files
-# =========================
+=========================
+OS files
+=========================
+
 .DS_Store
 Thumbs.db
->>>>>>> 4435e577cdbdd0d3a5168570d881fc4d1e643e59

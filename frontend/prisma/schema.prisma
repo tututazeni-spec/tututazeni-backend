@@ -3,8 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
 }
 
 //////////////////////////
@@ -12,7 +11,7 @@ datasource db {
 //////////////////////////
 model User {
   id                      Int                     @id @default(autoincrement())
-  fullName                String
+  fullName                String                  @db.Text
   password                String
   email                   String                  @unique
   roleId                  Int?
@@ -68,7 +67,7 @@ model User {
 
 model Answers {
   id         Int       @id @default(autoincrement())
-  body       String
+  body       String    @db.Text
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   userId     Int
@@ -79,8 +78,8 @@ model Answers {
 
 model Questions {
   id        Int       @id @default(autoincrement())
-  title     String
-  body      String?
+  title     String    @db.Text
+  body      String?   @db.Text
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   userId    Int
@@ -90,7 +89,7 @@ model Questions {
 
 model Profile {
   id     Int    @id @default(autoincrement())
-  bio    String
+  bio    String @db.Text
   userId Int    @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -136,7 +135,7 @@ model Post {
   id         Int        @id @default(autoincrement())
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
-  title      String
+  title      String     @db.Text
   published  Boolean    @default(false)
   categories Category[]
 }
@@ -152,7 +151,7 @@ model GlobalSearchIndex {
   entityType  String
   entityId    Int
   title       String
-  description String?
+  description String?  @db.Text
   route       String?
   createdAt   DateTime @default(now())
 
@@ -172,8 +171,8 @@ enum UserRole {
 //////////////////////////
 model Course {
   id            Int                  @id @default(autoincrement())
-  title         String
-  description   String?
+  title         String               @db.Text
+  description   String?              @db.Text
   category      String?
   workloadHours Int?
   mandatory     Boolean              @default(false)
@@ -193,8 +192,8 @@ model Course {
 
 model LearningPath {
   id          Int                      @id @default(autoincrement())
-  title       String
-  description String?
+  title       String                   @db.Text
+  description String?                  @db.Text
   mandatory   Boolean                  @default(false)
   createdAt   DateTime                 @default(now())
   courses     LearningPathCourse[]
@@ -236,8 +235,8 @@ model Lesson {
   moduleId    Int
   title       String
   contentType LessonContentType @default(VIDEO)
-  videoUrl    String?
-  pdfUrl      String?
+  videoUrl    String?           @db.Text
+  pdfUrl      String?           @db.Text
   seq         Int
   createdAt   DateTime          @default(now())
   module      Module            @relation(fields: [moduleId], references: [id], onDelete: Cascade)
@@ -274,7 +273,7 @@ model Assessment {
 model AssessmentQuestion {
   id           Int        @id @default(autoincrement())
   assessmentId Int
-  question     String
+  question     String     @db.Text
   options      Json
   correctIndex Int
   weight       Float      @default(1)
@@ -312,14 +311,14 @@ model Evaluation {
   courseId           Int
   title              String
   createdAt          DateTime             @default(now())
-  question           String
+  question           String               @db.Text
   options            Json
   correctOptionIndex Int
-  employee           Employee             @relation(fields: [employeeId], references: [id])
   employeeId         Int
   score              Float
-  feedback           String
+  feedback           String               @db.Text
   evaluatedAt        DateTime
+  employee           Employee             @relation(fields: [employeeId], references: [id])
   course             Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
   attempts           EvaluationAttempt[]
   questions          EvaluationQuestion[]
@@ -330,7 +329,7 @@ model Evaluation {
 model EvaluationQuestion {
   id                       Int                       @id @default(autoincrement())
   evaluationId             Int
-  question                 String
+  question                 String                    @db.Text
   options                  Json
   correctIndex             Int
   evaluation               Evaluation                @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
@@ -379,7 +378,7 @@ model Certificate {
   developmentPlanId Int?
   issuedAt          DateTime           @default(now())
   validationCode    String             @unique
-  fileUrl           String?
+  fileUrl           String?            @db.Text
   revoked           Boolean            @default(false)
   enrollment        Enrollment?        @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   program           LeadershipProgram? @relation(fields: [programId], references: [id])
@@ -389,7 +388,7 @@ model Certificate {
 model MicroLearning {
   id        Int                     @id @default(autoincrement())
   title     String
-  content   String
+  content   String                  @db.Text
   createdAt DateTime                @default(now())
   dispatch  MicroLearningDispatch[]
   active    Boolean                 @default(true)
@@ -407,18 +406,18 @@ model MicroLearningDispatch {
 model AvatarScript {
   id        Int      @id @default(autoincrement())
   title     String
-  script    String
+  script    String   @db.Text
   version   Int      @default(1)
-  videoUrl  String?
+  videoUrl  String?  @db.Text
   createdAt DateTime @default(now())
 }
 
 model ContentAsset {
   id          Int      @id @default(autoincrement())
   title       String
-  description String?
+  description String?  @db.Text
   type        String
-  url         String
+  url         String   @db.Text
   version     Int      @default(1)
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -427,7 +426,7 @@ model ContentAsset {
 model Training {
   id           Int               @id @default(autoincrement())
   title        String
-  description  String?
+  description  String?           @db.Text
   startDate    DateTime
   endDate      DateTime
   location     String?
@@ -442,7 +441,7 @@ model TrainingSession {
   id           Int                   @id @default(autoincrement())
   trainingId   Int
   sessionDate  DateTime
-  duration     Int // em minutos
+  duration     Int
   createdAt    DateTime              @default(now())
   updatedAt    DateTime              @updatedAt
   training     Training              @relation(fields: [trainingId], references: [id], onDelete: Cascade)
@@ -453,7 +452,7 @@ model TrainingParticipant {
   id        Int             @id @default(autoincrement())
   sessionId Int
   userId    Int
-  status    String          @default("registered") // registered, attended, absent
+  status    String          @default("registered")
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   session   TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -463,11 +462,11 @@ model TrainingParticipant {
 model LiveClass {
   id             Int                  @id @default(autoincrement())
   courseId       Int
-  zoomMeetingId  String?
-  topic          String
+  zoomMeetingId  String?              @db.Text
+  topic          String               @db.Text
   scheduledAt    DateTime
   duration       Int
-  recordingUrl   String?
+  recordingUrl   String?              @db.Text
   createdAt      DateTime             @default(now())
   course         Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
   attendances    LiveAttendance[]
@@ -493,7 +492,7 @@ model LiveChatMessage {
   id          Int       @id @default(autoincrement())
   liveClassId Int
   userId      Int
-  message     String
+  message     String    @db.Text
   createdAt   DateTime  @default(now())
   liveClass   LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -514,7 +513,7 @@ model PostClassResponse {
   evaluationId Int
   userId       Int
   rating       Int
-  feedback     String?
+  feedback     String?             @db.Text
   createdAt    DateTime            @default(now())
   evaluation   PostClassEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -557,7 +556,7 @@ model PerformanceReview {
   id        Int      @id @default(autoincrement())
   userId    Int
   score     Float
-  comment   String?
+  comment   String?  @db.Text
   period    String
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
@@ -567,7 +566,7 @@ model SuccessionPlan {
   id          Int      @id @default(autoincrement())
   positionId  Int
   candidateId Int
-  readiness   String
+  readiness   String   @db.Text
   createdAt   DateTime @default(now())
   position    Position @relation(fields: [positionId], references: [id])
   candidate   User     @relation(fields: [candidateId], references: [id])
@@ -584,7 +583,7 @@ model OnboardingPlan {
 model Competency {
   id               Int                  @id @default(autoincrement())
   name             String               @unique
-  description      String?
+  description      String?              @db.Text
   createdAt        DateTime             @default(now())
   courses          CourseCompetency[]
   userCompetencies UserCompetency[]
@@ -603,7 +602,7 @@ model UserCompetency {
   id           Int        @id @default(autoincrement())
   userId       Int
   competencyId Int
-  level        Int // 1 a 5
+  level        Int
   evaluatedAt  DateTime   @default(now())
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
@@ -615,7 +614,7 @@ model DevelopmentPlan {
   id           Int           @id @default(autoincrement())
   userId       Int
   goal         String
-  status       String        @default("ACTIVE") // ACTIVE, COMPLETED
+  status       String        @default("ACTIVE")
   createdAt    DateTime      @default(now())
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   certificates Certificate[]
@@ -624,7 +623,7 @@ model DevelopmentPlan {
 model LeadershipProgram {
   id           Int                     @id @default(autoincrement())
   name         String
-  description  String?
+  description  String?                 @db.Text
   active       Boolean                 @default(true)
   createdAt    DateTime                @default(now())
   participants LeadershipParticipant[]
@@ -635,8 +634,8 @@ model LeadershipParticipant {
   id         Int               @id @default(autoincrement())
   userId     Int
   programId  Int
-  status     String            @default("ENROLLED") // ENROLLED, COMPLETED, DROPPED
-  progress   Int               @default(0) // porcentagem
+  status     String            @default("ENROLLED")
+  progress   Int               @default(0)
   enrolledAt DateTime          @default(now())
   user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   program    LeadershipProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -647,7 +646,7 @@ model LeadershipParticipant {
 model KnowledgeArticle {
   id           Int                    @id @default(autoincrement())
   title        String
-  description  String?
+  description  String?                @db.Text
   content      String
   authorId     Int
   categoryId   Int?
@@ -678,7 +677,7 @@ model KnowledgeInteraction {
   id        Int              @id @default(autoincrement())
   userId    Int
   articleId Int
-  action    String // e.g., "view", "like", "share"
+  action    String
   createdAt DateTime         @default(now())
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   article   KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
@@ -687,7 +686,7 @@ model KnowledgeInteraction {
 model ProcessStandard {
   id          Int           @id @default(autoincrement())
   title       String
-  description String?
+  description String?       @db.Text
   ownerId     Int
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
@@ -699,7 +698,7 @@ model ProcessStep {
   id            Int             @id @default(autoincrement())
   processId     Int
   title         String
-  description   String?
+  description   String?         @db.Text
   responsibleId Int
   order         Int
   createdAt     DateTime        @default(now())
@@ -711,7 +710,7 @@ model ProcessStep {
 model CareerPosition {
   id           Int                  @id @default(autoincrement())
   title        String
-  description  String
+  description  String               @db.Text
   level        String
   createdAt    DateTime             @default(now())
   competencies PositionCompetency[]
@@ -752,7 +751,7 @@ model HistoryRecord {
   action      String
   entityType  String
   entityId    Int?
-  description String?
+  description String?  @db.Text
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -777,48 +776,48 @@ model Employee {
 
 model Contract {
   id         Int      @id @default(autoincrement())
-  employee   Employee @relation(fields: [employeeId], references: [id])
   employeeId Int
   startDate  DateTime
   endDate    DateTime
-  status     String // "active", "expired", "pending_renewal"
+  status     String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  employee   Employee @relation(fields: [employeeId], references: [id])
 }
 
 model Attendance {
   id          Int      @id @default(autoincrement())
-  employee    Employee @relation(fields: [employeeId], references: [id])
   employeeId  Int
   date        DateTime
   hoursWorked Float
-  status      String // "present", "absent", "late"
+  status      String
   createdAt   DateTime @default(now())
+  employee    Employee @relation(fields: [employeeId], references: [id])
 }
 
 model CareerPlan {
   id          Int      @id @default(autoincrement())
-  employee    Employee @relation(fields: [employeeId], references: [id])
   employeeId  Int
   title       String
-  description String
+  description String   @db.Text
   startDate   DateTime
   endDate     DateTime
-  status      String // "active", "completed", "pending"
+  status      String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  employee    Employee @relation(fields: [employeeId], references: [id])
 }
 
 model Feedback360 {
   id            Int      @id @default(autoincrement())
-  employee      Employee @relation(fields: [employeeId], references: [id])
   employeeId    Int
   evaluatorName String
   evaluatorRole String
   score         Float
-  comments      String
+  comments      String   @db.Text
   evaluatedAt   DateTime
   createdAt     DateTime @default(now())
+  employee      Employee @relation(fields: [employeeId], references: [id])
 }
 
 //////////////////////////
@@ -855,7 +854,7 @@ model ReportLog {
   id          Int      @id @default(autoincrement())
   type        String
   generatedBy Int
-  fileUrl     String?
+  fileUrl     String?  @db.Text
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [generatedBy], references: [id])
 }
@@ -872,7 +871,6 @@ model ScalabilitySnapshot {
 
 model ExecutiveSnapshot {
   id                   Int          @id @default(autoincrement())
-  organization         Organization @relation(fields: [organizationId], references: [id])
   organizationId       Int
   totalUsers           Int
   totalEmployees       Int
@@ -882,6 +880,7 @@ model ExecutiveSnapshot {
   engagementScore      Float
   roi                  Float
   createdAt            DateTime     @default(now())
+  organization         Organization @relation(fields: [organizationId], references: [id])
 }
 
 model Organization {
@@ -904,7 +903,7 @@ model UserPoints {
 model Badge {
   id          Int          @id @default(autoincrement())
   name        String       @unique
-  description String?
+  description String?      @db.Text
   awards      BadgeAward[]
 }
 
@@ -913,17 +912,17 @@ model BadgeAward {
   userId       Int
   badgeId      Int
   awardedAt    DateTime    @default(now())
+  userPointsId Int?
   user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   badge        Badge       @relation(fields: [badgeId], references: [id], onDelete: Cascade)
   userPoints   UserPoints? @relation(fields: [userPointsId], references: [id])
-  userPointsId Int?
 }
 
 model CourseFeedback {
   id        Int      @id @default(autoincrement())
   courseId  Int
   userId    Int
-  comment   String
+  comment   String   @db.Text
   rating    Int
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
@@ -937,7 +936,7 @@ model NotificationLog {
   id        Int      @id @default(autoincrement())
   userId    Int
   type      String
-  message   String
+  message   String   @db.Text
   createdAt DateTime @default(now())
   success   Boolean
   user      User     @relation(fields: [userId], references: [id])
@@ -970,7 +969,7 @@ model IntegrationConfig {
   endpoint  String
   config    Json
   type      String
-  baseUrl   String?
+  baseUrl   String?  @db.Text
   apiKey    String?
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -982,7 +981,7 @@ model IntegrationConfig {
 model Role {
   id              Int              @id @default(autoincrement())
   name            String           @unique
-  description     String?
+  description     String?          @db.Text
   users           User[]
   permissions     Permission[]
   rolePermissions RolePermission[]
@@ -1012,14 +1011,13 @@ model RolePermission {
 //////////////////////////
 // MOBILE
 //////////////////////////
-
 model MobileSession {
   id        Int      @id @default(autoincrement())
   userId    Int
   deviceId  String
-  platform  String // "ios" | "android"
+  platform  String
   lastLogin DateTime @default(now())
-  pushToken String?
+  pushToken String?  @db.Text
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -1029,8 +1027,8 @@ model MobileSyncLog {
   id       Int      @id @default(autoincrement())
   userId   Int
   syncedAt DateTime @default(now())
-  entity   String // Ex: "Enrollment", "Progress", "EvaluationAttempt"
-  status   String // Ex: "SUCCESS", "FAILED"
+  entity   String
+  status   String
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -1039,7 +1037,6 @@ model MobileSyncLog {
 //////////////////////////
 // REPORTING
 //////////////////////////
-
 model ExecutiveReport {
   id            Int               @id @default(autoincrement())
   title         String
@@ -1073,7 +1070,6 @@ enum ReportFormat {
 //////////////////////////
 // AI
 //////////////////////////
-
 model AiTutorSession {
   id           Int         @id @default(autoincrement())
   userId       Int
@@ -1094,7 +1090,7 @@ model AiMessage {
   id         Int            @id @default(autoincrement())
   sessionId  Int
   role       AiRole
-  content    String
+  content    String         @db.Text
   tokensUsed Int?
   createdAt  DateTime       @default(now())
   session    AiTutorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -1111,12 +1107,11 @@ enum AiRole {
 //////////////////////////
 // INSTRUCTOR
 //////////////////////////
-
 model InstructorProfile {
   id                 Int                 @id @default(autoincrement())
   userId             Int                 @unique
-  bio                String?
-  expertiseArea      String
+  bio                String?             @db.Text
+  expertiseArea      String              @db.Text
   approved           Boolean             @default(false)
   ratingAverage      Float               @default(0)
   totalCourses       Int                 @default(0)
@@ -1125,17 +1120,17 @@ model InstructorProfile {
   reviews            InstructorReview[]
   payouts            InstructorPayout[]
   marketplaceCourses MarketplaceCourse[]
-  courses            InstructorCourse[]  @relation("InstructorProfileCourses")
-  instructorLinks    InstructorCourse[]  @relation("InstructorProfileLinks")
+  // FIX: apenas uma relação para InstructorCourse — a duplicada foi removida
+  courses            InstructorCourse[]
 }
 
 model InstructorCourse {
-  id                    String             @id @default(uuid())
-  instructorId          Int
-  marketplaceCourseId   String
-  instructor            InstructorProfile  @relation(fields: [instructorId], references: [id], name: "InstructorProfileCourses")
-  instructorLinkProfile InstructorProfile? @relation(fields: [instructorId], references: [id], name: "InstructorProfileLinks")
-  marketplaceCourse     MarketplaceCourse  @relation(fields: [marketplaceCourseId], references: [id], onDelete: Cascade)
+  id                  String            @id @default(uuid())
+  instructorId        Int
+  marketplaceCourseId String
+  // FIX: única relação para InstructorProfile, sem colisão de FK
+  instructor          InstructorProfile @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  marketplaceCourse   MarketplaceCourse @relation(fields: [marketplaceCourseId], references: [id], onDelete: Cascade)
 
   @@unique([instructorId, marketplaceCourseId])
 }
@@ -1145,7 +1140,7 @@ model InstructorReview {
   instructorId Int
   userId       Int
   rating       Int
-  comment      String
+  comment      String            @db.Text
   createdAt    DateTime          @default(now())
   instructor   InstructorProfile @relation(fields: [instructorId], references: [id], onDelete: Cascade)
   user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1162,31 +1157,30 @@ model InstructorPayout {
 }
 
 model MarketplaceCourse {
-  id              String             @id @default(uuid())
-  title           String
-  price           Float
-  createdAt       DateTime           @default(now())
-  instructorId    Int
-  instructor      InstructorProfile  @relation(fields: [instructorId], references: [id])
-  instructorLinks InstructorCourse[]
+  id           String             @id @default(uuid())
+  title        String
+  price        Float
+  createdAt    DateTime           @default(now())
+  instructorId Int
+  instructor   InstructorProfile  @relation(fields: [instructorId], references: [id])
+  courses      InstructorCourse[]
 }
 
 //////////////////////////
 // EVENTS
 //////////////////////////
-
 model Event {
   id           Int                @id @default(autoincrement())
   title        String
-  description  String?
+  description  String?            @db.Text
   startAt      DateTime
   endAt        DateTime
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   organizerId  Int
-  participants EventParticipant[]
   location     String?
   organizer    User               @relation(fields: [organizerId], references: [id])
+  participants EventParticipant[]
 }
 
 model EventParticipant {
