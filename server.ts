@@ -1,24 +1,35 @@
-import express from "express";
-import enrollmentsRoutes from "./src/routes/enrollmentsRoutes"; // ajuste o caminho conforme seu projeto
+import express, { Request, Response, NextFunction } from 'express';
+import enrollmentsRoutes from './routes/enrollmentsRoutes';
 
-// Cria a instância do Express
 const app = express();
 
-// Middlewares
-app.use(express.json()); // para interpretar JSON no corpo das requisições
+// Middleware para ler JSON
+app.use(express.json());
 
-// Rotas
-app.use("/enrollments", enrollmentsRoutes);
-
-// Rota raiz
-app.get("/", (req, res) => {
-  res.send("API rodando!");
+// CORS simples para produção
+app.use((_req: Request, res: Response, next: NextFunction): void => {
+  res.header("Access-Control-Allow-Origin", process.env.FRONTEND_URL || "*");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  next();
 });
 
-// Porta do servidor
+// Registo das rotas
+app.use("/enrollments", enrollmentsRoutes);
+
+// Rota de health check — útil para verificar no browser após deploy
+app.get("/health", (_req: Request, res: Response): void => {
+  res.json({ status: "ok" });
+});
+
+// Rota raiz
+app.get("/", (_req: Request, res: Response): void => {
+  res.send("API Innova funcionando 🚀");
+});
+
+// Porta dinâmica — obrigatório no Render
 const PORT = process.env.PORT || 3000;
 
-// Inicia o servidor
 app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
+  console.log(`Servidor a correr na porta ${PORT}`);
 });
