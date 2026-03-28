@@ -1,7 +1,7 @@
 import { defineConfig } from "prisma/config";
 import * as dotenv from "dotenv";
 
-dotenv.config(); // ← carrega o .env antes de tudo
+dotenv.config();
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
@@ -10,5 +10,6 @@ export default defineConfig({
   },
   migrations: {
     path: "prisma/migrations",
+    seed: "ts-node prisma/seed.ts",
   },
 });
