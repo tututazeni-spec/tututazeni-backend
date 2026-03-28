@@ -1,10 +1,11 @@
+// Prisma 7 — client com adapter PrismaPg obrigatório
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
+declare const globalThis: {
+  prismaGlobal?: PrismaClient;
+} & typeof global;
 
 function createPrismaClient(): PrismaClient {
   const pool = new Pool({
@@ -23,13 +24,13 @@ function createPrismaClient(): PrismaClient {
       process.env.NODE_ENV === 'development'
         ? ['query', 'error', 'warn']
         : ['error'],
-  });
+  } as ConstructorParameters<typeof PrismaClient>[0]);
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+export const prisma = globalThis.prismaGlobal ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
+  globalThis.prismaGlobal = prisma;
 }
 
 export default prisma;
