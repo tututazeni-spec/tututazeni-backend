@@ -9,7 +9,7 @@
     "node": "20.x"
   },
   "prisma": {
-  "seed": "ts-node prisma/seed.ts"
+    "seed": "ts-node prisma/seed.ts"
   },
   "scripts": {
     "postinstall": "prisma generate",
@@ -29,7 +29,10 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "db:seed": "prisma db seed",
-    "test:cov": "jest --coverage",
+    "hash-password": "ts-node -P tsconfig.json scripts/hashPassword.ts",
+    "check-user": "ts-node -P tsconfig.json scripts/checkUser.ts",
+    "fix-role": "ts-node -P tsconfig.json scripts/fixUserRole.ts",
+    "change-role": "ts-node -P tsconfig.json scripts/changeRole.ts",
     "render:build": "npm install --include=dev && npm run db:deploy && npm run build",
     "render:start": "npm start"
   },
@@ -46,10 +49,12 @@
     "@prisma/client": "^7.5.0",
     "axios": "^1.13.6",
     "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.6.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.3.1",
+    "jsonwebtoken": "^9.0.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.20.0",
@@ -65,8 +70,10 @@
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@types/bcrypt": "^6.0.0",
+    "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.10.7",
     "@types/passport-jwt": "^4.0.1",
     "@types/pg": "^8.20.0",
@@ -89,13 +96,19 @@
     "typescript-eslint": "^8.20.0"
   },
   "jest": {
-    "moduleFileExtensions": ["js", "json", "ts"],
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
-    "collectCoverageFrom": ["**/*.(t|j)s"],
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
   }
