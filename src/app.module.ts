@@ -1,172 +1,108 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 
-// Prisma
-import { PrismaModule } from './prisma/prisma.module';
+// MÓDULOS ORIGINAIS
+import { PrismaModule }           from './prisma/prisma.module';
+import { AuthModule }             from './auth/auth.module';
+import { UsersModule }            from './users/users.module';
+import { DepartmentsModule }      from './departments/departments.module';
+import { CoursesModule }          from './courses/courses.module';
+import { CourseModulesModule }    from './course-modules/course-modules.module';
+import { EnrollmentsModule }      from './enrollments/enrollments.module';
+import { AssessmentsModule }      from './assessments/assessments.module';
+import { CompetenciesModule }     from './competencies/competencies.module';
+import { DevelopmentPlansModule } from './development-plans/development-plans.module';
+import { PerformanceModule }      from './performance/performance.module';
+import { SuccessionModule }       from './succession/succession.module';
+import { OnboardingModule }       from './onboarding/onboarding.module';
+import { LeadershipModule }       from './leadership/leadership.module';
+import { KnowledgeModule }        from './knowledge/knowledge.module';
+import { MicroLearningModule }    from './micro-learning/micro-learning.module';
+import { LiveClassesModule }      from './live-classes/live-classes.module';
+import { TrainingModule }         from './training/training.module';
+import { GamificationModule }     from './gamification/gamification.module';
+import { AnalyticsModule }        from './analytics/analytics.module';
+import { ExecutiveReportsModule } from './executive-reports/executive-reports.module';
+import { NotificationsModule }    from './notifications/notifications.module';
+import { AuditModule }            from './audit/audit.module';
+import { AiTutorModule }          from './ai-tutor/ai-tutor.module';
+import { InstructorModule }       from './instructor/instructor.module';
+import { EventsModule }           from './events/events.module';
+import { EmployeesModule }        from './employees/employees.module';
 
-// CORE
-import { UsersModule } from './core/users/user.module';
-import { AuthModule } from './core/auth/auth.module';
-import { RolesPermissionsModule } from './core/rolespermissions/rolespermissions.module';
-import { OrganizationModule } from './core/organization/organization.module';
-import { SearchModule } from './core/search/search.module';
-import { AclModule } from './core/acl/acl.module';
+// MÓDULOS NOVOS — RH
+import { AttendanceModule }         from './attendance/attendance.module';
+import { LeaveManagementModule }    from './leave-management/leave-management.module';
+import { PayslipsModule }           from './payslips/payslips.module';
+import { WorkDeclarationModule }    from './work-declaration/work-declaration.module';
+import { DocumentRepositoryModule } from './document-repository/document-repository.module';
 
-// LEARNING
-import { CoursesModule } from './learning/courses/courses.module';
-import { EnrollmentsModule } from './learning/enrollments/enrollments.module';
-import { LearningPathsModule } from './learning/learningpaths/learningpaths.module';
-import { AssessmentsModule } from './learning/assessments/assessments.module';
-import { ContentLibraryModule } from './learning/contentlibrary/contentlibrary.module';
-import { CertificatesModule } from './learning/certificates/certificates.module';
-import { MicroLearningModule } from './learning/microlearning/microlearning.module';
-import { AvatarTrainingModule } from './learning/avatartraining/avatartraining.module';
-import { TrainingModule } from './learning/training/training.module';
-import { EvaluationModule } from './learning/evaluation/evaluation.module';
-import { LiveModule } from './learning/live/live.module';
+// MÓDULOS NOVOS — TALENTO E CARREIRA
+import { CareerPlansModule }       from './career-plans/career-plans.module';
+import { CompetencyMapModule }     from './competency-map/competency-map.module';
+import { TalentDevelopmentModule } from './talent-development/talent-development.module';
+import { EngagementModule }        from './engagement/engagement.module';
+import { ContentLibraryModule }    from './content-library/content-library.module';
+import { EvaluationModule }        from './evaluation/evaluation.module';
+import { AvatarTrainingModule }    from './avatar-training/avatar-training.module';
 
-// HR
-import { PositionsModule } from './hr/positions/positions.module';
-import { PerformanceModule } from './hr/performance/performance.module';
-import { SuccessionModule } from './hr/succession/succession.module';
-import { OnboardingModule } from './hr/onboarding/onboarding.module';
-import { CompetencyMapModule } from './hr/competencymap/competencymap.module';
-import { TalentDevelopmentModule } from './hr/talentdevelopment/talentdevelopment.module';
-import { LeadershipModule } from './hr/leadership/leadership.module';
-import { KnowledgeModule } from './hr/knowledge/knowledge.module';
-import { ProcessStandardModule } from './hr/processstandard/processstandard.module';
-import { CareerModule } from './hr/career/career.module';
-import { DashboardModule } from './hr/dashboard/dashboard.module';
-import { HistoryModule } from './hr/history/history.module';
-import { DashboardRhModule } from './hr/dashboard-rh/dashboard-rh.module';
-import { CareerPlansModule } from './hr/career-plans/career-plans.module';
+// MÓDULOS NOVOS — DASHBOARD E RELATÓRIOS
+import { DashboardModule }   from './dashboard/dashboard.module';
+import { DashboardRhModule } from './dashboard-rh/dashboard-rh.module';
+import { ReportsModule }     from './reports/reports.module';
+import { RoiImpactModule }   from './roi-impact/roi-impact.module';
+import { HistoryModule }     from './history/history.module';
 
-// INTELLIGENCE
-import { AnalyticsModule } from './intelligence/analytics/analytics.module';
-import { RoiImpactModule } from './intelligence/roiimpact/roiimpact.module';
-import { ReportsModule } from './intelligence/reports/reports.module';
-import { ScalabilityModule } from './intelligence/scalability/scalability.module';
+// MÓDULOS NOVOS — ORGANIZAÇÃO E ACESSOS
+import { OrganizationModule }     from './organization/organization.module';
+import { AclModule }              from './acl/acl.module';
+import { RolesPermissionsModule } from './roles-permissions/roles-permissions.module';
+import { LeaderModule }           from './leader/leader.module';
 
-// ENGAGEMENT
-import { GamificationModule } from './engagement/gamification/gamification.module';
-import { FeedbackModule } from './engagement/feedback/feedback.module';
+// MÓDULOS NOVOS — PROCESSOS E INTEGRAÇÃO
+import { ProcessStandardModule } from './process-standard/process-standard.module';
+import { ApiIntegrationModule }  from './api-integration/api-integration.module';
+import { AutomationModule }      from './automation/automation.module';
+import { SearchModule }          from './search/search.module';
 
 // INFRA
-import { NotificationsModule } from './infra/notifications/notifications.module';
-import { AutomationModule } from './infra/automation/automation.module';
-import { AuditLogsModule } from './infra/auditlogs/auditlogs.module';
-import { ApiIntegrationModule } from './infra/apiintegration/apiintegration.module';
-
-// MOBILE
-import { MobileModule } from './mobile/mobile.module';
-
-// REPORTING
-import { ExecutivePdfModule } from './reporting/executive-pdf/executive-pdf.module';
-
-// AI
-import { AiTutorModule } from './ai/tutor/ai-tutor.module';
-
-// INSTRUCTOR MARKETPLACE
-import { InstructorMarketplaceModule } from './instructor/instructor-marketplace.module';
-
-// EVENTS
-import { EventsModule } from './events/events.module';
-
-// PAINEL FINAL INTEGRADO
-import { PainelFinalIntegradoModule } from './modules/painel-final-integrado/painel-final-integrado.module';
-
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { LearningPathsController } from './courses/learning-paths.controller';
+import { LearningPathsService }    from './courses/learning-paths.service';
+import { AllExceptionsFilter }     from './common/filters/all-exceptions.filter';
+import { LoggingInterceptor }      from './common/interceptors/logging.interceptor';
+import { JwtAuthGuard }            from './common/guards/jwt-auth.guard';
+import { RolesGuard }              from './common/guards/roles.guard';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
-
-    TypeOrmModule.forRoot({
-      type: 'sqlite',
-      database: 'dev.db',
-      autoLoadEntities: true,
-      synchronize: true,
-    }),
-
-    PrismaModule,
-
-    // CORE
-    UsersModule,
-    AuthModule,
-    RolesPermissionsModule,
-    OrganizationModule,
-    SearchModule,
-    AclModule,
-
-    // LEARNING
-    CoursesModule,
-    EnrollmentsModule,
-    LearningPathsModule,
-    AssessmentsModule,
-    ContentLibraryModule,
-    CertificatesModule,
-    MicroLearningModule,
-    AvatarTrainingModule,
-    TrainingModule,
-    EvaluationModule,
-    LiveModule,
-
-    // HR
-    PositionsModule,
-    PerformanceModule,
-    SuccessionModule,
-    OnboardingModule,
-    CompetencyMapModule,
-    TalentDevelopmentModule,
-    LeadershipModule,
-    KnowledgeModule,
-    ProcessStandardModule,
-    CareerModule,
-    DashboardModule,
-    HistoryModule,
-    DashboardRhModule,
-    CareerPlansModule,
-
-    // INTELLIGENCE
-    AnalyticsModule,
-    RoiImpactModule,
-    ReportsModule,
-    ScalabilityModule,
-
-    // ENGAGEMENT
-    GamificationModule,
-    FeedbackModule,
-
-    // INFRA
-    NotificationsModule,
-    AutomationModule,
-    AuditLogsModule,
-    ApiIntegrationModule,
-
-    // MOBILE
-    MobileModule,
-
-    // REPORTING
-    ExecutivePdfModule,
-
-    // AI
-    AiTutorModule,
-
-    // INSTRUCTOR MARKETPLACE
-    InstructorMarketplaceModule,
-
-    // EVENTS
-    EventsModule,
-
-    // PAINEL FINAL INTEGRADO
-    PainelFinalIntegradoModule,
-
+    ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    PrismaModule, AuthModule, UsersModule, DepartmentsModule,
+    CoursesModule, CourseModulesModule, EnrollmentsModule,
+    AssessmentsModule, CompetenciesModule, DevelopmentPlansModule,
+    PerformanceModule, SuccessionModule, OnboardingModule,
+    LeadershipModule, KnowledgeModule, MicroLearningModule,
+    LiveClassesModule, TrainingModule, GamificationModule,
+    AnalyticsModule, ExecutiveReportsModule, NotificationsModule,
+    AuditModule, AiTutorModule, InstructorModule, EventsModule, EmployeesModule,
+    AttendanceModule, LeaveManagementModule, PayslipsModule,
+    WorkDeclarationModule, DocumentRepositoryModule,
+    CareerPlansModule, CompetencyMapModule, TalentDevelopmentModule,
+    EngagementModule, ContentLibraryModule, EvaluationModule, AvatarTrainingModule,
+    DashboardModule, DashboardRhModule, ReportsModule, RoiImpactModule, HistoryModule,
+    OrganizationModule, AclModule, RolesPermissionsModule, LeaderModule,
+    ProcessStandardModule, ApiIntegrationModule, AutomationModule, SearchModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [LearningPathsController],
+  providers: [
+    LearningPathsService,
+    { provide: APP_FILTER,       useClass: AllExceptionsFilter },
+    { provide: APP_INTERCEPTOR,  useClass: LoggingInterceptor  },
+    { provide: APP_GUARD,        useClass: JwtAuthGuard        },
+    { provide: APP_GUARD,        useClass: RolesGuard          },
+    { provide: APP_GUARD,        useClass: ThrottlerGuard      },
+  ],
 })
 export class AppModule {}

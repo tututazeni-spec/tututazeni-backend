@@ -1,18 +1,93 @@
+// src/main.ts
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import helmet from 'helmet';
+import compression from 'compression';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-
-  // CORS para o frontend
-  app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn', 'log', 'debug'],
   });
 
-  // Porta 4000 para não colidir com o Next.js
-  await app.listen(process.env.PORT || 4000);
-  console.log('Servidor a correr na porta 4000');
+  // ─── Security ────────────────────────────────────────────────────────────
+  app.use(helmet());
+  app.use(compression());
+
+  // ─── CORS ────────────────────────────────────────────────────────────────
+  app.enableCors({
+    origin: process.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:3000'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  });
+
+  // ─── Global Prefix ───────────────────────────────────────────────────────
+  app.setGlobalPrefix('api/v1');
+
+  // ─── Validation ──────────────────────────────────────────────────────────
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
+
+  // ─── Swagger ─────────────────────────────────────────────────────────────
+  const config = new DocumentBuilder()
+    .setTitle('INNOVA - ACADEMIA CORPORATIVA e RH')
+    .setDescription('API completa para plataforma de Academia Corporativa e Recursos Humanos')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .addTag('Auth', 'Autenticação e autorização')
+    .addTag('Users', 'Gestão de utilizadores')
+    .addTag('Departments', 'Departamentos')
+    .addTag('Units', 'Unidades organizacionais')
+    .addTag('Roles & Permissions', 'Roles e permissões')
+    .addTag('Positions', 'Posições organizacionais')
+    .addTag('Courses', 'Gestão de cursos')
+    .addTag('Learning Paths', 'Trilhas de aprendizagem')
+    .addTag('Course Modules & Lessons', 'Módulos e lições')
+    .addTag('Enrollments', 'Matrículas')
+    .addTag('Assessments', 'Avaliações e quizzes')
+    .addTag('Competencies', 'Competências')
+    .addTag('Development Plans', 'Planos de desenvolvimento')
+    .addTag('Performance Reviews', 'Avaliações de desempenho')
+    .addTag('Succession Planning', 'Planeamento de sucessão')
+    .addTag('Onboarding', 'Integração de novos colaboradores')
+    .addTag('Leadership Programs', 'Programas de liderança')
+    .addTag('Knowledge Base', 'Base de conhecimento')
+    .addTag('Micro Learning', 'Micro-aprendizagem')
+    .addTag('Live Classes', 'Aulas ao vivo')
+    .addTag('Trainings', 'Treinamentos presenciais')
+    .addTag('Gamification', 'Pontos, badges e ranking')
+    .addTag('Analytics & Intelligence', 'Análise e inteligência')
+    .addTag('Executive Reports', 'Relatórios executivos')
+    .addTag('Notifications', 'Notificações e automações')
+    .addTag('Audit Logs', 'Logs de auditoria')
+    .addTag('AI Tutor', 'Tutor com Inteligência Artificial')
+    .addTag('Instructors', 'Gestão de instrutores')
+    .addTag('Events', 'Eventos corporativos')
+    .addTag('Employees (HR)', 'Colaboradores RH (legado)')
+    .addTag('Careers', 'Carreira e progressão')
+    .addTag('API Integration (Integrações com Sistemas Externos)')
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+      tagsSorter: 'alpha',
+    },
+  });
+
+  const port = process.env.PORT ?? 4000;
+  await app.listen(port);
+
+  console.log(`\n🚀 INNOVA API running on: http://localhost:${port}/api/v1`);
+  console.log(`📚 Swagger docs available at: http://localhost:${port}/api/docs\n`);
 }
+
 bootstrap();
