@@ -1,4 +1,3 @@
-// src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -21,9 +20,6 @@ async function bootstrap() {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
-
-  // ─── Global Prefix ───────────────────────────────────────────────────────
-  app.setGlobalPrefix('api/v1');
 
   // ─── Validation ──────────────────────────────────────────────────────────
   app.useGlobalPipes(
@@ -76,18 +72,28 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
+  SwaggerModule.setup('docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true,
       tagsSorter: 'alpha',
     },
   });
 
+  app.getHttpAdapter().get('/', (_req: any, res: any) => {
+  res.json({
+    name: 'INNOVA API',
+    version: '1.0',
+    status: 'running',
+    docs: `http://localhost:${port}/docs`,
+    timestamp: new Date().toISOString(),
+  });
+});
+
   const port = process.env.PORT ?? 4000;
   await app.listen(port);
 
-  console.log(`\n🚀 INNOVA API running on: http://localhost:${port}/api/v1`);
-  console.log(`📚 Swagger docs available at: http://localhost:${port}/api/docs\n`);
+  console.log(`\n🚀 INNOVA API running on: http://localhost:${port}`);
+  console.log(`📚 Swagger docs available at: http://localhost:${port}/docs\n`);
 }
 
 bootstrap();
