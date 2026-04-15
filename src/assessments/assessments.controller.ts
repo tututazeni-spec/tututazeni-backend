@@ -1,71 +1,181 @@
 import {
-  Controller, Get, Post, Put, Delete,
-  Body, Param, Query, ParseIntPipe, UseGuards,
+  Controller, Get, Post, Put, Patch, Delete,
+  Body, Param, Query, ParseIntPipe,
+  UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AssessmentsService } from './assessments.service';
 import {
-  CreateAssessmentDto, UpdateAssessmentDto,
-  SubmitAssessmentDto, SubmitEvaluationDto,
+  CreateAssessmentDto, UpdateAssessmentDto, AssessmentFilterDto,
+  StartAttemptDto, SubmitAttemptDto, AutoSaveDto,
+  ReviewAnswerDto, CreateQuestionDto,
 } from './assessments.dto';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
+import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
+import { RolesGuard }    from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
- 
+
 @ApiTags('Assessments')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('assessments')
 export class AssessmentsController {
   constructor(private readonly svc: AssessmentsService) {}
- 
+
+  // ── Catálogo & Descoberta ─────────────────────────────────────────────────
+
+  @Get()
+  @ApiOperation({ summary: 'Listar avaliações com filtros' })
+  findAll(@Query() filters: AssessmentFilterDto) {
+    return this.svc.findAll(filters);
+  }
+
+  @Get('pending-reviews')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Respostas abertas aguardando revisão manual' })
+  pendingReviews() {
+    return this.svc.getPendingReviews();
+  }
+
+  @Get('my/attempts')
+  @ApiOperation({ summary: 'As minhas tentativas' })
+  @ApiQuery({ name: 'assessmentId', required: false })
+  myAttempts(
+    @CurrentUser() user: any,
+    @Query('assessmentId') assessmentId?: string,
+  ) {
+    return this.svc.getUserAttempts(user.id, assessmentId ? parseInt(assessmentId) : undefined);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Detalhe da avaliação (sem respostas correctas para colaborador)' })
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findOne(id, true);
+  }
+
+  @Get(':id/analytics')
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Analytics da avaliação (taxa aprovação, perguntas difíceis)' })
+  analytics(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getAnalytics(id);
+  }
+
+  @Get('attempts/:attemptId')
+  @ApiOperation({ summary: 'Detalhe de uma tentativa (para revisão)' })
+  attemptDetail(
+    @Param('attemptId', ParseIntPipe) attemptId: number,
+    @CurrentUser() user: any,
+  ) {
+    return this.svc.getAttemptDetail(attemptId, user.id);
+  }
+
+  // ── Gestão (Admin/RH) ────────────────────────────────────────────────────
+
   @Post()
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar avaliação' })
-  create(@Body() dto: CreateAssessmentDto) { return this.svc.create(dto); }
- 
-  @Get('course/:courseId')
-  @ApiOperation({ summary: 'Listar avaliações por curso' })
-  findByCourse(@Param('courseId', ParseIntPipe) courseId: number) { return this.svc.findByCourse(courseId); }
- 
-  @Get(':id')
-  @ApiOperation({ summary: 'Detalhe da avaliação' })
-  findOne(@Param('id', ParseIntPipe) id: number) { return this.svc.findOne(id); }
- 
+  create(@Body() dto: CreateAssessmentDto) {
+    return this.svc.create(dto);
+  }
+
   @Put(':id')
   @Roles('ADMIN', 'RH')
-  @ApiOperation({ summary: 'Atualizar avaliação' })
+  @ApiOperation({ summary: 'Actualizar avaliação' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateAssessmentDto) {
     return this.svc.update(id, dto);
   }
- 
+
+  @Patch(':id/publish')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Publicar avaliação (DRAFT → PUBLISHED)' })
+  @HttpCode(HttpStatus.OK)
+  publish(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.publish(id);
+  }
+
+  @Patch(':id/archive')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Arquivar avaliação' })
+  @HttpCode(HttpStatus.OK)
+  archive(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.archive(id);
+  }
+
+  @Post(':id/duplicate')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Duplicar avaliação' })
+  duplicate(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.duplicate(id);
+  }
+
   @Delete(':id')
   @Roles('ADMIN', 'RH')
-  @ApiOperation({ summary: 'Remover avaliação' })
-  remove(@Param('id', ParseIntPipe) id: number) { return this.svc.remove(id); }
- 
-  @Post('submit')
-  @ApiOperation({ summary: 'Submeter respostas de avaliação' })
-  submit(@CurrentUser() user: any, @Body() dto: SubmitAssessmentDto) {
-    return this.svc.submit(user.id, dto);
+  @ApiOperation({ summary: 'Eliminar avaliação' })
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remove(id);
   }
- 
-  @Get('attempts/my')
-  @ApiOperation({ summary: 'Minhas tentativas' })
-  myAttempts(
-    @CurrentUser() user: any,
-    @Query('assessmentId') assessmentId?: number,
-  ) { return this.svc.getUserAttempts(user.id, assessmentId); }
- 
-  // EVALUATIONS
-  @Post('evaluations/submit')
-  @ApiOperation({ summary: 'Submeter avaliação detalhada' })
-  submitEvaluation(@Body() dto: SubmitEvaluationDto) { return this.svc.submitEvaluation(dto); }
- 
-  @Get('evaluations/attempts/:enrollmentId')
-  @ApiOperation({ summary: 'Tentativas de avaliação por matrícula' })
-  evalAttempts(@Param('enrollmentId', ParseIntPipe) enrollmentId: number) {
-    return this.svc.getEvaluationAttempts(enrollmentId);
+
+  // ── Perguntas ─────────────────────────────────────────────────────────────
+
+  @Post(':id/questions')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Adicionar pergunta à avaliação' })
+  addQuestion(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateQuestionDto) {
+    return this.svc.addQuestion(id, dto);
+  }
+
+  @Delete('questions/:questionId')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Remover pergunta' })
+  removeQuestion(@Param('questionId', ParseIntPipe) questionId: number) {
+    return this.svc.removeQuestion(questionId);
+  }
+
+  // ── Execução (Colaborador) ────────────────────────────────────────────────
+
+  @Post('attempts/start')
+  @ApiOperation({ summary: 'Iniciar ou retomar tentativa' })
+  startAttempt(@CurrentUser() user: any, @Body() dto: StartAttemptDto) {
+    return this.svc.startAttempt(user.id, dto);
+  }
+
+  @Post('attempts/save')
+  @ApiOperation({ summary: 'Auto-save das respostas (durante tentativa)' })
+  @HttpCode(HttpStatus.OK)
+  autoSave(@CurrentUser() user: any, @Body() dto: AutoSaveDto) {
+    return this.svc.autoSave(user.id, dto);
+  }
+
+  @Post('attempts/submit')
+  @ApiOperation({ summary: 'Submeter tentativa e calcular score' })
+  @HttpCode(HttpStatus.OK)
+  submitAttempt(@CurrentUser() user: any, @Body() dto: SubmitAttemptDto) {
+    return this.svc.submitAttempt(user.id, dto);
+  }
+
+  // ── Revisão Manual ────────────────────────────────────────────────────────
+
+  @Post('review')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Avaliar resposta aberta manualmente' })
+  reviewAnswer(@CurrentUser() reviewer: any, @Body() dto: ReviewAnswerDto) {
+    return this.svc.reviewAnswer(dto, reviewer.id);
+  }
+
+  // Endpoints legacy (compatibilidade com código existente) ─────────────────
+
+  @Get('course/:courseId')
+  @ApiOperation({ summary: 'Listar avaliações de um curso' })
+  findByCourse(@Param('courseId', ParseIntPipe) courseId: number) {
+    return this.svc.findAll({ courseId });
+  }
+
+  @Get('attempts/user/:userId')
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Tentativas de um utilizador (Admin/RH)' })
+  userAttempts(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Query('assessmentId') assessmentId?: string,
+  ) {
+    return this.svc.getUserAttempts(userId, assessmentId ? parseInt(assessmentId) : undefined);
   }
 }
- 

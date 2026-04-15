@@ -27,9 +27,7 @@ export class DashboardService {
         where: { id: userId },
         include: { position: true, department: true, points: true },
       }),
-      // EnrollmentStatus: EM_ANDAMENTO (not IN_PROGRESS)
       this.prisma.enrollment.count({ where: { userId, status: 'EM_ANDAMENTO' } }),
-      // EnrollmentStatus: CONCLUIDO (not COMPLETED)
       this.prisma.enrollment.count({ where: { userId, status: 'CONCLUIDO' } }),
       this.prisma.userPoints.findUnique({ where: { userId } }),
       this.prisma.badgeAward.findMany({
@@ -38,11 +36,9 @@ export class DashboardService {
         orderBy: { awardedAt: 'desc' },
         take: 5,
       }),
-      // Assessment has no 'enrollments' relation → count via AssessmentAttempt
       this.prisma.assessmentAttempt.count({
         where: { userId, passed: false },
       }),
-      // CareerPlan belongs to Employee, not User → use DevelopmentPlan instead
       this.prisma.developmentPlan.findFirst({
         where: { userId, status: { in: ['ACTIVE', 'DRAFT'] } },
       }),
@@ -61,7 +57,6 @@ export class DashboardService {
         pendingAssessments,
       },
       gamification: {
-        // UserPoints has 'points' field, not 'total' or 'level'
         totalPoints: points?.points ?? 0,
         recentBadges,
       },
@@ -90,7 +85,6 @@ export class DashboardService {
       }),
     ]);
 
-    // leaveRequest and workDeclaration don't exist → count from HistoryRecord
     const [pendingLeaves, pendingDeclarations] = await Promise.all([
       this.prisma.historyRecord.count({
         where: { action: 'LEAVE_REQUEST', description: { contains: '"status":"PENDING"' } },
@@ -112,10 +106,9 @@ export class DashboardService {
     const [totalUsers, activeUsers, coursesTotal, enrollmentsThisMonth, completionsThisMonth] =
       await Promise.all([
         this.prisma.user.count(),
-        this.prisma.user.count({ where: { active: true } }),
-        this.prisma.course.count({ where: { active: true } }),
+        this.prisma.user.count({ where: { hrStatus: 'ACTIVE' } }),  // ← corrigido: status → hrStatus
+        this.prisma.course.count({ where: { status: 'ACTIVE' } }),
         this.prisma.enrollment.count({ where: { enrolledAt: { gte: monthStart } } }),
-        // Enrollment has no completedAt field → count CONCLUIDO enrollments from this month by enrolledAt
         this.prisma.enrollment.count({
           where: { status: 'CONCLUIDO', enrolledAt: { gte: monthStart } },
         }),

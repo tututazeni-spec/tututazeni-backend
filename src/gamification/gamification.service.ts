@@ -31,8 +31,8 @@ export class GamificationService {
  
     const award = await this.prisma.badgeAward.create({
       data: {
-        userId: dto.userId,
-        badgeId: dto.badgeId,
+        userId:       dto.userId,
+        badgeId:      dto.badgeId,
         userPointsId: userPoints.id,
       },
       include: { badge: true },
@@ -40,8 +40,8 @@ export class GamificationService {
  
     await this.prisma.notificationLog.create({
       data: {
-        userId: dto.userId,
-        type: 'BADGE_AWARDED',
+        userId:  dto.userId,
+        type:    'BADGE_AWARDED',
         message: `Parabéns! Recebeste o badge: ${award.badge.name}`,
         success: true,
       },
@@ -52,7 +52,7 @@ export class GamificationService {
  
   async getUserBadges(userId: number) {
     return this.prisma.badgeAward.findMany({
-      where: { userId },
+      where:   { userId },
       include: { badge: true },
       orderBy: { awardedAt: 'desc' },
     });
@@ -62,7 +62,7 @@ export class GamificationService {
  
   async addPoints(dto: AddPointsDto) {
     const result = await this.prisma.userPoints.upsert({
-      where: { userId: dto.userId },
+      where:  { userId: dto.userId },
       create: { userId: dto.userId, points: dto.points },
       update: { points: { increment: dto.points } },
     });
@@ -70,60 +70,59 @@ export class GamificationService {
     if (dto.reason) {
       await this.prisma.historyRecord.create({
         data: {
-          userId: dto.userId,
-          action: 'POINTS_ADDED',
-          entityType: 'UserPoints',
+          userId:      dto.userId,
+          action:      'POINTS_ADDED',
+          entityType:  'UserPoints',
           description: `+${dto.points} pontos: ${dto.reason}`,
         },
       });
     }
  
-    // Auto-award badges por marcos
     await this.checkMilestones(dto.userId, result.points);
     return result;
   }
  
   async getUserPoints(userId: number) {
+    // ← corrigido: removido bloco `const userBadges` que estava dentro do `include` (sintaxe inválida).
+    // Os badges são buscados separadamente via getUserBadges se necessário.
     return this.prisma.userPoints.findUnique({
-      where: { userId },
-      include: {
-        badges: { include: { badge: true }, orderBy: { awardedAt: 'desc' } },
-      },
+      where:   { userId },
+      include: { user: { select: { id: true, fullName: true } } },
     });
   }
  
   async getLeaderboard(filters: LeaderboardFilterDto) {
     const { limit = 20, unitId, departmentId } = filters;
     const userWhere: any = { active: true };
-    if (unitId) userWhere.unitId = unitId;
+    if (unitId)       userWhere.unitId       = unitId;
     if (departmentId) userWhere.departmentId = departmentId;
  
     const users = await this.prisma.user.findMany({
-      where: userWhere,
+      where:  userWhere,
       select: { id: true, fullName: true, unitId: true, departmentId: true },
     });
     const userIds = users.map(u => u.id);
  
     const points = await this.prisma.userPoints.findMany({
-      where: { userId: { in: userIds } },
+      where:   { userId: { in: userIds } },
       orderBy: { points: 'desc' },
-      take: limit,
+      take:    limit,
     });
  
     return points.map((p, i) => ({
-      rank: i + 1,
+      rank:   i + 1,
       userId: p.userId,
       points: p.points,
-      user: users.find(u => u.id === p.userId),
+      user:   users.find(u => u.id === p.userId),
     }));
   }
  
   private async checkMilestones(userId: number, totalPoints: number) {
     const milestones = [
-      { points: 100, badgeName: 'Iniciante' },
-      { points: 500, badgeName: 'Estudante Dedicado' },
-      { points: 1000, badgeName: 'Aprendiz Ativo' },
-      { points: 5000, badgeName: 'Expert em Formação' },
+      { points: 100,   badgeName: 'Iniciante' },
+      { points: 500,   badgeName: 'Estudante Dedicado' },
+      { points: 1000,  badgeName: 'Aprendiz Ativo' },
+      { points: 5000,  badgeName: 'Expert em Formação' },
       { points: 10000, badgeName: 'Mestre do Conhecimento' },
     ];
  
@@ -143,13 +142,13 @@ export class GamificationService {
  
   async initDefaultBadges() {
     const badges = [
-      { name: 'Iniciante', description: 'Primeiros 100 pontos' },
-      { name: 'Estudante Dedicado', description: '500 pontos acumulados' },
-      { name: 'Aprendiz Ativo', description: '1000 pontos acumulados' },
-      { name: 'Expert em Formação', description: '5000 pontos acumulados' },
+      { name: 'Iniciante',              description: 'Primeiros 100 pontos' },
+      { name: 'Estudante Dedicado',     description: '500 pontos acumulados' },
+      { name: 'Aprendiz Ativo',         description: '1000 pontos acumulados' },
+      { name: 'Expert em Formação',     description: '5000 pontos acumulados' },
       { name: 'Mestre do Conhecimento', description: '10000 pontos acumulados' },
-      { name: 'Primeiro Curso', description: 'Primeiro curso concluído' },
-      { name: 'Maratonista', description: '10 cursos concluídos' },
+      { name: 'Primeiro Curso',         description: 'Primeiro curso concluído' },
+      { name: 'Maratonista',            description: '10 cursos concluídos' },
     ];
     const created = [];
     for (const b of badges) {
@@ -159,4 +158,3 @@ export class GamificationService {
     return { created: created.length, message: `${created.length} badges criados` };
   }
 }
- 

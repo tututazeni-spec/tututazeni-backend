@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PrismaModule }    from '../prisma/prisma.module';
 import {
   DepartmentsService, UnitsService, RolesService,
   PositionsService, CareersService,
@@ -7,11 +8,11 @@ import {
   DepartmentsController, UnitsController, RolesController,
   PositionsController, CareersController,
 } from './departments.controller';
- 
+
 @Module({
-  providers: [DepartmentsService, UnitsService, RolesService, PositionsService, CareersService],
+  imports:     [PrismaModule],
+  providers:   [DepartmentsService, UnitsService, RolesService, PositionsService, CareersService],
   controllers: [DepartmentsController, UnitsController, RolesController, PositionsController, CareersController],
-  exports: [DepartmentsService, UnitsService, RolesService, PositionsService, CareersService],
+  exports:     [DepartmentsService, UnitsService, RolesService, PositionsService, CareersService],
 })
 export class DepartmentsModule {}
- 

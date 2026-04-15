@@ -18,7 +18,7 @@ export class CreateContractDto {
   @ApiProperty() @IsString() status!: string;
 }
 
-export class CreateAttendanceDto {
+export class CreateEmployeeAttendanceDto {
   @ApiProperty() @IsInt() employeeId!: number;
   @ApiProperty() @IsDateString() date!: string;
   @ApiProperty() @IsNumber() hoursWorked!: number;
@@ -34,7 +34,7 @@ export class CreateFeedback360Dto {
   @ApiProperty() @IsDateString() evaluatedAt!: string;
 }
 
-export class CreateCareerPlanDto {
+export class CreateEmployeeCareerPlanDto {
   @ApiProperty() @IsInt() employeeId!: number;
   @ApiProperty() @IsString() title!: string;
   @ApiProperty() @IsString() description!: string;

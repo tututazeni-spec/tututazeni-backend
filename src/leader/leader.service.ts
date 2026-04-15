@@ -52,7 +52,7 @@ export class LeaderService {
           position: true,
           points: true,
           // 'performance' is the correct relation name on User -> PerformanceReview[]
-          performance: {
+          performanceReviews: {
             take: 1,
             orderBy: { createdAt: 'desc' },
           },

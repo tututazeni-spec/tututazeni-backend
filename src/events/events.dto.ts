@@ -12,7 +12,7 @@ export class CreateEventDto {
 
 export class UpdateEventDto extends PartialType(CreateEventDto) {}
 
-export class UpdateParticipantStatusDto {
+export class UpdateEventParticipantStatusDto {
   @ApiProperty({ enum: ['PENDING', 'CONFIRMED', 'CANCELED'] })
   @IsEnum(['PENDING', 'CONFIRMED', 'CANCELED']) status!: string;
 }

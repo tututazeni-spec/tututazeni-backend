@@ -6,7 +6,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
 import {
   CreateEmployeeDto, UpdateEmployeeDto, CreateContractDto,
-  CreateAttendanceDto, CreateFeedback360Dto, CreateCareerPlanDto, EmployeeFilterDto,
+  CreateEmployeeAttendanceDto, CreateFeedback360Dto, CreateEmployeeCareerPlanDto, EmployeeFilterDto,
 } from './employees.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -51,13 +51,13 @@ export class EmployeesController {
   createContract(@Body() dto: CreateContractDto) { return this.svc.createContract(dto); }
  
   @Post('attendance') @Roles('ADMIN','RH','LIDER') @ApiOperation({ summary: 'Registar presença' })
-  logAttendance(@Body() dto: CreateAttendanceDto) { return this.svc.logAttendance(dto); }
+  logAttendance(@Body() dto: CreateEmployeeAttendanceDto) { return this.svc.logAttendance(dto); }
  
   @Post('feedback360') @Roles('ADMIN','RH','LIDER') @ApiOperation({ summary: 'Adicionar Feedback 360' })
   addFeedback(@Body() dto: CreateFeedback360Dto) { return this.svc.addFeedback360(dto); }
  
   @Post('career-plans') @Roles('ADMIN','RH') @ApiOperation({ summary: 'Criar plano de carreira' })
-  createCareerPlan(@Body() dto: CreateCareerPlanDto) { return this.svc.createCareerPlan(dto); }
+  createCareerPlan(@Body() dto: CreateEmployeeCareerPlanDto) { return this.svc.createCareerPlan(dto); }
  
   @Put(':id') @Roles('ADMIN','RH') @ApiOperation({ summary: 'Atualizar colaborador' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEmployeeDto) {

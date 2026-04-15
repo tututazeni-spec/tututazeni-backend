@@ -1,82 +1,241 @@
 import {
   Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, ParseIntPipe, UseGuards,
+  Body, Param, Query, ParseIntPipe,
+  UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { LeadershipService } from './leadership.service';
 import {
-  CreateLeadershipProgramDto, UpdateLeadershipProgramDto,
+  CreateLeadershipProgramDto, UpdateLeadershipProgramDto, LeadershipFilterDto,
   EnrollLeadershipDto, UpdateParticipantProgressDto,
+  CreateOneOnOneDto, CompleteOneOnOneDto,
+  Submit360FeedbackDto, SubmitPulseDto,
+  CreateMentoringDto, LogMentoringSessionDto,
+  UpsertTeamHealthDto, SendKudosDto,
 } from './leadership.dto';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
+import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
+import { RolesGuard }    from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
- 
-@ApiTags('Leadership Programs')
+
+@ApiTags('Leadership')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('leadership')
 export class LeadershipController {
   constructor(private readonly svc: LeadershipService) {}
- 
-  @Get()
-  @ApiOperation({ summary: 'Listar programas de liderança' })
-  findAll() { return this.svc.findAll(); }
- 
-  @Get('my')
-  @ApiOperation({ summary: 'Meus programas de liderança' })
+
+  // ── Dashboard do Líder ────────────────────────────────────────────────────
+
+  @Get('my/dashboard')
+  @ApiOperation({ summary: 'Dashboard pessoal do líder (score, programas, mentoring, 1:1s)' })
+  myDashboard(@CurrentUser() user: any) {
+    return this.svc.getMyLeaderDashboard(user.id);
+  }
+
+  @Get('team/dashboard')
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Team Dashboard — saúde, semáforo, alertas da equipa' })
+  teamDashboard(@CurrentUser() user: any) {
+    return this.svc.getTeamDashboard(user.id);
+  }
+
+  // ── Programas ─────────────────────────────────────────────────────────────
+
+  @Get('programs')
+  @ApiOperation({ summary: 'Catálogo de programas de liderança' })
+  findAll(@Query() filters: LeadershipFilterDto) {
+    return this.svc.findAll(filters);
+  }
+
+  @Get('programs/my')
+  @ApiOperation({ summary: 'Os meus programas de liderança' })
   myPrograms(@CurrentUser() user: any) { return this.svc.getMyPrograms(user.id); }
- 
-  @Get(':id')
+
+  @Get('programs/:id')
   @ApiOperation({ summary: 'Detalhe do programa' })
   findOne(@Param('id', ParseIntPipe) id: number) { return this.svc.findOne(id); }
- 
-  @Get(':id/stats')
+
+  @Get('programs/:id/stats')
   @Roles('ADMIN', 'RH')
-  @ApiOperation({ summary: 'Estatísticas do programa' })
+  @ApiOperation({ summary: 'Estatísticas do programa (conclusão, progresso médio)' })
   stats(@Param('id', ParseIntPipe) id: number) { return this.svc.getProgramStats(id); }
- 
-  @Post()
+
+  @Post('programs')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar programa de liderança' })
   create(@Body() dto: CreateLeadershipProgramDto) { return this.svc.create(dto); }
- 
-  @Post('enroll')
+
+  @Put('programs/:id')
   @Roles('ADMIN', 'RH')
-  @ApiOperation({ summary: 'Inscrever utilizador num programa' })
+  @ApiOperation({ summary: 'Actualizar programa' })
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLeadershipProgramDto) {
+    return this.svc.update(id, dto);
+  }
+
+  @Delete('programs/:id')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Eliminar programa (só sem participantes)' })
+  remove(@Param('id', ParseIntPipe) id: number) { return this.svc.remove(id); }
+
+  @Post('programs/enroll')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Inscrever colaborador num programa' })
   enroll(@Body() dto: EnrollLeadershipDto) { return this.svc.enroll(dto); }
- 
-  @Post('self-enroll/:programId')
+
+  @Post('programs/:programId/self-enroll')
   @ApiOperation({ summary: 'Auto-inscrição num programa' })
   selfEnroll(@CurrentUser() user: any, @Param('programId', ParseIntPipe) programId: number) {
     return this.svc.enroll({ userId: user.id, programId });
   }
- 
-  @Put(':id')
+
+  @Patch('programs/:programId/participants/:userId/progress')
   @Roles('ADMIN', 'RH')
-  @ApiOperation({ summary: 'Atualizar programa' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLeadershipProgramDto) {
-    return this.svc.update(id, dto);
-  }
- 
-  @Patch(':programId/participants/:userId/progress')
-  @Roles('ADMIN', 'RH')
-  @ApiOperation({ summary: 'Atualizar progresso do participante' })
+  @ApiOperation({ summary: 'Actualizar progresso do participante' })
+  @HttpCode(HttpStatus.OK)
   updateProgress(
     @Param('programId', ParseIntPipe) programId: number,
-    @Param('userId', ParseIntPipe) userId: number,
+    @Param('userId',    ParseIntPipe) userId:    number,
     @Body() dto: UpdateParticipantProgressDto,
-  ) { return this.svc.updateProgress(userId, programId, dto); }
- 
-  @Patch(':programId/withdraw')
+  ) {
+    return this.svc.updateProgress(userId, programId, dto);
+  }
+
+  @Patch('programs/:programId/withdraw')
   @ApiOperation({ summary: 'Abandonar programa' })
+  @HttpCode(HttpStatus.OK)
   withdraw(@CurrentUser() user: any, @Param('programId', ParseIntPipe) programId: number) {
     return this.svc.withdraw(user.id, programId);
   }
- 
-  @Delete(':id')
-  @Roles('ADMIN')
-  @ApiOperation({ summary: 'Remover programa' })
-  remove(@Param('id', ParseIntPipe) id: number) { return this.svc.remove(id); }
+
+  // ── Team Health ───────────────────────────────────────────────────────────
+
+  @Get('team/health')
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Métricas de saúde da equipa do gestor autenticado' })
+  teamHealth(@CurrentUser() user: any) { return this.svc.getTeamHealth(user.id); }
+
+  @Patch('team/health')
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Actualizar métricas de saúde da equipa' })
+  @HttpCode(HttpStatus.OK)
+  upsertTeamHealth(@CurrentUser() user: any, @Body() dto: UpsertTeamHealthDto) {
+    return this.svc.upsertTeamHealth(user.id, dto);
+  }
+
+  // ── One-on-One ────────────────────────────────────────────────────────────
+
+  @Get('1on1')
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Listar 1:1s agendados / realizados' })
+  @ApiQuery({ name: 'subordinateId', required: false })
+  getOneOnOnes(
+    @CurrentUser() user: any,
+    @Query('subordinateId') subordinateId?: string,
+  ) {
+    return this.svc.getOneOnOnes(user.id, subordinateId ? parseInt(subordinateId) : undefined);
+  }
+
+  @Post('1on1')
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Agendar 1:1 com liderado' })
+  createOneOnOne(@CurrentUser() user: any, @Body() dto: CreateOneOnOneDto) {
+    return this.svc.createOneOnOne(user.id, dto);
+  }
+
+  @Patch('1on1/complete')
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Concluir 1:1 e registar ata' })
+  @HttpCode(HttpStatus.OK)
+  completeOneOnOne(@CurrentUser() user: any, @Body() dto: CompleteOneOnOneDto) {
+    return this.svc.completeOneOnOne(user.id, dto);
+  }
+
+  // ── Feedback 360° ─────────────────────────────────────────────────────────
+
+  @Post('feedback-360')
+  @ApiOperation({ summary: 'Submeter feedback 360° de liderança (anonimizável)' })
+  submit360(@CurrentUser() user: any, @Body() dto: Submit360FeedbackDto) {
+    return this.svc.submit360Feedback(user.id, dto);
+  }
+
+  @Get('feedback-360/:leaderId/summary')
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Sumário 360° de um líder (média por competência, insights)' })
+  get360Summary(@Param('leaderId', ParseIntPipe) leaderId: number) {
+    return this.svc.get360Summary(leaderId);
+  }
+
+  @Get('feedback-360/my/summary')
+  @ApiOperation({ summary: 'O meu sumário de feedback 360°' })
+  my360Summary(@CurrentUser() user: any) {
+    return this.svc.get360Summary(user.id);
+  }
+
+  // ── Pulse ─────────────────────────────────────────────────────────────────
+
+  @Post('pulse')
+  @ApiOperation({ summary: 'Submeter pulse survey mensal sobre o líder' })
+  submitPulse(@CurrentUser() user: any, @Body() dto: SubmitPulseDto) {
+    return this.svc.submitPulse(user.id, dto);
+  }
+
+  // ── Mentoring ─────────────────────────────────────────────────────────────
+
+  @Post('mentoring')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Criar relação de mentoring (ou reverse mentoring)' })
+  createMentoring(@Body() dto: CreateMentoringDto) {
+    return this.svc.createMentoring(dto);
+  }
+
+  @Post('mentoring/session')
+  @ApiOperation({ summary: 'Registar sessão de mentoring' })
+  logSession(@CurrentUser() user: any, @Body() dto: LogMentoringSessionDto) {
+    return this.svc.logMentoringSession(user.id, dto);
+  }
+
+  @Get('mentoring/my')
+  @ApiOperation({ summary: 'As minhas relações de mentoring (como mentor e mentorado)' })
+  myMentoring(@CurrentUser() user: any) { return this.svc.getMyMentoring(user.id); }
+
+  // ── Kudos / Reconhecimento ────────────────────────────────────────────────
+
+  @Post('kudos')
+  @ApiOperation({ summary: 'Dar kudos / reconhecimento a um colega' })
+  sendKudos(@CurrentUser() user: any, @Body() dto: SendKudosDto) {
+    return this.svc.sendKudos(user.id, dto);
+  }
+
+  @Get('kudos')
+  @ApiOperation({ summary: 'Mural de reconhecimento (todos ou de utilizador específico)' })
+  @ApiQuery({ name: 'userId', required: false })
+  getKudosWall(@Query('userId') userId?: string) {
+    return this.svc.getKudosWall(userId ? parseInt(userId) : undefined);
+  }
+
+  // ── Leadership Score & Ranking ────────────────────────────────────────────
+
+  @Get('score/my')
+  @ApiOperation({ summary: 'O meu Leadership Score' })
+  myScore(@CurrentUser() user: any) { return this.svc.getLeadershipScore(user.id); }
+
+  @Get('score/:userId')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Leadership Score de um colaborador' })
+  userScore(@Param('userId', ParseIntPipe) userId: number) {
+    return this.svc.getLeadershipScore(userId);
+  }
+
+  @Get('ranking')
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Ranking de líderes (Leadership Scorecard)' })
+  ranking() { return this.svc.getLeadershipRanking(); }
+
+  @Patch('score/:userId/recalc')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Recalcular Leadership Score de um colaborador' })
+  @HttpCode(HttpStatus.OK)
+  recalcScore(@Param('userId', ParseIntPipe) userId: number) {
+    return this.svc.recalcLeadershipScore(userId);
+  }
 }
- 

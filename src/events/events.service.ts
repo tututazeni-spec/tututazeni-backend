@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateEventDto, UpdateEventDto, UpdateParticipantStatusDto, EventFilterDto } from './events.dto';
+import { CreateEventDto, UpdateEventDto, UpdateEventParticipantStatusDto, EventFilterDto } from './events.dto';
  
 @Injectable()
 export class EventsService {
@@ -76,7 +76,7 @@ export class EventsService {
     });
   }
  
-  async updateParticipantStatus(eventId: number, userId: number, dto: UpdateParticipantStatusDto) {
+  async updateParticipantStatus(eventId: number, userId: number, dto: UpdateEventParticipantStatusDto) {
     return this.prisma.eventParticipant.update({
       where: { eventId_userId: { eventId, userId } },
       data: { status: dto.status as any },

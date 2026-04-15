@@ -20,7 +20,7 @@ export class SuccessionService {
           select: {
             id: true, fullName: true, email: true,
             userCompetencies: { include: { competency: true } },
-            performance: { orderBy: { createdAt: 'desc' }, take: 1 },
+            performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
           },
         },
       },
@@ -36,7 +36,7 @@ export class SuccessionService {
         candidate: {
           include: {
             userCompetencies: { include: { competency: true } },
-            performance: { orderBy: { createdAt: 'desc' }, take: 3 },
+            performanceReviews: { orderBy: { createdAt: 'desc' }, take: 3 },
             enrollments: { where: { status: 'CONCLUIDO' }, include: { course: true } },
           },
         },
@@ -73,7 +73,7 @@ export class SuccessionService {
           candidate: {
             select: {
               id: true, fullName: true,
-              performance: { orderBy: { createdAt: 'desc' }, take: 1 },
+              performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
               userCompetencies: { include: { competency: true } },
             },
           },
@@ -100,7 +100,7 @@ export class SuccessionService {
       },
     });
     return positions.map(p => ({
-      position: { id: p.id, name: p.name, level: p.level, department: p.department },
+      position: { id: p.id, name: p.name, level: p.level, departmentId: (p as any).departmentId },
       incumbents: p.users,
       successors: p.successionPlans.map(sp => ({ ...sp.candidate, readiness: sp.readiness })),
     }));

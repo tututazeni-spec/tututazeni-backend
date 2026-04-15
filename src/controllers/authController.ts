@@ -1,35 +1,37 @@
-import { Request, Response } from "express";
+import { Controller, Post, Body, UnauthorizedException, InternalServerErrorException } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { prisma } from "../lib/prisma";
 
-export const login = async (req: Request, res: Response): Promise<void> => {
-  const { email, password } = req.body;
+@Controller("auth")
+export class AuthController {
+  @Post("login")
+  async login(@Body() body: { email: string; password: string }) {
+    const { email, password } = body;
 
-  if (!email || !password) {
-    res.status(400).json({ message: "E-mail e palavra-passe são obrigatórios" });
-    return;
-  }
+    if (!email || !password) {
+      throw new UnauthorizedException("E-mail e palavra-passe são obrigatórios");
+    }
 
-  try {
     const user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
-      res.status(401).json({ message: "Credenciais inválidas" });
-      return;
+      throw new UnauthorizedException("Credenciais inválidas");
+    }
+
+    if (!user.password) {
+      throw new UnauthorizedException("Credenciais inválidas");
     }
 
     const passwordMatch = await bcrypt.compare(password, user.password);
 
     if (!passwordMatch) {
-      res.status(401).json({ message: "Credenciais inválidas" });
-      return;
+      throw new UnauthorizedException("Credenciais inválidas");
     }
 
     const secret: string = process.env.JWT_SECRET!;
     if (!secret) {
-      res.status(500).json({ message: "Configuração do servidor em falta" });
-      return;
+      throw new InternalServerErrorException("Configuração do servidor em falta");
     }
 
     const payload = { sub: user.id, email: user.email };
@@ -39,9 +41,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     const accessToken = jwt.sign(payload, secret, options);
 
-    res.json({ accessToken });
-  } catch (error) {
-    console.error("[auth/login] Erro interno:", error);
-    res.status(500).json({ message: "Erro interno do servidor" });
+    return { accessToken };
   }
-};
+}

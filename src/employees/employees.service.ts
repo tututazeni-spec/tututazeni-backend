@@ -3,7 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateEmployeeDto, UpdateEmployeeDto, CreateContractDto,
-  CreateAttendanceDto, CreateFeedback360Dto, CreateCareerPlanDto, EmployeeFilterDto,
+  CreateEmployeeAttendanceDto, CreateFeedback360Dto, CreateEmployeeCareerPlanDto, EmployeeFilterDto,
 } from './employees.dto';
  
 @Injectable()
@@ -87,7 +87,7 @@ export class EmployeesService {
   }
  
   // ATTENDANCE
-  async logAttendance(dto: CreateAttendanceDto) {
+  async logAttendance(dto: CreateEmployeeAttendanceDto) {
     return this.prisma.attendance.create({
       data: { ...dto, date: new Date(dto.date) },
     });
@@ -126,7 +126,7 @@ export class EmployeesService {
   }
  
   // CAREER PLANS
-  async createCareerPlan(dto: CreateCareerPlanDto) {
+  async createCareerPlan(dto: CreateEmployeeCareerPlanDto) {
     return this.prisma.careerPlan.create({
       data: {
         ...dto,

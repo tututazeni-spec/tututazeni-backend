@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EventsService } from './events.service';
-import { CreateEventDto, UpdateEventDto, UpdateParticipantStatusDto, EventFilterDto } from './events.dto';
+import { CreateEventDto, UpdateEventDto, UpdateEventParticipantStatusDto, EventFilterDto } from './events.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
@@ -64,7 +64,7 @@ export class EventsController {
   participantStatus(
     @Param('id', ParseIntPipe) eventId: number,
     @Param('userId', ParseIntPipe) userId: number,
-    @Body() dto: UpdateParticipantStatusDto,
+    @Body() dto: UpdateEventParticipantStatusDto,
   ) { return this.svc.updateParticipantStatus(eventId, userId, dto); }
  
   @Delete(':id')

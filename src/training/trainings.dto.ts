@@ -2,6 +2,10 @@ import { IsString, IsInt, IsOptional, IsDateString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
+// ← corrigido: removido o bloco `data: { ...dto, type, level }` que estava solto
+// fora de qualquer classe ou função — esse código pertence ao training.service.ts
+// e não ao ficheiro de DTOs. Os campos type e level foram adicionados ao DTO.
+
 export class CreateTrainingDto {
   @ApiProperty() @IsString() title!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
@@ -9,7 +13,10 @@ export class CreateTrainingDto {
   @ApiProperty() @IsDateString() endDate!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() location?: string;
   @ApiProperty() @IsInt() instructorId!: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() type?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() level?: string;
 }
+
 export class UpdateTrainingDto extends PartialType(CreateTrainingDto) {}
 
 export class CreateTrainingSessionDto {

@@ -31,6 +31,7 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Credenciais inválidas');
     if (!user.active) throw new UnauthorizedException('Conta desativada');
  
+    if (!user.password) throw new UnauthorizedException('Credenciais inválidas');
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) throw new UnauthorizedException('Credenciais inválidas');
  
@@ -80,6 +81,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
  
+    if (!user.password) throw new UnauthorizedException('Sem password definida');
     const valid = await bcrypt.compare(dto.currentPassword, user.password);
     if (!valid) throw new BadRequestException('Senha atual incorreta');
  

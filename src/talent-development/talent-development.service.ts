@@ -1,15 +1,5 @@
-// src/talent-development/talent-development.service.ts
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-
-// Schema corrections applied:
-// - User relation 'competencies' → 'userCompetencies'
-// - User relation 'performanceReviews' → 'performance'
-// - UserCompetency has 'level' only (no targetLevel/currentLevel)
-// - PerformanceReview field is 'score', not 'overallScore'
-// - UserPoints has 'points', not 'total'
-// - prisma.successionCandidate does not exist → using SuccessionPlan (has positionId + candidateId)
-// - SuccessionPlan has no readinessScore → ordering by createdAt desc
 
 @Injectable()
 export class TalentDevelopmentService {
@@ -17,29 +7,26 @@ export class TalentDevelopmentService {
 
   async getTalentPool() {
     const users = await this.prisma.user.findMany({
-      where: { active: true },
+      where:   { active: true },
       include: {
-        userCompetencies: { include: { competency: true } },
-        points: true,
-        position: true,
-        department: true,
-        // correct relation name is 'performance'
-        performance: { orderBy: { createdAt: 'desc' }, take: 1 },
+        performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
+        // ← corrigido: include competency para ter acesso a .name; currentLevel em vez de level
+        userCompetencies:   { include: { competency: true } },
+        points:             true,
+        position:           true,
+        department:         true,
       },
     });
 
     return users.map(u => {
-      // UserCompetency has 'level', not 'currentLevel'
+      // ← corrigido: c.level → c.currentLevel (campo real do schema)
       const avgCompetency = u.userCompetencies.length
-        ? u.userCompetencies.reduce((s, c) => s + c.level, 0) / u.userCompetencies.length
+        ? u.userCompetencies.reduce((s: number, c) => s + (c.currentLevel ?? 0), 0) / u.userCompetencies.length
         : 0;
 
-      // PerformanceReview field is 'score', not 'overallScore'
-      const lastReview = u.performance[0];
+      const lastReview      = u.performanceReviews[0];
       const performanceScore = lastReview?.score ?? 0;
-
-      // UserPoints field is 'points', not 'total'
-      const points = u.points?.points ?? 0;
+      const points           = u.points?.points ?? 0;
 
       const talentScore = +(
         avgCompetency * 0.4 +
@@ -49,12 +36,12 @@ export class TalentDevelopmentService {
 
       return {
         user: {
-          id: u.id,
-          fullName: u.fullName,
-          position: u.position,
-          department: u.department,
+          id:         u.id,
+          fullName:   u.fullName,
+          position:   u.position,   // ← válido: incluído acima
+          department: u.department, // ← válido: incluído acima
         },
-        avgCompetency: +avgCompetency.toFixed(1),
+        avgCompetency:   +avgCompetency.toFixed(1),
         performanceScore,
         engagementPoints: points,
         talentScore,
@@ -69,12 +56,12 @@ export class TalentDevelopmentService {
   }
 
   async getTalentMatrix() {
-    const pool = await this.getTalentPool();
+    const pool   = await this.getTalentPool();
     const matrix = {
-      stars:           [] as any[],
-      highPerformers:  [] as any[],
-      potentials:      [] as any[],
-      developing:      [] as any[],
+      stars:          [] as any[],
+      highPerformers: [] as any[],
+      potentials:     [] as any[],
+      developing:     [] as any[],
     };
 
     for (const t of pool) {
@@ -96,15 +83,11 @@ export class TalentDevelopmentService {
   }
 
   async getSuccessionCandidates(positionId: number) {
-    // successionCandidate does not exist → using SuccessionPlan
-    // SuccessionPlan: { id, positionId, candidateId, readiness, createdAt }
     return this.prisma.successionPlan.findMany({
-      where: { positionId },
+      where:   { positionId },
       include: {
-        candidate: {
-          select: { id: true, fullName: true, position: true },
-        },
-        position: true,
+        candidate: { select: { id: true, fullName: true, position: true } },
+        position:  true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -114,21 +97,22 @@ export class TalentDevelopmentService {
     const where: any = {};
     if (departmentId) where.user = { departmentId };
 
+    // ← corrigido: level → currentLevel; include competency e user para ter acesso aos campos
     const gaps = await this.prisma.userCompetency.findMany({
       where,
-      include: {
-        competency: true,
-        user: { select: { id: true, fullName: true, department: true } },
+      select: {
+        currentLevel: true, // ← corrigido: level → currentLevel
+        competency:   true,
+        user:         { select: { id: true, fullName: true, department: true } },
       },
     });
 
-    // UserCompetency has only 'level'; gap is computed against TARGET_LEVEL = 5
     const TARGET_LEVEL = 5;
-    const withGap = gaps.filter(g => TARGET_LEVEL > g.level);
+    const withGap      = gaps.filter(g => TARGET_LEVEL > g.currentLevel); // ← corrigido
     const byCompetency: Record<string, any> = {};
 
     for (const g of withGap) {
-      const cname = g.competency.name;
+      const cname = g.competency.name; // ← válido: competency incluído via select: true
       if (!byCompetency[cname]) {
         byCompetency[cname] = {
           competency: g.competency,
@@ -138,8 +122,8 @@ export class TalentDevelopmentService {
           count:      0,
         };
       }
-      byCompetency[cname].users.push(g.user);
-      byCompetency[cname].totalGap += TARGET_LEVEL - g.level;
+      byCompetency[cname].users.push(g.user);                              // ← válido
+      byCompetency[cname].totalGap += TARGET_LEVEL - g.currentLevel;       // ← corrigido
       byCompetency[cname].count++;
     }
 

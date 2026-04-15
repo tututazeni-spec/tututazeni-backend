@@ -68,8 +68,8 @@ import { AutomationModule }      from './automation/automation.module';
 import { SearchModule }          from './search/search.module';
 
 // INFRA
-import { LearningPathsController } from './courses/learning-paths.controller';
-import { LearningPathsService }    from './courses/learning-paths.service';
+import { LearningPathsController } from './learning-paths/learning-paths.controller';
+import { LearningPathsService }    from './learning-paths/learning-paths.service';
 import { AllExceptionsFilter }     from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor }      from './common/interceptors/logging.interceptor';
 import { JwtAuthGuard }            from './common/guards/jwt-auth.guard';

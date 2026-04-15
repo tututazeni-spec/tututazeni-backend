@@ -1,91 +1,187 @@
 import {
-  Controller, Get, Post, Put, Patch, Delete, Body, Param, Query,
-  ParseIntPipe, UseGuards,
+  Controller, Get, Post, Put, Patch, Delete,
+  Body, Param, Query, ParseIntPipe,
+  UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto, UpdateProfileDto, UserFilterDto } from './users.dto';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
+import {
+  CreateUserDto, UpdateUserDto, UpdateProfileDto,
+  UserFilterDto, BulkActionDto, InviteUserDto, UserChangePasswordDto,
+} from './users.dto';
+import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
+import { RolesGuard }    from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
- 
+
 @ApiTags('Users')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly svc: UsersService) {}
- 
-  @Get()
-  @Roles('ADMIN', 'RH')
-  @ApiOperation({ summary: 'Listar todos os utilizadores' })
-  findAll(@Query() filters: UserFilterDto) {
-    return this.svc.findAll(filters);
+
+  // ── Endpoints do utilizador autenticado ──────────────────────────────────
+
+  @Get('me')
+  @ApiOperation({ summary: 'Perfil do utilizador autenticado' })
+  me(@CurrentUser() user: any) {
+    return this.svc.findOne(user.id);
   }
- 
+
   @Get('me/stats')
-  @ApiOperation({ summary: 'Estatísticas do utilizador autenticado' })
+  @ApiOperation({ summary: 'Estatísticas de aprendizagem (utilizador autenticado)' })
   myStats(@CurrentUser() user: any) {
     return this.svc.getUserStats(user.id);
   }
- 
+
+  @Get('me/team')
+  @ApiOperation({ summary: 'Equipa do utilizador autenticado (se for gestor)' })
+  myTeam(@CurrentUser() user: any) {
+    return this.svc.getTeam(user.id);
+  }
+
+  @Get('me/audit-logs')
+  @ApiOperation({ summary: 'Logs de auditoria do utilizador autenticado' })
+  myAuditLogs(@CurrentUser() user: any, @Query('page') page?: string) {
+    return this.svc.getAuditLogs(user.id, page ? parseInt(page) : 1);
+  }
+
+  @Put('me/profile')
+  @ApiOperation({ summary: 'Actualizar perfil do utilizador autenticado' })
+  updateMyProfile(@CurrentUser() user: any, @Body() dto: UpdateProfileDto) {
+    return this.svc.upsertProfile(user.id, dto);
+  }
+
+  @Patch('me/password')
+  @ApiOperation({ summary: 'Alterar password' })
+  @HttpCode(HttpStatus.OK)
+  changePassword(@CurrentUser() user: any, @Body() dto: UserChangePasswordDto) {
+    return this.svc.changePassword(user.id, dto);
+  }
+
+  // ── Listagem e directório ────────────────────────────────────────────────
+
+  @Get()
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Listar utilizadores com filtros e paginação' })
+  findAll(@Query() filters: UserFilterDto) {
+    return this.svc.findAll(filters);
+  }
+
+  @Get('directory')
+  @ApiOperation({ summary: 'Diretório interno (pesquisa de colaboradores)' })
+  @ApiQuery({ name: 'search',       required: false })
+  @ApiQuery({ name: 'departmentId', required: false })
+  directory(
+    @Query('search')       search?: string,
+    @Query('departmentId') departmentId?: string,
+  ) {
+    return this.svc.getDirectory(search, departmentId ? parseInt(departmentId) : undefined);
+  }
+
+  @Get('admin/dashboard')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Dashboard administrativo de utilizadores' })
+  adminDashboard() {
+    return this.svc.getAdminDashboard();
+  }
+
   @Get(':id')
-  @ApiOperation({ summary: 'Buscar utilizador por ID' })
+  @ApiOperation({ summary: 'Perfil completo de um utilizador' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
   }
- 
+
   @Get(':id/stats')
-  @Roles('ADMIN', 'RH', 'LIDER')
-  @ApiOperation({ summary: 'Estatísticas de um utilizador' })
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Estatísticas de aprendizagem de um utilizador' })
   stats(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getUserStats(id);
   }
- 
+
+  @Get(':id/team')
+  @Roles('ADMIN', 'RH', 'GESTOR')
+  @ApiOperation({ summary: 'Equipa de um gestor com progresso de aprendizagem' })
+  team(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getTeam(id);
+  }
+
+  @Get(':id/audit-logs')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Logs de auditoria de um utilizador' })
+  auditLogs(@Param('id', ParseIntPipe) id: number, @Query('page') page?: string) {
+    return this.svc.getAuditLogs(id, page ? parseInt(page) : 1);
+  }
+
+  // ── Gestão (Admin/RH) ────────────────────────────────────────────────────
+
   @Post()
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar utilizador' })
-  create(@Body() dto: CreateUserDto) {
+  create(@CurrentUser() admin: any, @Body() dto: CreateUserDto) {
     return this.svc.create(dto);
   }
- 
+
+  @Post('invite')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Convidar utilizador por email' })
+  invite(@Body() dto: InviteUserDto) {
+    return this.svc.invite(dto);
+  }
+
   @Post('bulk-import')
   @Roles('ADMIN', 'RH')
-  @ApiOperation({ summary: 'Importação em massa de utilizadores' })
+  @ApiOperation({ summary: 'Importação em massa (com relatório de erros por linha)' })
   bulkImport(@Body() dto: CreateUserDto[]) {
     return this.svc.bulkImport(dto);
   }
- 
+
+  @Post('bulk-action')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Acção em massa (activate, deactivate, suspend, assign_course)' })
+  @HttpCode(HttpStatus.OK)
+  bulkAction(@Body() dto: BulkActionDto) {
+    return this.svc.bulkAction(dto);
+  }
+
   @Put(':id')
   @Roles('ADMIN', 'RH')
-  @ApiOperation({ summary: 'Atualizar utilizador' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUserDto) {
-    return this.svc.update(id, dto);
+  @ApiOperation({ summary: 'Actualizar dados de um utilizador' })
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() admin: any,
+    @Body() dto: UpdateUserDto,
+  ) {
+    return this.svc.update(id, dto, admin.id);
   }
- 
-  @Put('me/profile')
-  @ApiOperation({ summary: 'Atualizar perfil do utilizador autenticado' })
-  updateProfile(@CurrentUser() user: any, @Body() dto: UpdateProfileDto) {
-    return this.svc.upsertProfile(user.id, dto);
-  }
- 
+
   @Patch(':id/activate')
   @Roles('ADMIN', 'RH')
-  @ApiOperation({ summary: 'Ativar utilizador' })
+  @ApiOperation({ summary: 'Activar conta de utilizador' })
+  @HttpCode(HttpStatus.OK)
   activate(@Param('id', ParseIntPipe) id: number) {
     return this.svc.activate(id);
   }
- 
+
   @Patch(':id/deactivate')
   @Roles('ADMIN', 'RH')
-  @ApiOperation({ summary: 'Desativar utilizador' })
-  deactivate(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.deactivate(id);
+  @ApiOperation({ summary: 'Desactivar conta (soft — preserva dados)' })
+  @HttpCode(HttpStatus.OK)
+  deactivate(@Param('id', ParseIntPipe) id: number, @Body('reason') reason?: string) {
+    return this.svc.deactivate(id, reason);
   }
- 
+
+  @Patch(':id/suspend')
+  @Roles('ADMIN', 'RH')
+  @ApiOperation({ summary: 'Suspender conta de utilizador' })
+  @HttpCode(HttpStatus.OK)
+  suspend(@Param('id', ParseIntPipe) id: number, @Body('reason') reason: string) {
+    return this.svc.suspend(id, reason);
+  }
+
   @Delete(':id')
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Remover utilizador' })
+  @ApiOperation({ summary: 'Soft delete — desactiva e marca como saído' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
   }

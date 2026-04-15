@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
-import { KnowledgeService } from './knowledge.service';
+import { KnowledgeService }    from './knowledge.service';
 import { KnowledgeController } from './knowledge.controller';
- 
+import { PrismaModule }        from '../prisma/prisma.module';
+
 @Module({
-  providers: [KnowledgeService],
+  imports:     [PrismaModule],
+  providers:   [KnowledgeService],
   controllers: [KnowledgeController],
-  exports: [KnowledgeService],
+  exports:     [KnowledgeService],
 })
 export class KnowledgeModule {}
- 

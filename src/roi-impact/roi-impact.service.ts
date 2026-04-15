@@ -33,14 +33,14 @@ export class RoiImpactService {
       }),
       // AssessmentAttempt is the closest model with a 'score' field
       this.prisma.assessmentAttempt.aggregate({
-        where: { createdAt: { gte: fromDate, lte: toDate } },
+        where: { startedAt: { gte: fromDate, lte: toDate } },
         _avg: { score: true },
       }),
     ]);
 
     const completionRate = enrollments > 0
       ? Math.round((completed / enrollments) * 100) : 0;
-    const avgKnowledgeGain = avgScore._avg.score ?? 0;
+    const avgKnowledgeGain = avgScore?._avg?.score ?? 0;
 
     const estimatedBenefitPerCompletion = 500;
     const estimatedCostPerEnrollment    = 200;
@@ -86,7 +86,7 @@ export class RoiImpactService {
       // Count users whose average competency level >= 4
       this.prisma.userCompetency.groupBy({
         by: ['userId'],
-        having: { level: { _avg: { gte: 4 } } },
+        having: { currentLevel: { _avg: { gte: 4 } } }
       }),
 
       // User has no 'hireDate' — using createdAt as proxy for new hires
