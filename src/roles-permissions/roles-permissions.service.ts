@@ -4,12 +4,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { IsString, IsOptional, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
-export class CreateRoleDto {
+export class CreatePermissionRoleDto {
   @ApiProperty() @IsString() name!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional({ type: [Number] }) @IsOptional() @IsArray() permissionIds?: number[];
 }
-export class UpdateRoleDto extends PartialType(CreateRoleDto) {}
+export class UpdateRoleDto extends PartialType(CreatePermissionRoleDto) {}
 
 @Injectable()
 export class RolesPermissionsService {
@@ -31,7 +31,7 @@ export class RolesPermissionsService {
     return r;
   }
 
-  async create(dto: CreateRoleDto) {
+  async create(dto: CreatePermissionRoleDto) {
     const exists = await this.prisma.role.findFirst({ where: { name: dto.name } });
     if (exists) throw new ConflictException('Nome de role já existe');
     const { permissionIds, ...data } = dto;

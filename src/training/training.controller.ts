@@ -6,7 +6,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TrainingService } from './training.service';
 import {
   CreateTrainingDto, UpdateTrainingDto, CreateTrainingSessionDto,
-  RegisterParticipantDto, UpdateParticipantStatusDto, TrainingFilterDto,
+  RegisterParticipantDto, UpdateTrainingParticipantStatusDto, TrainingFilterDto,
 } from './trainings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -76,7 +76,7 @@ export class TrainingController {
   @ApiOperation({ summary: 'Atualizar status de participante' })
   participantStatus(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateParticipantStatusDto,
+    @Body() dto: UpdateTrainingParticipantStatusDto,
   ) { return this.svc.updateParticipantStatus(id, dto); }
  
   @Delete(':id')

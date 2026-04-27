@@ -464,8 +464,8 @@ export class CourseModulesService {
         userId,
         type:     'MODULE_UNLOCKED',
         message:  `Novo módulo desbloqueado: "${nextModule.title}"`,
-        metadata: { moduleId: nextModule.id, courseId },
-      },
+        metadata: JSON.stringify({ moduleId: nextModule.id, courseId }),
+       },
     }).catch(() => {}); // Silenciar falha na notificação
   }
 
@@ -579,7 +579,7 @@ export class CourseModulesService {
         userId,
         type:     'COURSE_COMPLETED',
         message:  `Concluíste o curso "${course?.title}"! 🎉`,
-        metadata: { courseId, enrollmentId },
+        metadata: JSON.stringify({ courseId, enrollmentId }),
       },
     }).catch(() => {});
   }

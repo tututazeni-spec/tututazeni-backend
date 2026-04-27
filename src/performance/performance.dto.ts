@@ -218,7 +218,7 @@ export class CreateGoalDto {
 
 export class UpdateGoalDto extends PartialType(CreateGoalDto) {}
 
-export class UpdateGoalProgressDto {
+export class UpdatePerformanceGoalProgressDto {
   @ApiProperty() @IsNumber() @Min(0)
   currentValue!: number;
 

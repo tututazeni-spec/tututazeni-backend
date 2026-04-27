@@ -37,23 +37,6 @@ enum EventStatus {
   CANCELED
 }
 
-enum DocCategory {
-  POLITICA
-  MANUAL
-  PROCEDIMENTO
-  FORMULARIO
-  CONTRATO
-  REGULAMENTO
-  COMUNICADO
-  OUTRO
-}
-
-enum DocAccess {
-  PUBLIC
-  DEPARTMENT
-  RESTRICTED
-}
-
 enum ReportFormat {
   PDF
 }
@@ -64,17 +47,376 @@ enum AiRole {
   SYSTEM
 }
 
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  TERMINATED
+  SUSPENDED
+}
+
+enum ContractType {
+  INDEFINITE
+  FIXED_TERM
+  UNCERTAIN_TERM
+  APPRENTICESHIP
+  INTERNSHIP
+  SERVICE_PROVISION
+  TEMPORARY_PLACEMENT
+  PART_TIME
+}
+
+enum WorkMode {
+  REMOTE
+  HYBRID
+  ON_SITE
+}
+
+enum SeniorityLevel {
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+  MANAGER
+  DIRECTOR
+  C_LEVEL
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  NON_BINARY
+  PREFER_NOT_TO_SAY
+}
+
+enum SkillType {
+  TECHNICAL
+  BEHAVIORAL
+  LEADERSHIP
+  LANGUAGE
+  CERTIFICATION
+  TOOL
+}
+
+enum TimelineEventType {
+  HIRED
+  PROMOTED
+  TRANSFERRED
+  SALARY_CHANGE
+  COURSE
+  EVALUATION
+  PDI
+  EVENT
+  BADGE
+  DOCUMENT
+  NOTE
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum RequestType {
+  DATA_CHANGE
+  PROMOTION
+  TRANSFER
+  TERMINATION
+  LEAVE
+  BENEFIT_CHANGE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  PARTIAL
+  ABSENT
+  JUSTIFIED
+  REMOTE
+  ON_LEAVE
+  HALF_DAY_AM
+  HALF_DAY_PM
+  RECORDED
+  HOLIDAY
+}
+
+enum CheckInMethod {
+  MANUAL
+  QR_STATIC
+  QR_DYNAMIC
+  GEOLOCATION
+  FACIAL
+  NFC
+  TOKEN
+  VIRTUAL_LINK
+  FACILITATOR
+}
+
+enum AttendanceContext {
+  WORK
+  EVENT
+  WEBINAR
+  LMS
+  MENTORING
+  PRACTICAL
+}
+
+enum LeaveType {
+  VACATION
+  SICK_LEAVE
+  MATERNITY
+  PATERNITY
+  JUSTIFIED_ABSENCE
+  UNJUSTIFIED_ABSENCE
+  BEREAVEMENT
+  TRAINING
+  PUBLIC_DUTY
+  OTHER
+}
+
+enum LeaveStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+enum LeaveCategory {
+  STATUTORY
+  MEDICAL
+  FAMILY
+  TRAINING
+  FLEXIBLE
+  UNPAID
+  DISCIPLINARY
+  OTHER
+}
+
+enum DurationMode {
+  FULL_DAY
+  HALF_AM
+  HALF_PM
+  HOURS
+}
+
+enum ShiftType {
+  MORNING
+  AFTERNOON
+  NIGHT
+  FULL_DAY
+  ROTATING
+  ON_CALL
+  FLEXIBLE
+}
+
+enum OvertimeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPENSATED
+  PAID
+}
+
+enum PayslipStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  ISSUED
+  ACKNOWLEDGED
+  CANCELLED
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  PROCESSING
+  CALCULATED
+  APPROVED
+  PUBLISHED
+  CANCELLED
+}
+
+enum ComponentType {
+  EARNING
+  DEDUCTION
+}
+
+enum ComponentCalcType {
+  FIXED
+  PERCENT
+  FORMULA
+  TABLE
+}
+
+enum DocumentRequestStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  GENERATED
+  ISSUED
+  EXPIRED
+}
+
+enum WorkDeclStatus {
+  DRAFT
+  PENDING
+  SUBMITTED
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum WorkDeclType {
+  ONBOARDING
+  PERIODIC
+  EVENT
+  RESIGNATION
+  EXIT_INTERVIEW
+  DIVERSITY
+  COMPLIANCE
+  GENERAL
+}
+
+enum TemplateLanguage {
+  PT
+  EN
+  FR
+}
+
+enum PurposeCategory {
+  FINANCIAL
+  LEGAL
+  PERSONAL
+  GOVERNMENT
+  OTHER
+}
+
+enum DocCategoryType {
+  PERSONAL
+  LABOUR
+  LEARNING
+  CORPORATE
+  RECRUITMENT
+  COMPLIANCE
+  HEALTH
+  PAYROLL
+  LEAVE
+  POLITICA
+  MANUAL
+  PROCEDIMENTO
+  FORMULARIO
+  CONTRATO
+  REGULAMENTO
+  COMUNICADO
+  OTHER
+  OUTRO
+}
+
+enum DocAccess {
+  PUBLIC
+  DEPARTMENT
+  RESTRICTED
+}
+
+enum DocSensitivity {
+  PUBLIC
+  INTERNAL
+  CONFIDENTIAL
+  RESTRICTED
+  SECRET
+}
+
+enum DocStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  ARCHIVED
+  DELETED
+}
+
+enum ShareLinkAccess {
+  VIEW_ONLY
+  VIEW_DOWNLOAD
+}
+
+enum CareerPlanStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  PAUSED
+  ARCHIVED
+}
+
+enum CareerPathType {
+  LINEAR
+  Y_SHAPED
+  W_SHAPED
+  HORIZONTAL
+  HYBRID
+}
+
+enum ReadinessLevel {
+  READY
+  DEVELOPING
+  STARTING
+}
+
+enum PromotionStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  EXECUTED
+}
+
+enum GoalType {
+  COURSE
+  PROJECT
+  MENTORING
+  CERTIFICATION
+  SKILL
+  OTHER
+}
+
+enum GoalStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum AssessmentSource {
+  SELF
+  MANAGER
+  HR
+  PEER_360
+  TEST
+  PROJECT
+  CERTIFICATION
+  COURSE
+}
+
+enum GapPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 // ══════════════════════════════════════════════════════════════════
 // CORE — USER
 // ══════════════════════════════════════════════════════════════════
 
 model User {
   // ─── Identidade ───────────────────────────────────────────────
-  id             Int      @id @default(autoincrement())
-  fullName       String   @db.Text
-  email          String   @unique
+  id             Int     @id @default(autoincrement())
+  fullName       String  @db.Text
+  email          String  @unique
   password       String?
-  employeeNumber String?  @unique
+  employeeNumber String? @unique
   avatarUrl      String?
 
   // ─── Perfil Pessoal ───────────────────────────────────────────
@@ -90,8 +432,8 @@ model User {
 
   // ─── Status ───────────────────────────────────────────────────
   active        Boolean @default(true)
-  accountStatus String  @default("PENDING") // ACTIVE|INACTIVE|SUSPENDED|BLOCKED|PENDING
-  hrStatus      String  @default("ACTIVE")  // ACTIVE|ON_LEAVE|TERMINATED
+  accountStatus String  @default("PENDING")
+  hrStatus      String  @default("ACTIVE")
 
   // ─── RH / Carreira ────────────────────────────────────────────
   hireDate DateTime?
@@ -109,17 +451,28 @@ model User {
   managerId    Int?
 
   // ─── Relações Organizacionais ─────────────────────────────────
-  role             Role?       @relation(fields: [roleId],       references: [id], onDelete: SetNull)
-  department       Department? @relation("DeptMembers",          fields: [departmentId], references: [id], onDelete: SetNull)
-  position         Position?   @relation("PositionUsers",        fields: [positionId],   references: [id])
-  unit             Unit?       @relation(fields: [unitId],       references: [id])
-  manager          User?       @relation("Hierarchy",            fields: [managerId],    references: [id])
-  subordinates     User[]      @relation("Hierarchy")
-  departmentHead   Department[] @relation("DeptHead")
-  departmentHeadHistory  DepartmentHeadHistory[]
-  departmentTransferLogs DepartmentTransferLog[]
-  orgChanges             OrgChangeLog[] @relation("OrgChangeUser")
-  orgChangesPerformed    OrgChangeLog[] @relation("OrgChangePerformer")
+  role                    Role?                   @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  department              Department?             @relation("DeptMembers", fields: [departmentId], references: [id], onDelete: SetNull)
+  position                Position?               @relation("PositionUsers", fields: [positionId], references: [id])
+  unit                    Unit?                   @relation(fields: [unitId], references: [id])
+  manager                 User?                   @relation("Hierarchy", fields: [managerId], references: [id])
+  subordinates            User[]                  @relation("Hierarchy")
+  departmentHead          Department[]            @relation("DeptHead")
+  departmentHeadHistory   DepartmentHeadHistory[]
+  departmentTransferLogs  DepartmentTransferLog[]
+  orgChanges              OrgChangeLog[]          @relation("OrgChangeUser")
+  orgChangesPerformed     OrgChangeLog[]          @relation("OrgChangePerformer")
+  developmentPlansManaged DevelopmentPlan[]       @relation("PDIManager")
+  pdiEvidences            PdiEvidence[]
+  pdiApprovals            PdiApproval[]
+  reportApprovals         ReportApproval[]
+  reportAccessLogs        ReportAccessLog[]
+  notificationPreference  NotificationPreference?
+  aiTutorMemory           AiTutorMemory?
+  cohortParticipations    CohortParticipant[]
+  eventParticipations     EventParticipant[]
+  eventFeedbacks          EventFeedback[]
+  attendanceRecords       AttendanceRecord[]  @relation("UserAttendanceRecords")
 
   // ─── Perfil & Gamificação ─────────────────────────────────────
   profile        Profile?
@@ -128,21 +481,21 @@ model User {
   learningStreak LearningStreak?
 
   // ─── Competências ─────────────────────────────────────────────
-  userCompetencies         UserCompetency[]
-  competencyEvolutionLogs  CompetencyEvolutionLog[]
-  endorsementsGiven        CompetencyEndorsement[]  @relation("EndorsementGiven")
-  endorsementsReceived     CompetencyEndorsement[]  @relation("EndorsementReceived")
-  competencyMaps           CompetencyMap[]          @relation("UserCompetencyMaps")
-  assessedCompetencyMaps   CompetencyMap[]          @relation("AssessedCompetencyMaps")
+  userCompetencies        UserCompetency[]
+  competencyEvolutionLogs CompetencyEvolutionLog[]
+  endorsementsGiven       CompetencyEndorsement[]  @relation("EndorsementGiven")
+  endorsementsReceived    CompetencyEndorsement[]  @relation("EndorsementReceived")
+  competencyMaps          CompetencyMap[]          @relation("UserCompetencyMaps")
+  assessedCompetencyMaps  CompetencyMap[]          @relation("AssessedCompetencyMaps")
 
   // ─── Aprendizagem ─────────────────────────────────────────────
-  enrollments              Enrollment[]
-  certificates             Certificate[]
-  lessonProgress           LessonProgress[]
-  quizAttempts             QuizAttempt[]
-  assessmentAttempts       AssessmentAttempt[]
-  learningPathEnrollments  LearningPathEnrollment[]
-  courseFeedbacks          CourseFeedback[]
+  enrollments             Enrollment[]
+  certificates            Certificate[]
+  lessonProgress          LessonProgress[]
+  quizAttempts            QuizAttempt[]
+  assessmentAttempts      AssessmentAttempt[]
+  learningPathEnrollments LearningPathEnrollment[]
+  courseFeedbacks         CourseFeedback[]
 
   // ─── Micro-Learning ───────────────────────────────────────────
   microLearningProgress     MicroLearningProgress[]
@@ -150,19 +503,20 @@ model User {
   microQuizAttempts         MicroQuizAttempt[]
   microLearningPlaylists    MicroLearningPlaylist[]
   microLearningsAuthored    MicroLearning[]
+
   // ─── Treinamentos ─────────────────────────────────────────────
   instructedTrainings  Training[]
   trainingParticipants TrainingParticipant[]
   trainingRatings      TrainingRating[]
 
   // ─── Onboarding ───────────────────────────────────────────────
-  onboardingAsUser     OnboardingPlan[] @relation("OnboardingUser")
-  onboardingAsBuddy    OnboardingPlan[] @relation("OnboardingBuddy")
-  onboardingAsManager  OnboardingPlan[] @relation("OnboardingManager")
-  onboardingAsHR       OnboardingPlan[] @relation("OnboardingHR")
-  taskApprovals        OnboardingTaskInstance[] @relation("TaskApprover")
-  documentsUploaded    OnboardingDocument[] @relation("DocUploader")
-  documentsValidated   OnboardingDocument[] @relation("DocValidator")
+  onboardingAsUser    OnboardingPlan[]         @relation("OnboardingUser")
+  onboardingAsBuddy   OnboardingPlan[]         @relation("OnboardingBuddy")
+  onboardingAsManager OnboardingPlan[]         @relation("OnboardingManager")
+  onboardingAsHR      OnboardingPlan[]         @relation("OnboardingHR")
+  taskApprovals       OnboardingTaskInstance[] @relation("TaskApprover")
+  documentsUploaded   OnboardingDocument[]     @relation("DocUploader")
+  documentsValidated  OnboardingDocument[]     @relation("DocValidator")
 
   // ─── Conhecimento ─────────────────────────────────────────────
   articles                KnowledgeArticle[]
@@ -171,22 +525,22 @@ model User {
   articleRatings          ArticleRating[]
   articleVersions         ArticleVersion[]
   articleAcknowledgements ArticleAcknowledgement[]
-  articleQuestionsAsked   ArticleQuestion[] @relation("QuestionAsker")
+  articleQuestionsAsked   ArticleQuestion[]        @relation("QuestionAsker")
 
   // ─── Performance ──────────────────────────────────────────────
-  performanceReviews           PerformanceReview[]       @relation("ReviewedUser")
-  performanceReviewsGiven      PerformanceReview[]       @relation("ReviewerUser")
-  performanceGoals             PerformanceGoal[]
-  continuousFeedbackGiven      ContinuousFeedback[]      @relation("FeedbackGiver")
-  continuousFeedbackReceived   ContinuousFeedback[]      @relation("FeedbackReceived")
-  nineBoxPlacements            NineBoxPlacement[]        @relation("NineBoxUser")
-  nineBoxUpdated               NineBoxPlacement[]        @relation("NineBoxUpdater")
-  calibratedReviews            CalibrationLog[]
-  performanceDisputes          PerformanceDispute[]
-  performanceEvaluationsGiven  PerformanceEvaluation[]   @relation("EvaluatorRelation")
+  performanceReviews             PerformanceReview[]     @relation("ReviewedUser")
+  performanceReviewsGiven        PerformanceReview[]     @relation("ReviewerUser")
+  performanceGoals               PerformanceGoal[]
+  continuousFeedbackGiven        ContinuousFeedback[]    @relation("FeedbackGiver")
+  continuousFeedbackReceived     ContinuousFeedback[]    @relation("FeedbackReceived")
+  nineBoxPlacements              NineBoxPlacement[]      @relation("NineBoxUser")
+  nineBoxUpdated                 NineBoxPlacement[]      @relation("NineBoxUpdater")
+  calibratedReviews              CalibrationLog[]
+  performanceDisputes            PerformanceDispute[]
+  performanceEvaluationsGiven    PerformanceEvaluation[] @relation("EvaluatorRelation")
   performanceEvaluationsReceived PerformanceEvaluation[] @relation("EvaluatedRelation")
-  evaluationRequestsGiven      EvaluationRequest[]       @relation("RequestEvaluator")
-  evaluationRequestsReceived   EvaluationRequest[]       @relation("RequestEvaluated")
+  evaluationRequestsGiven        EvaluationRequest[]     @relation("RequestEvaluator")
+  evaluationRequestsReceived     EvaluationRequest[]     @relation("RequestEvaluated")
 
   // ─── Liderança ────────────────────────────────────────────────
   leadershipParticipations LeadershipParticipant[]
@@ -200,24 +554,25 @@ model User {
   leadershipScore          LeadershipScore?
 
   // ─── Carreira ─────────────────────────────────────────────────
-  careers          UserCareer[]
-  userCareerPlans  UserCareerPlan[] @relation("UserCareerPlans")
-  mentoredPlans    UserCareerPlan[] @relation("MentoredPlans")
-  successionPlans  SuccessionPlan[]
-  developmentPlans DevelopmentPlan[]
+  careers             UserCareer[]
+  userCareerPlans     UserCareerPlan[]   @relation("UserCareerPlans")
+  mentoredCareerPlans UserCareerPlan[]   @relation("CareerMentor")
+  promotionRequests   PromotionRequest[] @relation("PromotionRequester")
+  promotionReviews    PromotionRequest[] @relation("PromotionReviewer")
+  successionPlans     SuccessionPlan[]
+  developmentPlans    DevelopmentPlan[]
 
   // ─── Processos ────────────────────────────────────────────────
   processStandardsOwned ProcessStandard[]
   processStepsOwned     ProcessStep[]
-  initiatedInstances    ProcessInstance[] @relation("InstanceInitiator")
-  targetInstances       ProcessInstance[] @relation("InstanceTarget")
+  initiatedInstances    ProcessInstance[]    @relation("InstanceInitiator")
+  targetInstances       ProcessInstance[]    @relation("InstanceTarget")
   completedSteps        StepProgress[]
   processApprovalLogs   ProcessApprovalLog[]
   processAuditLogs      ProcessAuditLog[]
 
   // ─── Eventos & Presença ───────────────────────────────────────
   events             Event[]
-  eventParticipants  EventParticipant[]
   liveAttendances    LiveAttendance[]
   liveMessages       LiveChatMessage[]
   postClassResponses PostClassResponse[]
@@ -231,15 +586,25 @@ model User {
   historyRecords    HistoryRecord[]
 
   // ─── RH Operacional ───────────────────────────────────────────
-  payslips         Payslip[]
-  workDeclarations WorkDeclaration[]
-  surveyResponses  SurveyResponse[]
+  payslips                 Payslip[]
+  payslipAccessLogs        PayslipAccessLog[]
+  workDeclarations         WorkDeclaration[]
+  surveyResponses          SurveyResponse[]
+  leaveRequests            LeaveRequest[]
+  leaveApprovals           LeaveApproval[]
+  leaveBalances            LeaveBalance[]
+  overtimeRecords          OvertimeRecord[]
+  userSchedule             UserSchedule?
+  attendanceJustifications AttendanceJustification[]
+  attendanceAdjustments    AttendanceAdjustment[]
+  payrollRunsCreated       PayrollRun[]              @relation("PayrollRunCreator")
+  employeeCompensations    EmployeeCompensation[]
 
   // ─── Notificações & Auditoria ─────────────────────────────────
   notificationLogs NotificationLog[]
   auditLogs        AuditLog[]
-  userAuditLogs    UserAuditLog[] @relation("AuditTarget")
-  auditPerformed   UserAuditLog[] @relation("AuditPerformer")
+  userAuditLogs    UserAuditLog[]    @relation("AuditTarget")
+  auditPerformed   UserAuditLog[]    @relation("AuditPerformer")
 
   // ─── Mobile ───────────────────────────────────────────────────
   mobileSessions MobileSession[]
@@ -257,6 +622,28 @@ model User {
   questions Questions[]
   answers   Answers[]
 
+  // ─── Documentos (Repositório) ─────────────────────────────────
+  createdDocuments      Document[]      @relation("DocCreator")
+  ownedDocuments        Document[]      @relation("DocOwner")
+  uploadedDocVersions   DocVersion[]
+  docPermissions        DocPermission[]
+  grantedDocPermissions DocPermission[] @relation("PermissionGrantor")
+  docShareLinks         DocShareLink[]
+  docDownloads          DocDownload[]
+  docAuditLogs          DocAuditLog[]
+
+  // ─── Declarações ──────────────────────────────────────────────
+  declarationTemplates DeclarationTemplate[]
+  declarationRequests  DeclarationRequest[]
+  declarationApprovals DeclarationApproval[]
+  workDeclForms        WorkDeclForm[]
+  workDeclSubmissions  WorkDeclSubmission[]
+  workDeclReviews      WorkDeclReview[]
+
+  // ─── Skills ───────────────────────────────────────────────────
+  legacySkills         LegacyEmployeeSkill[]
+  assessedLegacySkills LegacyEmployeeSkill[] @relation("SkillAssessor")
+  workDeclAnswers      WorkDeclAnswer[]
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -282,8 +669,9 @@ model UserAuditLog {
   action        String
   meta          String?
   createdAt     DateTime @default(now())
-  user          User     @relation("AuditTarget",    fields: [userId],        references: [id])
+  user          User     @relation("AuditTarget", fields: [userId], references: [id])
   performedBy   User     @relation("AuditPerformer", fields: [performedById], references: [id])
+
   @@index([userId])
   @@index([createdAt])
 }
@@ -331,6 +719,7 @@ model Permission {
   roleId          Int
   role            Role             @relation(fields: [roleId], references: [id], onDelete: Cascade)
   rolePermissions RolePermission[]
+
   @@index([action])
   @@index([subject])
 }
@@ -339,7 +728,7 @@ model RolePermission {
   id           Int        @id @default(autoincrement())
   roleId       Int
   permissionId Int
-  role         Role       @relation(fields: [roleId],       references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 }
 
@@ -348,97 +737,95 @@ model RolePermission {
 // ══════════════════════════════════════════════════════════════════
 
 model Department {
-  id             Int      @id @default(autoincrement())
-  code           String   @unique
-  name           String
-  description    String?
-  active         Boolean  @default(true)
-  status         String   @default("ACTIVE")
-  color          String?
-  icon           String?
-  costCenter     String?
-  annualBudget   Float?
-  trainingBudget Int?
-  parentId       Int?
-  headId         Int?
-  unitId         Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                  Int                     @id @default(autoincrement())
+  code                String                  @unique
+  name                String
+  description         String?
+  active              Boolean                 @default(true)
+  status              String                  @default("ACTIVE")
+  color               String?
+  icon                String?
+  costCenter          String?
+  annualBudget        Float?
+  trainingBudget      Int?
+  parentId            Int?
+  headId              Int?
+  unitId              Int?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  parent              Department?             @relation("DeptHierarchy", fields: [parentId], references: [id])
+  children            Department[]            @relation("DeptHierarchy")
+  head                User?                   @relation("DeptHead", fields: [headId], references: [id])
+  unit                Unit?                   @relation(fields: [unitId], references: [id])
+  users               User[]                  @relation("DeptMembers")
+  headHistory         DepartmentHeadHistory[]
+  transfersIn         DepartmentTransferLog[] @relation("TransferTo")
+  transfersOut        DepartmentTransferLog[] @relation("TransferFrom")
+  dashboardSnapshots  DashboardSnapshot[]
+  companyDocuments    CompanyDocument[]
+  executiveReports    ExecutiveReport[]
+  processStandards    ProcessStandard[]
+  onboardingTemplates OnboardingTemplate[]
+  orgChangesFrom      OrgChangeLog[]          @relation("OrgChangeFrom")
+  orgChangesTo        OrgChangeLog[]          @relation("OrgChangeTo")
+  courses             Course[]
 
-  parent   Department?  @relation("DeptHierarchy",  fields: [parentId], references: [id])
-  children Department[] @relation("DeptHierarchy")
-  head     User?        @relation("DeptHead",        fields: [headId],   references: [id])
-  unit     Unit?        @relation(fields: [unitId],  references: [id])
-
-  users                User[]                  @relation("DeptMembers")
-  headHistory          DepartmentHeadHistory[]
-  transfersIn          DepartmentTransferLog[] @relation("TransferTo")
-  transfersOut         DepartmentTransferLog[] @relation("TransferFrom")
-  dashboardSnapshots   DashboardSnapshot[]
-  companyDocuments     CompanyDocument[]
-  executiveReports     ExecutiveReport[]
-  processStandards     ProcessStandard[]
-  onboardingTemplates  OnboardingTemplate[]
-  orgChangesFrom       OrgChangeLog[]          @relation("OrgChangeFrom")
-  orgChangesTo         OrgChangeLog[]          @relation("OrgChangeTo")
-  courses              Course[]
   @@index([active])
   @@index([parentId])
 }
 
 model DepartmentHeadHistory {
-  id           Int       @id @default(autoincrement())
+  id           Int        @id @default(autoincrement())
   departmentId Int
   headId       Int
-  startedAt    DateTime  @default(now())
+  startedAt    DateTime   @default(now())
   endedAt      DateTime?
   department   Department @relation(fields: [departmentId], references: [id])
-  head         User       @relation(fields: [headId],       references: [id])
+  head         User       @relation(fields: [headId], references: [id])
 }
 
 model DepartmentTransferLog {
-  id               Int        @id @default(autoincrement())
+  id               Int         @id @default(autoincrement())
   userId           Int
   fromDepartmentId Int?
   toDepartmentId   Int
   reason           String?
-  transferredAt    DateTime   @default(now())
-  user             User       @relation(fields: [userId],           references: [id])
+  transferredAt    DateTime    @default(now())
+  user             User        @relation(fields: [userId], references: [id])
   fromDepartment   Department? @relation("TransferFrom", fields: [fromDepartmentId], references: [id])
-  toDepartment     Department  @relation("TransferTo",   fields: [toDepartmentId],   references: [id])
+  toDepartment     Department  @relation("TransferTo", fields: [toDepartmentId], references: [id])
+
   @@index([userId])
   @@index([toDepartmentId])
 }
 
 model Unit {
-  id       Int     @id @default(autoincrement())
-  name     String
-  code     String  @unique
-  type     String  @default("BRANCH") // HEADQUARTERS|BRANCH|REMOTE|PROJECT
-  province String?
-  address  String?
-  city     String?
-  country  String?
-  timezone String?
-  phone    String?
-  email    String?
-
+  id                 Int                 @id @default(autoincrement())
+  name               String
+  code               String              @unique
+  type               String              @default("BRANCH")
+  province           String?
+  address            String?
+  city               String?
+  country            String?
+  timezone           String?
+  phone              String?
+  email              String?
   users              User[]
   departments        Department[]
   operationalMetrics OperationalMetric[]
 }
 
 model Position {
-  id               Int     @id @default(autoincrement())
-  name             String
-  code             String?
-  description      String?
-  level            String?
-  departmentId     Int?
-  salaryMin        Float?
-  salaryMax        Float?
-  headcountPlanned Int?    @default(1)
-
+  id                  Int                  @id @default(autoincrement())
+  name                String
+  code                String?
+  description         String?
+  level               String?
+  departmentId        Int?
+  salaryMin           Float?
+  salaryMax           Float?
+  headcountPlanned    Int?                 @default(1)
   users               User[]               @relation("PositionUsers")
   successionPlans     SuccessionPlan[]
   competencies        PositionCompetency[]
@@ -448,9 +835,9 @@ model Position {
 }
 
 model OrgChangeLog {
-  id               Int      @id @default(autoincrement())
+  id               Int         @id @default(autoincrement())
   userId           Int
-  changeType       String   // PROMOTION|TRANSFER|RESTRUCTURE|HIRE|TERMINATION|MANAGER_CHANGE
+  changeType       String
   fromDepartmentId Int?
   toDepartmentId   Int?
   fromPositionId   Int?
@@ -461,14 +848,13 @@ model OrgChangeLog {
   reason           String?
   notes            String?
   performedById    Int
-  createdAt        DateTime @default(now())
-
-  user           User        @relation("OrgChangeUser",     fields: [userId],           references: [id])
-  performedBy    User        @relation("OrgChangePerformer",fields: [performedById],     references: [id])
-  fromDepartment Department? @relation("OrgChangeFrom",     fields: [fromDepartmentId], references: [id])
-  toDepartment   Department? @relation("OrgChangeTo",       fields: [toDepartmentId],   references: [id])
-  fromPosition   Position?   @relation("OrgChangePosFrom",  fields: [fromPositionId],   references: [id])
-  toPosition     Position?   @relation("OrgChangePosTto",   fields: [toPositionId],     references: [id])
+  createdAt        DateTime    @default(now())
+  user             User        @relation("OrgChangeUser", fields: [userId], references: [id])
+  performedBy      User        @relation("OrgChangePerformer", fields: [performedById], references: [id])
+  fromDepartment   Department? @relation("OrgChangeFrom", fields: [fromDepartmentId], references: [id])
+  toDepartment     Department? @relation("OrgChangeTo", fields: [toDepartmentId], references: [id])
+  fromPosition     Position?   @relation("OrgChangePosFrom", fields: [fromPositionId], references: [id])
+  toPosition       Position?   @relation("OrgChangePosTto", fields: [toPositionId], references: [id])
 
   @@index([userId])
   @@index([changeType])
@@ -480,36 +866,54 @@ model OrgChangeLog {
 // ══════════════════════════════════════════════════════════════════
 
 model UserCareerPlan {
-  id             Int          @id @default(autoincrement())
-  userId         Int
-  mentorId       Int?
-  title          String
-  description    String?      @db.Text
-  targetPosition String?
-  targetDate     DateTime?
-  status         String       @default("DRAFT")
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  user           User         @relation("UserCareerPlans", fields: [userId],   references: [id], onDelete: Cascade)
-  mentor         User?        @relation("MentoredPlans",   fields: [mentorId], references: [id], onDelete: SetNull)
-  goals          CareerGoal[]
-  @@index([userId])
-  @@index([status])
+  id            Int                @id @default(autoincrement())
+  userId        Int
+  user          User               @relation("UserCareerPlans", fields: [userId], references: [id])
+  title         String
+  description   String?
+  status        CareerPlanStatus   @default(DRAFT)
+  currentRoleId Int?
+  currentRole   CareerRole?        @relation("CurrentRole", fields: [currentRoleId], references: [id])
+  targetRoleId  Int?
+  targetRole    CareerRole?        @relation("TargetRole", fields: [targetRoleId], references: [id])
+  careerPathId  Int?
+  careerPath    CareerPath?        @relation(fields: [careerPathId], references: [id])
+  mentorId      Int?
+  mentor        User?              @relation("CareerMentor", fields: [mentorId], references: [id])
+  targetDate    DateTime?
+  activatedAt   DateTime?
+  goals         CareerGoal[]
+  promotions    PromotionRequest[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([userId, status])
 }
 
-model CareerGoal {
-  id           Int            @id @default(autoincrement())
-  careerPlanId Int
-  title        String
-  description  String?        @db.Text
-  category     String?
-  status       String         @default("PENDING")
-  progress     Int            @default(0)
-  dueDate      DateTime?
-  completedAt  DateTime?
-  createdAt    DateTime       @default(now())
-  careerPlan   UserCareerPlan @relation(fields: [careerPlanId], references: [id], onDelete: Cascade)
-  @@index([careerPlanId])
+model CareerRole {
+  id                Int                    @id @default(autoincrement())
+  name              String
+  description       String?
+  department        String
+  seniority         String?
+  level             Int                    @default(1)
+  salaryMin         Float?
+  salaryMax         Float?
+  parentRoleId      Int?
+  parent            CareerRole?            @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
+  children          CareerRole[]           @relation("RoleHierarchy")
+  active            Boolean                @default(true)
+  skillRequirements RoleSkillRequirement[]
+  fromRules         ProgressionRule[]      @relation("FromRole")
+  toRules           ProgressionRule[]      @relation("ToRole")
+  pathSteps         CareerPathStep[]
+  plans             UserCareerPlan[]       @relation("CurrentRole")
+  targetPlans       UserCareerPlan[]       @relation("TargetRole")
+  promotions        PromotionRequest[]
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  @@index([department, level])
 }
 
 model CareerPosition {
@@ -520,6 +924,7 @@ model CareerPosition {
   createdAt    DateTime             @default(now())
   competencies PositionCompetency[]
   users        UserCareer[]
+
   @@index([level])
 }
 
@@ -529,10 +934,112 @@ model UserCareer {
   positionId Int
   startedAt  DateTime       @default(now())
   endedAt    DateTime?
-  user       User           @relation(fields: [userId],     references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   position   CareerPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([positionId])
+}
+
+model CareerSkill {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  description String?
+  type        SkillType
+  category    String?
+  maxLevel    Int          @default(5)
+  active      Boolean      @default(true)
+  goals       CareerGoal[]
+  createdAt   DateTime     @default(now())
+}
+
+model CareerPath {
+  id          Int              @id @default(autoincrement())
+  name        String
+  description String?
+  type        CareerPathType
+  department  String?
+  active      Boolean          @default(true)
+  steps       CareerPathStep[]
+  plans       UserCareerPlan[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model CareerPathStep {
+  id     Int        @id @default(autoincrement())
+  pathId Int
+  path   CareerPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  roleId Int
+  role   CareerRole @relation(fields: [roleId], references: [id])
+  order  Int
+  label  String?
+
+  @@unique([pathId, order])
+  @@index([pathId])
+}
+
+model ProgressionRule {
+  id                        Int        @id @default(autoincrement())
+  fromRoleId                Int
+  fromRole                  CareerRole @relation("FromRole", fields: [fromRoleId], references: [id])
+  toRoleId                  Int
+  toRole                    CareerRole @relation("ToRole", fields: [toRoleId], references: [id])
+  minMonthsInRole           Int?
+  minPerformanceScore       Float?
+  minCompletedProjects      Int?
+  requiresManagerApproval   Boolean    @default(true)
+  requiresHrApproval        Boolean    @default(true)
+  requiresCommitteeApproval Boolean    @default(false)
+  active                    Boolean    @default(true)
+  createdAt                 DateTime   @default(now())
+
+  @@unique([fromRoleId, toRoleId])
+}
+
+model CareerGoal {
+  id           Int            @id @default(autoincrement())
+  careerPlanId Int
+  careerPlan   UserCareerPlan @relation(fields: [careerPlanId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  type         GoalType       @default(OTHER)
+  status       GoalStatus     @default(PENDING)
+  progress     Int            @default(0)
+  skillId      Int?
+  skill        CareerSkill?   @relation(fields: [skillId], references: [id])
+  courseId     Int?
+  dueDate      DateTime?
+  resourceUrl  String?
+  notes        String?
+  completedAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([careerPlanId, status])
+}
+
+model PromotionRequest {
+  id             Int             @id @default(autoincrement())
+  userId         Int
+  user           User            @relation("PromotionRequester", fields: [userId], references: [id])
+  targetRoleId   Int
+  targetRole     CareerRole      @relation(fields: [targetRoleId], references: [id])
+  careerPlanId   Int?
+  careerPlan     UserCareerPlan? @relation(fields: [careerPlanId], references: [id])
+  justification  String
+  readinessScore Float?
+  status         PromotionStatus @default(PENDING)
+  reviewNotes    String?
+  reviewedById   Int?
+  reviewedBy     User?           @relation("PromotionReviewer", fields: [reviewedById], references: [id])
+  reviewedAt     DateTime?
+  effectiveDate  DateTime?
+  requestedById  Int
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([userId, status])
 }
 
 model SuccessionPlan {
@@ -541,18 +1048,130 @@ model SuccessionPlan {
   candidateId Int
   readiness   String   @db.Text
   createdAt   DateTime @default(now())
-  position    Position @relation(fields: [positionId],  references: [id])
+  position    Position @relation(fields: [positionId], references: [id])
   candidate   User     @relation(fields: [candidateId], references: [id])
 }
 
 model DevelopmentPlan {
-  id           Int           @id @default(autoincrement())
-  userId       Int
-  goal         String
-  status       String        @default("ACTIVE")
-  createdAt    DateTime      @default(now())
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  certificates Certificate[]
+  id                 Int                     @id @default(autoincrement())
+  name               String
+  goal               String                  @db.Text
+  userId             Int
+  managerId          Int?
+  priority           String                  @default("MEDIUM")
+  status             String                  @default("DRAFT")
+  period             String?
+  startDate          DateTime?
+  endDate            DateTime?
+  completedAt        DateTime?
+  activatedAt        DateTime?
+  cancelReason       String?
+  performanceCycleId Int?
+  overallProgress    Int                     @default(0)
+  isTemplate         Boolean                 @default(false)
+  notes              String?                 @db.Text
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  user               User                    @relation(fields: [userId], references: [id])
+  manager            User?                   @relation("PDIManager", fields: [managerId], references: [id])
+  actions            DevelopmentPlanAction[]
+  goals              PdiGoal[]
+  checkpoints        PdiCheckpoint[]
+  approvals          PdiApproval[]
+  certificates       Certificate[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([managerId])
+}
+
+model DevelopmentPlanAction {
+  id            Int             @id @default(autoincrement())
+  planId        Int
+  title         String
+  description   String?         @db.Text
+  type          String
+  status        String          @default("TODO")
+  courseId      Int?
+  workloadHours Int?
+  dueDate       DateTime?
+  completedAt   DateTime?
+  resources     String[]
+  xpReward      Int             @default(20)
+  seq           Int             @default(0)
+  mandatory     Boolean         @default(false)
+  progress      Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  plan          DevelopmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  evidence      PdiEvidence[]
+
+  @@index([planId])
+  @@index([status])
+}
+
+model PdiEvidence {
+  id            Int                   @id @default(autoincrement())
+  actionId      Int
+  submittedById Int
+  title         String
+  url           String?
+  notes         String?               @db.Text
+  evidenceType  String                @default("NOTE")
+  createdAt     DateTime              @default(now())
+  action        DevelopmentPlanAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  submittedBy   User                  @relation(fields: [submittedById], references: [id])
+
+  @@index([actionId])
+}
+
+model PdiGoal {
+  id               Int             @id @default(autoincrement())
+  planId           Int
+  title            String
+  description      String?
+  successIndicator String?
+  progress         Int             @default(0)
+  weight           Int             @default(100)
+  notes            String?
+  dueDate          DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  plan             DevelopmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+}
+
+model PdiCheckpoint {
+  id          Int             @id @default(autoincrement())
+  planId      Int
+  title       String
+  description String?
+  type        String          @default("QUICK")
+  status      String          @default("PENDING")
+  scheduledAt DateTime
+  completedAt DateTime?
+  selfScore   Int?
+  notes       String?
+  createdAt   DateTime        @default(now())
+  plan        DevelopmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([scheduledAt])
+}
+
+model PdiApproval {
+  id         Int             @id @default(autoincrement())
+  planId     Int
+  approverId Int
+  decision   String
+  comment    String?
+  createdAt  DateTime        @default(now())
+  plan       DevelopmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  approver   User            @relation(fields: [approverId], references: [id])
+
+  @@index([planId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -560,30 +1179,30 @@ model DevelopmentPlan {
 // ══════════════════════════════════════════════════════════════════
 
 model Course {
-  id                      Int      @id @default(autoincrement())
+  id                      Int       @id @default(autoincrement())
   title                   String
   shortDescription        String?
-  description             String?  @db.Text
+  description             String?   @db.Text
   category                String?
   tags                    String[]
   thumbnailUrl            String?
   introVideoUrl           String?
   workloadHours           Int?
-  language                String   @default("pt")
-  level                   String   @default("BEGINNER")
-  status                  String   @default("DRAFT")
-  mandatory               Boolean  @default(false)
-  internalCode            String?  @unique
+  language                String    @default("pt")
+  level                   String    @default("BEGINNER")
+  status                  String    @default("DRAFT")
+  mandatory               Boolean   @default(false)
+  internalCode            String?   @unique
   departmentId            Int?
   learningObjectives      String[]
   passingScore            Int?
   certificateValidityDays Int?
-  allowDownload           Boolean  @default(false)
+  allowDownload           Boolean   @default(false)
   publishedAt             DateTime?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
-  department      Department?      @relation(fields: [departmentId], references: [id])
+  department      Department?          @relation(fields: [departmentId], references: [id])
   modules         CourseModule[]
   enrollments     Enrollment[]
   feedbacks       CourseFeedback[]
@@ -596,6 +1215,7 @@ model Course {
   liveClasses     LiveClass[]
   trainingImpacts TrainingImpact[]
   learningPaths   LearningPathCourse[]
+  cohorts         InstructorCohort[]
 
   @@index([status])
   @@index([category])
@@ -603,26 +1223,26 @@ model Course {
 }
 
 model CourseModule {
-  id                   Int      @id @default(autoincrement())
+  id                   Int       @id @default(autoincrement())
   courseId             Int
   title                String
   description          String?
   learningObjectives   String[]
   seq                  Int
-  status               String   @default("DRAFT")
+  status               String    @default("DRAFT")
   type                 String?
-  progressionType      String   @default("SEQUENTIAL")
-  completionRule       String   @default("ALL_LESSONS")
-  minCompletionPercent Int      @default(100)
+  progressionType      String    @default("SEQUENTIAL")
+  completionRule       String    @default("ALL_LESSONS")
+  minCompletionPercent Int       @default(100)
   minQuizScore         Int?
-  mandatory            Boolean  @default(true)
+  mandatory            Boolean   @default(true)
   dripDays             Int?
   availableFrom        DateTime?
-  createdAt            DateTime @default(now())
+  createdAt            DateTime  @default(now())
 
-  course     Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  lessons    Lesson[]
-  materials  ModuleMaterial[]
+  course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons     Lesson[]
+  materials   ModuleMaterial[]
   assessments Assessment[]
 
   @@index([courseId])
@@ -634,7 +1254,7 @@ model Lesson {
   moduleId        Int
   title           String
   description     String?
-  type            String   @default("VIDEO") // VIDEO|TEXT|PDF|QUIZ|AUDIO|WEBINAR|DOWNLOAD
+  type            String   @default("VIDEO")
   contentUrl      String?  @db.Text
   textContent     String?  @db.Text
   seq             Int
@@ -642,8 +1262,8 @@ model Lesson {
   isFree          Boolean  @default(false)
   allowDownload   Boolean  @default(false)
   createdAt       DateTime @default(now())
-
-  module   CourseModule    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  content         String?  @db.Text
+  module   CourseModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   progress LessonProgress[]
   quiz     Quiz?
 
@@ -660,8 +1280,8 @@ model LessonProgress {
   watchedSeconds Int?
   resumePosition Int?
 
-  lesson     Lesson      @relation(fields: [lessonId],     references: [id], onDelete: Cascade)
-  user       User        @relation(fields: [userId],       references: [id])
+  lesson     Lesson      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id])
   enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
 
   @@unique([lessonId, userId])
@@ -680,12 +1300,12 @@ model ModuleMaterial {
 }
 
 model Enrollment {
-  id           Int       @id @default(autoincrement())
-  courseId     Int
-  userId       Int
-  status       String    @default("NOT_STARTED")
-  origin       String    @default("MANUAL")
-  mandatory    Boolean   @default(false)
+  id             Int       @id @default(autoincrement())
+  courseId       Int
+  userId         Int
+  status         String    @default("NOT_STARTED")
+  origin         String    @default("MANUAL")
+  mandatory      Boolean   @default(false)
   learningPathId Int?
   assignedById   Int?
   deadline       DateTime?
@@ -694,9 +1314,9 @@ model Enrollment {
   completedAt    DateTime?
   cancelledAt    DateTime?
   cancelReason   String?
-
-  course      Course           @relation(fields: [courseId], references: [id])
-  user        User             @relation(fields: [userId],   references: [id])
+  progress       Int  @default(0)
+  course      Course              @relation(fields: [courseId], references: [id])
+  user        User                @relation(fields: [userId], references: [id])
   certificate Certificate?
   progresses  LessonProgress[]
   attempts    EvaluationAttempt[] @relation("EnrollmentAttempts")
@@ -711,24 +1331,26 @@ model Enrollment {
 }
 
 model Certificate {
-  id                Int             @id @default(autoincrement())
+  id                Int                @id @default(autoincrement())
   type              CertificateType
   userId            Int?
-  enrollmentId      Int?            @unique
+  enrollmentId      Int?               @unique
   courseId          Int?
   programId         Int?
   developmentPlanId Int?
-  issuedAt          DateTime        @default(now())
-  code              String?         @unique
-  validationCode    String          @unique
-  fileUrl           String?         @db.Text
+  issuedAt          DateTime           @default(now())
+  code              String?            @unique
+  validationCode    String             @unique
+  fileUrl           String?            @db.Text
   expiresAt         DateTime?
-  revoked           Boolean         @default(false)
-  user            User?              @relation(fields: [userId],            references: [id])
-  enrollment      Enrollment?        @relation(fields: [enrollmentId],      references: [id], onDelete: Cascade)
-  course          Course?            @relation(fields: [courseId],           references: [id])
-  program         LeadershipProgram? @relation(fields: [programId],          references: [id])
-  developmentPlan DevelopmentPlan?   @relation(fields: [developmentPlanId],  references: [id])
+  revoked           Boolean            @default(false)
+  user              User?              @relation(fields: [userId], references: [id])
+  enrollment        Enrollment?        @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  course            Course?            @relation(fields: [courseId], references: [id])
+  program           LeadershipProgram? @relation(fields: [programId], references: [id])
+  developmentPlan   DevelopmentPlan?   @relation(fields: [developmentPlanId], references: [id])
+  eventId           Int?
+  event             Event?             @relation(fields: [eventId], references: [id])
 }
 
 model Quiz {
@@ -744,7 +1366,7 @@ model Quiz {
 }
 
 model QuizQuestion {
-  id            Int    @id @default(autoincrement())
+  id            Int     @id @default(autoincrement())
   quizId        Int
   question      String
   type          String
@@ -773,8 +1395,9 @@ model CourseCompetency {
   courseId     Int
   competencyId Int
   levelGained  Int        @default(1)
-  course       Course     @relation(fields: [courseId],     references: [id], onDelete: Cascade)
+  course       Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
   competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
   @@unique([courseId, competencyId])
 }
 
@@ -797,7 +1420,8 @@ model CourseFeedback {
   comment   String   @db.Text
   createdAt DateTime @default(now())
   course    Course   @relation(fields: [courseId], references: [id])
-  user      User     @relation(fields: [userId],   references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
   @@unique([courseId, userId])
 }
 
@@ -806,25 +1430,25 @@ model CourseFeedback {
 // ══════════════════════════════════════════════════════════════════
 
 model LearningPath {
-  id               Int      @id @default(autoincrement())
+  id               Int       @id @default(autoincrement())
   title            String
   shortDescription String?
-  description      String?  @db.Text
+  description      String?   @db.Text
   objective        String?
   thumbnailUrl     String?
   category         String?
   tags             String[]
-  level            String   @default("BEGINNER")
-  pathType         String   @default("CUSTOM")
-  progressionType  String   @default("SEQUENTIAL")
-  status           String   @default("DRAFT")
-  mandatory        Boolean  @default(false)
-  language         String   @default("pt")
-  totalHours       Int      @default(0)
+  level            String    @default("BEGINNER")
+  pathType         String    @default("CUSTOM")
+  progressionType  String    @default("SEQUENTIAL")
+  status           String    @default("DRAFT")
+  mandatory        Boolean   @default(false)
+  language         String    @default("pt")
+  totalHours       Int       @default(0)
   deadline         DateTime?
   publishedAt      DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   courses     LearningPathCourse[]
   milestones  LearningPathMilestone[]
@@ -844,7 +1468,8 @@ model LearningPathCourse {
   milestoneId    Int?
   deadlineDays   Int?
   learningPath   LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
-  course         Course       @relation(fields: [courseId],       references: [id])
+  course         Course       @relation(fields: [courseId], references: [id])
+
   @@unique([learningPathId, courseId])
   @@index([learningPathId])
 }
@@ -861,12 +1486,13 @@ model LearningPathMilestone {
 model LearningPathAssignment {
   id             Int          @id @default(autoincrement())
   learningPathId Int
-  targetType     String       // USER|DEPARTMENT|POSITION|UNIT|ROLE
+  targetType     String
   targetId       Int
   mandatory      Boolean      @default(false)
   deadline       DateTime?
   createdAt      DateTime     @default(now())
   learningPath   LearningPath @relation(fields: [learningPathId], references: [id])
+
   @@index([learningPathId])
 }
 
@@ -880,7 +1506,8 @@ model LearningPathEnrollment {
   enrolledAt     DateTime     @default(now())
   completedAt    DateTime?
   learningPath   LearningPath @relation(fields: [learningPathId], references: [id])
-  user           User         @relation(fields: [userId],         references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
   @@unique([learningPathId, userId])
   @@index([status])
   @@index([userId])
@@ -910,73 +1537,76 @@ model Assessment {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  course     Course?      @relation(fields: [courseId], references: [id])
-  module     CourseModule?@relation(fields: [moduleId], references: [id])
-  questions  AssessmentQuestion[]
-  attempts   AssessmentAttempt[]
+  course    Course?              @relation(fields: [courseId], references: [id])
+  module    CourseModule?        @relation(fields: [moduleId], references: [id])
+  questions AssessmentQuestion[]
+  attempts  AssessmentAttempt[]
 
   @@index([courseId])
   @@index([status])
 }
 
 model AssessmentQuestion {
-  id           Int      @id @default(autoincrement())
-  assessmentId Int
-  type         String
-  questionText String
-  mediaUrl     String?
-  options      String?
+  id            Int                       @id @default(autoincrement())
+  assessmentId  Int
+  type          String
+  questionText  String
+  mediaUrl      String?
+  options       String?
   correctAnswer String?
-  explanation  String?
-  weight       Float    @default(1)
-  mandatory    Boolean  @default(false)
-  difficulty   Int      @default(1)
-  tags         String[]
-  seq          Int
-  assessment   Assessment              @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  answers      AssessmentAttemptAnswer[]
+  explanation   String?
+  weight        Float                     @default(1)
+  mandatory     Boolean                   @default(false)
+  difficulty    Int                       @default(1)
+  tags          String[]
+  seq           Int
+  assessment    Assessment                @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  answers       AssessmentAttemptAnswer[]
+
   @@index([assessmentId])
 }
 
 model AssessmentAttempt {
-  id               Int      @id @default(autoincrement())
-  assessmentId     Int
-  userId           Int
-  status           String   @default("IN_PROGRESS")
-  score            Int?
-  passed           Boolean?
-  startedAt        DateTime @default(now())
-  submittedAt      DateTime?
-  deadline         DateTime?
-  timeSpentMinutes Int?
-  questionOrder    String?
-  savedAnswers     String   @default("{}")
-  lastSavedAt      DateTime?
-  needsManualReview Boolean @default(false)
-  assessment       Assessment              @relation(fields: [assessmentId], references: [id])
-  user             User                    @relation(fields: [userId],       references: [id])
-  answers          AssessmentAttemptAnswer[]
+  id                Int                       @id @default(autoincrement())
+  assessmentId      Int
+  userId            Int
+  status            String                    @default("IN_PROGRESS")
+  score             Int?
+  passed            Boolean?
+  startedAt         DateTime                  @default(now())
+  submittedAt       DateTime?
+  deadline          DateTime?
+  timeSpentMinutes  Int?
+  questionOrder     String?
+  savedAnswers      String                    @default("{}")
+  lastSavedAt       DateTime?
+  needsManualReview Boolean                   @default(false)
+  assessment        Assessment                @relation(fields: [assessmentId], references: [id])
+  user              User                      @relation(fields: [userId], references: [id])
+  answers           AssessmentAttemptAnswer[]
+
   @@index([userId])
   @@index([assessmentId])
   @@index([status])
 }
 
 model AssessmentAttemptAnswer {
-  id             Int      @id @default(autoincrement())
-  attemptId      Int
-  questionId     Int
+  id              Int                @id @default(autoincrement())
+  attemptId       Int
+  questionId      Int
   selectedIndices String?
-  textAnswer     String?
-  fileUrl        String?
-  isCorrect      Boolean?
-  earnedPoints   Float    @default(0)
-  needsReview    Boolean  @default(false)
-  manualScore    Float?
-  reviewComment  String?
-  reviewedById   Int?
-  reviewedAt     DateTime?
-  attempt        AssessmentAttempt  @relation(fields: [attemptId],  references: [id], onDelete: Cascade)
-  question       AssessmentQuestion @relation(fields: [questionId], references: [id])
+  textAnswer      String?
+  fileUrl         String?
+  isCorrect       Boolean?
+  earnedPoints    Float              @default(0)
+  needsReview     Boolean            @default(false)
+  manualScore     Float?
+  reviewComment   String?
+  reviewedById    Int?
+  reviewedAt      DateTime?
+  attempt         AssessmentAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question        AssessmentQuestion @relation(fields: [questionId], references: [id])
+
   @@unique([attemptId, questionId])
 }
 
@@ -1014,23 +1644,25 @@ model ProficiencyLevel {
   value        Int
   description  String?
   competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
   @@unique([competencyId, value])
 }
 
 model UserCompetency {
-  id           Int      @id @default(autoincrement())
+  id           Int        @id @default(autoincrement())
   userId       Int
   competencyId Int
-  currentLevel Int      @default(0)
+  currentLevel Int        @default(0)
   targetLevel  Int?
   selfLevel    Int?
   managerLevel Int?
-  source       String   @default("MANUAL")
+  source       String     @default("MANUAL")
   notes        String?
   evidenceUrl  String?
-  evaluatedAt  DateTime @default(now())
-  user         User       @relation(fields: [userId],       references: [id])
+  evaluatedAt  DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id])
   competency   Competency @relation(fields: [competencyId], references: [id])
+
   @@unique([userId, competencyId])
   @@index([userId])
 }
@@ -1044,8 +1676,9 @@ model CompetencyEvolutionLog {
   source        String
   updatedById   Int?
   createdAt     DateTime   @default(now())
-  user          User       @relation(fields: [userId],       references: [id])
+  user          User       @relation(fields: [userId], references: [id])
   competency    Competency @relation(fields: [competencyId], references: [id])
+
   @@index([userId])
   @@index([competencyId])
 }
@@ -1057,23 +1690,24 @@ model CompetencyEndorsement {
   competencyId Int
   comment      String?
   createdAt    DateTime   @default(now())
-  endorser     User       @relation("EndorsementGiven",    fields: [endorserId],   references: [id])
-  user         User       @relation("EndorsementReceived", fields: [userId],       references: [id])
+  endorser     User       @relation("EndorsementGiven", fields: [endorserId], references: [id])
+  user         User       @relation("EndorsementReceived", fields: [userId], references: [id])
   competency   Competency @relation(fields: [competencyId], references: [id])
+
   @@unique([endorserId, userId, competencyId])
 }
 
 model PositionCompetency {
-  id             Int            @id @default(autoincrement())
-  positionId     Int?
+  id               Int             @id @default(autoincrement())
+  positionId       Int?
   careerPositionId Int?
-  competencyId   Int
-  requiredLevel  Int
-  priority       String         @default("MANDATORY")
-  weight         Float          @default(1)
-  position       Position?      @relation(fields: [positionId],       references: [id])
-  careerPosition CareerPosition?@relation(fields: [careerPositionId], references: [id])
-  competency     Competency     @relation(fields: [competencyId],      references: [id])
+  competencyId     Int
+  requiredLevel    Int
+  priority         String          @default("MANDATORY")
+  weight           Float           @default(1)
+  position         Position?       @relation(fields: [positionId], references: [id])
+  careerPosition   CareerPosition? @relation(fields: [careerPositionId], references: [id])
+  competency       Competency      @relation(fields: [competencyId], references: [id])
 }
 
 model CompetencyMap {
@@ -1085,9 +1719,10 @@ model CompetencyMap {
   assessedById Int?
   notes        String?    @db.Text
   assessedAt   DateTime   @default(now())
-  user         User       @relation("UserCompetencyMaps",    fields: [userId],       references: [id], onDelete: Cascade)
-  competency   Competency @relation(fields: [competencyId],  references: [id], onDelete: Cascade)
-  assessedBy   User?      @relation("AssessedCompetencyMaps",fields: [assessedById], references: [id], onDelete: SetNull)
+  user         User       @relation("UserCompetencyMaps", fields: [userId], references: [id], onDelete: Cascade)
+  competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  assessedBy   User?      @relation("AssessedCompetencyMaps", fields: [assessedById], references: [id], onDelete: SetNull)
+
   @@unique([userId, competencyId])
   @@index([userId])
   @@index([competencyId])
@@ -1098,22 +1733,22 @@ model CompetencyMap {
 // ══════════════════════════════════════════════════════════════════
 
 model PerformanceCycle {
-  id                  Int      @id @default(autoincrement())
+  id                  Int       @id @default(autoincrement())
   name                String
-  type                String   // PROBATION|QUARTERLY|SEMESTER|ANNUAL|AD_HOC
-  status              String   @default("PLANNED")
+  type                String
+  status              String    @default("PLANNED")
   startDate           DateTime
   endDate             DateTime
   selfEvalDeadline    DateTime?
   managerEvalDeadline DateTime?
-  goalsWeight         Int      @default(40)
-  competenciesWeight  Int      @default(40)
-  behaviorsWeight     Int      @default(20)
-  selfBeforeManager   Boolean  @default(true)
-  anonymous360        Boolean  @default(true)
-  scoreScale          Int      @default(5)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  goalsWeight         Int       @default(40)
+  competenciesWeight  Int       @default(40)
+  behaviorsWeight     Int       @default(20)
+  selfBeforeManager   Boolean   @default(true)
+  anonymous360        Boolean   @default(true)
+  scoreScale          Int       @default(5)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   reviews  PerformanceReview[]
   goals    PerformanceGoal[]
@@ -1128,7 +1763,7 @@ model PerformanceReview {
   userId         Int
   cycleId        Int
   reviewerId     Int?
-  type           String    // SELF|MANAGER|PEER|R360
+  type           String
   status         String    @default("PENDING_SELF")
   score          Float?
   potentialScore Int?
@@ -1139,7 +1774,7 @@ model PerformanceReview {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  user     User             @relation("ReviewedUser", fields: [userId],     references: [id])
+  user     User             @relation("ReviewedUser", fields: [userId], references: [id])
   reviewer User?            @relation("ReviewerUser", fields: [reviewerId], references: [id])
   cycle    PerformanceCycle @relation(fields: [cycleId], references: [id])
 
@@ -1154,23 +1789,23 @@ model PerformanceReview {
 }
 
 model PerformanceGoal {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   userId       Int
   cycleId      Int
   title        String
   description  String?
   targetValue  Float
-  currentValue Float    @default(0)
-  progress     Int      @default(0)
-  weight       Float    @default(100)
+  currentValue Float     @default(0)
+  progress     Int       @default(0)
+  weight       Float     @default(100)
   unit         String?
-  status       String   @default("ON_TRACK")
+  status       String    @default("ON_TRACK")
   notes        String?
   dueDate      DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  user        User             @relation(fields: [userId],  references: [id])
+  user        User             @relation(fields: [userId], references: [id])
   cycle       PerformanceCycle @relation(fields: [cycleId], references: [id])
   evaluations GoalEvaluation[]
 
@@ -1178,82 +1813,85 @@ model PerformanceGoal {
 }
 
 model GoalEvaluation {
-  id       Int    @id @default(autoincrement())
+  id       Int               @id @default(autoincrement())
   reviewId Int
   goalId   Int
   score    Float
   comment  String?
   review   PerformanceReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  goal     PerformanceGoal   @relation(fields: [goalId],   references: [id])
+  goal     PerformanceGoal   @relation(fields: [goalId], references: [id])
+
   @@unique([reviewId, goalId])
 }
 
 model CompetencyEvaluation {
-  id             Int    @id @default(autoincrement())
+  id             Int               @id @default(autoincrement())
   reviewId       Int
   competencyId   Int
   evaluatedLevel Int
   feedback       String?
   review         PerformanceReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
   @@unique([reviewId, competencyId])
 }
 
 model ContinuousFeedback {
-  id            Int      @id @default(autoincrement())
+  id            Int               @id @default(autoincrement())
   giverId       Int
   userId        Int
   cycleId       Int?
-  type          String   // PRAISE|IMPROVEMENT|GENERAL
+  type          String
   message       String
-  visibleToUser Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  giver         User              @relation("FeedbackGiver",    fields: [giverId],  references: [id])
-  user          User              @relation("FeedbackReceived", fields: [userId],   references: [id])
-  cycle         PerformanceCycle? @relation(fields: [cycleId],  references: [id])
+  visibleToUser Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  giver         User              @relation("FeedbackGiver", fields: [giverId], references: [id])
+  user          User              @relation("FeedbackReceived", fields: [userId], references: [id])
+  cycle         PerformanceCycle? @relation(fields: [cycleId], references: [id])
+
   @@index([userId])
 }
 
 model CalibrationLog {
-  id              Int      @id @default(autoincrement())
+  id              Int               @id @default(autoincrement())
   reviewId        Int
   calibratorId    Int
   previousScore   Float?
   calibratedScore Float
   reason          String
-  createdAt       DateTime @default(now())
-  review          PerformanceReview @relation(fields: [reviewId],     references: [id])
+  createdAt       DateTime          @default(now())
+  review          PerformanceReview @relation(fields: [reviewId], references: [id])
   calibrator      User              @relation(fields: [calibratorId], references: [id])
 }
 
 model PerformanceDispute {
-  id         Int      @id @default(autoincrement())
+  id         Int               @id @default(autoincrement())
   reviewId   Int
   userId     Int
   reason     String
   evidence   String?
-  status     String   @default("OPEN")
+  status     String            @default("OPEN")
   resolution String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime          @default(now())
   review     PerformanceReview @relation(fields: [reviewId], references: [id])
-  user       User              @relation(fields: [userId],   references: [id])
+  user       User              @relation(fields: [userId], references: [id])
 }
 
 model NineBoxPlacement {
-  id              Int      @id @default(autoincrement())
+  id              Int               @id @default(autoincrement())
   userId          Int
   cycleId         Int?
   performanceAxis Int
   potentialAxis   Int
   justification   String
   updatedById     Int
-  updatedAt       DateTime @default(now())
-  user            User              @relation("NineBoxUser",    fields: [userId],      references: [id])
-  cycle           PerformanceCycle? @relation(fields: [cycleId],references: [id])
+  updatedAt       DateTime          @default(now())
+  user            User              @relation("NineBoxUser", fields: [userId], references: [id])
+  cycle           PerformanceCycle? @relation(fields: [cycleId], references: [id])
   updatedBy       User              @relation("NineBoxUpdater", fields: [updatedById], references: [id])
+
   @@unique([userId, cycleId])
 }
 
-// Legacy evaluation models (older system)
 model PerformanceEvaluation {
   id             Int      @id @default(autoincrement())
   evaluatorId    Int
@@ -1266,6 +1904,7 @@ model PerformanceEvaluation {
   createdAt      DateTime @default(now())
   evaluator      User     @relation("EvaluatorRelation", fields: [evaluatorId], references: [id])
   evaluated      User     @relation("EvaluatedRelation", fields: [evaluatedId], references: [id])
+
   @@index([evaluatedId])
   @@index([evaluatorId])
   @@index([period])
@@ -1280,6 +1919,7 @@ model EvaluationRequest {
   createdAt   DateTime  @default(now())
   evaluator   User      @relation("RequestEvaluator", fields: [evaluatorId], references: [id])
   evaluated   User      @relation("RequestEvaluated", fields: [evaluatedId], references: [id])
+
   @@index([evaluatorId])
   @@index([evaluatedId])
 }
@@ -1289,19 +1929,19 @@ model EvaluationRequest {
 // ══════════════════════════════════════════════════════════════════
 
 model LeadershipProgram {
-  id                 Int      @id @default(autoincrement())
+  id                 Int       @id @default(autoincrement())
   name               String
-  description        String?  @db.Text
-  level              String   // INITIAL|INTERMEDIATE|ADVANCED
-  status             String   @default("DRAFT")
+  description        String?   @db.Text
+  level              String
+  status             String    @default("DRAFT")
   durationWeeks      Int?
   learningPathId     Int?
-  mandatory          Boolean  @default(false)
+  mandatory          Boolean   @default(false)
   minLeadershipScore Int?
   startDate          DateTime?
   endDate            DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   participants LeadershipParticipant[]
   certificates Certificate[]
@@ -1311,16 +1951,17 @@ model LeadershipProgram {
 }
 
 model LeadershipParticipant {
-  id          Int       @id @default(autoincrement())
+  id          Int               @id @default(autoincrement())
   userId      Int
   programId   Int
-  progress    Int       @default(0)
-  status      String    @default("ENROLLED")
+  progress    Int               @default(0)
+  status      String            @default("ENROLLED")
   notes       String?
-  enrolledAt  DateTime  @default(now())
+  enrolledAt  DateTime          @default(now())
   completedAt DateTime?
-  user        User              @relation(fields: [userId],    references: [id])
+  user        User              @relation(fields: [userId], references: [id])
   program     LeadershipProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
   @@unique([userId, programId])
   @@index([userId])
 }
@@ -1339,26 +1980,28 @@ model OneOnOne {
   nextMeetingDate DateTime?
   completedAt     DateTime?
   createdAt       DateTime  @default(now())
-  manager         User      @relation("OneOnOneManager",     fields: [managerId],     references: [id])
+  manager         User      @relation("OneOnOneManager", fields: [managerId], references: [id])
   subordinate     User      @relation("OneOnOneSubordinate", fields: [subordinateId], references: [id])
+
   @@index([managerId])
 }
 
 model LeadershipFeedback360 {
-  id                  Int      @id @default(autoincrement())
+  id                  Int                             @id @default(autoincrement())
   leaderId            Int
   respondentId        Int?
   cycleId             Int?
-  anonymous           Boolean  @default(false)
+  anonymous           Boolean                         @default(false)
   qualitativeFeedback String?
-  createdAt           DateTime @default(now())
-  leader              User     @relation("LeaderFeedback", fields: [leaderId], references: [id])
+  createdAt           DateTime                        @default(now())
+  leader              User                            @relation("LeaderFeedback", fields: [leaderId], references: [id])
   responses           LeadershipFeedback360Response[]
+
   @@index([leaderId])
 }
 
 model LeadershipFeedback360Response {
-  id         Int    @id @default(autoincrement())
+  id         Int                   @id @default(autoincrement())
   feedbackId Int
   competency String
   score      Int
@@ -1376,6 +2019,7 @@ model LeadershipPulse {
   month        Int
   year         Int
   createdAt    DateTime @default(now())
+
   @@unique([leaderId, respondentId, month, year])
   @@index([leaderId])
 }
@@ -1390,18 +2034,19 @@ model LeadershipScore {
 }
 
 model Mentoring {
-  id               Int       @id @default(autoincrement())
+  id               Int                @id @default(autoincrement())
   mentorId         Int
   menteeId         Int
   objective        String?
   durationMonths   Int?
-  reverseMentoring Boolean   @default(false)
-  status           String    @default("ACTIVE")
-  startedAt        DateTime  @default(now())
+  reverseMentoring Boolean            @default(false)
+  status           String             @default("ACTIVE")
+  startedAt        DateTime           @default(now())
   completedAt      DateTime?
-  mentor           User              @relation("MentoringMentor", fields: [mentorId], references: [id])
-  mentee           User              @relation("MentoringMentee", fields: [menteeId], references: [id])
+  mentor           User               @relation("MentoringMentor", fields: [mentorId], references: [id])
+  mentee           User               @relation("MentoringMentee", fields: [menteeId], references: [id])
   sessions         MentoringSession[]
+
   @@index([mentorId])
   @@index([menteeId])
 }
@@ -1436,8 +2081,9 @@ model Kudos {
   message    String
   badge      String?
   createdAt  DateTime @default(now())
-  sender     User     @relation("KudosSender",   fields: [senderId],   references: [id])
+  sender     User     @relation("KudosSender", fields: [senderId], references: [id])
   receiver   User     @relation("KudosReceiver", fields: [receiverId], references: [id])
+
   @@index([receiverId])
 }
 
@@ -1446,119 +2092,124 @@ model Kudos {
 // ══════════════════════════════════════════════════════════════════
 
 model OnboardingTemplate {
-  id              Int       @id @default(autoincrement())
+  id              Int                      @id @default(autoincrement())
   name            String
   description     String?
   positionId      Int?
   departmentId    Int?
-  durationDays    Int       @default(30)
+  durationDays    Int                      @default(30)
   learningPathId  Int?
   welcomeVideoUrl String?
-  active          Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  position        Position?   @relation(fields: [positionId],   references: [id])
-  department      Department? @relation(fields: [departmentId], references: [id])
+  active          Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  position        Position?                @relation(fields: [positionId], references: [id])
+  department      Department?              @relation(fields: [departmentId], references: [id])
   tasks           OnboardingTemplateTask[]
   plans           OnboardingPlan[]
+
   @@index([active])
 }
 
 model OnboardingTemplateTask {
-  id               Int      @id @default(autoincrement())
+  id               Int                      @id @default(autoincrement())
   templateId       Int
   title            String
   description      String?
-  category         String   // DOCUMENTS|IT_ACCESS|TRAINING|SOCIAL|BENEFITS|ADMIN|MEETING
-  type             String   // TASK|COURSE|LEARNING_PATH|PROCESS|DOCUMENT|MEETING
-  phase            String   // PRE_BOARDING|DAY_1|WEEK_1|DAY_30|DAY_60|DAY_90
-  responsible      String   // SELF|HR|MANAGER|IT|BUDDY|EXTERNAL
+  category         String
+  type             String
+  phase            String
+  responsible      String
   dueDayOffset     Int?
   dependsOn        Int[]
   courseId         Int?
   processId        Int?
-  xpReward         Int      @default(10)
-  requiresApproval Boolean  @default(false)
-  requiresEvidence Boolean  @default(false)
+  xpReward         Int                      @default(10)
+  requiresApproval Boolean                  @default(false)
+  requiresEvidence Boolean                  @default(false)
   seq              Int
-  template         OnboardingTemplate     @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template         OnboardingTemplate       @relation(fields: [templateId], references: [id], onDelete: Cascade)
   instances        OnboardingTaskInstance[]
+
   @@index([templateId])
 }
 
 model OnboardingPlan {
-  id              Int       @id @default(autoincrement())
+  id              Int                      @id @default(autoincrement())
   userId          Int
   templateId      Int
-  status          String    @default("NOT_STARTED")
-  startDate       DateTime  @default(now())
+  status          String                   @default("NOT_STARTED")
+  startDate       DateTime                 @default(now())
   expectedEndDate DateTime?
   completedAt     DateTime?
   buddyId         Int?
   managerId       Int?
   hrResponsibleId Int?
-  xpEarned        Int       @default(0)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  user          User               @relation("OnboardingUser",    fields: [userId],          references: [id])
-  template      OnboardingTemplate @relation(fields: [templateId],references: [id])
-  buddy         User?              @relation("OnboardingBuddy",   fields: [buddyId],         references: [id])
-  manager       User?              @relation("OnboardingManager", fields: [managerId],       references: [id])
-  hrResponsible User?              @relation("OnboardingHR",      fields: [hrResponsibleId], references: [id])
-  taskInstances OnboardingTaskInstance[]
-  documents     OnboardingDocument[]
-  surveys       OnboardingSurvey[]
+  xpEarned        Int                      @default(0)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  user            User                     @relation("OnboardingUser", fields: [userId], references: [id])
+  template        OnboardingTemplate       @relation(fields: [templateId], references: [id])
+  buddy           User?                    @relation("OnboardingBuddy", fields: [buddyId], references: [id])
+  manager         User?                    @relation("OnboardingManager", fields: [managerId], references: [id])
+  hrResponsible   User?                    @relation("OnboardingHR", fields: [hrResponsibleId], references: [id])
+  taskInstances   OnboardingTaskInstance[]
+  documents       OnboardingDocument[]
+  surveys         OnboardingSurvey[]
+
   @@index([userId])
   @@index([status])
 }
 
 model OnboardingTaskInstance {
-  id             Int       @id @default(autoincrement())
-  planId         Int
-  templateTaskId Int
-  status         String    @default("PENDING")
-  dueDate        DateTime?
-  completedAt    DateTime?
+  id              Int                    @id @default(autoincrement())
+  planId          Int
+  templateTaskId  Int
+  status          String                 @default("PENDING")
+  dueDate         DateTime?
+  completedAt     DateTime?
   evidenceComment String?
-  evidenceUrl    String?
-  skipReason     String?
-  approvedById   Int?
-  approvedAt     DateTime?
-  approvalNote   String?
-  createdAt      DateTime  @default(now())
-  plan         OnboardingPlan         @relation(fields: [planId],         references: [id], onDelete: Cascade)
-  templateTask OnboardingTemplateTask @relation(fields: [templateTaskId], references: [id])
-  approvedBy   User?                  @relation("TaskApprover",           fields: [approvedById], references: [id])
+  evidenceUrl     String?
+  skipReason      String?
+  approvedById    Int?
+  approvedAt      DateTime?
+  approvalNote    String?
+  createdAt       DateTime               @default(now())
+  plan            OnboardingPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  templateTask    OnboardingTemplateTask @relation(fields: [templateTaskId], references: [id])
+  approvedBy      User?                  @relation("TaskApprover", fields: [approvedById], references: [id])
+
   @@unique([planId, templateTaskId])
   @@index([planId])
 }
 
 model OnboardingDocument {
-  id              Int       @id @default(autoincrement())
+  id              Int            @id @default(autoincrement())
   planId          Int
   documentType    String
   fileUrl         String
   notes           String?
-  status          String    @default("PENDING")
+  status          String         @default("PENDING")
   uploadedById    Int
   validatedById   Int?
   validatedAt     DateTime?
   rejectionReason String?
-  createdAt       DateTime  @default(now())
-  plan        OnboardingPlan @relation(fields: [planId],        references: [id], onDelete: Cascade)
-  uploadedBy  User           @relation("DocUploader",           fields: [uploadedById],  references: [id])
-  validatedBy User?          @relation("DocValidator",          fields: [validatedById], references: [id])
+  createdAt       DateTime       @default(now())
+  plan            OnboardingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  uploadedBy      User           @relation("DocUploader", fields: [uploadedById], references: [id])
+  validatedBy     User?          @relation("DocValidator", fields: [validatedById], references: [id])
 }
 
 model OnboardingSurvey {
-  id        Int      @id @default(autoincrement())
+  id        Int            @id @default(autoincrement())
   planId    Int
-  milestone String   // DAY_1|DAY_7|DAY_30|DAY_90
+  milestone String
   score     Int
   enps      Int?
   comment   String?
-  createdAt DateTime @default(now())
+  createdAt DateTime       @default(now())
   plan      OnboardingPlan @relation(fields: [planId], references: [id])
+
   @@unique([planId, milestone])
 }
 
@@ -1567,27 +2218,27 @@ model OnboardingSurvey {
 // ══════════════════════════════════════════════════════════════════
 
 model MicroLearning {
-  id              Int      @id @default(autoincrement())
-  title           String   @db.VarChar(80)
-  description     String?  @db.VarChar(200)
-  contentType     String   // VIDEO|TEXT|AUDIO|INFOGRAPHIC|QUIZ
-  level           String   // BEGINNER|INTERMEDIATE|ADVANCED
-  status          String   @default("DRAFT")
+  id              Int       @id @default(autoincrement())
+  title           String    @db.VarChar(80)
+  description     String?   @db.VarChar(200)
+  contentType     String
+  level           String
+  status          String    @default("DRAFT")
   durationSeconds Int?
   mediaUrl        String?
-  textContent     String?  @db.Text
+  textContent     String?   @db.Text
   thumbnailUrl    String?
   tags            String[]
   takeaways       String[]
-  xpReward        Int      @default(10)
-  viewCount       Int      @default(0)
+  xpReward        Int       @default(10)
+  viewCount       Int       @default(0)
   categoryId      Int?
   learningPathId  Int?
   authorId        Int?
   publishedAt     DateTime?
   scheduledAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   author        User?                      @relation(fields: [authorId], references: [id])
   quizQuestions MicroQuizQuestion[]
@@ -1601,7 +2252,7 @@ model MicroLearning {
 }
 
 model MicroQuizQuestion {
-  id              Int    @id @default(autoincrement())
+  id              Int           @id @default(autoincrement())
   microLearningId Int
   question        String
   options         String
@@ -1611,49 +2262,51 @@ model MicroQuizQuestion {
 }
 
 model MicroLearningProgress {
-  id              Int       @id @default(autoincrement())
+  id              Int           @id @default(autoincrement())
   userId          Int
   microLearningId Int
-  progress        Int       @default(0)
-  watchedSeconds  Int       @default(0)
+  progress        Int           @default(0)
+  watchedSeconds  Int           @default(0)
   completedAt     DateTime?
-  updatedAt       DateTime  @updatedAt
-  user            User          @relation(fields: [userId],          references: [id])
+  updatedAt       DateTime      @updatedAt
+  user            User          @relation(fields: [userId], references: [id])
   microLearning   MicroLearning @relation(fields: [microLearningId], references: [id])
+
   @@unique([userId, microLearningId])
   @@index([userId])
 }
 
 model MicroLearningInteraction {
-  id              Int      @id @default(autoincrement())
+  id              Int           @id @default(autoincrement())
   userId          Int
   microLearningId Int
-  action          String   // LIKE|SAVE|SKIP
-  createdAt       DateTime @default(now())
-  user            User          @relation(fields: [userId],          references: [id])
+  action          String
+  createdAt       DateTime      @default(now())
+  user            User          @relation(fields: [userId], references: [id])
   microLearning   MicroLearning @relation(fields: [microLearningId], references: [id])
+
   @@index([userId])
   @@index([microLearningId])
 }
 
 model MicroQuizAttempt {
-  id              Int      @id @default(autoincrement())
+  id              Int           @id @default(autoincrement())
   userId          Int
   microLearningId Int
   score           Int
   answers         String
-  completedAt     DateTime @default(now())
-  user            User          @relation(fields: [userId],          references: [id])
+  completedAt     DateTime      @default(now())
+  user            User          @relation(fields: [userId], references: [id])
   microLearning   MicroLearning @relation(fields: [microLearningId], references: [id])
 }
 
 model MicroLearningPlaylist {
-  id          Int      @id @default(autoincrement())
+  id          Int            @id @default(autoincrement())
   title       String
   description String?
   authorId    Int
-  createdAt   DateTime @default(now())
-  author      User          @relation(fields: [authorId], references: [id])
+  createdAt   DateTime       @default(now())
+  author      User           @relation(fields: [authorId], references: [id])
   items       PlaylistItem[]
 }
 
@@ -1663,6 +2316,7 @@ model PlaylistItem {
   microLearningId Int
   seq             Int
   playlist        MicroLearningPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
   @@unique([playlistId, microLearningId])
 }
 
@@ -1686,8 +2340,8 @@ model Training {
   description            String?   @db.Text
   objectives             String?
   targetAudience         String?
-  type                   String    // PRESENTIAL|ONLINE|HYBRID
-  level                  String    // BEGINNER|INTERMEDIATE|ADVANCED
+  type                   String
+  level                  String
   status                 String    @default("DRAFT")
   category               String?
   tags                   String[]
@@ -1707,7 +2361,7 @@ model Training {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  instructor   User?                @relation(fields: [instructorId], references: [id])
+  instructor   User?                 @relation(fields: [instructorId], references: [id])
   sessions     TrainingSession[]
   participants TrainingParticipant[]
   ratings      TrainingRating[]
@@ -1717,39 +2371,41 @@ model Training {
 }
 
 model TrainingSession {
-  id              Int       @id @default(autoincrement())
+  id              Int                   @id @default(autoincrement())
   trainingId      Int
   sessionDate     DateTime
   sessionEndDate  DateTime?
   durationMinutes Int
-  modality        String    // PRESENTIAL|ONLINE|HYBRID
+  modality        String
   location        String?
   meetingUrl      String?
-  maxParticipants Int       @default(0)
-  waitlistEnabled Boolean   @default(true)
+  maxParticipants Int                   @default(0)
+  waitlistEnabled Boolean               @default(true)
   notes           String?
-  createdAt       DateTime  @default(now())
+  createdAt       DateTime              @default(now())
   training        Training              @relation(fields: [trainingId], references: [id], onDelete: Cascade)
   participants    TrainingParticipant[]
+
   @@index([trainingId])
   @@index([sessionDate])
 }
 
 model TrainingParticipant {
-  id                 Int       @id @default(autoincrement())
+  id                 Int             @id @default(autoincrement())
   sessionId          Int
   userId             Int
   trainingId         Int?
-  status             String    @default("REGISTERED")
+  status             String          @default("REGISTERED")
   finalScore         Float?
   attendedHours      Float?
   cancellationReason String?
   completedAt        DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  session  TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user     User            @relation(fields: [userId],    references: [id])
-  training  Training?  @relation(fields: [trainingId], references: [id])
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  session            TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user               User            @relation(fields: [userId], references: [id])
+  training           Training?       @relation(fields: [trainingId], references: [id])
+
   @@unique([sessionId, userId])
   @@index([userId])
   @@index([status])
@@ -1762,8 +2418,9 @@ model TrainingRating {
   rating     Int
   comment    String?
   createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId],     references: [id])
+  user       User     @relation(fields: [userId], references: [id])
   training   Training @relation(fields: [trainingId], references: [id])
+
   @@unique([userId, trainingId])
   @@index([trainingId])
 }
@@ -1784,6 +2441,7 @@ model KnowledgeCategory {
   parent      KnowledgeCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
   children    KnowledgeCategory[] @relation("CategoryHierarchy")
   articles    KnowledgeArticle[]
+
   @@index([parentId])
 }
 
@@ -1807,8 +2465,8 @@ model KnowledgeArticle {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  author           User               @relation(fields: [authorId],   references: [id])
-  category         KnowledgeCategory? @relation(fields: [categoryId], references: [id])
+  author           User                     @relation(fields: [authorId], references: [id])
+  category         KnowledgeCategory?       @relation(fields: [categoryId], references: [id])
   tags             KnowledgeTag[]
   interactions     KnowledgeInteraction[]
   ratings          ArticleRating[]
@@ -1827,6 +2485,7 @@ model KnowledgeTag {
   articleId Int
   name      String
   article   KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
   @@index([articleId])
 }
 
@@ -1834,10 +2493,11 @@ model KnowledgeInteraction {
   id        Int              @id @default(autoincrement())
   userId    Int
   articleId Int
-  action    String           // VIEW|LIKE|BOOKMARK|SHARE
+  action    String
   createdAt DateTime         @default(now())
-  user      User             @relation(fields: [userId],    references: [id])
+  user      User             @relation(fields: [userId], references: [id])
   article   KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
   @@index([articleId])
   @@index([userId])
 }
@@ -1849,60 +2509,65 @@ model ArticleRating {
   score     Int
   comment   String?
   createdAt DateTime         @default(now())
-  user      User             @relation(fields: [userId],    references: [id])
+  user      User             @relation(fields: [userId], references: [id])
   article   KnowledgeArticle @relation(fields: [articleId], references: [id])
+
   @@unique([userId, articleId])
 }
 
 model ArticleComment {
-  id        Int      @id @default(autoincrement())
+  id        Int              @id @default(autoincrement())
   articleId Int
   authorId  Int
   content   String
   parentId  Int?
-  createdAt DateTime @default(now())
+  createdAt DateTime         @default(now())
   article   KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  author    User             @relation(fields: [authorId],  references: [id])
+  author    User             @relation(fields: [authorId], references: [id])
   parent    ArticleComment?  @relation("CommentReplies", fields: [parentId], references: [id])
   replies   ArticleComment[] @relation("CommentReplies")
+
   @@index([articleId])
 }
 
 model ArticleQuestion {
-  id           Int       @id @default(autoincrement())
+  id           Int              @id @default(autoincrement())
   articleId    Int
   askedById    Int
   question     String
   answer       String?
   answeredById Int?
   answeredAt   DateTime?
-  createdAt    DateTime  @default(now())
-  article   KnowledgeArticle @relation(fields: [articleId], references: [id])
-  askedBy   User             @relation("QuestionAsker", fields: [askedById], references: [id])
+  createdAt    DateTime         @default(now())
+  article      KnowledgeArticle @relation(fields: [articleId], references: [id])
+  askedBy      User             @relation("QuestionAsker", fields: [askedById], references: [id])
+
   @@index([articleId])
 }
 
 model ArticleVersion {
-  id           Int      @id @default(autoincrement())
+  id           Int              @id @default(autoincrement())
   articleId    Int
   version      Int
   title        String
-  content      String   @db.Text
+  content      String           @db.Text
   authorId     Int
   changeReason String?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime         @default(now())
   article      KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  author       User             @relation(fields: [authorId],  references: [id])
+  author       User             @relation(fields: [authorId], references: [id])
+
   @@unique([articleId, version])
 }
 
 model ArticleAcknowledgement {
-  id             Int      @id @default(autoincrement())
+  id             Int              @id @default(autoincrement())
   userId         Int
   articleId      Int
-  acknowledgedAt DateTime @default(now())
-  user           User             @relation(fields: [userId],    references: [id])
+  acknowledgedAt DateTime         @default(now())
+  user           User             @relation(fields: [userId], references: [id])
   article        KnowledgeArticle @relation(fields: [articleId], references: [id])
+
   @@unique([userId, articleId])
 }
 
@@ -1912,6 +2577,7 @@ model KnowledgeSearchLog {
   userId       Int?
   resultsCount Int      @default(0)
   createdAt    DateTime @default(now())
+
   @@index([query])
   @@index([resultsCount])
 }
@@ -1941,8 +2607,8 @@ model ProcessStandard {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  owner        User        @relation(fields: [ownerId],      references: [id])
-  department   Department? @relation(fields: [departmentId], references: [id])
+  owner        User                 @relation(fields: [ownerId], references: [id])
+  department   Department?          @relation(fields: [departmentId], references: [id])
   steps        ProcessStep[]
   instances    ProcessInstance[]
   versions     ProcessVersion[]
@@ -1953,9 +2619,9 @@ model ProcessStandard {
 }
 
 model ProcessStep {
-  id               Int      @id @default(autoincrement())
+  id               Int             @id @default(autoincrement())
   processId        Int
-  type             String   @default("TASK")
+  type             String          @default("TASK")
   title            String
   description      String?
   order            Int
@@ -1965,11 +2631,12 @@ model ProcessStep {
   estimatedMinutes Float?
   formSchema       String?
   exitConditions   String?
-  requiresUpload   Boolean  @default(false)
+  requiresUpload   Boolean         @default(false)
   checklist        String[]
-  process          ProcessStandard @relation(fields: [processId],    references: [id], onDelete: Cascade)
+  process          ProcessStandard @relation(fields: [processId], references: [id], onDelete: Cascade)
   responsible      User?           @relation(fields: [responsibleId], references: [id])
   stepProgress     StepProgress[]
+
   @@index([processId])
 }
 
@@ -1987,9 +2654,9 @@ model ProcessInstance {
   cancelledAt    DateTime?
   slaDeadline    DateTime?
 
-  process     ProcessStandard @relation(fields: [processId],    references: [id])
-  initiatedBy User            @relation("InstanceInitiator",    fields: [initiatedById], references: [id])
-  targetUser  User            @relation("InstanceTarget",        fields: [targetUserId],  references: [id])
+  process      ProcessStandard @relation(fields: [processId], references: [id])
+  initiatedBy  User            @relation("InstanceInitiator", fields: [initiatedById], references: [id])
+  targetUser   User            @relation("InstanceTarget", fields: [targetUserId], references: [id])
   stepProgress StepProgress[]
 
   @@index([status])
@@ -2012,8 +2679,8 @@ model StepProgress {
   slaDeadline   DateTime?
   duration      Int?
 
-  instance    ProcessInstance @relation(fields: [instanceId],    references: [id])
-  step        ProcessStep     @relation(fields: [stepId],        references: [id])
+  instance    ProcessInstance @relation(fields: [instanceId], references: [id])
+  step        ProcessStep     @relation(fields: [stepId], references: [id])
   completedBy User?           @relation(fields: [completedById], references: [id])
 
   @@unique([instanceId, stepId])
@@ -2021,25 +2688,25 @@ model StepProgress {
 }
 
 model ProcessVersion {
-  id          Int      @id @default(autoincrement())
+  id          Int             @id @default(autoincrement())
   processId   Int
   version     String
   snapshot    String
   createdById Int
-  createdAt   DateTime @default(now())
+  createdAt   DateTime        @default(now())
   process     ProcessStandard @relation(fields: [processId], references: [id])
 }
 
 model ProcessApprovalLog {
-  id        Int      @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   processId Int
   userId    Int
   action    String
   comment   String?
   status    String
-  createdAt DateTime @default(now())
+  createdAt DateTime        @default(now())
   process   ProcessStandard @relation(fields: [processId], references: [id])
-  user      User            @relation(fields: [userId],    references: [id])
+  user      User            @relation(fields: [userId], references: [id])
 }
 
 model ProcessAuditLog {
@@ -2052,6 +2719,7 @@ model ProcessAuditLog {
   hash       String
   createdAt  DateTime @default(now())
   user       User     @relation(fields: [userId], references: [id])
+
   @@index([processId])
   @@index([instanceId])
 }
@@ -2061,56 +2729,68 @@ model ProcessAuditLog {
 // ══════════════════════════════════════════════════════════════════
 
 model Payslip {
-  id                 Int       @id @default(autoincrement())
-  receiptCode        String    @unique
-  userId             Int
-  period             String
-  paymentDate        String?
-  baseSalary         Float     @default(0)
-  mealAllowance      Float     @default(0)
-  vacationAllowance  Float     @default(0)
-  christmasAllowance Float     @default(0)
-  overtime           Float     @default(0)
-  bonuses            Float     @default(0)
-  otherAllowances    Float     @default(0)
-  grossSalary        Float     @default(0)
-  incomeTax          Float     @default(0)
-  socialSecurity     Float     @default(0)
-  employerInss       Float     @default(0)
-  healthInsurance    Float     @default(0)
-  loanDeduction      Float     @default(0)
-  advanceDeduction   Float     @default(0)
-  otherDeductions    Float     @default(0)
-  totalDeductions    Float     @default(0)
-  netSalary          Float     @default(0)
-  irtBracketRate     Float?
-  irtFormula         String?
-  irtOverride        Float?
-  inssOverride       Float?
-  status             String    @default("DRAFT")
-  notes              String?
-  issuedAt           DateTime?
-  acknowledgedAt     DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-
-  user       User               @relation(fields: [userId], references: [id])
-  accessLogs PayslipAccessLog[]
-  disputes   PayslipDispute[]
+  id                     Int                @id @default(autoincrement())
+  userId                 Int
+  user                   User               @relation(fields: [userId], references: [id])
+  period                 String
+  runId                  Int?
+  run                    PayrollRun?        @relation(fields: [runId], references: [id])
+  countryCode            String             @default("AO")
+  baseSalary             Float
+  grossSalary            Float
+  netSalary              Float
+  totalEarnings          Float              @default(0)
+  totalDeductions        Float
+  incomeTax              Float              @default(0)
+  socialSecurity         Float              @default(0)
+  employerSocialSecurity Float              @default(0)
+  totalEmployerCost      Float              @default(0)
+  otherDeductions        Float              @default(0)
+  taxBracket             String?
+  status                 PayslipStatus      @default(DRAFT)
+  notes                  String?
+  issuedAt               DateTime?
+  acknowledgedAt         DateTime?
+  createdById            Int?
+  items                  PayslipItem[]
+  accessLogs             PayslipAccessLog[]
+  disputes               PayslipDispute[]
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
 
   @@unique([userId, period])
-  @@index([period])
-  @@index([status])
+  @@index([userId, period])
+  @@index([period, status])
+  @@index([runId])
+}
+
+model PayslipItem {
+  id        Int     @id @default(autoincrement())
+  payslipId Int
+  payslip   Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  code      String
+  name      String
+  type      String
+  value     Float
+  isTaxable Boolean @default(true)
+  calcType  String?
+  order     Int     @default(0)
+
+  @@index([payslipId])
 }
 
 model PayslipAccessLog {
-  id         Int      @id @default(autoincrement())
-  payslipId  Int
-  userId     Int
-  action     String
-  ip         String
-  accessedAt DateTime @default(now())
-  payslip    Payslip  @relation(fields: [payslipId], references: [id])
+  id        Int      @id @default(autoincrement())
+  payslipId Int
+  payslip   Payslip  @relation(fields: [payslipId], references: [id])
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([payslipId])
+  @@index([userId])
 }
 
 model PayslipDispute {
@@ -2124,6 +2804,109 @@ model PayslipDispute {
   resolvedAt DateTime?
   resolution String?
   payslip    Payslip   @relation(fields: [payslipId], references: [id])
+}
+
+model CountryConfig {
+  id                        Int          @id @default(autoincrement())
+  countryCode               String
+  name                      String
+  currency                  String
+  locale                    String
+  taxYear                   Int
+  minimumWage               Float
+  defaultFoodAllowance      Float?
+  defaultTransportAllowance Float?
+  socialSecurity            Json
+  healthInsuranceRate       Float?
+  unionFeeRate              Float?
+  guaranteeFundRate         Float?
+  active                    Boolean      @default(true)
+  irtBrackets               IrtBracket[]
+  createdAt                 DateTime     @default(now())
+  updatedAt                 DateTime     @updatedAt
+
+  @@unique([countryCode, taxYear])
+  @@index([countryCode, active])
+}
+
+model IrtBracket {
+  id        Int           @id @default(autoincrement())
+  configId  Int
+  config    CountryConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  min       Float
+  max       Float?
+  rate      Float
+  deduction Float?
+  order     Int           @default(0)
+
+  @@index([configId])
+}
+
+model SalaryComponent {
+  code        String            @id
+  name        String
+  description String?
+  type        ComponentType
+  calcType    ComponentCalcType
+  fixedValue  Float?
+  rate        Float?
+  formula     String?
+  isTaxable   Boolean           @default(true)
+  isMandatory Boolean           @default(false)
+  order       Int               @default(0)
+  active      Boolean           @default(true)
+  countryCode String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model EmployeeCompensation {
+  id                 Int                             @id @default(autoincrement())
+  userId             Int
+  user               User                            @relation(fields: [userId], references: [id])
+  baseSalary         Float
+  countryCode        String?                         @default("AO")
+  bankName           String?
+  iban               String?
+  accountNumber      String?
+  effectiveFrom      DateTime                        @default(now())
+  effectiveTo        DateTime?
+  foodAllowance      Float?
+  transportAllowance Float?
+  components         EmployeeCompensationComponent[]
+  createdAt          DateTime                        @default(now())
+  updatedAt          DateTime                        @updatedAt
+
+  @@index([userId, effectiveFrom])
+}
+
+model EmployeeCompensationComponent {
+  id             Int                  @id @default(autoincrement())
+  compensationId Int
+  compensation   EmployeeCompensation @relation(fields: [compensationId], references: [id], onDelete: Cascade)
+  componentCode  String
+  value          Float
+  override       Boolean              @default(false)
+}
+
+model PayrollRun {
+  id            Int              @id @default(autoincrement())
+  period        String
+  countryCode   String           @default("AO")
+  status        PayrollRunStatus @default(DRAFT)
+  notes         String?
+  totalGross    Float?
+  processedAt   DateTime?
+  processedById Int?
+  approvedAt    DateTime?
+  approvedById  Int?
+  createdById   Int
+  createdBy     User             @relation("PayrollRunCreator", fields: [createdById], references: [id])
+  payslips      Payslip[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([period, status])
 }
 
 model WorkDeclaration {
@@ -2142,17 +2925,18 @@ model WorkDeclaration {
 }
 
 model UserAttendance {
-  id            Int       @id @default(autoincrement())
+  id            Int      @id @default(autoincrement())
   userId        Int
   date          DateTime
   clockIn       String?
   clockOut      String?
   workMinutes   Int?
-  status        String    @default("PRESENT")
-  notes         String?   @db.Text
-  justification String?   @db.Text
-  createdAt     DateTime  @default(now())
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status        String   @default("PRESENT")
+  notes         String?  @db.Text
+  justification String?  @db.Text
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, date])
   @@index([userId])
   @@index([date])
@@ -2172,6 +2956,7 @@ model EngagementSurvey {
   updatedAt   DateTime         @updatedAt
   questions   SurveyQuestion[]
   responses   SurveyResponse[]
+
   @@index([status])
 }
 
@@ -2183,6 +2968,7 @@ model SurveyQuestion {
   order    Int
   survey   EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   answers  SurveyAnswer[]
+
   @@index([surveyId])
 }
 
@@ -2193,8 +2979,9 @@ model SurveyResponse {
   score     Float?
   createdAt DateTime         @default(now())
   survey    EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  user      User             @relation(fields: [userId],   references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   answers   SurveyAnswer[]
+
   @@index([surveyId])
   @@index([userId])
 }
@@ -2207,6 +2994,7 @@ model SurveyAnswer {
   comment    String?        @db.Text
   response   SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
   question   SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
   @@index([responseId])
   @@index([questionId])
 }
@@ -2216,11 +3004,11 @@ model SurveyAnswer {
 // ══════════════════════════════════════════════════════════════════
 
 model UserPoints {
-  id         Int          @id @default(autoincrement())
-  userId     Int          @unique
-  points     Int          @default(0)
+  id          Int          @id @default(autoincrement())
+  userId      Int          @unique
+  points      Int          @default(0)
   badgeAwards BadgeAward[]
-  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Badge {
@@ -2231,14 +3019,154 @@ model Badge {
 }
 
 model BadgeAward {
-  id           Int        @id @default(autoincrement())
+  id           Int         @id @default(autoincrement())
   userId       Int
   badgeId      Int
-  awardedAt    DateTime   @default(now())
+  awardedAt    DateTime    @default(now())
   userPointsId Int?
-  user         User        @relation(fields: [userId],       references: [id], onDelete: Cascade)
-  badge        Badge       @relation(fields: [badgeId],      references: [id], onDelete: Cascade)
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge        Badge       @relation(fields: [badgeId], references: [id], onDelete: Cascade)
   userPoints   UserPoints? @relation(fields: [userPointsId], references: [id])
+}
+
+// ══════════════════════════════════════════════════════════════════
+// REPOSITÓRIO DE DOCUMENTOS
+// ══════════════════════════════════════════════════════════════════
+
+model DocCategoryModel {
+  id                 Int             @id @default(autoincrement())
+  name               String
+  description        String?
+  type               DocCategoryType
+  retentionYears     Int?
+  defaultSensitivity DocSensitivity  @default(INTERNAL)
+  requiresApproval   Boolean         @default(false)
+  active             Boolean         @default(true)
+  documents          Document[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+}
+
+model Document {
+  id             Int               @id @default(autoincrement())
+  title          String
+  description    String?
+  category       DocCategoryType
+  categoryId     Int?
+  docCategory    DocCategoryModel? @relation(fields: [categoryId], references: [id])
+  sensitivity    DocSensitivity    @default(INTERNAL)
+  status         DocStatus         @default(ACTIVE)
+  origin         String            @default("UPLOAD")
+  fileUrl        String
+  mimeType       String
+  fileSize       Int?
+  fileName       String?
+  version        String            @default("1.0")
+  tags           String[]
+  ocrText        String?
+  ocrStatus      String?
+  createdById    Int
+  createdBy      User              @relation("DocCreator", fields: [createdById], references: [id])
+  ownerId        Int?
+  owner          User?             @relation("DocOwner", fields: [ownerId], references: [id])
+  department     String?
+  expiresAt      DateTime?
+  retentionUntil DateTime?
+  archivedAt     DateTime?
+  archiveReason  String?
+  deletedAt      DateTime?
+  deleteReason   String?
+  downloadCount  Int               @default(0)
+  versions       DocVersion[]
+  permissions    DocPermission[]
+  shareLinks     DocShareLink[]
+  downloads      DocDownload[]
+  auditLogs      DocAuditLog[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([category, status])
+  @@index([ownerId])
+  @@index([department, status])
+  @@index([expiresAt, status])
+  @@index([sensitivity])
+}
+
+model DocVersion {
+  id                Int      @id @default(autoincrement())
+  documentId        Int
+  document          Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  versionNumber     Int
+  fileUrl           String
+  mimeType          String
+  fileSize          Int?
+  fileName          String?
+  changeDescription String
+  uploadedById      Int
+  uploadedBy        User     @relation(fields: [uploadedById], references: [id])
+  createdAt         DateTime @default(now())
+
+  @@index([documentId, versionNumber])
+}
+
+model DocPermission {
+  id          Int       @id @default(autoincrement())
+  documentId  Int
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  userId      Int?
+  user        User?     @relation(fields: [userId], references: [id])
+  department  String?
+  permissions String[]
+  expiresAt   DateTime?
+  grantedById Int
+  grantedBy   User      @relation("PermissionGrantor", fields: [grantedById], references: [id])
+  createdAt   DateTime  @default(now())
+
+  @@index([documentId])
+  @@index([userId])
+}
+
+model DocShareLink {
+  id            Int             @id @default(autoincrement())
+  documentId    Int
+  document      Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  token         String          @unique
+  access        ShareLinkAccess
+  expiresAt     DateTime
+  passwordHash  String?
+  maxDownloads  Int?
+  downloadCount Int             @default(0)
+  createdById   Int
+  createdBy     User            @relation(fields: [createdById], references: [id])
+  createdAt     DateTime        @default(now())
+
+  @@index([token])
+}
+
+model DocDownload {
+  id           Int      @id @default(autoincrement())
+  documentId   Int
+  document     Document @relation(fields: [documentId], references: [id])
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id])
+  downloadedAt DateTime @default(now())
+
+  @@index([documentId])
+  @@index([userId])
+}
+
+model DocAuditLog {
+  id         Int      @id @default(autoincrement())
+  documentId Int
+  document   Document @relation(fields: [documentId], references: [id])
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  action     String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([documentId, createdAt])
+  @@index([userId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2246,25 +3174,26 @@ model BadgeAward {
 // ══════════════════════════════════════════════════════════════════
 
 model CompanyDocument {
-  id            Int               @id @default(autoincrement())
+  id            Int                @id @default(autoincrement())
   title         String
-  description   String?           @db.Text
-  category      DocCategory
+  description   String?            @db.Text
+  category      DocCategoryType
   access        DocAccess
-  fileUrl       String            @db.Text
+  fileUrl       String             @db.Text
   fileType      String
   fileSize      Int?
   version       String?
   tags          String[]
-  downloadCount Int               @default(0)
-  active        Boolean           @default(true)
+  downloadCount Int                @default(0)
+  active        Boolean            @default(true)
   createdById   Int
   departmentId  Int?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  createdBy     User              @relation(fields: [createdById],  references: [id])
-  department    Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  createdBy     User               @relation(fields: [createdById], references: [id])
+  department    Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   downloads     DocumentDownload[]
+
   @@index([category])
   @@index([access])
   @@index([createdById])
@@ -2277,7 +3206,8 @@ model DocumentDownload {
   userId       Int
   downloadedAt DateTime        @default(now())
   document     CompanyDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  user         User            @relation(fields: [userId],     references: [id], onDelete: Cascade)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([documentId])
   @@index([userId])
 }
@@ -2287,18 +3217,19 @@ model DocumentDownload {
 // ══════════════════════════════════════════════════════════════════
 
 model LiveClass {
-  id            Int                  @id @default(autoincrement())
-  courseId      Int
-  zoomMeetingId String?              @db.Text
-  topic         String               @db.Text
-  scheduledAt   DateTime
-  duration      Int
-  recordingUrl  String?              @db.Text
-  createdAt     DateTime             @default(now())
-  course        Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  attendances   LiveAttendance[]
-  messages      LiveChatMessage[]
+  id             Int                  @id @default(autoincrement())
+  courseId       Int
+  zoomMeetingId  String?              @db.Text
+  topic          String               @db.Text
+  scheduledAt    DateTime
+  duration       Int
+  recordingUrl   String?              @db.Text
+  createdAt      DateTime             @default(now())
+  course         Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  attendances    LiveAttendance[]
+  messages       LiveChatMessage[]
   postEvaluation PostClassEvaluation?
+
   @@index([courseId])
 }
 
@@ -2309,7 +3240,8 @@ model LiveAttendance {
   joinedAt    DateTime
   leftAt      DateTime?
   liveClass   LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
-  user        User      @relation(fields: [userId],      references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([liveClassId, userId])
 }
 
@@ -2320,7 +3252,8 @@ model LiveChatMessage {
   message     String    @db.Text
   createdAt   DateTime  @default(now())
   liveClass   LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
-  user        User      @relation(fields: [userId],      references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([liveClassId])
 }
 
@@ -2340,7 +3273,8 @@ model PostClassResponse {
   feedback     String?             @db.Text
   createdAt    DateTime            @default(now())
   evaluation   PostClassEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
-  user         User                @relation(fields: [userId],       references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([evaluationId, userId])
 }
 
@@ -2349,27 +3283,76 @@ model PostClassResponse {
 // ══════════════════════════════════════════════════════════════════
 
 model InstructorProfile {
-  id            Int                 @id @default(autoincrement())
-  userId        Int                 @unique
-  bio           String?             @db.Text
-  expertiseArea String              @db.Text
-  approved      Boolean             @default(false)
-  ratingAverage Float               @default(0)
-  totalCourses  Int                 @default(0)
-  createdAt     DateTime            @default(now())
-  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reviews       InstructorReview[]
-  payouts       InstructorPayout[]
-  courses       InstructorCourse[]
-  marketplaceCourses MarketplaceCourse[]
+  id                    Int                 @id @default(autoincrement())
+  userId                Int                 @unique
+  bio                   String?             @db.Text
+  expertiseArea         String
+  instructorType        String              @default("STANDARD")
+  specialties           String[]            @default([])
+  certifications        String[]            @default([])
+  linkedinUrl           String?
+  hourlyRate            Float?
+  availableForMentoring Boolean             @default(false)
+  approved              Boolean             @default(false)
+  ratingAverage         Float               @default(0)
+  totalCourses          Int                 @default(0)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  user                  User                @relation(fields: [userId], references: [id])
+  reviews               InstructorReview[]
+  marketplaceCourses    MarketplaceCourse[]
+  payouts               InstructorPayout[]
+  cohorts               InstructorCohort[]
+  courses               InstructorCourse[]
+
+  @@index([approved])
+  @@index([instructorType])
+}
+
+model InstructorCohort {
+  id              Int                 @id @default(autoincrement())
+  instructorId    Int
+  courseId        Int
+  name            String
+  description     String?
+  modalidade      String              @default("ONLINE")
+  maxParticipants Int                 @default(30)
+  status          String              @default("OPEN")
+  startDate       DateTime
+  endDate         DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  instructor      InstructorProfile   @relation(fields: [instructorId], references: [id])
+  course          Course              @relation(fields: [courseId], references: [id])
+  participants    CohortParticipant[]
+
+  @@index([instructorId])
+  @@index([status])
+}
+
+model CohortParticipant {
+  id           Int              @id @default(autoincrement())
+  cohortId     Int
+  userId       Int
+  status       String           @default("ACTIVE")
+  progress     Int              @default(0)
+  enrolledAt   DateTime         @default(now())
+  lastActiveAt DateTime?
+  cohort       InstructorCohort @relation(fields: [cohortId], references: [id])
+  user         User             @relation(fields: [userId], references: [id])
+
+  @@unique([cohortId, userId])
+  @@index([cohortId])
+  @@index([userId])
 }
 
 model InstructorCourse {
   id                  String            @id @default(uuid())
   instructorId        Int
   marketplaceCourseId String
-  instructor          InstructorProfile @relation(fields: [instructorId],        references: [id], onDelete: Cascade)
+  instructor          InstructorProfile @relation(fields: [instructorId], references: [id], onDelete: Cascade)
   marketplaceCourse   MarketplaceCourse @relation(fields: [marketplaceCourseId], references: [id], onDelete: Cascade)
+
   @@unique([instructorId, marketplaceCourseId])
 }
 
@@ -2381,7 +3364,8 @@ model InstructorReview {
   comment      String            @db.Text
   createdAt    DateTime          @default(now())
   instructor   InstructorProfile @relation(fields: [instructorId], references: [id], onDelete: Cascade)
-  user         User              @relation(fields: [userId],       references: [id], onDelete: Cascade)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([instructorId, userId])
 }
 
@@ -2394,13 +3378,17 @@ model InstructorPayout {
 }
 
 model MarketplaceCourse {
-  id           String             @id @default(uuid())
-  title        String
-  price        Float
-  createdAt    DateTime           @default(now())
-  instructorId Int
-  instructor   InstructorProfile  @relation(fields: [instructorId], references: [id])
-  courses      InstructorCourse[]
+  id            String             @id @default(uuid())
+  title         String
+  price         Float
+  createdAt     DateTime           @default(now())
+  instructorId  Int
+  instructor    InstructorProfile  @relation(fields: [instructorId], references: [id])
+  courses       InstructorCourse[]
+  description   String?
+  category      String?
+  level         String?
+  workloadHours Int?
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2408,16 +3396,62 @@ model MarketplaceCourse {
 // ══════════════════════════════════════════════════════════════════
 
 model NotificationLog {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  type      String
-  message   String   @db.Text
-  metadata  Json?
-  read      Boolean  @default(false)
-  success   Boolean  @default(true)
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  type        String
+  title       String?
+  message     String    @db.Text
+  priority    String    @default("MEDIUM")
+  category    String?
+  actionUrl   String?
+  actionLabel String?
+  metadata    String?
+  read        Boolean   @default(false)
+  readAt      DateTime?
+  archived    Boolean   @default(false)
+  success     Boolean   @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id])
+
   @@index([userId])
+  @@index([read])
+  @@index([category])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+model NotificationPreference {
+  id                 Int      @id @default(autoincrement())
+  userId             Int      @unique
+  inApp              Boolean  @default(true)
+  email              Boolean  @default(true)
+  push               Boolean  @default(false)
+  slack              Boolean  @default(false)
+  sms                Boolean  @default(false)
+  quietHourStart     Int      @default(22)
+  quietHourEnd       Int      @default(8)
+  digestFrequency    String   @default("NONE")
+  disabledCategories String[] @default([])
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id])
+}
+
+model NotificationTemplate {
+  id                Int      @id @default(autoincrement())
+  name              String
+  eventType         String   @unique
+  messageTemplate   String   @db.Text
+  titleTemplate     String?
+  priority          String   @default("MEDIUM")
+  category          String?
+  actionUrlTemplate String?
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([eventType])
+  @@index([active])
 }
 
 model AuditLog {
@@ -2428,7 +3462,21 @@ model AuditLog {
   entityId  Int?
   metadata  Json?
   timestamp DateTime @default(now())
+  createdAt DateTime @default(now())
   user      User?    @relation(fields: [userId], references: [id])
+  entityName   String?
+  before       String?
+  after        String?
+  changes      String?
+  severity     String?
+  status       String?
+  ip           String?
+  userAgent    String?
+  reason       String?
+  hash         String?
+  previousHash String?
+  @@index([entity, entityId])
+  @@index([userId])
 }
 
 model AutomationRule {
@@ -2450,6 +3498,7 @@ model HistoryRecord {
   description String?  @db.Text
   createdAt   DateTime @default(now())
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([entityType])
 }
@@ -2466,6 +3515,7 @@ model MobileSession {
   lastLogin DateTime @default(now())
   pushToken String?  @db.Text
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 
@@ -2476,6 +3526,7 @@ model MobileSyncLog {
   entity   String
   status   String
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 
@@ -2489,31 +3540,83 @@ model ReportLog {
 }
 
 model ExecutiveReport {
-  id            Int               @id @default(autoincrement())
-  title         String
-  generatedById Int
-  departmentId  Int?
-  filePath      String
-  format        ReportFormat
-  createdAt     DateTime          @default(now())
-  generatedBy   User              @relation(fields: [generatedById], references: [id], onDelete: Cascade)
-  department    Department?       @relation(fields: [departmentId],  references: [id], onDelete: SetNull)
-  metrics       ExecutiveMetric[]
+  id              Int               @id @default(autoincrement())
+  title           String
+  subtitle        String?
+  type            String            @default("MONTHLY")
+  status          String            @default("DRAFT")
+  confidentiality String            @default("CONFIDENTIAL")
+  generatedById   Int
+  departmentId    Int?
+  period          String?
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  achievements    String[]
+  risks           String[]
+  recommendations String[]
+  nextSteps       String[]
+  narrative       String?           @db.Text
+  filePath        String
+  format          ReportFormat
+  approvedAt      DateTime?
+  publishedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  generatedBy     User              @relation(fields: [generatedById], references: [id], onDelete: Cascade)
+  department      Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  metrics         ExecutiveMetric[]
+  approvals       ReportApproval[]
+  accessLogs      ReportAccessLog[]
+
   @@index([generatedById])
   @@index([departmentId])
+  @@index([status])
+  @@index([type])
 }
 
 model ExecutiveMetric {
-  id       Int             @id @default(autoincrement())
-  reportId Int
-  label    String
-  value    Float
-  report   ExecutiveReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  id            Int             @id @default(autoincrement())
+  reportId      Int
+  label         String
+  value         Float
+  unit          String?
+  previousValue Float?
+  target        Float?
+  status        String?
+  comment       String?
+  sortOrder     Int             @default(0)
+  report        ExecutiveReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
   @@index([reportId])
 }
 
+model ReportApproval {
+  id         Int             @id @default(autoincrement())
+  reportId   Int
+  approverId Int
+  decision   String
+  comment    String?
+  createdAt  DateTime        @default(now())
+  report     ExecutiveReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  approver   User            @relation(fields: [approverId], references: [id])
+
+  @@index([reportId])
+}
+
+model ReportAccessLog {
+  id         Int             @id @default(autoincrement())
+  reportId   Int
+  userId     Int
+  accessedAt DateTime        @default(now())
+  report     ExecutiveReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  user       User            @relation(fields: [userId], references: [id])
+
+  @@index([reportId])
+  @@index([userId])
+}
+
 model Organization {
-  id        Int                @id @default(autoincrement())
+  id        Int                 @id @default(autoincrement())
   name      String
   snapshots ExecutiveSnapshot[]
 }
@@ -2541,6 +3644,7 @@ model DashboardSnapshot {
   activePlans           Int
   generatedAt           DateTime    @default(now())
   department            Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
   @@index([departmentId])
 }
 
@@ -2563,6 +3667,7 @@ model ApiIntegrationLog {
   statusCode    Int?
   message       String?  @db.Text
   createdAt     DateTime @default(now())
+
   @@index([integrationId])
 }
 
@@ -2584,6 +3689,7 @@ model GlobalSearchIndex {
   description String?  @db.Text
   route       String?
   createdAt   DateTime @default(now())
+
   @@index([entityType])
   @@index([title])
 }
@@ -2617,23 +3723,41 @@ model AiTutorSession {
   enrollmentId Int?
   startedAt    DateTime    @default(now())
   endedAt      DateTime?
-  user         User        @relation(fields: [userId],       references: [id], onDelete: Cascade)
-  course       Course?     @relation(fields: [courseId],     references: [id], onDelete: SetNull)
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course       Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
   enrollment   Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
   messages     AiMessage[]
+
   @@index([userId])
   @@index([courseId])
 }
 
 model AiMessage {
-  id         Int            @id @default(autoincrement())
-  sessionId  Int
-  role       AiRole
-  content    String         @db.Text
-  tokensUsed Int?
-  createdAt  DateTime       @default(now())
-  session    AiTutorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id             Int            @id @default(autoincrement())
+  sessionId      Int
+  role           String
+  content        String         @db.Text
+  tokensUsed     Int?
+  latencyMs      Int?
+  provider       String?
+  model          String?
+  rating         Int?
+  ratingFeedback String?
+  agentAction    String?
+  createdAt      DateTime       @default(now())
+  session        AiTutorSession @relation(fields: [sessionId], references: [id])
+
   @@index([sessionId])
+  @@index([role])
+}
+
+model AiTutorMemory {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  summary   String   @db.Text
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model AvatarScript {
@@ -2666,6 +3790,7 @@ model AvatarScenario {
   createdAt    DateTime        @default(now())
   competency   Competency?     @relation(fields: [competencyId], references: [id], onDelete: SetNull)
   sessions     AvatarSession[]
+
   @@index([competencyId])
 }
 
@@ -2678,8 +3803,9 @@ model AvatarSession {
   feedback    String?        @db.Text
   startedAt   DateTime       @default(now())
   completedAt DateTime?
-  user        User           @relation(fields: [userId],     references: [id], onDelete: Cascade)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   scenario    AvatarScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([scenarioId])
 }
@@ -2689,92 +3815,591 @@ model AvatarSession {
 // ══════════════════════════════════════════════════════════════════
 
 model Event {
-  id           Int                @id @default(autoincrement())
-  title        String
-  description  String?            @db.Text
-  startAt      DateTime
-  endAt        DateTime
-  location     String?
-  organizerId  Int
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  organizer    User               @relation(fields: [organizerId], references: [id])
-  participants EventParticipant[]
+  id                   Int                @id @default(autoincrement())
+  title                String
+  description          String?            @db.Text
+  type                 String             @default("TRAINING")
+  modalidade           String             @default("ONLINE")
+  status               String             @default("DRAFT")
+  startAt              DateTime
+  endAt                DateTime
+  location             String?
+  meetingUrl           String?
+  meetingPassword      String?
+  maxCapacity          Int                @default(50)
+  waitlistEnabled      Boolean            @default(true)
+  certificateEnabled   Boolean            @default(false)
+  minAttendancePercent Int                @default(80)
+  tags                 String[]           @default([])
+  mandatory            Boolean            @default(false)
+  bannerUrl            String?
+  courseId             Int?
+  organizerId          Int
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  organizer            User               @relation(fields: [organizerId], references: [id])
+  participants         EventParticipant[]
+  feedbacks            EventFeedback[]
+  certificates         Certificate[]
+
+  @@index([organizerId])
+  @@index([status])
+  @@index([type])
+  @@index([startAt])
 }
 
 model EventParticipant {
-  id      Int         @id @default(autoincrement())
-  eventId Int
-  userId  Int
-  status  EventStatus @default(PENDING)
-  event   Event       @relation(fields: [eventId], references: [id])
-  user    User        @relation(fields: [userId],  references: [id])
+  id           Int       @id @default(autoincrement())
+  eventId      Int
+  userId       Int
+  status       String    @default("PENDING")
+  note         String?
+  registeredAt DateTime  @default(now())
+  checkedInAt  DateTime?
+  checkedOutAt DateTime?
+  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id])
+
   @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+  @@index([status])
+}
+
+model EventFeedback {
+  id               Int      @id @default(autoincrement())
+  eventId          Int
+  userId           Int
+  nps              Int
+  rating           Int?
+  instructorRating Int?
+  comment          String?  @db.Text
+  createdAt        DateTime @default(now())
+  event            Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id])
+
+  @@unique([eventId, userId])
+  @@index([eventId])
 }
 
 // ══════════════════════════════════════════════════════════════════
-// LEGACY — Employee-based (sistema anterior, manter por compatibilidade)
+// ATTENDANCE — Controle de Presenças
+// ══════════════════════════════════════════════════════════════════
+
+model Attendance {
+  id              Int                       @id @default(autoincrement())
+  employeeId      Int
+  employee        Employee                  @relation(fields: [employeeId], references: [id])
+  date            DateTime
+  status          AttendanceStatus          @default(PRESENT)
+  context         AttendanceContext         @default(WORK)
+  method          CheckInMethod             @default(MANUAL)
+  clockIn         String?
+  clockOut        String?
+  clockInAt       DateTime?
+  clockOutAt      DateTime?
+  breakMinutes    Int?                      @default(0)
+  workMinutes     Int?                      @default(0)
+  hoursWorked     Float?                    @default(0)
+  overtimeMinutes Int?                      @default(0)
+  presencePercent Float?
+  latitude        Float?
+  longitude       Float?
+  locationLabel   String?
+  deviceInfo      String?
+  ipAddress       String?
+  selfieUrl       String?
+  facialValidated Boolean                   @default(false)
+  eventId         Int?
+  courseId        Int?
+  sessionId       Int?
+  leaveRequestId  Int?
+  justification   String?
+  notes           String?
+  shiftId         Int?
+  justifications  AttendanceJustification[]
+  adjustments     AttendanceAdjustment[]
+  overtimeRecords OvertimeRecord[]
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@unique([employeeId, date, context])
+  @@index([employeeId, date])
+  @@index([date, status])
+  @@index([eventId])
+  @@index([courseId])
+}
+
+model LeaveRequest {
+  id              Int                 @id @default(autoincrement())
+  userId          Int
+  user            User                @relation(fields: [userId], references: [id])
+  leaveType       LeaveType
+  startDate       DateTime
+  endDate         DateTime
+  durationMode    DurationMode        @default(FULL_DAY)
+  hours           Float?
+  workDays        Float               @default(0)
+  calendarDays    Int                 @default(0)
+  reason          String?
+  status          LeaveStatus         @default(PENDING)
+  attachments     String[]
+  substituteId    Int?
+  finalApprovedAt DateTime?
+  approvals       LeaveApproval[]
+  documents       LeaveDocument[]
+  impactPreview   LeaveImpactPreview?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  leaveTypeCode  String?
+  reviewNotes    String?
+  reviewedById   Int?
+  reviewedAt     DateTime?
+  halfDay        Boolean   @default(false)
+  halfDayPeriod  String?
+  @@index([userId, status])
+  @@index([startDate, endDate])
+}
+
+model LeaveApproval {
+  id         Int          @id @default(autoincrement())
+  requestId  Int
+  request    LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approverId Int
+  approver   User         @relation(fields: [approverId], references: [id])
+  level      Int          @default(1)
+  decision   String?
+  notes      String?
+  decidedAt  DateTime?
+  createdAt  DateTime     @default(now())
+
+  @@index([requestId])
+  @@index([approverId, decidedAt])
+}
+
+model LeaveBalance {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  leaveType LeaveType
+  balance   Float     @default(0)
+  used      Float     @default(0)
+  expiresAt DateTime?
+  updatedAt DateTime  @updatedAt
+  @@unique([userId, leaveType])
+}
+
+model LeaveBalanceHistory {
+  id            Int       @id @default(autoincrement())
+  userId        Int
+  leaveType     LeaveType
+  balanceBefore Float
+  balanceAfter  Float
+  change        Float
+  reason        String
+  requestId     Int?
+  updatedById   Int
+  createdAt     DateTime  @default(now())
+  leaveTypeCode  String?
+  @@index([userId, leaveType])
+}
+
+model LeaveDocument {
+  id           Int          @id @default(autoincrement())
+  requestId    Int
+  request      LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  name         String
+  fileUrl      String
+  mimeType     String?
+  uploadedById Int
+  createdAt    DateTime     @default(now())
+}
+
+model LeaveImpactPreview {
+  id              Int          @id @default(autoincrement())
+  requestId       Int          @unique
+  request         LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  affectedCourses Int          @default(0)
+  affectedEvents  Int          @default(0)
+  notes           String?
+  createdAt       DateTime     @default(now())
+}
+
+model LeaveTypeConfig {
+  id                   Int      @id @default(autoincrement())
+  code                 String   @unique
+  name                 String
+  description          String?
+  color                String?
+  icon                 String?
+  isPaid               Boolean  @default(true)
+  annualLimit          Int?
+  allowCarryOver       Boolean  @default(false)
+  carryOverLimit       Int?
+  countWorkDaysOnly    Boolean  @default(true)
+  autoApprove          Boolean  @default(false)
+  autoApproveUnderDays Int?
+  minNoticeDays        Int?
+  maxConsecutiveDays   Int?
+  active               Boolean  @default(true)
+  category             String?
+  createdAt            DateTime @default(now()) 
+  @@map("leave_type_configs")
+}
+ 
+model LeavePolicy {
+  id                Int      @id @default(autoincrement())
+  name              String
+  description       String?
+  department        String?
+  seniority         String?
+  approvalLevels    Int      @default(1)
+  maxAbsencePercent Int      @default(30)
+  blackoutPeriods   Json?
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  @@map("leave_policies")
+}
+
+model AttendanceJustification {
+  id           Int        @id @default(autoincrement())
+  attendanceId Int
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  userId       Int
+  user         User       @relation(fields: [userId], references: [id])
+  reason       String
+  attachments  String[]
+  leaveType    LeaveType?
+  status       String     @default("PENDING")
+  reviewNotes  String?
+  reviewedById Int?
+  reviewedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  recordId     Int?
+  record       AttendanceRecord? @relation("RecordJustifications", fields: [recordId], references: [id])
+  @@index([attendanceId])
+  @@index([status])
+}
+
+model AttendanceRecord {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  date            DateTime
+  status          String    @default("PRESENT")
+  context         String    @default("WORK")
+  method          String    @default("MANUAL")
+  clockIn         String?
+  clockOut        String?
+  clockInAt       DateTime?
+  clockOutAt      DateTime?
+  breakMinutes    Int?      @default(0)
+  workMinutes     Int?      @default(0)
+  hoursWorked     Float?    @default(0)
+  overtimeMinutes Int?      @default(0)
+  presencePercent Float?
+  latitude        Float?
+  longitude       Float?
+  locationLabel   String?
+  deviceInfo      String?
+  ipAddress       String?
+  selfieUrl       String?
+  facialValidated Boolean   @default(false)
+  eventId         Int?
+  courseId        Int?
+  sessionId       Int?
+  leaveRequestId  Int?
+  justification   String?
+  notes           String?
+  shiftId         Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  user            User      @relation("UserAttendanceRecords", fields: [userId], references: [id])
+  justifications  AttendanceJustification[] @relation("RecordJustifications")
+  adjustments     AttendanceAdjustment[]    @relation("RecordAdjustments")
+  @@unique([userId, date, context])
+  @@index([userId, date])
+  @@index([date, status])
+  @@map("attendance_records")
+}
+
+model AttendanceAdjustment {
+  id           Int        @id @default(autoincrement())
+  attendanceId Int
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  adjustedById Int
+  adjustedBy   User       @relation(fields: [adjustedById], references: [id])
+  changes      Json
+  reason       String
+  createdAt    DateTime   @default(now())
+  recordId     Int?
+  record       AttendanceRecord? @relation("RecordAdjustments", fields: [recordId], references: [id])
+  @@index([attendanceId])
+}
+
+model WorkSchedule {
+  id                 Int            @id @default(autoincrement())
+  name               String         @unique
+  description        String?
+  shiftType          ShiftType
+  startTime          String
+  endTime            String
+  breakMinutes       Int?           @default(60)
+  toleranceMinutes   Int?           @default(10)
+  minPresencePercent Float?         @default(75)
+  workDays           Int[]
+  userSchedules      UserSchedule[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+}
+
+model UserSchedule {
+  id            Int          @id @default(autoincrement())
+  userId        Int          @unique
+  user          User         @relation(fields: [userId], references: [id])
+  scheduleId    Int
+  schedule      WorkSchedule @relation(fields: [scheduleId], references: [id])
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  createdAt     DateTime     @default(now())
+
+  @@index([userId])
+}
+
+model OvertimeRecord {
+  id                 Int            @id @default(autoincrement())
+  userId             Int
+  user               User           @relation(fields: [userId], references: [id])
+  date               DateTime
+  overtimeMinutes    Int
+  reason             String
+  compensateWithTime Boolean        @default(true)
+  compensated        Boolean        @default(false)
+  status             OvertimeStatus @default(PENDING)
+  reviewNotes        String?
+  reviewedById       Int?
+  reviewedAt         DateTime?
+  attendanceId       Int?
+  attendance         Attendance?    @relation(fields: [attendanceId], references: [id])
+  createdAt          DateTime       @default(now())
+
+  @@index([userId, status])
+}
+
+model AllowedLocation {
+  id           Int      @id @default(autoincrement())
+  name         String
+  latitude     Float
+  longitude    Float
+  radiusMeters Float    @default(200)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LEGACY — Employee-based
 // ══════════════════════════════════════════════════════════════════
 
 model Employee {
-  id          Int           @id @default(autoincrement())
-  name        String
-  email       String        @unique
-  role        String
-  joinedAt    DateTime
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  careerPlans CareerPlan[]
-  feedbacks   Feedback360[]
-  contracts   Contract[]
-  evaluations Evaluation[]
-  attendances Attendance[]
+  id               Int                   @id @default(autoincrement())
+  matricula        String?               @unique
+  name             String
+  email            String                @unique
+  phone            String?
+  avatarUrl        String?
+  cpf              String?               @unique
+  rg               String?
+  birthDate        DateTime?
+  gender           Gender?
+  maritalStatus    String?
+  nationality      String?
+  address          Json?
+  emergencyContact Json?
+  role             String
+  jobTitle         String?
+  department       String?
+  area             String?
+  team             String?
+  unit             String?
+  location         String?
+  seniority        SeniorityLevel?
+  contractType     ContractType?
+  workMode         WorkMode?
+  status           EmployeeStatus        @default(ACTIVE)
+  joinedAt         DateTime
+  costCenter       String?
+  salary           Float?
+  salaryBand       String?
+  managerId        Int?
+  manager          Employee?             @relation("ManagerSubordinates", fields: [managerId], references: [id])
+  subordinates     Employee[]            @relation("ManagerSubordinates")
+  contracts        Contract[]
+  evaluations      Evaluation[]
+  feedbacks        Feedback360[]
+  careerPlans      CareerPlan[]
+  pdis             LegacyPdi[]
+  attendances      Attendance[]
+  documents        EmployeeDocument[]
+  employeeSkills   LegacyEmployeeSkill[]
+  newSkills        EmployeeSkill[]       @relation("EmployeeSkills")
+  assessedSkills   EmployeeSkill[]       @relation("SkillAssessor")
+  timeline         EmployeeTimeline[]
+  requests         SelfServiceRequest[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([department, status])
+  @@index([managerId])
+  @@index([status, joinedAt])
+}
+
+model EmployeeSkill {
+  id         Int       @id @default(autoincrement())
+  employeeId Int
+  assessorId Int?
+  skillName  String
+  level      Int?
+  createdAt  DateTime  @default(now())
+  employee   Employee  @relation("EmployeeSkills", fields: [employeeId], references: [id])
+  assessor   Employee? @relation("SkillAssessor", fields: [assessorId], references: [id])
+  skillId      Int?
+  currentLevel Int?
+  desiredLevel Int?
+  source       String?
+  notes        String?
+  assessedAt   DateTime?
+  updatedAt    DateTime  @updatedAt
+  skill        Skill?    @relation("EmployeeSkillRef", fields: [skillId], references: [id])
+  @@unique([employeeId, skillId])
 }
 
 model Contract {
-  id         Int      @id @default(autoincrement())
+  id         Int          @id @default(autoincrement())
   employeeId Int
+  employee   Employee     @relation(fields: [employeeId], references: [id])
+  type       ContractType
   startDate  DateTime
-  endDate    DateTime
+  endDate    DateTime?
   status     String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  employee   Employee @relation(fields: [employeeId], references: [id])
-}
-
-model Attendance {
-  id          Int      @id @default(autoincrement())
-  employeeId  Int
-  date        DateTime
-  hoursWorked Float
-  status      String
-  createdAt   DateTime @default(now())
-  employee    Employee @relation(fields: [employeeId], references: [id])
-}
-
-model CareerPlan {
-  id          Int      @id @default(autoincrement())
-  employeeId  Int
-  title       String
-  description String   @db.Text
-  startDate   DateTime
-  endDate     DateTime
-  status      String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  employee    Employee @relation(fields: [employeeId], references: [id])
+  salary     Float?
+  notes      String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 }
 
 model Feedback360 {
   id            Int      @id @default(autoincrement())
   employeeId    Int
-  evaluatorName String
+  employee      Employee @relation(fields: [employeeId], references: [id])
+  evaluatorId   Int
   evaluatorRole String
   score         Float
-  comments      String   @db.Text
+  strengths     String?
+  improvements  String?
+  comments      String
+  cycle         String?
+  anonymous     Boolean  @default(false)
   evaluatedAt   DateTime
   createdAt     DateTime @default(now())
-  employee      Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, cycle])
+}
+
+model CareerPlan {
+  id              Int      @id @default(autoincrement())
+  employeeId      Int
+  employee        Employee @relation(fields: [employeeId], references: [id])
+  title           String
+  description     String
+  targetRole      String?
+  startDate       DateTime
+  endDate         DateTime
+  progressPercent Int      @default(0)
+  status          String   @default("ACTIVE")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model LegacyPdi {
+  id              Int               @id @default(autoincrement())
+  employeeId      Int
+  employee        Employee          @relation(fields: [employeeId], references: [id])
+  title           String
+  objective       String?
+  startDate       DateTime
+  endDate         DateTime
+  progressPercent Int               @default(0)
+  status          String            @default("ACTIVE")
+  notes           String?
+  actions         LegacyPdiAction[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model LegacyPdiAction {
+  id           Int       @id @default(autoincrement())
+  pdiId        Int
+  pdi          LegacyPdi @relation(fields: [pdiId], references: [id], onDelete: Cascade)
+  description  String
+  deadline     DateTime
+  done         Boolean   @default(false)
+  resourceType String?
+  resourceUrl  String?
+  createdAt    DateTime  @default(now())
+}
+
+model EmployeeDocument {
+  id                Int       @id @default(autoincrement())
+  employeeId        Int
+  employee          Employee  @relation(fields: [employeeId], references: [id])
+  name              String
+  type              String
+  fileUrl           String
+  mimeType          String?
+  fileSize          Int?
+  expiresAt         DateTime?
+  requiresSignature Boolean   @default(false)
+  signedAt          DateTime?
+  status            String    @default("ACTIVE")
+  uploadedById      Int
+  deletedAt         DateTime?
+  deletedById       Int?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([employeeId, status])
+}
+
+model EmployeeTimeline {
+  id          Int               @id @default(autoincrement())
+  employeeId  Int
+  employee    Employee          @relation(fields: [employeeId], references: [id])
+  type        TimelineEventType
+  title       String
+  description String?
+  metadata    Json?
+  isPublic    Boolean           @default(true)
+  occurredAt  DateTime          @default(now())
+  createdAt   DateTime          @default(now())
+
+  @@index([employeeId, occurredAt])
+}
+
+model SelfServiceRequest {
+  id           Int           @id @default(autoincrement())
+  employeeId   Int
+  employee     Employee      @relation(fields: [employeeId], references: [id])
+  type         RequestType
+  reason       String
+  payload      Json?
+  attachments  String[]
+  status       RequestStatus @default(PENDING)
+  reviewNotes  String?
+  reviewedById Int?
+  reviewedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([employeeId, status])
 }
 
 model Evaluation {
@@ -2790,9 +4415,10 @@ model Evaluation {
   evaluatedAt        DateTime
   createdAt          DateTime             @default(now())
   employee           Employee             @relation(fields: [employeeId], references: [id])
-  course             Course               @relation(fields: [courseId],   references: [id], onDelete: Cascade)
+  course             Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
   attempts           EvaluationAttempt[]
   questions          EvaluationQuestion[]
+
   @@index([courseId])
 }
 
@@ -2804,6 +4430,7 @@ model EvaluationQuestion {
   correctIndex Int
   evaluation   Evaluation                @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
   answers      EvaluationAttemptAnswer[]
+
   @@index([evaluationId])
 }
 
@@ -2820,6 +4447,7 @@ model EvaluationAttempt {
   enrollment     Enrollment                @relation("EnrollmentAttempts", fields: [enrollmentId], references: [id], onDelete: Cascade)
   evaluation     Evaluation                @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
   answers        EvaluationAttemptAnswer[]
+
   @@index([evaluationId])
   @@index([enrollmentId])
 }
@@ -2831,10 +4459,123 @@ model EvaluationAttemptAnswer {
   selectedIndex Int
   isCorrect     Boolean
   createdAt     DateTime           @default(now())
-  attempt       EvaluationAttempt  @relation(fields: [attemptId],  references: [id], onDelete: Cascade)
+  attempt       EvaluationAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   question      EvaluationQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
   @@index([attemptId])
   @@index([questionId])
+}
+
+model SkillCategory {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  family      String?
+  domain      String?
+  active      Boolean  @default(true)
+  skills      Skill[]
+  createdAt   DateTime @default(now())
+
+  @@index([family, domain])
+}
+
+model Skill {
+  id                Int                      @id @default(autoincrement())
+  name              String                   @unique
+  description       String?
+  type              SkillType
+  categoryId        Int?
+  category          SkillCategory?           @relation(fields: [categoryId], references: [id])
+  tags              String[]
+  strategicWeight   Float?                   @default(1.0)
+  maxLevel          Int                      @default(5)
+  active            Boolean                  @default(true)
+  proficiencyLevels SkillProficiencyLevel[]
+  employeeSkills    LegacyEmployeeSkill[]
+  roleRequirements  RoleSkillRequirement[]
+  assessmentHistory SkillAssessmentHistory[]
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  employeeSkills2   EmployeeSkill[]  @relation("EmployeeSkillRef")
+  @@index([type, active])
+}
+
+model SkillProficiencyLevel {
+  id                 Int    @id @default(autoincrement())
+  skillId            Int
+  skill              Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  level              Int
+  name               String
+  description        String
+  observableBehavior String
+  expectedMonths     Int?
+
+  @@unique([skillId, level])
+  @@index([skillId])
+}
+
+model RoleSkillMatrix {
+  id           Int                    @id @default(autoincrement())
+  roleCode     String                 @unique
+  department   String?
+  requirements RoleSkillRequirement[]
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+}
+
+model RoleSkillRequirement {
+  id            Int             @id @default(autoincrement())
+  matrixId      Int
+  roleMatrix    RoleSkillMatrix @relation(fields: [matrixId], references: [id], onDelete: Cascade)
+  skillId       Int
+  skill         Skill           @relation(fields: [skillId], references: [id])
+  careerRoleId  Int?
+  careerRole    CareerRole?     @relation(fields: [careerRoleId], references: [id])
+  requiredLevel Int
+  weight        Float           @default(1.0)
+  mandatory     Boolean         @default(true)
+
+  @@unique([matrixId, skillId])
+  @@index([matrixId])
+}
+
+model LegacyEmployeeSkill {
+  id               Int              @id @default(autoincrement())
+  userId           Int
+  user             User             @relation(fields: [userId], references: [id])
+  employeeId       Int?
+  employee         Employee?        @relation(fields: [employeeId], references: [id])
+  skillId          Int
+  skill            Skill            @relation(fields: [skillId], references: [id])
+  currentLevel     Int
+  targetLevel      Int?
+  source           AssessmentSource @default(SELF)
+  assessedById     Int?
+  assessedBy       User?            @relation("SkillAssessor", fields: [assessedById], references: [id])
+  managerValidated Boolean          @default(false)
+  notes            String?
+  evidenceUrl      String?
+  assessedAt       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([userId, skillId])
+  @@index([userId])
+  @@index([skillId])
+}
+
+model SkillAssessmentHistory {
+  id           Int              @id @default(autoincrement())
+  userId       Int
+  skillId      Int
+  skill        Skill            @relation(fields: [skillId], references: [id])
+  level        Int
+  source       AssessmentSource
+  assessedById Int?
+  notes        String?
+  snapshotAt   DateTime
+
+  @@index([userId, skillId, snapshotAt])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -2855,3 +4596,179 @@ model Category {
   name  String @unique
   posts Post[]
 }
+
+// ══════════════════════════════════════════════════════════════════
+// DECLARAÇÃO DE TRABALHO
+// ══════════════════════════════════════════════════════════════════
+
+model DeclarationPurpose {
+  id               Int                   @id @default(autoincrement())
+  name             String
+  description      String?
+  category         PurposeCategory
+  requiresApproval Boolean               @default(false)
+  active           Boolean               @default(true)
+  templates        DeclarationTemplate[]
+  requests         DeclarationRequest[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+}
+
+model DeclarationTemplate {
+  id               Int                  @id @default(autoincrement())
+  name             String
+  description      String?
+  purposeId        Int?
+  purpose          DeclarationPurpose?  @relation(fields: [purposeId], references: [id])
+  language         TemplateLanguage     @default(PT)
+  content          String
+  variables        String[]
+  requiresApproval Boolean              @default(true)
+  autoGenerate     Boolean              @default(false)
+  validDays        Int?
+  version          Int                  @default(1)
+  active           Boolean              @default(true)
+  createdById      Int
+  createdBy        User                 @relation(fields: [createdById], references: [id])
+  requests         DeclarationRequest[]
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([purposeId, active])
+}
+
+model DeclarationRequest {
+  id               Int                   @id @default(autoincrement())
+  userId           Int
+  user             User                  @relation(fields: [userId], references: [id])
+  templateId       Int
+  template         DeclarationTemplate   @relation(fields: [templateId], references: [id])
+  purposeId        Int?
+  purpose          DeclarationPurpose?   @relation(fields: [purposeId], references: [id])
+  language         TemplateLanguage      @default(PT)
+  addressedTo      String?
+  observations     String?
+  extraVariables   Json?
+  status           DocumentRequestStatus @default(PENDING)
+  generatedContent String?
+  referenceNumber  String?               @unique
+  verificationCode String?               @unique
+  generatedAt      DateTime?
+  issuedAt         DateTime?
+  expiresAt        DateTime?
+  approval         DeclarationApproval?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([userId, status])
+  @@index([verificationCode])
+}
+
+model DeclarationApproval {
+  id         Int                @id @default(autoincrement())
+  requestId  Int                @unique
+  request    DeclarationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  reviewerId Int
+  reviewer   User               @relation(fields: [reviewerId], references: [id])
+  approved   Boolean
+  notes      String?
+  reviewedAt DateTime
+  createdAt  DateTime           @default(now())
+}
+
+model WorkDeclForm {
+  id                       Int                  @id @default(autoincrement())
+  title                    String
+  description              String?
+  type                     WorkDeclType
+  periodicity              String?
+  validFrom                DateTime
+  validTo                  DateTime?
+  mandatory                Boolean              @default(false)
+  requiresDigitalSignature Boolean              @default(false)
+  active                   Boolean              @default(true)
+  targetAllEmployees       Boolean              @default(true)
+  targetDepartments        String[]
+  targetRoles              String[]
+  createdById              Int
+  createdBy                User                 @relation(fields: [createdById], references: [id])
+  questions                WorkDeclQuestion[]
+  submissions              WorkDeclSubmission[]
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+
+  @@index([type, active])
+}
+
+model WorkDeclQuestion {
+  id                Int              @id @default(autoincrement())
+  formId            Int
+  form              WorkDeclForm     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  key               String
+  label             String
+  helpText          String?
+  fieldType         String
+  required          Boolean          @default(false)
+  options           String[]
+  conditionalKey    String?
+  conditionalValue  String?
+  order             Int              @default(0)
+  placeholder       String?
+  validationRegex   String?
+  acceptedFileTypes String[]
+  answers           WorkDeclAnswer[]
+
+  @@unique([formId, key])
+  @@index([formId])
+}
+
+model WorkDeclSubmission {
+  id              Int              @id @default(autoincrement())
+  userId          Int
+  user            User             @relation(fields: [userId], references: [id])
+  formId          Int
+  form            WorkDeclForm     @relation(fields: [formId], references: [id])
+  status          WorkDeclStatus   @default(PENDING)
+  signature       String?
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  exemptionReason String?
+  answers         WorkDeclAnswer[]
+  review          WorkDeclReview?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([userId, formId])
+  @@index([userId, status])
+  @@index([formId, status])
+}
+
+model WorkDeclAnswer {
+  user         User?              @relation(fields: [userId], references: [id])
+  userId       Int?
+  id           Int                @id @default(autoincrement())
+  submissionId Int
+  submission   WorkDeclSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId   Int?
+  question     WorkDeclQuestion?  @relation(fields: [questionId], references: [id])
+  questionKey  String
+  value        String
+  createdAt    DateTime           @default(now())
+
+  @@index([submissionId])
+}
+
+model WorkDeclReview {
+  id               Int                @id @default(autoincrement())
+  submissionId     Int                @unique
+  submission       WorkDeclSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  reviewerId       Int
+  reviewer         User               @relation(fields: [reviewerId], references: [id])
+  approved         Boolean
+  notes            String?
+  correctionFields String[]
+  reviewedAt       DateTime
+  createdAt        DateTime           @default(now())
+}
+
+

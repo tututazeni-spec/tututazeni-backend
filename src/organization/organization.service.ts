@@ -403,7 +403,7 @@ export class OrganizationService {
         userId:   dto.userId,
         type:     'ORG_CHANGE',
         message:  `Mudança organizacional registada: ${dto.changeType}`,
-        metadata: { changeId: change.id, changeType: dto.changeType },
+        metadata: JSON.stringify({ changeId: change.id, changeType: dto.changeType }),
       },
     }).catch(() => {});
 

@@ -116,7 +116,7 @@ export class LeadershipService {
         userId:   dto.userId,
         type:     'LEADERSHIP_ENROLLED',
         message:  `Inscrito no programa de liderança "${participant.program.name}"`,
-        metadata: { programId: dto.programId },
+        metadata: JSON.stringify({ programId: dto.programId }),
       },
     }).catch(() => {});
 
@@ -357,7 +357,7 @@ const pendingLeaves = 0; // TODO: implementar LeaveRequest
         userId:   dto.subordinateId,
         type:     'ONEONONE_SCHEDULED',
         message:  `1:1 agendado para ${new Date(dto.scheduledAt).toLocaleDateString('pt-AO')}`,
-        metadata: { oneOnOneId: oneOnOne.id },
+        metadata: JSON.stringify({ oneOnOneId: oneOnOne.id }),
       },
     }).catch(() => {});
 
@@ -425,7 +425,7 @@ const pendingLeaves = 0; // TODO: implementar LeaveRequest
         userId:   dto.leaderId,
         type:     'LEADERSHIP_360_RECEIVED',
         message:  'Recebeu um novo feedback 360° de liderança',
-        metadata: { feedbackId: feedback.id, anonymous: dto.anonymous },
+        metadata: JSON.stringify({ feedbackId: feedback.id, anonymous: dto.anonymous }),
       },
     }).catch(() => {});
 
@@ -560,7 +560,7 @@ const pendingLeaves = 0; // TODO: implementar LeaveRequest
         userId:   dto.receiverId,
         type:     'KUDOS_RECEIVED',
         message:  `Recebeu um reconhecimento de um colega!`,
-        metadata: { kudosId: kudos.id },
+        metadata: JSON.stringify({ kudosId: kudos.id }),
       },
     }).catch(() => {});
 

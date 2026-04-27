@@ -1,3 +1,4 @@
+// src/assessments/assessments.service.ts
 import {
   Injectable, NotFoundException, ConflictException,
   BadRequestException, ForbiddenException, Logger,
@@ -14,8 +15,6 @@ export class AssessmentsService {
   private readonly logger = new Logger(AssessmentsService.name);
 
   constructor(private prisma: PrismaService) {}
-
-  // ─── CRUD Assessments ─────────────────────────────────────────────────────
 
   async create(dto: CreateAssessmentDto) {
     const { questions, ...data } = dto;
@@ -90,7 +89,6 @@ export class AssessmentsService {
     });
     if (!a) throw new NotFoundException('Avaliação não encontrada');
 
-    // Para utilizador: não expor respostas correctas (a menos que feedback imediato)
     if (forUser && (a as any).feedbackMode !== 'IMMEDIATE') {
       const questions = (a.questions as any[]).map(q => {
         const opts = q.options ? JSON.parse(q.options) : null;
@@ -186,8 +184,6 @@ export class AssessmentsService {
     return { message: 'Avaliação eliminada' };
   }
 
-  // ─── Perguntas individuais ────────────────────────────────────────────────
-
   async addQuestion(assessmentId: number, dto: any) {
     await this.findOne(assessmentId);
     return this.prisma.assessmentQuestion.create({
@@ -212,8 +208,6 @@ export class AssessmentsService {
     return this.prisma.assessmentQuestion.delete({ where: { id: questionId } });
   }
 
-  // ─── TENTATIVAS ───────────────────────────────────────────────────────────
-
   async startAttempt(userId: number, dto: StartAttemptDto) {
     const assessment = await this.findOne(dto.assessmentId, true) as any;
 
@@ -221,7 +215,6 @@ export class AssessmentsService {
       throw new BadRequestException('Avaliação não está publicada');
     }
 
-    // Verificar tentativas máximas
     if (assessment.maxAttempts > 0) {
       const totalAttempts = await this.prisma.assessmentAttempt.count({
         where: { assessmentId: dto.assessmentId, userId },
@@ -231,7 +224,6 @@ export class AssessmentsService {
       }
     }
 
-    // Verificar cooldown
     if (assessment.cooldownHours > 0) {
       const lastAttempt = await this.prisma.assessmentAttempt.findFirst({
         where:   { assessmentId: dto.assessmentId, userId },
@@ -247,20 +239,17 @@ export class AssessmentsService {
       }
     }
 
-    // Verificar tentativa em progresso
     const inProgress = await this.prisma.assessmentAttempt.findFirst({
       where: { assessmentId: dto.assessmentId, userId, status: 'IN_PROGRESS' },
     });
     if (inProgress) {
-      return inProgress; // Retomar tentativa existente
+      return inProgress;
     }
 
-    // Calcular deadline da tentativa
     const deadline = assessment.timeLimitMinutes > 0
       ? new Date(Date.now() + assessment.timeLimitMinutes * 60 * 1000)
       : null;
 
-    // Preparar ordem das perguntas (randomização)
     let questionOrder = assessment.questions.map((q: any) => q.id);
     if (assessment.randomizeQuestions) {
       questionOrder = questionOrder.sort(() => Math.random() - 0.5);
@@ -312,7 +301,6 @@ export class AssessmentsService {
       throw new ConflictException('Tentativa já foi submetida');
     }
 
-    // Verificar timeout
     if ((attempt as any).deadline && new Date() > new Date((attempt as any).deadline)) {
       await this.prisma.assessmentAttempt.update({
         where: { id: dto.attemptId },
@@ -349,7 +337,6 @@ export class AssessmentsService {
         if (isCorrect) { earnedPoints = q.weight ?? 1; earnedWeight += earnedPoints; }
 
       } else if (q.type === 'OPEN_TEXT' || q.type === 'FILE_UPLOAD') {
-        // Correção manual — guarda para revisão
         needsManualReview.push(q.id);
         isCorrect = null;
 
@@ -359,7 +346,6 @@ export class AssessmentsService {
         if (isCorrect) { earnedPoints = q.weight ?? 1; earnedWeight += earnedPoints; }
       }
 
-      // Guardar resposta
       await this.prisma.assessmentAttemptAnswer.create({
         data: {
           attemptId:      dto.attemptId,
@@ -384,7 +370,6 @@ export class AssessmentsService {
       });
     }
 
-    // Calcular score final (excluindo questões de revisão manual)
     const autoGradableWeight = questions
       .filter(q => !needsManualReview.includes(q.id))
       .reduce((s, q) => s + (q.weight ?? 1), 0);
@@ -411,7 +396,6 @@ export class AssessmentsService {
       },
     });
 
-    // Gamificação
     if (passed) {
       await this.prisma.userPoints.upsert({
         where:  { userId },
@@ -419,21 +403,23 @@ export class AssessmentsService {
         update: { points: { increment: 50 } },
       }).catch(() => {});
 
+      // FIX: metadata → JSON.stringify
       await this.prisma.notificationLog.create({
         data: {
           userId,
           type:     'ASSESSMENT_PASSED',
           message:  `Aprovado na avaliação "${assessment.title}" com ${score}%`,
-          metadata: { assessmentId: assessment.id, score },
+          metadata: JSON.stringify({ assessmentId: assessment.id, score }),
         },
       }).catch(() => {});
     } else if (passed === false) {
+      // FIX: metadata → JSON.stringify
       await this.prisma.notificationLog.create({
         data: {
           userId,
           type:     'ASSESSMENT_FAILED',
           message:  `Reprovado na avaliação "${assessment.title}" com ${score}%`,
-          metadata: { assessmentId: assessment.id, score, passing: assessment.passingScore },
+          metadata: JSON.stringify({ assessmentId: assessment.id, score, passing: assessment.passingScore }),
         },
       }).catch(() => {});
     }
@@ -470,8 +456,6 @@ export class AssessmentsService {
     return attempt;
   }
 
-  // ─── Revisão manual ───────────────────────────────────────────────────────
-
   async reviewAnswer(dto: ReviewAnswerDto, reviewerId: number) {
     const answer = await this.prisma.assessmentAttemptAnswer.findUnique({
       where:   { id: dto.attemptAnswerId },
@@ -487,18 +471,16 @@ export class AssessmentsService {
         reviewedById:  reviewerId,
         reviewedAt:    new Date(),
         needsReview:   false,
-        isCorrect:     dto.score >= 50, // aprovado se >= 50%
+        isCorrect:     dto.score >= 50,
       },
     });
 
-    // Verificar se todas as questões manuais foram revistas
     const attempt = (answer as any).attempt;
     const pendingReview = await this.prisma.assessmentAttemptAnswer.count({
       where: { attemptId: attempt.id, needsReview: true },
     });
 
     if (pendingReview === 0) {
-      // Recalcular score final
       const allAnswers = await this.prisma.assessmentAttemptAnswer.findMany({
         where: { attemptId: attempt.id },
       });
@@ -535,8 +517,6 @@ export class AssessmentsService {
     });
   }
 
-  // ─── Histórico ────────────────────────────────────────────────────────────
-
   async getUserAttempts(userId: number, assessmentId?: number) {
     const where: any = { userId };
     if (assessmentId) where.assessmentId = assessmentId;
@@ -549,8 +529,6 @@ export class AssessmentsService {
       orderBy: { startedAt: 'desc' },
     });
   }
-
-  // ─── Analytics ────────────────────────────────────────────────────────────
 
   async getAnalytics(assessmentId: number) {
     await this.findOne(assessmentId);
@@ -566,7 +544,6 @@ export class AssessmentsService {
       this.prisma.assessmentQuestion.findMany({ where: { assessmentId } }),
     ]);
 
-    // Análise por pergunta
     const questionStats = await Promise.all(
       questions.map(async q => {
         const [total, correct] = await Promise.all([

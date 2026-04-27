@@ -8,7 +8,7 @@ import { PerformanceService } from './performance.service';
 import {
   CreateCycleDto, UpdateCycleDto,
   CreatePerformanceReviewDto, UpdatePerformanceReviewDto,
-  SubmitReviewDto, CreateGoalDto, UpdateGoalDto, UpdateGoalProgressDto,
+  SubmitReviewDto, CreateGoalDto, UpdateGoalDto, UpdatePerformanceGoalProgressDto,
   CreateFeedbackDto, CalibrateReviewDto, CreateDisputeDto,
   Update9BoxDto, PerformanceFilterDto,
 } from './performance.dto';
@@ -162,7 +162,7 @@ export class PerformanceController {
   updateGoalProgress(
     @Param('goalId', ParseIntPipe) goalId: number,
     @CurrentUser() user: any,
-    @Body() dto: UpdateGoalProgressDto,
+    @Body() dto: UpdatePerformanceGoalProgressDto,
   ) {
     return this.svc.updateGoalProgress(goalId, user.id, dto);
   }

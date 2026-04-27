@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateCycleDto, UpdateCycleDto,
   CreatePerformanceReviewDto, UpdatePerformanceReviewDto,
-  SubmitReviewDto, CreateGoalDto, UpdateGoalDto, UpdateGoalProgressDto,
+  SubmitReviewDto, CreateGoalDto, UpdateGoalDto, UpdatePerformanceGoalProgressDto,
   CreateFeedbackDto, CalibrateReviewDto, CreateDisputeDto,
   Update9BoxDto, PerformanceFilterDto,
   ReviewStatus, CycleStatus, PerformanceCategory,
@@ -88,7 +88,7 @@ export class PerformanceService {
           userId:   u.id,
           type:     'PERFORMANCE_CYCLE_STARTED',
           message:  `O ciclo de avaliação "${cycle.name}" foi iniciado`,
-          metadata: { cycleId },
+          metadata: JSON.stringify({ cycleId }),
         },
       }).catch(() => {});
     }
@@ -173,7 +173,7 @@ export class PerformanceService {
         userId:   dto.userId,
         type:     'PERFORMANCE_REVIEW_CREATED',
         message:  `Uma avaliação de desempenho foi iniciada para si no ciclo "${cycle.name}"`,
-        metadata: { reviewId: review.id, cycleId: dto.cycleId },
+        metadata: JSON.stringify({ reviewId: review.id, cycleId: dto.cycleId }),
       },
     }).catch(() => {});
 
@@ -284,7 +284,7 @@ export class PerformanceService {
             userId:   user.managerId,
             type:     'SELF_REVIEW_COMPLETED',
             message:  `${user.fullName} concluiu a autoavaliação. A sua avaliação está pendente.`,
-            metadata: { reviewId: dto.reviewId, userId: review.userId },
+            metadata: JSON.stringify({ reviewId: dto.reviewId, userId: review.userId }),
           },
         }).catch(() => {});
       }
@@ -316,7 +316,7 @@ export class PerformanceService {
     });
   }
 
-  async updateGoalProgress(goalId: number, userId: number, dto: UpdateGoalProgressDto) {
+  async updateGoalProgress(goalId: number, userId: number, dto: UpdatePerformanceGoalProgressDto) {
     const goal = await this.prisma.performanceGoal.findUnique({ where: { id: goalId } });
     if (!goal) throw new NotFoundException('Goal não encontrado');
     if ((goal as any).userId !== userId) throw new ForbiddenException('Sem permissão');
@@ -365,7 +365,7 @@ export class PerformanceService {
           userId:   dto.targetUserId,
           type:     'FEEDBACK_RECEIVED',
           message:  `Recebeu um feedback do tipo ${dto.type}`,
-          metadata: { feedbackId: feedback.id },
+          metadata: JSON.stringify({ feedbackId: feedback.id }),
         },
       }).catch(() => {});
     }
@@ -419,7 +419,7 @@ export class PerformanceService {
         userId:   review.userId,
         type:     'PERFORMANCE_PUBLISHED',
         message:  `O resultado da sua avaliação de desempenho foi publicado`,
-        metadata: { reviewId: dto.reviewId },
+        metadata: JSON.stringify({ reviewId: review.id }),
       },
     }).catch(() => {});
 
@@ -460,7 +460,7 @@ export class PerformanceService {
           userId:   rh.id,
           type:     'PERFORMANCE_DISPUTE',
           message:  `Disputa aberta para avaliação #${dto.reviewId}`,
-          metadata: { reviewId: dto.reviewId, disputeId: dispute.id },
+          metadata: JSON.stringify({ reviewId: dto.reviewId, disputeId: dispute.id }),
         },
       }).catch(() => {});
     }

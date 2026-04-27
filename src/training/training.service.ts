@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateTrainingDto, UpdateTrainingDto, CreateTrainingSessionDto,
-  RegisterParticipantDto, UpdateParticipantStatusDto, TrainingFilterDto,
+  RegisterParticipantDto, UpdateTrainingParticipantStatusDto, TrainingFilterDto,
 } from './trainings.dto';
 
 @Injectable()
@@ -108,7 +108,7 @@ export class TrainingService {
     );
   }
 
-  async updateParticipantStatus(id: number, dto: UpdateParticipantStatusDto) {
+  async updateParticipantStatus(id: number, dto: UpdateTrainingParticipantStatusDto) {
     return this.prisma.trainingParticipant.update({
       where: { id }, data: { status: dto.status },
     });

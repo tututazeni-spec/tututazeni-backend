@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { SwaggerModule, DocumentBuilder, ApiExtraModels } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
 import { AppModule } from './app.module';
@@ -71,7 +71,23 @@ async function bootstrap() {
     .addTag('API Integration (Integrações com Sistemas Externos)')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, config, {
+  operationIdFactory: (controllerKey: string, methodKey: string) =>
+    `${controllerKey}_${methodKey}`,
+  extraModels: [],
+});
+
+const schemas = document.components?.schemas ?? {};
+const seen = new Set<string>();
+for (const key of Object.keys(schemas)) {
+  const baseName = key.replace(/_\d+$/, '');
+  if (seen.has(baseName)) {
+    delete schemas[key];
+  } else {
+    seen.add(baseName);
+  }
+}
+
   SwaggerModule.setup('docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true,

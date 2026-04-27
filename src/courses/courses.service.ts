@@ -285,7 +285,7 @@ export class CoursesService {
         userId,
         type:     'COURSE_ENROLLED',
         message:  `Está matriculado no curso "${course.title}"`,
-        metadata: { courseId, mandatory: enrollment.mandatory },
+        metadata: JSON.stringify({ courseId, mandatory: enrollment.mandatory }),
       },
     });
 
@@ -337,7 +337,7 @@ export class CoursesService {
           userId,
           type:     'COURSE_ASSIGNED',
           message:  `O curso "${course.title}" foi atribuído a si`,
-          metadata: { courseId, mandatory: dto.mandatory, deadline: dto.deadline },
+          metadata: JSON.stringify({ courseId, mandatory: dto.mandatory, deadline: dto.deadline }),
         },
       });
 
@@ -494,7 +494,7 @@ export class CoursesService {
         userId,
         type:     'CERTIFICATE_ISSUED',
         message:  `Certificado emitido para o curso "${course?.title}"`,
-        metadata: { certificateId: cert.id },
+        metadata: JSON.stringify({ certificateId: cert.id }),
       },
     });
 

@@ -30,7 +30,7 @@ export class RegisterParticipantDto {
   @ApiProperty() @IsInt() userId!: number;
 }
 
-export class UpdateParticipantStatusDto {
+export class UpdateTrainingParticipantStatusDto {
   @ApiProperty() @IsString() status!: string;
 }
 
