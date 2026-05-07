@@ -1,3 +1,4 @@
+// src/departments/departments.dto.ts
 import {
   IsString, IsOptional, IsInt, IsBoolean,
   IsEnum, IsArray, Min, MaxLength,
@@ -5,34 +6,43 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
+// ─── Department ───────────────────────────────────────────────────────────────
+
 export class CreateDepartmentDto {
   @ApiProperty({ example: 'Recursos Humanos' })
   @IsString() @MaxLength(120)
-  name!: string;
+  name: string;
 
-  @ApiProperty({ example: 'RH-001' })
+  @ApiProperty({ example: 'RH-001', description: 'Código único do departamento' })
   @IsString() @MaxLength(30)
-  code!: string;
+  code: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional()
+  @IsOptional() @IsString()
   description?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsInt()
+  @ApiPropertyOptional({ description: 'ID do departamento pai (hierarquia)' })
+  @IsOptional() @IsInt()
   parentId?: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsInt()
+  @ApiPropertyOptional({ description: 'ID do gestor/responsável' })
+  @IsOptional() @IsInt()
   headId?: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional({ description: 'Cor do departamento (hex)' })
+  @IsOptional() @IsString()
   color?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional({ description: 'Ícone identificativo' })
+  @IsOptional() @IsString()
   icon?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional({ description: 'Centro de custo associado' })
+  @IsOptional() @IsString()
   costCenter?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0)
+  @ApiPropertyOptional({ description: 'Orçamento de formação (Kz)' })
+  @IsOptional() @IsInt() @Min(0)
   trainingBudget?: number;
 }
 
@@ -48,7 +58,8 @@ export class DepartmentFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number)
   parentId?: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean)
+  @ApiPropertyOptional({ description: 'Apenas raiz (sem pai)' })
+  @IsOptional() @IsBoolean() @Type(() => Boolean)
   rootOnly?: boolean;
 
   @ApiPropertyOptional({ default: 1 }) @IsOptional() @IsInt() @Min(1) @Type(() => Number)
@@ -58,78 +69,90 @@ export class DepartmentFilterDto {
   limit?: number;
 }
 
+// ─── Member Transfer ──────────────────────────────────────────────────────────
+
 export class TransferMemberDto {
-  @ApiProperty() @IsInt()
-  userId!: number;
+  @ApiProperty({ description: 'ID do utilizador a transferir' })
+  @IsInt()
+  userId: number;
 
-  @ApiProperty() @IsInt()
-  targetDepartmentId!: number;
+  @ApiProperty({ description: 'ID do departamento de destino' })
+  @IsInt()
+  targetDepartmentId: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional({ description: 'Motivo da transferência' })
+  @IsOptional() @IsString()
   reason?: string;
 }
 
 export class BulkTransferDto {
   @ApiProperty({ type: [Number] })
   @IsArray() @IsInt({ each: true })
-  userIds!: number[];
+  userIds: number[];
 
-  @ApiProperty() @IsInt()
-  targetDepartmentId!: number;
+  @ApiProperty()
+  @IsInt()
+  targetDepartmentId: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional()
+  @IsOptional() @IsString()
   reason?: string;
 }
 
+// ─── Unit ─────────────────────────────────────────────────────────────────────
+
 export class CreateUnitDto {
   @ApiProperty() @IsString() @MaxLength(120)
-  name!: string;
+  name: string;
 
-  @ApiProperty({ example: 'SEDE' }) @IsString()
-  tipo!: string;
+  @ApiProperty({ example: 'SEDE', description: 'Tipo: SEDE | DELEGACAO | AGENCIA' })
+  @IsString()
+  tipo: string;
 
   @ApiPropertyOptional() @IsOptional() @IsString()
   province?: string;
 
   @ApiPropertyOptional() @IsOptional() @IsInt()
   departmentId?: number;
-
-  @ApiProperty() @IsString()
-  code!: string;
 }
 
 export class UpdateUnitDto extends PartialType(CreateUnitDto) {}
 
-export class CreateDeptRoleDto {
+// ─── Role ─────────────────────────────────────────────────────────────────────
+
+export class CreateRoleDto {
   @ApiProperty({ example: 'GESTOR' }) @IsString() @MaxLength(60)
-  name!: string;
+  name: string;
 
   @ApiPropertyOptional() @IsOptional() @IsString()
   description?: string;
 }
 
-export class UpdateDeptRoleDto extends PartialType(CreateDeptRoleDto) {}
+export class UpdateRoleDto extends PartialType(CreateRoleDto) {}
 
 export class CreatePermissionDto {
   @ApiProperty({ example: 'read:courses' }) @IsString()
-  name!: string;
+  name: string;
 
   @ApiProperty({ example: 'read' }) @IsString()
-  action!: string;
+  action: string;
 
   @ApiProperty({ example: 'Course' }) @IsString()
-  subject!: string;
+  subject: string;
 
   @ApiPropertyOptional() @IsOptional() @IsInt()
   roleId?: number;
 }
 
+// ─── Position ─────────────────────────────────────────────────────────────────
+
 export class CreatePositionDto {
   @ApiProperty({ example: 'Engenheiro de Software Sénior' })
   @IsString() @MaxLength(120)
-  name!: string;
+  name: string;
 
-  @ApiPropertyOptional({ example: 'SENIOR' }) @IsOptional() @IsString()
+  @ApiPropertyOptional({ example: 'SENIOR' })
+  @IsOptional() @IsString()
   level?: string;
 
   @ApiPropertyOptional() @IsOptional() @IsString()
@@ -141,15 +164,17 @@ export class CreatePositionDto {
 
 export class UpdatePositionDto extends PartialType(CreatePositionDto) {}
 
+// ─── Career ───────────────────────────────────────────────────────────────────
+
 export class CreateCareerPositionDto {
   @ApiProperty() @IsString()
-  title!: string;
+  title: string;
 
   @ApiPropertyOptional() @IsOptional() @IsString()
   description?: string;
 
   @ApiProperty({ example: 'JUNIOR' }) @IsString()
-  level!: string;
+  level: string;
 
   @ApiPropertyOptional({ type: [Object] })
   @IsOptional() @IsArray()

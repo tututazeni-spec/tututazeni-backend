@@ -1,4 +1,4 @@
-// src/development-plans/development-plans.service.ts
+﻿// src/development-plans/development-plans.service.ts
 import {
   Injectable, NotFoundException, ConflictException,
   BadRequestException, ForbiddenException, Logger,
@@ -125,7 +125,7 @@ export class DevelopmentPlansService {
         userId:   data.userId,
         type:     'PDI_CREATED',
         message:  `Um novo Plano de Desenvolvimento foi criado para si: "${data.name}"`,
-        metadata: JSON.stringify({ planId: plan.id }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
 
@@ -186,7 +186,7 @@ export class DevelopmentPlansService {
         message:  dto.decision === 'approve'
           ? `✅ O seu PDI "${plan.name}" foi aprovado!`
           : `⚠️ O seu PDI "${plan.name}" foi devolvido para revisão`,
-        metadata: JSON.stringify({ planId: dto.planId, comment: dto.comment }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
 
@@ -229,7 +229,7 @@ export class DevelopmentPlansService {
         userId:   plan.userId,
         type:     'PDI_COMPLETED',
         message:  `🎉 PDI "${plan.name}" concluído! +300 XP e certificado emitido.`,
-        metadata: JSON.stringify({ planId: id, code }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
 
@@ -333,16 +333,16 @@ export class DevelopmentPlansService {
     const action = await this.prisma.developmentPlanAction.findUnique({ where: { id: dto.actionId } });
     if (!action) throw new NotFoundException('Acção não encontrada');
 
-    const evidence = await this.prisma.pdiEvidence.create({
-      data: {
-        actionId:     dto.actionId,
-        submittedById:userId,
-        title:        dto.title,
-        url:          dto.url,
-        notes:        dto.notes,
-        evidenceType: dto.evidenceType ?? 'NOTE',
-      },
-    });
+    const evidence = await (this.prisma as any).pdiEvidence.create({
+    data: {
+    actionId:     dto.actionId,
+    submittedById:userId,
+    title:        dto.title,
+    url:          dto.url,
+    notes:        dto.notes,
+    evidenceType: dto.evidenceType ?? 'NOTE',
+  },
+});
 
     // Auto-avançar para IN_PROGRESS se ainda em TODO
     if (action.status === 'TODO') {

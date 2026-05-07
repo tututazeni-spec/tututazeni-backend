@@ -1,3 +1,4 @@
+// src/process-standard/process-standard.dto.ts
 import {
   IsString, IsOptional, IsInt, IsArray, IsEnum,
   IsNumber, IsDateString, ValidateNested, IsBoolean,
@@ -6,6 +7,7 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
+// ─── Enums ─────────────────────────────────────────────────────────────────
 export enum ProcessStatus {
   DRAFT      = 'DRAFT',
   IN_REVIEW  = 'IN_REVIEW',
@@ -44,62 +46,75 @@ export enum TaskStatus {
   SKIPPED   = 'SKIPPED',
 }
 
+// ─── Step DTO ─────────────────────────────────────────────────────────────
 export class ProcessStepDto {
   @ApiProperty({ enum: StepType }) @IsEnum(StepType)
-  type!: StepType;
+  type: StepType;
 
   @ApiProperty() @IsString()
-  title!: string;
+  title: string;
 
   @ApiPropertyOptional() @IsOptional() @IsString()
   description?: string;
 
   @ApiProperty({ description: 'Ordem de execução' }) @IsInt() @Min(0)
-  order!: number;
+  order: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsInt()
+  @ApiPropertyOptional({ description: 'ID do responsável (user)' })
+  @IsOptional() @IsInt()
   responsibleId?: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional({ description: 'Role responsável (ex: GESTOR)' })
+  @IsOptional() @IsString()
   responsibleRole?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0)
+  @ApiPropertyOptional({ description: 'SLA em horas' })
+  @IsOptional() @IsNumber() @Min(0)
   slaHours?: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0)
+  @ApiPropertyOptional({ description: 'Tempo estimado em minutos' })
+  @IsOptional() @IsNumber() @Min(0)
   estimatedMinutes?: number;
 
-  @ApiPropertyOptional() @IsOptional()
+  @ApiPropertyOptional({ description: 'Formulário em JSON (campos input)' })
+  @IsOptional()
   formSchema?: Record<string, any>;
 
-  @ApiPropertyOptional() @IsOptional()
+  @ApiPropertyOptional({ description: 'Condições de saída do nó (JSON)' })
+  @IsOptional()
   exitConditions?: Record<string, any>;
 
-  @ApiPropertyOptional() @IsOptional() @IsArray() @IsInt({ each: true })
+  @ApiPropertyOptional({ description: 'IDs de documentos associados' })
+  @IsOptional() @IsArray() @IsInt({ each: true })
   documentIds?: number[];
 
-  @ApiPropertyOptional() @IsOptional() @IsBoolean()
+  @ApiPropertyOptional({ description: 'Upload obrigatório?' })
+  @IsOptional() @IsBoolean()
   requiresUpload?: boolean;
 
-  @ApiPropertyOptional() @IsOptional()
+  @ApiPropertyOptional({ description: 'Checklist de verificação (JSON)' })
+  @IsOptional()
   checklist?: string[];
 }
 
+// ─── Create Process ────────────────────────────────────────────────────────
 export class CreateProcessDto {
   @ApiProperty({ example: 'Admissão de Colaborador' }) @IsString()
-  title!: string;
+  title: string;
 
   @ApiProperty({ example: 'RH-ADM-001', description: 'Código único do processo' })
   @IsString()
-  code!: string;
+  code: string;
 
   @ApiPropertyOptional() @IsOptional() @IsString()
   description?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional({ description: 'Objetivo do processo' })
+  @IsOptional() @IsString()
   objective?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional({ description: 'Âmbito / Escopo' })
+  @IsOptional() @IsString()
   scope?: string;
 
   @ApiPropertyOptional() @IsOptional() @IsInt()
@@ -109,28 +124,34 @@ export class CreateProcessDto {
   @IsOptional() @IsEnum(RiskLevel)
   riskLevel?: RiskLevel;
 
-  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0)
+  @ApiPropertyOptional({ description: 'SLA padrão em horas' })
+  @IsOptional() @IsNumber() @Min(0)
   defaultSlaHours?: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0)
+  @ApiPropertyOptional({ description: 'Tempo estimado total em minutos' })
+  @IsOptional() @IsNumber() @Min(0)
   estimatedMinutes?: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsDateString()
+  @ApiPropertyOptional({ description: 'Data da próxima revisão' })
+  @IsOptional() @IsDateString()
   nextReviewDate?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsArray() @IsString({ each: true })
+  @ApiPropertyOptional({ description: 'Tags' })
+  @IsOptional() @IsArray() @IsString({ each: true })
   tags?: string[];
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional({ description: 'Categoria' })
+  @IsOptional() @IsString()
   category?: string;
 
-  @ApiProperty({ type: [ProcessStepDto] })
+  @ApiProperty({ type: [ProcessStepDto], description: 'Etapas do processo' })
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => ProcessStepDto)
-  steps!: ProcessStepDto[];
+  steps: ProcessStepDto[];
 }
 
 export class UpdateProcessDto extends PartialType(CreateProcessDto) {}
 
+// ─── Filter DTO ─────────────────────────────────────────────────────────────
 export class ProcessFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString()
   search?: string;
@@ -154,45 +175,51 @@ export class ProcessFilterDto {
   limit?: number;
 }
 
+// ─── Start Instance ──────────────────────────────────────────────────────────
 export class StartInstanceDto {
   @ApiProperty({ description: 'ID do colaborador alvo' }) @IsInt()
-  targetUserId!: number;
+  targetUserId: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional({ description: 'Notas de abertura' })
+  @IsOptional() @IsString()
   notes?: string;
 }
 
+// ─── Complete Step ──────────────────────────────────────────────────────────
 export class CompleteStepDto {
   @ApiPropertyOptional() @IsOptional() @IsString()
   notes?: string;
 
-  @ApiPropertyOptional() @IsOptional()
+  @ApiPropertyOptional({ description: 'Dados do formulário preenchido (JSON)' })
+  @IsOptional()
   formData?: Record<string, any>;
 
-  @ApiPropertyOptional() @IsOptional() @IsArray() @IsInt({ each: true })
+  @ApiPropertyOptional({ description: 'IDs de evidências/uploads' })
+  @IsOptional() @IsArray() @IsInt({ each: true })
   evidenceIds?: number[];
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional({ description: 'Acção executada (approve/reject/etc.)' })
+  @IsOptional() @IsString()
   action?: string;
 }
 
+// ─── Reject / Escalate Step ─────────────────────────────────────────────────
 export class RejectStepDto {
   @ApiProperty({ description: 'Motivo da rejeição' }) @IsString()
-  reason!: string;
+  reason: string;
 }
 
+// ─── Submit for Approval ─────────────────────────────────────────────────────
 export class ApprovalActionDto {
   @ApiProperty({ enum: ['approve', 'reject'] }) @IsString()
-  action!: 'approve' | 'reject';
+  action: 'approve' | 'reject';
 
   @ApiPropertyOptional() @IsOptional() @IsString()
   comment?: string;
 }
 
+// ─── Compare versions ────────────────────────────────────────────────────────
 export class CompareVersionsDto {
-  @ApiProperty() @IsString()
-  versionA!: string;
-
-  @ApiProperty() @IsString()
-  versionB!: string;
+  @ApiProperty() @IsString() versionA: string;
+  @ApiProperty() @IsString() versionB: string;
 }

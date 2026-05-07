@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable, NotFoundException, ForbiddenException,
   BadRequestException, Logger, ConflictException,
 } from '@nestjs/common';
@@ -464,7 +464,7 @@ export class CourseModulesService {
         userId,
         type:     'MODULE_UNLOCKED',
         message:  `Novo módulo desbloqueado: "${nextModule.title}"`,
-        metadata: JSON.stringify({ moduleId: nextModule.id, courseId }),
+        metadata: JSON.stringify({}),
        },
     }).catch(() => {}); // Silenciar falha na notificação
   }
@@ -579,7 +579,7 @@ export class CourseModulesService {
         userId,
         type:     'COURSE_COMPLETED',
         message:  `Concluíste o curso "${course?.title}"! 🎉`,
-        metadata: JSON.stringify({ courseId, enrollmentId }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
   }

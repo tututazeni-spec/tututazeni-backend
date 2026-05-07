@@ -1,19 +1,13 @@
-// ─── src/payslips/payslips.module.ts ─────────────────────────────────────────
+// src/payslips/payslips.module.ts
+import { Module } from '@nestjs/common';
+import { PayslipsService }    from './payslips.service';
+import { PayslipsController } from './payslips.controller';
+import { PrismaModule }       from '../prisma/prisma.module';
 
-import { Module }                from '@nestjs/common';
-import { PayslipsService }       from './payslips.service';
-import { PayslipsController }    from './payslips.controller';
-import { PayrollEngineService }  from './payroll-engine.service';
-import { PrismaModule }          from '../prisma/prisma.module';
-import { AuditModule }           from '../common/modules/audit.module';
- 
 @Module({
-  imports: [PrismaModule, AuditModule],
-  providers: [PayslipsService, PayrollEngineService],
+  imports:     [PrismaModule],
+  providers:   [PayslipsService],
   controllers: [PayslipsController],
-  exports: [PayslipsService, PayrollEngineService],
+  exports:     [PayslipsService],
 })
 export class PayslipsModule {}
-
-
- 

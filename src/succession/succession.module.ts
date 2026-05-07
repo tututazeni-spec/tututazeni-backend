@@ -1,11 +1,14 @@
+// src/succession/succession.module.ts
 import { Module } from '@nestjs/common';
-import { SuccessionService } from './succession.service';
+import { SuccessionService }    from './succession.service';
 import { SuccessionController } from './succession.controller';
- 
+import { PrismaModule }         from '../prisma/prisma.module';
+
 @Module({
-  providers: [SuccessionService],
+  imports:     [PrismaModule],
+  providers:   [SuccessionService],
   controllers: [SuccessionController],
-  exports: [SuccessionService],
+  exports:     [SuccessionService],
 })
 export class SuccessionModule {}
- 
+

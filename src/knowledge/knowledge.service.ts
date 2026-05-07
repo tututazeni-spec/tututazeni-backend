@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable, NotFoundException, ConflictException,
   BadRequestException, ForbiddenException, Logger,
 } from '@nestjs/common';
@@ -268,7 +268,7 @@ export class KnowledgeService {
           userId:   b.userId,
           type:     'KNOWLEDGE_UPDATED',
           message:  `O artigo "${updated.title}" foi actualizado`,
-          metadata: JSON.stringify({ articleId: id }),
+          metadata: JSON.stringify({}),
         },
       }).catch(() => {});
     }
@@ -395,7 +395,7 @@ export class KnowledgeService {
           userId:   article.authorId,
           type:     'KNOWLEDGE_COMMENT',
           message:  `Novo comentário no seu artigo "${article.title}"`,
-          metadata: JSON.stringify({ articleId: dto.articleId, commentId: comment.id }),
+          metadata: JSON.stringify({}),
         },
       }).catch(() => {});
     }
@@ -440,7 +440,7 @@ export class KnowledgeService {
           userId:   (question as any).askedById,
           type:     'KNOWLEDGE_ANSWER',
           message:  `A sua pergunta foi respondida`,
-          metadata: JSON.stringify({ questionId: dto.questionId }),
+          metadata: JSON.stringify({}),
         },
       }).catch(() => {});
     }

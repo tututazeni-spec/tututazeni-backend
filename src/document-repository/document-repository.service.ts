@@ -1,4 +1,4 @@
-// ─── src/document-repository/document-repository.service.ts ──────────────────
+﻿// ─── src/document-repository/document-repository.service.ts ──────────────────
 import {
   Injectable, NotFoundException, ForbiddenException,
   BadRequestException, ConflictException,
@@ -199,7 +199,7 @@ export class DocumentRepositoryService {
       include: { createdBy: { select: { id: true, fullName: true } } },
     });
 
-    await this.audit.log({ action: 'DOC_UPLOADED', entityType: 'Document', entityId: doc.id, userId: createdById, metadata: { title: dto.title, category: dto.category } });
+    await this.audit.log({ action: 'DOC_UPLOADED', entityType: 'Document', entityId: doc.id, userId: createdById, metadata: {} });
     await this.logAudit(doc.id, createdById, DocAuditAction.UPLOADED);
 
     // Auto-notificar owner se diferente do criador

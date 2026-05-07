@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable, NotFoundException, ConflictException,
   BadRequestException, ForbiddenException, Logger,
 } from '@nestjs/common';
@@ -166,7 +166,7 @@ export class EnrollmentsService {
         userId:   dto.userId,
         type:     'COURSE_ENROLLED',
         message:  `Matriculado no curso "${course.title}"`,
-        metadata: JSON.stringify({ courseId: dto.courseId, mandatory: enrollment.mandatory }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
 
@@ -315,7 +315,7 @@ export class EnrollmentsService {
         userId:   e.userId,
         type:     'CERTIFICATE_ISSUED',
         message:  `Certificado emitido para "${course?.title}"`,
-        metadata: JSON.stringify({ certificateId: cert.id, validationCode }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
 

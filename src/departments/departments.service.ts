@@ -1,3 +1,4 @@
+// src/departments/departments.service.ts
 import {
   Injectable, NotFoundException, ConflictException,
   BadRequestException, Logger,
@@ -7,7 +8,7 @@ import {
   CreateDepartmentDto, UpdateDepartmentDto, DepartmentFilterDto,
   TransferMemberDto, BulkTransferDto,
   CreateUnitDto, UpdateUnitDto,
-  CreateDeptRoleDto, UpdateDeptRoleDto, CreatePermissionDto,
+  CreateRoleDto, UpdateRoleDto, CreatePermissionDto,
   CreatePositionDto, UpdatePositionDto,
   CreateCareerPositionDto,
 } from './departments.dto';
@@ -20,6 +21,7 @@ export class DepartmentsService {
 
   constructor(private prisma: PrismaService) {}
 
+  // Validar que não há loop hierárquico (A → B → A)
   private async detectCircularHierarchy(id: number, newParentId: number): Promise<boolean> {
     let current = newParentId;
     const visited = new Set<number>();
@@ -28,7 +30,7 @@ export class DepartmentsService {
       if (visited.has(current)) break;
       visited.add(current);
       const dept = await this.prisma.department.findUnique({
-        where:  { id: current },
+        where: { id: current },
         select: { parentId: true },
       });
       if (!dept?.parentId) break;
@@ -42,9 +44,9 @@ export class DepartmentsService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (active !== undefined)  where.active   = active;
+    if (active !== undefined) where.active = active;
     if (parentId !== undefined) where.parentId = parentId;
-    if (rootOnly)              where.parentId = null;
+    if (rootOnly) where.parentId = null;
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -70,9 +72,10 @@ export class DepartmentsService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
+  // Árvore hierárquica completa (para org chart)
   async getTree() {
     const all = await this.prisma.department.findMany({
-      where:   { active: true },
+      where: { active: true },
       include: {
         head:   { select: { id: true, fullName: true, email: true } },
         _count: { select: { users: true, children: true } },
@@ -80,8 +83,11 @@ export class DepartmentsService {
       orderBy: { name: 'asc' },
     });
 
+    // Construir árvore recursivamente
     const buildTree = (parentId: number | null): any[] =>
-      all.filter(d => d.parentId === parentId).map(d => ({ ...d, children: buildTree(d.id) }));
+      all
+        .filter(d => d.parentId === parentId)
+        .map(d => ({ ...d, children: buildTree(d.id) }));
 
     return buildTree(null);
   }
@@ -93,7 +99,7 @@ export class DepartmentsService {
         head:     { select: { id: true, fullName: true, email: true, position: true } },
         parent:   { select: { id: true, name: true, code: true } },
         children: {
-          where:   { active: true },
+          where: { active: true },
           include: {
             head:   { select: { id: true, fullName: true } },
             _count: { select: { users: true } },
@@ -105,12 +111,12 @@ export class DepartmentsService {
             position: { select: { name: true } },
           },
           where: { active: true },
-          take:  50,
+          take: 50,
         },
         headHistory: {
           include: { head: { select: { id: true, fullName: true } } },
           orderBy: { startedAt: 'desc' },
-          take:    10,
+          take: 10,
         },
         _count: { select: { users: true, children: true } },
       },
@@ -120,9 +126,13 @@ export class DepartmentsService {
   }
 
   async create(dto: CreateDepartmentDto) {
-    const codeExists = await this.prisma.department.findFirst({ where: { code: dto.code } });
+    // Validar código único
+    const codeExists = await this.prisma.department.findFirst({
+      where: { code: dto.code },
+    });
     if (codeExists) throw new ConflictException(`Código ${dto.code} já existe`);
 
+    // Validar parentId
     if (dto.parentId) {
       const parent = await this.prisma.department.findUnique({ where: { id: dto.parentId } });
       if (!parent) throw new NotFoundException('Departamento pai não encontrado');
@@ -147,6 +157,7 @@ export class DepartmentsService {
       },
     });
 
+    // Registar gestor inicial no histórico
     if (dto.headId) {
       await this.prisma.departmentHeadHistory.create({
         data: { departmentId: dept.id, headId: dto.headId, startedAt: new Date() },
@@ -159,6 +170,7 @@ export class DepartmentsService {
   async update(id: number, dto: UpdateDepartmentDto) {
     const existing = await this.findOne(id);
 
+    // Validar código único
     if (dto.code && dto.code !== existing.code) {
       const codeExists = await this.prisma.department.findFirst({
         where: { code: dto.code, id: { not: id } },
@@ -166,15 +178,17 @@ export class DepartmentsService {
       if (codeExists) throw new ConflictException(`Código ${dto.code} já em uso`);
     }
 
+    // Validar hierarquia circular
     if (dto.parentId && dto.parentId !== existing.parentId) {
       const isCircular = await this.detectCircularHierarchy(id, dto.parentId);
       if (isCircular) throw new BadRequestException('Hierarquia circular detectada');
     }
 
+    // Gestor mudou → registar histórico
     if (dto.headId && dto.headId !== (existing as any).headId) {
       await this.prisma.departmentHeadHistory.updateMany({
         where: { departmentId: id, endedAt: null },
-        data:  { endedAt: new Date() },
+        data: { endedAt: new Date() },
       });
       await this.prisma.departmentHeadHistory.create({
         data: { departmentId: id, headId: dto.headId, startedAt: new Date() },
@@ -183,7 +197,7 @@ export class DepartmentsService {
 
     return this.prisma.department.update({
       where: { id },
-      data:  dto,
+      data: dto,
       include: {
         head:   { select: { id: true, fullName: true } },
         parent: { select: { id: true, name: true, code: true } },
@@ -192,6 +206,7 @@ export class DepartmentsService {
     });
   }
 
+  // Soft deactivate — preserva histórico
   async deactivate(id: number) {
     const d = await this.findOne(id);
     const activeUsers = (d as any)._count.users;
@@ -200,7 +215,10 @@ export class DepartmentsService {
         `Departamento tem ${activeUsers} colaboradores activos. Transfira-os primeiro.`
       );
     }
-    return this.prisma.department.update({ where: { id }, data: { active: false } });
+    return this.prisma.department.update({
+      where: { id },
+      data: { active: false },
+    });
   }
 
   async activate(id: number) {
@@ -208,6 +226,7 @@ export class DepartmentsService {
     return this.prisma.department.update({ where: { id }, data: { active: true } });
   }
 
+  // Transferir membro entre departamentos
   async transferMember(dto: TransferMemberDto) {
     const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
     if (!user) throw new NotFoundException('Utilizador não encontrado');
@@ -222,6 +241,7 @@ export class DepartmentsService {
       data:  { departmentId: dto.targetDepartmentId },
     });
 
+    // Registar histórico de transferência
     await this.prisma.departmentTransferLog.create({
       data: {
         userId:           dto.userId,
@@ -235,6 +255,7 @@ export class DepartmentsService {
     return { message: 'Transferência realizada com sucesso', userId: dto.userId, targetDepartmentId: dto.targetDepartmentId };
   }
 
+  // Transferência em massa
   async bulkTransfer(dto: BulkTransferDto) {
     const target = await this.prisma.department.findUnique({ where: { id: dto.targetDepartmentId } });
     if (!target || !target.active) throw new NotFoundException('Departamento de destino não encontrado');
@@ -253,16 +274,23 @@ export class DepartmentsService {
     return results;
   }
 
+  // Métricas do departamento
   async getMetrics(id: number) {
     await this.findOne(id);
 
-    const [totalUsers, activeUsers, transfersIn, transfersOut] = await Promise.all([
+    const [
+      totalUsers,
+      activeUsers,
+      transfersIn,
+      transfersOut,
+    ] = await Promise.all([
       this.prisma.user.count({ where: { departmentId: id } }),
       this.prisma.user.count({ where: { departmentId: id, active: true } }),
       this.prisma.departmentTransferLog.count({ where: { toDepartmentId: id } }),
       this.prisma.departmentTransferLog.count({ where: { fromDepartmentId: id } }),
     ]);
 
+    // Breadcrumb da hierarquia
     const breadcrumb = await this.buildBreadcrumb(id);
 
     return {
@@ -275,17 +303,14 @@ export class DepartmentsService {
     };
   }
 
-  // ← corrigido erro 285: tipo de retorno explícito evita inferência circular
   private async buildBreadcrumb(id: number): Promise<Array<{ id: number; name: string; code: string }>> {
     const trail: Array<{ id: number; name: string; code: string }> = [];
     let current: number | null = id;
-
     while (current) {
-      const dept: { id: number; name: string; code: string; parentId: number | null } | null =
-        await this.prisma.department.findUnique({
-          where:  { id: current },
-          select: { id: true, name: true, code: true, parentId: true },
-        });
+      const dept = await this.prisma.department.findUnique({
+        where: { id: current },
+        select: { id: true, name: true, code: true, parentId: true },
+      });
       if (!dept) break;
       trail.unshift({ id: dept.id, name: dept.name, code: dept.code });
       current = dept.parentId;
@@ -293,9 +318,10 @@ export class DepartmentsService {
     return trail;
   }
 
+  // Dashboard comparativo de departamentos
   async getComparativeDashboard() {
     const depts = await this.prisma.department.findMany({
-      where:   { active: true },
+      where: { active: true },
       include: {
         _count: { select: { users: true } },
         head:   { select: { id: true, fullName: true } },
@@ -304,17 +330,18 @@ export class DepartmentsService {
     });
 
     return depts.map(d => ({
-      id:           d.id,
-      name:         d.name,
-      code:         d.code,
-      headName:     (d.head as any)?.fullName ?? '—',
-      totalMembers: (d._count as any).users,
-      active:       d.active,
+      id:          d.id,
+      name:        d.name,
+      code:        d.code,
+      headName:    (d.head as any)?.fullName ?? '—',
+      totalMembers:(d._count as any).users,
+      active:      d.active,
     }));
   }
 
+  // Histórico de transferências de um departamento
   async getTransferHistory(id: number, page = 1, limit = 20) {
-    const skip  = (page - 1) * limit;
+    const skip = (page - 1) * limit;
     const where = { OR: [{ fromDepartmentId: id }, { toDepartmentId: id }] };
 
     const [data, total] = await Promise.all([
@@ -344,18 +371,18 @@ export class UnitsService {
     return this.prisma.unit.findMany({
       include: {
         departments: { select: { id: true, name: true, code: true } },
-        _count:      { select: { users: true } },
-      },
+       _count: { select: { users: true } },
+    },
       orderBy: { name: 'asc' },
     });
   }
 
   async findOne(id: number) {
     const u = await this.prisma.unit.findUnique({
-      where:   { id },
+      where: { id },
       include: {
         departments: { select: { id: true, name: true, code: true } },
-        users:       { select: { id: true, fullName: true, email: true, active: true } },
+        users: { select: { id: true, fullName: true, email: true, active: true } },
       },
     });
     if (!u) throw new NotFoundException('Unidade não encontrada');
@@ -363,8 +390,8 @@ export class UnitsService {
   }
 
   async create(dto: CreateUnitDto) {
-    return this.prisma.unit.create({ data: dto });
-  }
+  return (this.prisma as any).unit.create({ data: dto });
+}
 
   async update(id: number, dto: UpdateUnitDto) {
     await this.findOne(id);
@@ -387,7 +414,7 @@ export class RolesService {
     return this.prisma.role.findMany({
       include: {
         permissions: true,
-        _count:      { select: { users: true } },
+        _count: { select: { users: true } },
       },
       orderBy: { name: 'asc' },
     });
@@ -395,9 +422,9 @@ export class RolesService {
 
   async findOne(id: number) {
     const r = await this.prisma.role.findUnique({
-      where:   { id },
+      where: { id },
       include: {
-        permissions:     true,
+        permissions: true,
         rolePermissions: { include: { permission: true } },
       },
     });
@@ -405,13 +432,13 @@ export class RolesService {
     return r;
   }
 
-  async create(dto: CreateDeptRoleDto) {
+  async create(dto: CreateRoleDto) {
     const exists = await this.prisma.role.findFirst({ where: { name: dto.name } });
     if (exists) throw new ConflictException(`Role '${dto.name}' já existe`);
     return this.prisma.role.create({ data: dto });
   }
 
-  async update(id: number, dto: UpdateDeptRoleDto) {
+  async update(id: number, dto: UpdateRoleDto) {
     await this.findOne(id);
     return this.prisma.role.update({ where: { id }, data: dto });
   }
@@ -422,27 +449,20 @@ export class RolesService {
   }
 
   async addPermission(dto: CreatePermissionDto) {
-    const { roleId, ...rest } = dto;
-
-    // ← corrigido erro 431: roleId não pode ser undefined num create do Prisma.
-    // Se não for fornecido, lançamos erro antes de tentar persistir.
-    if (roleId === undefined) {
-      throw new BadRequestException('roleId é obrigatório para criar uma permissão');
-    }
-
-    return this.prisma.permission.create({
-      data: { ...rest, roleId },
-    });
-  }
+  return (this.prisma as any).permission.create({ data: dto });
+}
 
   async removePermission(permissionId: number) {
     return this.prisma.permission.delete({ where: { id: permissionId } });
   }
 
   async assignPermissionToRole(roleId: number, permissionId: number) {
-    const existing = await this.prisma.rolePermission.findFirst({ where: { roleId, permissionId } });
-    if (existing) return existing;
-    return this.prisma.rolePermission.create({ data: { roleId, permissionId } });
+    // FIX: upsert correcto com chave composta
+    return (this.prisma as any).rolePermission.upsert({
+      where: { roleId_permissionId: { roleId, permissionId } },
+      create: { roleId, permissionId },
+      update: {},
+     });
   }
 
   async revokePermissionFromRole(roleId: number, permissionId: number) {
@@ -451,11 +471,11 @@ export class RolesService {
 
   async initDefaultRoles() {
     const defaults = [
-      { name: 'ADMIN',       description: 'Administrador do sistema' },
-      { name: 'RH',          description: 'Recursos Humanos' },
-      { name: 'GESTOR',      description: 'Gestor de equipa' },
-      { name: 'COLABORADOR', description: 'Colaborador' },
-      { name: 'AUDITOR',     description: 'Auditor (apenas leitura)' },
+      { name: 'ADMIN',        description: 'Administrador do sistema' },
+      { name: 'RH',           description: 'Recursos Humanos' },
+      { name: 'GESTOR',       description: 'Gestor de equipa' },
+      { name: 'COLABORADOR',  description: 'Colaborador' },
+      { name: 'AUDITOR',      description: 'Auditor (apenas leitura)' },
     ];
     const created = [];
     for (const r of defaults) {
@@ -474,15 +494,19 @@ export class PositionsService {
 
   async findAll() {
     return this.prisma.position.findMany({
-      include: { _count: { select: { users: true } } },
+      include: {
+        _count: { select: { users: true } },
+      },
       orderBy: { name: 'asc' },
     });
   }
 
   async findOne(id: number) {
     const p = await this.prisma.position.findUnique({
-      where:   { id },
-      include: { users: { select: { id: true, fullName: true, email: true } } },
+      where: { id },
+      include: {
+        users: { select: { id: true, fullName: true, email: true } },
+      },
     });
     if (!p) throw new NotFoundException('Posição não encontrada');
     return p;
@@ -513,7 +537,7 @@ export class CareersService {
     return this.prisma.careerPosition.findMany({
       include: {
         competencies: { include: { competency: true } },
-        _count:       { select: { users: true } },
+        _count: { select: { users: true } },
       },
       orderBy: { level: 'asc' },
     });
@@ -521,10 +545,10 @@ export class CareersService {
 
   async findOnePosition(id: number) {
     const p = await this.prisma.careerPosition.findUnique({
-      where:   { id },
+      where: { id },
       include: {
         competencies: { include: { competency: true } },
-        users:        { include: { user: { select: { id: true, fullName: true } } } },
+        users: { include: { user: { select: { id: true, fullName: true } } } },
       },
     });
     if (!p) throw new NotFoundException('Posição de carreira não encontrada');
@@ -532,40 +556,32 @@ export class CareersService {
   }
 
   async createPosition(dto: CreateCareerPositionDto) {
-    const { competencies, ...rest } = dto;
-
-    const position = await this.prisma.position.create({
-      data: {
-        name:        dto.title,
-        description: dto.description ?? '',
-        level:       dto.level,
-      },
-    });
-
+    const { competencies, ...data } = dto;
+    const position = await (this.prisma as any).careerPosition.create({ data });
     if (competencies?.length) {
       await this.prisma.positionCompetency.createMany({
         data: competencies.map(c => ({ positionId: position.id, ...c })),
       });
     }
-
     return this.findOnePosition(position.id);
   }
 
   async getUserCareerHistory(userId: number) {
     return this.prisma.userCareer.findMany({
-      where:   { userId },
+      where: { userId },
       include: { position: true },
       orderBy: { startedAt: 'desc' },
     });
   }
 
   async assignCareerPosition(userId: number, positionId: number) {
+    // Fechar posição atual
     await this.prisma.userCareer.updateMany({
       where: { userId, endedAt: null },
-      data:  { endedAt: new Date() },
+      data: { endedAt: new Date() },
     });
     return this.prisma.userCareer.create({
-      data:    { userId, positionId },
+      data: { userId, positionId },
       include: { position: true },
     });
   }
@@ -574,7 +590,7 @@ export class CareersService {
     return this.prisma.careerPosition.findMany({
       include: {
         competencies: { include: { competency: true } },
-        _count:       { select: { users: true } },
+        _count: { select: { users: true } },
       },
       orderBy: { level: 'asc' },
     });

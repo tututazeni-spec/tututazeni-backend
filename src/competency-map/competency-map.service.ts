@@ -1,4 +1,4 @@
-// ─── src/competency-map/competency-map.service.ts ────────────────────────────
+﻿// ─── src/competency-map/competency-map.service.ts ────────────────────────────
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService }  from '../common/services/audit.service';
@@ -75,7 +75,7 @@ export class CompetencyMapService {
       },
       include: { category: true },
     });
-    await this.audit.log({ action: 'SKILL_CREATED', entityType: 'Skill', entityId: skill.id, userId: createdById });
+    await this.audit.log({ action: 'SKILL_CREATED', entity: 'Skill', entityId: String(skill.id), userId: createdById });
     return skill;
   }
 
@@ -246,7 +246,7 @@ export class CompetencyMapService {
       include: { skill: { include: { category: true } } },
     });
 
-    await this.audit.log({ action: 'SKILL_ASSESSED', entityType: 'LegacyEmployeeSkill', entityId: skill.id, userId: submittedById, metadata: { skillId: dto.skillId, level: dto.currentLevel, source: dto.source } });
+    await this.audit.log({ action: 'SKILL_ASSESSED', entity: 'LegacyEmployeeSkill', entityId: String(skill.id), userId: submittedById });
 
     // Notificar gestor se autoavaliação
     if (dto.source === AssessmentSource.SELF) {
@@ -497,7 +497,7 @@ export class CompetencyMapService {
 
   async getTeamMap(managerId: number) {
     const subordinates = await this.prisma.user.findMany({
-      where: { /* employee managerId filter removed — no direct relation */ } as any,
+     where: { managerId },
       select: { id: true, fullName: true, avatarUrl: true } as any,
     });
 
@@ -586,7 +586,8 @@ export class CompetencyMapService {
     try {
       const user = await this.prisma.user.findUnique({ where: { id: userId } });
       const managerId = (user as any)?.employee?.managerId;
-      if (managerId) await this.prisma.notificationLog.create({ data: { userId: managerId, type, message, success: true } });
+      if (managerId) await this.prisma.notificationLog.create({ data: { userId: managerId, type, message } });
     } catch {}
   }
 }
+

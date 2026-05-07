@@ -98,22 +98,22 @@ export class CareerPlansService {
 
   async createCareerPath(dto: CreateCareerPathDto, createdById: number) {
     const { steps, ...rest } = dto;
-    const path = await this.prisma.careerPath.create({
-      data: {
-        ...rest,
-        active: dto.active ?? true,
-        steps: {
-          create: steps.map(s => ({ roleId: s.roleId, order: s.order, label: s.label })),
-        },
-      },
+    const path = await (this.prisma as any).careerPath.create({
+       data: {
+       ...rest,
+       active: dto.active ?? true,
+       steps: {
+      create: steps.map(s => ({ roleId: s.roleId, order: s.order, label: s.label })),
+    },
+  },
       include: { steps: { orderBy: { order: 'asc' }, include: { role: true } } },
     });
     return path;
   }
 
   async getCareerPaths(department?: string) {
-    return this.prisma.careerPath.findMany({
-      where: { active: true, ...(department ? { department: { contains: department, mode: 'insensitive' } } : {}) },
+    return (this.prisma as any).careerPath.findMany({
+      where: { active: true, ...(department ? { department: { name: { contains: department, mode: 'insensitive' } } } : {}) },
       include: {
         steps: { orderBy: { order: 'asc' }, include: { role: { include: { skillRequirements: { include: { skill: true } } } } } },
       },
@@ -315,7 +315,7 @@ export class CareerPlansService {
     }
 
     await this.notify(dto.userId, 'CAREER_PLAN_CREATED', `Novo plano de carreira criado: "${dto.title}"`);
-    await this.audit.log({ action: 'CAREER_PLAN_CREATED', entityType: 'CareerPlan', entityId: plan.id, userId: createdById });
+    await this.audit.log({ action: 'CAREER_PLAN_CREATED', entity: 'CareerPlan', entityId: String(plan.id), userId: createdById });
 
     return this.findOne(plan.id);
   }
@@ -416,7 +416,7 @@ export class CareerPlansService {
     const managerId = (user as any)?.managerId;
     if (managerId) await this.notify(managerId, 'PROMOTION_REQUEST_PENDING', `Pedido de promoção de ${(user as any).fullName} para "${targetRole.name}" aguarda aprovação`);
 
-    await this.audit.log({ action: 'PROMOTION_REQUESTED', entityType: 'PromotionRequest', entityId: promotion.id, userId: requestedById });
+    await this.audit.log({ action: 'PROMOTION_REQUESTED', entity: 'PromotionRequest', entityId: String(promotion.id), userId: requestedById });
     return promotion;
   }
 
@@ -463,7 +463,7 @@ export class CareerPlansService {
       await this.notify(promotion.userId, 'PROMOTION_REJECTED', `O pedido de promoção para "${promotion.targetRole?.name}" foi rejeitado.`);
     }
 
-    await this.audit.log({ action: `PROMOTION_${newStatus}`, entityType: 'PromotionRequest', entityId: id, userId: reviewerId });
+    await this.audit.log({ action: `PROMOTION_${newStatus}`, entity: 'PromotionRequest', entityId: String(id), userId: reviewerId });
     return this.prisma.promotionRequest.findUnique({ where: { id }, include: { targetRole: true } });
   }
 

@@ -1,3 +1,4 @@
+// src/competencies/competencies.dto.ts
 import {
   IsString, IsOptional, IsInt, IsArray, IsBoolean,
   IsEnum, Min, Max, MaxLength, IsNumber,

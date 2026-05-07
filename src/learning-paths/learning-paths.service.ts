@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable, NotFoundException, ConflictException,
   BadRequestException, ForbiddenException, Logger,
 } from '@nestjs/common';
@@ -396,7 +396,7 @@ export class LearningPathsService {
           userId,
           type:     'LEARNING_PATH_ASSIGNED',
           message:  `A trilha "${lp.title}" foi atribuída a si`,
-          metadata: JSON.stringify({ learningPathId, mandatory: opts.mandatory }),
+          metadata: JSON.stringify({}),
         },
       }).catch(() => {});
     }
@@ -507,7 +507,7 @@ export class LearningPathsService {
         userId,
         type:     'LEARNING_PATH_COMPLETED',
         message:  `Concluíste a trilha "${lp?.title}"! 🎉`,
-        metadata: JSON.stringify({ learningPathId }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
 

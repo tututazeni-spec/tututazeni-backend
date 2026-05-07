@@ -1,4 +1,4 @@
-// ─── employees/employees.service.ts ──────────────────────────────────────────
+﻿// ─── employees/employees.service.ts ──────────────────────────────────────────
 import {
   Injectable, NotFoundException, BadRequestException,
   ForbiddenException, ConflictException,
@@ -224,7 +224,7 @@ export class EmployeesService {
       entityType: 'Employee',
       entityId: employee.id,
       userId: createdById,
-      metadata: { name: employee.name, email: employee.email },
+      metadata: {},
     });
 
     return employee;
@@ -257,7 +257,7 @@ export class EmployeesService {
       entityType: 'Employee',
       entityId: id,
       userId: updatedById,
-      metadata: { changes: Object.keys(dto) },
+      metadata: {},
     });
 
     return updated;
@@ -434,7 +434,7 @@ export class EmployeesService {
       title: 'Avaliação 360°',
       description: `Score: ${dto.score}/10 – ${dto.cycle ?? 'ciclo atual'}`,
       isPublic: false,
-      metadata: { cycle: dto.cycle, score: dto.score },
+      metadata: {},
     });
 
     return fb;
@@ -816,7 +816,7 @@ export class EmployeesService {
       entityType: 'Employee',
       entityId: 0,
       userId: updatedById,
-      metadata: { count: result.count, status: dto.status, reason: dto.reason },
+      metadata: {},
     });
 
     return { updated: result.count };
@@ -867,3 +867,4 @@ export class EmployeesService {
     return `INN${year}${seq}`;
   }
 }
+

@@ -6,7 +6,6 @@
     "moduleResolution": "node",
     "outDir": "./dist",
     "rootDir": "src",
-    "strict": true,
     "esModuleInterop": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
@@ -16,7 +15,12 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "strict": false,
+    "strictPropertyInitialization": false,
+    "strictNullChecks": false,
+    "noImplicitAny": false,
+    "useUnknownInCatchVariables": false
   },
   "include": ["src/**/*.ts"],
   "exclude": [

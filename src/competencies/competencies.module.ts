@@ -1,3 +1,4 @@
+// src/competencies/competencies.module.ts
 import { Module } from '@nestjs/common';
 import { CompetenciesService }    from './competencies.service';
 import { CompetenciesController } from './competencies.controller';

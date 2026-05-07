@@ -1,6 +1,14 @@
+// src/automation/automation.module.ts
 import { Module } from '@nestjs/common';
-import { AutomationService } from './automation.service';
+import { PrismaModule }    from '../prisma/prisma.module';
+import { AutomationService }    from './automation.service';
 import { AutomationController } from './automation.controller';
-@Module({ providers: [AutomationService], controllers: [AutomationController], exports: [AutomationService] })
+
+@Module({
+  imports:     [PrismaModule],
+  providers:   [AutomationService],
+  controllers: [AutomationController],
+  exports:     [AutomationService],
+})
 export class AutomationModule {}
- 
+

@@ -5,10 +5,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 interface AuditLogInput {
   action:      string;
   entity?:     string;
-  entityType?: string;   // aceita ambos — normaliza para entity
-  entityId?:   number;
-  userId:      number;
+  entityType?: string;
+  entityId?:   number | string;
+  userId:      number | string;
   metadata?:   Record<string, any>;
+  details?:    Record<string, any>;
 }
  
 @Injectable()
@@ -20,9 +21,9 @@ export class AuditService {
       data: {
         action:   input.action,
         entity:   input.entity ?? input.entityType ?? 'Unknown',
-        entityId: input.entityId,
-        userId:   input.userId,
-        metadata: input.metadata ? input.metadata as any : undefined,
+        entityId: input.entityId !== undefined ? Number(input.entityId) : undefined,
+        userId:   Number(input.userId),
+        metadata: (input.metadata ?? input.details) ? (input.metadata ?? input.details) as any : undefined,
       },
     });
   }

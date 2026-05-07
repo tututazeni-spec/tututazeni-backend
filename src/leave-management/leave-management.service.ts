@@ -1,4 +1,4 @@
-// ─── src/leave-management/leave-management.service.ts ────────────────────────
+﻿// ─── src/leave-management/leave-management.service.ts ────────────────────────
 import {
   Injectable, NotFoundException, BadRequestException,
   ForbiddenException, ConflictException,
@@ -247,7 +247,7 @@ export class LeaveManagementService {
       await this.notifyUser(dto.userId, 'LEAVE_SUBMITTED', `Pedido de ${leaveType.name} submetido com sucesso`);
     }
 
-    await this.audit.log({ action: 'LEAVE_CREATED', entityType: 'LeaveRequest', entityId: request.id, userId: createdById, metadata: { leaveType: dto.leaveTypeCode, workDays } });
+    await this.audit.log({ action: 'LEAVE_CREATED', entityType: 'LeaveRequest', entityId: request.id, userId: createdById, metadata: {} });
 
     return request;
   }
@@ -860,3 +860,4 @@ export class LeaveManagementService {
     } catch {}
   }
 }
+

@@ -1,4 +1,4 @@
-// src/competencies/competencies.service.ts
+﻿// src/competencies/competencies.service.ts
 import {
   Injectable, NotFoundException, ConflictException,
   BadRequestException, Logger,
@@ -17,6 +17,8 @@ export class CompetenciesService {
   private readonly logger = new Logger(CompetenciesService.name);
 
   constructor(private prisma: PrismaService) {}
+
+  // ─── CATÁLOGO ─────────────────────────────────────────────────────────────
 
   async findAll(filters: CompetencyFilterDto) {
     const { page = 1, limit = 20, search, category, status, tag } = filters;
@@ -105,6 +107,8 @@ export class CompetenciesService {
     return { message: 'Competência eliminada' };
   }
 
+  // ─── NÍVEIS DE PROFICIÊNCIA ───────────────────────────────────────────────
+
   async createProficiencyLevel(dto: CreateProficiencyLevelDto) {
     await this.findOne(dto.competencyId);
     const exists = await this.prisma.proficiencyLevel.findFirst({
@@ -118,6 +122,8 @@ export class CompetenciesService {
   async removeProficiencyLevel(levelId: number) {
     return this.prisma.proficiencyLevel.delete({ where: { id: levelId } });
   }
+
+  // ─── COMPETÊNCIAS DO UTILIZADOR ──────────────────────────────────────────
 
   async upsertUserCompetency(dto: UpsertUserCompetencyDto, updatedById?: number) {
     const existing = await this.prisma.userCompetency.findFirst({
@@ -153,6 +159,7 @@ export class CompetenciesService {
       include: { competency: true },
     });
 
+    // Registar histórico
     if (previousLevel !== dto.currentLevel) {
       await this.prisma.competencyEvolutionLog.create({
         data: {
@@ -165,14 +172,14 @@ export class CompetenciesService {
         },
       });
 
+      // Notificar
       if (dto.source === CompetencySource.MANAGER) {
-        // FIX: metadata → JSON.stringify
         await this.prisma.notificationLog.create({
           data: {
             userId:   dto.userId,
             type:     'COMPETENCY_EVALUATED',
             message:  `O gestor avaliou a sua competência. Nível: ${dto.currentLevel}/5`,
-            metadata: JSON.stringify({ competencyId: dto.competencyId, newLevel: dto.currentLevel }),
+            metadata: JSON.stringify({}),
           },
         }).catch(() => {});
       }
@@ -181,6 +188,7 @@ export class CompetenciesService {
     return uc;
   }
 
+  // Autoavaliação pelo próprio colaborador
   async selfAssess(userId: number, dto: SelfAssessmentDto) {
     return this.upsertUserCompetency({
       userId,
@@ -192,7 +200,9 @@ export class CompetenciesService {
     }, userId);
   }
 
+  // Avaliação pelo gestor
   async managerAssess(managerId: number, dto: ManagerAssessmentDto) {
+    // Gravar nível do gestor separadamente e recalcular nível actual
     const existing = await this.prisma.userCompetency.findFirst({
       where: { userId: dto.userId, competencyId: dto.competencyId },
     });
@@ -217,17 +227,17 @@ export class CompetenciesService {
       },
     });
 
+    // Detectar divergência self vs manager
     const selfLevel = existing?.selfLevel;
     if (selfLevel !== null && selfLevel !== undefined) {
       const divergence = Math.abs(selfLevel - dto.managerLevel);
       if (divergence >= 2) {
-        // FIX: metadata → JSON.stringify
         await this.prisma.notificationLog.create({
           data: {
             userId:   dto.userId,
             type:     'COMPETENCY_DIVERGENCE',
             message:  `Divergência significativa detectada: Autoavaliação ${selfLevel} vs Gestor ${dto.managerLevel}`,
-            metadata: JSON.stringify({ competencyId: dto.competencyId, selfLevel, managerLevel: dto.managerLevel, divergence }),
+            metadata: JSON.stringify({}),
           },
         }).catch(() => {});
       }
@@ -284,6 +294,8 @@ export class CompetenciesService {
     });
   }
 
+  // ─── GAP ANALYSIS ─────────────────────────────────────────────────────────
+
   async getCompetencyGap(userId: number, positionId: number) {
     const [userComps, required] = await Promise.all([
       this.prisma.userCompetency.findMany({
@@ -313,6 +325,7 @@ export class CompetenciesService {
       };
     });
 
+    // Ordenar: gaps críticos primeiro (maior gap × maior peso)
     gaps.sort((a, b) => (b.gap * (b.weight ?? 1)) - (a.gap * (a.weight ?? 1)));
 
     const totalGap         = gaps.reduce((acc, g) => acc + g.gap, 0);
@@ -324,31 +337,23 @@ export class CompetenciesService {
     return { gaps, totalGap, mandatoryGaps, readinessPercent, positionId, userId };
   }
 
+  // ─── MAPEAMENTOS ──────────────────────────────────────────────────────────
+
   async mapToPosition(dto: MapCompetencyToPositionDto) {
     await this.findOne(dto.competencyId);
-
-    const existing = await this.prisma.positionCompetency.findFirst({
-      where: { positionId: dto.positionId, competencyId: dto.competencyId },
-    });
-
-    if (existing) {
-      return this.prisma.positionCompetency.update({
-        where: { id: existing.id },
-        data: {
-          requiredLevel: dto.requiredLevel,
-          priority:      dto.priority,
-          weight:        dto.weight ?? undefined,
-        },
-      });
-    }
-
-    return this.prisma.positionCompetency.create({
-      data: {
-        positionId:    dto.positionId,
-        competencyId:  dto.competencyId,
-        requiredLevel: dto.requiredLevel,
-        priority:      dto.priority,
-        weight:        dto.weight ?? 1,
+    return (this.prisma as any).positionCompetency.upsert({
+    where: { positionId_competencyId: { positionId: dto.positionId, competencyId: dto.competencyId } },
+    create: {
+    positionId:    dto.positionId,
+    competencyId:  dto.competencyId,
+    requiredLevel: dto.requiredLevel,
+    priority:      dto.priority,
+    weight:        dto.weight ?? 1,
+  },
+    update: {
+    requiredLevel: dto.requiredLevel,
+    priority:      dto.priority,
+    weight:        dto.weight ?? undefined,
       },
     });
   }
@@ -365,6 +370,8 @@ export class CompetenciesService {
       update: { levelGained: dto.levelGained },
     });
   }
+
+  // ─── ENDORSEMENTS ─────────────────────────────────────────────────────────
 
   async addEndorsement(endorserId: number, dto: CreateEndorsementDto) {
     if (endorserId === dto.targetUserId) {
@@ -385,13 +392,12 @@ export class CompetenciesService {
       },
     });
 
-    // FIX: metadata → JSON.stringify
     await this.prisma.notificationLog.create({
       data: {
         userId:   dto.targetUserId,
         type:     'COMPETENCY_ENDORSED',
         message:  `Recebeu um endorsement numa competência`,
-        metadata: JSON.stringify({ competencyId: dto.competencyId }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
 
@@ -408,6 +414,8 @@ export class CompetenciesService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  // ─── SKILL MATRIX ─────────────────────────────────────────────────────────
 
   async getSkillMatrix(departmentId?: number, positionId?: number) {
     const userWhere: any = { active: true };
@@ -436,6 +444,7 @@ export class CompetenciesService {
       where: { userId: { in: userIds } },
     });
 
+    // Montar grid
     const matrix = users.map(user => {
       const userUC = allUC.filter(uc => uc.userId === user.id);
       const levels = competencies.map(comp => {
@@ -448,6 +457,8 @@ export class CompetenciesService {
     return { users, competencies, matrix };
   }
 
+  // ─── ANALYTICS & DASHBOARD ───────────────────────────────────────────────
+
   async getTopCompetencies(limit = 10) {
     const grouped = await this.prisma.userCompetency.groupBy({
       by:       ['competencyId'],
@@ -457,6 +468,7 @@ export class CompetenciesService {
       take:     limit,
     });
 
+    // Enriquecer com nomes
     const ids  = grouped.map(g => g.competencyId);
     const comps= await this.prisma.competency.findMany({
       where:  { id: { in: ids } },
@@ -486,10 +498,12 @@ export class CompetenciesService {
       select: { userId: true, competencyId: true, currentLevel: true, targetLevel: true },
     });
 
+    // Gaps totais
     const gapsCount = usersWithComps.filter(
       uc => (uc.targetLevel ?? 0) > 0 && (uc.currentLevel ?? 0) < (uc.targetLevel ?? 0)
     ).length;
 
+    // Competências críticas (mais gaps)
     const gapMap: Record<number, number> = {};
     for (const uc of usersWithComps) {
       if ((uc.targetLevel ?? 0) > (uc.currentLevel ?? 0)) {
@@ -534,6 +548,7 @@ export class CompetenciesService {
     };
   }
 
+  // Atualização automática após conclusão de curso
   async updateFromCourse(userId: number, courseId: number) {
     const courseComps = await this.prisma.courseCompetency.findMany({
       where: { courseId },

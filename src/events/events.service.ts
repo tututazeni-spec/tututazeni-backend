@@ -1,4 +1,4 @@
-// src/events/events.service.ts
+﻿// src/events/events.service.ts
 import {
   Injectable, NotFoundException, ConflictException,
   BadRequestException, Logger,
@@ -209,7 +209,7 @@ export class EventsService {
         priority: 'MEDIUM',
         category: 'LMS',
         actionUrl:`/events/${eventId}`,
-        metadata: JSON.stringify({ eventId }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
 

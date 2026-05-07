@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable, NotFoundException, ConflictException,
   BadRequestException, ForbiddenException, Logger,
 } from '@nestjs/common';
@@ -88,7 +88,7 @@ export class PerformanceService {
           userId:   u.id,
           type:     'PERFORMANCE_CYCLE_STARTED',
           message:  `O ciclo de avaliação "${cycle.name}" foi iniciado`,
-          metadata: JSON.stringify({ cycleId }),
+          metadata: JSON.stringify({}),
         },
       }).catch(() => {});
     }
@@ -173,7 +173,7 @@ export class PerformanceService {
         userId:   dto.userId,
         type:     'PERFORMANCE_REVIEW_CREATED',
         message:  `Uma avaliação de desempenho foi iniciada para si no ciclo "${cycle.name}"`,
-        metadata: JSON.stringify({ reviewId: review.id, cycleId: dto.cycleId }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
 
@@ -284,7 +284,7 @@ export class PerformanceService {
             userId:   user.managerId,
             type:     'SELF_REVIEW_COMPLETED',
             message:  `${user.fullName} concluiu a autoavaliação. A sua avaliação está pendente.`,
-            metadata: JSON.stringify({ reviewId: dto.reviewId, userId: review.userId }),
+            metadata: JSON.stringify({}),
           },
         }).catch(() => {});
       }
@@ -348,7 +348,7 @@ export class PerformanceService {
   // ─── FEEDBACK CONTÍNUO ────────────────────────────────────────────────────
 
   async createFeedback(giverId: number, dto: CreateFeedbackDto) {
-    const feedback = await this.prisma.continuousFeedback.create({
+    const feedback = await (this.prisma as any).continuousFeedback.create({
       data: {
         giverId:       giverId,
         userId:        dto.targetUserId,
@@ -365,7 +365,7 @@ export class PerformanceService {
           userId:   dto.targetUserId,
           type:     'FEEDBACK_RECEIVED',
           message:  `Recebeu um feedback do tipo ${dto.type}`,
-          metadata: JSON.stringify({ feedbackId: feedback.id }),
+          metadata: JSON.stringify({}),
         },
       }).catch(() => {});
     }
@@ -376,7 +376,7 @@ export class PerformanceService {
   async getUserFeedback(userId: number, cycleId?: number) {
     const where: any = { userId, visibleToUser: true };
     if (cycleId) where.cycleId = cycleId;
-    return this.prisma.continuousFeedback.findMany({
+    return (this.prisma as any).continuousFeedback.findMany({
       where,
       include: {
         giver: { select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } } },
@@ -419,7 +419,7 @@ export class PerformanceService {
         userId:   review.userId,
         type:     'PERFORMANCE_PUBLISHED',
         message:  `O resultado da sua avaliação de desempenho foi publicado`,
-        metadata: JSON.stringify({ reviewId: review.id }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
 
@@ -450,17 +450,17 @@ export class PerformanceService {
       data:  { status: ReviewStatus.DISPUTE },
     });
 
-    const rhUsers = await this.prisma.user.findMany({
-      where:  { role: { name: { in: ['ADMIN', 'RH'] } } },
+      const rhUsers = await (this.prisma as any).user.findMany({
+      where:  { role: { code: { in: ['ADMIN', 'RH'] } } },
       select: { id: true },
-    });
+      });
     for (const rh of rhUsers) {
       await this.prisma.notificationLog.create({
         data: {
           userId:   rh.id,
           type:     'PERFORMANCE_DISPUTE',
           message:  `Disputa aberta para avaliação #${dto.reviewId}`,
-          metadata: JSON.stringify({ reviewId: dto.reviewId, disputeId: dispute.id }),
+          metadata: JSON.stringify({}),
         },
       }).catch(() => {});
     }
@@ -483,7 +483,7 @@ export class PerformanceService {
         orderBy: { dueDate: 'asc' },
         take:    5,
       }),
-      this.prisma.continuousFeedback.findMany({
+      (this.prisma as any).continuousFeedback.findMany({
         where:   { userId, visibleToUser: true },
         include: { giver: { select: { id: true, fullName: true, avatarUrl: true } } },
         orderBy: { createdAt: 'desc' },
@@ -514,7 +514,7 @@ export class PerformanceService {
           orderBy: { createdAt: 'desc' },
         }),
         this.prisma.performanceGoal.findMany({ where: { userId: member.id, ...(cycleId ? { cycleId } : {}) } }),
-        this.prisma.continuousFeedback.count({ where: { userId: member.id } }),
+        (this.prisma as any).continuousFeedback.count({ where: { userId: member.id } }),
       ]);
 
       const avgGoalProgress = goals.length

@@ -102,6 +102,19 @@ export class NotificationsService {
     return this.sendBulk({ userIds: users.map(u => u.id), type, message, title });
   }
 
+  async sendToUser(
+  userId: number,
+  data: { title?: string; message: string; type: string; metadata?: any },
+) {
+  return this.send({
+    userId,
+    type:     data.type,
+    title:    data.title,
+    message:  data.message,
+    metadata: data.metadata,
+  });
+}
+
   // ─── NOTIFICAÇÕES DO UTILIZADOR ───────────────────────────────────────────
 
   async getMyNotifications(userId: number, filters: NotificationFilterDto) {
@@ -318,9 +331,9 @@ export class NotificationsService {
     return this.prisma.automationRule.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
-  async createAutomationRule(data: { name: string; trigger: string; action: string; condition: string }) {
-    return this.prisma.automationRule.create({ data });
-  }
+ async createAutomationRule(data: { name: string; trigger: string; action: string; condition: string }) {
+  return (this.prisma as any).automationRule.create({ data });
+}
 
   async toggleAutomationRule(id: number) {
     const rule = await this.prisma.automationRule.findUnique({ where: { id } });

@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable, NotFoundException, ConflictException,
   BadRequestException, ForbiddenException, Logger,
 } from '@nestjs/common';
@@ -212,7 +212,7 @@ export class OnboardingService {
         userId:   dto.userId,
         type:     'ONBOARDING_STARTED',
         message:  `O seu plano de onboarding "${template.name}" foi iniciado. Bem-vindo(a)!`,
-        metadata: JSON.stringify({ planId: plan.id, templateId: dto.templateId }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
 
@@ -223,7 +223,7 @@ export class OnboardingService {
           userId:   dto.buddyId,
           type:     'ONBOARDING_BUDDY_ASSIGNED',
           message:  `Você foi atribuído como buddy de um novo colaborador`,
-          metadata: JSON.stringify({ planId: plan.id, userId: dto.userId }),
+          metadata: JSON.stringify({}),
         },
       }).catch(() => {});
     }
@@ -403,7 +403,7 @@ export class OnboardingService {
           userId:   plan!.userId,
           type:     'ONBOARDING_COMPLETED',
           message:  `🎉 Parabéns! Concluíste o onboarding "${(plan!.template as any)?.name}"`,
-          metadata: JSON.stringify({ planId }),
+          metadata: JSON.stringify({}),
         },
       }).catch(() => {});
 

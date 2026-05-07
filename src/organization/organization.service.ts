@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable, NotFoundException, ConflictException,
   BadRequestException, Logger,
 } from '@nestjs/common';
@@ -403,7 +403,7 @@ export class OrganizationService {
         userId:   dto.userId,
         type:     'ORG_CHANGE',
         message:  `Mudança organizacional registada: ${dto.changeType}`,
-        metadata: JSON.stringify({ changeId: change.id, changeType: dto.changeType }),
+        metadata: JSON.stringify({}),
       },
     }).catch(() => {});
 

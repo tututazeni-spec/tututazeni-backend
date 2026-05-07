@@ -21,8 +21,7 @@ import { LeadershipModule }       from './leadership/leadership.module';
 import { KnowledgeModule }        from './knowledge/knowledge.module';
 import { MicroLearningModule }    from './micro-learning/micro-learning.module';
 import { LiveClassesModule }      from './live-classes/live-classes.module';
-import { TrainingModule }         from './training/training.module';
-import { GamificationModule }     from './gamification/gamification.module';
+import { TrainingModule }        from './trainings/trainings.module';
 import { AnalyticsModule }        from './analytics/analytics.module';
 import { ExecutiveReportsModule } from './executive-reports/executive-reports.module';
 import { NotificationsModule }    from './notifications/notifications.module';
@@ -41,11 +40,13 @@ import { DocumentRepositoryModule } from './document-repository/document-reposit
 
 // MÓDULOS NOVOS — TALENTO E CARREIRA
 import { CareerPlansModule }       from './career-plans/career-plans.module';
+import { CareerModule }            from './career/career.module';
 import { CompetencyMapModule }     from './competency-map/competency-map.module';
 import { TalentDevelopmentModule } from './talent-development/talent-development.module';
 import { EngagementModule }        from './engagement/engagement.module';
 import { ContentLibraryModule }    from './content-library/content-library.module';
 import { EvaluationModule }        from './evaluation/evaluation.module';
+import { Evaluation360Module }     from './evaluation360/evaluation360.module';
 import { AvatarTrainingModule }    from './avatar-training/avatar-training.module';
 
 // MÓDULOS NOVOS — DASHBOARD E RELATÓRIOS
@@ -66,6 +67,7 @@ import { ProcessStandardModule } from './process-standard/process-standard.modul
 import { ApiIntegrationModule }  from './api-integration/api-integration.module';
 import { AutomationModule }      from './automation/automation.module';
 import { SearchModule }          from './search/search.module';
+import { PdfModule }             from './pdf/pdf.module';
 
 // INFRA
 import { LearningPathsController } from './learning-paths/learning-paths.controller';
@@ -84,13 +86,13 @@ import { RolesGuard }              from './common/guards/roles.guard';
     AssessmentsModule, CompetenciesModule, DevelopmentPlansModule,
     PerformanceModule, SuccessionModule, OnboardingModule,
     LeadershipModule, KnowledgeModule, MicroLearningModule,
-    LiveClassesModule, TrainingModule, GamificationModule,
+    LiveClassesModule, TrainingModule,
     AnalyticsModule, ExecutiveReportsModule, NotificationsModule,
     AuditModule, AiTutorModule, InstructorModule, EventsModule, EmployeesModule,
-    AttendanceModule, LeaveManagementModule, PayslipsModule,
+    AttendanceModule, LeaveManagementModule, PayslipsModule, PdfModule,
     WorkDeclarationModule, DocumentRepositoryModule,
-    CareerPlansModule, CompetencyMapModule, TalentDevelopmentModule,
-    EngagementModule, ContentLibraryModule, EvaluationModule, AvatarTrainingModule,
+    CareerPlansModule, CareerModule, CompetencyMapModule, TalentDevelopmentModule,
+    EngagementModule, ContentLibraryModule, EvaluationModule, Evaluation360Module, AvatarTrainingModule,
     DashboardModule, DashboardRhModule, ReportsModule, RoiImpactModule, HistoryModule,
     OrganizationModule, AclModule, RolesPermissionsModule, LeaderModule,
     ProcessStandardModule, ApiIntegrationModule, AutomationModule, SearchModule,

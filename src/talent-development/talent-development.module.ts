@@ -1,11 +1,13 @@
 // src/talent-development/talent-development.module.ts
 import { Module } from '@nestjs/common';
-import { TalentDevelopmentService } from './talent-development.service';
-import { TalentDevelopmentController } from './talent-development.controller';
+import { PrismaModule }                  from '../prisma/prisma.module';
+import { TalentDevelopmentService }      from './talent-development.service';
+import { TalentDevelopmentController }   from './talent-development.controller';
 
 @Module({
-  providers: [TalentDevelopmentService],
+  imports:     [PrismaModule],
+  providers:   [TalentDevelopmentService],
   controllers: [TalentDevelopmentController],
-  exports: [TalentDevelopmentService],
+  exports:     [TalentDevelopmentService],
 })
 export class TalentDevelopmentModule {}

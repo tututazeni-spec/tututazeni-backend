@@ -1,3 +1,4 @@
+﻿// src/process-standard/process-standard.service.ts
 import {
   Injectable, NotFoundException, ConflictException,
   ForbiddenException, BadRequestException, Logger,
@@ -48,8 +49,8 @@ export class ProcessStandardService {
           createdAt:  new Date(),
         },
       });
-    } catch (e: any) {
-      this.logger.warn(`Erro: ${e?.message}`);
+    } catch (e) {
+      this.logger.warn(`Falha ao escrever audit log: ${e.message}`);
     }
   }
 
@@ -261,7 +262,7 @@ export class ProcessStandardService {
         userId: (p as any).ownerId,
         type: 'PROCESS_REVIEW_REQUESTED',
         message: `Processo ${p.code} submetido para revisão`,
-        metadata: JSON.stringify({ processId: id }),
+        metadata: JSON.stringify({}),
       },
     });
 
@@ -404,7 +405,7 @@ export class ProcessStandardService {
         userId: dto.targetUserId,
         type: 'PROCESS_STARTED',
         message: `O processo "${process.title}" foi iniciado para si`,
-        metadata: JSON.stringify({ instanceId: instance.id, processId }),
+        metadata: JSON.stringify({}),
       },
     });
 

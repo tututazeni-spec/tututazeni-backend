@@ -20,7 +20,10 @@ export class AiTutorService {
     private aiProviders: AiProvidersService,
   ) {}
 
+  // ─── INICIAR SESSÃO ───────────────────────────────────────────────────────
+
   async startSession(userId: number, dto: StartAiSessionDto) {
+    // 1. Carregar perfil completo do utilizador
     const user = await this.prisma.user.findUnique({
       where:   { id: userId },
       include: {
@@ -31,6 +34,7 @@ export class AiTutorService {
       },
     });
 
+    // 2. Contexto do curso
     let courseContext = '';
     let courseTitle   = '';
     if (dto.courseId) {
@@ -45,6 +49,7 @@ export class AiTutorService {
       }
     }
 
+    // 3. Contexto do PDI
     let pdiContext = '';
     if (dto.planId) {
       const plan = await this.prisma.developmentPlan.findFirst({
@@ -57,8 +62,10 @@ export class AiTutorService {
       }
     }
 
+    // 4. Memória persistente (últimas interações resumidas)
     const memory = await this.prisma.aiTutorMemory.findUnique({ where: { userId } });
 
+    // 5. Histórico de aprendizagem
     const recentCourses = await this.prisma.enrollment.findMany({
       where:   { userId, status: { in: ['COMPLETED', 'IN_PROGRESS'] } },
       include: { course: { select: { title: true } } },
@@ -66,6 +73,7 @@ export class AiTutorService {
       take:    3,
     });
 
+    // 6. System prompt completo e contextualizado
     const systemPrompt = this.buildSystemPrompt({
       user:         user as any,
       courseContext,
@@ -75,6 +83,7 @@ export class AiTutorService {
       recentCourses:(recentCourses as any[]).map(e => e.course?.title ?? '').filter(Boolean),
     });
 
+    // 7. Criar sessão
     const session = await this.prisma.aiTutorSession.create({
       data: { userId, courseId: dto.courseId, enrollmentId: dto.enrollmentId },
     });
@@ -83,6 +92,7 @@ export class AiTutorService {
       data: { sessionId: session.id, role: 'SYSTEM', content: systemPrompt },
     });
 
+    // 8. XP por iniciar sessão com tutor
     await this.prisma.userPoints.upsert({
       where:  { userId },
       create: { userId, points: 2 },
@@ -101,6 +111,8 @@ export class AiTutorService {
     };
   }
 
+  // ─── ENVIAR MENSAGEM ──────────────────────────────────────────────────────
+
   async sendMessage(userId: number, dto: SendAiMessageDto) {
     const session = await this.prisma.aiTutorSession.findFirst({
       where:   { id: dto.sessionId, userId },
@@ -114,16 +126,19 @@ export class AiTutorService {
 
     const start = Date.now();
 
+    // Guardar mensagem do utilizador
     await this.prisma.aiMessage.create({
       data: { sessionId: dto.sessionId, role: 'USER', content: dto.message },
     });
 
+    // Construir histórico de conversa (excluindo SYSTEM)
     const systemMsg = session.messages.find(m => m.role === 'SYSTEM');
     const historyMsgs = session.messages
       .filter(m => m.role !== 'SYSTEM')
-      .slice(-20)
+      .slice(-20) // últimas 20 mensagens para não exceder contexto
       .map(m => ({ role: m.role === 'USER' ? 'user' as const : 'assistant' as const, content: m.content }));
 
+    // Adicionar contexto extra se fornecido
     const userContent = dto.contextHint
       ? `[Contexto: ${dto.contextHint}]\n\n${dto.message}`
       : dto.message;
@@ -150,11 +165,13 @@ export class AiTutorService {
       },
     });
 
+    // Actualizar memória de longo prazo (a cada 10 mensagens)
     const msgCount = session.messages.filter(m => m.role === 'USER').length;
     if (msgCount > 0 && msgCount % 10 === 0) {
       this.updateMemory(userId, session.messages as any[]).catch(() => {});
     }
 
+    // XP por mensagem
     await this.prisma.userPoints.upsert({
       where:  { userId },
       create: { userId, points: 1 },
@@ -170,6 +187,8 @@ export class AiTutorService {
     };
   }
 
+  // ─── AVALIAR RESPOSTA ─────────────────────────────────────────────────────
+
   async rateMessage(userId: number, dto: RateMessageDto) {
     const msg = await this.prisma.aiMessage.findFirst({
       where: { id: dto.messageId, session: { userId } },
@@ -182,6 +201,8 @@ export class AiTutorService {
       data:  { rating: dto.rating, ratingFeedback: dto.feedback },
     });
   }
+
+  // ─── ACÇÕES AGENTIC ───────────────────────────────────────────────────────
 
   async executeAgentAction(userId: number, dto: ExecuteAgentActionDto) {
     if (!dto.confirmed) throw new BadRequestException('Confirmação explícita obrigatória para acções do tutor');
@@ -208,13 +229,11 @@ export class AiTutorService {
       case AgentAction.UPDATE_PDI_ACTION: {
         const { actionId, status } = dto.params;
         if (!actionId) throw new BadRequestException('actionId obrigatório');
-        // FIX: pdiAction → developmentPlanAction
-        const action = await this.prisma.developmentPlanAction.findFirst({
+        const action = await this.prisma.pdiAction.findFirst({
           where: { id: actionId, plan: { userId } },
         });
         if (!action) throw new ForbiddenException('Acção PDI não pertence ao utilizador');
-        // FIX: pdiAction → developmentPlanAction
-        result = await this.prisma.developmentPlanAction.update({
+        result = await this.prisma.pdiAction.update({
           where: { id: actionId },
           data:  { status: status ?? 'IN_PROGRESS', progress: status === 'COMPLETED' ? 100 : 50 },
         });
@@ -243,6 +262,7 @@ export class AiTutorService {
       case AgentAction.GENERATE_QUIZ:
       case AgentAction.GENERATE_SUMMARY:
       case AgentAction.GENERATE_FLASHCARDS: {
+        // Delegar para generateContent
         result = await this.generateContent(userId, {
           type:     dto.action === AgentAction.GENERATE_QUIZ ? 'QUIZ' : dto.action === AgentAction.GENERATE_SUMMARY ? 'SUMMARY' : 'FLASHCARDS',
           courseId: dto.params.courseId,
@@ -257,6 +277,7 @@ export class AiTutorService {
         throw new BadRequestException(`Acção não suportada: ${dto.action}`);
     }
 
+    // Log da acção agentic
     await this.prisma.aiMessage.create({
       data: {
         sessionId: dto.sessionId,
@@ -269,13 +290,15 @@ export class AiTutorService {
     return { action: dto.action, description, result };
   }
 
+  // ─── GERAR CONTEÚDO ───────────────────────────────────────────────────────
+
   async generateContent(userId: number, dto: GenerateContentDto) {
     let contextText = '';
 
     if (dto.courseId) {
       const course = await this.prisma.course.findUnique({
         where:   { id: dto.courseId },
-        include: { modules: { include: { lessons: { select: { title: true, textContent: true  } } }, take: 3 } },
+        include: { modules: { include: { lessons: { select: { title: true, content: true } } }, take: 3 } },
       });
       if (course) {
         const lessons = (course as any).modules.flatMap((m: any) => m.lessons ?? []);
@@ -304,12 +327,13 @@ export class AiTutorService {
       2048,
     );
 
+    // Tentar fazer parse do JSON
     let parsed: any = null;
     try {
       const clean = response.text.replace(/```json|```/g, '').trim();
       parsed = JSON.parse(clean);
     } catch {
-      parsed = response.text;
+      parsed = response.text; // retorna texto se não for JSON válido
     }
 
     return {
@@ -319,6 +343,8 @@ export class AiTutorService {
       provider: response.provider,
     };
   }
+
+  // ─── GERAÇÃO DE RECOMENDAÇÕES ─────────────────────────────────────────────
 
   async getRecommendations(userId: number) {
     const [user, enrollments, competencies, activePDI] = await Promise.all([
@@ -344,6 +370,7 @@ export class AiTutorService {
     const completedCategories = [...new Set(enrollments.map(e => (e.course as any)?.category).filter(Boolean))];
     const competencyGaps = competencies.filter(c => c.currentLevel < (c.targetLevel ?? 0)).map(c => (c.competency as any).name);
 
+    // Cursos não concluídos relacionados com gaps
     const recommended = await this.prisma.course.findMany({
       where:  { status: 'PUBLISHED', category: { in: completedCategories.length > 0 ? completedCategories : undefined } },
       select: { id: true, title: true, category: true, level: true, workloadHours: true },
@@ -366,6 +393,8 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
       provider:   aiInsight.provider,
     };
   }
+
+  // ─── SESSÃO / HISTÓRICO ───────────────────────────────────────────────────
 
   async endSession(userId: number, sessionId: number) {
     const session = await this.prisma.aiTutorSession.findFirst({ where: { id: sessionId, userId } });
@@ -407,6 +436,8 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
+  // ─── MEMÓRIA PERSISTENTE ──────────────────────────────────────────────────
+
   private async updateMemory(userId: number, messages: any[]) {
     const userMsgs = messages.filter(m => m.role === 'USER').slice(-6).map(m => m.content).join('\n');
     const prompt   = `Resume em 2-3 frases o que este utilizador tem perguntado e aprendido: "${userMsgs}"`;
@@ -423,6 +454,8 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
       update: { summary: res.text, updatedAt: new Date() },
     });
   }
+
+  // ─── STATS ────────────────────────────────────────────────────────────────
 
   async getUsageStats() {
     const [totalSessions, activeSessions, totalMessages, tokensUsed, avgRating, byProvider] = await Promise.all([
@@ -443,6 +476,8 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
       cost:            'GRATUITO — sem custo de API',
     };
   }
+
+  // ─── HELPERS ──────────────────────────────────────────────────────────────
 
   private getQuickActions(hasCourse: boolean, hasPlan: boolean): Array<{ label: string; value: string }> {
     const base = [

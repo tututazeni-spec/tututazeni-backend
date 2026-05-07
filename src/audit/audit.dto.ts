@@ -1,22 +1,23 @@
 // src/audit/audit.dto.ts
 import {
-  IsString, IsInt, IsOptional, IsEnum, IsDateString, IsBoolean, Min, MaxLength,
+  IsString, IsInt, IsOptional, IsEnum, IsBoolean, IsDateString, Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 export enum AuditAction {
-  CREATE  = 'CREATE',
-  UPDATE  = 'UPDATE',
-  DELETE  = 'DELETE',
-  READ    = 'READ',
-  LOGIN   = 'LOGIN',
-  LOGOUT  = 'LOGOUT',
-  EXPORT  = 'EXPORT',
-  SEND    = 'SEND',
-  APPROVE = 'APPROVE',
-  REJECT  = 'REJECT',
-  DENY    = 'DENY',
+  CREATE   = 'CREATE',
+  UPDATE   = 'UPDATE',
+  DELETE   = 'DELETE',
+  LOGIN    = 'LOGIN',
+  LOGOUT   = 'LOGOUT',
+  EXPORT   = 'EXPORT',
+  SEND     = 'SEND',
+  READ     = 'READ',
+  APPROVE  = 'APPROVE',
+  REJECT   = 'REJECT',
+  DENIED   = 'DENIED',
+  FAILED   = 'FAILED',
 }
 
 export enum AuditSeverity {
@@ -27,9 +28,9 @@ export enum AuditSeverity {
 }
 
 export enum AuditStatus {
-  SUCCESS = 'SUCCESS',
-  FAILED  = 'FAILED',
-  DENIED  = 'DENIED',
+  SUCCESS  = 'SUCCESS',
+  FAILED   = 'FAILED',
+  DENIED   = 'DENIED',
 }
 
 export class AuditFilterDto {
@@ -60,7 +61,8 @@ export class AuditFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString()
   to?: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean)
+  @ApiPropertyOptional({ description: 'Apenas eventos críticos e altos' })
+  @IsOptional() @IsBoolean() @Type(() => Boolean)
   criticalOnly?: boolean;
 
   @ApiPropertyOptional({ default: 1 }) @IsOptional() @IsInt() @Min(1) @Type(() => Number)
@@ -70,39 +72,26 @@ export class AuditFilterDto {
   limit?: number;
 }
 
-export class AuditTimelineFilterDto {
-  @ApiPropertyOptional() @IsOptional() @IsString()
-  entity?: string;
-
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number)
-  entityId?: number;
-
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number)
-  userId?: number;
-}
-
-export class CreateAuditLogDto {
-  userId?:       number | null;
-  action!:       AuditAction | string;
-  entity!:       string;
-  entityId?:     number;
-  entityName?:   string;
-  before?:       any;
-  after?:        any;
-  changes?:      Record<string, { from: any; to: any }>;
-  status?:       AuditStatus;
-  severity?:     AuditSeverity;
-  ip?:           string;
-  userAgent?:    string;
-  sessionId?:    string;
-  reason?:       string;
-  metadata?:     Record<string, any>;
+export class LogAuditDto {
+  userId!:      number | null;
+  action!:      string;
+  entity!:      string;
+  entityId?:    number;
+  entityName?:  string;
+  before?:      any;
+  after?:       any;
+  changes?:     Record<string, { from: any; to: any }>;
+  status?:      AuditStatus;
+  severity?:    AuditSeverity;
+  ip?:          string;
+  userAgent?:   string;
+  reason?:      string;
+  metadata?:    any;
 }
 
 // ADICIONAR NO FINAL de src/audit/audit.dto.ts
 // (depois de todas as classes existentes)
  
-export type LogAuditDto = CreateAuditLogDto;
  
 // Adicionar também o campo entityId ao AuditFilterDto se não existir:
 // (dentro da classe AuditFilterDto, adiciona)

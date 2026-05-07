@@ -213,7 +213,7 @@ export class AttendanceService {
       ? await (this.prisma as any).attendanceRecord.update({ where: { id: existing.id }, data })
       : await (this.prisma as any).attendanceRecord.create({ data });
 
-    await this.audit.log({ action: 'CLOCK_IN', entityType: 'AttendanceRecord', entityId: record.id, userId, metadata: { method: data.method, context: data.context } });
+    await this.audit.log({ action: 'CLOCK_IN', entityType: 'AttendanceRecord', entityId: record.id, userId, metadata: {} });
 
     return record;
   }
@@ -263,7 +263,7 @@ export class AttendanceService {
       });
     }
 
-    await this.audit.log({ action: 'CLOCK_OUT', entityType: 'AttendanceRecord', entityId: record.id, userId, metadata: { workMinutes, overtimeMin } });
+    await this.audit.log({ action: 'CLOCK_OUT', entityType: 'AttendanceRecord', entityId: record.id, userId, metadata: {} });
 
     return updated;
   }
@@ -760,7 +760,7 @@ export class AttendanceService {
     );
 
     if (!inRange) {
-      await this.audit.log({ action: 'GEOFENCE_VIOLATION', entityType: 'AttendanceRecord', entityId: 0, userId, metadata: { lat, lon } });
+      await this.audit.log({ action: 'GEOFENCE_VIOLATION', entityType: 'AttendanceRecord', entityId: 0, userId, metadata: {} });
       throw new BadRequestException('Localização fora da área permitida para check-in');
     }
   }

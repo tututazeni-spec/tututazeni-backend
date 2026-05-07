@@ -1,3 +1,4 @@
+// src/departments/departments.controller.ts
 import {
   Controller, Get, Post, Put, Patch, Delete,
   Body, Param, Query, ParseIntPipe, UseGuards, HttpCode, HttpStatus,
@@ -14,7 +15,7 @@ import {
   CreateDepartmentDto, UpdateDepartmentDto, DepartmentFilterDto,
   TransferMemberDto, BulkTransferDto,
   CreateUnitDto, UpdateUnitDto,
-  CreateDeptRoleDto, UpdateDeptRoleDto, CreatePermissionDto,
+  CreateRoleDto, UpdateRoleDto, CreatePermissionDto,
   CreatePositionDto, UpdatePositionDto,
   CreateCareerPositionDto,
 } from './departments.dto';
@@ -158,7 +159,7 @@ export class RolesController {
   findOne(@Param('id', ParseIntPipe) id: number) { return this.svc.findOne(id); }
 
   @Post() @Roles('ADMIN') @ApiOperation({ summary: 'Criar role' })
-  create(@Body() dto: CreateDeptRoleDto) { return this.svc.create(dto); }
+  create(@Body() dto: CreateRoleDto) { return this.svc.create(dto); }
 
   @Post('init-defaults') @Roles('ADMIN') @ApiOperation({ summary: 'Inicializar roles padrão' })
   initDefaults() { return this.svc.initDefaultRoles(); }
@@ -181,7 +182,7 @@ export class RolesController {
   ) { return this.svc.revokePermissionFromRole(roleId, permissionId); }
 
   @Put(':id') @Roles('ADMIN') @ApiOperation({ summary: 'Actualizar role' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDeptRoleDto) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRoleDto) {
     return this.svc.update(id, dto);
   }
 

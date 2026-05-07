@@ -17,6 +17,8 @@ import { CurrentUser, Roles } from '../common/decorators';
 export class AuditController {
   constructor(private readonly svc: AuditService) {}
 
+  // ── Listagem ──────────────────────────────────────────────────────────────
+
   @Get()
   @ApiOperation({ summary: 'Listar logs com filtros (entity, action, severity, período, IP)' })
   findAll(@Query() filters: AuditFilterDto) { return this.svc.findAll(filters); }
@@ -27,12 +29,13 @@ export class AuditController {
 
   @Get('anomalies')
   @ApiOperation({ summary: 'Resumo de anomalias (logins suspeitos, exportações em massa, deletes)' })
-  // FIX: cast as any para método que pode não existir no tipo
-  anomalies() { return (this.svc as any).getAnomalySummary(); }
+  anomalies() { return this.svc.getAnomalySummary(); }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe de um log (com diff antes/depois)' })
   findOne(@Param('id', ParseIntPipe) id: number) { return this.svc.findOne(id); }
+
+  // ── Timeline ──────────────────────────────────────────────────────────────
 
   @Get('timeline/:entity/:entityId')
   @ApiOperation({ summary: 'Timeline completa de um recurso (ex: PDI/42, User/5)' })
@@ -43,11 +46,15 @@ export class AuditController {
     return this.svc.getTimeline(entity, entityId);
   }
 
+  // ── Utilizador ────────────────────────────────────────────────────────────
+
   @Get('users/:userId/history')
   @ApiOperation({ summary: 'Histórico completo de acções de um utilizador' })
   userHistory(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.getUserHistory(userId);
   }
+
+  // ── Integridade ───────────────────────────────────────────────────────────
 
   @Get('integrity/verify')
   @Roles('ADMIN')
@@ -56,6 +63,8 @@ export class AuditController {
   verify(@Query('limit') limit?: string) {
     return this.svc.verifyIntegrity(limit ? parseInt(limit) : 100);
   }
+
+  // ── Exportação ────────────────────────────────────────────────────────────
 
   @Post('export')
   @Roles('ADMIN')

@@ -1,605 +1,507 @@
-// ─── src/payslips/payslips.service.ts ────────────────────────────────────────
+﻿// src/payslips/payslips.service.ts
 import {
   Injectable, NotFoundException, ConflictException,
-  BadRequestException, ForbiddenException,
+  ForbiddenException, BadRequestException, Logger,
 } from '@nestjs/common';
-import { PrismaService }       from '../prisma/prisma.service';
-import { AuditService }        from '../common/services/audit.service';
-import { PayrollEngineService } from './payroll-engine.service';
+import { PrismaService } from '../prisma/prisma.service';
 import {
-  PayslipFilterDto, PayrollRunFilterDto,
-  CreatePayslipDto, UpdatePayslipDto,
-  CreatePayrollRunDto, ProcessPayrollDto, SimulatePayrollDto,
-  CreateEmployeeCompensationDto,
-  CreateCountryConfigDto, CreateSalaryComponentDto,
-  PayslipStatus, PayrollRunStatus,
+  CreatePayslipDto, UpdatePayslipDto, PayslipFilterDto,
+  BulkCreatePayslipDto, SimulatePayslipDto, CreateDisputeDto,
 } from './payslips.dto';
+import { randomBytes } from 'crypto';
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Tabela IRT Angola 2026 (Lei nº 26/2020 + actualização 2026) ─────────────
+// Isenção até 150.000 Kz/mês (Portaria 2026)
+interface IrtBracket {
+  min: number; max: number | null;
+  rate: number; deduction: number;
+}
+
+const IRT_TABLE_2026: IrtBracket[] = [
+  { min: 0,       max: 150_000,  rate: 0.00, deduction: 0       },
+  { min: 150_001, max: 200_000,  rate: 0.10, deduction: 15_000  },
+  { min: 200_001, max: 300_000,  rate: 0.13, deduction: 21_000  },
+  { min: 300_001, max: 500_000,  rate: 0.16, deduction: 30_000  },
+  { min: 500_001, max: 1_000_000,rate: 0.18, deduction: 40_000  },
+  { min: 1_000_001,max: 1_500_000,rate: 0.19, deduction: 50_000 },
+  { min: 1_500_001,max: null,    rate: 0.25, deduction: 140_000 },
+];
+
+const INSS_EMPLOYEE_RATE = 0.03;  // 3%
+const INSS_EMPLOYER_RATE = 0.08;  // 8%
 
 @Injectable()
 export class PayslipsService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly audit: AuditService,
-    private readonly engine: PayrollEngineService,
-  ) {}
+  private readonly logger = new Logger(PayslipsService.name);
 
-  // ══════════════════════════════════════════════════════════════════
-  // PAYSLIPS — LIST / DETAIL
-  // ══════════════════════════════════════════════════════════════════
+  constructor(private prisma: PrismaService) {}
 
+  // ─── Cálculo IRT Angola 2026 (método progressivo) ─────────────────────────
+  calcIRT(grossSalary: number): { tax: number; bracket: IrtBracket; formula: string } {
+    const bracket = IRT_TABLE_2026.find(
+      b => grossSalary >= b.min && (b.max === null || grossSalary <= b.max)
+    )!;
+    const tax = Math.max(0, grossSalary * bracket.rate - bracket.deduction);
+    const formula = `${grossSalary.toLocaleString('pt-AO')} × ${(bracket.rate * 100).toFixed(0)}% − ${bracket.deduction.toLocaleString('pt-AO')} = ${tax.toLocaleString('pt-AO')} Kz`;
+    return { tax, bracket, formula };
+  }
+
+  // ─── Calcular totais ────────────────────────────────────────────────────────
+  private computeTotals(dto: Partial<CreatePayslipDto>) {
+    const grossSalary =
+      (dto.baseSalary ?? 0) +
+      (dto.mealAllowance ?? 0) +
+      (dto.vacationAllowance ?? 0) +
+      (dto.christmasAllowance ?? 0) +
+      (dto.overtime ?? 0) +
+      (dto.bonuses ?? 0) +
+      (dto.otherAllowances ?? 0);
+
+    const irtResult = this.calcIRT(dto.baseSalary ?? 0); // IRT aplica-se ao salário base
+    const incomeTax      = dto.irtOverride ?? irtResult.tax;
+    const socialSecurity = dto.inssOverride ?? (dto.baseSalary ?? 0) * INSS_EMPLOYEE_RATE;
+    const employerInss   = (dto.baseSalary ?? 0) * INSS_EMPLOYER_RATE;
+
+    const totalDeductions =
+      incomeTax +
+      socialSecurity +
+      (dto.healthInsurance ?? 0) +
+      (dto.loanDeduction ?? 0) +
+      (dto.advanceDeduction ?? 0) +
+      (dto.otherDeductions ?? 0);
+
+    const netSalary = grossSalary - totalDeductions;
+
+    return {
+      grossSalary,
+      incomeTax,
+      socialSecurity,
+      employerInss,
+      totalDeductions,
+      netSalary,
+      irtBracketRate: irtResult.bracket.rate,
+      irtFormula: irtResult.formula,
+    };
+  }
+
+  // ─── Gerar código único de recibo ─────────────────────────────────────────
+  private generateReceiptCode(userId: number, period: string): string {
+    const hash = randomBytes(4).toString('hex').toUpperCase();
+    const p = period.replace('-', '');
+    return `REC-${p}-${String(userId).padStart(4, '0')}-${hash}`;
+  }
+
+  // ─── Registar acesso ────────────────────────────────────────────────────────
+  async logAccess(payslipId: number, userId: number, action: string, ip?: string) {
+    try {
+      await (this.prisma as any).payslipAccessLog.create({
+      data: { payslipId, userId, action, ip: ip ?? 'unknown', accessedAt: new Date() },
+     });
+    } catch (e) {
+      this.logger.warn(`Falha ao registar log de acesso: ${e.message}`);
+    }
+  }
+
+  // ─── LISTAGEM (ADMIN / RH) ─────────────────────────────────────────────────
   async findAll(filters: PayslipFilterDto) {
-    const { page = 1, limit = 20, userId, period, status, department, countryCode, runId } = filters;
+    const { page = 1, limit = 20, userId, period, year, status } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
 
-    if (userId)      where.userId      = userId;
-    if (period)      where.period      = { contains: period };
-    if (status)      where.status      = status;
-    if (countryCode) where.countryCode = countryCode;
-    if (runId)       where.runId       = runId;
-    if (department)  where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
+    const where: any = {};
+    if (userId)  where.userId = userId;
+    if (status)  where.status = status;
+    if (period)  where.period = period;
+    if (year && !period) where.period = { startsWith: year };
 
     const [data, total] = await Promise.all([
-     this.prisma.payslip.findMany({
-      where, skip, take: limit,
-      include: {
-        user: { select: { id: true, fullName: true } },
-        items: { orderBy: { order: 'asc' } },
-        run: { select: { id: true, period: true, status: true } },
-      },
+      this.prisma.payslip.findMany({
+        where, skip, take: limit,
+        include: {
+          user: { select: { id: true, fullName: true, employeeNumber: true, position: true, department: true } },
+        },
         orderBy: [{ period: 'desc' }, { userId: 'asc' }],
       }),
       this.prisma.payslip.count({ where }),
     ]);
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOne(id: number, requesterId?: number) {
-    const p = await this.prisma.payslip.findUnique({
+  // ─── DETALHE ───────────────────────────────────────────────────────────────
+  async findOne(id: number, requestingUserId?: number, requestingRole?: string) {
+    const p = await (this.prisma as any).payslip.findUnique({
       where: { id },
-      include: {
-        user: { select: { id: true, fullName: true } },
-        items: { orderBy: { order: 'asc' } },
-        run: { select: { id: true, period: true, status: true } },
-        accessLogs: { orderBy: { createdAt: 'desc' }, take: 10 },
+       include: {
+        user: {
+         select: {
+          id: true, fullName: true, email: true, employeeNumber: true,
+           nif: true, nib: true, hireDate: true,
+          },
+        },
       },
     });
+
     if (!p) throw new NotFoundException('Recibo não encontrado');
 
-    // Registar acesso
-    if (requesterId) {
-      await this.prisma.payslipAccessLog.create({
-        data: { payslipId: id, userId: requesterId, action: 'VIEW' },
-      });
+    // Colaborador só vê os seus próprios recibos
+    if (requestingRole === 'EMPLOYEE' && p.userId !== requestingUserId) {
+      throw new ForbiddenException('Acesso não autorizado a este recibo');
     }
 
     return p;
   }
 
-  async getMyPayslips(userId: number) {
-    const payslips = await this.prisma.payslip.findMany({
-      where: { userId, status: { in: [PayslipStatus.ISSUED, PayslipStatus.ACKNOWLEDGED] } },
-      include: { items: { orderBy: { order: 'asc' } } },
-      orderBy: { period: 'desc' },
-      take: 36, // 3 anos de histórico
+  // ─── CRIAR INDIVIDUAL ──────────────────────────────────────────────────────
+  async create(dto: CreatePayslipDto) {
+    const exists = await this.prisma.payslip.findFirst({
+      where: { userId: dto.userId, period: dto.period },
     });
-
-    // Resumo anual
-    const currentYear = new Date().getFullYear().toString();
-    const thisYear    = payslips.filter(p => p.period.startsWith(currentYear));
-    const annualSummary = {
-      year: currentYear,
-      totalNet:    +thisYear.reduce((a, p) => a + (p.netSalary ?? 0), 0).toFixed(2),
-      totalGross:  +thisYear.reduce((a, p) => a + (p.grossSalary ?? 0), 0).toFixed(2),
-      totalIRT:    +thisYear.reduce((a, p) => a + (p.incomeTax ?? 0), 0).toFixed(2),
-      totalINSS:   +thisYear.reduce((a, p) => a + (p.socialSecurity ?? 0), 0).toFixed(2),
-      months:      thisYear.length,
-    };
-
-    return { payslips, annualSummary };
-  }
-
-  async getAnnualStatement(userId: number, year: number) {
-    const payslips = await this.prisma.payslip.findMany({
-      where: {
-        userId,
-        period: { startsWith: year.toString() },
-        status: { in: [PayslipStatus.ISSUED, PayslipStatus.ACKNOWLEDGED] },
-      },
-      include: { items: true },
-      orderBy: { period: 'asc' },
-    });
-
-    const totals = payslips.reduce((acc, p) => ({
-      totalGross:   acc.totalGross + (p.grossSalary ?? 0),
-      totalNet:     acc.totalNet   + (p.netSalary ?? 0),
-      totalIRT:     acc.totalIRT   + (p.incomeTax ?? 0),
-      totalINSS:    acc.totalINSS  + (p.socialSecurity ?? 0),
-      totalEarnings:acc.totalEarnings + (p.totalEarnings ?? 0),
-    }), { totalGross: 0, totalNet: 0, totalIRT: 0, totalINSS: 0, totalEarnings: 0 });
-
-    // Rendimentos por categoria
-    const allItems = payslips.flatMap(p => p.items ?? []);
-    const byComponent: Record<string, number> = {};
-    for (const item of allItems) {
-      byComponent[item.code] = (byComponent[item.code] ?? 0) + item.value;
+    if (exists) {
+      throw new ConflictException(`Recibo de ${dto.period} já existe para este colaborador`);
     }
 
-    return {
-      userId, year,
-      months: payslips.length,
-      payslips: payslips.map(p => ({ period: p.period, gross: p.grossSalary, net: p.netSalary, irt: p.incomeTax })),
-      totals: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, +v.toFixed(2)])),
-      byComponent,
-    };
-  }
+    const totals  = this.computeTotals(dto);
+    const code    = this.generateReceiptCode(dto.userId, dto.period);
 
-  // ══════════════════════════════════════════════════════════════════
-  // PAYROLL RUNS
-  // ══════════════════════════════════════════════════════════════════
-
-  async createRun(dto: CreatePayrollRunDto, createdById: number) {
-    const exists = await this.prisma.payrollRun.findFirst({
-      where: { period: dto.period, status: { not: PayrollRunStatus.CANCELLED } },
-    });
-    if (exists) throw new ConflictException(`Já existe uma folha para o período ${dto.period}`);
-
-    const run = await this.prisma.payrollRun.create({
+    return (this.prisma as any).payslip.create({
       data: {
-        period: dto.period,
-        countryCode: dto.countryCode ?? 'AO',
-        status: PayrollRunStatus.DRAFT,
-        notes: dto.notes,
-        createdById,
+        ...dto,
+        receiptCode:    code,
+        grossSalary:    totals.grossSalary,
+        incomeTax:      totals.incomeTax,
+        socialSecurity: totals.socialSecurity,
+        employerInss:   totals.employerInss,
+        totalDeductions:totals.totalDeductions,
+        netSalary:      totals.netSalary,
+        irtBracketRate: totals.irtBracketRate,
+        irtFormula:     totals.irtFormula,
+        status:         'DRAFT',
       },
+      include: { user: { select: { id: true, fullName: true, employeeNumber: true } } },
     });
-
-    await this.audit.log({ action: 'PAYROLL_RUN_CREATED', entityType: 'PayrollRun', entityId: run.id, userId: createdById, metadata: { period: dto.period } });
-
-    return run;
   }
 
-  async getRuns(filters: PayrollRunFilterDto) {
-    const { page = 1, limit = 12, period, status, countryCode } = filters;
-    const skip = (page - 1) * limit;
-    const where: any = {};
-    if (period)      where.period      = { contains: period };
-    if (status)      where.status      = status;
-    if (countryCode) where.countryCode = countryCode;
+  // ─── CRIAR EM MASSA ────────────────────────────────────────────────────────
+  async bulkCreate(dto: BulkCreatePayslipDto) {
+    const { period, paymentDate, userIds, issueImmediately = false } = dto;
+    const where: any = { active: true };
+    if (userIds?.length) where.id = { in: userIds };
 
-    const [data, total] = await Promise.all([
-      this.prisma.payrollRun.findMany({
-        where, skip, take: limit,
-        orderBy: { period: 'desc' },
-        include: {
-          _count: { select: { payslips: true } },
-          createdBy: { select: { id: true, fullName: true } },
-        },
-      }),
-      this.prisma.payrollRun.count({ where }),
-    ]);
-
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
-  }
-
-  async processRun(dto: ProcessPayrollDto, processedById: number) {
-    const run = await this.prisma.payrollRun.findUnique({ where: { id: dto.runId } });
-    if (!run) throw new NotFoundException('Folha de processamento não encontrada');
-    if (![PayrollRunStatus.DRAFT, PayrollRunStatus.CALCULATED].includes(run.status as any)) {
-      throw new BadRequestException('Esta folha não pode ser reprocessada no estado actual');
-    }
-
-    await this.prisma.payrollRun.update({
-      where: { id: dto.runId },
-      data: { status: PayrollRunStatus.PROCESSING },
+    const users = await this.prisma.user.findMany({
+      where,
+      include: { position: true },
     });
 
-    // Buscar colaboradores activos com compensação definida
-    const compensations = await this.prisma.employeeCompensation.findMany({
-      where: {
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
-      },
-      include: { user: { select: { id: true, fullName: true } } },
-    });
+    const results = { created: 0, skipped: 0, errors: [] as string[], period };
 
-    const inputMap = new Map(dto.inputs?.map(i => [i.userId, i]) ?? []);
-    const config   = await this.engine.loadCountryConfig(run.countryCode, new Date().getFullYear());
-    const results  = [];
-    const errors   = [];
-
-    for (const comp of compensations) {
+    for (const u of users) {
       try {
-        const input   = inputMap.get(comp.userId);
-        const context = {
-          userId:              comp.userId,
-          baseSalary:          comp.baseSalary,
-          countryCode:         run.countryCode,
-          taxYear:             new Date().getFullYear(),
-          overtimeHours:       input?.overtimeHours,
-          bonusAmount:         input?.bonusAmount,
-          absenceDays:         input?.absenceDays,
-          advanceDeduction:    input?.advanceDeduction,
-        };
+        const exists = await this.prisma.payslip.findFirst({
+          where: { userId: u.id, period },
+        });
+        if (exists) { results.skipped++; continue; }
 
-        const result = await this.engine.calculate(context, run.period);
+        const base = (u.position as any)?.baseSalary ?? 0;
+        const totals = this.computeTotals({ baseSalary: base });
+        const code   = this.generateReceiptCode(u.id, period);
 
-        // Upsert payslip
-        const payslip = await this.upsertCalculatedPayslip(result, run.id, run.period);
-        results.push({ userId: comp.userId, payslipId: payslip.id, net: result.netSalary });
-      } catch (e: any) {
-        errors.push({ userId: comp.userId, error: e.message });
+        const payslip = await (this.prisma as any).payslip.create({
+          data: {
+            userId: u.id, period, paymentDate, receiptCode: code,
+            baseSalary: base,
+            grossSalary: totals.grossSalary,
+            incomeTax: totals.incomeTax,
+            socialSecurity: totals.socialSecurity,
+            employerInss: totals.employerInss,
+            totalDeductions: totals.totalDeductions,
+            netSalary: totals.netSalary,
+            irtBracketRate: totals.irtBracketRate,
+            irtFormula: totals.irtFormula,
+            status: issueImmediately ? 'ISSUED' : 'DRAFT',
+            issuedAt: issueImmediately ? new Date() : null,
+          },
+        });
+
+        if (issueImmediately) {
+          await this.prisma.notificationLog.create({
+            data: {
+              userId: u.id,
+              type: 'PAYSLIP_ISSUED',
+              message: `O seu recibo de ${period} está disponível.`,
+              metadata: JSON.stringify({}),
+            },
+          });
+        }
+
+        results.created++;
+      } catch (e) {
+        results.errors.push(`User ${u.id}: ${e.message}`);
+        this.logger.error(`Erro ao criar recibo para user ${u.id}: ${e.message}`);
       }
     }
 
-    await this.prisma.payrollRun.update({
-      where: { id: dto.runId },
-      data: {
-        status: errors.length > 0 ? PayrollRunStatus.CALCULATED : PayrollRunStatus.CALCULATED,
-        processedAt: new Date(),
-        processedById,
-        totalGross: results.reduce((a: number, r: any) => a + r.net, 0),
-      },
-    });
-
-    await this.audit.log({ action: 'PAYROLL_RUN_PROCESSED', entityType: 'PayrollRun', entityId: dto.runId, userId: processedById, metadata: { count: results.length, errors: errors.length } });
-
-    return {
-      runId: dto.runId,
-      period: run.period,
-      processed: results.length,
-      errors: errors.length,
-      errorDetails: errors,
-    };
+    return results;
   }
 
-  async approveRun(runId: number, approvedById: number) {
-    const run = await this.prisma.payrollRun.findUnique({ where: { id: runId } });
-    if (!run) throw new NotFoundException('Folha não encontrada');
-    if (run.status !== PayrollRunStatus.CALCULATED) throw new BadRequestException('Folha não está calculada');
-
-    await this.prisma.payrollRun.update({
-      where: { id: runId },
-      data: { status: PayrollRunStatus.APPROVED, approvedById, approvedAt: new Date() },
-    });
-
-    await this.audit.log({ action: 'PAYROLL_RUN_APPROVED', entityType: 'PayrollRun', entityId: runId, userId: approvedById });
-
-    return { message: 'Folha aprovada com sucesso' };
-  }
-
-  async publishRun(runId: number, publishedById: number) {
-    const run = await this.prisma.payrollRun.findUnique({
-      where: { id: runId },
-      include: { payslips: { select: { id: true, userId: true, period: true } } },
-    });
-    if (!run) throw new NotFoundException('Folha não encontrada');
-    if (run.status !== PayrollRunStatus.APPROVED) throw new BadRequestException('Folha não está aprovada');
-
-    // Publicar todos os recibos
-    await this.prisma.payslip.updateMany({
-      where: { runId },
-      data: { status: PayslipStatus.ISSUED, issuedAt: new Date() },
-    });
-
-    // Notificar colaboradores
-    for (const ps of run.payslips) {
-      await this.prisma.notificationLog.create({
-        data: { userId: ps.userId, type: 'PAYSLIP_ISSUED', message: `O seu recibo de ${ps.period} está disponível`, success: true },
-      });
-    }
-
-    await this.prisma.payrollRun.update({
-      where: { id: runId },
-      data: { status: PayrollRunStatus.PUBLISHED },
-    });
-
-    await this.audit.log({ action: 'PAYROLL_RUN_PUBLISHED', entityType: 'PayrollRun', entityId: runId, userId: publishedById, metadata: { payslips: run.payslips.length } });
-
-    return { published: run.payslips.length };
-  }
-
-  // ══════════════════════════════════════════════════════════════════
-  // PAYSLIPS — CRUD & WORKFLOW
-  // ══════════════════════════════════════════════════════════════════
-
-  async create(dto: CreatePayslipDto, createdById: number) {
-    const exists = await this.prisma.payslip.findFirst({ where: { userId: dto.userId, period: dto.period } });
-    if (exists) throw new ConflictException(`Recibo de ${dto.period} já existe para este colaborador`);
-
-    const gross       = (dto.grossSalary ?? dto.baseSalary) + 0;
-    const deductions  = dto.totalDeductions ?? ((dto.incomeTax ?? 0) + (dto.socialSecurity ?? 0) + (dto.otherDeductions ?? 0));
-    const net         = dto.netSalary ?? (gross - deductions);
-
-    return this.prisma.payslip.create({
-      data: {
-        userId: dto.userId,
-        period: dto.period,
-        runId: dto.runId,
-        baseSalary: dto.baseSalary,
-        grossSalary: gross,
-        netSalary: net,
-        totalEarnings: dto.totalEarnings ?? gross,
-        totalDeductions: deductions,
-        incomeTax: dto.incomeTax ?? 0,
-        socialSecurity: dto.socialSecurity ?? 0,
-        employerSocialSecurity: dto.employerSocialSecurity ?? 0,
-        otherDeductions: dto.otherDeductions ?? 0,
-        countryCode: dto.countryCode ?? 'AO',
-        status: PayslipStatus.DRAFT,
-        notes: dto.notes,
-        createdById,
-      },
-    });
-  }
-
-  async update(id: number, dto: UpdatePayslipDto, updatedById: number) {
+  // ─── EMITIR (NOTIFICA) ─────────────────────────────────────────────────────
+  async issue(id: number) {
     const p = await this.findOne(id);
-    if ([PayslipStatus.ISSUED, PayslipStatus.ACKNOWLEDGED].includes(p.status as any)) {
-      throw new BadRequestException('Não é possível editar um recibo já emitido');
-    }
-    await this.audit.log({ action: 'PAYSLIP_UPDATED', entityType: 'Payslip', entityId: id, userId: updatedById });
-    return this.prisma.payslip.update({ where: { id }, data: dto as any });
-  }
-
-  async issue(id: number, issuedById: number) {
-    const p = await this.findOne(id);
-    if (p.status !== PayslipStatus.APPROVED && p.status !== PayslipStatus.DRAFT) {
-      throw new BadRequestException('Recibo deve estar aprovado para ser emitido');
+    if (p.status === 'ISSUED' || p.status === 'ACKNOWLEDGED') {
+      throw new ConflictException('Recibo já foi emitido');
     }
 
     const updated = await this.prisma.payslip.update({
       where: { id },
-      data: { status: PayslipStatus.ISSUED, issuedAt: new Date() },
+      data: { status: 'ISSUED', issuedAt: new Date() },
     });
 
     await this.prisma.notificationLog.create({
-      data: { userId: updated.userId, type: 'PAYSLIP_ISSUED', message: `O seu recibo de ${updated.period} está disponível`, success: true },
-    });
-
-    await this.audit.log({ action: 'PAYSLIP_ISSUED', entityType: 'Payslip', entityId: id, userId: issuedById });
-
-    return updated;
-  }
-
-  async acknowledge(id: number, userId: number) {
-    const p = await this.findOne(id);
-    if (p.userId !== userId) throw new ForbiddenException('Sem permissão');
-    if (p.status !== PayslipStatus.ISSUED) throw new BadRequestException('Recibo não está emitido');
-
-    const updated = await this.prisma.payslip.update({
-      where: { id },
-      data: { status: PayslipStatus.ACKNOWLEDGED, acknowledgedAt: new Date() },
-    });
-
-    await this.prisma.payslipAccessLog.create({
-      data: { payslipId: id, userId, action: 'ACKNOWLEDGE' },
-    });
-
-    return updated;
-  }
-
-  // ══════════════════════════════════════════════════════════════════
-  // SIMULATION
-  // ══════════════════════════════════════════════════════════════════
-
-  async simulate(dto: SimulatePayrollDto) {
-    const countryCode = dto.countryCode ?? 'AO';
-    const taxYear     = dto.taxYear ?? new Date().getFullYear();
-
-    const result = await this.engine.calculate(
-      {
-        userId: 0, // simulação sem utilizador real
-        baseSalary: dto.baseSalary,
-        countryCode, taxYear,
-        bonusAmount: dto.bonusAmount,
-        foodAllowance: dto.foodAllowance,
-        transportAllowance: dto.transportAllowance,
-        overtimeHours: dto.overtimeHours,
-        advanceDeduction: dto.advanceDeduction,
+      data: {
+        userId: updated.userId,
+        type: 'PAYSLIP_ISSUED',
+        message: `O seu recibo de ${updated.period} está disponível.`,
+        metadata: JSON.stringify({}),
       },
-      `SIMULATION`,
-    );
+    });
 
-    // Não persistir — apenas retornar o breakdown
+    return updated;
+  }
+
+  // ─── RECONHECER ────────────────────────────────────────────────────────────
+  async acknowledge(id: number, userId: number) {
+    const p = await this.findOne(id, userId, 'EMPLOYEE');
+    if (p.status === 'ACKNOWLEDGED') return p;
+
+    return this.prisma.payslip.update({
+      where: { id },
+      data: { status: 'ACKNOWLEDGED', acknowledgedAt: new Date() },
+    });
+  }
+
+  // ─── ACTUALIZAR ────────────────────────────────────────────────────────────
+  async update(id: number, dto: UpdatePayslipDto) {
+    const existing = await this.findOne(id);
+
+    if (existing.status === 'ACKNOWLEDGED') {
+      throw new ForbiddenException('Não é possível editar um recibo já confirmado pelo colaborador');
+    }
+
+    const merged = {
+      baseSalary:        dto.baseSalary        ?? (existing as any).baseSalary,
+      mealAllowance:     dto.mealAllowance     ?? (existing as any).mealAllowance,
+      vacationAllowance: dto.vacationAllowance ?? (existing as any).vacationAllowance,
+      christmasAllowance:dto.christmasAllowance?? (existing as any).christmasAllowance,
+      overtime:          dto.overtime          ?? (existing as any).overtime,
+      bonuses:           dto.bonuses           ?? (existing as any).bonuses,
+      otherAllowances:   dto.otherAllowances   ?? (existing as any).otherAllowances,
+      healthInsurance:   dto.healthInsurance   ?? (existing as any).healthInsurance,
+      loanDeduction:     dto.loanDeduction     ?? (existing as any).loanDeduction,
+      advanceDeduction:  dto.advanceDeduction  ?? (existing as any).advanceDeduction,
+      otherDeductions:   dto.otherDeductions   ?? (existing as any).otherDeductions,
+      irtOverride:       dto.irtOverride,
+      inssOverride:      dto.inssOverride,
+    };
+
+    const totals = this.computeTotals(merged);
+
+    return this.prisma.payslip.update({
+      where: { id },
+      data: {
+        ...dto,
+        grossSalary:    totals.grossSalary,
+        incomeTax:      totals.incomeTax,
+        socialSecurity: totals.socialSecurity,
+        employerInss:   totals.employerInss,
+        totalDeductions:totals.totalDeductions,
+        netSalary:      totals.netSalary,
+        irtBracketRate: totals.irtBracketRate,
+        irtFormula:     totals.irtFormula,
+        status:         'DRAFT', // volta a draft ao editar
+      },
+    });
+  }
+
+  // ─── MEUS RECIBOS (colaborador) ────────────────────────────────────────────
+  async getMyPayslips(userId: number, filters: PayslipFilterDto) {
+    const { page = 1, limit = 12, year } = filters;
+    const skip = (page - 1) * limit;
+
+    const where: any = { userId, status: { not: 'DRAFT' } };
+    if (year) where.period = { startsWith: year };
+
+    const [data, total] = await Promise.all([
+      (this.prisma as any).payslip.findMany({
+        where, skip, take: limit,
+        orderBy: { period: 'desc' },
+        select: {
+          id: true, receiptCode: true, period: true, paymentDate: true,
+          netSalary: true, grossSalary: true, status: true,
+          issuedAt: true, acknowledgedAt: true,
+        },
+      }),
+      this.prisma.payslip.count({ where }),
+    ]);
+
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  // ─── RESUMO ANUAL ──────────────────────────────────────────────────────────
+  async annualSummary(userId: number, year: string) {
+    const payslips = await this.prisma.payslip.findMany({
+      where: { userId, period: { startsWith: year }, status: { not: 'DRAFT' } },
+      orderBy: { period: 'asc' },
+    });
+
+    if (!payslips.length) {
+      throw new NotFoundException(`Sem recibos para ${year}`);
+    }
+
+    const sum = (field: string) =>
+      payslips.reduce((acc, p) => acc + ((p as any)[field] ?? 0), 0);
+
     return {
-      simulation: true,
-      ...result,
-      lines: result.lines.map(l => ({
-        code: l.code, name: l.name, type: l.type,
-        value: l.value, isTaxable: l.isTaxable,
+      year,
+      userId,
+      months: payslips.length,
+      totalGross:           sum('grossSalary'),
+      totalNet:             sum('netSalary'),
+      totalIRT:             sum('incomeTax'),
+      totalINSSEmployee:    sum('socialSecurity'),
+      totalINSSEmployer:    sum('employerInss'),
+      totalMealAllowance:   sum('mealAllowance'),
+      totalVacationAllowance: sum('vacationAllowance'),
+      totalChristmasAllowance: sum('christmasAllowance'),
+      totalBonuses:         sum('bonuses'),
+      totalDeductions:      sum('totalDeductions'),
+      monthlySeries: payslips.map(p => ({
+        period:     p.period,
+        grossSalary: (p as any).grossSalary,
+        netSalary:   (p as any).netSalary,
+        incomeTax:   (p as any).incomeTax,
+        socialSecurity: (p as any).socialSecurity,
       })),
     };
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  // ANALYTICS / DASHBOARD
-  // ══════════════════════════════════════════════════════════════════
+  // ─── COMPARAÇÃO DE 2 MESES ─────────────────────────────────────────────────
+  async compare(userId: number, periodA: string, periodB: string) {
+    const [a, b] = await Promise.all([
+      this.prisma.payslip.findFirst({ where: { userId, period: periodA } }),
+      this.prisma.payslip.findFirst({ where: { userId, period: periodB } }),
+    ]);
 
-  async getDashboard(period?: string, department?: string) {
-    const targetPeriod = period ?? new Date().toISOString().slice(0, 7);
-    const where: any   = { period: { contains: targetPeriod.slice(0, 7) } };
-    if (department) where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
+    if (!a) throw new NotFoundException(`Recibo de ${periodA} não encontrado`);
+    if (!b) throw new NotFoundException(`Recibo de ${periodB} não encontrado`);
 
-    const payslips = await this.prisma.payslip.findMany({
-      where: { ...where, status: { in: [PayslipStatus.ISSUED, PayslipStatus.ACKNOWLEDGED, PayslipStatus.APPROVED] } },
-      include: { user: { select: { id: true, fullName: true } } },
+    const diff = (field: string) => {
+      const va = (a as any)[field] ?? 0;
+      const vb = (b as any)[field] ?? 0;
+      return { a: va, b: vb, delta: vb - va, pct: va ? ((vb - va) / va) * 100 : null };
+    };
+
+    return {
+      periodA, periodB,
+      baseSalary:     diff('baseSalary'),
+      grossSalary:    diff('grossSalary'),
+      netSalary:      diff('netSalary'),
+      incomeTax:      diff('incomeTax'),
+      socialSecurity: diff('socialSecurity'),
+      bonuses:        diff('bonuses'),
+      overtime:       diff('overtime'),
+      totalDeductions:diff('totalDeductions'),
+    };
+  }
+
+  // ─── SIMULAÇÃO ─────────────────────────────────────────────────────────────
+  simulate(dto: SimulatePayslipDto) {
+    const totals   = this.computeTotals(dto);
+    const irtInfo  = this.calcIRT(dto.baseSalary);
+
+    return {
+      input: dto,
+      grossSalary:    totals.grossSalary,
+      incomeTax:      totals.incomeTax,
+      socialSecurity: totals.socialSecurity,
+      employerInss:   totals.employerInss,
+      totalDeductions:totals.totalDeductions,
+      netSalary:      totals.netSalary,
+      irtDetails: {
+        bracket:    irtInfo.bracket,
+        formula:    irtInfo.formula,
+        effectiveRate: totals.grossSalary > 0
+          ? (totals.incomeTax / totals.grossSalary) * 100
+          : 0,
+      },
+    };
+  }
+
+  // ─── ABRIR DISPUTA ─────────────────────────────────────────────────────────
+  async createDispute(payslipId: number, userId: number, dto: CreateDisputeDto) {
+    const p = await this.findOne(payslipId, userId, 'EMPLOYEE');
+
+    const dispute = await this.prisma.payslipDispute.create({
+      data: { payslipId, userId, reason: dto.reason, details: dto.details, status: 'OPEN' },
     });
 
-    const totalGross      = payslips.reduce((a, p) => a + (p.grossSalary ?? 0), 0);
-    const totalNet        = payslips.reduce((a, p) => a + (p.netSalary ?? 0), 0);
-    const totalIRT        = payslips.reduce((a, p) => a + (p.incomeTax ?? 0), 0);
-    const totalINSS       = payslips.reduce((a, p) => a + (p.socialSecurity ?? 0), 0);
-    const totalEmpCost    = payslips.reduce((a, p) => a + (p.grossSalary ?? 0) + (p.employerSocialSecurity ?? 0), 0);
-    const avgSalary       = payslips.length ? totalGross / payslips.length : 0;
+    await this.prisma.payslip.update({
+      where: { id: payslipId },
+      data: { status: 'DISPUTED' },
+    });
 
-    const byDept = payslips.reduce((acc: any, p) => {
-      const dept = (p as any).user?.employee?.department ?? 'N/A';
-      if (!acc[dept]) acc[dept] = { department: dept, count: 0, totalGross: 0, totalNet: 0 };
-      acc[dept].count++;
-      acc[dept].totalGross += p.grossSalary ?? 0;
-      acc[dept].totalNet   += p.netSalary ?? 0;
-      return acc;
-    }, {});
+    await this.prisma.notificationLog.create({
+      data: {
+        userId: p.userId,
+        type: 'PAYSLIP_DISPUTE',
+        message: `Disputa aberta para o recibo ${(p as any).receiptCode}`,
+        metadata: JSON.stringify({}),
+      },
+    });
+
+    return dispute;
+  }
+
+  // ─── DASHBOARD RH ─────────────────────────────────────────────────────────
+  async hrDashboard(period?: string) {
+    const targetPeriod = period ?? new Date().toISOString().slice(0, 7);
+
+    const [total, issued, acknowledged, disputed, notViewed] = await Promise.all([
+      this.prisma.payslip.count({ where: { period: targetPeriod } }),
+      this.prisma.payslip.count({ where: { period: targetPeriod, status: 'ISSUED' } }),
+      this.prisma.payslip.count({ where: { period: targetPeriod, status: 'ACKNOWLEDGED' } }),
+      this.prisma.payslip.count({ where: { period: targetPeriod, status: 'DISPUTED' } }),
+      this.prisma.payslip.count({ where: { period: targetPeriod, status: 'ISSUED', acknowledgedAt: null } }),
+    ]);
+
+    const agg = await this.prisma.payslip.aggregate({
+      where: { period: targetPeriod },
+      _sum: { grossSalary: true, netSalary: true, incomeTax: true, socialSecurity: true, employerInss: true },
+      _avg: { netSalary: true },
+    });
 
     return {
       period: targetPeriod,
-      kpis: {
-        headcount:    payslips.length,
-        totalGross:   +totalGross.toFixed(2),
-        totalNet:     +totalNet.toFixed(2),
-        totalIRT:     +totalIRT.toFixed(2),
-        totalINSS:    +totalINSS.toFixed(2),
-        totalEmployerCost: +totalEmpCost.toFixed(2),
-        avgSalary:    +avgSalary.toFixed(2),
+      counts: { total, issued, acknowledged, disputed, notViewed, draft: total - issued - acknowledged - disputed },
+      financials: {
+        totalGross:        agg._sum.grossSalary ?? 0,
+        totalNet:          agg._sum.netSalary   ?? 0,
+        totalIRT:          agg._sum.incomeTax   ?? 0,
+        totalINSSEmployee: agg._sum.socialSecurity ?? 0,
+        totalINSSEmployer: agg._sum.employerInss ?? 0,
+        avgNet:            agg._avg.netSalary   ?? 0,
       },
-      byDepartment: Object.values(byDept).map((d: any) => ({
-        ...d,
-        totalGross: +d.totalGross.toFixed(2),
-        totalNet:   +d.totalNet.toFixed(2),
-      })),
+      compliance: {
+        viewRate: total > 0 ? ((acknowledged / total) * 100).toFixed(1) + '%' : '0%',
+        pendingAcknowledgement: notViewed,
+      },
     };
   }
 
-  async getMonthlyTrend(months = 12) {
-    const records = await this.prisma.payslip.groupBy({
-      by: ['period'],
-      where: { status: { in: [PayslipStatus.ISSUED, PayslipStatus.ACKNOWLEDGED] } },
-      _sum: { grossSalary: true, netSalary: true, incomeTax: true },
-      _count: true,
-      orderBy: { period: 'desc' },
-      take: months,
+  // ─── LOGS DE ACESSO ────────────────────────────────────────────────────────
+  async getAccessLogs(payslipId: number) {
+    return this.prisma.payslipAccessLog.findMany({
+      where: { payslipId },
+      orderBy: { accessedAt: 'desc' },
+      take: 50,
     });
-
-    return records.reverse().map(r => ({
-      period:    r.period,
-      gross:     r._sum.grossSalary ?? 0,
-      net:       r._sum.netSalary ?? 0,
-      irt:       r._sum.incomeTax ?? 0,
-      headcount: r._count,
-    }));
-  }
-
-  // ══════════════════════════════════════════════════════════════════
-  // COUNTRY CONFIG & COMPONENTS
-  // ══════════════════════════════════════════════════════════════════
-
-  async createCountryConfig(dto: CreateCountryConfigDto, createdById: number) {
-    const { irtBrackets, socialSecurity, ...rest } = dto;
-
-    return this.prisma.countryConfig.create({
-      data: {
-        ...rest,
-        socialSecurity: socialSecurity as any,
-        active: dto.active ?? true,
-        irtBrackets: { create: irtBrackets.map((b, i) => ({ ...b, order: i })) },
-      },
-      include: { irtBrackets: true },
-    });
-  }
-
-  async getCountryConfigs() {
-    return this.prisma.countryConfig.findMany({
-      where: { active: true },
-      include: { irtBrackets: { orderBy: { min: 'asc' } } },
-    });
-  }
-
-  async createSalaryComponent(dto: CreateSalaryComponentDto) {
-    return this.prisma.salaryComponent.create({ data: dto as any });
-  }
-
-  async getSalaryComponents(countryCode?: string) {
-    return this.prisma.salaryComponent.findMany({
-      where: {
-        active: true,
-        OR: countryCode ? [{ countryCode }, { countryCode: null }] : undefined,
-      },
-      orderBy: [{ type: 'asc' }, { order: 'asc' }],
-    });
-  }
-
-  async createEmployeeCompensation(dto: CreateEmployeeCompensationDto, createdById: number) {
-    // Encerrar compensação anterior
-    await this.prisma.employeeCompensation.updateMany({
-      where: { userId: dto.userId, effectiveTo: null },
-      data: { effectiveTo: dto.effectiveFrom ? new Date(dto.effectiveFrom) : new Date() },
-    });
-
-    const { components, ...rest } = dto;
-
-    return this.prisma.employeeCompensation.create({
-      data: {
-        ...rest,
-        effectiveFrom: dto.effectiveFrom ? new Date(dto.effectiveFrom) : new Date(),
-        effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
-        components: components ? {
-          create: components.map(c => ({
-            componentCode: c.componentCode,
-            value: c.value,
-            override: c.override ?? false,
-          })),
-        } : undefined,
-      },
-      include: { components: true },
-    });
-  }
-
-  async getEmployeeCompensation(userId: number) {
-    return this.engine.loadEmployeeCompensation(userId);
-  }
-
-  // ══════════════════════════════════════════════════════════════════
-  // INTERNAL HELPERS
-  // ══════════════════════════════════════════════════════════════════
-
-  private async upsertCalculatedPayslip(result: any, runId: number, period: string) {
-    const existing = await this.prisma.payslip.findFirst({
-      where: { userId: result.userId, period },
-    });
-
-    const data = {
-      userId:              result.userId,
-      period,
-      runId,
-      countryCode:         result.countryCode,
-      baseSalary:          result.lines.find((l: any) => l.code === 'BASE_SALARY')?.value ?? 0,
-      grossSalary:         result.grossSalary,
-      netSalary:           result.netSalary,
-      totalEarnings:       result.totalEarnings,
-      totalDeductions:     result.totalDeductions,
-      incomeTax:           result.incomeTax,
-      socialSecurity:      result.employeeSocialSecurity,
-      employerSocialSecurity: result.employerSocialSecurity,
-      totalEmployerCost:   result.totalEmployerCost,
-      taxBracket:          result.taxBracketApplied,
-      status:              PayslipStatus.DRAFT,
-    };
-
-    let payslip: any;
-    if (existing) {
-      // Cancelar versão anterior e criar nova
-      await this.prisma.payslip.update({ where: { id: existing.id }, data: { status: PayslipStatus.CANCELLED } });
-    }
-
-    payslip = await this.prisma.payslip.create({ data });
-
-    // Criar itens de detalhe
-    await this.prisma.payslipItem.createMany({
-      data: result.lines.map((l: any, idx: number) => ({
-        payslipId:  payslip.id,
-        code:       l.code,
-        name:       l.name,
-        type:       l.type,
-        value:      l.value,
-        isTaxable:  l.isTaxable,
-        calcType:   l.calcType,
-        order:      idx,
-      })),
-    });
-
-    return payslip;
   }
 }

@@ -1,4 +1,4 @@
-// ─── src/declarations/work-declarations.service.ts ───────────────────────────
+﻿// ─── src/declarations/work-declarations.service.ts ───────────────────────────
 // Módulo 2 — Work Declarations
 // Responsabilidade: formulários dinâmicos de compliance, onboarding, periódicos
 // ─────────────────────────────────────────────────────────────────────────────
@@ -264,7 +264,7 @@ export class WorkDeclarationsService {
       if (form.mandatory) {
         await this.notifyRH('WORK_DECL_PENDING', `Nova declaração "${form.title}" aguarda revisão`);
       }
-      await this.audit.log({ action: 'WORK_DECL_SUBMITTED', entityType: 'WorkDeclSubmission', entityId: submission.id, userId, metadata: { form: form.title } });
+      await this.audit.log({ action: 'WORK_DECL_SUBMITTED', entityType: 'WorkDeclSubmission', entityId: submission.id, userId, metadata: {} });
     }
 
     return submission;
@@ -344,7 +344,7 @@ export class WorkDeclarationsService {
       where: { id: submissionId },
       data: { status: WorkDeclStatus.APPROVED, exemptionReason: reason, reviewedAt: new Date() },
     });
-    await this.audit.log({ action: 'WORK_DECL_EXEMPTED', entityType: 'WorkDeclSubmission', entityId: submissionId, userId: exemptedById, metadata: { reason } });
+    await this.audit.log({ action: 'WORK_DECL_EXEMPTED', entityType: 'WorkDeclSubmission', entityId: submissionId, userId: exemptedById, metadata: {} });
     return { message: 'Isento com sucesso' };
   }
 

@@ -1,4 +1,4 @@
-// ─── src/declarations/document-declarations.service.ts ───────────────────────
+﻿// ─── src/declarations/document-declarations.service.ts ───────────────────────
 import {
   Injectable, NotFoundException,
   BadRequestException,
@@ -75,15 +75,15 @@ export class DocumentDeclarationsService {
   async createTemplate(dto: CreateTemplateDto, createdById: number) {
     const detected = [...new Set((dto.content.match(/\{\{(\w+)\}\}/g) ?? []).map(m => m.slice(2, -2)))];
 
-    const template = await this.prisma.declarationTemplate.create({
-      data: {
-        ...dto,
-        variables:  dto.variables ?? detected,
-        active:     dto.active ?? true,
-        version:    1,
-        createdById,
-      },
-    });
+    const template = await (this.prisma as any).declarationTemplate.create({
+    data: {
+    ...dto,
+    variables:  dto.variables ?? detected,
+    active:     dto.active ?? true,
+    version:    1,
+    createdById,
+  },
+});
 
     await this.audit.log({ action: 'TEMPLATE_CREATED', entityType: 'DeclarationTemplate', entityId: template.id, userId: createdById });
     return template;
@@ -237,7 +237,7 @@ export class DocumentDeclarationsService {
       }
     }
 
-    await this.audit.log({ action: 'DECLARATION_REQUESTED', entityType: 'DeclarationRequest', entityId: req.id, userId, metadata: { template: template.name } });
+    await this.audit.log({ action: 'DECLARATION_REQUESTED', entityType: 'DeclarationRequest', entityId: req.id, userId, metadata: {} });
 
     return req;
   }
