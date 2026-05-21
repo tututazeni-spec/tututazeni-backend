@@ -1,0 +1,28 @@
+meta {
+  name: Setup Courses (enrollment)
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/courses
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Setup cursos deve ser 200", function() {
+    expect(res.status).to.equal(200);
+  });
+}
+
+script:post-response {
+  const body = res.body;
+  const items = Array.isArray(body) ? body : (body.data || []);
+  if (items.length > 0) {
+    bru.setEnvVar("courseId", items[0].id);
+  }
+}
