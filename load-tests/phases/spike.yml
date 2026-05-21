@@ -1,0 +1,25 @@
+# load-tests/phases/spike.yml
+# Spike Test — simula entrada massiva repentina (ex: todos entram às 09h00)
+# Mede o recovery time após o pico
+# Uso: npm run test:spike
+
+config:
+  phases:
+    - name: "Estado normal (baseline)"
+      duration: 30
+      arrivalRate: 10
+      maxVusers: 50
+
+    - name: "SPIKE — entrada massiva"
+      duration: 30
+      arrivalRate: 1000
+      maxVusers: 2000
+
+    - name: "Recuperação"
+      duration: 90
+      arrivalRate: 20
+      maxVusers: 100
+
+  ensure:
+    p95: 10000
+    maxErrorRate: 15   # spike pode ter picos de erros — o que importa é a recuperação

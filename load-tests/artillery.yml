@@ -1,0 +1,232 @@
+# load-tests/artillery.yml
+# Configuração principal — INNOVA Load Test
+# Empresa: ~6000 funcionários | Backend: NestJS + Prisma + PostgreSQL
+#
+# CORRECÇÕES vs CLAUDE.md template:
+#   - Token: "accessToken" (camelCase) — auth.service.ts usa { accessToken, refreshToken }
+#   - JWT expira em 15 min (hardcoded em auth.service.ts:generateTokens)
+#   - Rotas reais: /enrollments/self-enroll/:id | /enrollments/my | /development-plans/my | /audit
+#   - User.id é Int — courseId e userId nos CSVs são inteiros
+#   - ThrottlerGuard activo (100 req/60s global) — pode devolver 429 em carga
+#     → NODE_ENV=test já bypass o express-rate-limit (500 req/15min no main.ts)
+#     → Para desactivar o ThrottlerGuard: adicionar @SkipThrottle() ou remover APP_GUARD
+
+config:
+  target: "http://127.0.0.1:4000"
+
+  http:
+    timeout: 30
+    pool: 100
+
+  processor: "./hooks/functions.js"
+
+  # Fases por defeito — override via --config load-tests/phases/<fase>.yml
+  phases:
+    - name: "Smoke Test (default — usar test:smoke)"
+      duration: 30
+      arrivalRate: 1
+      maxVusers: 5
+
+  # Payload principal: utilizadores de teste criados pelo seed
+  payload:
+    - path: "./data/users.csv"
+      fields:
+        - email
+        - password
+        - role
+        - userId
+      skipHeader: true
+      order: random
+
+  plugins:
+    metrics-by-endpoint:
+      useOnlyRequestNames: true
+    expect: {}
+
+  ensure:
+    p95: 3000      # 95% das respostas < 3 s (tolerância local)
+    p99: 8000      # 99% das respostas < 8 s
+    maxErrorRate: 5 # máximo 5% de erros (inclui 429 do ThrottlerGuard)
+
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+
+# ══════════════════════════════════════════════════════════════════════
+# CENÁRIOS
+# ══════════════════════════════════════════════════════════════════════
+
+scenarios:
+
+  # ── Cenário 1: Academia — fluxo de leitura (COLABORADOR) ──────────────────
+  # Simula o colaborador típico: browse cursos, ver progresso, certificados
+  - name: "Academia — leitura (COLABORADOR)"
+    weight: 50
+    beforeScenario: "setRandomIds"
+    afterResponse:  "logErrors"
+    flow:
+
+      # Login — cada cenário renova o token (JWT expira em 15 min)
+      - post:
+          url: "/auth/login"
+          name: "POST /auth/login"
+          json:
+            email: "{{ email }}"
+            password: "LoadTest@2024"
+          capture:
+            - json: "$.accessToken"   # camelCase — NÃO access_token
+              as: "token"
+          expect:
+            - statusCode: 201
+            - hasProperty: "accessToken"
+
+      # Catálogo de cursos
+      - get:
+          url: "/courses"
+          name: "GET /courses"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+
+      # Detalhe de um curso (ID aleatório do seed)
+      - get:
+          url: "/courses/{{ courseId }}"
+          name: "GET /courses/:id"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: [200, 404]
+
+      # As minhas matrículas — rota real: /enrollments/my (não /enrollment/my)
+      - get:
+          url: "/enrollments/my"
+          name: "GET /enrollments/my"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+
+      # Os meus certificados — rota real: /courses/my/certificates
+      - get:
+          url: "/courses/my/certificates"
+          name: "GET /courses/my/certificates"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+
+      # PDI — rota real: /development-plans/my (não /pdi/my)
+      - get:
+          url: "/development-plans/my"
+          name: "GET /development-plans/my"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+
+      # Notificações
+      - get:
+          url: "/notifications/my"
+          name: "GET /notifications/my"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+
+  # ── Cenário 2: RH / Admin — gestão e relatórios ───────────────────────────
+  # Simula o gestor de RH: utilizadores, presenças, audit logs
+  - name: "RH/Admin — gestão"
+    weight: 30
+    beforeScenario: "setRandomIds"
+    afterResponse:  "logErrors"
+    flow:
+
+      - post:
+          url: "/auth/login"
+          name: "POST /auth/login (RH)"
+          json:
+            email: "{{ email }}"
+            password: "LoadTest@2024"
+          capture:
+            - json: "$.accessToken"
+              as: "token"
+          expect:
+            - statusCode: 201
+
+      # Listagem de utilizadores — requer role ADMIN | RH | GESTOR
+      - get:
+          url: "/users"
+          name: "GET /users"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: [200, 403]   # 403 se o VU for COLABORADOR
+
+      # Presenças pessoais
+      - get:
+          url: "/attendance/my"
+          name: "GET /attendance/my"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+
+      # Audit logs — rota real: /audit (não /audit-logs)
+      # Requer role ADMIN | RH → 403 esperado para outros roles
+      - get:
+          url: "/audit"
+          name: "GET /audit"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: [200, 403]
+
+      # Contagem de notificações não lidas
+      - get:
+          url: "/notifications/my/unread-count"
+          name: "GET /notifications/my/unread-count"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200
+
+  # ── Cenário 3: Inscrição — escrita crítica ────────────────────────────────
+  # Testa o ponto de escrita mais frequente; 409 é esperado (@@unique)
+  - name: "Inscrição — escrita crítica"
+    weight: 20
+    beforeScenario: "setRandomIds"
+    afterResponse:  "logErrors"
+    flow:
+
+      - post:
+          url: "/auth/login"
+          name: "POST /auth/login (enroll)"
+          json:
+            email: "{{ email }}"
+            password: "LoadTest@2024"
+          capture:
+            - json: "$.accessToken"
+              as: "token"
+          expect:
+            - statusCode: 201
+
+      # Auto-matrícula — rota real: /enrollments/self-enroll/:courseId
+      # 201 = inscrito com sucesso | 409 = já inscrito (@@unique [courseId, userId])
+      - post:
+          url: "/enrollments/self-enroll/{{ courseId }}"
+          name: "POST /enrollments/self-enroll/:courseId"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: [201, 409]
+
+      # Confirmar estado após inscrição
+      - get:
+          url: "/enrollments/my"
+          name: "GET /enrollments/my (pós-inscrição)"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          expect:
+            - statusCode: 200

@@ -1,0 +1,31 @@
+# load-tests/phases/stress.yml
+# Stress Test — simula hora de pico (30% dos 6000 funcionários)
+# Identifica o ponto de ruptura do sistema
+# Uso: npm run test:stress
+
+config:
+  phases:
+    - name: "Aquecimento lento"
+      duration: 60
+      arrivalRate: 20
+      maxVusers: 200
+
+    - name: "Carga elevada (1800 VUs)"
+      duration: 180
+      arrivalRate: 300
+      maxVusers: 1800
+
+    - name: "Pico máximo (3000 VUs)"
+      duration: 60
+      arrivalRate: 500
+      maxVusers: 3000
+
+    - name: "Descida gradual"
+      duration: 60
+      arrivalRate: 50
+      maxVusers: 300
+
+  ensure:
+    p95: 8000
+    p99: 15000
+    maxErrorRate: 10   # stress aceita mais erros — objetivo é encontrar limites

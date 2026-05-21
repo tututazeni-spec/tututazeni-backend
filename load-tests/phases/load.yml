@@ -1,0 +1,27 @@
+# load-tests/phases/load.yml
+# Carga Normal — calibrado para servidor único de desenvolvimento
+# Representa ~200 utilizadores simultâneos (3% dos 6000)
+# Para testes de produção multi-instância usar arrivalRate: 50-100
+# Uso: npm run test:load
+
+config:
+  phases:
+    - name: "Aquecimento"
+      duration: 60
+      arrivalRate: 5
+      maxVusers: 50
+
+    - name: "Carga Normal (~150 VUs)"
+      duration: 180
+      arrivalRate: 20
+      maxVusers: 150
+
+    - name: "Descida"
+      duration: 60
+      arrivalRate: 5
+      maxVusers: 50
+
+  ensure:
+    p95: 15000     # localhost dev: 150 VUs gera 10-15s (normal em single-server local)
+    p99: 30000     # para p95/p99 < 3s/8s usar staging/produção
+    maxErrorRate: 5

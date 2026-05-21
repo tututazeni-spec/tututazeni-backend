@@ -1,0 +1,14 @@
+# load-tests/phases/smoke.yml
+# Smoke Test — valida que a API responde sem erros antes de qualquer carga
+# Uso: npm run test:smoke
+
+config:
+  phases:
+    - name: "Smoke Test"
+      duration: 60
+      arrivalRate: 1
+      maxVusers: 5
+
+  ensure:
+    p95: 2000
+    maxErrorRate: 0   # smoke = zero erros tolerados
