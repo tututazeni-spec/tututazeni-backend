@@ -6,5 +6,16 @@
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
-  "setupFiles": ["dotenv/config"]
+  "globalSetup": "<rootDir>/test/setup.ts",
+  "globalTeardown": "<rootDir>/test/teardown.ts",
+  "testTimeout": 30000,
+  "verbose": true,
+  "forceExit": true,
+  "detectOpenHandles": true,
+  "coverageDirectory": "../coverage",
+  "collectCoverageFrom": [
+    "src/**/*.ts",
+    "!src/**/*.spec.ts",
+    "!src/main.ts"
+  ]
 }

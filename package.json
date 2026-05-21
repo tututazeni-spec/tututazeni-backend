@@ -45,6 +45,8 @@
     "test:stress": "cross-env NODE_ENV=test artillery run --config load-tests/phases/stress.yml load-tests/artillery.yml --output load-tests/reports/stress-report.json",
     "test:spike": "cross-env NODE_ENV=test artillery run --config load-tests/phases/spike.yml load-tests/artillery.yml --output load-tests/reports/spike-report.json",
     "test:report": "artillery report load-tests/reports/load-report.json --output load-tests/reports/load-report.html",
+    "test:report:stress": "artillery report load-tests/reports/stress-report.json --output load-tests/reports/stress-report.html",
+    "test:report:spike": "artillery report load-tests/reports/spike-report.json --output load-tests/reports/spike-report.html",
     "seed:loadtest": "ts-node --transpile-only prisma/seed-load-test.ts",
     "start:test": "cross-env UV_THREADPOOL_SIZE=16 NODE_ENV=test nest start --watch",
     "hash-password": "ts-node -P tsconfig.json scripts/hashPassword.ts",
