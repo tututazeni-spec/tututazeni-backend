@@ -80,7 +80,7 @@ import { RolesGuard }              from './common/guards/roles.guard';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: process.env.NODE_ENV === 'test' ? 10000 : 100 }]),
     PrismaModule, AuthModule, UsersModule, DepartmentsModule,
     CoursesModule, CourseModulesModule, EnrollmentsModule,
     AssessmentsModule, CompetenciesModule, DevelopmentPlansModule,
