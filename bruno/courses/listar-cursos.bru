@@ -1,0 +1,36 @@
+meta {
+  name: Listar cursos
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/courses
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status deve ser 200", function() {
+    expect(res.status).to.equal(200);
+  });
+
+  test("Deve retornar array ou objecto com data", function() {
+    const body = res.body;
+    const isArray = Array.isArray(body);
+    const hasData = body && body.data !== undefined;
+    expect(isArray || hasData).to.be.true;
+  });
+}
+
+script:post-response {
+  const body = res.body;
+  const items = Array.isArray(body) ? body : (body.data || []);
+  if (items.length > 0) {
+    bru.setEnvVar("courseId", items[0].id);
+    console.log("✅ courseId guardado:", items[0].id);
+  }
+}

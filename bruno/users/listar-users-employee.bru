@@ -1,0 +1,20 @@
+meta {
+  name: Employee nao pode listar users
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/users
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{employeeToken}}
+}
+
+tests {
+  test("Employee deve receber 403", function() {
+    expect(res.status).to.equal(403);
+  });
+}

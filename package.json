@@ -26,6 +26,7 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset --force",
     "db:deploy": "prisma migrate deploy",
+    "db:deploy:test": "cross-env NODE_ENV=test prisma migrate deploy",
     "db:generate": "prisma migrate dev && prisma generate",
     "db:seed": "prisma db seed",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -54,7 +55,14 @@
     "fix-role": "ts-node -P tsconfig.json scripts/fixUserRole.ts",
     "change-role": "ts-node -P tsconfig.json scripts/changeRole.ts",
     "render:build": "npm install --include=dev && npm run db:deploy && npm run build",
-    "render:start": "npm start"
+    "render:start": "npm start",
+    "test:api": "cd bruno && node ../node_modules/@usebruno/cli/bin/bru.js run . -r --env local",
+    "test:api:auth": "cd bruno && node ../node_modules/@usebruno/cli/bin/bru.js run auth/ --env local",
+    "test:api:courses": "cd bruno && node ../node_modules/@usebruno/cli/bin/bru.js run courses/ --env local",
+    "test:api:enrollment": "cd bruno && node ../node_modules/@usebruno/cli/bin/bru.js run enrollment/ --env local",
+    "test:api:users": "cd bruno && node ../node_modules/@usebruno/cli/bin/bru.js run users/ -r --env local",
+    "test:api:pdi": "cd bruno && node ../node_modules/@usebruno/cli/bin/bru.js run pdi/ --env local",
+    "test:api:report": "cd bruno && node ../node_modules/@usebruno/cli/bin/bru.js run . -r --env local --reporter-json reports/results.json"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
@@ -114,6 +122,7 @@
     "@types/pg": "^8.20.0",
     "@types/qrcode": "^1.5.6",
     "@types/supertest": "^6.0.2",
+    "@usebruno/cli": "^3.4.0",
     "cross-env": "^10.1.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",

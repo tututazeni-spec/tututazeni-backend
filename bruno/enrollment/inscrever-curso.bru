@@ -1,0 +1,27 @@
+meta {
+  name: Inscrever em curso
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/enrollments/self-enroll/{{courseId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status deve ser 201 ou 409", function() {
+    expect([201, 409]).to.include(res.status);
+  });
+
+  test("Se 201 deve ter courseId", function() {
+    if (res.status === 201) {
+      expect(res.body).to.have.property("courseId");
+    }
+  });
+}

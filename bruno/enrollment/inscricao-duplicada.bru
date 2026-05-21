@@ -1,0 +1,21 @@
+meta {
+  name: Inscricao duplicada deve dar 409
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/enrollments/self-enroll/{{courseId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status deve ser 409 compound unique", function() {
+    expect(res.status).to.equal(409);
+  });
+}

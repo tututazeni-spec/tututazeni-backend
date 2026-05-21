@@ -1,0 +1,41 @@
+meta {
+  name: Login com sucesso
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "admin@innova.com",
+    "password": "Admin@1234"
+  }
+}
+
+tests {
+  test("Status deve ser 201", function() {
+    expect(res.status).to.equal(201);
+  });
+
+  test("Deve ter accessToken", function() {
+    expect(res.body).to.have.property("accessToken");
+    expect(res.body.accessToken).to.be.a("string");
+    expect(res.body.accessToken.length).to.be.greaterThan(10);
+  });
+
+  test("Deve ter dados do utilizador", function() {
+    expect(res.body).to.have.property("user");
+  });
+}
+
+script:post-response {
+  if (res.status === 201 && res.body.accessToken) {
+    bru.setEnvVar("accessToken", res.body.accessToken);
+    console.log("✅ Token guardado:", res.body.accessToken.substring(0, 20) + "...");
+  }
+}

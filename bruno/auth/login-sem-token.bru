@@ -1,0 +1,16 @@
+meta {
+  name: Rota protegida sem token
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/users
+  auth: none
+}
+
+tests {
+  test("Status deve ser 401", function() {
+    expect(res.status).to.equal(401);
+  });
+}

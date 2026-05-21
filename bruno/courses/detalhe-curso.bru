@@ -1,0 +1,27 @@
+meta {
+  name: Detalhe do curso
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/courses/{{courseId}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status deve ser 200 ou 404", function() {
+    expect([200, 404]).to.include(res.status);
+  });
+
+  test("Se 200 deve ter id e title", function() {
+    if (res.status === 200) {
+      expect(res.body).to.have.property("id");
+      expect(res.body).to.have.property("title");
+    }
+  });
+}
