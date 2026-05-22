@@ -2,16 +2,18 @@
 // Módulo 2 — Work Declarations
 // Responsabilidade: formulários dinâmicos de compliance, onboarding, periódicos
 // ─────────────────────────────────────────────────────────────────────────────
-import {
-  Injectable, NotFoundException, BadRequestException, ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuditService }  from '../common/services/audit.service';
+import { AuditService } from '../common/services/audit.service';
 import {
-  CreateWorkDeclFormDto, UpdateWorkDeclFormDto,
-  SubmitWorkDeclDto, ReviewWorkDeclDto, BulkApproveWorkDeclDto,
+  CreateWorkDeclFormDto,
+  UpdateWorkDeclFormDto,
+  SubmitWorkDeclDto,
+  ReviewWorkDeclDto,
+  BulkApproveWorkDeclDto,
   WorkDeclFilterDto,
-  WorkDeclStatus, WorkDeclType,
+  WorkDeclStatus,
+  WorkDeclType,
 } from './declarations.dto';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,7 +57,12 @@ export class WorkDeclarationsService {
       include: { questions: { orderBy: { order: 'asc' } } },
     });
 
-    await this.audit.log({ action: 'WORK_DECL_FORM_CREATED', entityType: 'WorkDeclForm', entityId: form.id, userId: createdById });
+    await this.audit.log({
+      action: 'WORK_DECL_FORM_CREATED',
+      entityType: 'WorkDeclForm',
+      entityId: form.id,
+      userId: createdById,
+    });
     return form;
   }
 
@@ -86,14 +93,17 @@ export class WorkDeclarationsService {
     const { questions, ...rest } = dto;
     const updated: any = { ...rest };
     if (rest.validFrom) updated.validFrom = new Date(rest.validFrom);
-    if (rest.validTo)   updated.validTo   = new Date(rest.validTo);
+    if (rest.validTo) updated.validTo = new Date(rest.validTo);
 
     if (questions) {
       await this.prisma.workDeclQuestion.deleteMany({ where: { formId: id } });
       updated.questions = {
         create: questions.map((q, idx) => ({
-          ...q, order: q.order ?? idx, required: q.required ?? false,
-          options: q.options ?? [], acceptedFileTypes: q.acceptedFileTypes ?? [],
+          ...q,
+          order: q.order ?? idx,
+          required: q.required ?? false,
+          options: q.options ?? [],
+          acceptedFileTypes: q.acceptedFileTypes ?? [],
         })),
       };
     }
@@ -139,7 +149,7 @@ export class WorkDeclarationsService {
     const submittedIds = new Set(submitted.map(s => s.formId));
 
     const pending = allForms.filter(f => !submittedIds.has(f.id));
-    const drafts  = await this.prisma.workDeclSubmission.findMany({
+    const drafts = await this.prisma.workDeclSubmission.findMany({
       where: { userId, status: WorkDeclStatus.DRAFT },
       include: { form: { select: { id: true, title: true, type: true } } },
     });
@@ -162,18 +172,21 @@ export class WorkDeclarationsService {
     if (from || to) {
       where.createdAt = {};
       if (from) where.createdAt.gte = new Date(from);
-      if (to)   where.createdAt.lte = new Date(to);
+      if (to) where.createdAt.lte = new Date(to);
     }
-    if (type)       where.form = { type };
-    if (department) where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
+    if (type) where.form = { type };
+    if (department)
+      where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
 
     const [data, total] = await Promise.all([
       this.prisma.workDeclSubmission.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
           form: { select: { id: true, title: true, type: true, mandatory: true } },
-          user:   { select: { id: true, fullName: true, email: true } },
+          user: { select: { id: true, fullName: true, email: true } },
           answers: { include: { question: { select: { key: true, label: true } } } },
           review: { include: { reviewer: { select: { id: true, fullName: true } } } },
         },
@@ -189,7 +202,7 @@ export class WorkDeclarationsService {
       where: { id },
       include: {
         form: { include: { questions: { orderBy: { order: 'asc' } } } },
-        user:   { select: { id: true, fullName: true, email: true } },
+        user: { select: { id: true, fullName: true, email: true } },
         answers: { include: { question: true }, orderBy: { question: { order: 'asc' } } },
         review: { include: { reviewer: { select: { id: true, fullName: true } } } },
       },
@@ -206,7 +219,10 @@ export class WorkDeclarationsService {
     const existing = await this.prisma.workDeclSubmission.findFirst({
       where: { userId, formId: dto.formId, status: { not: WorkDeclStatus.DRAFT } },
     });
-    if (existing?.status === WorkDeclStatus.SUBMITTED || existing?.status === WorkDeclStatus.APPROVED) {
+    if (
+      existing?.status === WorkDeclStatus.SUBMITTED ||
+      existing?.status === WorkDeclStatus.APPROVED
+    ) {
       throw new BadRequestException('Já existe uma submissão activa para este formulário');
     }
 
@@ -220,7 +236,7 @@ export class WorkDeclarationsService {
       }
     }
 
-    const status  = dto.saveAsDraft ? WorkDeclStatus.DRAFT : WorkDeclStatus.SUBMITTED;
+    const status = dto.saveAsDraft ? WorkDeclStatus.DRAFT : WorkDeclStatus.SUBMITTED;
 
     // Upsert: actualizar rascunho ou criar nova
     let submission: any;
@@ -264,7 +280,13 @@ export class WorkDeclarationsService {
       if (form.mandatory) {
         await this.notifyRH('WORK_DECL_PENDING', `Nova declaração "${form.title}" aguarda revisão`);
       }
-      await this.audit.log({ action: 'WORK_DECL_SUBMITTED', entityType: 'WorkDeclSubmission', entityId: submission.id, userId, metadata: {} });
+      await this.audit.log({
+        action: 'WORK_DECL_SUBMITTED',
+        entityType: 'WorkDeclSubmission',
+        entityId: submission.id,
+        userId,
+        metadata: {},
+      });
     }
 
     return submission;
@@ -272,7 +294,8 @@ export class WorkDeclarationsService {
 
   async review(submissionId: number, dto: ReviewWorkDeclDto, reviewerId: number) {
     const sub = await this.findOneSubmission(submissionId);
-    if (sub.status !== WorkDeclStatus.SUBMITTED) throw new BadRequestException('Submissão não está pendente de revisão');
+    if (sub.status !== WorkDeclStatus.SUBMITTED)
+      throw new BadRequestException('Submissão não está pendente de revisão');
 
     const newStatus = dto.approved ? WorkDeclStatus.APPROVED : WorkDeclStatus.REJECTED;
 
@@ -283,18 +306,37 @@ export class WorkDeclarationsService {
 
     await this.prisma.workDeclReview.upsert({
       where: { submissionId },
-      create: { submissionId, reviewerId, approved: dto.approved, notes: dto.notes, correctionFields: dto.correctionFields ?? [], reviewedAt: new Date() },
-      update: { reviewerId, approved: dto.approved, notes: dto.notes, correctionFields: dto.correctionFields ?? [], reviewedAt: new Date() },
+      create: {
+        submissionId,
+        reviewerId,
+        approved: dto.approved,
+        notes: dto.notes,
+        correctionFields: dto.correctionFields ?? [],
+        reviewedAt: new Date(),
+      },
+      update: {
+        reviewerId,
+        approved: dto.approved,
+        notes: dto.notes,
+        correctionFields: dto.correctionFields ?? [],
+        reviewedAt: new Date(),
+      },
     });
 
     const msg = dto.approved
-     ? `A sua declaração "${(sub as any).form?.title}" foi aprovada`
-     : `A sua declaração "${(sub as any).form?.title}" foi rejeitada${dto.notes ? `: ${dto.notes}` : ''}`;
-    await this.notifyUser(sub.userId, dto.approved ? 'WORK_DECL_APPROVED' : 'WORK_DECL_REJECTED', msg);
+      ? `A sua declaração "${(sub as any).form?.title}" foi aprovada`
+      : `A sua declaração "${(sub as any).form?.title}" foi rejeitada${dto.notes ? `: ${dto.notes}` : ''}`;
+    await this.notifyUser(
+      sub.userId,
+      dto.approved ? 'WORK_DECL_APPROVED' : 'WORK_DECL_REJECTED',
+      msg,
+    );
 
     await this.audit.log({
       action: dto.approved ? 'WORK_DECL_APPROVED' : 'WORK_DECL_REJECTED',
-      entityType: 'WorkDeclSubmission', entityId: submissionId, userId: reviewerId,
+      entityType: 'WorkDeclSubmission',
+      entityId: submissionId,
+      userId: reviewerId,
     });
 
     return this.findOneSubmission(submissionId);
@@ -303,12 +345,12 @@ export class WorkDeclarationsService {
   async bulkApprove(dto: BulkApproveWorkDeclDto, reviewerId: number) {
     const results = await Promise.allSettled(
       dto.submissionIds.map(id =>
-        this.review(id, { approved: dto.approved, notes: dto.notes }, reviewerId)
-      )
+        this.review(id, { approved: dto.approved, notes: dto.notes }, reviewerId),
+      ),
     );
     return {
       success: results.filter(r => r.status === 'fulfilled').length,
-      failed:  results.filter(r => r.status === 'rejected').length,
+      failed: results.filter(r => r.status === 'rejected').length,
     };
   }
 
@@ -330,9 +372,14 @@ export class WorkDeclarationsService {
     await Promise.allSettled(
       pending.map(u =>
         this.prisma.notificationLog.create({
-          data: { userId: u.id, type: 'WORK_DECL_REMINDER', message: `Lembrete: "${form.title}" está pendente de preenchimento`, success: true },
-        })
-      )
+          data: {
+            userId: u.id,
+            type: 'WORK_DECL_REMINDER',
+            message: `Lembrete: "${form.title}" está pendente de preenchimento`,
+            success: true,
+          },
+        }),
+      ),
     );
 
     return { sent: pending.length };
@@ -344,7 +391,13 @@ export class WorkDeclarationsService {
       where: { id: submissionId },
       data: { status: WorkDeclStatus.APPROVED, exemptionReason: reason, reviewedAt: new Date() },
     });
-    await this.audit.log({ action: 'WORK_DECL_EXEMPTED', entityType: 'WorkDeclSubmission', entityId: submissionId, userId: exemptedById, metadata: {} });
+    await this.audit.log({
+      action: 'WORK_DECL_EXEMPTED',
+      entityType: 'WorkDeclSubmission',
+      entityId: submissionId,
+      userId: exemptedById,
+      metadata: {},
+    });
     return { message: 'Isento com sucesso' };
   }
 
@@ -354,13 +407,20 @@ export class WorkDeclarationsService {
 
   async getDashboard(department?: string) {
     const where: any = {};
-    if (department) where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
+    if (department)
+      where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
 
     const [total, pending, approved, rejected, expired] = await Promise.all([
       this.prisma.workDeclSubmission.count({ where }),
-      this.prisma.workDeclSubmission.count({ where: { ...where, status: WorkDeclStatus.SUBMITTED } }),
-      this.prisma.workDeclSubmission.count({ where: { ...where, status: WorkDeclStatus.APPROVED } }),
-      this.prisma.workDeclSubmission.count({ where: { ...where, status: WorkDeclStatus.REJECTED } }),
+      this.prisma.workDeclSubmission.count({
+        where: { ...where, status: WorkDeclStatus.SUBMITTED },
+      }),
+      this.prisma.workDeclSubmission.count({
+        where: { ...where, status: WorkDeclStatus.APPROVED },
+      }),
+      this.prisma.workDeclSubmission.count({
+        where: { ...where, status: WorkDeclStatus.REJECTED },
+      }),
       this.prisma.workDeclSubmission.count({ where: { ...where, status: WorkDeclStatus.EXPIRED } }),
     ]);
 
@@ -379,11 +439,13 @@ export class WorkDeclarationsService {
   }
 
   async getComplianceReport(department?: string) {
-    const forms    = await this.prisma.workDeclForm.findMany({ where: { active: true, mandatory: true } });
+    const forms = await this.prisma.workDeclForm.findMany({
+      where: { active: true, mandatory: true },
+    });
     const where: any = { employee: { isNot: null } };
     if (department) where.employee = { department: { contains: department, mode: 'insensitive' } };
 
-   const users = await this.prisma.user.findMany({ where, select: { id: true, fullName: true } });
+    const users = await this.prisma.user.findMany({ where, select: { id: true, fullName: true } });
 
     const submissions = await this.prisma.workDeclSubmission.findMany({
       where: {
@@ -398,19 +460,20 @@ export class WorkDeclarationsService {
     const report = users.map(u => {
       const completedForms = forms.filter(f => submitted.has(`${u.id}:${f.id}`)).length;
       return {
-        userId:          u.id,
-        name:       u.fullName,
+        userId: u.id,
+        name: u.fullName,
         department: (u as any).employee?.department,
         completedForms,
-        totalForms:      forms.length,
-        complianceRate:  forms.length > 0 ? +((completedForms / forms.length) * 100).toFixed(0) : 0,
-        pending:         forms.filter(f => !submitted.has(`${u.id}:${f.id}`)).map(f => f.title),
+        totalForms: forms.length,
+        complianceRate: forms.length > 0 ? +((completedForms / forms.length) * 100).toFixed(0) : 0,
+        pending: forms.filter(f => !submitted.has(`${u.id}:${f.id}`)).map(f => f.title),
       };
     });
 
-    const overallRate = report.length > 0
-      ? +(report.reduce((a, r) => a + r.complianceRate, 0) / report.length).toFixed(1)
-      : 0;
+    const overallRate =
+      report.length > 0
+        ? +(report.reduce((a, r) => a + r.complianceRate, 0) / report.length).toFixed(1)
+        : 0;
 
     return { overallRate, report: report.sort((a, b) => a.complianceRate - b.complianceRate) };
   }
@@ -418,13 +481,18 @@ export class WorkDeclarationsService {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   private async notifyUser(userId: number, type: string, message: string) {
-    try { await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } }); } catch {}
+    try {
+      await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } });
+    } catch {}
   }
 
   private async notifyRH(type: string, message: string) {
     try {
-     const hr = await this.prisma.user.findFirst({ where: { roleCode: 'RH' } as any });
-      if (hr) await this.prisma.notificationLog.create({ data: { userId: hr.id, type, message, success: true } });
+      const hr = await this.prisma.user.findFirst({ where: { roleCode: 'RH' } as any });
+      if (hr)
+        await this.prisma.notificationLog.create({
+          data: { userId: hr.id, type, message, success: true },
+        });
     } catch {}
   }
 
@@ -440,7 +508,11 @@ export class WorkDeclarationsService {
       skipDuplicates: true,
     });
     for (const f of forms) {
-      await this.notifyUser(userId, 'ONBOARDING_DECLARATION', `Complete a declaração de onboarding: "${f.title}"`);
+      await this.notifyUser(
+        userId,
+        'ONBOARDING_DECLARATION',
+        `Complete a declaração de onboarding: "${f.title}"`,
+      );
     }
     return { triggered: forms.length };
   }
@@ -458,13 +530,18 @@ export class WorkDeclarationsService {
         const thisYear = today.getFullYear().toString();
         const alreadyDone = await this.prisma.workDeclSubmission.findFirst({
           where: {
-            userId: user.id, formId: form.id,
+            userId: user.id,
+            formId: form.id,
             createdAt: { gte: new Date(today.getFullYear(), 0, 1) },
             status: { in: [WorkDeclStatus.SUBMITTED, WorkDeclStatus.APPROVED] },
           },
         });
         if (!alreadyDone) {
-          await this.notifyUser(user.id, 'PERIODIC_DECLARATION', `A declaração "${form.title}" requer actualização anual`);
+          await this.notifyUser(
+            user.id,
+            'PERIODIC_DECLARATION',
+            `A declaração "${form.title}" requer actualização anual`,
+          );
           triggered++;
         }
       }

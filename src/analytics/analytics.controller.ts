@@ -1,13 +1,11 @@
 // src/analytics/analytics.controller.ts
-import {
-  Controller, Get, Post, Query, Param, ParseIntPipe, UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Query, Param, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { AnalyticsService }    from './analytics.service';
-import { AnalyticsFilterDto }  from './analytics.dto';
-import { JwtAuthGuard }        from '../common/guards/jwt-auth.guard';
-import { RolesGuard }          from '../common/guards/roles.guard';
-import { CurrentUser, Roles }  from '../common/decorators';
+import { AnalyticsService } from './analytics.service';
+import { AnalyticsFilterDto } from './analytics.dto';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Analytics & Intelligence')
 @ApiBearerAuth()
@@ -21,7 +19,9 @@ export class AnalyticsController {
   @Get('overview')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'KPIs globais da organização (C-Level / Board)' })
-  overview() { return this.svc.getOrganizationOverview(); }
+  overview() {
+    return this.svc.getOrganizationOverview();
+  }
 
   // ── Dashboards por persona ────────────────────────────────────────────────
 
@@ -50,17 +50,23 @@ export class AnalyticsController {
   @Get('learning')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Analytics de aprendizagem (cursos, conclusões, certificados)' })
-  learning(@Query() filters: AnalyticsFilterDto) { return this.svc.getLearningAnalytics(filters); }
+  learning(@Query() filters: AnalyticsFilterDto) {
+    return this.svc.getLearningAnalytics(filters);
+  }
 
   @Get('people')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'People analytics (headcount, turnover, diversidade)' })
-  people(@Query() filters: AnalyticsFilterDto) { return this.svc.getPeopleAnalytics(filters); }
+  people(@Query() filters: AnalyticsFilterDto) {
+    return this.svc.getPeopleAnalytics(filters);
+  }
 
   @Get('pdi')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Analytics de PDIs (adopção, progresso, acções, tipos)' })
-  pdi(@Query() filters: AnalyticsFilterDto) { return this.svc.getPDIAnalytics(filters); }
+  pdi(@Query() filters: AnalyticsFilterDto) {
+    return this.svc.getPDIAnalytics(filters);
+  }
 
   @Get('competency-gaps')
   @Roles('ADMIN', 'RH', 'GESTOR')
@@ -72,24 +78,32 @@ export class AnalyticsController {
   @Get('engagement')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Métricas de engagement (activos 30d, leaderboard, AI, knowledge)' })
-  engagement(@Query() filters: AnalyticsFilterDto) { return this.svc.getEngagementMetrics(filters); }
+  engagement(@Query() filters: AnalyticsFilterDto) {
+    return this.svc.getEngagementMetrics(filters);
+  }
 
   @Get('risks')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Alertas de risco (inactivos, PDIs atrasados, acções críticas)' })
-  risks(@Query() filters: AnalyticsFilterDto) { return this.svc.getRiskAlerts(filters); }
+  risks(@Query() filters: AnalyticsFilterDto) {
+    return this.svc.getRiskAlerts(filters);
+  }
 
   @Get('roi')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'ROI de treinamento (horas investidas, impacto, certificados)' })
-  roi() { return this.svc.getTrainingROI(); }
+  roi() {
+    return this.svc.getTrainingROI();
+  }
 
   // ── Curso específico ──────────────────────────────────────────────────────
 
   @Get('courses')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Performance de todos os cursos' })
-  courses() { return this.svc.getCoursePerformance(); }
+  courses() {
+    return this.svc.getCoursePerformance();
+  }
 
   @Get('courses/:courseId')
   @Roles('ADMIN', 'RH', 'GESTOR')

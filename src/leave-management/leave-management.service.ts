@@ -1,25 +1,41 @@
 ﻿// ─── src/leave-management/leave-management.service.ts ────────────────────────
 import {
-  Injectable, NotFoundException, BadRequestException,
-  ForbiddenException, ConflictException,
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuditService }  from '../common/services/audit.service';
+import { AuditService } from '../common/services/audit.service';
 import {
-  LeaveFilterDto, CalendarFilterDto,
-  CreateLeaveTypeDto, UpdateLeaveTypeDto,
-  CreateLeaveManagementRequestDto, UpdateLeaveRequestDto,
-  ApproveLeaveDto, BulkApproveDto,
-  UpdateBalanceDto, AccrueBalanceDto,
+  LeaveFilterDto,
+  CalendarFilterDto,
+  CreateLeaveTypeDto,
+  UpdateLeaveTypeDto,
+  CreateLeaveManagementRequestDto,
+  ApproveLeaveDto,
+  BulkApproveDto,
+  UpdateBalanceDto,
+  AccrueBalanceDto,
   CreateLeavePolicyDto,
-  LeaveStatus, ApprovalAction, DurationMode,
+  LeaveStatus,
+  ApprovalAction,
+  DurationMode,
 } from './leave-management.dto';
 
 // ─── Angola public holidays (configurable via DB in the future) ──────────────
 const ANGOLA_HOLIDAYS_2025: string[] = [
-  '2025-01-01','2025-02-04','2025-03-08','2025-04-04',
-  '2025-04-18','2025-05-01','2025-09-17','2025-11-02',
-  '2025-11-11','2025-12-25',
+  '2025-01-01',
+  '2025-02-04',
+  '2025-03-08',
+  '2025-04-04',
+  '2025-04-18',
+  '2025-05-01',
+  '2025-09-17',
+  '2025-11-02',
+  '2025-11-11',
+  '2025-12-25',
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -45,7 +61,7 @@ function countCalendarDays(start: Date, end: Date): number {
 
 function addWorkDays(start: Date, days: number, holidays: string[] = ANGOLA_HOLIDAYS_2025): Date {
   let added = 0;
-  const cur  = new Date(start);
+  const cur = new Date(start);
   while (added < days) {
     cur.setDate(cur.getDate() + 1);
     if (cur.getDay() !== 0 && cur.getDay() !== 6 && !isHoliday(cur, holidays)) added++;
@@ -67,7 +83,9 @@ export class LeaveManagementService {
   // ══════════════════════════════════════════════════════════════════
 
   async createLeaveType(dto: CreateLeaveTypeDto) {
-    const exists = await (this.prisma as any).leaveTypeConfig.findUnique({ where: { code: dto.code } });
+    const exists = await (this.prisma as any).leaveTypeConfig.findUnique({
+      where: { code: dto.code },
+    });
     if (exists) throw new ConflictException(`Tipo de licença "${dto.code}" já existe`);
     return (this.prisma as any).leaveTypeConfig.create({ data: dto as any });
   }
@@ -90,27 +108,29 @@ export class LeaveManagementService {
   // ══════════════════════════════════════════════════════════════════
 
   async createPolicy(dto: CreateLeavePolicyDto) {
-    return (this.prisma as any).leavePolicy.create({ data: { ...dto, blackoutPeriods: dto.blackoutPeriods as any } });
+    return (this.prisma as any).leavePolicy.create({
+      data: { ...dto, blackoutPeriods: dto.blackoutPeriods as any },
+    });
   }
 
   async getPolicies() {
-    return (this.prisma as any).leavePolicy.findMany({ where: { active: true }, orderBy: { name: 'asc' } });
+    return (this.prisma as any).leavePolicy.findMany({
+      where: { active: true },
+      orderBy: { name: 'asc' },
+    });
   }
 
   private async getApplicablePolicy(userId: number): Promise<any | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      });
+    });
     if (!user) return null;
 
     // Match by department or seniority — fallback to global
     return (this.prisma as any).leavePolicy.findFirst({
       where: {
         active: true,
-        OR: [
-          { department: (user as any).employee?.department ?? '' },
-          { department: null },
-        ],
+        OR: [{ department: (user as any).employee?.department ?? '' }, { department: null }],
       },
       orderBy: { department: 'desc' }, // More specific first
     });
@@ -121,23 +141,37 @@ export class LeaveManagementService {
   // ══════════════════════════════════════════════════════════════════
 
   async findAll(filters: LeaveFilterDto) {
-    const { page = 1, limit = 20, userId, leaveTypeCode, status, department, from, to, sortBy = 'createdAt', sortOrder = 'desc' } = filters;
+    const {
+      page = 1,
+      limit = 20,
+      userId,
+      leaveTypeCode,
+      status,
+      department,
+      from,
+      to,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = filters;
     const skip = (page - 1) * limit;
     const where: any = {};
 
-    if (userId)        where.userId = userId;
+    if (userId) where.userId = userId;
     if (leaveTypeCode) where.leaveTypeCode = leaveTypeCode;
-    if (status)        where.status = status;
-    if (department)    where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
+    if (status) where.status = status;
+    if (department)
+      where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
     if (from || to) {
       where.startDate = {};
       if (from) where.startDate.gte = new Date(from);
-      if (to)   where.startDate.lte = new Date(to);
+      if (to) where.startDate.lte = new Date(to);
     }
 
     const [data, total] = await Promise.all([
       this.prisma.leaveRequest.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         orderBy: { [sortBy]: sortOrder },
         include: {
           user: { select: { id: true, fullName: true, email: true } },
@@ -158,8 +192,11 @@ export class LeaveManagementService {
     const r = await this.prisma.leaveRequest.findUnique({
       where: { id },
       include: {
-       user: { select: { id: true, fullName: true, email: true } },
-        approvals: { orderBy: { level: 'asc' }, include: { approver: { select: { id: true, fullName: true } } } },
+        user: { select: { id: true, fullName: true, email: true } },
+        approvals: {
+          orderBy: { level: 'asc' },
+          include: { approver: { select: { id: true, fullName: true } } },
+        },
         documents: true,
         impactPreview: true,
       },
@@ -175,7 +212,7 @@ export class LeaveManagementService {
         approvals: { some: { approverId, decidedAt: null } },
       },
       include: {
-       user: { select: { id: true, fullName: true, avatarUrl: true } },
+        user: { select: { id: true, fullName: true, avatarUrl: true } },
         approvals: { include: { approver: { select: { id: true, fullName: true } } } },
       },
       orderBy: { createdAt: 'asc' },
@@ -188,15 +225,24 @@ export class LeaveManagementService {
 
   async create(dto: CreateLeaveManagementRequestDto, createdById: number) {
     const start = new Date(dto.startDate);
-    const end   = new Date(dto.endDate);
+    const end = new Date(dto.endDate);
 
     if (end < start) throw new BadRequestException('A data de fim não pode ser anterior ao início');
 
-    const leaveType = await (this.prisma as any).leaveTypeConfig.findUnique({ where: { code: dto.leaveTypeCode } });
-    if (!leaveType) throw new NotFoundException(`Tipo de licença "${dto.leaveTypeCode}" não encontrado`);
+    const leaveType = await (this.prisma as any).leaveTypeConfig.findUnique({
+      where: { code: dto.leaveTypeCode },
+    });
+    if (!leaveType)
+      throw new NotFoundException(`Tipo de licença "${dto.leaveTypeCode}" não encontrado`);
 
     // ── Calcular duração
-    const { workDays, calendarDays } = this.calculateDuration(start, end, dto.durationMode, dto.hours, leaveType.countWorkDaysOnly);
+    const { workDays, calendarDays } = this.calculateDuration(
+      start,
+      end,
+      dto.durationMode,
+      dto.hours,
+      leaveType.countWorkDaysOnly,
+    );
 
     // ── Validações
     await this.runValidations(dto.userId, leaveType, start, end, workDays, dto.durationMode);
@@ -217,7 +263,7 @@ export class LeaveManagementService {
       data: {
         userId: dto.userId,
         leaveTypeCode: dto.leaveTypeCode,
-        leaveType:     dto.leaveTypeCode as any,
+        leaveType: dto.leaveTypeCode as any,
         startDate: start,
         endDate: end,
         durationMode: dto.durationMode ?? DurationMode.FULL_DAY,
@@ -241,13 +287,33 @@ export class LeaveManagementService {
 
     // ── Se auto-aprovado, deduzir saldo
     if (initialStatus === LeaveStatus.APPROVED) {
-      await this.deductBalance(dto.userId, dto.leaveTypeCode, workDays, dto.durationMode, request.id);
-      await this.notifyUser(dto.userId, 'LEAVE_AUTO_APPROVED', `A sua ${leaveType.name} foi aprovada automaticamente`);
+      await this.deductBalance(
+        dto.userId,
+        dto.leaveTypeCode,
+        workDays,
+        dto.durationMode,
+        request.id,
+      );
+      await this.notifyUser(
+        dto.userId,
+        'LEAVE_AUTO_APPROVED',
+        `A sua ${leaveType.name} foi aprovada automaticamente`,
+      );
     } else {
-      await this.notifyUser(dto.userId, 'LEAVE_SUBMITTED', `Pedido de ${leaveType.name} submetido com sucesso`);
+      await this.notifyUser(
+        dto.userId,
+        'LEAVE_SUBMITTED',
+        `Pedido de ${leaveType.name} submetido com sucesso`,
+      );
     }
 
-    await this.audit.log({ action: 'LEAVE_CREATED', entityType: 'LeaveRequest', entityId: request.id, userId: createdById, metadata: {} });
+    await this.audit.log({
+      action: 'LEAVE_CREATED',
+      entityType: 'LeaveRequest',
+      entityId: request.id,
+      userId: createdById,
+      metadata: {},
+    });
 
     return request;
   }
@@ -285,16 +351,29 @@ export class LeaveManagementService {
     });
 
     if (dto.action === ApprovalAction.REJECT || dto.action === ApprovalAction.ESCALATE) {
-      const newStatus = dto.action === ApprovalAction.REJECT ? LeaveStatus.REJECTED : LeaveStatus.PENDING;
-      await this.prisma.leaveRequest.update({ where: { id: requestId }, data: { status: newStatus } });
+      const newStatus =
+        dto.action === ApprovalAction.REJECT ? LeaveStatus.REJECTED : LeaveStatus.PENDING;
+      await this.prisma.leaveRequest.update({
+        where: { id: requestId },
+        data: { status: newStatus },
+      });
 
       if (dto.action === ApprovalAction.REJECT) {
-        await this.notifyUser(request.userId, 'LEAVE_REJECTED', `O seu pedido de licença foi rejeitado`);
+        await this.notifyUser(
+          request.userId,
+          'LEAVE_REJECTED',
+          `O seu pedido de licença foi rejeitado`,
+        );
       } else {
         // Escalar para próximo nível
         await this.escalateApproval(requestId, approval.level);
       }
-      await this.audit.log({ action: `LEAVE_${dto.action}`, entityType: 'LeaveRequest', entityId: requestId, userId: approverId });
+      await this.audit.log({
+        action: `LEAVE_${dto.action}`,
+        entityType: 'LeaveRequest',
+        entityId: requestId,
+        userId: approverId,
+      });
       return this.findOne(requestId);
     }
 
@@ -310,10 +389,21 @@ export class LeaveManagementService {
         data: { status: LeaveStatus.APPROVED, finalApprovedAt: new Date() },
       });
 
-      await this.deductBalance(request.userId, (request as any).leaveTypeCode, request.workDays, (request as any).durationMode, requestId);
+      await this.deductBalance(
+        request.userId,
+        (request as any).leaveTypeCode,
+        request.workDays,
+        (request as any).durationMode,
+        requestId,
+      );
       await this.applyModuleImpacts(request);
       await this.notifyUser(request.userId, 'LEAVE_APPROVED', `O seu pedido foi aprovado!`);
-      await this.audit.log({ action: 'LEAVE_APPROVED', entityType: 'LeaveRequest', entityId: requestId, userId: approverId });
+      await this.audit.log({
+        action: 'LEAVE_APPROVED',
+        entityType: 'LeaveRequest',
+        entityId: requestId,
+        userId: approverId,
+      });
     }
 
     return this.findOne(requestId);
@@ -322,30 +412,44 @@ export class LeaveManagementService {
   async bulkApprove(dto: BulkApproveDto, approverId: number) {
     const results = await Promise.allSettled(
       dto.requestIds.map(id =>
-        this.processApproval(id, approverId, { action: dto.action, notes: dto.notes })
-      )
+        this.processApproval(id, approverId, { action: dto.action, notes: dto.notes }),
+      ),
     );
     return {
       success: results.filter(r => r.status === 'fulfilled').length,
-      failed:  results.filter(r => r.status === 'rejected').length,
-      total:   results.length,
+      failed: results.filter(r => r.status === 'rejected').length,
+      total: results.length,
     };
   }
 
   async cancel(requestId: number, userId: number) {
     const request = await this.findOne(requestId);
 
-    if (request.userId !== userId) throw new ForbiddenException('Sem permissão para cancelar este pedido');
-    if (![LeaveStatus.PENDING, LeaveStatus.DRAFT, LeaveStatus.APPROVED].includes(request.status as LeaveStatus)) {
+    if (request.userId !== userId)
+      throw new ForbiddenException('Sem permissão para cancelar este pedido');
+    if (
+      ![LeaveStatus.PENDING, LeaveStatus.DRAFT, LeaveStatus.APPROVED].includes(
+        request.status as LeaveStatus,
+      )
+    ) {
       throw new BadRequestException('Este pedido não pode ser cancelado');
     }
 
     const wasApproved = request.status === LeaveStatus.APPROVED;
-    await this.prisma.leaveRequest.update({ where: { id: requestId }, data: { status: LeaveStatus.CANCELLED } });
+    await this.prisma.leaveRequest.update({
+      where: { id: requestId },
+      data: { status: LeaveStatus.CANCELLED },
+    });
 
     // Devolver saldo se estava aprovado
     if (wasApproved) {
-      await this.returnBalance(userId, (request as any).leaveTypeCode, request.workDays, (request as any).durationMode, requestId);
+      await this.returnBalance(
+        userId,
+        (request as any).leaveTypeCode,
+        request.workDays,
+        (request as any).durationMode,
+        requestId,
+      );
       await this.reverseModuleImpacts(request);
     }
 
@@ -356,7 +460,12 @@ export class LeaveManagementService {
     });
 
     await this.notifyUser(userId, 'LEAVE_CANCELLED', 'O seu pedido foi cancelado');
-    await this.audit.log({ action: 'LEAVE_CANCELLED', entityType: 'LeaveRequest', entityId: requestId, userId });
+    await this.audit.log({
+      action: 'LEAVE_CANCELLED',
+      entityType: 'LeaveRequest',
+      entityId: requestId,
+      userId,
+    });
 
     return { message: 'Pedido cancelado com sucesso' };
   }
@@ -381,8 +490,16 @@ export class LeaveManagementService {
     });
 
     return balances.map(b => {
-     const pendingDays    = future.filter(f => f.leaveTypeCode === (b.leaveType as string) && f.status === LeaveStatus.PENDING).reduce((a, f) => a + (f.workDays ?? 0), 0);
-     const approvedFuture = future.filter(f => f.leaveTypeCode === (b.leaveType as string) && f.status === LeaveStatus.APPROVED).reduce((a, f) => a + (f.workDays ?? 0), 0);
+      const pendingDays = future
+        .filter(
+          f => f.leaveTypeCode === (b.leaveType as string) && f.status === LeaveStatus.PENDING,
+        )
+        .reduce((a, f) => a + (f.workDays ?? 0), 0);
+      const approvedFuture = future
+        .filter(
+          f => f.leaveTypeCode === (b.leaveType as string) && f.status === LeaveStatus.APPROVED,
+        )
+        .reduce((a, f) => a + (f.workDays ?? 0), 0);
       return {
         ...b,
         pendingDays,
@@ -393,7 +510,9 @@ export class LeaveManagementService {
   }
 
   async updateBalance(userId: number, dto: UpdateBalanceDto, updatedById: number) {
-    const leaveType = await (this.prisma as any).leaveTypeConfig.findUnique({ where: { code: dto.leaveTypeCode } });
+    const leaveType = await (this.prisma as any).leaveTypeConfig.findUnique({
+      where: { code: dto.leaveTypeCode },
+    });
     if (!leaveType) throw new NotFoundException(`Tipo "${dto.leaveTypeCode}" não encontrado`);
 
     const updated = await this.prisma.leaveBalance.upsert({
@@ -424,14 +543,16 @@ export class LeaveManagementService {
           where: { userId_leaveType: { userId, leaveType: dto.leaveTypeCode as any } },
           create: { userId, leaveType: dto.leaveTypeCode as any, balance: dto.days, used: 0 },
           update: { balance: { increment: dto.days } },
-        })
-      )
+        }),
+      ),
     );
     return { accrued: results.filter(r => r.status === 'fulfilled').length, total: results.length };
   }
 
   async initializeUserBalances(userId: number) {
-    const leaveTypes = await (this.prisma as any).leaveTypeConfig.findMany({ where: { active: true, annualLimit: { gt: 0 } } });
+    const leaveTypes = await (this.prisma as any).leaveTypeConfig.findMany({
+      where: { active: true, annualLimit: { gt: 0 } },
+    });
 
     await this.prisma.leaveBalance.createMany({
       data: leaveTypes.map((lt: any) => ({
@@ -445,19 +566,23 @@ export class LeaveManagementService {
   }
 
   async processCarryOver(year: number) {
-    const leaveTypes = await (this.prisma as any).leaveTypeConfig.findMany({ where: { allowCarryOver: true } });
+    const leaveTypes = await (this.prisma as any).leaveTypeConfig.findMany({
+      where: { allowCarryOver: true },
+    });
     const results: any[] = [];
 
     for (const lt of leaveTypes) {
-      const balances = await this.prisma.leaveBalance.findMany({ where: { leaveType: lt.code as any } });
+      const balances = await this.prisma.leaveBalance.findMany({
+        where: { leaveType: lt.code },
+      });
       for (const b of balances) {
         const carryOver = Math.min(b.balance, lt.carryOverLimit ?? b.balance);
         const newBalance = (lt.annualLimit ?? 0) + carryOver;
 
         await this.prisma.leaveBalance.update({
-         where: { userId_leaveType: { userId: b.userId, leaveType: lt.code as any } },
-         data:  { balance: lt.annualLimit ?? 0, used: 0 },
-       });
+          where: { userId_leaveType: { userId: b.userId, leaveType: lt.code } },
+          data: { balance: lt.annualLimit ?? 0, used: 0 },
+        });
 
         results.push({ userId: b.userId, code: lt.code, carryOver, newBalance });
       }
@@ -481,11 +606,9 @@ export class LeaveManagementService {
   // ══════════════════════════════════════════════════════════════════
 
   async getCalendar(filters: CalendarFilterDto) {
-    const year  = filters.year  ?? new Date().getFullYear();
-    const from  = filters.month
-      ? new Date(year, filters.month - 1, 1)
-      : new Date(year, 0, 1);
-    const to    = filters.month
+    const year = filters.year ?? new Date().getFullYear();
+    const from = filters.month ? new Date(year, filters.month - 1, 1) : new Date(year, 0, 1);
+    const to = filters.month
       ? new Date(year, filters.month, 0, 23, 59, 59)
       : new Date(year, 11, 31, 23, 59, 59);
 
@@ -498,14 +621,17 @@ export class LeaveManagementService {
       ],
     };
 
-    if (filters.department) where.user = { employee: { department: { contains: filters.department, mode: 'insensitive' } } };
+    if (filters.department)
+      where.user = {
+        employee: { department: { contains: filters.department, mode: 'insensitive' } },
+      };
     if (filters.leaveTypeCode) where.leaveTypeCode = filters.leaveTypeCode;
 
     const requests = await this.prisma.leaveRequest.findMany({
       where,
       include: {
         user: { select: { id: true, fullName: true } },
-  },
+      },
       orderBy: { startDate: 'asc' },
     });
 
@@ -523,66 +649,61 @@ export class LeaveManagementService {
     return { requests, heatmap };
   }
 
- async getConflictCheck(userId: number, startDate: string, endDate: string) {
-  const start = new Date(startDate);
-  const end   = new Date(endDate);
+  async getConflictCheck(userId: number, startDate: string, endDate: string) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
 
-  // FIX: buscar departamento do user antes do Promise.all (User não tem relação employee)
-  const currentUser = await this.prisma.user.findUnique({
-    where:  { id: userId },
-    select: { departmentId: true },
-  });
-  const userDeptId = currentUser?.departmentId;
+    // FIX: buscar departamento do user antes do Promise.all (User não tem relação employee)
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { departmentId: true },
+    });
+    const userDeptId = currentUser?.departmentId;
 
-  const [teamConflicts, userConflicts] = await Promise.all([
-    this.prisma.leaveRequest.findMany({
-      where: {
-        status: { in: [LeaveStatus.APPROVED, LeaveStatus.PENDING] },
-        user:   userDeptId ? { departmentId: userDeptId } : {},
-        OR: [
-          { startDate: { gte: start, lte: end } },
-          { endDate:   { gte: start, lte: end } },
-        ],
-        userId: { not: userId },
-      },
-      include: { user: { select: { id: true, fullName: true } } },
-    }),
-    this.prisma.leaveRequest.findMany({
-      where: {
-        userId,
-        status: { in: [LeaveStatus.APPROVED, LeaveStatus.PENDING] },
-        OR: [
-          { startDate: { gte: start, lte: end } },
-          { endDate:   { gte: start, lte: end } },
-        ],
-      },
-    }),
-  ]);
+    const [teamConflicts, userConflicts] = await Promise.all([
+      this.prisma.leaveRequest.findMany({
+        where: {
+          status: { in: [LeaveStatus.APPROVED, LeaveStatus.PENDING] },
+          user: userDeptId ? { departmentId: userDeptId } : {},
+          OR: [{ startDate: { gte: start, lte: end } }, { endDate: { gte: start, lte: end } }],
+          userId: { not: userId },
+        },
+        include: { user: { select: { id: true, fullName: true } } },
+      }),
+      this.prisma.leaveRequest.findMany({
+        where: {
+          userId,
+          status: { in: [LeaveStatus.APPROVED, LeaveStatus.PENDING] },
+          OR: [{ startDate: { gte: start, lte: end } }, { endDate: { gte: start, lte: end } }],
+        },
+      }),
+    ]);
 
-  const policy      = await this.getApplicablePolicy(userId);
-  const maxAbsent   = policy?.maxAbsencePercent ?? 30;
+    const policy = await this.getApplicablePolicy(userId);
+    const maxAbsent = policy?.maxAbsencePercent ?? 30;
 
-  return {
-    hasUserConflict:    userConflicts.length > 0,
-    userConflicts,
-    teamConflicts,
-    teamConflictCount:  teamConflicts.length,
-    warningThreshold:   maxAbsent,
-    isAtRisk:           teamConflicts.length > 0,
-  };
-}
+    return {
+      hasUserConflict: userConflicts.length > 0,
+      userConflicts,
+      teamConflicts,
+      teamConflictCount: teamConflicts.length,
+      warningThreshold: maxAbsent,
+      isAtRisk: teamConflicts.length > 0,
+    };
+  }
 
   // ══════════════════════════════════════════════════════════════════
   // ANALYTICS
   // ══════════════════════════════════════════════════════════════════
 
   async getDashboard(department?: string) {
-    const now   = new Date();
-    const year  = now.getFullYear();
-    const from  = new Date(year, 0, 1);
-    const to    = new Date(year, 11, 31);
+    const now = new Date();
+    const year = now.getFullYear();
+    const from = new Date(year, 0, 1);
+    const to = new Date(year, 11, 31);
     const where: any = { startDate: { gte: from, lte: to } };
-    if (department) where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
+    if (department)
+      where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
 
     const [allRequests, pending, approved, activeNow] = await Promise.all([
       this.prisma.leaveRequest.findMany({ where }),
@@ -593,9 +714,11 @@ export class LeaveManagementService {
       }),
     ]);
 
-    const totalWorkDays = allRequests.filter(r => r.status === LeaveStatus.APPROVED).reduce((a, r) => a + (r.workDays ?? 0), 0);
+    const totalWorkDays = allRequests
+      .filter(r => r.status === LeaveStatus.APPROVED)
+      .reduce((a, r) => a + (r.workDays ?? 0), 0);
     const byType = allRequests.reduce((acc: any, r) => {
-      const code = r.leaveTypeCode ?? r.leaveType as string;
+      const code = r.leaveTypeCode ?? (r.leaveType as string);
       if (!code) return acc;
       if (!acc[code]) acc[code] = { code, count: 0, days: 0 };
       acc[code].count++;
@@ -604,8 +727,14 @@ export class LeaveManagementService {
     }, {});
 
     const byMonth = Array.from({ length: 12 }, (_, i) => {
-      const monthRequests = allRequests.filter(r => new Date(r.startDate).getMonth() === i && r.status === LeaveStatus.APPROVED);
-      return { month: i + 1, count: monthRequests.length, days: monthRequests.reduce((a, r) => a + (r.workDays ?? 0), 0) };
+      const monthRequests = allRequests.filter(
+        r => new Date(r.startDate).getMonth() === i && r.status === LeaveStatus.APPROVED,
+      );
+      return {
+        month: i + 1,
+        count: monthRequests.length,
+        days: monthRequests.reduce((a, r) => a + (r.workDays ?? 0), 0),
+      };
     });
 
     return {
@@ -621,18 +750,20 @@ export class LeaveManagementService {
       status: LeaveStatus.APPROVED,
       startDate: { gte: new Date(from), lte: new Date(to) },
     };
-    if (department) where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
+    if (department)
+      where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const records = await this.prisma.leaveRequest.findMany({
       where,
       include: {
-      user: { select: { id: true, fullName: true } },
+        user: { select: { id: true, fullName: true } },
       },
     });
 
     const byUser = records.reduce((acc: any, r) => {
       const uid = r.userId;
-      if (!acc[uid]) acc[uid] = { userId: uid, fullName: (r as any).user?.fullName, totalDays: 0, requests: 0 };
+      if (!acc[uid])
+        acc[uid] = { userId: uid, fullName: (r as any).user?.fullName, totalDays: 0, requests: 0 };
       acc[uid].totalDays += r.workDays ?? 0;
       acc[uid].requests++;
       return acc;
@@ -640,17 +771,26 @@ export class LeaveManagementService {
 
     const workDaysInPeriod = countWorkDays(new Date(from), new Date(to));
 
-    return Object.values(byUser).map((u: any) => ({
-      ...u,
-      absenteeismRate: workDaysInPeriod > 0 ? +((u.totalDays / workDaysInPeriod) * 100).toFixed(1) : 0,
-    })).sort((a: any, b: any) => b.totalDays - a.totalDays);
+    return Object.values(byUser)
+      .map((u: any) => ({
+        ...u,
+        absenteeismRate:
+          workDaysInPeriod > 0 ? +((u.totalDays / workDaysInPeriod) * 100).toFixed(1) : 0,
+      }))
+      .sort((a: any, b: any) => b.totalDays - a.totalDays);
   }
 
   // ══════════════════════════════════════════════════════════════════
   // HELPER PRIVADOS
   // ══════════════════════════════════════════════════════════════════
 
-  private calculateDuration(start: Date, end: Date, mode?: DurationMode, hours?: number, workDaysOnly = true) {
+  private calculateDuration(
+    start: Date,
+    end: Date,
+    mode?: DurationMode,
+    hours?: number,
+    workDaysOnly = true,
+  ) {
     const calendarDays = countCalendarDays(start, end);
     let workDays = workDaysOnly ? countWorkDays(start, end) : calendarDays;
 
@@ -672,23 +812,29 @@ export class LeaveManagementService {
     if (leaveType.minNoticeDays) {
       const noticeDays = countWorkDays(new Date(), start);
       if (noticeDays < leaveType.minNoticeDays) {
-        throw new BadRequestException(`Este tipo de licença requer ${leaveType.minNoticeDays} dias de antecedência`);
+        throw new BadRequestException(
+          `Este tipo de licença requer ${leaveType.minNoticeDays} dias de antecedência`,
+        );
       }
     }
 
     // 2. Máximo de dias consecutivos
     if (leaveType.maxConsecutiveDays && workDays > leaveType.maxConsecutiveDays) {
-      throw new BadRequestException(`Máximo de ${leaveType.maxConsecutiveDays} dias consecutivos para este tipo`);
+      throw new BadRequestException(
+        `Máximo de ${leaveType.maxConsecutiveDays} dias consecutivos para este tipo`,
+      );
     }
 
     // 3. Saldo disponível
     if (leaveType.annualLimit) {
       const balance = await this.prisma.leaveBalance.findUnique({
-       where: { userId_leaveType: { userId, leaveType: leaveType as any } },
+        where: { userId_leaveType: { userId, leaveType: leaveType } },
       });
       const available = balance?.balance ?? 0;
       if (workDays > available) {
-        throw new BadRequestException(`Saldo insuficiente: tem ${available} dias disponíveis, solicitou ${workDays}`);
+        throw new BadRequestException(
+          `Saldo insuficiente: tem ${available} dias disponíveis, solicitou ${workDays}`,
+        );
       }
     }
 
@@ -697,10 +843,12 @@ export class LeaveManagementService {
     if (policy?.blackoutPeriods) {
       for (const bp of policy.blackoutPeriods as any[]) {
         const bpStart = new Date(bp.startDate);
-        const bpEnd   = new Date(bp.endDate);
+        const bpEnd = new Date(bp.endDate);
         if (start <= bpEnd && end >= bpStart) {
           if (!bp.leaveTypeCodes?.length || bp.leaveTypeCodes.includes(leaveType.code)) {
-            throw new BadRequestException(`Período bloqueado: ${bp.label} (${bp.startDate} a ${bp.endDate})`);
+            throw new BadRequestException(
+              `Período bloqueado: ${bp.label} (${bp.startDate} a ${bp.endDate})`,
+            );
           }
         }
       }
@@ -719,7 +867,9 @@ export class LeaveManagementService {
       },
     });
     if (selfConflict) {
-      throw new ConflictException('Já existe um pedido aprovado/pendente que sobrepõe este período');
+      throw new ConflictException(
+        'Já existe um pedido aprovado/pendente que sobrepõe este período',
+      );
     }
   }
 
@@ -735,17 +885,24 @@ export class LeaveManagementService {
 
     // Nível 2+: RH (buscar por role)
     if (levels >= 2) {
-     const hr = await this.prisma.user.findFirst({ where: { roleCode: 'RH' } as any });
+      const hr = await this.prisma.user.findFirst({ where: { roleCode: 'RH' } as any });
       if (hr) approvals.push({ requestId, approverId: hr.id, level: 2 });
     }
 
     if (approvals.length === 0) {
       // Sem gestor configurado — auto-aprovar
-      await this.prisma.leaveRequest.update({ where: { id: requestId }, data: { status: LeaveStatus.APPROVED } });
+      await this.prisma.leaveRequest.update({
+        where: { id: requestId },
+        data: { status: LeaveStatus.APPROVED },
+      });
     } else {
       await this.prisma.leaveApproval.createMany({ data: approvals });
       // Notificar primeiro aprovador
-      await this.notifyUser(approvals[0].approverId, 'LEAVE_PENDING_APPROVAL', 'Novo pedido de licença aguarda a sua aprovação');
+      await this.notifyUser(
+        approvals[0].approverId,
+        'LEAVE_PENDING_APPROVAL',
+        'Novo pedido de licença aguarda a sua aprovação',
+      );
     }
   }
 
@@ -754,7 +911,11 @@ export class LeaveManagementService {
       where: { requestId, level: { gt: currentLevel }, decidedAt: null },
     });
     if (nextApproval) {
-      await this.notifyUser(nextApproval.approverId, 'LEAVE_ESCALATED', 'Pedido de licença escalado para aprovação');
+      await this.notifyUser(
+        nextApproval.approverId,
+        'LEAVE_ESCALATED',
+        'Pedido de licença escalado para aprovação',
+      );
     }
   }
 
@@ -765,12 +926,18 @@ export class LeaveManagementService {
     });
   }
 
-  private async deductBalance(userId: number, leaveTypeCode: string, workDays: number, mode?: DurationMode, requestId?: number) {
+  private async deductBalance(
+    userId: number,
+    leaveTypeCode: string,
+    workDays: number,
+    mode?: DurationMode,
+    requestId?: number,
+  ) {
     const current = await this.prisma.leaveBalance.findUnique({
       where: { userId_leaveType: { userId, leaveType: leaveTypeCode as any } },
     });
     const balanceBefore = current?.balance ?? 0;
-    const balanceAfter  = Math.max(0, balanceBefore - workDays);
+    const balanceAfter = Math.max(0, balanceBefore - workDays);
 
     await this.prisma.leaveBalance.upsert({
       where: { userId_leaveType: { userId, leaveType: leaveTypeCode as any } },
@@ -780,8 +947,10 @@ export class LeaveManagementService {
 
     await this.prisma.leaveBalanceHistory.create({
       data: {
-        userId, leaveType: leaveTypeCode as any,
-        balanceBefore, balanceAfter,
+        userId,
+        leaveType: leaveTypeCode as any,
+        balanceBefore,
+        balanceAfter,
         change: -workDays,
         reason: 'Licença aprovada',
         requestId,
@@ -790,12 +959,18 @@ export class LeaveManagementService {
     });
   }
 
-  private async returnBalance(userId: number, leaveTypeCode: string, workDays: number, mode?: DurationMode, requestId?: number) {
+  private async returnBalance(
+    userId: number,
+    leaveTypeCode: string,
+    workDays: number,
+    mode?: DurationMode,
+    requestId?: number,
+  ) {
     const current = await this.prisma.leaveBalance.findUnique({
       where: { userId_leaveType: { userId, leaveType: leaveTypeCode as any } },
     });
     const balanceBefore = current?.balance ?? 0;
-    const balanceAfter  = balanceBefore + workDays;
+    const balanceAfter = balanceBefore + workDays;
 
     await this.prisma.leaveBalance.update({
       where: { userId_leaveType: { userId, leaveType: leaveTypeCode as any } },
@@ -805,33 +980,43 @@ export class LeaveManagementService {
     await this.prisma.leaveBalanceHistory.create({
       data: {
         userId,
-        leaveType:     leaveTypeCode as any,
+        leaveType: leaveTypeCode as any,
         balanceBefore,
         balanceAfter,
-        change:        workDays,
-        reason:        'Cancelamento de licença',
+        change: workDays,
+        reason: 'Cancelamento de licença',
         requestId,
-        updatedById:   userId,
+        updatedById: userId,
       },
     });
   }
 
   private async calculateImpact(userId: number, start: Date, end: Date) {
     // Cursos activos no período
-    const activeCourses = await (this.prisma as any).enrollment?.findMany?.({
-      where: { userId, completedAt: null },
-      include: { course: { select: { id: true, title: true } } },
-    }).catch(() => []) ?? [];
+    const activeCourses =
+      (await (this.prisma as any).enrollment
+        ?.findMany?.({
+          where: { userId, completedAt: null },
+          include: { course: { select: { id: true, title: true } } },
+        })
+        .catch(() => [])) ?? [];
 
     // Eventos no período
-    const events = await (this.prisma as any).eventParticipant?.findMany?.({
-      where: { userId, event: { startDate: { gte: start, lte: end } } },
-      include: { event: { select: { id: true, title: true, startDate: true } } },
-    }).catch(() => []) ?? [];
+    const events =
+      (await (this.prisma as any).eventParticipant
+        ?.findMany?.({
+          where: { userId, event: { startDate: { gte: start, lte: end } } },
+          include: { event: { select: { id: true, title: true, startDate: true } } },
+        })
+        .catch(() => [])) ?? [];
 
     if (activeCourses.length === 0 && events.length === 0) return null;
 
-    return { affectedCourses: activeCourses.length, affectedEvents: events.length, notes: `${activeCourses.length} curso(s) e ${events.length} evento(s) no período` };
+    return {
+      affectedCourses: activeCourses.length,
+      affectedEvents: events.length,
+      notes: `${activeCourses.length} curso(s) e ${events.length} evento(s) no período`,
+    };
   }
 
   private async applyModuleImpacts(request: any) {
@@ -860,4 +1045,3 @@ export class LeaveManagementService {
     } catch {}
   }
 }
-

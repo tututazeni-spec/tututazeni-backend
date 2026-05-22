@@ -1,19 +1,34 @@
 // src/trainings/trainings.controller.ts
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TrainingService } from './trainings.service';
 import {
-  CreateTrainingDto, UpdateTrainingDto, TrainingFilterDto,
-  CreateTrainingSessionDto, UpdateTrainingSessionDto,
-  RegisterParticipantDto, UpdateParticipantStatusDto,
-  BulkAttendanceDto, RateTrainingDto,
+  CreateTrainingDto,
+  UpdateTrainingDto,
+  TrainingFilterDto,
+  CreateTrainingSessionDto,
+  UpdateTrainingSessionDto,
+  RegisterParticipantDto,
+  UpdateParticipantStatusDto,
+  BulkAttendanceDto,
+  RateTrainingDto,
 } from './trainings.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Trainings')
@@ -28,21 +43,29 @@ export class TrainingController {
   @Get('admin/dashboard')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Dashboard admin (KPIs, top treinamentos)' })
-  dashboard() { return this.svc.getAdminDashboard(); }
+  dashboard() {
+    return this.svc.getAdminDashboard();
+  }
 
   // ── Catálogo ──────────────────────────────────────────────────────────────
 
   @Get()
   @ApiOperation({ summary: 'Catálogo de treinamentos com filtros' })
-  findAll(@Query() filters: TrainingFilterDto) { return this.svc.findAll(filters); }
+  findAll(@Query() filters: TrainingFilterDto) {
+    return this.svc.findAll(filters);
+  }
 
   @Get('my')
   @ApiOperation({ summary: 'Os meus treinamentos (inscrições e histórico)' })
-  myTrainings(@CurrentUser() user: any) { return this.svc.getMyTrainings(user.id); }
+  myTrainings(@CurrentUser() user: any) {
+    return this.svc.getMyTrainings(user.id);
+  }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do treinamento (sessões, rating médio)' })
-  findOne(@Param('id', ParseIntPipe) id: number) { return this.svc.findOne(id); }
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findOne(id);
+  }
 
   @Get(':id/attendance-report')
   @Roles('ADMIN', 'RH', 'GESTOR')
@@ -56,7 +79,9 @@ export class TrainingController {
   @Post()
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar treinamento' })
-  create(@Body() dto: CreateTrainingDto) { return this.svc.create(dto); }
+  create(@Body() dto: CreateTrainingDto) {
+    return this.svc.create(dto);
+  }
 
   @Put(':id')
   @Roles('ADMIN', 'RH')
@@ -69,25 +94,33 @@ export class TrainingController {
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Publicar treinamento (DRAFT → PUBLISHED)' })
   @HttpCode(HttpStatus.OK)
-  publish(@Param('id', ParseIntPipe) id: number) { return this.svc.publish(id); }
+  publish(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.publish(id);
+  }
 
   @Patch(':id/archive')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Arquivar treinamento' })
   @HttpCode(HttpStatus.OK)
-  archive(@Param('id', ParseIntPipe) id: number) { return this.svc.archive(id); }
+  archive(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.archive(id);
+  }
 
   @Delete(':id')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Eliminar treinamento' })
-  remove(@Param('id', ParseIntPipe) id: number) { return this.svc.remove(id); }
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remove(id);
+  }
 
   // ── Sessões ───────────────────────────────────────────────────────────────
 
   @Post('sessions')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar sessão de treinamento' })
-  createSession(@Body() dto: CreateTrainingSessionDto) { return this.svc.createSession(dto); }
+  createSession(@Body() dto: CreateTrainingSessionDto) {
+    return this.svc.createSession(dto);
+  }
 
   @Put('sessions/:id')
   @Roles('ADMIN', 'RH')
@@ -99,7 +132,9 @@ export class TrainingController {
   @Delete('sessions/:id')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Eliminar sessão (sem participantes)' })
-  removeSession(@Param('id', ParseIntPipe) id: number) { return this.svc.removeSession(id); }
+  removeSession(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.removeSession(id);
+  }
 
   @Get('sessions/:sessionId/participants')
   @Roles('ADMIN', 'RH', 'GESTOR')
@@ -113,7 +148,9 @@ export class TrainingController {
   @Post('sessions/register')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Inscrever colaborador numa sessão (com controlo de vagas)' })
-  register(@Body() dto: RegisterParticipantDto) { return this.svc.registerParticipant(dto); }
+  register(@Body() dto: RegisterParticipantDto) {
+    return this.svc.registerParticipant(dto);
+  }
 
   @Post('sessions/:sessionId/self-register')
   @ApiOperation({ summary: 'Auto-inscrição numa sessão' })

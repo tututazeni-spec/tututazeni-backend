@@ -1,18 +1,15 @@
 // src/history/history.controller.ts
-import {
-  Controller, Get, Post, Param, Query, Body,
-  ParseIntPipe, UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { HistoryService }  from './history.service';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { HistoryService } from './history.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 import { HistoryFilterDto, TimelineFilterDto, CreateEventDto } from './history.dto';
 
-const ALL_ROLES   = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
-const MGMT_ROLES  = ['ADMIN', 'RH', 'LIDER']                as const;
-const ADMIN_ROLES = ['ADMIN', 'RH']                          as const;
+const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
+const MGMT_ROLES = ['ADMIN', 'RH', 'LIDER'] as const;
+const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
 
 @ApiTags('History & Timeline')
 @ApiBearerAuth()
@@ -33,20 +30,14 @@ export class HistoryController {
   @Get('user/:userId')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Actividade bruta de um utilizador (AuditLog)' })
-  userActivity(
-    @Param('userId', ParseIntPipe) id: number,
-    @Query('limit') limit?: string,
-  ) {
+  userActivity(@Param('userId', ParseIntPipe) id: number, @Query('limit') limit?: string) {
     return this.svc.getUserActivity(id, limit ? +limit : 50);
   }
 
   @Get(':entity/:entityId')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Histórico de uma entidade específica' })
-  entityHistory(
-    @Param('entity') entity: string,
-    @Param('entityId', ParseIntPipe) id: number,
-  ) {
+  entityHistory(@Param('entity') entity: string, @Param('entityId', ParseIntPipe) id: number) {
     return this.svc.getEntityHistory(entity, id);
   }
 
@@ -61,7 +52,9 @@ export class HistoryController {
 
   @Get('timeline/me')
   @Roles(...ALL_ROLES)
-  @ApiOperation({ summary: 'Timeline pessoal — multi-fonte: cursos, badges, PDI, avaliações, avatar' })
+  @ApiOperation({
+    summary: 'Timeline pessoal — multi-fonte: cursos, badges, PDI, avaliações, avatar',
+  })
   myTimeline(@CurrentUser() user: any, @Query() filters: TimelineFilterDto) {
     return this.svc.getUserTimeline(user.id, filters);
   }
@@ -69,10 +62,7 @@ export class HistoryController {
   @Get('timeline/user/:userId')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Timeline de um colaborador (gestor/RH)' })
-  userTimeline(
-    @Param('userId', ParseIntPipe) userId: number,
-    @Query() filters: TimelineFilterDto,
-  ) {
+  userTimeline(@Param('userId', ParseIntPipe) userId: number, @Query() filters: TimelineFilterDto) {
     return this.svc.getUserTimeline(userId, filters);
   }
 
@@ -120,7 +110,9 @@ export class HistoryController {
   @Get('upcoming')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Próximos eventos: aniversários, certificados a expirar' })
-  upcoming() { return this.svc.getUpcomingEvents(); }
+  upcoming() {
+    return this.svc.getUpcomingEvents();
+  }
 
   // ─── Audit Analytics ─────────────────────────────────────────
 

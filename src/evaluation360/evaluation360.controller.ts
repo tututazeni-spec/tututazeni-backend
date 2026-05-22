@@ -4,29 +4,46 @@
 // ============================================================
 
 import {
-  Controller, Get, Post, Patch, Body, Param, Query,
-  UseGuards, Request, HttpCode, HttpStatus, DefaultValuePipe,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags, ApiBearerAuth, ApiOperation, ApiResponse,
-  ApiParam, ApiQuery,
-} from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Evaluation360Service } from './evaluation360.service';
 import {
-  CreateCompetencyDto, UpdateCompetencyDto,
-  CreateEvaluationCycleDto, UpdateEvaluationCycleDto, PublishCycleDto,
-  CreateQuestionDto, UpdateQuestionDto,
-  AddParticipantsDto, ConsentDto,
-  SuggestEvaluatorsDto, BulkAssignEvaluatorsDto, ApproveEvaluatorsDto,
+  CreateCompetencyDto,
+  UpdateCompetencyDto,
+  CreateEvaluationCycleDto,
+  UpdateEvaluationCycleDto,
+  PublishCycleDto,
+  CreateQuestionDto,
+  AddParticipantsDto,
+  ConsentDto,
+  SuggestEvaluatorsDto,
+  BulkAssignEvaluatorsDto,
+  ApproveEvaluatorsDto,
   SubmitResponseDto,
   CreateContinuousFeedbackDto,
-  CreatePulseSurveyDto, SubmitPulseSurveyDto,
-  AnalyticsQueryDto, NineBoxQueryDto,
-  GenerateReportDto, CalibrateScoreDto, SendRemindersDto, PaginationDto,
+  CreatePulseSurveyDto,
+  SubmitPulseSurveyDto,
+  AnalyticsQueryDto,
+  NineBoxQueryDto,
+  GenerateReportDto,
+  CalibrateScoreDto,
+  SendRemindersDto,
+  PaginationDto,
 } from './evaluation360.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard }   from '../common/guards/roles.guard';
-import { Roles }        from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 
 @ApiTags('Avaliação 360°')
 @ApiBearerAuth()
@@ -49,7 +66,11 @@ export class Evaluation360Controller {
   @Patch('competencies/:id')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Actualizar competência' })
-  async updateCompetency(@Param('id') id: string, @Body() dto: UpdateCompetencyDto, @Request() req: any) {
+  async updateCompetency(
+    @Param('id') id: string,
+    @Body() dto: UpdateCompetencyDto,
+    @Request() req: any,
+  ) {
     return this.service.updateCompetency(id, dto, req.user.id);
   }
 
@@ -74,7 +95,11 @@ export class Evaluation360Controller {
   @Patch('cycles/:id')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Actualizar ciclo (apenas em DRAFT)' })
-  async updateCycle(@Param('id') id: string, @Body() dto: UpdateEvaluationCycleDto, @Request() req: any) {
+  async updateCycle(
+    @Param('id') id: string,
+    @Body() dto: UpdateEvaluationCycleDto,
+    @Request() req: any,
+  ) {
     return this.service.updateCycle(id, dto, req.user.id);
   }
 
@@ -125,7 +150,10 @@ export class Evaluation360Controller {
   @ApiOperation({ summary: 'Listar questões' })
   @ApiQuery({ name: 'cycleId', required: false })
   @ApiQuery({ name: 'competencyId', required: false })
-  async listQuestions(@Query('cycleId') cycleId?: string, @Query('competencyId') competencyId?: string) {
+  async listQuestions(
+    @Query('cycleId') cycleId?: string,
+    @Query('competencyId') competencyId?: string,
+  ) {
     return this.service.listQuestions(cycleId, competencyId);
   }
 
@@ -136,13 +164,21 @@ export class Evaluation360Controller {
   @Post('cycles/:id/participants')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Adicionar participantes (avaliados) ao ciclo' })
-  async addParticipants(@Param('id') id: string, @Body() dto: AddParticipantsDto, @Request() req: any) {
+  async addParticipants(
+    @Param('id') id: string,
+    @Body() dto: AddParticipantsDto,
+    @Request() req: any,
+  ) {
     return this.service.addParticipants(id, dto, req.user.id);
   }
 
   @Post('cycles/:cycleId/participants/:userId/consent')
   @ApiOperation({ summary: 'Registar consentimento LGPD do participante' })
-  async giveConsent(@Param('cycleId') cycleId: string, @Param('userId') userId: string, @Body() dto: ConsentDto) {
+  async giveConsent(
+    @Param('cycleId') cycleId: string,
+    @Param('userId') userId: string,
+    @Body() dto: ConsentDto,
+  ) {
     return this.service.giveConsent(cycleId, userId, dto);
   }
 
@@ -166,7 +202,11 @@ export class Evaluation360Controller {
   @Post('cycles/:id/evaluators')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Atribuir avaliadores (bulk)' })
-  async assignEvaluators(@Param('id') id: string, @Body() dto: BulkAssignEvaluatorsDto, @Request() req: any) {
+  async assignEvaluators(
+    @Param('id') id: string,
+    @Body() dto: BulkAssignEvaluatorsDto,
+    @Request() req: any,
+  ) {
     return this.service.assignEvaluators(id, dto, req.user.id);
   }
 
@@ -174,7 +214,11 @@ export class Evaluation360Controller {
   @Roles('ADMIN', 'RH', 'GESTOR')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Aprovar avaliadores e enviar convites' })
-  async approveEvaluators(@Param('id') id: string, @Body() dto: ApproveEvaluatorsDto, @Request() req: any) {
+  async approveEvaluators(
+    @Param('id') id: string,
+    @Body() dto: ApproveEvaluatorsDto,
+    @Request() req: any,
+  ) {
     return this.service.approveEvaluators(id, dto, req.user.id);
   }
 
@@ -233,7 +277,12 @@ export class Evaluation360Controller {
     @Param('participantId') participantId: string,
     @Request() req: any,
   ) {
-    return this.service.getParticipantResult(cycleId, participantId, req.user.id, req.user.roleCode);
+    return this.service.getParticipantResult(
+      cycleId,
+      participantId,
+      req.user.id,
+      req.user.roleCode,
+    );
   }
 
   @Get('cycles/:cycleId/analytics/team')

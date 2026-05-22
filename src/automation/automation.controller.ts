@@ -1,16 +1,30 @@
 // src/automation/automation.controller.ts
 import {
-  Controller, Get, Post, Patch, Delete, Put,
-  Body, Param, Query, ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Put,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { AutomationService }  from './automation.service';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
-import { Roles }         from '../common/decorators';
+import { AutomationService } from './automation.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators';
 import {
-  CreateRuleDto, UpdateRuleDto, TriggerEventDto,
-  ExecutionFilterDto, AutomationCategory,
+  CreateRuleDto,
+  UpdateRuleDto,
+  TriggerEventDto,
+  ExecutionFilterDto,
+  AutomationCategory,
 } from './automation.dto';
 
 const ADMIN = ['ADMIN', 'RH'] as const;
@@ -33,7 +47,9 @@ export class AutomationController {
 
   @Post('rules')
   @ApiOperation({ summary: 'Criar regra de automação (trigger → condition → action)' })
-  create(@Body() dto: CreateRuleDto) { return this.svc.createRule(dto); }
+  create(@Body() dto: CreateRuleDto) {
+    return this.svc.createRule(dto);
+  }
 
   @Put('rules/:id')
   @ApiOperation({ summary: 'Actualizar regra' })
@@ -43,27 +59,37 @@ export class AutomationController {
 
   @Patch('rules/:id/toggle')
   @ApiOperation({ summary: 'Activar/desactivar regra' })
-  toggle(@Param('id', ParseIntPipe) id: number) { return this.svc.toggleRule(id); }
+  toggle(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.toggleRule(id);
+  }
 
   @Post('rules/:id/clone')
   @ApiOperation({ summary: 'Clonar regra (cria cópia inactiva)' })
-  clone(@Param('id', ParseIntPipe) id: number) { return this.svc.cloneRule(id); }
+  clone(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.cloneRule(id);
+  }
 
   @Delete('rules/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remover regra' })
-  remove(@Param('id', ParseIntPipe) id: number) { return this.svc.deleteRule(id); }
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.deleteRule(id);
+  }
 
   // ─── Execution ────────────────────────────────────────────────
 
   @Post('run')
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Executar manualmente todas as regras activas' })
-  runAll() { return this.svc.runAllActiveRules(); }
+  runAll() {
+    return this.svc.runAllActiveRules();
+  }
 
   @Post('trigger')
   @ApiOperation({ summary: 'Disparar evento e executar automações correspondentes' })
-  trigger(@Body() dto: TriggerEventDto) { return this.svc.triggerEvent(dto); }
+  trigger(@Body() dto: TriggerEventDto) {
+    return this.svc.triggerEvent(dto);
+  }
 
   // ─── Executions ───────────────────────────────────────────────
 
@@ -83,13 +109,17 @@ export class AutomationController {
 
   @Get('stats')
   @ApiOperation({ summary: 'Dashboard — total de regras, taxa de sucesso, por categoria' })
-  stats() { return this.svc.getStats(); }
+  stats() {
+    return this.svc.getStats();
+  }
 
   // ─── Templates ────────────────────────────────────────────────
 
   @Get('templates')
   @ApiOperation({ summary: 'Biblioteca de templates pré-configurados (7 built-in)' })
-  templates() { return this.svc.getTemplates(); }
+  templates() {
+    return this.svc.getTemplates();
+  }
 
   @Post('templates/:index/apply')
   @ApiOperation({ summary: 'Aplicar template à lista de automações' })
@@ -101,6 +131,7 @@ export class AutomationController {
 
   @Post('rules/init-defaults')
   @ApiOperation({ summary: '[Legacy] Criar regras padrão se não existirem' })
-  initDefaults() { return this.svc.initDefaultRules(); }
+  initDefaults() {
+    return this.svc.initDefaultRules();
+  }
 }
-

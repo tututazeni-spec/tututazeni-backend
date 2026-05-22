@@ -1,19 +1,28 @@
 ﻿// src/roles-permissions/roles-permissions.service.ts
 import {
-  Injectable, NotFoundException, ConflictException, BadRequestException,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateRoleDto, UpdateRoleDto, CloneRoleDto,
-  BulkAssignRoleDto, SetPermissionsDto,
-  SimulatePermissionDto, RoleTemplateDto,
+  CreateRoleDto,
+  UpdateRoleDto,
+  BulkAssignRoleDto,
+  SimulatePermissionDto,
+  RoleTemplateDto,
 } from './roles-permissions.dto';
 
 // Re-export DTOs so controller can import from service (legacy compat)
 export {
-  CreateRoleDto, UpdateRoleDto, CloneRoleDto,
-  BulkAssignRoleDto, SetPermissionsDto,
-  SimulatePermissionDto, RoleTemplateDto,
+  CreateRoleDto,
+  UpdateRoleDto,
+  CloneRoleDto,
+  BulkAssignRoleDto,
+  SetPermissionsDto,
+  SimulatePermissionDto,
+  RoleTemplateDto,
 } from './roles-permissions.dto';
 
 // ─────────────────────────────────────────────────────────────────
@@ -32,7 +41,7 @@ export class RolesPermissionsService {
     const roles = await this.prisma.role.findMany({
       include: {
         permissions: { select: { id: true, name: true, action: true, subject: true } },
-        _count:      { select: { users: true } },
+        _count: { select: { users: true } },
       },
       orderBy: { name: 'asc' },
     });
@@ -40,21 +49,29 @@ export class RolesPermissionsService {
     return roles.map(r => ({
       ...r,
       effectivePermissions: r.permissions.length,
-      usersCount:           r._count.users,
-      isSystem:             (r as any).isSystem ?? false,
-      priority:             (r as any).priority ?? 0,
+      usersCount: r._count.users,
+      isSystem: (r as any).isSystem ?? false,
+      priority: (r as any).priority ?? 0,
     }));
   }
 
   async findOne(id: number) {
     const r = await this.prisma.role.findUnique({
-      where:   { id },
+      where: { id },
       include: {
         permissions: true,
-        users:       { select: { id: true, fullName: true, avatarUrl: true, email: true,
-          department: { select: { name: true } }, position: { select: { name: true } } },
-          take: 20 },
-        _count:      { select: { users: true } },
+        users: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            email: true,
+            department: { select: { name: true } },
+            position: { select: { name: true } },
+          },
+          take: 20,
+        },
+        _count: { select: { users: true } },
       },
     });
     if (!r) throw new NotFoundException('Role não encontrado');
@@ -68,17 +85,27 @@ export class RolesPermissionsService {
     const { permissionIds, ...data } = dto;
     const role = await this.prisma.role.create({
       data: {
-        name:        data.name,
+        name: data.name,
         description: data.description,
-        code:        data.code ?? data.name.toUpperCase().replace(/\s+/g, '_'),
-        permissions: permissionIds?.length ? { connect: permissionIds.map(id => ({ id })) } : undefined,
+        code: data.code ?? data.name.toUpperCase().replace(/\s+/g, '_'),
+        permissions: permissionIds?.length
+          ? { connect: permissionIds.map(id => ({ id })) }
+          : undefined,
       },
       include: { permissions: true },
     });
 
-    await this.prisma.auditLog.create({
-      data: { userId: 0, action: 'ROLE_CREATED', entity: 'Role', entityId: role.id, changes: JSON.stringify({ name: role.name }) },
-    }).catch(() => {});
+    await this.prisma.auditLog
+      .create({
+        data: {
+          userId: 0,
+          action: 'ROLE_CREATED',
+          entity: 'Role',
+          entityId: role.id,
+          changes: JSON.stringify({ name: role.name }),
+        },
+      })
+      .catch(() => {});
 
     return role;
   }
@@ -92,34 +119,54 @@ export class RolesPermissionsService {
     const { permissionIds, ...data } = dto;
     const updated = await this.prisma.role.update({
       where: { id },
-      data:  {
-        ...(data.name        && { name:        data.name }),
+      data: {
+        ...(data.name && { name: data.name }),
         ...(data.description && { description: data.description }),
         ...(permissionIds !== undefined && {
           permissions: {
-            set:     permissionIds.map(pid => ({ id: pid })),
+            set: permissionIds.map(pid => ({ id: pid })),
           },
         }),
       },
       include: { permissions: true },
     });
 
-    await this.prisma.auditLog.create({
-      data: { userId: 0, action: 'ROLE_UPDATED', entity: 'Role', entityId: id, changes: JSON.stringify(dto) },
-    }).catch(() => {});
+    await this.prisma.auditLog
+      .create({
+        data: {
+          userId: 0,
+          action: 'ROLE_UPDATED',
+          entity: 'Role',
+          entityId: id,
+          changes: JSON.stringify(dto),
+        },
+      })
+      .catch(() => {});
 
     return updated;
   }
 
   async remove(id: number) {
     const role = await this.findOne(id);
-    if ((role as any).isSystem) throw new BadRequestException('Não é possível remover roles de sistema');
-    if ((role._count as any).users > 0) throw new ConflictException(`Role tem ${(role._count as any).users} utilizador(es) atribuídos — reatribua antes de remover`);
+    if ((role as any).isSystem)
+      throw new BadRequestException('Não é possível remover roles de sistema');
+    if ((role._count as any).users > 0)
+      throw new ConflictException(
+        `Role tem ${(role._count as any).users} utilizador(es) atribuídos — reatribua antes de remover`,
+      );
 
     await this.prisma.role.delete({ where: { id } });
-    await this.prisma.auditLog.create({
-      data: { userId: 0, action: 'ROLE_DELETED', entity: 'Role', entityId: id, changes: JSON.stringify({ name: role.name }) },
-    }).catch(() => {});
+    await this.prisma.auditLog
+      .create({
+        data: {
+          userId: 0,
+          action: 'ROLE_DELETED',
+          entity: 'Role',
+          entityId: id,
+          changes: JSON.stringify({ name: role.name }),
+        },
+      })
+      .catch(() => {});
 
     return { message: 'Role removido com sucesso', roleName: role.name };
   }
@@ -131,8 +178,8 @@ export class RolesPermissionsService {
 
     const clone = await this.prisma.role.create({
       data: {
-        name:        newName,
-        code:        newName.toUpperCase().replace(/\s+/g, '_'),
+        name: newName,
+        code: newName.toUpperCase().replace(/\s+/g, '_'),
         description: `Clone de: ${source.name}`,
         permissions: { connect: (source as any).permissions.map((p: any) => ({ id: p.id })) },
       },
@@ -148,23 +195,33 @@ export class RolesPermissionsService {
   async assignToUser(userId: number, roleId: number) {
     await this.findOne(roleId);
     const user = await this.prisma.user.update({
-      where:   { id: userId },
-      data:    { roleId },
+      where: { id: userId },
+      data: { roleId },
       include: { role: { include: { permissions: true } } },
     });
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId,
-        type:     'ROLE_CHANGED',
-        message:  `O teu perfil de acesso foi actualizado para: ${user.role?.name}`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId,
+          type: 'ROLE_CHANGED',
+          message: `O teu perfil de acesso foi actualizado para: ${user.role?.name}`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
-    await this.prisma.auditLog.create({
-      data: { userId, action: 'ROLE_ASSIGNED', entity: 'User', entityId: userId, changes: JSON.stringify({ roleId }) },
-    }).catch(() => {});
+    await this.prisma.auditLog
+      .create({
+        data: {
+          userId,
+          action: 'ROLE_ASSIGNED',
+          entity: 'User',
+          entityId: userId,
+          changes: JSON.stringify({ roleId }),
+        },
+      })
+      .catch(() => {});
 
     return { message: `Role "${user.role?.name}" atribuído a ${user.fullName}`, user };
   }
@@ -175,7 +232,7 @@ export class RolesPermissionsService {
       dto.userIds.map(uid => this.assignToUser(uid, dto.roleId)),
     );
     const succeeded = results.filter(r => r.status === 'fulfilled').length;
-    const failed    = results.filter(r => r.status === 'rejected').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
     return { total: dto.userIds.length, succeeded, failed };
   }
 
@@ -187,7 +244,7 @@ export class RolesPermissionsService {
     await this.findOne(roleId);
     return this.prisma.role.update({
       where: { id: roleId },
-      data:  { permissions: { connect: permissionIds.map(id => ({ id })) } },
+      data: { permissions: { connect: permissionIds.map(id => ({ id })) } },
       include: { permissions: true },
     });
   }
@@ -196,7 +253,7 @@ export class RolesPermissionsService {
     await this.findOne(roleId);
     return this.prisma.role.update({
       where: { id: roleId },
-      data:  { permissions: { disconnect: permissionIds.map(id => ({ id })) } },
+      data: { permissions: { disconnect: permissionIds.map(id => ({ id })) } },
       include: { permissions: true },
     });
   }
@@ -205,7 +262,7 @@ export class RolesPermissionsService {
     await this.findOne(roleId);
     return this.prisma.role.update({
       where: { id: roleId },
-      data:  { permissions: { set: permissionIds.map(id => ({ id })) } },
+      data: { permissions: { set: permissionIds.map(id => ({ id })) } },
       include: { permissions: true },
     });
   }
@@ -234,7 +291,7 @@ export class RolesPermissionsService {
     });
 
     return {
-      roles:   roles.map(r => ({ id: r.id, name: r.name, code: (r as any).code })),
+      roles: roles.map(r => ({ id: r.id, name: r.name, code: (r as any).code })),
       permissions,
       grouped: Object.entries(grouped).map(([subject, perms]) => ({ subject, permissions: perms })),
       matrix,
@@ -250,16 +307,18 @@ export class RolesPermissionsService {
     const permsA = new Set((a as any).permissions.map((p: any) => p.name));
     const permsB = new Set((b as any).permissions.map((p: any) => p.name));
 
-    const onlyInA    = [...permsA].filter(p => !permsB.has(p));
-    const onlyInB    = [...permsB].filter(p => !permsA.has(p));
-    const inBoth     = [...permsA].filter(p => permsB.has(p));
+    const onlyInA = [...permsA].filter(p => !permsB.has(p));
+    const onlyInB = [...permsB].filter(p => !permsA.has(p));
+    const inBoth = [...permsA].filter(p => permsB.has(p));
 
     return {
-      roleA:   { id: a.id, name: a.name },
-      roleB:   { id: b.id, name: b.name },
-      onlyInA, onlyInB, inBoth,
-      totalA:  permsA.size,
-      totalB:  permsB.size,
+      roleA: { id: a.id, name: a.name },
+      roleB: { id: b.id, name: b.name },
+      onlyInA,
+      onlyInB,
+      inBoth,
+      totalA: permsA.size,
+      totalB: permsB.size,
       overlap: inBoth.length,
     };
   }
@@ -270,36 +329,59 @@ export class RolesPermissionsService {
 
   async simulatePermission(dto: SimulatePermissionDto) {
     const user = await this.prisma.user.findUnique({
-      where:   { id: dto.userId },
+      where: { id: dto.userId },
       include: { role: { include: { permissions: true } } },
     });
     if (!user) throw new NotFoundException('Utilizador não encontrado');
 
-    const rolePerms  = (user.role as any)?.permissions ?? [];
-    const permName   = `${dto.resource.toLowerCase()}:${dto.action.toLowerCase()}`;
-    const hasWildcard= rolePerms.some((p: any) => p.name === '*' || p.action === '*');
-    const hasPerm    = hasWildcard || rolePerms.some((p: any) =>
-      p.name === permName || (p.subject === dto.resource.toUpperCase() && p.action === dto.action.toUpperCase()),
-    );
+    const rolePerms = (user.role as any)?.permissions ?? [];
+    const permName = `${dto.resource.toLowerCase()}:${dto.action.toLowerCase()}`;
+    const hasWildcard = rolePerms.some((p: any) => p.name === '*' || p.action === '*');
+    const hasPerm =
+      hasWildcard ||
+      rolePerms.some(
+        (p: any) =>
+          p.name === permName ||
+          (p.subject === dto.resource.toUpperCase() && p.action === dto.action.toUpperCase()),
+      );
 
-    const matchedPerm = rolePerms.find((p: any) =>
-      p.name === permName || (p.subject === dto.resource.toUpperCase() && p.action === dto.action.toUpperCase()),
+    const matchedPerm = rolePerms.find(
+      (p: any) =>
+        p.name === permName ||
+        (p.subject === dto.resource.toUpperCase() && p.action === dto.action.toUpperCase()),
     );
 
     return {
-      userId:   dto.userId,
-      user:     { id: user.id, fullName: user.fullName, email: user.email },
-      role:     { id: user.role?.id, name: user.role?.name, code: (user.role as any)?.code },
+      userId: dto.userId,
+      user: { id: user.id, fullName: user.fullName, email: user.email },
+      role: { id: user.role?.id, name: user.role?.name, code: (user.role as any)?.code },
       resource: dto.resource,
-      action:   dto.action,
-      allowed:  hasPerm,
-      reason:   hasWildcard ? 'ADMIN wildcard (*)'
-        : hasPerm   ? `Permissão "${matchedPerm?.name}" concedida via role "${user.role?.name}"`
-        : `Permissão "${permName}" não encontrada no role "${user.role?.name}"`,
+      action: dto.action,
+      allowed: hasPerm,
+      reason: hasWildcard
+        ? 'ADMIN wildcard (*)'
+        : hasPerm
+          ? `Permissão "${matchedPerm?.name}" concedida via role "${user.role?.name}"`
+          : `Permissão "${permName}" não encontrada no role "${user.role?.name}"`,
       chain: [
-        { step: 1, check: 'Role lookup',      result: !!user.role,  detail: user.role?.name ?? 'Sem role' },
-        { step: 2, check: 'Wildcard check',   result: hasWildcard,  detail: hasWildcard ? 'Admin wildcard activo' : 'Sem wildcard' },
-        { step: 3, check: 'Permission check', result: hasPerm,      detail: matchedPerm?.name ?? 'Não encontrado' },
+        {
+          step: 1,
+          check: 'Role lookup',
+          result: !!user.role,
+          detail: user.role?.name ?? 'Sem role',
+        },
+        {
+          step: 2,
+          check: 'Wildcard check',
+          result: hasWildcard,
+          detail: hasWildcard ? 'Admin wildcard activo' : 'Sem wildcard',
+        },
+        {
+          step: 3,
+          check: 'Permission check',
+          result: hasPerm,
+          detail: matchedPerm?.name ?? 'Não encontrado',
+        },
       ],
     };
   }
@@ -309,39 +391,51 @@ export class RolesPermissionsService {
   // ══════════════════════════════════════════════════════
 
   async getPositionTemplates() {
-    return (this.prisma as any).roleTemplate?.findMany({
-      include: { role: { select: { id: true, name: true, code: true } } },
-      orderBy: { positionName: 'asc' },
-    }).catch(() => [] as any[]);
+    return (this.prisma as any).roleTemplate
+      ?.findMany({
+        include: { role: { select: { id: true, name: true, code: true } } },
+        orderBy: { positionName: 'asc' },
+      })
+      .catch(() => [] as any[]);
   }
 
   async createPositionTemplate(dto: RoleTemplateDto) {
-    return (this.prisma as any).roleTemplate?.create({
-      data: {
-        positionName: dto.positionName,
-        roleId:       dto.roleId,
-        positionId:   dto.positionId,
-      },
-    }).catch(() => ({ message: 'Template registado (modelo roleTemplate ausente — execute migration)', ...dto }));
+    return (this.prisma as any).roleTemplate
+      ?.create({
+        data: {
+          positionName: dto.positionName,
+          roleId: dto.roleId,
+          positionId: dto.positionId,
+        },
+      })
+      .catch(() => ({
+        message: 'Template registado (modelo roleTemplate ausente — execute migration)',
+        ...dto,
+      }));
   }
 
   async applyPositionTemplate(positionId: number) {
     // Find template for this position
-    const template = await (this.prisma as any).roleTemplate?.findFirst({
-      where: { positionId },
-    }).catch(() => null);
+    const template = await (this.prisma as any).roleTemplate
+      ?.findFirst({
+        where: { positionId },
+      })
+      .catch(() => null);
 
     if (!template) return { applied: 0, message: 'Sem template para esta posição' };
 
     // Apply role to all users in this position
     const users = await this.prisma.user.findMany({
-      where:  { positionId, active: true },
+      where: { positionId, active: true },
       select: { id: true },
     });
 
     if (!users.length) return { applied: 0, message: 'Sem utilizadores nesta posição' };
 
-    const result = await this.bulkAssignRole({ roleId: template.roleId, userIds: users.map(u => u.id) });
+    const result = await this.bulkAssignRole({
+      roleId: template.roleId,
+      userIds: users.map(u => u.id),
+    });
     return { ...result, positionId, roleId: template.roleId };
   }
 
@@ -355,35 +449,48 @@ export class RolesPermissionsService {
       this.prisma.permission.count(),
       this.prisma.user.count({ where: { active: true, roleId: null } }),
       this.prisma.auditLog.count({ where: { action: 'ACCESS_DENIED' } }).catch(() => 0),
-      this.prisma.user.groupBy({
-        by:     ['roleId'],
-        where:  { active: true },
-        _count: { id: true },
-      }).then(async rows => {
-        const ids    = rows.map(r => r.roleId).filter(Boolean) as number[];
-        const rols   = await this.prisma.role.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, code: true } });
-        const rMap   = new Map(rols.map(r => [r.id, r]));
-        return rows.map(r => ({ role: rMap.get(r.roleId!), count: r._count.id })).sort((a, b) => b.count - a.count);
-      }),
+      this.prisma.user
+        .groupBy({
+          by: ['roleId'],
+          where: { active: true },
+          _count: { id: true },
+        })
+        .then(async rows => {
+          const ids = rows.map(r => r.roleId).filter(Boolean);
+          const rols = await this.prisma.role.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, name: true, code: true },
+          });
+          const rMap = new Map(rols.map(r => [r.id, r]));
+          return rows
+            .map(r => ({ role: rMap.get(r.roleId), count: r._count.id }))
+            .sort((a, b) => b.count - a.count);
+        }),
     ]);
 
     // Roles with no users (unused)
     const unusedRoles = await this.prisma.role.findMany({
-      where:  { users: { none: {} } },
+      where: { users: { none: {} } },
       select: { id: true, name: true, code: true },
     });
 
     return {
-      totalRoles:      roles,
-      totalPermissions:permissions,
+      totalRoles: roles,
+      totalPermissions: permissions,
       usersWithoutRole,
-      deniedAccesses:  deniedLogs,
+      deniedAccesses: deniedLogs,
       usersPerRole,
       unusedRoles,
       alerts: [
-        ...(usersWithoutRole > 0 ? [{ type: 'WARNING', message: `${usersWithoutRole} utilizadores sem role atribuído` }] : []),
-        ...(unusedRoles.length  > 0 ? [{ type: 'INFO',    message: `${unusedRoles.length} role(s) sem utilizadores` }] : []),
-        ...(deniedLogs > 100        ? [{ type: 'ALERT',   message: `Elevado nº de acessos negados: ${deniedLogs}` }] : []),
+        ...(usersWithoutRole > 0
+          ? [{ type: 'WARNING', message: `${usersWithoutRole} utilizadores sem role atribuído` }]
+          : []),
+        ...(unusedRoles.length > 0
+          ? [{ type: 'INFO', message: `${unusedRoles.length} role(s) sem utilizadores` }]
+          : []),
+        ...(deniedLogs > 100
+          ? [{ type: 'ALERT', message: `Elevado nº de acessos negados: ${deniedLogs}` }]
+          : []),
       ],
     };
   }
@@ -395,18 +502,30 @@ export class RolesPermissionsService {
   async getUsersWithRole(roleId: number) {
     await this.findOne(roleId);
     return this.prisma.user.findMany({
-      where:   { roleId, active: true },
-      select:  { id: true, fullName: true, email: true, avatarUrl: true,
-        department: { select: { name: true } }, position: { select: { name: true } } },
+      where: { roleId, active: true },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        avatarUrl: true,
+        department: { select: { name: true } },
+        position: { select: { name: true } },
+      },
       orderBy: { fullName: 'asc' },
     });
   }
 
   async getUsersWithoutRole() {
     return this.prisma.user.findMany({
-      where:   { active: true, roleId: null },
-      select:  { id: true, fullName: true, email: true, avatarUrl: true,
-        department: { select: { name: true } }, position: { select: { name: true } } },
+      where: { active: true, roleId: null },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        avatarUrl: true,
+        department: { select: { name: true } },
+        position: { select: { name: true } },
+      },
       orderBy: { fullName: 'asc' },
     });
   }

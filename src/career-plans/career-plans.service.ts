@@ -1,18 +1,26 @@
 // src/career-plans/career-plans.service.ts
-import {
-  Injectable, NotFoundException, BadRequestException, ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuditService }  from '../common/services/audit.service';
+import { AuditService } from '../common/services/audit.service';
 import {
-  CareerPlanFilterDto, PromotionFilterDto,
-  CreateCareerPlanDto, UpdateCareerPlanDto,
-  AddCareerGoalDto, UpdateGoalProgressDto,
-  CreateRoleDto, CreateSkillDto, SetRoleSkillsDto,
-  CreateCareerPathDto, CreateProgressionRuleDto,
-  CreatePromotionRequestDto, ReviewPromotionDto,
+  CareerPlanFilterDto,
+  PromotionFilterDto,
+  CreateCareerPlanDto,
+  UpdateCareerPlanDto,
+  AddCareerGoalDto,
+  UpdateGoalProgressDto,
+  CreateRoleDto,
+  CreateSkillDto,
+  SetRoleSkillsDto,
+  CreateCareerPathDto,
+  CreateProgressionRuleDto,
+  CreatePromotionRequestDto,
+  ReviewPromotionDto,
   SimulateCareerDto,
-  CareerPlanStatus, ReadinessLevel, PromotionStatus, GoalStatus,
+  CareerPlanStatus,
+  ReadinessLevel,
+  PromotionStatus,
+  GoalStatus,
 } from './career-plans.dto';
 
 function getReadinessLevel(score: number): ReadinessLevel {
@@ -68,25 +76,27 @@ export class CareerPlansService {
       where: { careerRoleId: dto.roleId },
     });
     const matrix = await this.prisma.roleSkillMatrix.upsert({
-      where:  { roleCode: `ROLE_${dto.roleId}` },
+      where: { roleCode: `ROLE_${dto.roleId}` },
       create: { roleCode: `ROLE_${dto.roleId}` },
       update: {},
     });
     await this.prisma.roleSkillRequirement.createMany({
       data: dto.skills.map(s => ({
-        matrixId:      matrix.id,
-        careerRoleId:  dto.roleId,
-        skillId:       s.skillId,
+        matrixId: matrix.id,
+        careerRoleId: dto.roleId,
+        skillId: s.skillId,
         requiredLevel: s.requiredLevel,
-        weight:        s.weight,
-        mandatory:     s.mandatory,
+        weight: s.weight,
+        mandatory: s.mandatory,
       })),
     });
     return this.getRole(dto.roleId);
   }
 
   async createSkill(dto: CreateSkillDto) {
-    return this.prisma.careerSkill.create({ data: { ...dto, active: dto.active ?? true, maxLevel: dto.maxLevel ?? 5 } });
+    return this.prisma.careerSkill.create({
+      data: { ...dto, active: dto.active ?? true, maxLevel: dto.maxLevel ?? 5 },
+    });
   }
 
   async getSkills(type?: string) {
@@ -99,13 +109,13 @@ export class CareerPlansService {
   async createCareerPath(dto: CreateCareerPathDto, createdById: number) {
     const { steps, ...rest } = dto;
     const path = await (this.prisma as any).careerPath.create({
-       data: {
-       ...rest,
-       active: dto.active ?? true,
-       steps: {
-      create: steps.map(s => ({ roleId: s.roleId, order: s.order, label: s.label })),
-    },
-  },
+      data: {
+        ...rest,
+        active: dto.active ?? true,
+        steps: {
+          create: steps.map(s => ({ roleId: s.roleId, order: s.order, label: s.label })),
+        },
+      },
       include: { steps: { orderBy: { order: 'asc' }, include: { role: true } } },
     });
     return path;
@@ -113,9 +123,17 @@ export class CareerPlansService {
 
   async getCareerPaths(department?: string) {
     return (this.prisma as any).careerPath.findMany({
-      where: { active: true, ...(department ? { department: { name: { contains: department, mode: 'insensitive' } } } : {}) },
+      where: {
+        active: true,
+        ...(department
+          ? { department: { name: { contains: department, mode: 'insensitive' } } }
+          : {}),
+      },
       include: {
-        steps: { orderBy: { order: 'asc' }, include: { role: { include: { skillRequirements: { include: { skill: true } } } } } },
+        steps: {
+          orderBy: { order: 'asc' },
+          include: { role: { include: { skillRequirements: { include: { skill: true } } } } },
+        },
       },
       orderBy: { name: 'asc' },
     });
@@ -146,9 +164,13 @@ export class CareerPlansService {
 
     if (!targetRole.skillRequirements.length) {
       return {
-        userId, targetRoleId,
-        score: 100, readinessLevel: ReadinessLevel.READY,
-        skillGaps: [], missingSkills: [], message: 'Sem requisitos de skills configurados',
+        userId,
+        targetRoleId,
+        score: 100,
+        readinessLevel: ReadinessLevel.READY,
+        skillGaps: [],
+        missingSkills: [],
+        message: 'Sem requisitos de skills configurados',
         recommendedCourses: [],
       };
     }
@@ -156,41 +178,41 @@ export class CareerPlansService {
     const userSkillMap = new Map(userSkills.map(s => [s.skillId, s.currentLevel]));
 
     let totalWeight = 0;
-    let metWeight   = 0;
+    let metWeight = 0;
     const skillGaps: any[] = [];
     const missingSkills: any[] = [];
 
     for (const req of targetRole.skillRequirements as any[]) {
       totalWeight += req.weight;
       const userLevel = userSkillMap.get(req.skillId) ?? 0;
-      const gap       = req.requiredLevel - userLevel;
+      const gap = req.requiredLevel - userLevel;
 
       if (gap <= 0) {
         metWeight += req.weight;
       } else {
         const partial = Math.max(0, req.weight * (userLevel / req.requiredLevel));
-        metWeight    += partial;
+        metWeight += partial;
         const gapEntry = {
-          skillId:       req.skillId,
-          skillName:     req.skill.name,
-          skillType:     req.skill.type,
-          currentLevel:  userLevel,
+          skillId: req.skillId,
+          skillName: req.skill.name,
+          skillType: req.skill.type,
+          currentLevel: userLevel,
           requiredLevel: req.requiredLevel,
           gap,
-          weight:        req.weight,
-          mandatory:     req.mandatory,
+          weight: req.weight,
+          mandatory: req.mandatory,
         };
         if (req.mandatory) missingSkills.push(gapEntry);
-        else               skillGaps.push(gapEntry);
+        else skillGaps.push(gapEntry);
       }
     }
 
     const rawScore = totalWeight > 0 ? (metWeight / totalWeight) * 100 : 100;
-    const score    = +rawScore.toFixed(1);
-    const level    = getReadinessLevel(score);
+    const score = +rawScore.toFixed(1);
+    const level = getReadinessLevel(score);
 
     const recommendedCourses = await this.getCoursesForSkills(
-      [...missingSkills, ...skillGaps].map(g => g.skillId)
+      [...missingSkills, ...skillGaps].map(g => g.skillId),
     );
 
     return {
@@ -203,47 +225,55 @@ export class CareerPlansService {
       skillGaps,
       missingSkills,
       totalRequirements: targetRole.skillRequirements.length,
-      metRequirements:   targetRole.skillRequirements.length - skillGaps.length - missingSkills.length,
+      metRequirements:
+        targetRole.skillRequirements.length - skillGaps.length - missingSkills.length,
       recommendedCourses,
     };
   }
 
   async findAll(filters: CareerPlanFilterDto) {
     const { page = 1, limit = 20, userId, status, department } = filters;
-    const skip  = (page - 1) * limit;
+    const skip = (page - 1) * limit;
     const where: any = {};
-    if (userId)     where.userId = userId;
-    if (status)     where.status = status;
+    if (userId) where.userId = userId;
+    if (status) where.status = status;
     // FIX: removed employee from UserSelect — User has no employee relation
-    if (department) where.user   = { department: { name: { contains: department, mode: 'insensitive' } } };
+    if (department)
+      where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const [data, total] = await Promise.all([
       this.prisma.userCareerPlan.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
           // FIX: removed employee sub-select from user select
-          user:       { select: { id: true, fullName: true, avatarUrl: true } },
-          mentor:     { select: { id: true, fullName: true } },
-          currentRole:{ select: { id: true, name: true, level: true } },
+          user: { select: { id: true, fullName: true, avatarUrl: true } },
+          mentor: { select: { id: true, fullName: true } },
+          currentRole: { select: { id: true, name: true, level: true } },
           targetRole: { select: { id: true, name: true, level: true } },
           careerPath: { select: { id: true, name: true, type: true } },
-          goals:      { where: { status: { not: GoalStatus.CANCELLED } }, orderBy: { dueDate: 'asc' } },
-          _count:     { select: { goals: true } },
+          goals: { where: { status: { not: GoalStatus.CANCELLED } }, orderBy: { dueDate: 'asc' } },
+          _count: { select: { goals: true } },
         },
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.userCareerPlan.count({ where }),
     ]);
 
-    const enriched = await Promise.all(data.map(async plan => {
-      if (plan.targetRoleId) {
-        try {
-          const readiness = await this.calculateReadiness(plan.userId, plan.targetRoleId);
-          return { ...plan, readiness };
-        } catch { return plan; }
-      }
-      return plan;
-    }));
+    const enriched = await Promise.all(
+      data.map(async plan => {
+        if (plan.targetRoleId) {
+          try {
+            const readiness = await this.calculateReadiness(plan.userId, plan.targetRoleId);
+            return { ...plan, readiness };
+          } catch {
+            return plan;
+          }
+        }
+        return plan;
+      }),
+    );
 
     return { data: enriched, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
@@ -253,20 +283,21 @@ export class CareerPlansService {
       where: { id },
       include: {
         // FIX: removed employee sub-select
-        user:       { select: { id: true, fullName: true, email: true, avatarUrl: true } },
-        mentor:     { select: { id: true, fullName: true, email: true } },
-        currentRole:{ include: { skillRequirements: { include: { skill: true } } } },
+        user: { select: { id: true, fullName: true, email: true, avatarUrl: true } },
+        mentor: { select: { id: true, fullName: true, email: true } },
+        currentRole: { include: { skillRequirements: { include: { skill: true } } } },
         targetRole: { include: { skillRequirements: { include: { skill: true } } } },
         careerPath: { include: { steps: { orderBy: { order: 'asc' }, include: { role: true } } } },
-        goals:      { orderBy: [{ status: 'asc' }, { dueDate: 'asc' }] },
+        goals: { orderBy: [{ status: 'asc' }, { dueDate: 'asc' }] },
       },
     });
     if (!plan) throw new NotFoundException('Plano de carreira não encontrado');
 
     let readiness = null;
     if (plan.targetRoleId) {
-      try { readiness = await this.calculateReadiness(plan.userId, plan.targetRoleId); }
-      catch {}
+      try {
+        readiness = await this.calculateReadiness(plan.userId, plan.targetRoleId);
+      } catch {}
     }
 
     return { ...plan, readiness };
@@ -276,11 +307,11 @@ export class CareerPlansService {
     const plan = await this.prisma.userCareerPlan.findFirst({
       where: { userId, status: { in: [CareerPlanStatus.ACTIVE, CareerPlanStatus.DRAFT] } },
       include: {
-        mentor:     { select: { id: true, fullName: true } },
-        currentRole:{ select: { id: true, name: true, level: true } },
+        mentor: { select: { id: true, fullName: true } },
+        currentRole: { select: { id: true, name: true, level: true } },
         targetRole: { select: { id: true, name: true, level: true } },
         careerPath: { include: { steps: { orderBy: { order: 'asc' }, include: { role: true } } } },
-        goals:      { orderBy: [{ status: 'asc' }, { dueDate: 'asc' }] },
+        goals: { orderBy: [{ status: 'asc' }, { dueDate: 'asc' }] },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -289,8 +320,9 @@ export class CareerPlansService {
 
     let readiness = null;
     if (plan.targetRoleId) {
-      try { readiness = await this.calculateReadiness(userId, plan.targetRoleId); }
-      catch {}
+      try {
+        readiness = await this.calculateReadiness(userId, plan.targetRoleId);
+      } catch {}
     }
 
     return { ...plan, readiness };
@@ -304,8 +336,8 @@ export class CareerPlansService {
         targetDate: dto.targetDate ? new Date(dto.targetDate) : null,
       },
       include: {
-        user:       { select: { id: true, fullName: true } },
-        currentRole:{ select: { id: true, name: true } },
+        user: { select: { id: true, fullName: true } },
+        currentRole: { select: { id: true, name: true } },
         targetRole: { select: { id: true, name: true } },
       },
     });
@@ -314,8 +346,17 @@ export class CareerPlansService {
       await this.autoGenerateGoals(plan.id, dto.userId, dto.targetRoleId);
     }
 
-    await this.notify(dto.userId, 'CAREER_PLAN_CREATED', `Novo plano de carreira criado: "${dto.title}"`);
-    await this.audit.log({ action: 'CAREER_PLAN_CREATED', entity: 'CareerPlan', entityId: String(plan.id), userId: createdById });
+    await this.notify(
+      dto.userId,
+      'CAREER_PLAN_CREATED',
+      `Novo plano de carreira criado: "${dto.title}"`,
+    );
+    await this.audit.log({
+      action: 'CAREER_PLAN_CREATED',
+      entity: 'CareerPlan',
+      entityId: String(plan.id),
+      userId: createdById,
+    });
 
     return this.findOne(plan.id);
   }
@@ -350,9 +391,12 @@ export class CareerPlansService {
     const goal = await this.prisma.careerGoal.findUnique({ where: { id: goalId } });
     if (!goal) throw new NotFoundException('Meta não encontrada');
 
-    const status = dto.progress === 100
-      ? GoalStatus.COMPLETED
-      : dto.progress > 0 ? GoalStatus.IN_PROGRESS : GoalStatus.PENDING;
+    const status =
+      dto.progress === 100
+        ? GoalStatus.COMPLETED
+        : dto.progress > 0
+          ? GoalStatus.IN_PROGRESS
+          : GoalStatus.PENDING;
 
     return this.prisma.careerGoal.update({
       where: { id: goalId },
@@ -366,17 +410,20 @@ export class CareerPlansService {
   }
 
   async getProgress(planId: number) {
-    const plan  = await this.findOne(planId);
+    const plan = await this.findOne(planId);
     const goals = ((plan as any).goals as any[]) ?? [];
-    const total     = goals.length;
+    const total = goals.length;
     const completed = goals.filter(g => g.status === GoalStatus.COMPLETED).length;
-    const inProgress= goals.filter(g => g.status === GoalStatus.IN_PROGRESS).length;
-    const pending   = goals.filter(g => g.status === GoalStatus.PENDING).length;
-    const progress  = total ? Math.round((completed / total) * 100) : 0;
+    const inProgress = goals.filter(g => g.status === GoalStatus.IN_PROGRESS).length;
+    const pending = goals.filter(g => g.status === GoalStatus.PENDING).length;
+    const progress = total ? Math.round((completed / total) * 100) : 0;
 
     return {
       planId,
-      total, completed, inProgress, pending,
+      total,
+      completed,
+      inProgress,
+      pending,
       progress,
       readiness: (plan as any).readiness,
       goals,
@@ -396,92 +443,132 @@ export class CareerPlansService {
       const rule = await this.prisma.progressionRule.findFirst({
         where: { fromRoleId: currentRoleId, toRoleId: dto.targetRoleId, active: true },
       });
-      if (!rule) throw new BadRequestException('Não existe regra de progressão para esta transição');
+      if (!rule)
+        throw new BadRequestException('Não existe regra de progressão para esta transição');
     }
 
     const readiness = await this.calculateReadiness(dto.userId, dto.targetRoleId);
 
     const promotion = await this.prisma.promotionRequest.create({
       data: {
-        userId:        dto.userId,
-        targetRoleId:  dto.targetRoleId,
+        userId: dto.userId,
+        targetRoleId: dto.targetRoleId,
         justification: dto.justification,
-        careerPlanId:  dto.careerPlanId,
-        readinessScore:readiness.score,
-        status:        PromotionStatus.PENDING,
+        careerPlanId: dto.careerPlanId,
+        readinessScore: readiness.score,
+        status: PromotionStatus.PENDING,
         requestedById,
       },
     });
 
     const managerId = (user as any)?.managerId;
-    if (managerId) await this.notify(managerId, 'PROMOTION_REQUEST_PENDING', `Pedido de promoção de ${(user as any).fullName} para "${targetRole.name}" aguarda aprovação`);
+    if (managerId)
+      await this.notify(
+        managerId,
+        'PROMOTION_REQUEST_PENDING',
+        `Pedido de promoção de ${(user as any).fullName} para "${targetRole.name}" aguarda aprovação`,
+      );
 
-    await this.audit.log({ action: 'PROMOTION_REQUESTED', entity: 'PromotionRequest', entityId: String(promotion.id), userId: requestedById });
+    await this.audit.log({
+      action: 'PROMOTION_REQUESTED',
+      entity: 'PromotionRequest',
+      entityId: String(promotion.id),
+      userId: requestedById,
+    });
     return promotion;
   }
 
   async reviewPromotion(id: number, dto: ReviewPromotionDto, reviewerId: number, role: string) {
     const promotion = await this.prisma.promotionRequest.findUnique({
-      where: { id }, include: { user: true, targetRole: true },
+      where: { id },
+      include: { user: true, targetRole: true },
     });
     if (!promotion) throw new NotFoundException('Pedido não encontrado');
-    if (promotion.status !== PromotionStatus.PENDING) throw new BadRequestException('Pedido já processado');
+    if (promotion.status !== PromotionStatus.PENDING)
+      throw new BadRequestException('Pedido já processado');
 
     const newStatus = dto.approved ? PromotionStatus.APPROVED : PromotionStatus.REJECTED;
 
     await this.prisma.promotionRequest.update({
       where: { id },
       data: {
-        status:      newStatus,
+        status: newStatus,
         reviewNotes: dto.notes,
-        reviewedById:reviewerId,
-        reviewedAt:  new Date(),
+        reviewedById: reviewerId,
+        reviewedAt: new Date(),
         effectiveDate: dto.effectiveDate ? new Date(dto.effectiveDate) : null,
       },
     });
 
     if (dto.approved) {
       // FIX: User has no employee relation — use (this.prisma as any) to avoid type error
-      await (this.prisma as any).user.update({
-        where: { id: promotion.userId },
-        data: { employee: { update: { role: promotion.targetRole?.name, currentRoleId: promotion.targetRoleId } } },
-      }).catch(() => {});
+      await (this.prisma as any).user
+        .update({
+          where: { id: promotion.userId },
+          data: {
+            employee: {
+              update: { role: promotion.targetRole?.name, currentRoleId: promotion.targetRoleId },
+            },
+          },
+        })
+        .catch(() => {});
 
-      await this.prisma.employeeTimeline.create({
-        data: {
-          employeeId:  promotion.userId,
-          type:        'PROMOTED',
-          title:       'Promoção',
-          description: `Promovido para "${promotion.targetRole?.name}"`,
-          isPublic:    true,
-          occurredAt:  dto.effectiveDate ? new Date(dto.effectiveDate) : new Date(),
-        },
-      }).catch(() => {});
+      await this.prisma.employeeTimeline
+        .create({
+          data: {
+            employeeId: promotion.userId,
+            type: 'PROMOTED',
+            title: 'Promoção',
+            description: `Promovido para "${promotion.targetRole?.name}"`,
+            isPublic: true,
+            occurredAt: dto.effectiveDate ? new Date(dto.effectiveDate) : new Date(),
+          },
+        })
+        .catch(() => {});
 
-      await this.notify(promotion.userId, 'PROMOTION_APPROVED', `Parabéns! A sua promoção para "${promotion.targetRole?.name}" foi aprovada!`);
+      await this.notify(
+        promotion.userId,
+        'PROMOTION_APPROVED',
+        `Parabéns! A sua promoção para "${promotion.targetRole?.name}" foi aprovada!`,
+      );
     } else {
-      await this.notify(promotion.userId, 'PROMOTION_REJECTED', `O pedido de promoção para "${promotion.targetRole?.name}" foi rejeitado.`);
+      await this.notify(
+        promotion.userId,
+        'PROMOTION_REJECTED',
+        `O pedido de promoção para "${promotion.targetRole?.name}" foi rejeitado.`,
+      );
     }
 
-    await this.audit.log({ action: `PROMOTION_${newStatus}`, entity: 'PromotionRequest', entityId: String(id), userId: reviewerId });
-    return this.prisma.promotionRequest.findUnique({ where: { id }, include: { targetRole: true } });
+    await this.audit.log({
+      action: `PROMOTION_${newStatus}`,
+      entity: 'PromotionRequest',
+      entityId: String(id),
+      userId: reviewerId,
+    });
+    return this.prisma.promotionRequest.findUnique({
+      where: { id },
+      include: { targetRole: true },
+    });
   }
 
   async getPromotions(filters: PromotionFilterDto) {
     const { page = 1, limit = 20, userId, status, department } = filters;
-    const skip  = (page - 1) * limit;
+    const skip = (page - 1) * limit;
     const where: any = {};
-    if (userId)     where.userId = userId;
-    if (status)     where.status = status;
+    if (userId) where.userId = userId;
+    if (status) where.status = status;
     // FIX: removed employee from UserSelect
-    if (department) where.user   = { department: { name: { contains: department, mode: 'insensitive' } } };
+    if (department)
+      where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const [data, total] = await Promise.all([
       this.prisma.promotionRequest.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
           // FIX: removed employee sub-select
-          user:       { select: { id: true, fullName: true, avatarUrl: true } },
+          user: { select: { id: true, fullName: true, avatarUrl: true } },
           targetRole: { select: { id: true, name: true, level: true } },
           reviewedBy: { select: { id: true, fullName: true } },
         },
@@ -506,20 +593,18 @@ export class CareerPlansService {
 
     const readiness = await this.calculateReadiness(dto.userId, dto.targetRoleId);
 
-    const relevantPaths = paths.filter(p =>
-      p.steps.some(s => s.roleId === dto.targetRoleId)
-    );
+    const relevantPaths = paths.filter(p => p.steps.some(s => s.roleId === dto.targetRoleId));
 
-    const gapCount   = readiness.skillGaps.length + readiness.missingSkills.length;
-    const monthsEst  = Math.max(6, gapCount * 3);
+    const gapCount = readiness.skillGaps.length + readiness.missingSkills.length;
+    const monthsEst = Math.max(6, gapCount * 3);
 
     return {
-      userId:          dto.userId,
-      userName:        (user as any).fullName,
-      targetRole:      { id: targetRole.id, name: targetRole.name, level: targetRole.level },
+      userId: dto.userId,
+      userName: (user as any).fullName,
+      targetRole: { id: targetRole.id, name: targetRole.name, level: targetRole.level },
       readiness,
       estimatedMonths: monthsEst,
-      estimatedDate:   new Date(Date.now() + monthsEst * 30 * 86400000).toISOString().split('T')[0],
+      estimatedDate: new Date(Date.now() + monthsEst * 30 * 86400000).toISOString().split('T')[0],
       relevantPaths,
       // FIX: optional chain to handle possibly undefined
       recommendedActions: (readiness.recommendedCourses ?? []).slice(0, 5),
@@ -537,62 +622,80 @@ export class CareerPlansService {
       },
     });
 
-    const enriched = await Promise.all(candidates.map(async c => {
-      const readiness = await this.calculateReadiness(c.userId, roleId);
-      return { ...c, readiness };
-    }));
+    const enriched = await Promise.all(
+      candidates.map(async c => {
+        const readiness = await this.calculateReadiness(c.userId, roleId);
+        return { ...c, readiness };
+      }),
+    );
 
     enriched.sort((a, b) => (b as any).readiness?.score - (a as any).readiness?.score);
 
     const pipeline = {
-      ready:      enriched.filter((c: any) => c.readiness?.readinessLevel === ReadinessLevel.READY),
-      developing: enriched.filter((c: any) => c.readiness?.readinessLevel === ReadinessLevel.DEVELOPING),
-      starting:   enriched.filter((c: any) => c.readiness?.readinessLevel === ReadinessLevel.STARTING),
+      ready: enriched.filter((c: any) => c.readiness?.readinessLevel === ReadinessLevel.READY),
+      developing: enriched.filter(
+        (c: any) => c.readiness?.readinessLevel === ReadinessLevel.DEVELOPING,
+      ),
+      starting: enriched.filter(
+        (c: any) => c.readiness?.readinessLevel === ReadinessLevel.STARTING,
+      ),
     };
 
     return {
       role,
       totalCandidates: enriched.length,
       pipeline,
-      riskLevel: pipeline.ready.length === 0 ? 'HIGH' : pipeline.ready.length <= 1 ? 'MEDIUM' : 'LOW',
+      riskLevel:
+        pipeline.ready.length === 0 ? 'HIGH' : pipeline.ready.length <= 1 ? 'MEDIUM' : 'LOW',
     };
   }
 
   async getSuccessionDashboard(department?: string) {
     const roles = await this.prisma.careerRole.findMany({
-      where: { active: true, ...(department ? { department: { contains: department, mode: 'insensitive' } } : {}) },
+      where: {
+        active: true,
+        ...(department ? { department: { contains: department, mode: 'insensitive' } } : {}),
+      },
       include: { _count: { select: { plans: true } } },
     });
 
     const dashboard = await Promise.all(
-      roles.filter(r => r.level >= 4).map(async role => {
-        const candidateCount = await this.prisma.userCareerPlan.count({
-          where: { targetRoleId: role.id, status: CareerPlanStatus.ACTIVE },
-        });
-        return {
-          roleId:   role.id,
-          roleName: role.name,
-          level:    role.level,
-          department: role.department,
-          candidateCount,
-          riskLevel: candidateCount === 0 ? 'HIGH' : candidateCount === 1 ? 'MEDIUM' : 'LOW',
-        };
-      })
+      roles
+        .filter(r => r.level >= 4)
+        .map(async role => {
+          const candidateCount = await this.prisma.userCareerPlan.count({
+            where: { targetRoleId: role.id, status: CareerPlanStatus.ACTIVE },
+          });
+          return {
+            roleId: role.id,
+            roleName: role.name,
+            level: role.level,
+            department: role.department,
+            candidateCount,
+            riskLevel: candidateCount === 0 ? 'HIGH' : candidateCount === 1 ? 'MEDIUM' : 'LOW',
+          };
+        }),
     );
 
-    return dashboard.sort((a, b) =>
-      ['HIGH','MEDIUM','LOW'].indexOf(a.riskLevel) - ['HIGH','MEDIUM','LOW'].indexOf(b.riskLevel)
+    return dashboard.sort(
+      (a, b) =>
+        ['HIGH', 'MEDIUM', 'LOW'].indexOf(a.riskLevel) -
+        ['HIGH', 'MEDIUM', 'LOW'].indexOf(b.riskLevel),
     );
   }
 
   async getAnalytics(department?: string) {
     const where: any = {};
     // FIX: removed employee from UserSelect
-    if (department) where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
+    if (department)
+      where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const [
-      totalPlans, activePlans, completedPlans,
-      totalPromotions, approvedPromotions,
+      totalPlans,
+      activePlans,
+      completedPlans,
+      totalPromotions,
+      approvedPromotions,
       plansByStatus,
     ] = await Promise.all([
       this.prisma.userCareerPlan.count({ where }),
@@ -608,12 +711,26 @@ export class CareerPlansService {
       select: { createdAt: true, reviewedAt: true },
     });
     const avgPromotionDays = promotions.length
-      ? promotions.reduce((a, p) => a + (p.reviewedAt!.getTime() - p.createdAt.getTime()) / 86400000, 0) / promotions.length
+      ? promotions.reduce(
+          (a, p) => a + (p.reviewedAt.getTime() - p.createdAt.getTime()) / 86400000,
+          0,
+        ) / promotions.length
       : 0;
 
     return {
-      plans: { total: totalPlans, active: activePlans, completed: completedPlans, byStatus: plansByStatus },
-      promotions: { total: totalPromotions, approved: approvedPromotions, approvalRate: totalPromotions ? +((approvedPromotions / totalPromotions) * 100).toFixed(1) : 0 },
+      plans: {
+        total: totalPlans,
+        active: activePlans,
+        completed: completedPlans,
+        byStatus: plansByStatus,
+      },
+      promotions: {
+        total: totalPromotions,
+        approved: approvedPromotions,
+        approvalRate: totalPromotions
+          ? +((approvedPromotions / totalPromotions) * 100).toFixed(1)
+          : 0,
+      },
       avgPromotionDays: +avgPromotionDays.toFixed(0),
       hasCareerPlanRate: 0,
     };
@@ -627,12 +744,12 @@ export class CareerPlansService {
       await this.prisma.careerGoal.create({
         data: {
           careerPlanId: planId,
-          title:    `Desenvolver: ${gap.skillName} (Nível ${gap.currentLevel} → ${gap.requiredLevel})`,
-          type:     'SKILL',
-          skillId:  gap.skillId,
-          status:   GoalStatus.PENDING,
+          title: `Desenvolver: ${gap.skillName} (Nível ${gap.currentLevel} → ${gap.requiredLevel})`,
+          type: 'SKILL',
+          skillId: gap.skillId,
+          status: GoalStatus.PENDING,
           progress: 0,
-          dueDate:  new Date(Date.now() + 90 * 86400000),
+          dueDate: new Date(Date.now() + 90 * 86400000),
         },
       });
     }
@@ -641,16 +758,21 @@ export class CareerPlansService {
   private async getCoursesForSkills(skillIds: number[]) {
     if (!skillIds.length) return [];
     try {
-      return this.prisma.course?.findMany?.({
-        where: { status: 'PUBLISHED' },
-        select: { id: true, title: true },
-        take: 5,
-      }) ?? [];
-    } catch { return []; }
+      return (
+        this.prisma.course?.findMany?.({
+          where: { status: 'PUBLISHED' },
+          select: { id: true, title: true },
+          take: 5,
+        }) ?? []
+      );
+    } catch {
+      return [];
+    }
   }
 
   private async notify(userId: number, type: string, message: string) {
-    try { await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } }); }
-    catch {}
+    try {
+      await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } });
+    } catch {}
   }
 }

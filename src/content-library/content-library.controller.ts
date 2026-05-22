@@ -1,23 +1,35 @@
 // src/content-library/content-library.controller.ts
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Param, Body, Query, Req,
-  ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Param,
+  Body,
+  Query,
+  ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { ContentLibraryService }  from './content-library.service';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ContentLibraryService } from './content-library.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 import {
-  CreateContentDto, UpdateContentDto, ContentFilterDto,
-  RateContentDto, UpdateProgressDto, SaveNoteDto,
-  CreateLearningPathDto, LearningPathFilterDto,
+  CreateContentDto,
+  UpdateContentDto,
+  ContentFilterDto,
+  RateContentDto,
+  UpdateProgressDto,
+  SaveNoteDto,
+  CreateLearningPathDto,
+  LearningPathFilterDto,
 } from './content-library.dto';
 
-const ALL_ROLES     = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR', 'INSTRUCTOR'] as const;
-const AUTHOR_ROLES  = ['ADMIN', 'RH', 'INSTRUCTOR']                          as const;
-const ADMIN_ROLES   = ['ADMIN', 'RH']                                         as const;
+const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR', 'INSTRUCTOR'] as const;
+const AUTHOR_ROLES = ['ADMIN', 'RH', 'INSTRUCTOR'] as const;
+const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
 
 @ApiTags('Content Library')
 @ApiBearerAuth()
@@ -30,7 +42,9 @@ export class ContentLibraryController {
 
   @Get()
   @Roles(...ALL_ROLES)
-  @ApiOperation({ summary: 'Catálogo com busca full-text e filtros (format, level, category, tags…)' })
+  @ApiOperation({
+    summary: 'Catálogo com busca full-text e filtros (format, level, category, tags…)',
+  })
   findAll(@Query() filters: ContentFilterDto) {
     return this.svc.findAll(filters);
   }
@@ -80,12 +94,16 @@ export class ContentLibraryController {
   @Get('categories')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Distribuição de conteúdos por formato/categoria' })
-  categories() { return this.svc.getCategoryBreakdown(); }
+  categories() {
+    return this.svc.getCategoryBreakdown();
+  }
 
   @Get('tags')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Todas as tags disponíveis' })
-  tags() { return this.svc.getAllTags(); }
+  tags() {
+    return this.svc.getAllTags();
+  }
 
   // ─── Single Content ───────────────────────────────────────────
 

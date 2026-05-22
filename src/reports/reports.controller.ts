@@ -1,19 +1,25 @@
 // src/reports/reports.controller.ts
 import {
-  Controller, Get, Post, Delete, Body, Param, Query,
-  ParseIntPipe, UseGuards, Header,
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
-import { JwtAuthGuard }   from '../common/guards/jwt-auth.guard';
-import { RolesGuard }     from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
-import {
-  ReportFilterDto, SaveReportDto, CreateScheduleDto, ReportCategory,
-} from './reports.dto';
+import { ReportFilterDto, SaveReportDto, CreateScheduleDto, ReportCategory } from './reports.dto';
 
 const ALL_MGMT = ['ADMIN', 'RH', 'LIDER', 'DIRECTOR'] as const;
-const ADMIN    = ['ADMIN', 'RH']                       as const;
+const ADMIN = ['ADMIN', 'RH'] as const;
 
 @ApiTags('Reports')
 @ApiBearerAuth()
@@ -27,44 +33,59 @@ export class ReportsController {
   @Get('hr/headcount')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Headcount por período, departamento e cargo' })
-  headcount(@Query() filter: ReportFilterDto) { return this.svc.headcountReport(filter); }
+  headcount(@Query() filter: ReportFilterDto) {
+    return this.svc.headcountReport(filter);
+  }
 
   @Get('hr/turnover')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Turnover, retenção e admissões/saídas' })
-  turnover(@Query() filter: ReportFilterDto) { return this.svc.turnoverReport(filter); }
+  turnover(@Query() filter: ReportFilterDto) {
+    return this.svc.turnoverReport(filter);
+  }
 
   @Get('hr/attendance')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Relatório de presenças' })
   attendance(
-    @Query('from') from: string, @Query('to') to: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
     @Query('departmentId') deptId?: string,
-  ) { return this.svc.attendanceReport(from, to, deptId ? +deptId : undefined); }
+  ) {
+    return this.svc.attendanceReport(from, to, deptId ? +deptId : undefined);
+  }
 
   @Get('hr/payroll')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Resumo da folha salarial por período' })
-  payroll(@Query('period') period: string) { return this.svc.payrollSummary(period); }
+  payroll(@Query('period') period: string) {
+    return this.svc.payrollSummary(period);
+  }
 
   // ─── Learning Reports ─────────────────────────────────────────
 
   @Get('learning/training')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Relatório de formação — conclusões, abandono, top cursos' })
-  training(@Query() filter: ReportFilterDto) { return this.svc.trainingReportFull(filter); }
+  training(@Query() filter: ReportFilterDto) {
+    return this.svc.trainingReportFull(filter);
+  }
 
   @Get('learning/skill-gap')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Gaps de competências por departamento e skill' })
-  skillGap(@Query() filter: ReportFilterDto) { return this.svc.skillGapReport(filter); }
+  skillGap(@Query() filter: ReportFilterDto) {
+    return this.svc.skillGapReport(filter);
+  }
 
   // ─── Performance Reports ──────────────────────────────────────
 
   @Get('performance')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Performance — avaliações, distribuição, top performers, em risco' })
-  performance(@Query() filter: ReportFilterDto) { return this.svc.performanceReportFull(filter); }
+  performance(@Query() filter: ReportFilterDto) {
+    return this.svc.performanceReportFull(filter);
+  }
 
   // Legacy endpoint compatibility
   @Get('performance/by-period')
@@ -79,21 +100,27 @@ export class ReportsController {
   @Get('engagement')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Engagement — surveys, eNPS, reconhecimento, humor' })
-  engagement(@Query() filter: ReportFilterDto) { return this.svc.engagementReport(filter); }
+  engagement(@Query() filter: ReportFilterDto) {
+    return this.svc.engagementReport(filter);
+  }
 
   // ─── Talent Reports ───────────────────────────────────────────
 
   @Get('talent')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Talent intelligence — HiPos, PDI, sucessão, competências' })
-  talent(@Query() filter: ReportFilterDto) { return this.svc.talentReport(filter); }
+  talent(@Query() filter: ReportFilterDto) {
+    return this.svc.talentReport(filter);
+  }
 
   // ─── Compliance ───────────────────────────────────────────────
 
   @Get('compliance')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Compliance — formações obrigatórias, certificações, auditoria' })
-  compliance(@Query() filter: ReportFilterDto) { return this.svc.complianceReport(filter); }
+  compliance(@Query() filter: ReportFilterDto) {
+    return this.svc.complianceReport(filter);
+  }
 
   // ─── Competency gap (legacy compat) ──────────────────────────
 
@@ -109,24 +136,29 @@ export class ReportsController {
   @Get('operational/usage')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Uso da plataforma — conteúdos, sessões, utilizadores activos' })
-  usage(@Query() filter: ReportFilterDto) { return this.svc.platformUsageReport(filter); }
+  usage(@Query() filter: ReportFilterDto) {
+    return this.svc.platformUsageReport(filter);
+  }
 
   // ─── AI Insights ─────────────────────────────────────────────
 
   @Get('insights')
   @Roles(...ALL_MGMT)
-  @ApiOperation({ summary: 'Insights inteligentes — padrões, riscos e recomendações de toda a plataforma' })
-  insights(@Query() filter: ReportFilterDto) { return this.svc.getInsights(filter); }
+  @ApiOperation({
+    summary: 'Insights inteligentes — padrões, riscos e recomendações de toda a plataforma',
+  })
+  insights(@Query() filter: ReportFilterDto) {
+    return this.svc.getInsights(filter);
+  }
 
   // ─── Saved Reports ────────────────────────────────────────────
 
   @Get('saved')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Listar relatórios guardados do utilizador' })
-  listSaved(
-    @CurrentUser() user: any,
-    @Query('category') category?: ReportCategory,
-  ) { return this.svc.listSavedReports(user.id, category); }
+  listSaved(@CurrentUser() user: any, @Query('category') category?: ReportCategory) {
+    return this.svc.listSavedReports(user.id, category);
+  }
 
   @Post('saved')
   @Roles(...ALL_MGMT)
@@ -147,7 +179,9 @@ export class ReportsController {
   @Get('templates')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Biblioteca de templates pré-configurados (9 templates built-in)' })
-  templates() { return this.svc.getTemplates(); }
+  templates() {
+    return this.svc.getTemplates();
+  }
 
   // ─── Schedules ────────────────────────────────────────────────
 
@@ -161,7 +195,9 @@ export class ReportsController {
   @Get('schedules')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Listar agendamentos activos' })
-  listSchedules(@CurrentUser() user: any) { return this.svc.listSchedules(user.id); }
+  listSchedules(@CurrentUser() user: any) {
+    return this.svc.listSchedules(user.id);
+  }
 
   @Delete('schedules/:id')
   @Roles(...ALL_MGMT)
@@ -178,13 +214,13 @@ export class ReportsController {
   @Header('Content-Disposition', 'attachment; filename="skill-gap.csv"')
   @ApiOperation({ summary: 'Exportar gaps de competências como CSV' })
   async exportSkillGapCsv(@Query() filter: ReportFilterDto) {
-    const data    = await this.svc.skillGapReport(filter);
-    const rows    = (data.skills as any[]).map((s: any) => ({
-      skill:       s.competency?.name,
-      type:        s.competency?.type,
-      users:       s.count,
-      usersWithGap:s.usersWithGap,
-      avgGap:      s.avgGap,
+    const data = await this.svc.skillGapReport(filter);
+    const rows = data.skills.map((s: any) => ({
+      skill: s.competency?.name,
+      type: s.competency?.type,
+      users: s.count,
+      usersWithGap: s.usersWithGap,
+      avgGap: s.avgGap,
     }));
     return this.svc.exportToCsv(rows, ['skill', 'type', 'users', 'usersWithGap', 'avgGap']);
   }
@@ -197,29 +233,12 @@ export class ReportsController {
   async exportPerfCsv(@Query() filter: ReportFilterDto) {
     const data = await this.svc.performanceReportFull(filter);
     const rows = (data.topPerformers as any[]).map((r: any) => ({
-      name:       r.user?.fullName,
+      name: r.user?.fullName,
       department: r.user?.department?.name,
-      position:   r.user?.position?.name,
-      score:      r.score,
-      type:       r.type,
+      position: r.user?.position?.name,
+      score: r.score,
+      type: r.type,
     }));
     return this.svc.exportToCsv(rows, ['name', 'department', 'position', 'score', 'type']);
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

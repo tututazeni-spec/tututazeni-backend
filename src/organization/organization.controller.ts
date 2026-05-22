@@ -1,18 +1,31 @@
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import {
-  CreateOrgDepartmentDto, UpdateOrgDepartmentDto, DepartmentFilterDto,
-  CreateOrgPositionDto, UpdateOrgPositionDto, PositionFilterDto,
-  CreateOrgUnitDto, UpdateOrgUnitDto,
-  RecordOrgChangeDto, OrgChartFilterDto,
+  CreateOrgDepartmentDto,
+  UpdateOrgDepartmentDto,
+  DepartmentFilterDto,
+  CreateOrgPositionDto,
+  UpdateOrgPositionDto,
+  PositionFilterDto,
+  CreateOrgUnitDto,
+  UpdateOrgUnitDto,
+  RecordOrgChangeDto,
+  OrgChartFilterDto,
 } from './organization.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Organization')
@@ -25,24 +38,34 @@ export class OrganizationController {
   // ── Dashboard ─────────────────────────────────────────────────────────────
 
   @Get('stats')
-  @ApiOperation({ summary: 'KPIs organizacionais (headcount, span of control, profundidade hierárquica)' })
-  stats() { return this.svc.getStats(); }
+  @ApiOperation({
+    summary: 'KPIs organizacionais (headcount, span of control, profundidade hierárquica)',
+  })
+  stats() {
+    return this.svc.getStats();
+  }
 
   @Get('headcount')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Headcount por departamento (ocupado vs planeado)' })
-  headcount() { return this.svc.getHeadcountByDepartment(); }
+  headcount() {
+    return this.svc.getHeadcountByDepartment();
+  }
 
   @Get('span-of-control')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Relatório de span of control por gestor' })
-  spanOfControl() { return this.svc.getSpanOfControlReport(); }
+  spanOfControl() {
+    return this.svc.getSpanOfControlReport();
+  }
 
   // ── Organograma ───────────────────────────────────────────────────────────
 
   @Get('chart')
   @ApiOperation({ summary: 'Organograma hierárquico (tree, até N níveis de profundidade)' })
-  chart(@Query() filters: OrgChartFilterDto) { return this.svc.getOrgChart(filters); }
+  chart(@Query() filters: OrgChartFilterDto) {
+    return this.svc.getOrgChart(filters);
+  }
 
   // ── Timeline / Histórico ──────────────────────────────────────────────────
 
@@ -50,11 +73,8 @@ export class OrganizationController {
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Timeline de movimentações organizacionais' })
   @ApiQuery({ name: 'fromDate', required: false })
-  @ApiQuery({ name: 'toDate',   required: false })
-  timeline(
-    @Query('fromDate') fromDate?: string,
-    @Query('toDate')   toDate?:   string,
-  ) {
+  @ApiQuery({ name: 'toDate', required: false })
+  timeline(@Query('fromDate') fromDate?: string, @Query('toDate') toDate?: string) {
     return this.svc.getOrgTimeline(fromDate, toDate);
   }
 
@@ -146,12 +166,16 @@ export class OrganizationController {
 
   @Get('units')
   @ApiOperation({ summary: 'Listar unidades/escritórios' })
-  getUnits() { return this.svc.getUnits(); }
+  getUnits() {
+    return this.svc.getUnits();
+  }
 
   @Post('units')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar unidade/filial' })
-  createUnit(@Body() dto: CreateOrgUnitDto) { return this.svc.createUnit(dto); }
+  createUnit(@Body() dto: CreateOrgUnitDto) {
+    return this.svc.createUnit(dto);
+  }
 
   @Put('units/:id')
   @Roles('ADMIN', 'RH')

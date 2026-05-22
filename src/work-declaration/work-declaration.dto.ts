@@ -23,7 +23,7 @@ import {
 // ─── Enums espelhados do Prisma ──────────────────────────────
 export enum DeclarationStatus {
   DRAFT = 'DRAFT',
-  PENDING   = 'PENDING',
+  PENDING = 'PENDING',
   SIGNED = 'SIGNED',
   ISSUED = 'ISSUED',
   EXPIRED = 'EXPIRED',
@@ -64,74 +64,103 @@ export enum SignatureType {
 // ────────────────────────────────────────────────────────────
 
 export class CreateDeclarationTemplateDto {
-  @IsString() @IsNotEmpty() @MaxLength(150)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(150)
   name: string;
 
-  @IsOptional() @IsString() @MaxLength(500)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
   description?: string;
 
   @IsEnum(DeclarationType)
   type: DeclarationType;
 
-  @IsOptional() @IsEnum(DeclarationLocale)
+  @IsOptional()
+  @IsEnum(DeclarationLocale)
   locale?: DeclarationLocale;
 
-  @IsOptional() @IsEnum(DocumentLayout)
+  @IsOptional()
+  @IsEnum(DocumentLayout)
   layout?: DocumentLayout;
 
-  @IsString() @IsNotEmpty()
+  @IsString()
+  @IsNotEmpty()
   bodyContent: string; // HTML com variáveis {{var}}
 
-  @IsOptional() @IsInt() @Min(1)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
   validityDays?: number;
 
-  @IsOptional() @IsArray() @IsString({ each: true })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   requiredFields?: string[];
 
-  @IsOptional() @IsObject()
+  @IsOptional()
+  @IsObject()
   customVariables?: Record<string, string>;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   isDefault?: boolean;
 }
 
 export class UpdateDeclarationTemplateDto {
-  @IsOptional() @IsString() @MaxLength(150)
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
   name?: string;
 
-  @IsOptional() @IsString() @MaxLength(500)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
   description?: string;
 
-  @IsOptional() @IsEnum(DocumentLayout)
+  @IsOptional()
+  @IsEnum(DocumentLayout)
   layout?: DocumentLayout;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   bodyContent?: string;
 
-  @IsOptional() @IsInt() @Min(1)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
   validityDays?: number;
 
-  @IsOptional() @IsArray() @IsString({ each: true })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   requiredFields?: string[];
 
-  @IsOptional() @IsObject()
+  @IsOptional()
+  @IsObject()
   customVariables?: Record<string, string>;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   isDefault?: boolean;
 }
 
 export class TemplatePreviewDto {
-  @IsString() @IsNotEmpty()
+  @IsString()
+  @IsNotEmpty()
   templateId: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   employeeId?: string; // usa dados reais para preview
 
-  @IsOptional() @IsObject()
+  @IsOptional()
+  @IsObject()
   overrideData?: Record<string, string>; // dados manuais para preview
 }
 
@@ -140,28 +169,37 @@ export class TemplatePreviewDto {
 // ────────────────────────────────────────────────────────────
 
 export class RequestDeclarationDto {
-  @IsString() @IsNotEmpty()
+  @IsString()
+  @IsNotEmpty()
   templateId: string;
 
   @IsEnum(DeclarationType)
   type: DeclarationType;
 
-  @IsOptional() @IsEnum(DeclarationLocale)
+  @IsOptional()
+  @IsEnum(DeclarationLocale)
   locale?: DeclarationLocale;
 
-  @IsOptional() @IsEnum(DocumentLayout)
+  @IsOptional()
+  @IsEnum(DocumentLayout)
   layout?: DocumentLayout;
 
-  @IsOptional() @IsString() @MaxLength(500)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
   purpose?: string;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   showSalary?: boolean;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   watermark?: boolean;
 
-  @IsOptional() @IsString() @MaxLength(1000)
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
   requestNotes?: string;
 }
 
@@ -176,60 +214,83 @@ export class DeclarationFilterDto {
 export { DeclarationFilterDto as FilterDeclarationsDto };
 
 export class CreateDeclarationDto {
-  @IsString() @IsNotEmpty()
+  @IsString()
+  @IsNotEmpty()
   templateId: string;
 
-  @IsString() @IsNotEmpty()
+  @IsString()
+  @IsNotEmpty()
   employeeId: string;
 
   @IsEnum(DeclarationType)
   type: DeclarationType;
 
-  @IsOptional() @IsEnum(DeclarationLocale)
+  @IsOptional()
+  @IsEnum(DeclarationLocale)
   locale?: DeclarationLocale;
 
-  @IsOptional() @IsEnum(DocumentLayout)
+  @IsOptional()
+  @IsEnum(DocumentLayout)
   layout?: DocumentLayout;
 
-  @IsString() @IsNotEmpty() @MaxLength(200)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
   title: string;
 
-  @IsOptional() @IsString() @MaxLength(500)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
   purpose?: string;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   showSalary?: boolean;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   watermark?: boolean;
 
-  @IsOptional() @IsObject()
+  @IsOptional()
+  @IsObject()
   customFields?: Record<string, string>; // campos extra definidos no template
 
-  @IsOptional() @IsString() @MaxLength(1000)
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
   internalNotes?: string;
 }
 
 export class UpdateDeclarationDto {
-  @IsOptional() @IsString() @MaxLength(200)
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
   title?: string;
 
-  @IsOptional() @IsString() @MaxLength(500)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
   purpose?: string;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   showSalary?: boolean;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   watermark?: boolean;
 
-  @IsOptional() @IsObject()
+  @IsOptional()
+  @IsObject()
   customFields?: Record<string, string>;
 
-  @IsOptional() @IsString() @MaxLength(1000)
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
   internalNotes?: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   assignedToId?: string;
 }
 
@@ -237,7 +298,9 @@ export class ChangeDeclarationStatusDto {
   @IsEnum(DeclarationStatus)
   status: DeclarationStatus;
 
-  @IsOptional() @IsString() @MaxLength(500)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
   reason?: string; // obrigatório para REVOKED / REJECTED
 }
 
@@ -245,13 +308,16 @@ export class SignDeclarationDto {
   @IsEnum(SignatureType)
   type: SignatureType;
 
-  @IsOptional() @IsUrl()
+  @IsOptional()
+  @IsUrl()
   signatureUrl?: string; // obrigatório para IMAGE_UPLOAD
 
-  @IsOptional() @IsObject()
+  @IsOptional()
+  @IsObject()
   certificateData?: Record<string, unknown>; // para DIGITAL_CERTIFIED
 
-  @IsString() @IsNotEmpty()
+  @IsString()
+  @IsNotEmpty()
   signerRole: string; // "RH" | "MANAGER" | "DIRECTOR"
 }
 
@@ -259,18 +325,23 @@ export class ExportDeclarationDto {
   @IsEnum(['PDF', 'DOCX'])
   format: 'PDF' | 'DOCX';
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   includeWatermark?: boolean;
 }
 
 export class SendDeclarationDto {
-  @IsArray() @IsString({ each: true })
+  @IsArray()
+  @IsString({ each: true })
   recipientEmails: string[];
 
-  @IsOptional() @IsString() @MaxLength(500)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
   message?: string;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   generateSecureLink?: boolean;
 }
 
@@ -279,51 +350,70 @@ export class SendDeclarationDto {
 // ────────────────────────────────────────────────────────────
 
 export class DeclarationQueryDto {
-  @IsOptional() @IsEnum(DeclarationStatus)
+  @IsOptional()
+  @IsEnum(DeclarationStatus)
   status?: DeclarationStatus;
 
-  @IsOptional() @IsEnum(DeclarationType)
+  @IsOptional()
+  @IsEnum(DeclarationType)
   type?: DeclarationType;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   employeeId?: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   assignedToId?: string;
 
-  @IsOptional() @IsDateString()
+  @IsOptional()
+  @IsDateString()
   fromDate?: string;
 
-  @IsOptional() @IsDateString()
+  @IsOptional()
+  @IsDateString()
   toDate?: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   search?: string; // busca por código, nome do colaborador
 
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1)
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   page?: number = 1;
 
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1)
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   limit?: number = 20;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   sortBy?: string = 'createdAt';
 
-  @IsOptional() @IsEnum(['asc', 'desc'])
+  @IsOptional()
+  @IsEnum(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }
 
 export class TemplateQueryDto {
-  @IsOptional() @IsEnum(DeclarationType)
+  @IsOptional()
+  @IsEnum(DeclarationType)
   type?: DeclarationType;
 
-  @IsOptional() @IsEnum(DeclarationLocale)
+  @IsOptional()
+  @IsEnum(DeclarationLocale)
   locale?: DeclarationLocale;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   search?: string;
 }
 
@@ -332,46 +422,66 @@ export class TemplateQueryDto {
 // ────────────────────────────────────────────────────────────
 
 export class UpsertTenantConfigDto {
-  @IsOptional() @IsUrl()
+  @IsOptional()
+  @IsUrl()
   logoUrl?: string;
 
-  @IsOptional() @IsString() @MaxLength(200)
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
   companyName?: string;
 
-  @IsOptional() @IsString() @MaxLength(500)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
   companyAddress?: string;
 
-  @IsOptional() @IsString() @MaxLength(50)
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
   companyPhone?: string;
 
-  @IsOptional() @IsString() @MaxLength(100)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
   companyEmail?: string;
 
-  @IsOptional() @IsString() @MaxLength(30)
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
   companyNif?: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   headerHtml?: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   footerHtml?: string;
 
-  @IsOptional() @IsEnum(DocumentLayout)
+  @IsOptional()
+  @IsEnum(DocumentLayout)
   defaultLayout?: DocumentLayout;
 
-  @IsOptional() @IsEnum(DeclarationLocale)
+  @IsOptional()
+  @IsEnum(DeclarationLocale)
   defaultLocale?: DeclarationLocale;
 
-  @IsOptional() @IsInt() @Min(1)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
   defaultValidity?: number;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   allowSalaryExposure?: boolean;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   requireManagerSignature?: boolean;
 
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   emailNotifications?: boolean;
 }
 
@@ -380,20 +490,7 @@ export class UpsertTenantConfigDto {
 // ────────────────────────────────────────────────────────────
 
 export class VerifyDeclarationDto {
-  @IsString() @IsNotEmpty()
+  @IsString()
+  @IsNotEmpty()
   code: string; // código único da declaração
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

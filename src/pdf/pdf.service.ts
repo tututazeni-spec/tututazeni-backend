@@ -1,11 +1,9 @@
 // src/pdf/pdf.service.ts
 import { Injectable } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
-import { Writable } from 'stream';
 
 @Injectable()
 export class PdfService {
-
   // ─── UTILITÁRIOS INTERNOS ────────────────────────────────────
 
   private createDoc(title: string): PDFKit.PDFDocument {
@@ -31,48 +29,45 @@ export class PdfService {
     doc
       .fontSize(8)
       .font('Helvetica')
-      .text(
-        `Gerado em ${new Date().toLocaleDateString('pt-PT')} — Página ${pageNum}`,
-        50,
-        780,
-        { align: 'center' }
-      );
+      .text(`Gerado em ${new Date().toLocaleDateString('pt-PT')} — Página ${pageNum}`, 50, 780, {
+        align: 'center',
+      });
   }
 
-async generateDeclarationPdf(data: {
-  content: string;
-  config: any;
-  declaration: any;
-  withWatermark?: boolean;
-}): Promise<Buffer> {
-  const doc = this.createDoc('Declaração');
-  this.addHeader(doc, data.config?.companyName);
+  async generateDeclarationPdf(data: {
+    content: string;
+    config: any;
+    declaration: any;
+    withWatermark?: boolean;
+  }): Promise<Buffer> {
+    const doc = this.createDoc('Declaração');
+    this.addHeader(doc, data.config?.companyName);
 
-  doc
-    .moveDown()
-    .fontSize(11)
-    .font('Helvetica')
-    .text(data.content || 'Conteúdo da declaração.', { align: 'justify', lineGap: 6 });
-
-  if (data.withWatermark) {
     doc
-      .save()
-      .rotate(45, { origin: [300, 400] })
-      .fontSize(60)
-      .fillOpacity(0.1)
-      .fillColor('red')
-      .text('CÓPIA', 150, 350)
-      .restore();
-  }
+      .moveDown()
+      .fontSize(11)
+      .font('Helvetica')
+      .text(data.content || 'Conteúdo da declaração.', { align: 'justify', lineGap: 6 });
 
-  this.addFooter(doc, 1);
-  return this.bufferFromDoc(doc);
-}
+    if (data.withWatermark) {
+      doc
+        .save()
+        .rotate(45, { origin: [300, 400] })
+        .fontSize(60)
+        .fillOpacity(0.1)
+        .fillColor('red')
+        .text('CÓPIA', 150, 350)
+        .restore();
+    }
+
+    this.addFooter(doc, 1);
+    return this.bufferFromDoc(doc);
+  }
 
   private bufferFromDoc(doc: PDFKit.PDFDocument): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
-      doc.on('data', (chunk) => chunks.push(chunk));
+      doc.on('data', chunk => chunks.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
       doc.end();
@@ -105,16 +100,16 @@ async generateDeclarationPdf(data: {
       .font('Helvetica')
       .text(
         `Declaramos para os devidos fins que ${data.employeeName}, ` +
-        `titular do número de colaborador ${data.employeeId}, ` +
-        `exerce funções de ${data.position} no departamento de ${data.department}, ` +
-        `desde ${data.startDate}.`,
-        { align: 'justify', lineGap: 6 }
+          `titular do número de colaborador ${data.employeeId}, ` +
+          `exerce funções de ${data.position} no departamento de ${data.department}, ` +
+          `desde ${data.startDate}.`,
+        { align: 'justify', lineGap: 6 },
       )
       .moveDown()
-      .text(
-        `A presente declaração é emitida a pedido do interessado para ${data.purpose}.`,
-        { align: 'justify', lineGap: 6 }
-      )
+      .text(`A presente declaração é emitida a pedido do interessado para ${data.purpose}.`, {
+        align: 'justify',
+        lineGap: 6,
+      })
       .moveDown(3)
       .text(`Data: ${new Date().toLocaleDateString('pt-PT')}`, { align: 'right' })
       .moveDown(4)
@@ -213,17 +208,13 @@ async generateDeclarationPdf(data: {
       .font('Helvetica')
       .text(`Salário Base: ${data.baseSalary.toFixed(2)} €`);
 
-    data.allowances.forEach((a) => {
+    data.allowances.forEach(a => {
       doc.text(`${a.label}: ${a.amount.toFixed(2)} €`);
     });
 
-    doc
-      .moveDown()
-      .font('Helvetica-Bold')
-      .text('DESCONTOS')
-      .font('Helvetica');
+    doc.moveDown().font('Helvetica-Bold').text('DESCONTOS').font('Helvetica');
 
-    data.deductions.forEach((d) => {
+    data.deductions.forEach(d => {
       doc.text(`${d.label}: ${d.amount.toFixed(2)} €`);
     });
 
@@ -265,12 +256,12 @@ async generateDeclarationPdf(data: {
 
     // Métricas resumo
     doc.font('Helvetica-Bold').text('RESUMO EXECUTIVO').moveDown(0.5);
-    data.metrics.forEach((m) => {
+    data.metrics.forEach(m => {
       doc.font('Helvetica').text(`${m.label}: ${m.value}`);
     });
 
     // Secções
-    data.sections.forEach((section) => {
+    data.sections.forEach(section => {
       doc
         .moveDown()
         .font('Helvetica-Bold')

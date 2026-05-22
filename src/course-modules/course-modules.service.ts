@@ -1,14 +1,21 @@
 ﻿import {
-  Injectable, NotFoundException, ForbiddenException,
-  BadRequestException, Logger, ConflictException,
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateModuleDto, UpdateModuleDto, ReorderModulesDto,
-  CreateModuleLessonDto, UpdateModuleLessonDto, MoveLessonDto,
+  CreateModuleDto,
+  UpdateModuleDto,
+  ReorderModulesDto,
+  CreateModuleLessonDto,
+  UpdateModuleLessonDto,
+  MoveLessonDto,
   MarkModuleLessonCompleteDto,
-  CreateModuleMaterialDto, CloneModuleDto,
-  ProgressionType, CompletionRule,
+  CreateModuleMaterialDto,
+  CloneModuleDto,
 } from './course-modules.dto';
 
 @Injectable()
@@ -26,39 +33,39 @@ export class CourseModulesService {
 
     return this.prisma.courseModule.create({
       data: {
-        courseId:             dto.courseId,
-        title:                dto.title,
-        description:          dto.description,
-        learningObjectives:   dto.learningObjectives ?? [],
-        seq:                  dto.seq,
-        status:               dto.status ?? 'DRAFT',
-        type:                 dto.type,
-        progressionType:      dto.progressionType ?? 'SEQUENTIAL',
-        completionRule:       dto.completionRule  ?? 'ALL_LESSONS',
+        courseId: dto.courseId,
+        title: dto.title,
+        description: dto.description,
+        learningObjectives: dto.learningObjectives ?? [],
+        seq: dto.seq,
+        status: dto.status ?? 'DRAFT',
+        type: dto.type,
+        progressionType: dto.progressionType ?? 'SEQUENTIAL',
+        completionRule: dto.completionRule ?? 'ALL_LESSONS',
         minCompletionPercent: dto.minCompletionPercent ?? 100,
-        minQuizScore:         dto.minQuizScore,
-        mandatory:            dto.mandatory ?? true,
-        dripDays:             dto.dripDays,
-        availableFrom:        dto.availableFrom ? new Date(dto.availableFrom) : null,
+        minQuizScore: dto.minQuizScore,
+        mandatory: dto.mandatory ?? true,
+        dripDays: dto.dripDays,
+        availableFrom: dto.availableFrom ? new Date(dto.availableFrom) : null,
       },
       include: {
-        lessons:   { orderBy: { seq: 'asc' } },
+        lessons: { orderBy: { seq: 'asc' } },
         materials: true,
-        _count:    { select: { lessons: true } },
+        _count: { select: { lessons: true } },
       },
     });
   }
 
   async findModuleOrFail(id: number) {
     const mod = await this.prisma.courseModule.findUnique({
-      where:   { id },
+      where: { id },
       include: {
         lessons: {
           orderBy: { seq: 'asc' },
           include: { quiz: true },
         },
         materials: { orderBy: { createdAt: 'desc' } },
-        _count:    { select: { lessons: true } },
+        _count: { select: { lessons: true } },
       },
     });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
@@ -75,26 +82,26 @@ export class CourseModulesService {
         learningObjectives: dto.learningObjectives ?? undefined,
       },
       include: {
-        lessons:   { orderBy: { seq: 'asc' } },
+        lessons: { orderBy: { seq: 'asc' } },
         materials: true,
-        _count:    { select: { lessons: true } },
+        _count: { select: { lessons: true } },
       },
     });
   }
 
   async publishModule(id: number) {
-    const mod = await this.findModuleOrFail(id) as any;
+    const mod = (await this.findModuleOrFail(id)) as any;
     if (mod._count.lessons === 0) {
       throw new BadRequestException('Módulo sem aulas não pode ser publicado');
     }
     return this.prisma.courseModule.update({
       where: { id },
-      data:  { status: 'PUBLISHED' },
+      data: { status: 'PUBLISHED' },
     });
   }
 
   async deleteModule(id: number) {
-    const mod = await this.findModuleOrFail(id) as any;
+    const mod = (await this.findModuleOrFail(id)) as any;
 
     // Verificar se há progresso activo nas aulas
     const activeProgress = await this.prisma.lessonProgress.count({
@@ -102,7 +109,7 @@ export class CourseModulesService {
     });
     if (activeProgress > 0) {
       throw new ForbiddenException(
-        `Módulo tem ${activeProgress} registos de progresso de utilizadores. Arquive-o ou mova as aulas primeiro.`
+        `Módulo tem ${activeProgress} registos de progresso de utilizadores. Arquive-o ou mova as aulas primeiro.`,
       );
     }
 
@@ -113,7 +120,7 @@ export class CourseModulesService {
   async reorderModules(courseId: number, dto: ReorderModulesDto) {
     // Validar que todos os IDs pertencem ao curso
     const moduleIds = dto.order.map(o => o.id);
-    const modules   = await this.prisma.courseModule.findMany({
+    const modules = await this.prisma.courseModule.findMany({
       where: { id: { in: moduleIds }, courseId },
     });
     if (modules.length !== moduleIds.length) {
@@ -122,16 +129,16 @@ export class CourseModulesService {
 
     await Promise.all(
       dto.order.map(({ id, seq }) =>
-        this.prisma.courseModule.update({ where: { id }, data: { seq } })
-      )
+        this.prisma.courseModule.update({ where: { id }, data: { seq } }),
+      ),
     );
 
     return this.prisma.courseModule.findMany({
-      where:   { courseId },
+      where: { courseId },
       orderBy: { seq: 'asc' },
       include: {
-        lessons:   { orderBy: { seq: 'asc' } },
-        _count:    { select: { lessons: true } },
+        lessons: { orderBy: { seq: 'asc' } },
+        _count: { select: { lessons: true } },
       },
     });
   }
@@ -139,7 +146,7 @@ export class CourseModulesService {
   // ─── CLONAR MÓDULO ────────────────────────────────────────────────────────
 
   async cloneModule(moduleId: number, dto: CloneModuleDto) {
-    const original = await this.findModuleOrFail(moduleId) as any;
+    const original = (await this.findModuleOrFail(moduleId)) as any;
 
     // Verificar curso destino
     const targetCourse = await this.prisma.course.findUnique({ where: { id: dto.targetCourseId } });
@@ -147,26 +154,26 @@ export class CourseModulesService {
 
     // Determinar posição
     const maxSeq = await this.prisma.courseModule.findFirst({
-      where:   { courseId: dto.targetCourseId },
+      where: { courseId: dto.targetCourseId },
       orderBy: { seq: 'desc' },
-      select:  { seq: true },
+      select: { seq: true },
     });
     const seq = dto.seq ?? (maxSeq?.seq ?? 0) + 1;
 
     const clone = await this.prisma.courseModule.create({
       data: {
-        courseId:             dto.targetCourseId,
-        title:                `${original.title} (cópia)`,
-        description:          original.description,
-        learningObjectives:   original.learningObjectives,
+        courseId: dto.targetCourseId,
+        title: `${original.title} (cópia)`,
+        description: original.description,
+        learningObjectives: original.learningObjectives,
         seq,
-        status:               'DRAFT',
-        type:                 original.type,
-        progressionType:      original.progressionType,
-        completionRule:       original.completionRule,
+        status: 'DRAFT',
+        type: original.type,
+        progressionType: original.progressionType,
+        completionRule: original.completionRule,
         minCompletionPercent: original.minCompletionPercent,
-        minQuizScore:         original.minQuizScore,
-        mandatory:            original.mandatory,
+        minQuizScore: original.minQuizScore,
+        mandatory: original.mandatory,
       },
     });
 
@@ -174,16 +181,16 @@ export class CourseModulesService {
     for (const lesson of original.lessons) {
       await this.prisma.lesson.create({
         data: {
-          moduleId:        clone.id,
-          title:           lesson.title,
-          description:     lesson.description,
-          type:            lesson.type,
-          contentUrl:      lesson.contentUrl,
-          textContent:     lesson.textContent,
-          seq:             lesson.seq,
+          moduleId: clone.id,
+          title: lesson.title,
+          description: lesson.description,
+          type: lesson.type,
+          contentUrl: lesson.contentUrl,
+          textContent: lesson.textContent,
+          seq: lesson.seq,
           durationMinutes: lesson.durationMinutes,
-          isFree:          lesson.isFree,
-          allowDownload:   lesson.allowDownload,
+          isFree: lesson.isFree,
+          allowDownload: lesson.allowDownload,
         },
       });
     }
@@ -193,8 +200,8 @@ export class CourseModulesService {
       await this.prisma.moduleMaterial.create({
         data: {
           moduleId: clone.id,
-          title:    mat.title,
-          url:      mat.url,
+          title: mat.title,
+          url: mat.url,
           fileType: mat.fileType,
           fileSizeKb: mat.fileSizeKb,
         },
@@ -212,16 +219,16 @@ export class CourseModulesService {
 
     return this.prisma.lesson.create({
       data: {
-        moduleId:        dto.moduleId,
-        title:           dto.title,
-        description:     dto.description,
-        type:            dto.contentType,
-        contentUrl:      dto.contentUrl,
-        textContent:     dto.textContent,
-        seq:             dto.seq,
+        moduleId: dto.moduleId,
+        title: dto.title,
+        description: dto.description,
+        type: dto.contentType,
+        contentUrl: dto.contentUrl,
+        textContent: dto.textContent,
+        seq: dto.seq,
         durationMinutes: dto.durationMinutes,
-        isFree:          dto.isFree ?? false,
-        allowDownload:   dto.allowDownload ?? false,
+        isFree: dto.isFree ?? false,
+        allowDownload: dto.allowDownload ?? false,
       },
     });
   }
@@ -236,21 +243,23 @@ export class CourseModulesService {
     const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
 
-    const targetMod = await this.prisma.courseModule.findUnique({ where: { id: dto.targetModuleId } });
+    const targetMod = await this.prisma.courseModule.findUnique({
+      where: { id: dto.targetModuleId },
+    });
     if (!targetMod) throw new NotFoundException('Módulo de destino não encontrado');
 
     return this.prisma.lesson.update({
       where: { id: lessonId },
-      data:  { moduleId: dto.targetModuleId, seq: dto.seq },
+      data: { moduleId: dto.targetModuleId, seq: dto.seq },
     });
   }
 
   async reorderLessons(moduleId: number, order: Array<{ id: number; seq: number }>) {
     await Promise.all(
-      order.map(({ id, seq }) => this.prisma.lesson.update({ where: { id }, data: { seq } }))
+      order.map(({ id, seq }) => this.prisma.lesson.update({ where: { id }, data: { seq } })),
     );
     return this.prisma.lesson.findMany({
-      where:   { moduleId },
+      where: { moduleId },
       orderBy: { seq: 'asc' },
     });
   }
@@ -284,14 +293,17 @@ export class CourseModulesService {
   // ─── PROGRESSO ────────────────────────────────────────────────────────────
 
   // Verificar se aula está acessível (segurança — previne acesso directo a aulas em módulos bloqueados)
-  private async isLessonAccessible(lessonId: number, userId: number): Promise<{ accessible: boolean; reason?: string }> {
+  private async isLessonAccessible(
+    lessonId: number,
+    userId: number,
+  ): Promise<{ accessible: boolean; reason?: string }> {
     const lesson = await this.prisma.lesson.findUnique({
-      where:   { id: lessonId },
+      where: { id: lessonId },
       include: { module: { include: { course: true } } },
     });
     if (!lesson) return { accessible: false, reason: 'Aula não encontrada' };
 
-    const mod    = (lesson as any).module;
+    const mod = (lesson as any).module;
     const course = mod.course;
 
     if (mod.status !== 'PUBLISHED') {
@@ -306,7 +318,7 @@ export class CourseModulesService {
 
     // Verificar drip content
     if (mod.dripDays && mod.dripDays > 0) {
-      const enrolledAt  = new Date(enrollment.enrolledAt);
+      const enrolledAt = new Date(enrollment.enrolledAt);
       const availableAt = new Date(enrolledAt.getTime() + mod.dripDays * 86400 * 1000);
       if (new Date() < availableAt) {
         return {
@@ -339,12 +351,12 @@ export class CourseModulesService {
   // Verificar se módulo está concluído segundo as regras configuradas
   async isModuleCompleted(moduleId: number, userId: number): Promise<boolean> {
     const mod = await this.prisma.courseModule.findUnique({
-      where:   { id: moduleId },
+      where: { id: moduleId },
       include: { lessons: true },
     });
     if (!mod) return false;
 
-    const lessons     = (mod as any).lessons;
+    const lessons = (mod as any).lessons;
     const totalLessons = lessons.length;
     if (totalLessons === 0) return true;
 
@@ -375,11 +387,13 @@ export class CourseModulesService {
     }
 
     if (rule === 'COMBINED') {
-      const pct     = (mod as any).minCompletionPercent ?? 80;
+      const pct = (mod as any).minCompletionPercent ?? 80;
       const lessonOk = (completedCount / totalLessons) * 100 >= pct;
-      const quiz    = await this.prisma.quiz.findFirst({ where: { lesson: { moduleId } } });
-      const quizOk  = quiz
-        ? !!(await this.prisma.quizAttempt.findFirst({ where: { quizId: quiz.id, userId, passed: true } }))
+      const quiz = await this.prisma.quiz.findFirst({ where: { lesson: { moduleId } } });
+      const quizOk = quiz
+        ? !!(await this.prisma.quizAttempt.findFirst({
+            where: { quizId: quiz.id, userId, passed: true },
+          }))
         : true;
       return lessonOk && quizOk;
     }
@@ -395,7 +409,7 @@ export class CourseModulesService {
     }
 
     const lesson = await this.prisma.lesson.findUnique({
-      where:   { id: dto.lessonId },
+      where: { id: dto.lessonId },
       include: { module: { include: { course: true } } },
     });
     const courseId = (lesson as any).module.courseId;
@@ -403,18 +417,18 @@ export class CourseModulesService {
 
     // Upsert progresso da aula
     const progress = await this.prisma.lessonProgress.upsert({
-      where:  { lessonId_userId: { lessonId: dto.lessonId, userId } },
+      where: { lessonId_userId: { lessonId: dto.lessonId, userId } },
       create: {
-        lessonId:       dto.lessonId,
+        lessonId: dto.lessonId,
         userId,
-        completed:      true,
-        completedAt:    new Date(),
+        completed: true,
+        completedAt: new Date(),
         watchedSeconds: dto.watchedSeconds,
         resumePosition: dto.resumePosition,
       },
       update: {
-        completed:      true,
-        completedAt:    new Date(),
+        completed: true,
+        completedAt: new Date(),
         watchedSeconds: dto.watchedSeconds,
         resumePosition: dto.resumePosition,
       },
@@ -425,7 +439,7 @@ export class CourseModulesService {
     if (enrollment && enrollment.status === 'NOT_STARTED') {
       await this.prisma.enrollment.update({
         where: { id: enrollment.id },
-        data:  { status: 'IN_PROGRESS', startedAt: new Date() },
+        data: { status: 'IN_PROGRESS', startedAt: new Date() },
       });
     }
 
@@ -454,24 +468,26 @@ export class CourseModulesService {
     if (!current) return;
 
     const nextModule = await this.prisma.courseModule.findFirst({
-      where:   { courseId, seq: (current as any).seq + 1, status: 'PUBLISHED' },
+      where: { courseId, seq: (current as any).seq + 1, status: 'PUBLISHED' },
       include: { course: { select: { title: true } } },
     });
     if (!nextModule) return;
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId,
-        type:     'MODULE_UNLOCKED',
-        message:  `Novo módulo desbloqueado: "${nextModule.title}"`,
-        metadata: JSON.stringify({}),
-       },
-    }).catch(() => {}); // Silenciar falha na notificação
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId,
+          type: 'MODULE_UNLOCKED',
+          message: `Novo módulo desbloqueado: "${nextModule.title}"`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {}); // Silenciar falha na notificação
   }
 
   async getLessonProgress(userId: number, courseId: number) {
     const modules = await this.prisma.courseModule.findMany({
-      where:   { courseId },
+      where: { courseId },
       orderBy: { seq: 'asc' },
       include: {
         lessons: {
@@ -489,9 +505,9 @@ export class CourseModulesService {
       modules.map(async mod => {
         const lessons = (mod as any).lessons;
         const completedCount = lessons.filter((l: any) => l.progress[0]?.completed).length;
-        const totalCount     = lessons.length;
-        const pct            = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-        const completed      = await this.isModuleCompleted(mod.id, userId);
+        const totalCount = lessons.length;
+        const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+        const completed = await this.isModuleCompleted(mod.id, userId);
 
         // Verificar se módulo está bloqueado (progressão sequencial)
         let locked = false;
@@ -500,18 +516,18 @@ export class CourseModulesService {
           const firstLesson = lessons[0];
           if (firstLesson) {
             const access = await this.isLessonAccessible(firstLesson.id, userId);
-            locked       = !access.accessible;
+            locked = !access.accessible;
             lockedReason = access.reason;
           }
         }
 
         return {
-          id:          mod.id,
-          title:       mod.title,
-          seq:         (mod as any).seq,
-          type:        (mod as any).type,
-          mandatory:   (mod as any).mandatory,
-          materials:   (mod as any).materials,
+          id: mod.id,
+          title: mod.title,
+          seq: (mod as any).seq,
+          type: (mod as any).type,
+          mandatory: (mod as any).mandatory,
+          materials: (mod as any).materials,
           completedCount,
           totalCount,
           pct,
@@ -519,18 +535,18 @@ export class CourseModulesService {
           locked,
           lockedReason,
           lessons: lessons.map((l: any) => ({
-            id:             l.id,
-            title:          l.title,
-            type:           l.type,
-            seq:            l.seq,
+            id: l.id,
+            title: l.title,
+            type: l.type,
+            seq: l.seq,
             durationMinutes: l.durationMinutes,
-            isFree:         l.isFree,
-            completed:      l.progress[0]?.completed ?? false,
-            completedAt:    l.progress[0]?.completedAt ?? null,
+            isFree: l.isFree,
+            completed: l.progress[0]?.completed ?? false,
+            completedAt: l.progress[0]?.completedAt ?? null,
             resumePosition: l.progress[0]?.resumePosition ?? 0,
           })),
         };
-      })
+      }),
     );
 
     return result;
@@ -550,38 +566,45 @@ export class CourseModulesService {
     let allMandatoryDone = true;
     for (const mod of mandatoryModules) {
       const done = await this.isModuleCompleted(mod.id, userId);
-      if (!done) { allMandatoryDone = false; break; }
+      if (!done) {
+        allMandatoryDone = false;
+        break;
+      }
     }
 
     if (!allMandatoryDone) return;
 
     await this.prisma.enrollment.update({
       where: { id: enrollmentId },
-      data:  { status: 'COMPLETED', completedAt: new Date() },
+      data: { status: 'COMPLETED', completedAt: new Date() },
     });
 
     await this.prisma.courseAnalytics.updateMany({
       where: { courseId },
-      data:  { totalCompleted: { increment: 1 } },
+      data: { totalCompleted: { increment: 1 } },
     });
 
     // Gamificação — pontuar
-    await this.prisma.userPoints.upsert({
-      where:  { userId },
-      create: { userId, points: 100 },
-      update: { points: { increment: 100 } },
-    }).catch(() => {});
+    await this.prisma.userPoints
+      .upsert({
+        where: { userId },
+        create: { userId, points: 100 },
+        update: { points: { increment: 100 } },
+      })
+      .catch(() => {});
 
     // Notificar
     const course = await this.prisma.course.findUnique({ where: { id: courseId } });
-    await this.prisma.notificationLog.create({
-      data: {
-        userId,
-        type:     'COURSE_COMPLETED',
-        message:  `Concluíste o curso "${course?.title}"! 🎉`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId,
+          type: 'COURSE_COMPLETED',
+          message: `Concluíste o curso "${course?.title}"! 🎉`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
   }
 
   // ─── ANALYTICS POR MÓDULO ─────────────────────────────────────────────────
@@ -597,35 +620,42 @@ export class CourseModulesService {
 
     const [totalEnrollments, totalCompleted, avgWatched, lessonStats] = await Promise.all([
       // Total de utilizadores que acederam a pelo menos uma aula
-      this.prisma.lessonProgress.groupBy({
-        by: ['userId'], where: { lessonId: { in: lessonIds } }, _count: true,
-      }).then(r => r.length),
+      this.prisma.lessonProgress
+        .groupBy({
+          by: ['userId'],
+          where: { lessonId: { in: lessonIds } },
+          _count: true,
+        })
+        .then(r => r.length),
 
       // Utilizadores que completaram todas as aulas
-      this.prisma.lessonProgress.groupBy({
-        by: ['userId'],
-        where: { lessonId: { in: lessonIds }, completed: true },
-        _count: true,
-      }).then(groups => groups.filter(g => g._count >= lessonIds.length).length),
+      this.prisma.lessonProgress
+        .groupBy({
+          by: ['userId'],
+          where: { lessonId: { in: lessonIds }, completed: true },
+          _count: true,
+        })
+        .then(groups => groups.filter(g => g._count >= lessonIds.length).length),
 
       // Média de segundos vistos
       this.prisma.lessonProgress.aggregate({
         where: { lessonId: { in: lessonIds } },
-        _avg:  { watchedSeconds: true },
+        _avg: { watchedSeconds: true },
       }),
 
       // Stats por aula
-      Promise.all(lessons.map(async l => {
-        const completions = await this.prisma.lessonProgress.count({
-          where: { lessonId: l.id, completed: true },
-        });
-        return { lessonId: l.id, title: l.title, completions };
-      })),
+      Promise.all(
+        lessons.map(async l => {
+          const completions = await this.prisma.lessonProgress.count({
+            where: { lessonId: l.id, completed: true },
+          });
+          return { lessonId: l.id, title: l.title, completions };
+        }),
+      ),
     ]);
 
-    const completionRate = totalEnrollments > 0
-      ? Math.round((totalCompleted / totalEnrollments) * 100)
-      : 0;
+    const completionRate =
+      totalEnrollments > 0 ? Math.round((totalCompleted / totalEnrollments) * 100) : 0;
 
     return {
       moduleId,

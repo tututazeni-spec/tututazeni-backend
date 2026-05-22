@@ -1,23 +1,36 @@
 // src/attendance/attendance.service.ts
 import {
-  Injectable, NotFoundException, ConflictException,
-  BadRequestException, ForbiddenException,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
-import { PrismaService }  from '../prisma/prisma.service';
-import { AuditService }   from '../common/services/audit.service';
-import * as crypto        from 'crypto';
+import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../common/services/audit.service';
+import * as crypto from 'crypto';
 import {
-  AttendanceFilterDto, LeaveFilterDto,
-  CreateAttendanceDto, UpdateAttendanceDto,
-  ClockInDto, ClockOutDto,
-  CreateLeaveRequestDto, ReviewLeaveDto,
-  CreateWorkScheduleDto, AssignScheduleDto,
-  CreateOvertimeDto, ReviewOvertimeDto,
-  CreateJustificationDto, ReviewJustificationDto,
-  CreateAdjustmentDto, CreateOvertimeDto as OTDto,
-  GenerateQrDto, ValidateQrDto,
-  AttendanceStatus, LeaveStatus, LeaveType,
-  CheckInMethod, AttendanceContext, OvertimeStatus,
+  AttendanceFilterDto,
+  LeaveFilterDto,
+  CreateAttendanceDto,
+  UpdateAttendanceDto,
+  ClockInDto,
+  ClockOutDto,
+  CreateLeaveRequestDto,
+  ReviewLeaveDto,
+  CreateWorkScheduleDto,
+  AssignScheduleDto,
+  CreateOvertimeDto,
+  ReviewOvertimeDto,
+  CreateJustificationDto,
+  ReviewJustificationDto,
+  GenerateQrDto,
+  AttendanceStatus,
+  LeaveStatus,
+  LeaveType,
+  CheckInMethod,
+  AttendanceContext,
+  OvertimeStatus,
 } from './attendance.dto';
 
 const qrStore = new Map<string, { userId?: number; payload: any; expiresAt: number }>();
@@ -62,9 +75,7 @@ function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number):
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-    Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLon / 2) ** 2;
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
@@ -76,19 +87,32 @@ export class AttendanceService {
   ) {}
 
   async findAll(filters: AttendanceFilterDto) {
-    const { page = 1, limit = 20, userId, department, from, to, status, context, eventId, courseId, sortBy = 'date', sortOrder = 'desc' } = filters;
+    const {
+      page = 1,
+      limit = 20,
+      userId,
+      department,
+      from,
+      to,
+      status,
+      context,
+      eventId,
+      courseId,
+      sortBy = 'date',
+      sortOrder = 'desc',
+    } = filters;
     const skip = (page - 1) * limit;
     const where: any = {};
 
-    if (userId)  where.userId = userId;
-    if (status)  where.status = status;
+    if (userId) where.userId = userId;
+    if (status) where.status = status;
     if (context) where.context = context;
     if (eventId) where.eventId = eventId;
-    if (courseId)where.courseId = courseId;
+    if (courseId) where.courseId = courseId;
     if (from || to) {
       where.date = {};
       if (from) where.date.gte = new Date(from);
-      if (to)   where.date.lte = new Date(to);
+      if (to) where.date.lte = new Date(to);
     }
     if (department) {
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
@@ -96,7 +120,9 @@ export class AttendanceService {
 
     const [data, total] = await Promise.all([
       (this.prisma as any).attendanceRecord.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         orderBy: { [sortBy]: sortOrder },
         include: {
           user: { select: { id: true, fullName: true, email: true } },
@@ -117,18 +143,21 @@ export class AttendanceService {
     if (from || to) {
       where.date = {};
       if (from) where.date.gte = new Date(from);
-      if (to)   where.date.lte = new Date(to);
+      if (to) where.date.lte = new Date(to);
     }
 
     const records = await (this.prisma as any).attendanceRecord.findMany({
-      where, orderBy: { date: 'desc' },
+      where,
+      orderBy: { date: 'desc' },
       include: { justifications: true },
     });
 
     const totalMinutes = records.reduce((a: number, r: any) => a + (r.workMinutes ?? 0), 0);
-    const presentDays  = records.filter((r: any) => [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.REMOTE].includes(r.status as any)).length;
-    const absentDays   = records.filter((r: any) => r.status === AttendanceStatus.ABSENT).length;
-    const lateDays     = records.filter((r: any) => r.status === AttendanceStatus.LATE).length;
+    const presentDays = records.filter((r: any) =>
+      [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.REMOTE].includes(r.status),
+    ).length;
+    const absentDays = records.filter((r: any) => r.status === AttendanceStatus.ABSENT).length;
+    const lateDays = records.filter((r: any) => r.status === AttendanceStatus.LATE).length;
 
     return {
       records,
@@ -205,7 +234,7 @@ export class AttendanceService {
     };
 
     if (dto.location) {
-      data.latitude  = dto.location.latitude;
+      data.latitude = dto.location.latitude;
       data.longitude = dto.location.longitude;
     }
 
@@ -213,7 +242,13 @@ export class AttendanceService {
       ? await (this.prisma as any).attendanceRecord.update({ where: { id: existing.id }, data })
       : await (this.prisma as any).attendanceRecord.create({ data });
 
-    await this.audit.log({ action: 'CLOCK_IN', entityType: 'AttendanceRecord', entityId: record.id, userId, metadata: {} });
+    await this.audit.log({
+      action: 'CLOCK_IN',
+      entityType: 'AttendanceRecord',
+      entityId: record.id,
+      userId,
+      metadata: {},
+    });
 
     return record;
   }
@@ -225,17 +260,19 @@ export class AttendanceService {
       orderBy: { createdAt: 'desc' },
     });
 
-    if (!record)          throw new NotFoundException('Nenhum clock-in registado hoje');
-    if (record.clockOut)  throw new ConflictException('Clock-out já registado hoje');
+    if (!record) throw new NotFoundException('Nenhum clock-in registado hoje');
+    if (record.clockOut) throw new ConflictException('Clock-out já registado hoje');
 
-    const clockOutTime  = nowHHMM();
-    const breakMinutes  = dto.breakMinutes ?? record.breakMinutes ?? 0;
-    const workMinutes   = calcWorkMinutes(record.clockIn!, clockOutTime, breakMinutes);
-    const hoursWorked   = minutesToHours(workMinutes);
+    const clockOutTime = nowHHMM();
+    const breakMinutes = dto.breakMinutes ?? record.breakMinutes ?? 0;
+    const workMinutes = calcWorkMinutes(record.clockIn, clockOutTime, breakMinutes);
+    const hoursWorked = minutesToHours(workMinutes);
 
-    const schedule      = await this.getActiveSchedule(userId);
-    const expectedMin   = schedule ? parseTime(schedule.endTime) - parseTime(schedule.startTime) - (schedule.breakMinutes ?? 0) : 480;
-    const overtimeMin   = Math.max(0, workMinutes - expectedMin);
+    const schedule = await this.getActiveSchedule(userId);
+    const expectedMin = schedule
+      ? parseTime(schedule.endTime) - parseTime(schedule.startTime) - (schedule.breakMinutes ?? 0)
+      : 480;
+    const overtimeMin = Math.max(0, workMinutes - expectedMin);
 
     const updated = await (this.prisma as any).attendanceRecord.update({
       where: { id: record.id },
@@ -263,7 +300,13 @@ export class AttendanceService {
       });
     }
 
-    await this.audit.log({ action: 'CLOCK_OUT', entityType: 'AttendanceRecord', entityId: record.id, userId, metadata: {} });
+    await this.audit.log({
+      action: 'CLOCK_OUT',
+      entityType: 'AttendanceRecord',
+      entityId: record.id,
+      userId,
+      metadata: {},
+    });
 
     return updated;
   }
@@ -277,9 +320,10 @@ export class AttendanceService {
     });
     if (exists) throw new ConflictException('Presença já registada para este dia/contexto');
 
-    const workMinutes = dto.clockIn && dto.clockOut
-      ? calcWorkMinutes(dto.clockIn, dto.clockOut, dto.breakMinutes ?? 0)
-      : dto.workMinutes ?? 0;
+    const workMinutes =
+      dto.clockIn && dto.clockOut
+        ? calcWorkMinutes(dto.clockIn, dto.clockOut, dto.breakMinutes ?? 0)
+        : (dto.workMinutes ?? 0);
 
     return (this.prisma as any).attendanceRecord.create({
       data: {
@@ -306,14 +350,14 @@ export class AttendanceService {
   async update(id: number, dto: UpdateAttendanceDto, updatedById: number) {
     const record = await this.findOne(id);
 
-    const changedFields = Object.keys(dto).filter(k => (record as any)[k] !== (dto as any)[k]);
+    const changedFields = Object.keys(dto).filter(k => record[k] !== (dto as any)[k]);
     if (changedFields.length > 0) {
       await this.prisma.attendanceAdjustment.create({
         data: {
           attendanceId: id,
           adjustedById: updatedById,
           changes: changedFields.reduce((acc, k) => {
-            (acc as any)[k] = { from: (record as any)[k], to: (dto as any)[k] };
+            acc[k] = { from: record[k], to: (dto as any)[k] };
             return acc;
           }, {} as any),
           reason: 'Actualização manual',
@@ -322,9 +366,13 @@ export class AttendanceService {
     }
 
     if (dto.clockIn && dto.clockOut) {
-      const wm = calcWorkMinutes(dto.clockIn, dto.clockOut, dto.breakMinutes ?? record.breakMinutes ?? 0);
-      (dto as any).workMinutes  = wm;
-      (dto as any).hoursWorked  = minutesToHours(wm);
+      const wm = calcWorkMinutes(
+        dto.clockIn,
+        dto.clockOut,
+        dto.breakMinutes ?? record.breakMinutes ?? 0,
+      );
+      (dto as any).workMinutes = wm;
+      (dto as any).hoursWorked = minutesToHours(wm);
     }
 
     return (this.prisma as any).attendanceRecord.update({ where: { id }, data: dto as any });
@@ -338,7 +386,7 @@ export class AttendanceService {
 
   async createLeaveRequest(userId: number, dto: CreateLeaveRequestDto) {
     const start = new Date(dto.startDate);
-    const end   = new Date(dto.endDate);
+    const end = new Date(dto.endDate);
 
     if (end < start) throw new BadRequestException('Data de fim anterior ao início');
 
@@ -346,12 +394,11 @@ export class AttendanceService {
       where: {
         userId,
         status: LeaveStatus.APPROVED,
-        OR: [
-          { startDate: { lte: end }, endDate: { gte: start } },
-        ],
+        OR: [{ startDate: { lte: end }, endDate: { gte: start } }],
       },
     });
-    if (conflict) throw new ConflictException('Existe sobreposição com licença já aprovada neste período');
+    if (conflict)
+      throw new ConflictException('Existe sobreposição com licença já aprovada neste período');
 
     const workDays = this.countWorkdays(start, end);
 
@@ -378,7 +425,12 @@ export class AttendanceService {
 
     const updated = await this.prisma.leaveRequest.update({
       where: { id },
-      data: { status: dto.status, reviewNotes: dto.reviewNotes, reviewedById: reviewerId, reviewedAt: new Date() },
+      data: {
+        status: dto.status,
+        reviewNotes: dto.reviewNotes,
+        reviewedById: reviewerId,
+        reviewedAt: new Date(),
+      },
     });
 
     if (dto.status === LeaveStatus.APPROVED) {
@@ -393,17 +445,19 @@ export class AttendanceService {
     const skip = (page - 1) * limit;
     const where: any = {};
     if (userId) where.userId = userId;
-    if (type)   where.leaveType = type;
+    if (type) where.leaveType = type;
     if (status) where.status = status;
     if (from || to) {
       where.startDate = {};
       if (from) where.startDate.gte = new Date(from);
-      if (to)   where.startDate.lte = new Date(to);
+      if (to) where.startDate.lte = new Date(to);
     }
 
     const [data, total] = await Promise.all([
       this.prisma.leaveRequest.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
           // FIX: removed reviewedBy (does not exist on LeaveRequest); kept user only
@@ -417,9 +471,9 @@ export class AttendanceService {
   }
 
   async getLeaveBalance(userId: number) {
-    const year  = new Date().getFullYear();
+    const year = new Date().getFullYear();
     const start = new Date(year, 0, 1);
-    const end   = new Date(year, 11, 31);
+    const end = new Date(year, 11, 31);
 
     const approved = await this.prisma.leaveRequest.findMany({
       where: { userId, status: LeaveStatus.APPROVED, startDate: { gte: start, lte: end } },
@@ -458,8 +512,16 @@ export class AttendanceService {
   async assignSchedule(dto: AssignScheduleDto) {
     return this.prisma.userSchedule.upsert({
       where: { userId: dto.userId },
-      create: { ...dto, effectiveFrom: new Date(dto.effectiveFrom), effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null },
-      update: { scheduleId: dto.scheduleId, effectiveFrom: new Date(dto.effectiveFrom), effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null },
+      create: {
+        ...dto,
+        effectiveFrom: new Date(dto.effectiveFrom),
+        effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
+      },
+      update: {
+        scheduleId: dto.scheduleId,
+        effectiveFrom: new Date(dto.effectiveFrom),
+        effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
+      },
     });
   }
 
@@ -479,7 +541,12 @@ export class AttendanceService {
   async reviewOvertime(id: number, dto: ReviewOvertimeDto, reviewerId: number) {
     return this.prisma.overtimeRecord.update({
       where: { id },
-      data: { status: dto.status, reviewNotes: dto.reviewNotes, reviewedById: reviewerId, reviewedAt: new Date() },
+      data: {
+        status: dto.status,
+        reviewNotes: dto.reviewNotes,
+        reviewedById: reviewerId,
+        reviewedAt: new Date(),
+      },
     });
   }
 
@@ -487,18 +554,27 @@ export class AttendanceService {
     const records = await this.prisma.overtimeRecord.findMany({
       where: { userId, status: { in: [OvertimeStatus.APPROVED] } },
     });
-    const totalMin    = records.filter(r => !r.compensated).reduce((a, r) => a + r.overtimeMinutes, 0);
-    const compensated = records.filter(r => r.compensated).reduce((a, r) => a + r.overtimeMinutes, 0);
-    return { totalMinutes: totalMin, totalHours: minutesToHours(totalMin), compensatedHours: minutesToHours(compensated), balanceHours: minutesToHours(totalMin - compensated) };
+    const totalMin = records.filter(r => !r.compensated).reduce((a, r) => a + r.overtimeMinutes, 0);
+    const compensated = records
+      .filter(r => r.compensated)
+      .reduce((a, r) => a + r.overtimeMinutes, 0);
+    return {
+      totalMinutes: totalMin,
+      totalHours: minutesToHours(totalMin),
+      compensatedHours: minutesToHours(compensated),
+      balanceHours: minutesToHours(totalMin - compensated),
+    };
   }
 
   async createJustification(userId: number, dto: CreateJustificationDto) {
     const record = await this.findOne(dto.attendanceId);
-    if (record.userId !== userId) throw new ForbiddenException('Não pode justificar presença de outro utilizador');
+    if (record.userId !== userId)
+      throw new ForbiddenException('Não pode justificar presença de outro utilizador');
 
     const deadline = new Date(record.date);
     deadline.setDate(deadline.getDate() + 3);
-    if (new Date() > deadline) throw new BadRequestException('Prazo para justificação expirado (3 dias)');
+    if (new Date() > deadline)
+      throw new BadRequestException('Prazo para justificação expirado (3 dias)');
 
     return this.prisma.attendanceJustification.create({
       data: {
@@ -514,13 +590,19 @@ export class AttendanceService {
 
   async reviewJustification(id: number, dto: ReviewJustificationDto, reviewerId: number) {
     const justification = await this.prisma.attendanceJustification.findUnique({
-      where: { id }, include: { attendance: true },
+      where: { id },
+      include: { attendance: true },
     });
     if (!justification) throw new NotFoundException('Justificativa não encontrada');
 
     const updated = await this.prisma.attendanceJustification.update({
       where: { id },
-      data: { status: dto.status, reviewNotes: dto.reviewNotes, reviewedById: reviewerId, reviewedAt: new Date() },
+      data: {
+        status: dto.status,
+        reviewNotes: dto.reviewNotes,
+        reviewedById: reviewerId,
+        reviewedAt: new Date(),
+      },
     });
 
     if (dto.status === 'APPROVED') {
@@ -539,25 +621,27 @@ export class AttendanceService {
       where,
       include: {
         // FIX: attendance.user → cast as any since Attendance uses Employee not User
-        attendance: { include: { user: { select: { id: true, fullName: true, email: true } } } as any },
+        attendance: {
+          include: { user: { select: { id: true, fullName: true, email: true } } } as any,
+        },
       },
       orderBy: { createdAt: 'asc' },
     });
   }
 
   async generateQrCode(generatorId: number, dto: GenerateQrDto) {
-    const token    = crypto.randomBytes(32).toString('hex');
-    const ttl      = dto.ttlSeconds ?? 30;
+    const token = crypto.randomBytes(32).toString('hex');
+    const ttl = dto.ttlSeconds ?? 30;
     const expiresAt = Date.now() + ttl * 1000;
 
     qrStore.set(token, {
       payload: {
-        context:            dto.context ?? AttendanceContext.WORK,
-        eventId:            dto.eventId,
-        sessionId:          dto.sessionId,
+        context: dto.context ?? AttendanceContext.WORK,
+        eventId: dto.eventId,
+        sessionId: dto.sessionId,
         requireGeolocation: dto.requireGeolocation ?? false,
-        generatedById:      generatorId,
-        generatedAt:        new Date().toISOString(),
+        generatedById: generatorId,
+        generatedAt: new Date().toISOString(),
       },
       expiresAt,
     });
@@ -565,15 +649,21 @@ export class AttendanceService {
     return { token, expiresAt: new Date(expiresAt).toISOString(), ttlSeconds: ttl };
   }
 
-  async validateQrToken(token: string, userId: number, location?: { latitude: number; longitude: number }) {
+  async validateQrToken(
+    token: string,
+    userId: number,
+    location?: { latitude: number; longitude: number },
+  ) {
     const entry = qrStore.get(token);
     if (!entry) throw new BadRequestException('QR code inválido ou já utilizado');
     if (Date.now() > entry.expiresAt) {
       qrStore.delete(token);
       throw new BadRequestException('QR code expirado');
     }
-    if (entry.userId && entry.userId !== userId) throw new ForbiddenException('QR code não pertence a este utilizador');
-    if (entry.payload.requireGeolocation && !location) throw new BadRequestException('Geolocalização obrigatória para este QR code');
+    if (entry.userId && entry.userId !== userId)
+      throw new ForbiddenException('QR code não pertence a este utilizador');
+    if (entry.payload.requireGeolocation && !location)
+      throw new BadRequestException('Geolocalização obrigatória para este QR code');
 
     qrStore.delete(token);
     return entry.payload;
@@ -581,9 +671,10 @@ export class AttendanceService {
 
   async getMonthlyReport(year: number, month: number, department?: string) {
     const from = new Date(year, month - 1, 1);
-    const to   = new Date(year, month, 0, 23, 59, 59);
+    const to = new Date(year, month, 0, 23, 59, 59);
     const where: any = { date: { gte: from, lte: to } };
-    if (department) where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
+    if (department)
+      where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const records = await (this.prisma as any).attendanceRecord.findMany({
       where,
@@ -599,33 +690,47 @@ export class AttendanceService {
         userMap.set(uid, {
           userId: uid,
           name: r.user?.fullName,
-          present: 0, late: 0, absent: 0, justified: 0, remote: 0,
-          totalWorkMin: 0, overtimeMin: 0,
+          present: 0,
+          late: 0,
+          absent: 0,
+          justified: 0,
+          remote: 0,
+          totalWorkMin: 0,
+          overtimeMin: 0,
         });
       }
       const u = userMap.get(uid)!;
-      if ([AttendanceStatus.PRESENT, AttendanceStatus.PARTIAL].includes(r.status as any)) u.present++;
-      if (r.status === AttendanceStatus.LATE)      { u.present++; u.late++; }
-      if (r.status === AttendanceStatus.ABSENT)    u.absent++;
+      if ([AttendanceStatus.PRESENT, AttendanceStatus.PARTIAL].includes(r.status)) u.present++;
+      if (r.status === AttendanceStatus.LATE) {
+        u.present++;
+        u.late++;
+      }
+      if (r.status === AttendanceStatus.ABSENT) u.absent++;
       if (r.status === AttendanceStatus.JUSTIFIED) u.justified++;
-      if (r.status === AttendanceStatus.REMOTE)    { u.present++; u.remote++; }
-      u.totalWorkMin  += r.workMinutes ?? 0;
-      u.overtimeMin   += r.overtimeMinutes ?? 0;
+      if (r.status === AttendanceStatus.REMOTE) {
+        u.present++;
+        u.remote++;
+      }
+      u.totalWorkMin += r.workMinutes ?? 0;
+      u.overtimeMin += r.overtimeMinutes ?? 0;
     }
 
     const summary = Array.from(userMap.values()).map(u => ({
       ...u,
-      totalHours:     minutesToHours(u.totalWorkMin),
-      overtimeHours:  minutesToHours(u.overtimeMin),
+      totalHours: minutesToHours(u.totalWorkMin),
+      overtimeHours: minutesToHours(u.overtimeMin),
       attendanceRate: workdays > 0 ? +((u.present / workdays) * 100).toFixed(1) : 0,
-      absenteeismRate:workdays > 0 ? +((u.absent  / workdays) * 100).toFixed(1) : 0,
+      absenteeismRate: workdays > 0 ? +((u.absent / workdays) * 100).toFixed(1) : 0,
     }));
 
-    const totals = summary.reduce((a, u) => ({
-      totalPresent: a.totalPresent + u.present,
-      totalAbsent:  a.totalAbsent  + u.absent,
-      totalHours:   +(a.totalHours  + u.totalHours).toFixed(2),
-    }), { totalPresent: 0, totalAbsent: 0, totalHours: 0 });
+    const totals = summary.reduce(
+      (a, u) => ({
+        totalPresent: a.totalPresent + u.present,
+        totalAbsent: a.totalAbsent + u.absent,
+        totalHours: +(a.totalHours + u.totalHours).toFixed(2),
+      }),
+      { totalPresent: 0, totalAbsent: 0, totalHours: 0 },
+    );
 
     return {
       period: `${year}-${String(month).padStart(2, '0')}`,
@@ -640,7 +745,8 @@ export class AttendanceService {
     const today = todayMidnight();
     const todayEnd = new Date(today.getTime() + 86399999);
     const where: any = { date: { gte: today, lte: todayEnd } };
-    if (department) where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
+    if (department)
+      where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const [records, pendingLeaves, pendingJustifications, pendingOvertime] = await Promise.all([
       (this.prisma as any).attendanceRecord.findMany({
@@ -652,9 +758,11 @@ export class AttendanceService {
       this.prisma.overtimeRecord.count({ where: { status: OvertimeStatus.PENDING } }),
     ]);
 
-    const present   = records.filter((r: any) => [AttendanceStatus.PRESENT, AttendanceStatus.REMOTE, AttendanceStatus.LATE].includes(r.status as any));
-    const absent    = records.filter((r: any) => r.status === AttendanceStatus.ABSENT);
-    const late      = records.filter((r: any) => r.status === AttendanceStatus.LATE);
+    const present = records.filter((r: any) =>
+      [AttendanceStatus.PRESENT, AttendanceStatus.REMOTE, AttendanceStatus.LATE].includes(r.status),
+    );
+    const absent = records.filter((r: any) => r.status === AttendanceStatus.ABSENT);
+    const late = records.filter((r: any) => r.status === AttendanceStatus.LATE);
     const checkedIn = records.filter((r: any) => r.clockIn && !r.clockOut);
 
     return {
@@ -667,11 +775,21 @@ export class AttendanceService {
         pendingLeaves,
         pendingJustifications,
         pendingOvertime,
-        attendanceRate: records.length > 0 ? +((present.length / records.length) * 100).toFixed(1) : 0,
+        attendanceRate:
+          records.length > 0 ? +((present.length / records.length) * 100).toFixed(1) : 0,
       },
-      presentList: present.map((r: any) => ({ id: r.userId, name: r.user?.fullName, clockIn: r.clockIn, status: r.status })),
-      absentList:  absent.map((r: any) => ({ id: r.userId, name: r.user?.fullName })),
-      lateList:    late.map((r: any) => ({ id: r.userId, name: r.user?.fullName, clockIn: r.clockIn })),
+      presentList: present.map((r: any) => ({
+        id: r.userId,
+        name: r.user?.fullName,
+        clockIn: r.clockIn,
+        status: r.status,
+      })),
+      absentList: absent.map((r: any) => ({ id: r.userId, name: r.user?.fullName })),
+      lateList: late.map((r: any) => ({
+        id: r.userId,
+        name: r.user?.fullName,
+        clockIn: r.clockIn,
+      })),
     };
   }
 
@@ -680,14 +798,22 @@ export class AttendanceService {
     const where: any = { date: { gte: from } };
     if (userId) where.userId = userId;
 
-    const records = await (this.prisma as any).attendanceRecord.findMany({ where, orderBy: { date: 'asc' } });
+    const records = await (this.prisma as any).attendanceRecord.findMany({
+      where,
+      orderBy: { date: 'asc' },
+    });
 
     const byDate = records.reduce((acc: any, r: any) => {
       const key = r.date.toISOString().split('T')[0];
       if (!acc[key]) acc[key] = { date: key, present: 0, absent: 0, late: 0, totalHours: 0 };
-      if ([AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.REMOTE].includes(r.status as any)) acc[key].present++;
+      if (
+        [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.REMOTE].includes(
+          r.status,
+        )
+      )
+        acc[key].present++;
       if (r.status === AttendanceStatus.ABSENT) acc[key].absent++;
-      if (r.status === AttendanceStatus.LATE)   acc[key].late++;
+      if (r.status === AttendanceStatus.LATE) acc[key].late++;
       acc[key].totalHours = +(acc[key].totalHours + (r.hoursWorked ?? 0)).toFixed(2);
       return acc;
     }, {});
@@ -700,7 +826,8 @@ export class AttendanceService {
       status: AttendanceStatus.ABSENT,
       date: { gte: new Date(from), lte: new Date(to) },
     };
-    if (department) where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
+    if (department)
+      where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const records = await (this.prisma as any).attendanceRecord.findMany({
       where,
@@ -746,7 +873,8 @@ export class AttendanceService {
 
   private async getActiveSchedule(userId: number) {
     const userSchedule = await this.prisma.userSchedule.findUnique({
-      where: { userId }, include: { schedule: true },
+      where: { userId },
+      include: { schedule: true },
     });
     return userSchedule?.schedule ?? null;
   }
@@ -755,12 +883,18 @@ export class AttendanceService {
     const locations = await this.prisma.allowedLocation.findMany();
     if (locations.length === 0) return;
 
-    const inRange = locations.some(loc =>
-      distanceMeters(lat, lon, loc.latitude, loc.longitude) <= loc.radiusMeters
+    const inRange = locations.some(
+      loc => distanceMeters(lat, lon, loc.latitude, loc.longitude) <= loc.radiusMeters,
     );
 
     if (!inRange) {
-      await this.audit.log({ action: 'GEOFENCE_VIOLATION', entityType: 'AttendanceRecord', entityId: 0, userId, metadata: {} });
+      await this.audit.log({
+        action: 'GEOFENCE_VIOLATION',
+        entityType: 'AttendanceRecord',
+        entityId: 0,
+        userId,
+        metadata: {},
+      });
       throw new BadRequestException('Localização fora da área permitida para check-in');
     }
   }

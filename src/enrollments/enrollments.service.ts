@@ -1,18 +1,43 @@
 ﻿import {
-  Injectable, NotFoundException, ConflictException,
-  BadRequestException, ForbiddenException, Logger,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { CertificateType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateEnrollmentDto, UpdateEnrollmentStatusDto,
-  EnrollmentFilterDto, BulkEnrollDto, CancelEnrollmentDto,
-  UpdateDeadlineDto, EnrollmentStatus, EnrollmentOrigin,
+  CreateEnrollmentDto,
+  UpdateEnrollmentStatusDto,
+  EnrollmentFilterDto,
+  BulkEnrollDto,
+  CancelEnrollmentDto,
+  UpdateDeadlineDto,
+  EnrollmentOrigin,
 } from './enrollments.dto';
 
 const ENROLLMENT_INCLUDE_BASIC = {
-  user:   { select: { id: true, fullName: true, email: true, avatarUrl: true, department: { select: { name: true } } } },
-  course: { select: { id: true, title: true, thumbnailUrl: true, category: true, workloadHours: true, status: true } },
+  user: {
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      avatarUrl: true,
+      department: { select: { name: true } },
+    },
+  },
+  course: {
+    select: {
+      id: true,
+      title: true,
+      thumbnailUrl: true,
+      category: true,
+      workloadHours: true,
+      status: true,
+    },
+  },
   certificate: { select: { id: true, validationCode: true, issuedAt: true, expiresAt: true } },
 } as const;
 
@@ -34,9 +59,7 @@ export class EnrollmentsService {
     return {
       totalLessons,
       completedLessons,
-      progressPercent: totalLessons > 0
-        ? Math.round((completedLessons / totalLessons) * 100)
-        : 0,
+      progressPercent: totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0,
     };
   }
 
@@ -50,28 +73,37 @@ export class EnrollmentsService {
 
   async findAll(filters: EnrollmentFilterDto) {
     const {
-      page = 1, limit = 20, userId, courseId, departmentId,
-      status, origin, mandatory, overdue,
+      page = 1,
+      limit = 20,
+      userId,
+      courseId,
+      departmentId,
+      status,
+      origin,
+      mandatory,
+      overdue,
     } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (userId)                  where.userId   = userId;
-    if (courseId)                where.courseId = courseId;
-    if (status)                  where.status   = status;
-    if (origin)                  where.origin   = origin;
+    if (userId) where.userId = userId;
+    if (courseId) where.courseId = courseId;
+    if (status) where.status = status;
+    if (origin) where.origin = origin;
     if (mandatory !== undefined) where.mandatory = mandatory;
     if (departmentId) {
       where.user = { departmentId };
     }
     if (overdue) {
       where.deadline = { lt: new Date() };
-      where.status   = { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] };
+      where.status = { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] };
     }
 
     const [data, total] = await Promise.all([
       this.prisma.enrollment.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
           ...ENROLLMENT_INCLUDE_BASIC,
           _count: { select: { progresses: true } },
@@ -89,7 +121,7 @@ export class EnrollmentsService {
           ...prog,
           isOverdue: this.isOverdue((e as any).deadline, (e as any).status),
         };
-      })
+      }),
     );
 
     return { data: enriched, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -122,14 +154,14 @@ export class EnrollmentsService {
   async enroll(dto: CreateEnrollmentDto) {
     const exists = await this.prisma.enrollment.findFirst({
       where: {
-        userId:   dto.userId,
+        userId: dto.userId,
         courseId: dto.courseId,
-        status:   { notIn: ['CANCELLED', 'EXPIRED'] },
+        status: { notIn: ['CANCELLED', 'EXPIRED'] },
       },
     });
     if (exists) {
       throw new ConflictException(
-        `Utilizador já tem matrícula activa neste curso (status: ${exists.status})`
+        `Utilizador já tem matrícula activa neste curso (status: ${exists.status})`,
       );
     }
 
@@ -144,31 +176,35 @@ export class EnrollmentsService {
 
     const enrollment = await this.prisma.enrollment.create({
       data: {
-        userId:         dto.userId,
-        courseId:       dto.courseId,
-        deadline:       dto.deadline    ? new Date(dto.deadline) : null,
-        mandatory:      dto.mandatory   ?? course.mandatory ?? false,
-        origin:         dto.origin      ?? 'MANUAL',
+        userId: dto.userId,
+        courseId: dto.courseId,
+        deadline: dto.deadline ? new Date(dto.deadline) : null,
+        mandatory: dto.mandatory ?? course.mandatory ?? false,
+        origin: dto.origin ?? 'MANUAL',
         learningPathId: dto.learningPathId,
-        assignedById:   dto.assignedById,
-        status:         'NOT_STARTED',
+        assignedById: dto.assignedById,
+        status: 'NOT_STARTED',
       },
       include: ENROLLMENT_INCLUDE_BASIC,
     });
 
-    await this.prisma.courseAnalytics.updateMany({
-      where: { courseId: dto.courseId },
-      data:  { totalEnrollments: { increment: 1 } },
-    }).catch(() => {});
+    await this.prisma.courseAnalytics
+      .updateMany({
+        where: { courseId: dto.courseId },
+        data: { totalEnrollments: { increment: 1 } },
+      })
+      .catch(() => {});
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId:   dto.userId,
-        type:     'COURSE_ENROLLED',
-        message:  `Matriculado no curso "${course.title}"`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: dto.userId,
+          type: 'COURSE_ENROLLED',
+          message: `Matriculado no curso "${course.title}"`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
     return enrollment;
   }
@@ -177,9 +213,9 @@ export class EnrollmentsService {
 
   async bulkEnroll(dto: BulkEnrollDto) {
     const results = {
-      success:  0,
-      skipped:  0,
-      errors:   [] as Array<{ userId: number; error: string }>,
+      success: 0,
+      skipped: 0,
+      errors: [] as Array<{ userId: number; error: string }>,
       enrolled: [] as number[],
     };
 
@@ -187,10 +223,10 @@ export class EnrollmentsService {
       try {
         await this.enroll({
           userId,
-          courseId:  dto.courseId,
-          deadline:  dto.deadline,
+          courseId: dto.courseId,
+          deadline: dto.deadline,
           mandatory: dto.mandatory,
-          origin:    dto.origin ?? EnrollmentOrigin.MANUAL,
+          origin: dto.origin ?? EnrollmentOrigin.MANUAL,
         });
         results.success++;
         results.enrolled.push(userId);
@@ -205,11 +241,11 @@ export class EnrollmentsService {
     }
 
     return {
-      success:  results.success,
-      skipped:  results.skipped,
-      errors:   results.errors.length,
-      total:    dto.userIds.length,
-      details:  { enrolled: results.enrolled, errors: results.errors },
+      success: results.success,
+      skipped: results.skipped,
+      errors: results.errors.length,
+      total: dto.userIds.length,
+      details: { enrolled: results.enrolled, errors: results.errors },
     };
   }
 
@@ -220,13 +256,11 @@ export class EnrollmentsService {
     const current = (e as any).status;
 
     const invalidTransitions: Record<string, string[]> = {
-      COMPLETED:  ['NOT_STARTED', 'IN_PROGRESS'],
-      CANCELLED:  ['COMPLETED'],
+      COMPLETED: ['NOT_STARTED', 'IN_PROGRESS'],
+      CANCELLED: ['COMPLETED'],
     };
     if (invalidTransitions[dto.status]?.includes(current)) {
-      throw new BadRequestException(
-        `Transição inválida: ${current} → ${dto.status}`
-      );
+      throw new BadRequestException(`Transição inválida: ${current} → ${dto.status}`);
     }
 
     const data: any = { status: dto.status };
@@ -240,28 +274,32 @@ export class EnrollmentsService {
   // ─── CANCELAR ─────────────────────────────────────────────────────────────
 
   async cancel(id: number, dto: CancelEnrollmentDto, requestingUserId: number) {
-    const e = await this.findOne(id) as any;
+    const e = (await this.findOne(id)) as any;
 
     if (e.status === 'COMPLETED') {
       throw new ForbiddenException('Matrícula concluída não pode ser cancelada');
     }
     if (e.mandatory) {
-      throw new ForbiddenException('Matrículas obrigatórias não podem ser canceladas pelo colaborador. Contacte o RH.');
+      throw new ForbiddenException(
+        'Matrículas obrigatórias não podem ser canceladas pelo colaborador. Contacte o RH.',
+      );
     }
 
     await this.prisma.enrollment.update({
       where: { id },
       data: {
-        status:       'CANCELLED',
+        status: 'CANCELLED',
         cancelReason: dto.reason,
-        cancelledAt:  new Date(),
+        cancelledAt: new Date(),
       },
     });
 
-    await this.prisma.courseAnalytics.updateMany({
-      where: { courseId: e.courseId },
-      data:  { totalEnrollments: { decrement: 1 } },
-    }).catch(() => {});
+    await this.prisma.courseAnalytics
+      .updateMany({
+        where: { courseId: e.courseId },
+        data: { totalEnrollments: { decrement: 1 } },
+      })
+      .catch(() => {});
 
     return { message: 'Matrícula cancelada' };
   }
@@ -272,14 +310,14 @@ export class EnrollmentsService {
     await this.findOne(id);
     return this.prisma.enrollment.update({
       where: { id },
-      data:  { deadline: new Date(dto.deadline) },
+      data: { deadline: new Date(dto.deadline) },
     });
   }
 
   // ─── GERAR CERTIFICADO ────────────────────────────────────────────────────
 
   async generateCertificate(enrollmentId: number) {
-    const e = await this.findOne(enrollmentId) as any;
+    const e = (await this.findOne(enrollmentId)) as any;
 
     if (e.status !== 'COMPLETED') {
       throw new BadRequestException('Curso ainda não concluído');
@@ -290,7 +328,7 @@ export class EnrollmentsService {
     });
     if (exists) return exists;
 
-    const course         = await this.prisma.course.findUnique({ where: { id: e.courseId } });
+    const course = await this.prisma.course.findUnique({ where: { id: e.courseId } });
     const validationCode = `CERT-${e.courseId}-${e.userId}-${Date.now()}`;
 
     const expiresAt = course?.certificateValidityDays
@@ -301,23 +339,25 @@ export class EnrollmentsService {
     const cert = await this.prisma.certificate.create({
       data: {
         enrollmentId,
-        userId:         e.userId,
-        courseId:       e.courseId,
-        type:           CertificateType.COURSE,
+        userId: e.userId,
+        courseId: e.courseId,
+        type: CertificateType.COURSE,
         validationCode,
-        issuedAt:       new Date(),
+        issuedAt: new Date(),
         expiresAt,
       },
     });
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId:   e.userId,
-        type:     'CERTIFICATE_ISSUED',
-        message:  `Certificado emitido para "${course?.title}"`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: e.userId,
+          type: 'CERTIFICATE_ISSUED',
+          message: `Certificado emitido para "${course?.title}"`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
     return cert;
   }
@@ -326,7 +366,7 @@ export class EnrollmentsService {
 
   async getUserEnrollments(userId: number, filters?: Partial<EnrollmentFilterDto>) {
     const where: any = { userId };
-    if (filters?.status)              where.status    = filters.status;
+    if (filters?.status) where.status = filters.status;
     if (filters?.mandatory !== undefined) where.mandatory = filters.mandatory;
 
     const enrollments = await this.prisma.enrollment.findMany({
@@ -334,34 +374,35 @@ export class EnrollmentsService {
       include: {
         course: {
           select: {
-            id: true, title: true, thumbnailUrl: true, category: true,
-            level: true, workloadHours: true, status: true,
+            id: true,
+            title: true,
+            thumbnailUrl: true,
+            category: true,
+            level: true,
+            workloadHours: true,
+            status: true,
             _count: { select: { modules: true } },
           },
         },
         certificate: { select: { id: true, validationCode: true, issuedAt: true } },
       },
-      orderBy: [
-        { mandatory:  'desc' },
-        { deadline:   'asc' },
-        { enrolledAt: 'desc' },
-      ],
+      orderBy: [{ mandatory: 'desc' }, { deadline: 'asc' }, { enrolledAt: 'desc' }],
     });
 
     const enriched = await Promise.all(
       enrollments.map(async e => {
-        const prog    = await this.computeProgress(e.id, (e as any).courseId, userId);
+        const prog = await this.computeProgress(e.id, (e as any).courseId, userId);
         const overdue = this.isOverdue((e as any).deadline, (e as any).status);
         return { ...e, ...prog, isOverdue: overdue };
-      })
+      }),
     );
 
     const groups = {
-      overdue:    enriched.filter(e => e.isOverdue),
+      overdue: enriched.filter(e => e.isOverdue),
       inProgress: enriched.filter(e => !e.isOverdue && (e as any).status === 'IN_PROGRESS'),
       notStarted: enriched.filter(e => !e.isOverdue && (e as any).status === 'NOT_STARTED'),
-      completed:  enriched.filter(e => (e as any).status === 'COMPLETED'),
-      cancelled:  enriched.filter(e => (e as any).status === 'CANCELLED'),
+      completed: enriched.filter(e => (e as any).status === 'COMPLETED'),
+      cancelled: enriched.filter(e => (e as any).status === 'CANCELLED'),
     };
 
     return { enrollments: enriched, groups };
@@ -373,57 +414,59 @@ export class EnrollmentsService {
     const userWhere: any = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;
 
-    const [
-      totalMandatory, completedMandatory,
-      overdueCount, notStartedMandatory,
-    ] = await Promise.all([
-      this.prisma.enrollment.count({
-        where: { mandatory: true, user: userWhere },
-      }),
-      this.prisma.enrollment.count({
-        where: { mandatory: true, status: 'COMPLETED', user: userWhere },
-      }),
-      this.prisma.enrollment.count({
-        where: {
-          mandatory: true,
-          deadline:  { lt: new Date() },
-          status:    { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] },
-          user:      userWhere,
-        },
-      }),
-      this.prisma.enrollment.count({
-        where: { mandatory: true, status: 'NOT_STARTED', user: userWhere },
-      }),
-    ]);
+    const [totalMandatory, completedMandatory, overdueCount, notStartedMandatory] =
+      await Promise.all([
+        this.prisma.enrollment.count({
+          where: { mandatory: true, user: userWhere },
+        }),
+        this.prisma.enrollment.count({
+          where: { mandatory: true, status: 'COMPLETED', user: userWhere },
+        }),
+        this.prisma.enrollment.count({
+          where: {
+            mandatory: true,
+            deadline: { lt: new Date() },
+            status: { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] },
+            user: userWhere,
+          },
+        }),
+        this.prisma.enrollment.count({
+          where: { mandatory: true, status: 'NOT_STARTED', user: userWhere },
+        }),
+      ]);
 
-    const complianceRate = totalMandatory > 0
-      ? Math.round((completedMandatory / totalMandatory) * 100)
-      : 100;
+    const complianceRate =
+      totalMandatory > 0 ? Math.round((completedMandatory / totalMandatory) * 100) : 100;
 
     const topOverdueCourses = await this.prisma.enrollment.groupBy({
       by: ['courseId'],
       where: {
         mandatory: true,
-        deadline:  { lt: new Date() },
-        status:    { notIn: ['COMPLETED', 'CANCELLED'] },
+        deadline: { lt: new Date() },
+        status: { notIn: ['COMPLETED', 'CANCELLED'] },
       },
-      _count:   { courseId: true },
-      orderBy:  { _count: { courseId: 'desc' } },
-      take:     5,
+      _count: { courseId: true },
+      orderBy: { _count: { courseId: 'desc' } },
+      take: 5,
     });
 
     const topOverdueWithTitles = await Promise.all(
       topOverdueCourses.map(async o => {
         const c = await this.prisma.course.findUnique({
-          where:  { id: o.courseId },
+          where: { id: o.courseId },
           select: { id: true, title: true },
         });
         return { ...c, overdueCount: o._count.courseId };
-      })
+      }),
     );
 
     return {
-      mandatory: { total: totalMandatory, completed: completedMandatory, overdue: overdueCount, notStarted: notStartedMandatory },
+      mandatory: {
+        total: totalMandatory,
+        completed: completedMandatory,
+        overdue: overdueCount,
+        notStarted: notStartedMandatory,
+      },
       complianceRate,
       topOverdueCourses: topOverdueWithTitles,
     };
@@ -433,7 +476,7 @@ export class EnrollmentsService {
 
   async getTeamProgress(managerId: number, courseId?: number) {
     const subordinates = await this.prisma.user.findMany({
-      where:  { managerId, active: true },
+      where: { managerId, active: true },
       select: { id: true, fullName: true, email: true, avatarUrl: true },
     });
 
@@ -450,16 +493,14 @@ export class EnrollmentsService {
         });
 
         const stats = {
-          total:      enrollments.length,
-          completed:  enrollments.filter(e => e.status === 'COMPLETED').length,
+          total: enrollments.length,
+          completed: enrollments.filter(e => e.status === 'COMPLETED').length,
           inProgress: enrollments.filter(e => e.status === 'IN_PROGRESS').length,
-          overdue:    enrollments.filter(e =>
-            this.isOverdue((e as any).deadline, e.status)
-          ).length,
+          overdue: enrollments.filter(e => this.isOverdue((e as any).deadline, e.status)).length,
         };
 
         return { ...sub, enrollments, stats };
-      })
+      }),
     );
 
     return { managerId, team: teamProgress, total: teamProgress.length };
@@ -468,49 +509,46 @@ export class EnrollmentsService {
   // ─── ANALYTICS ADMIN ──────────────────────────────────────────────────────
 
   async getAdminDashboard() {
-    const [
-      totalEnrollments, completed, inProgress,
-      notStarted, overdue, mandatoryCount,
-    ] = await Promise.all([
-      this.prisma.enrollment.count(),
-      this.prisma.enrollment.count({ where: { status: 'COMPLETED' } }),
-      this.prisma.enrollment.count({ where: { status: 'IN_PROGRESS' } }),
-      this.prisma.enrollment.count({ where: { status: 'NOT_STARTED' } }),
-      this.prisma.enrollment.count({
-        where: {
-          deadline: { lt: new Date() },
-          status:   { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] },
-        },
-      }),
-      this.prisma.enrollment.count({ where: { mandatory: true } }),
-    ]);
+    const [totalEnrollments, completed, inProgress, notStarted, overdue, mandatoryCount] =
+      await Promise.all([
+        this.prisma.enrollment.count(),
+        this.prisma.enrollment.count({ where: { status: 'COMPLETED' } }),
+        this.prisma.enrollment.count({ where: { status: 'IN_PROGRESS' } }),
+        this.prisma.enrollment.count({ where: { status: 'NOT_STARTED' } }),
+        this.prisma.enrollment.count({
+          where: {
+            deadline: { lt: new Date() },
+            status: { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] },
+          },
+        }),
+        this.prisma.enrollment.count({ where: { mandatory: true } }),
+      ]);
 
-    const completionRate = totalEnrollments > 0
-      ? Math.round((completed / totalEnrollments) * 100)
-      : 0;
+    const completionRate =
+      totalEnrollments > 0 ? Math.round((completed / totalEnrollments) * 100) : 0;
 
     const topCourses = await this.prisma.enrollment.groupBy({
-      by:      ['courseId'],
-      _count:  { courseId: true },
+      by: ['courseId'],
+      _count: { courseId: true },
       orderBy: { _count: { courseId: 'desc' } },
-      take:    5,
+      take: 5,
     });
 
     const topCoursesDetail = await Promise.all(
       topCourses.map(async tc => {
         const c = await this.prisma.course.findUnique({
-          where:  { id: tc.courseId },
+          where: { id: tc.courseId },
           select: { id: true, title: true, category: true },
         });
         return { ...c, enrollments: tc._count.courseId };
-      })
+      }),
     );
 
     return {
       enrollments: { total: totalEnrollments, completed, inProgress, notStarted, overdue },
-      mandatory:   mandatoryCount,
+      mandatory: mandatoryCount,
       completionRate,
-      topCourses:  topCoursesDetail,
+      topCourses: topCoursesDetail,
     };
   }
 
@@ -520,7 +558,7 @@ export class EnrollmentsService {
     const updated = await this.prisma.enrollment.updateMany({
       where: {
         deadline: { lt: new Date() },
-        status:   { in: ['NOT_STARTED', 'IN_PROGRESS'] },
+        status: { in: ['NOT_STARTED', 'IN_PROGRESS'] },
       },
       data: { status: 'OVERDUE' },
     });

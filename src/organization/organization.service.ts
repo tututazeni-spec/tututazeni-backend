@@ -1,14 +1,22 @@
 ﻿import {
-  Injectable, NotFoundException, ConflictException,
-  BadRequestException, Logger,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateOrgDepartmentDto, UpdateOrgDepartmentDto, DepartmentFilterDto,
-  CreateOrgPositionDto, UpdateOrgPositionDto, PositionFilterDto,
-  CreateOrgUnitDto, UpdateOrgUnitDto,
-  RecordOrgChangeDto, OrgChartFilterDto,
-  DepartmentStatus,
+  CreateOrgDepartmentDto,
+  UpdateOrgDepartmentDto,
+  DepartmentFilterDto,
+  CreateOrgPositionDto,
+  UpdateOrgPositionDto,
+  PositionFilterDto,
+  CreateOrgUnitDto,
+  UpdateOrgUnitDto,
+  RecordOrgChangeDto,
+  OrgChartFilterDto,
 } from './organization.dto';
 
 @Injectable()
@@ -20,42 +28,46 @@ export class OrganizationService {
   // ─── ESTATÍSTICAS / DASHBOARD ─────────────────────────────────────────────
 
   async getStats() {
-    const [units, departments, positions, totalStaff, managers, activePositions] = await Promise.all([
-      this.prisma.unit.count(),
-      this.prisma.department.count({ where: { status: 'ACTIVE' } }),
-      this.prisma.position.count(),
-      this.prisma.user.count({ where: { active: true } }),
-      this.prisma.user.count({ where: { active: true, managerId: null, id: { gt: 0 } } }),
-      this.prisma.position.findMany({
-        select: { id: true, headcountPlanned: true, _count: { select: { users: true } } },
-      }),
-    ]);
+    const [units, departments, positions, totalStaff, managers, activePositions] =
+      await Promise.all([
+        this.prisma.unit.count(),
+        this.prisma.department.count({ where: { status: 'ACTIVE' } }),
+        this.prisma.position.count(),
+        this.prisma.user.count({ where: { active: true } }),
+        this.prisma.user.count({ where: { active: true, managerId: null, id: { gt: 0 } } }),
+        this.prisma.position.findMany({
+          select: { id: true, headcountPlanned: true, _count: { select: { users: true } } },
+        }),
+      ]);
 
     // Headcount: ocupado vs planeado
     const headcountOccupied = activePositions.reduce((s, p) => s + p._count.users, 0);
-    const headcountPlanned  = activePositions.reduce((s, p) => s + (p.headcountPlanned ?? 0), 0);
-    const openPositions     = Math.max(0, headcountPlanned - headcountOccupied);
+    const headcountPlanned = activePositions.reduce((s, p) => s + (p.headcountPlanned ?? 0), 0);
+    const openPositions = Math.max(0, headcountPlanned - headcountOccupied);
 
     // Span of control (média de liderados por gestor)
-    const managerIds = (await this.prisma.user.findMany({
-      where:  { active: true, managerId: { not: null } },
-      select: { managerId: true },
-      distinct: ['managerId'],
-    })).map(u => u.managerId!).filter(Boolean);
+    const managerIds = (
+      await this.prisma.user.findMany({
+        where: { active: true, managerId: { not: null } },
+        select: { managerId: true },
+        distinct: ['managerId'],
+      })
+    )
+      .map(u => u.managerId)
+      .filter(Boolean);
 
-    const spanOfControl = managerIds.length > 0
-      ? Math.round((totalStaff / managerIds.length) * 10) / 10
-      : 0;
+    const spanOfControl =
+      managerIds.length > 0 ? Math.round((totalStaff / managerIds.length) * 10) / 10 : 0;
 
     // Profundidade hierárquica máxima
     const maxDepth = await this.calcMaxHierarchyDepth();
 
     // Distribuição por departamento
     const deptDist = await this.prisma.department.findMany({
-      where:   { status: 'ACTIVE' },
-      select:  { id: true, name: true, _count: { select: { users: true } } },
+      where: { status: 'ACTIVE' },
+      select: { id: true, name: true, _count: { select: { users: true } } },
       orderBy: { users: { _count: 'desc' } },
-      take:    10,
+      take: 10,
     });
 
     return {
@@ -63,8 +75,10 @@ export class OrganizationService {
       departments,
       positions,
       headcount: {
-        total: totalStaff, occupied: headcountOccupied,
-        planned: headcountPlanned, open: openPositions,
+        total: totalStaff,
+        occupied: headcountOccupied,
+        planned: headcountPlanned,
+        open: openPositions,
       },
       kpis: {
         spanOfControl,
@@ -85,7 +99,7 @@ export class OrganizationService {
   private async calcMaxHierarchyDepth(): Promise<number> {
     // Conta colaboradores sem gestor (raízes) e calcula profundidade
     const roots = await this.prisma.user.findMany({
-      where:  { active: true, managerId: null },
+      where: { active: true, managerId: null },
       select: { id: true },
     });
     if (!roots.length) return 0;
@@ -99,9 +113,9 @@ export class OrganizationService {
       maxDepth = Math.max(maxDepth, depth);
 
       const subs = await this.prisma.user.findMany({
-        where:  { managerId: userId, active: true },
+        where: { managerId: userId, active: true },
         select: { id: true },
-        take:   20,
+        take: 20,
       });
       for (const s of subs) await dfs(s.id, depth + 1);
     };
@@ -117,14 +131,15 @@ export class OrganizationService {
 
     // Ponto de partida
     const rootWhere: any = { active: true };
-    if (rootUserId)    rootWhere.id           = rootUserId;
-    else if (!departmentId) rootWhere.managerId = null; // raízes da org
-    else               rootWhere.departmentId  = departmentId;
+    if (rootUserId) rootWhere.id = rootUserId;
+    else if (!departmentId)
+      rootWhere.managerId = null; // raízes da org
+    else rootWhere.departmentId = departmentId;
 
     const roots = await this.prisma.user.findMany({
       where: rootWhere,
       select: this.orgChartSelect(),
-      take:  departmentId ? 100 : 20,
+      take: departmentId ? 100 : 20,
     });
 
     // Expandir recursivamente até depth
@@ -134,10 +149,14 @@ export class OrganizationService {
 
   private orgChartSelect() {
     return {
-      id: true, fullName: true, email: true, avatarUrl: true, managerId: true,
-      position:   { select: { id: true, name: true, level: true } },
+      id: true,
+      fullName: true,
+      email: true,
+      avatarUrl: true,
+      managerId: true,
+      position: { select: { id: true, name: true, level: true } },
       department: { select: { id: true, name: true, color: true } },
-      _count:     { select: { subordinates: true } },
+      _count: { select: { subordinates: true } },
     };
   }
 
@@ -146,11 +165,11 @@ export class OrganizationService {
 
     if (currentDepth < maxDepth) {
       const children = await this.prisma.user.findMany({
-        where:  { managerId: user.id, active: true },
+        where: { managerId: user.id, active: true },
         select: this.orgChartSelect(),
       });
       node.children = await Promise.all(
-        children.map(c => this.buildSubtree(c, maxDepth, currentDepth + 1))
+        children.map(c => this.buildSubtree(c, maxDepth, currentDepth + 1)),
       );
     }
 
@@ -164,8 +183,8 @@ export class OrganizationService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (status)   where.status   = status;
-    if (unitId)   where.unitId   = unitId;
+    if (status) where.status = status;
+    if (unitId) where.unitId = unitId;
     if (rootOnly) where.parentId = null;
     else if (parentId !== undefined) where.parentId = parentId;
     if (search) {
@@ -177,11 +196,13 @@ export class OrganizationService {
 
     const [data, total] = await Promise.all([
       this.prisma.department.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
-          head:   { select: { id: true, fullName: true, avatarUrl: true } },
+          head: { select: { id: true, fullName: true, avatarUrl: true } },
           parent: { select: { id: true, name: true } },
-          unit:   { select: { id: true, name: true } },
+          unit: { select: { id: true, name: true } },
           _count: { select: { users: true, children: true } },
         },
         orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
@@ -196,14 +217,20 @@ export class OrganizationService {
     const dept = await this.prisma.department.findUnique({
       where: { id },
       include: {
-        head:     { select: { id: true, fullName: true, avatarUrl: true, email: true } },
-        parent:   { select: { id: true, name: true, code: true } },
-        children: { select: { id: true, name: true, code: true, _count: { select: { users: true } } } },
-        unit:     { select: { id: true, name: true, city: true } },
+        head: { select: { id: true, fullName: true, avatarUrl: true, email: true } },
+        parent: { select: { id: true, name: true, code: true } },
+        children: {
+          select: { id: true, name: true, code: true, _count: { select: { users: true } } },
+        },
+        unit: { select: { id: true, name: true, city: true } },
         users: {
-          where:  { active: true },
+          where: { active: true },
           select: {
-            id: true, fullName: true, email: true, avatarUrl: true, hireDate: true,
+            id: true,
+            fullName: true,
+            email: true,
+            avatarUrl: true,
+            hireDate: true,
             position: { select: { id: true, name: true, level: true } },
           },
           orderBy: { fullName: 'asc' },
@@ -228,16 +255,16 @@ export class OrganizationService {
 
     return this.prisma.department.create({
       data: {
-        name:         dto.name,
-        code:         dto.code.toUpperCase(),
-        description:  dto.description,
-        parentId:     dto.parentId,
-        headId:       dto.headId,
-        unitId:       dto.unitId,
-        costCenter:   dto.costCenter,
+        name: dto.name,
+        code: dto.code.toUpperCase(),
+        description: dto.description,
+        parentId: dto.parentId,
+        headId: dto.headId,
+        unitId: dto.unitId,
+        costCenter: dto.costCenter,
         annualBudget: dto.annualBudget,
-        status:       dto.status ?? 'ACTIVE',
-        color:        dto.color,
+        status: dto.status ?? 'ACTIVE',
+        color: dto.color,
       },
       include: { head: { select: { id: true, fullName: true } } },
     });
@@ -257,12 +284,14 @@ export class OrganizationService {
 
   async deleteDepartment(id: number) {
     const dept = await this.prisma.department.findUnique({
-      where:   { id },
+      where: { id },
       include: { _count: { select: { users: true, children: true } } },
     });
     if (!dept) throw new NotFoundException('Departamento não encontrado');
     if (dept._count.users > 0) {
-      throw new BadRequestException(`Departamento tem ${dept._count.users} colaboradores. Transfira-os primeiro.`);
+      throw new BadRequestException(
+        `Departamento tem ${dept._count.users} colaboradores. Transfira-os primeiro.`,
+      );
     }
     if (dept._count.children > 0) {
       throw new BadRequestException('Departamento tem sub-departamentos. Elimine-os primeiro.');
@@ -278,13 +307,15 @@ export class OrganizationService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (level)        where.level        = level;
+    if (level) where.level = level;
     if (departmentId) where.departmentId = departmentId;
-    if (search)       where.name         = { contains: search, mode: 'insensitive' };
+    if (search) where.name = { contains: search, mode: 'insensitive' };
 
     const [data, total] = await Promise.all([
       this.prisma.position.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
           _count: { select: { users: true } },
         },
@@ -297,9 +328,11 @@ export class OrganizationService {
       data: data.map(p => ({
         ...p,
         headcountOccupied: p._count.users,
-        headcountOpen:     Math.max(0, (p.headcountPlanned ?? 0) - p._count.users),
+        headcountOpen: Math.max(0, (p.headcountPlanned ?? 0) - p._count.users),
       })),
-      total, page, limit,
+      total,
+      page,
+      limit,
       totalPages: Math.ceil(total / limit),
     };
   }
@@ -307,21 +340,21 @@ export class OrganizationService {
   async createPosition(dto: CreateOrgPositionDto) {
     const exists = await this.prisma.position.findFirst({
       where: {
-        name:          { equals: dto.name, mode: 'insensitive' },
-        departmentId:  dto.departmentId ?? undefined,
+        name: { equals: dto.name, mode: 'insensitive' },
+        departmentId: dto.departmentId ?? undefined,
       },
     });
     if (exists) throw new ConflictException(`Posição "${dto.name}" já existe neste departamento`);
 
     return this.prisma.position.create({
       data: {
-        name:             dto.name,
-        code:             dto.code,
-        description:      dto.description,
-        level:            dto.level,
-        departmentId:     dto.departmentId,
-        salaryMin:        dto.salaryMin,
-        salaryMax:        dto.salaryMax,
+        name: dto.name,
+        code: dto.code,
+        description: dto.description,
+        level: dto.level,
+        departmentId: dto.departmentId,
+        salaryMin: dto.salaryMin,
+        salaryMax: dto.salaryMax,
         headcountPlanned: dto.headcountPlanned ?? 1,
       },
     });
@@ -335,7 +368,7 @@ export class OrganizationService {
 
   async deletePosition(id: number) {
     const pos = await this.prisma.position.findUnique({
-      where:   { id },
+      where: { id },
       include: { _count: { select: { users: true } } },
     });
     if (!pos) throw new NotFoundException('Posição não encontrada');
@@ -379,17 +412,17 @@ export class OrganizationService {
   async recordOrgChange(dto: RecordOrgChangeDto, performedById: number) {
     const change = await this.prisma.orgChangeLog.create({
       data: {
-        userId:           dto.userId,
-        changeType:       dto.changeType,
+        userId: dto.userId,
+        changeType: dto.changeType,
         fromDepartmentId: dto.fromDepartmentId,
-        toDepartmentId:   dto.toDepartmentId,
-        fromPositionId:   dto.fromPositionId,
-        toPositionId:     dto.toPositionId,
-        fromManagerId:    dto.fromManagerId,
-        toManagerId:      dto.toManagerId,
-        effectiveDate:    new Date(dto.effectiveDate),
-        reason:           dto.reason,
-        notes:            dto.notes,
+        toDepartmentId: dto.toDepartmentId,
+        fromPositionId: dto.fromPositionId,
+        toPositionId: dto.toPositionId,
+        fromManagerId: dto.fromManagerId,
+        toManagerId: dto.toManagerId,
+        effectiveDate: new Date(dto.effectiveDate),
+        reason: dto.reason,
+        notes: dto.notes,
         performedById,
       },
       include: {
@@ -398,27 +431,29 @@ export class OrganizationService {
     });
 
     // Notificar utilizador
-    await this.prisma.notificationLog.create({
-      data: {
-        userId:   dto.userId,
-        type:     'ORG_CHANGE',
-        message:  `Mudança organizacional registada: ${dto.changeType}`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: dto.userId,
+          type: 'ORG_CHANGE',
+          message: `Mudança organizacional registada: ${dto.changeType}`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
     return change;
   }
 
   async getUserOrgHistory(userId: number) {
     return this.prisma.orgChangeLog.findMany({
-      where:   { userId },
+      where: { userId },
       include: {
         fromDepartment: { select: { id: true, name: true } },
-        toDepartment:   { select: { id: true, name: true } },
-        fromPosition:   { select: { id: true, name: true } },
-        toPosition:     { select: { id: true, name: true } },
-        performedBy:    { select: { id: true, fullName: true } },
+        toDepartment: { select: { id: true, name: true } },
+        fromPosition: { select: { id: true, name: true } },
+        toPosition: { select: { id: true, name: true } },
+        performedBy: { select: { id: true, fullName: true } },
       },
       orderBy: { effectiveDate: 'desc' },
     });
@@ -427,19 +462,19 @@ export class OrganizationService {
   async getOrgTimeline(fromDate?: string, toDate?: string) {
     const where: any = {};
     if (fromDate) where.effectiveDate = { gte: new Date(fromDate) };
-    if (toDate)   where.effectiveDate = { ...where.effectiveDate, lte: new Date(toDate) };
+    if (toDate) where.effectiveDate = { ...where.effectiveDate, lte: new Date(toDate) };
 
     return this.prisma.orgChangeLog.findMany({
       where,
       include: {
-        user:           { select: { id: true, fullName: true, avatarUrl: true } },
+        user: { select: { id: true, fullName: true, avatarUrl: true } },
         fromDepartment: { select: { id: true, name: true } },
-        toDepartment:   { select: { id: true, name: true } },
-        fromPosition:   { select: { id: true, name: true } },
-        toPosition:     { select: { id: true, name: true } },
+        toDepartment: { select: { id: true, name: true } },
+        fromPosition: { select: { id: true, name: true } },
+        toPosition: { select: { id: true, name: true } },
       },
       orderBy: { effectiveDate: 'desc' },
-      take:    200,
+      take: 200,
     });
   }
 
@@ -447,9 +482,12 @@ export class OrganizationService {
 
   async getHeadcountByDepartment() {
     const depts = await this.prisma.department.findMany({
-      where:   { status: 'ACTIVE' },
+      where: { status: 'ACTIVE' },
       select: {
-        id: true, name: true, code: true, color: true,
+        id: true,
+        name: true,
+        code: true,
+        color: true,
         _count: { select: { users: true } },
       },
       orderBy: { users: { _count: 'desc' } },
@@ -467,7 +505,7 @@ export class OrganizationService {
         ...dept,
         occupied,
         planned,
-        open:        Math.max(0, planned - occupied),
+        open: Math.max(0, planned - occupied),
         occupancyPct: planned > 0 ? Math.round((occupied / planned) * 100) : null,
       };
     });
@@ -475,19 +513,23 @@ export class OrganizationService {
 
   async getSpanOfControlReport() {
     const managers = await this.prisma.user.findMany({
-      where:  { active: true, subordinates: { some: {} } },
+      where: { active: true, subordinates: { some: {} } },
       select: {
-        id: true, fullName: true, avatarUrl: true,
-        position:    { select: { name: true, level: true } },
-        department:  { select: { name: true } },
-        _count:      { select: { subordinates: true } },
+        id: true,
+        fullName: true,
+        avatarUrl: true,
+        position: { select: { name: true, level: true } },
+        department: { select: { name: true } },
+        _count: { select: { subordinates: true } },
       },
       orderBy: { subordinates: { _count: 'desc' } },
     });
 
-    const total      = managers.length;
+    const total = managers.length;
     const overloaded = managers.filter(m => m._count.subordinates > 10).length;
-    const optimal    = managers.filter(m => m._count.subordinates >= 4 && m._count.subordinates <= 8).length;
+    const optimal = managers.filter(
+      m => m._count.subordinates >= 4 && m._count.subordinates <= 8,
+    ).length;
 
     return {
       managers,
@@ -496,9 +538,11 @@ export class OrganizationService {
         overloaded,
         optimal,
         underutilized: managers.filter(m => m._count.subordinates < 2).length,
-        avgSpan: total > 0
-          ? Math.round((managers.reduce((s, m) => s + m._count.subordinates, 0) / total) * 10) / 10
-          : 0,
+        avgSpan:
+          total > 0
+            ? Math.round((managers.reduce((s, m) => s + m._count.subordinates, 0) / total) * 10) /
+              10
+            : 0,
       },
     };
   }
@@ -509,12 +553,41 @@ export class OrganizationService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
-        id: true, fullName: true, email: true, avatarUrl: true, hireDate: true, active: true,
-        position:    { select: { id: true, name: true, level: true, salaryMin: true, salaryMax: true } },
-        department:  { select: { id: true, name: true, code: true, head: { select: { id: true, fullName: true } } } },
-        unit:        { select: { id: true, name: true, city: true, country: true } },
-        manager:     { select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } } },
-        subordinates:{ select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } }, where: { active: true } },
+        id: true,
+        fullName: true,
+        email: true,
+        avatarUrl: true,
+        hireDate: true,
+        active: true,
+        position: {
+          select: { id: true, name: true, level: true, salaryMin: true, salaryMax: true },
+        },
+        department: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            head: { select: { id: true, fullName: true } },
+          },
+        },
+        unit: { select: { id: true, name: true, city: true, country: true } },
+        manager: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
+          },
+        },
+        subordinates: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
+          },
+          where: { active: true },
+        },
       },
     });
     if (!user) throw new NotFoundException('Utilizador não encontrado');

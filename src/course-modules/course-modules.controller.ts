@@ -1,16 +1,32 @@
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CourseModulesService } from './course-modules.service';
 import {
-  CreateModuleDto, UpdateModuleDto, ReorderModulesDto,
-  CreateModuleLessonDto, UpdateModuleLessonDto, MoveLessonDto,
-  MarkModuleLessonCompleteDto, CreateModuleMaterialDto, CloneModuleDto,
+  CreateModuleDto,
+  UpdateModuleDto,
+  ReorderModulesDto,
+  CreateModuleLessonDto,
+  UpdateModuleLessonDto,
+  MoveLessonDto,
+  MarkModuleLessonCompleteDto,
+  CreateModuleMaterialDto,
+  CloneModuleDto,
 } from './course-modules.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Course Modules & Lessons')
@@ -87,10 +103,7 @@ export class CourseModulesController {
   @Post('modules/:id/materials')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Adicionar material complementar ao módulo' })
-  addMaterial(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CreateModuleMaterialDto,
-  ) {
+  addMaterial(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateModuleMaterialDto) {
     return this.svc.addMaterial(id, dto);
   }
 
@@ -154,19 +167,13 @@ export class CourseModulesController {
 
   @Get('courses/:courseId/progress')
   @ApiOperation({ summary: 'Progresso completo do utilizador num curso (módulos + aulas)' })
-  getCourseProgress(
-    @Param('courseId', ParseIntPipe) courseId: number,
-    @CurrentUser() user: any,
-  ) {
+  getCourseProgress(@Param('courseId', ParseIntPipe) courseId: number, @CurrentUser() user: any) {
     return this.svc.getLessonProgress(user.id, courseId);
   }
 
   @Get('modules/:id/completed')
   @ApiOperation({ summary: 'Verificar se módulo está concluído pelo utilizador' })
-  isModuleCompleted(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
-  ) {
+  isModuleCompleted(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
     return this.svc.isModuleCompleted(id, user.id);
   }
 }

@@ -1,17 +1,30 @@
 // src/notifications/notifications.controller.ts
 import {
-  Controller, Get, Post, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import {
-  CreateNotificationDto, BulkNotificationDto, NotificationFilterDto,
-  CreateTemplateDto, UpdateTemplateDto, UpdatePreferencesDto,
+  CreateNotificationDto,
+  BulkNotificationDto,
+  NotificationFilterDto,
+  CreateTemplateDto,
+  UpdateTemplateDto,
+  UpdatePreferencesDto,
 } from './notifications.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Notifications')
@@ -38,17 +51,16 @@ export class NotificationsController {
   @Patch('my/:id/read')
   @ApiOperation({ summary: 'Marcar notificação como lida' })
   @HttpCode(HttpStatus.OK)
-  markRead(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
-  ) {
+  markRead(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
     return this.svc.markAsRead(id, user.id);
   }
 
   @Patch('my/read-all')
   @ApiOperation({ summary: 'Marcar todas como lidas' })
   @HttpCode(HttpStatus.OK)
-  readAll(@CurrentUser() user: any) { return this.svc.markAllAsRead(user.id); }
+  readAll(@CurrentUser() user: any) {
+    return this.svc.markAllAsRead(user.id);
+  }
 
   @Patch('my/read-bulk')
   @ApiOperation({ summary: 'Marcar lista de IDs como lidas' })
@@ -69,7 +81,9 @@ export class NotificationsController {
 
   @Get('preferences')
   @ApiOperation({ summary: 'As minhas preferências de notificação' })
-  getPrefs(@CurrentUser() user: any) { return this.svc.getPreferences(user.id); }
+  getPrefs(@CurrentUser() user: any) {
+    return this.svc.getPreferences(user.id);
+  }
 
   @Patch('preferences')
   @ApiOperation({ summary: 'Actualizar preferências (canais, horário silencioso, digest)' })
@@ -83,12 +97,16 @@ export class NotificationsController {
   @Get('templates')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Listar templates de notificação' })
-  getTemplates() { return this.svc.getTemplates(); }
+  getTemplates() {
+    return this.svc.getTemplates();
+  }
 
   @Post('templates')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar template' })
-  createTemplate(@Body() dto: CreateTemplateDto) { return this.svc.createTemplate(dto); }
+  createTemplate(@Body() dto: CreateTemplateDto) {
+    return this.svc.createTemplate(dto);
+  }
 
   @Patch('templates/:id')
   @Roles('ADMIN', 'RH')
@@ -109,17 +127,29 @@ export class NotificationsController {
   @Post('send')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Enviar notificação a um utilizador' })
-  send(@Body() dto: CreateNotificationDto) { return this.svc.send(dto); }
+  send(@Body() dto: CreateNotificationDto) {
+    return this.svc.send(dto);
+  }
 
   @Post('send-bulk')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Envio em massa (lista de userIds)' })
-  sendBulk(@Body() dto: BulkNotificationDto) { return this.svc.sendBulk(dto); }
+  sendBulk(@Body() dto: BulkNotificationDto) {
+    return this.svc.sendBulk(dto);
+  }
 
   @Post('send-all')
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Enviar a todos os colaboradores activos' })
-  @ApiBody({ schema: { properties: { type: { type: 'string' }, message: { type: 'string' }, title: { type: 'string' } } } })
+  @ApiBody({
+    schema: {
+      properties: {
+        type: { type: 'string' },
+        message: { type: 'string' },
+        title: { type: 'string' },
+      },
+    },
+  })
   sendAll(@Body() body: { type: string; message: string; title?: string }) {
     return this.svc.sendToAll(body.type, body.message, body.title);
   }
@@ -129,19 +159,25 @@ export class NotificationsController {
   @Get()
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Todos os logs de notificações' })
-  all(@Query() filters: NotificationFilterDto) { return this.svc.getAllLogs(filters); }
+  all(@Query() filters: NotificationFilterDto) {
+    return this.svc.getAllLogs(filters);
+  }
 
   @Get('stats')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Estatísticas (taxa leitura, por tipo, por categoria)' })
-  stats() { return this.svc.getStats(); }
+  stats() {
+    return this.svc.getStats();
+  }
 
   // ── Automation Rules ──────────────────────────────────────────────────────
 
   @Get('automation-rules')
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Regras de automação' })
-  rules() { return this.svc.getAutomationRules(); }
+  rules() {
+    return this.svc.getAutomationRules();
+  }
 
   @Post('automation-rules')
   @Roles('ADMIN')

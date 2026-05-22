@@ -1,15 +1,25 @@
 // src/departments/departments.service.ts
 import {
-  Injectable, NotFoundException, ConflictException,
-  BadRequestException, Logger,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateDepartmentDto, UpdateDepartmentDto, DepartmentFilterDto,
-  TransferMemberDto, BulkTransferDto,
-  CreateUnitDto, UpdateUnitDto,
-  CreateRoleDto, UpdateRoleDto, CreatePermissionDto,
-  CreatePositionDto, UpdatePositionDto,
+  CreateDepartmentDto,
+  UpdateDepartmentDto,
+  DepartmentFilterDto,
+  TransferMemberDto,
+  BulkTransferDto,
+  CreateUnitDto,
+  UpdateUnitDto,
+  CreateRoleDto,
+  UpdateRoleDto,
+  CreatePermissionDto,
+  CreatePositionDto,
+  UpdatePositionDto,
   CreateCareerPositionDto,
 } from './departments.dto';
 
@@ -57,12 +67,14 @@ export class DepartmentsService {
 
     const [data, total] = await Promise.all([
       this.prisma.department.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
-          head:     { select: { id: true, fullName: true, email: true } },
-          parent:   { select: { id: true, name: true, code: true } },
+          head: { select: { id: true, fullName: true, email: true } },
+          parent: { select: { id: true, name: true, code: true } },
           children: { select: { id: true, name: true, code: true, active: true } },
-          _count:   { select: { users: true, children: true } },
+          _count: { select: { users: true, children: true } },
         },
         orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
       }),
@@ -77,7 +89,7 @@ export class DepartmentsService {
     const all = await this.prisma.department.findMany({
       where: { active: true },
       include: {
-        head:   { select: { id: true, fullName: true, email: true } },
+        head: { select: { id: true, fullName: true, email: true } },
         _count: { select: { users: true, children: true } },
       },
       orderBy: { name: 'asc' },
@@ -85,9 +97,7 @@ export class DepartmentsService {
 
     // Construir árvore recursivamente
     const buildTree = (parentId: number | null): any[] =>
-      all
-        .filter(d => d.parentId === parentId)
-        .map(d => ({ ...d, children: buildTree(d.id) }));
+      all.filter(d => d.parentId === parentId).map(d => ({ ...d, children: buildTree(d.id) }));
 
     return buildTree(null);
   }
@@ -96,18 +106,21 @@ export class DepartmentsService {
     const d = await this.prisma.department.findUnique({
       where: { id },
       include: {
-        head:     { select: { id: true, fullName: true, email: true, position: true } },
-        parent:   { select: { id: true, name: true, code: true } },
+        head: { select: { id: true, fullName: true, email: true, position: true } },
+        parent: { select: { id: true, name: true, code: true } },
         children: {
           where: { active: true },
           include: {
-            head:   { select: { id: true, fullName: true } },
+            head: { select: { id: true, fullName: true } },
             _count: { select: { users: true } },
           },
         },
         users: {
           select: {
-            id: true, fullName: true, email: true, active: true,
+            id: true,
+            fullName: true,
+            email: true,
+            active: true,
             position: { select: { name: true } },
           },
           where: { active: true },
@@ -140,19 +153,19 @@ export class DepartmentsService {
 
     const dept = await this.prisma.department.create({
       data: {
-        name:           dto.name,
-        code:           dto.code,
-        description:    dto.description,
-        parentId:       dto.parentId,
-        headId:         dto.headId,
-        color:          dto.color,
-        icon:           dto.icon,
-        costCenter:     dto.costCenter,
+        name: dto.name,
+        code: dto.code,
+        description: dto.description,
+        parentId: dto.parentId,
+        headId: dto.headId,
+        color: dto.color,
+        icon: dto.icon,
+        costCenter: dto.costCenter,
         trainingBudget: dto.trainingBudget,
-        active:         true,
+        active: true,
       },
       include: {
-        head:   { select: { id: true, fullName: true } },
+        head: { select: { id: true, fullName: true } },
         parent: { select: { id: true, name: true, code: true } },
       },
     });
@@ -199,7 +212,7 @@ export class DepartmentsService {
       where: { id },
       data: dto,
       include: {
-        head:   { select: { id: true, fullName: true } },
+        head: { select: { id: true, fullName: true } },
         parent: { select: { id: true, name: true, code: true } },
         _count: { select: { users: true } },
       },
@@ -212,7 +225,7 @@ export class DepartmentsService {
     const activeUsers = (d as any)._count.users;
     if (activeUsers > 0) {
       throw new BadRequestException(
-        `Departamento tem ${activeUsers} colaboradores activos. Transfira-os primeiro.`
+        `Departamento tem ${activeUsers} colaboradores activos. Transfira-os primeiro.`,
       );
     }
     return this.prisma.department.update({
@@ -231,40 +244,54 @@ export class DepartmentsService {
     const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
     if (!user) throw new NotFoundException('Utilizador não encontrado');
 
-    const target = await this.prisma.department.findUnique({ where: { id: dto.targetDepartmentId } });
-    if (!target || !target.active) throw new NotFoundException('Departamento de destino não encontrado ou inactivo');
+    const target = await this.prisma.department.findUnique({
+      where: { id: dto.targetDepartmentId },
+    });
+    if (!target || !target.active)
+      throw new NotFoundException('Departamento de destino não encontrado ou inactivo');
 
     const previousDeptId = user.departmentId;
 
     await this.prisma.user.update({
       where: { id: dto.userId },
-      data:  { departmentId: dto.targetDepartmentId },
+      data: { departmentId: dto.targetDepartmentId },
     });
 
     // Registar histórico de transferência
     await this.prisma.departmentTransferLog.create({
       data: {
-        userId:           dto.userId,
+        userId: dto.userId,
         fromDepartmentId: previousDeptId,
-        toDepartmentId:   dto.targetDepartmentId,
-        reason:           dto.reason,
-        transferredAt:    new Date(),
+        toDepartmentId: dto.targetDepartmentId,
+        reason: dto.reason,
+        transferredAt: new Date(),
       },
     });
 
-    return { message: 'Transferência realizada com sucesso', userId: dto.userId, targetDepartmentId: dto.targetDepartmentId };
+    return {
+      message: 'Transferência realizada com sucesso',
+      userId: dto.userId,
+      targetDepartmentId: dto.targetDepartmentId,
+    };
   }
 
   // Transferência em massa
   async bulkTransfer(dto: BulkTransferDto) {
-    const target = await this.prisma.department.findUnique({ where: { id: dto.targetDepartmentId } });
-    if (!target || !target.active) throw new NotFoundException('Departamento de destino não encontrado');
+    const target = await this.prisma.department.findUnique({
+      where: { id: dto.targetDepartmentId },
+    });
+    if (!target || !target.active)
+      throw new NotFoundException('Departamento de destino não encontrado');
 
     const results = { transferred: 0, errors: [] as string[] };
 
     for (const userId of dto.userIds) {
       try {
-        await this.transferMember({ userId, targetDepartmentId: dto.targetDepartmentId, reason: dto.reason });
+        await this.transferMember({
+          userId,
+          targetDepartmentId: dto.targetDepartmentId,
+          reason: dto.reason,
+        });
         results.transferred++;
       } catch (e: any) {
         results.errors.push(`User ${userId}: ${e.message}`);
@@ -278,12 +305,7 @@ export class DepartmentsService {
   async getMetrics(id: number) {
     await this.findOne(id);
 
-    const [
-      totalUsers,
-      activeUsers,
-      transfersIn,
-      transfersOut,
-    ] = await Promise.all([
+    const [totalUsers, activeUsers, transfersIn, transfersOut] = await Promise.all([
       this.prisma.user.count({ where: { departmentId: id } }),
       this.prisma.user.count({ where: { departmentId: id, active: true } }),
       this.prisma.departmentTransferLog.count({ where: { toDepartmentId: id } }),
@@ -303,7 +325,9 @@ export class DepartmentsService {
     };
   }
 
-  private async buildBreadcrumb(id: number): Promise<Array<{ id: number; name: string; code: string }>> {
+  private async buildBreadcrumb(
+    id: number,
+  ): Promise<Array<{ id: number; name: string; code: string }>> {
     const trail: Array<{ id: number; name: string; code: string }> = [];
     let current: number | null = id;
     while (current) {
@@ -324,18 +348,18 @@ export class DepartmentsService {
       where: { active: true },
       include: {
         _count: { select: { users: true } },
-        head:   { select: { id: true, fullName: true } },
+        head: { select: { id: true, fullName: true } },
       },
       orderBy: { name: 'asc' },
     });
 
     return depts.map(d => ({
-      id:          d.id,
-      name:        d.name,
-      code:        d.code,
-      headName:    (d.head as any)?.fullName ?? '—',
-      totalMembers:(d._count as any).users,
-      active:      d.active,
+      id: d.id,
+      name: d.name,
+      code: d.code,
+      headName: (d.head as any)?.fullName ?? '—',
+      totalMembers: (d._count as any).users,
+      active: d.active,
     }));
   }
 
@@ -346,11 +370,13 @@ export class DepartmentsService {
 
     const [data, total] = await Promise.all([
       this.prisma.departmentTransferLog.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
-          user:           { select: { id: true, fullName: true } },
+          user: { select: { id: true, fullName: true } },
           fromDepartment: { select: { id: true, name: true, code: true } },
-          toDepartment:   { select: { id: true, name: true, code: true } },
+          toDepartment: { select: { id: true, name: true, code: true } },
         },
         orderBy: { transferredAt: 'desc' },
       }),
@@ -371,8 +397,8 @@ export class UnitsService {
     return this.prisma.unit.findMany({
       include: {
         departments: { select: { id: true, name: true, code: true } },
-       _count: { select: { users: true } },
-    },
+        _count: { select: { users: true } },
+      },
       orderBy: { name: 'asc' },
     });
   }
@@ -390,8 +416,8 @@ export class UnitsService {
   }
 
   async create(dto: CreateUnitDto) {
-  return (this.prisma as any).unit.create({ data: dto });
-}
+    return (this.prisma as any).unit.create({ data: dto });
+  }
 
   async update(id: number, dto: UpdateUnitDto) {
     await this.findOne(id);
@@ -449,8 +475,8 @@ export class RolesService {
   }
 
   async addPermission(dto: CreatePermissionDto) {
-  return (this.prisma as any).permission.create({ data: dto });
-}
+    return (this.prisma as any).permission.create({ data: dto });
+  }
 
   async removePermission(permissionId: number) {
     return this.prisma.permission.delete({ where: { id: permissionId } });
@@ -462,7 +488,7 @@ export class RolesService {
       where: { roleId_permissionId: { roleId, permissionId } },
       create: { roleId, permissionId },
       update: {},
-     });
+    });
   }
 
   async revokePermissionFromRole(roleId: number, permissionId: number) {
@@ -471,11 +497,11 @@ export class RolesService {
 
   async initDefaultRoles() {
     const defaults = [
-      { name: 'ADMIN',        description: 'Administrador do sistema' },
-      { name: 'RH',           description: 'Recursos Humanos' },
-      { name: 'GESTOR',       description: 'Gestor de equipa' },
-      { name: 'COLABORADOR',  description: 'Colaborador' },
-      { name: 'AUDITOR',      description: 'Auditor (apenas leitura)' },
+      { name: 'ADMIN', description: 'Administrador do sistema' },
+      { name: 'RH', description: 'Recursos Humanos' },
+      { name: 'GESTOR', description: 'Gestor de equipa' },
+      { name: 'COLABORADOR', description: 'Colaborador' },
+      { name: 'AUDITOR', description: 'Auditor (apenas leitura)' },
     ];
     const created = [];
     for (const r of defaults) {

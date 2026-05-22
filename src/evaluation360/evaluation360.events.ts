@@ -17,20 +17,32 @@ export class Evaluation360EventListeners {
   async onInvitationSend(payload: { assignment: any }) {
     const { assignment } = payload;
     try {
-      const evaluator = await (this.prisma as any).user.findUnique({ where: { id: assignment.evaluatorId } });
-      const evaluatee = await (this.prisma as any).user.findUnique({ where: { id: assignment.evaluateeId } });
+      const evaluator = await (this.prisma as any).user.findUnique({
+        where: { id: assignment.evaluatorId },
+      });
+      const evaluatee = await (this.prisma as any).user.findUnique({
+        where: { id: assignment.evaluateeId },
+      });
       if (!evaluator || !evaluatee) return;
 
-      this.logger.log(`[360] Enviando convite: ${evaluator.fullName} vai avaliar ${evaluatee.fullName} (${assignment.role})`);
+      this.logger.log(
+        `[360] Enviando convite: ${evaluator.fullName} vai avaliar ${evaluatee.fullName} (${assignment.role})`,
+      );
 
       await this.notifications.sendToUser(assignment.evaluatorId, {
         title: 'Convite para Avaliação 360°',
         message: `Você foi convidado a avaliar ${evaluatee.fullName}. Aceda ao INNOVA para responder.`,
         type: 'INFO',
-        metadata: JSON.stringify({ cycleId: assignment.cycleId, evaluateeId: assignment.evaluateeId, role: assignment.role }),
+        metadata: JSON.stringify({
+          cycleId: assignment.cycleId,
+          evaluateeId: assignment.evaluateeId,
+          role: assignment.role,
+        }),
       });
     } catch (err) {
-      this.logger.error(`[360] Falha ao enviar convite: ${(err instanceof Error ? err.message : String(err))}`);
+      this.logger.error(
+        `[360] Falha ao enviar convite: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -38,7 +50,9 @@ export class Evaluation360EventListeners {
   async onReminderSend(payload: { assignment: any; channels: string[] }) {
     const { assignment } = payload;
     try {
-      const evaluatee = await (this.prisma as any).user.findUnique({ where: { id: assignment.evaluateeId } });
+      const evaluatee = await (this.prisma as any).user.findUnique({
+        where: { id: assignment.evaluateeId },
+      });
       this.logger.log(`[360] Lembrete: avaliador ${assignment.evaluatorId} ainda não respondeu`);
 
       await this.notifications.sendToUser(assignment.evaluatorId, {
@@ -47,7 +61,9 @@ export class Evaluation360EventListeners {
         type: 'WARNING',
       });
     } catch (err) {
-      this.logger.error(`[360] Falha ao enviar lembrete: ${(err instanceof Error ? err.message : String(err))}`);
+      this.logger.error(
+        `[360] Falha ao enviar lembrete: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -61,8 +77,8 @@ export class Evaluation360EventListeners {
       if (!response) return;
 
       const textAnswers = response.answers
-        .filter((a) => a.question.type === 'OPEN_TEXT' && a.textValue)
-        .map((a) => a.textValue!);
+        .filter(a => a.question.type === 'OPEN_TEXT' && a.textValue)
+        .map(a => a.textValue!);
 
       if (textAnswers.length > 0) {
         const sentimentScore = this.calculateSimpleSentiment(textAnswers);
@@ -72,20 +88,30 @@ export class Evaluation360EventListeners {
         });
       }
 
-      const numericAnswers = response.answers.filter((a) => a.numericValue !== null).map((a) => a.numericValue!);
+      const numericAnswers = response.answers
+        .filter(a => a.numericValue !== null)
+        .map(a => a.numericValue!);
       if (numericAnswers.length >= 3) {
         const avg = numericAnswers.reduce((s, v) => s + v, 0) / numericAnswers.length;
-        const stdDev = Math.sqrt(numericAnswers.reduce((s, v) => s + Math.pow(v - avg, 2), 0) / numericAnswers.length);
+        const stdDev = Math.sqrt(
+          numericAnswers.reduce((s, v) => s + Math.pow(v - avg, 2), 0) / numericAnswers.length,
+        );
 
         if (stdDev < 0.2) {
-          this.logger.warn(`[360] Viés detectado (respostas homogéneas): responseId=${payload.responseId}, avg=${avg.toFixed(2)}`);
+          this.logger.warn(
+            `[360] Viés detectado (respostas homogéneas): responseId=${payload.responseId}, avg=${avg.toFixed(2)}`,
+          );
         }
         if (avg >= 4.9 || avg <= 1.1) {
-          this.logger.warn(`[360] Possível viés extremo: responseId=${payload.responseId}, avg=${avg.toFixed(2)}`);
+          this.logger.warn(
+            `[360] Possível viés extremo: responseId=${payload.responseId}, avg=${avg.toFixed(2)}`,
+          );
         }
       }
     } catch (err) {
-      this.logger.error(`[360] Falha na análise pós-submissão: ${(err instanceof Error ? err.message : String(err))}`);
+      this.logger.error(
+        `[360] Falha na análise pós-submissão: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -98,13 +124,18 @@ export class Evaluation360EventListeners {
       for (const p of participants) {
         await this.notifications.sendToUser(p.userId, {
           title: 'Resultados da Avaliação 360° Disponíveis',
-          message: 'Os resultados da sua avaliação 360° já estão disponíveis. Aceda ao INNOVA para ver o seu relatório.',
+          message:
+            'Os resultados da sua avaliação 360° já estão disponíveis. Aceda ao INNOVA para ver o seu relatório.',
           type: 'SUCCESS',
         });
       }
-      this.logger.log(`[360] Notificações de resultados enviadas: ${participants.length} participantes`);
+      this.logger.log(
+        `[360] Notificações de resultados enviadas: ${participants.length} participantes`,
+      );
     } catch (err) {
-      this.logger.error(`[360] Falha ao notificar resultados: ${(err instanceof Error ? err.message : String(err))}`);
+      this.logger.error(
+        `[360] Falha ao notificar resultados: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -118,33 +149,74 @@ export class Evaluation360EventListeners {
     const { feedback } = payload;
     if (feedback.isPrivate) return;
     try {
-      const from = await (this.prisma as any).user.findUnique({ where: { id: feedback.fromUserId } });
+      const from = await (this.prisma as any).user.findUnique({
+        where: { id: feedback.fromUserId },
+      });
       await this.notifications.sendToUser(feedback.toUserId, {
         title: `Novo feedback de ${from?.fullName ?? 'colega'}`,
-        message: feedback.message.length > 80 ? feedback.message.slice(0, 80) + '...' : feedback.message,
+        message:
+          feedback.message.length > 80 ? feedback.message.slice(0, 80) + '...' : feedback.message,
         type: feedback.type === 'RECOGNITION' ? 'SUCCESS' : 'INFO',
       });
     } catch (err) {
-      this.logger.error(`[360] Falha ao notificar feedback: ${(err instanceof Error ? err.message : String(err))}`);
+      this.logger.error(
+        `[360] Falha ao notificar feedback: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
   @OnEvent('pdi.auto.create')
-  async onPdiAutoCreate(payload: { userId: string; cycleId: string; gaps: any[]; actions: any[]; sourceResultId: string }) {
+  async onPdiAutoCreate(payload: {
+    userId: string;
+    cycleId: string;
+    gaps: any[];
+    actions: any[];
+    sourceResultId: string;
+  }) {
     try {
-      this.logger.log(`[360] Criando PDI automático para userId=${payload.userId}, ${payload.gaps.length} gaps identificados`);
+      this.logger.log(
+        `[360] Criando PDI automático para userId=${payload.userId}, ${payload.gaps.length} gaps identificados`,
+      );
     } catch (err) {
-      this.logger.error(`[360] Falha ao criar PDI automático: ${(err instanceof Error ? err.message : String(err))}`);
+      this.logger.error(
+        `[360] Falha ao criar PDI automático: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
   private calculateSimpleSentiment(texts: string[]): number {
-    const positive = ['excelente', 'ótimo', 'bom', 'positivo', 'destaque', 'liderança', 'proativo', 'dedicado', 'comprometido', 'forte'];
-    const negative = ['fraco', 'melhora', 'dificuldade', 'problema', 'falta', 'ausente', 'lento', 'ineficaz', 'conflito', 'resistente'];
+    const positive = [
+      'excelente',
+      'ótimo',
+      'bom',
+      'positivo',
+      'destaque',
+      'liderança',
+      'proativo',
+      'dedicado',
+      'comprometido',
+      'forte',
+    ];
+    const negative = [
+      'fraco',
+      'melhora',
+      'dificuldade',
+      'problema',
+      'falta',
+      'ausente',
+      'lento',
+      'ineficaz',
+      'conflito',
+      'resistente',
+    ];
     let score = 0;
     const combined = texts.join(' ').toLowerCase();
-    positive.forEach((w) => { if (combined.includes(w)) score += 0.1; });
-    negative.forEach((w) => { if (combined.includes(w)) score -= 0.1; });
+    positive.forEach(w => {
+      if (combined.includes(w)) score += 0.1;
+    });
+    negative.forEach(w => {
+      if (combined.includes(w)) score -= 0.1;
+    });
     return Math.max(-1, Math.min(1, score));
   }
 }

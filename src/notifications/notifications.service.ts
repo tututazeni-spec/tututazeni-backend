@@ -2,8 +2,12 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateNotificationDto, BulkNotificationDto, NotificationFilterDto,
-  CreateTemplateDto, UpdateTemplateDto, UpdatePreferencesDto,
+  CreateNotificationDto,
+  BulkNotificationDto,
+  NotificationFilterDto,
+  CreateTemplateDto,
+  UpdateTemplateDto,
+  UpdatePreferencesDto,
   NotificationPriority,
 } from './notifications.dto';
 
@@ -25,31 +29,35 @@ export class NotificationsService {
     if (prefs && dto.category) {
       const disabled = (prefs as any).disabledCategories ?? [];
       if (disabled.includes(dto.category)) {
-        this.logger.debug(`Notificação ignorada — categoria ${dto.category} desactivada para user ${dto.userId}`);
+        this.logger.debug(
+          `Notificação ignorada — categoria ${dto.category} desactivada para user ${dto.userId}`,
+        );
         return { skipped: true, reason: 'category_disabled' };
       }
     }
 
     const notification = await this.prisma.notificationLog.create({
       data: {
-        userId:      dto.userId,
-        type:        dto.type,
-        title:       dto.title,
-        message:     dto.message,
-        priority:    dto.priority    ?? 'MEDIUM',
-        category:    dto.category,
-        actionUrl:   dto.actionUrl,
+        userId: dto.userId,
+        type: dto.type,
+        title: dto.title,
+        message: dto.message,
+        priority: dto.priority ?? 'MEDIUM',
+        category: dto.category,
+        actionUrl: dto.actionUrl,
         actionLabel: dto.actionLabel,
-        metadata:    dto.metadata ? JSON.stringify(dto.metadata) : undefined,
-        expiresAt:   dto.expiresAt ? new Date(dto.expiresAt) : undefined,
-        read:        false,
-        success:     true,
+        metadata: dto.metadata ? JSON.stringify(dto.metadata) : undefined,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+        read: false,
+        success: true,
       },
     });
 
     // Log para canais externos (estrutura para integração futura)
     if (dto.priority === NotificationPriority.CRITICAL) {
-      this.logger.warn(`[CRITICAL] Notificação crítica enviada para user ${dto.userId}: ${dto.type}`);
+      this.logger.warn(
+        `[CRITICAL] Notificação crítica enviada para user ${dto.userId}: ${dto.type}`,
+      );
     }
 
     return notification;
@@ -67,7 +75,7 @@ export class NotificationsService {
       const blockedUsers = new Set(
         prefs
           .filter(p => ((p as any).disabledCategories ?? []).includes(dto.category))
-          .map(p => p.userId)
+          .map(p => p.userId),
       );
       targetIds = dto.userIds.filter(id => !blockedUsers.has(id));
     }
@@ -78,16 +86,16 @@ export class NotificationsService {
     const result = await this.prisma.notificationLog.createMany({
       data: targetIds.map(userId => ({
         userId,
-        type:        dto.type,
-        title:       dto.title,
-        message:     dto.message,
-        priority:    dto.priority   ?? 'MEDIUM',
-        category:    dto.category,
-        actionUrl:   dto.actionUrl,
-        metadata:    dto.metadata ? JSON.stringify(dto.metadata) : undefined,
-        read:        false,
-        success:     true,
-        createdAt:   now,
+        type: dto.type,
+        title: dto.title,
+        message: dto.message,
+        priority: dto.priority ?? 'MEDIUM',
+        category: dto.category,
+        actionUrl: dto.actionUrl,
+        metadata: dto.metadata ? JSON.stringify(dto.metadata) : undefined,
+        read: false,
+        success: true,
+        createdAt: now,
       })),
     });
 
@@ -96,24 +104,24 @@ export class NotificationsService {
 
   async sendToAll(type: string, message: string, title?: string) {
     const users = await this.prisma.user.findMany({
-      where:  { active: true },
+      where: { active: true },
       select: { id: true },
     });
     return this.sendBulk({ userIds: users.map(u => u.id), type, message, title });
   }
 
   async sendToUser(
-  userId: number,
-  data: { title?: string; message: string; type: string; metadata?: any },
-) {
-  return this.send({
-    userId,
-    type:     data.type,
-    title:    data.title,
-    message:  data.message,
-    metadata: data.metadata,
-  });
-}
+    userId: number,
+    data: { title?: string; message: string; type: string; metadata?: any },
+  ) {
+    return this.send({
+      userId,
+      type: data.type,
+      title: data.title,
+      message: data.message,
+      metadata: data.metadata,
+    });
+  }
 
   // ─── NOTIFICAÇÕES DO UTILIZADOR ───────────────────────────────────────────
 
@@ -125,14 +133,16 @@ export class NotificationsService {
       userId,
       OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
     };
-    if (type)     where.type     = type;
+    if (type) where.type = type;
     if (category) where.category = category;
     if (priority) where.priority = priority;
     if (read !== undefined) where.read = read;
 
     const [data, total, unreadCount] = await Promise.all([
       this.prisma.notificationLog.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         orderBy: [{ read: 'asc' }, { createdAt: 'desc' }],
       }),
       this.prisma.notificationLog.count({ where }),
@@ -140,20 +150,32 @@ export class NotificationsService {
     ]);
 
     // Agrupar por data
-    const today     = new Date(); today.setHours(0,0,0,0);
-    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-    const weekAgo   = new Date(today); weekAgo.setDate(weekAgo.getDate() - 7);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
 
     const grouped = {
-      today:     data.filter(n => new Date(n.createdAt) >= today),
-      yesterday: data.filter(n => new Date(n.createdAt) >= yesterday && new Date(n.createdAt) < today),
-      thisWeek:  data.filter(n => new Date(n.createdAt) >= weekAgo && new Date(n.createdAt) < yesterday),
-      older:     data.filter(n => new Date(n.createdAt) < weekAgo),
+      today: data.filter(n => new Date(n.createdAt) >= today),
+      yesterday: data.filter(
+        n => new Date(n.createdAt) >= yesterday && new Date(n.createdAt) < today,
+      ),
+      thisWeek: data.filter(
+        n => new Date(n.createdAt) >= weekAgo && new Date(n.createdAt) < yesterday,
+      ),
+      older: data.filter(n => new Date(n.createdAt) < weekAgo),
     };
 
     return {
-      data, grouped, total, unreadCount,
-      page, limit, totalPages: Math.ceil(total / limit),
+      data,
+      grouped,
+      total,
+      unreadCount,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     };
   }
 
@@ -175,14 +197,14 @@ export class NotificationsService {
     if (!n) throw new NotFoundException('Notificação não encontrada');
     return this.prisma.notificationLog.update({
       where: { id: notificationId },
-      data:  { read: true, readAt: new Date() },
+      data: { read: true, readAt: new Date() },
     });
   }
 
   async markAllAsRead(userId: number) {
     const result = await this.prisma.notificationLog.updateMany({
       where: { userId, read: false },
-      data:  { read: true, readAt: new Date() },
+      data: { read: true, readAt: new Date() },
     });
     return { updated: result.count };
   }
@@ -190,17 +212,19 @@ export class NotificationsService {
   async markBulkAsRead(userId: number, ids: number[]) {
     const result = await this.prisma.notificationLog.updateMany({
       where: { userId, id: { in: ids }, read: false },
-      data:  { read: true, readAt: new Date() },
+      data: { read: true, readAt: new Date() },
     });
     return { updated: result.count };
   }
 
   async archiveNotification(notificationId: number, userId: number) {
-    const n = await this.prisma.notificationLog.findFirst({ where: { id: notificationId, userId } });
+    const n = await this.prisma.notificationLog.findFirst({
+      where: { id: notificationId, userId },
+    });
     if (!n) throw new NotFoundException('Notificação não encontrada');
     return this.prisma.notificationLog.update({
       where: { id: notificationId },
-      data:  { archived: true },
+      data: { archived: true },
     });
   }
 
@@ -211,13 +235,15 @@ export class NotificationsService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (type)     where.type     = type;
+    if (type) where.type = type;
     if (category) where.category = category;
     if (priority) where.priority = priority;
 
     const [data, total] = await Promise.all([
       this.prisma.notificationLog.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
         orderBy: { createdAt: 'desc' },
       }),
@@ -231,16 +257,27 @@ export class NotificationsService {
     const [total, readCount, byType, byCategory, byPriority] = await Promise.all([
       this.prisma.notificationLog.count(),
       this.prisma.notificationLog.count({ where: { read: true } }),
-      this.prisma.notificationLog.groupBy({ by: ['type'],     _count: true, orderBy: { _count: { type:     'desc' } }, take: 10 }),
-      this.prisma.notificationLog.groupBy({ by: ['category'], _count: true, orderBy: { _count: { category: 'desc' } } }),
+      this.prisma.notificationLog.groupBy({
+        by: ['type'],
+        _count: true,
+        orderBy: { _count: { type: 'desc' } },
+        take: 10,
+      }),
+      this.prisma.notificationLog.groupBy({
+        by: ['category'],
+        _count: true,
+        orderBy: { _count: { category: 'desc' } },
+      }),
       this.prisma.notificationLog.groupBy({ by: ['priority'], _count: true }),
     ]);
 
     const unread = total - readCount;
     return {
-      total, read: readCount, unread,
+      total,
+      read: readCount,
+      unread,
       openRate: total > 0 ? Math.round((readCount / total) * 100) : 0,
-      byType:     byType.map(t => ({ type: t.type, count: t._count })),
+      byType: byType.map(t => ({ type: t.type, count: t._count })),
       byCategory: byCategory.map(c => ({ category: c.category, count: c._count })),
       byPriority: Object.fromEntries(byPriority.map(p => [p.priority ?? 'N/D', p._count])),
     };
@@ -250,18 +287,18 @@ export class NotificationsService {
 
   async getPreferences(userId: number) {
     return this.prisma.notificationPreference.upsert({
-      where:  { userId },
+      where: { userId },
       create: {
         userId,
-        inApp:             true,
-        email:             true,
-        push:              false,
-        slack:             false,
-        sms:               false,
-        quietHourStart:    22,
-        quietHourEnd:      8,
-        digestFrequency:   'NONE',
-        disabledCategories:[],
+        inApp: true,
+        email: true,
+        push: false,
+        slack: false,
+        sms: false,
+        quietHourStart: 22,
+        quietHourEnd: 8,
+        digestFrequency: 'NONE',
+        disabledCategories: [],
       },
       update: {},
     });
@@ -269,7 +306,7 @@ export class NotificationsService {
 
   async updatePreferences(userId: number, dto: UpdatePreferencesDto) {
     return this.prisma.notificationPreference.upsert({
-      where:  { userId },
+      where: { userId },
       create: { userId, ...dto, disabledCategories: dto.disabledCategories ?? [] },
       update: { ...dto, disabledCategories: dto.disabledCategories ?? undefined },
     });
@@ -316,12 +353,12 @@ export class NotificationsService {
 
     return this.send({
       userId,
-      type:       eventType,
-      title:      template.titleTemplate    ? interpolate(template.titleTemplate)    : undefined,
-      message:    interpolate((template as any).messageTemplate),
-      priority:   (template as any).priority  ?? 'MEDIUM',
-      category:   (template as any).category,
-      actionUrl:  template.actionUrlTemplate ? interpolate(template.actionUrlTemplate) : undefined,
+      type: eventType,
+      title: template.titleTemplate ? interpolate(template.titleTemplate) : undefined,
+      message: interpolate((template as any).messageTemplate),
+      priority: (template as any).priority ?? 'MEDIUM',
+      category: (template as any).category,
+      actionUrl: template.actionUrlTemplate ? interpolate(template.actionUrlTemplate) : undefined,
     });
   }
 
@@ -331,9 +368,14 @@ export class NotificationsService {
     return this.prisma.automationRule.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
- async createAutomationRule(data: { name: string; trigger: string; action: string; condition: string }) {
-  return (this.prisma as any).automationRule.create({ data });
-}
+  async createAutomationRule(data: {
+    name: string;
+    trigger: string;
+    action: string;
+    condition: string;
+  }) {
+    return (this.prisma as any).automationRule.create({ data });
+  }
 
   async toggleAutomationRule(id: number) {
     const rule = await this.prisma.automationRule.findUnique({ where: { id } });

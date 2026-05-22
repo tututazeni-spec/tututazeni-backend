@@ -40,22 +40,25 @@ export class AiProvidersService {
   private readonly ollamaModel: string;
 
   constructor() {
-    this.provider     = (process.env.AI_PROVIDER ?? 'groq').toLowerCase();
-    this.groqApiKey   = process.env.GROQ_API_KEY ?? '';
-    this.groqModel    = process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile';
+    this.provider = (process.env.AI_PROVIDER ?? 'groq').toLowerCase();
+    this.groqApiKey = process.env.GROQ_API_KEY ?? '';
+    this.groqModel = process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile';
     this.geminiApiKey = process.env.GEMINI_API_KEY ?? '';
-    this.geminiModel  = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash';
-    this.ollamaUrl    = process.env.OLLAMA_URL ?? 'http://localhost:11434';
-    this.ollamaModel  = process.env.OLLAMA_MODEL ?? 'llama3.2';
+    this.geminiModel = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash';
+    this.ollamaUrl = process.env.OLLAMA_URL ?? 'http://localhost:11434';
+    this.ollamaModel = process.env.OLLAMA_MODEL ?? 'llama3.2';
 
     this.logger.log(`🤖 Fornecedor de IA activo: ${this.provider.toUpperCase()}`);
   }
 
   async chat(systemPrompt: string, messages: ChatMessage[], maxTokens = 1024): Promise<AiResponse> {
     switch (this.provider) {
-      case 'groq':   return this.chatGroq(systemPrompt, messages, maxTokens);
-      case 'gemini': return this.chatGemini(systemPrompt, messages, maxTokens);
-      case 'ollama': return this.chatOllama(systemPrompt, messages, maxTokens);
+      case 'groq':
+        return this.chatGroq(systemPrompt, messages, maxTokens);
+      case 'gemini':
+        return this.chatGemini(systemPrompt, messages, maxTokens);
+      case 'ollama':
+        return this.chatOllama(systemPrompt, messages, maxTokens);
       default:
         this.logger.warn(`Fornecedor desconhecido: ${this.provider}. A usar Groq.`);
         return this.chatGroq(systemPrompt, messages, maxTokens);
@@ -64,15 +67,34 @@ export class AiProvidersService {
 
   getProviderInfo(): { provider: string; model: string; free: boolean; docs: string } {
     const info: Record<string, any> = {
-      groq:   { provider: 'Groq',   model: this.groqModel,   free: true, docs: 'https://console.groq.com' },
-      gemini: { provider: 'Gemini', model: this.geminiModel, free: true, docs: 'https://aistudio.google.com' },
-      ollama: { provider: 'Ollama', model: this.ollamaModel, free: true, docs: 'https://ollama.com' },
+      groq: {
+        provider: 'Groq',
+        model: this.groqModel,
+        free: true,
+        docs: 'https://console.groq.com',
+      },
+      gemini: {
+        provider: 'Gemini',
+        model: this.geminiModel,
+        free: true,
+        docs: 'https://aistudio.google.com',
+      },
+      ollama: {
+        provider: 'Ollama',
+        model: this.ollamaModel,
+        free: true,
+        docs: 'https://ollama.com',
+      },
     };
     return info[this.provider] ?? info['groq'];
   }
 
   // ── GROQ (OpenAI-compatible API) ─────────────────────────────────────────
-  private async chatGroq(system: string, messages: ChatMessage[], maxTokens: number): Promise<AiResponse> {
+  private async chatGroq(
+    system: string,
+    messages: ChatMessage[],
+    maxTokens: number,
+  ): Promise<AiResponse> {
     if (!this.groqApiKey) {
       throw new InternalServerErrorException(
         'GROQ_API_KEY não configurada. Obtenha gratuitamente em https://console.groq.com',
@@ -82,17 +104,14 @@ export class AiProvidersService {
     const body = {
       model: this.groqModel,
       max_tokens: maxTokens,
-      messages: [
-        { role: 'system', content: system },
-        ...messages,
-      ],
+      messages: [{ role: 'system', content: system }, ...messages],
     };
 
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.groqApiKey}`,
+        Authorization: `Bearer ${this.groqApiKey}`,
       },
       body: JSON.stringify(body),
     });
@@ -113,7 +132,11 @@ export class AiProvidersService {
   }
 
   // ── GOOGLE GEMINI ─────────────────────────────────────────────────────────
-  private async chatGemini(system: string, messages: ChatMessage[], maxTokens: number): Promise<AiResponse> {
+  private async chatGemini(
+    system: string,
+    messages: ChatMessage[],
+    maxTokens: number,
+  ): Promise<AiResponse> {
     if (!this.geminiApiKey) {
       throw new InternalServerErrorException(
         'GEMINI_API_KEY não configurada. Obtenha gratuitamente em https://aistudio.google.com',
@@ -153,13 +176,14 @@ export class AiProvidersService {
   }
 
   // ── OLLAMA (auto-hospedado) ────────────────────────────────────────────────
-  private async chatOllama(system: string, messages: ChatMessage[], maxTokens: number): Promise<AiResponse> {
+  private async chatOllama(
+    system: string,
+    messages: ChatMessage[],
+    maxTokens: number,
+  ): Promise<AiResponse> {
     const body = {
       model: this.ollamaModel,
-      messages: [
-        { role: 'system', content: system },
-        ...messages,
-      ],
+      messages: [{ role: 'system', content: system }, ...messages],
       options: { num_predict: maxTokens },
       stream: false,
     };

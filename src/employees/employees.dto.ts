@@ -1,8 +1,19 @@
 // ─── employees/employees.dto.ts ──────────────────────────────────────────────
 import {
-  IsString, IsInt, IsOptional, IsDateString, IsNumber,
-  IsEmail, IsEnum, IsArray, IsBoolean, IsObject,
-  ValidateNested, Min, Max, IsUrl,
+  IsString,
+  IsInt,
+  IsOptional,
+  IsDateString,
+  IsNumber,
+  IsEmail,
+  IsEnum,
+  IsArray,
+  IsBoolean,
+  IsObject,
+  ValidateNested,
+  Min,
+  Max,
+  IsUrl,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -10,11 +21,11 @@ import { Type } from 'class-transformer';
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export enum EmployeeStatus {
-  ACTIVE      = 'ACTIVE',
-  INACTIVE    = 'INACTIVE',
-  ON_LEAVE    = 'ON_LEAVE',
-  TERMINATED  = 'TERMINATED',
-  SUSPENDED   = 'SUSPENDED',
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  ON_LEAVE = 'ON_LEAVE',
+  TERMINATED = 'TERMINATED',
+  SUSPENDED = 'SUSPENDED',
 }
 
 /**
@@ -23,97 +34,97 @@ export enum EmployeeStatus {
  */
 export enum ContractType {
   /** Art. 12.º — Contrato por tempo indeterminado (regime geral, vínculo permanente) */
-  INDEFINITE          = 'INDEFINITE',
+  INDEFINITE = 'INDEFINITE',
 
   /** Art. 13.º — Contrato a prazo certo (duração máxima 3 anos, renovável 2×) */
-  FIXED_TERM          = 'FIXED_TERM',
+  FIXED_TERM = 'FIXED_TERM',
 
   /** Art. 14.º — Contrato a prazo incerto (obra ou serviço determinado, sem data fim precisa) */
-  UNCERTAIN_TERM      = 'UNCERTAIN_TERM',
+  UNCERTAIN_TERM = 'UNCERTAIN_TERM',
 
   /** Art. 230.º — Contrato de aprendizagem (formação profissional + trabalho, menores de 25 anos) */
-  APPRENTICESHIP      = 'APPRENTICESHIP',
+  APPRENTICESHIP = 'APPRENTICESHIP',
 
   /** Regime de estágio profissional (inserção no mercado de trabalho) */
-  INTERNSHIP          = 'INTERNSHIP',
+  INTERNSHIP = 'INTERNSHIP',
 
   /** Contrato de prestação de serviços (trabalhador independente / consultor) */
-  SERVICE_PROVISION   = 'SERVICE_PROVISION',
+  SERVICE_PROVISION = 'SERVICE_PROVISION',
 
   /** Cedência temporária de trabalhador por empresa de trabalho temporário */
   TEMPORARY_PLACEMENT = 'TEMPORARY_PLACEMENT',
 
   /** Trabalho a tempo parcial — jornada inferior à normal (Art. 103.º) */
-  PART_TIME           = 'PART_TIME',
+  PART_TIME = 'PART_TIME',
 }
 
 export enum WorkMode {
-  REMOTE   = 'REMOTE',
-  HYBRID   = 'HYBRID',
-  ON_SITE  = 'ON_SITE',
+  REMOTE = 'REMOTE',
+  HYBRID = 'HYBRID',
+  ON_SITE = 'ON_SITE',
 }
 
 export enum SeniorityLevel {
-  JUNIOR   = 'JUNIOR',
-  MID      = 'MID',
-  SENIOR   = 'SENIOR',
-  LEAD     = 'LEAD',
-  MANAGER  = 'MANAGER',
+  JUNIOR = 'JUNIOR',
+  MID = 'MID',
+  SENIOR = 'SENIOR',
+  LEAD = 'LEAD',
+  MANAGER = 'MANAGER',
   DIRECTOR = 'DIRECTOR',
-  C_LEVEL  = 'C_LEVEL',
+  C_LEVEL = 'C_LEVEL',
 }
 
 export enum Gender {
-  MALE              = 'MALE',
-  FEMALE            = 'FEMALE',
-  NON_BINARY        = 'NON_BINARY',
+  MALE = 'MALE',
+  FEMALE = 'FEMALE',
+  NON_BINARY = 'NON_BINARY',
   PREFER_NOT_TO_SAY = 'PREFER_NOT_TO_SAY',
 }
 
 export enum SkillType {
-  TECHNICAL    = 'TECHNICAL',
-  BEHAVIORAL   = 'BEHAVIORAL',
-  LANGUAGE     = 'LANGUAGE',
-  TOOL         = 'TOOL',
-  CERTIFICATION= 'CERTIFICATION',
+  TECHNICAL = 'TECHNICAL',
+  BEHAVIORAL = 'BEHAVIORAL',
+  LANGUAGE = 'LANGUAGE',
+  TOOL = 'TOOL',
+  CERTIFICATION = 'CERTIFICATION',
 }
 
 export enum SkillLevel {
-  BEGINNER     = 1,
-  ELEMENTARY   = 2,
+  BEGINNER = 1,
+  ELEMENTARY = 2,
   INTERMEDIATE = 3,
-  ADVANCED     = 4,
-  EXPERT       = 5,
+  ADVANCED = 4,
+  EXPERT = 5,
 }
 
 export enum TimelineEventType {
-  HIRED         = 'HIRED',
-  PROMOTED      = 'PROMOTED',
-  TRANSFERRED   = 'TRANSFERRED',
+  HIRED = 'HIRED',
+  PROMOTED = 'PROMOTED',
+  TRANSFERRED = 'TRANSFERRED',
   SALARY_CHANGE = 'SALARY_CHANGE',
-  COURSE        = 'COURSE',
-  EVALUATION    = 'EVALUATION',
-  PDI           = 'PDI',
-  EVENT         = 'EVENT',
-  BADGE         = 'BADGE',
-  DOCUMENT      = 'DOCUMENT',
-  NOTE          = 'NOTE',
+  COURSE = 'COURSE',
+  EVALUATION = 'EVALUATION',
+  PDI = 'PDI',
+  EVENT = 'EVENT',
+  BADGE = 'BADGE',
+  DOCUMENT = 'DOCUMENT',
+  NOTE = 'NOTE',
 }
 
 export enum RequestType {
-  DATA_CHANGE    = 'DATA_CHANGE',
-  PROMOTION      = 'PROMOTION',
-  TRANSFER       = 'TRANSFER',
-  TERMINATION    = 'TERMINATION',
-  LEAVE          = 'LEAVE',
+  DATA_CHANGE = 'DATA_CHANGE',
+  PROMOTION = 'PROMOTION',
+  TRANSFER = 'TRANSFER',
+  TERMINATION = 'TERMINATION',
+  LEAVE = 'LEAVE',
   BENEFIT_CHANGE = 'BENEFIT_CHANGE',
 }
 
 export enum RequestStatus {
-  PENDING  = 'PENDING',
+  PENDING = 'PENDING',
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
-  CANCELLED= 'CANCELLED',
+  CANCELLED = 'CANCELLED',
 }
 
 // ─── Employee Core ─────────────────────────────────────────────────────────────
@@ -147,8 +158,18 @@ export class CreateEmployeeDto {
   @ApiPropertyOptional() @IsOptional() @IsEnum(Gender) gender?: Gender;
   @ApiPropertyOptional() @IsOptional() @IsString() maritalStatus?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() nationality?: string;
-  @ApiPropertyOptional() @IsOptional() @IsObject() @ValidateNested() @Type(() => AddressDto) address?: AddressDto;
-  @ApiPropertyOptional() @IsOptional() @IsObject() @ValidateNested() @Type(() => EmergencyContactDto) emergencyContact?: EmergencyContactDto;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => AddressDto)
+  address?: AddressDto;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => EmergencyContactDto)
+  emergencyContact?: EmergencyContactDto;
   @ApiPropertyOptional() @IsOptional() @IsUrl() avatarUrl?: string;
 
   // ── Dados Profissionais
@@ -255,7 +276,12 @@ export class CreatePdiDto {
   @ApiPropertyOptional() @IsOptional() @IsString() objective?: string;
   @ApiProperty() @IsDateString() startDate!: string;
   @ApiProperty() @IsDateString() endDate!: string;
-  @ApiPropertyOptional() @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => CreatePdiActionDto) actions?: CreatePdiActionDto[];
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreatePdiActionDto)
+  actions?: CreatePdiActionDto[];
 }
 
 export class UpdatePdiProgressDto {

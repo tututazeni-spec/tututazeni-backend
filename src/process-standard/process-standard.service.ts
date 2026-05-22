@@ -1,14 +1,22 @@
 ﻿// src/process-standard/process-standard.service.ts
 import {
-  Injectable, NotFoundException, ConflictException,
-  ForbiddenException, BadRequestException, Logger,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  ForbiddenException,
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createHash } from 'crypto';
 import {
-  CreateProcessDto, UpdateProcessDto, ProcessFilterDto,
-  StartInstanceDto, CompleteStepDto, RejectStepDto,
-  ApprovalActionDto, ProcessStatus, InstanceStatus, TaskStatus,
+  CreateProcessDto,
+  UpdateProcessDto,
+  ProcessFilterDto,
+  StartInstanceDto,
+  CompleteStepDto,
+  RejectStepDto,
+  ApprovalActionDto,
 } from './process-standard.dto';
 
 @Injectable()
@@ -40,13 +48,13 @@ export class ProcessStandardService {
     try {
       await this.prisma.processAuditLog.create({
         data: {
-          processId:  opts.processId,
+          processId: opts.processId,
           instanceId: opts.instanceId,
-          userId:     opts.userId,
-          action:     opts.action,
-          meta:       opts.meta ? JSON.stringify(opts.meta) : null,
-          hash:       this.hashPayload(payload),
-          createdAt:  new Date(),
+          userId: opts.userId,
+          action: opts.action,
+          meta: opts.meta ? JSON.stringify(opts.meta) : null,
+          hash: this.hashPayload(payload),
+          createdAt: new Date(),
         },
       });
     } catch (e) {
@@ -61,25 +69,27 @@ export class ProcessStandardService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (status)       where.status = status;
-    if (riskLevel)    where.riskLevel = riskLevel;
+    if (status) where.status = status;
+    if (riskLevel) where.riskLevel = riskLevel;
     if (departmentId) where.departmentId = departmentId;
-    if (category)     where.category = category;
+    if (category) where.category = category;
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
-        { code:  { contains: search, mode: 'insensitive' } },
-        { tags:  { has: search } },
+        { code: { contains: search, mode: 'insensitive' } },
+        { tags: { has: search } },
       ];
     }
 
     const [data, total] = await Promise.all([
       this.prisma.processStandard.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
-          owner:      { select: { id: true, fullName: true } },
+          owner: { select: { id: true, fullName: true } },
           department: { select: { id: true, name: true } },
-          _count:     { select: { steps: true, instances: true } },
+          _count: { select: { steps: true, instances: true } },
         },
         orderBy: { updatedAt: 'desc' },
       }),
@@ -96,15 +106,15 @@ export class ProcessStandardService {
       where: { id },
       include: {
         steps: {
-          orderBy:  { order: 'asc' },
+          orderBy: { order: 'asc' },
           include: {
             responsible: { select: { id: true, fullName: true } },
           },
         },
-        owner:      { select: { id: true, fullName: true } },
+        owner: { select: { id: true, fullName: true } },
         department: { select: { id: true, name: true } },
-        versions:   { orderBy: { createdAt: 'desc' }, take: 10 },
-        _count:     { select: { instances: true } },
+        versions: { orderBy: { createdAt: 'desc' }, take: 10 },
+        _count: { select: { instances: true } },
       },
     });
     if (!p) throw new NotFoundException('Processo não encontrado');
@@ -125,33 +135,38 @@ export class ProcessStandardService {
       data: {
         ...data,
         ownerId,
-        status:  'DRAFT',
+        status: 'DRAFT',
         version: '1.0',
-        tags:    data.tags ?? [],
+        tags: data.tags ?? [],
         steps: {
           create: steps.map(s => ({
-            type:             s.type,
-            title:            s.title,
-            description:      s.description,
-            order:            s.order,
-            responsibleId:    s.responsibleId,
-            responsibleRole:  s.responsibleRole,
-            slaHours:         s.slaHours,
+            type: s.type,
+            title: s.title,
+            description: s.description,
+            order: s.order,
+            responsibleId: s.responsibleId,
+            responsibleRole: s.responsibleRole,
+            slaHours: s.slaHours,
             estimatedMinutes: s.estimatedMinutes,
-            formSchema:       s.formSchema ? JSON.stringify(s.formSchema) : null,
-            exitConditions:   s.exitConditions ? JSON.stringify(s.exitConditions) : null,
-            requiresUpload:   s.requiresUpload ?? false,
-            checklist:        s.checklist ?? [],
+            formSchema: s.formSchema ? JSON.stringify(s.formSchema) : null,
+            exitConditions: s.exitConditions ? JSON.stringify(s.exitConditions) : null,
+            requiresUpload: s.requiresUpload ?? false,
+            checklist: s.checklist ?? [],
           })),
         },
       },
       include: {
-        steps:  { orderBy: { order: 'asc' } },
-        owner:  { select: { id: true, fullName: true } },
+        steps: { orderBy: { order: 'asc' } },
+        owner: { select: { id: true, fullName: true } },
       },
     });
 
-    await this.writeAuditLog({ processId: process.id, userId: ownerId, action: 'CREATED', meta: { code: dto.code, version: '1.0' } });
+    await this.writeAuditLog({
+      processId: process.id,
+      userId: ownerId,
+      action: 'CREATED',
+      meta: { code: dto.code, version: '1.0' },
+    });
 
     return process;
   }
@@ -162,7 +177,9 @@ export class ProcessStandardService {
     const existing = await this.findOne(id);
 
     if (existing.status === 'ACTIVE') {
-      throw new ForbiddenException('Processo activo não pode ser editado directamente. Crie uma nova versão.');
+      throw new ForbiddenException(
+        'Processo activo não pode ser editado directamente. Crie uma nova versão.',
+      );
     }
 
     if (dto.code && dto.code !== existing.code) {
@@ -186,24 +203,29 @@ export class ProcessStandardService {
       await this.prisma.processStep.deleteMany({ where: { processId: id } });
       await this.prisma.processStep.createMany({
         data: steps.map(s => ({
-          processId:        id,
-          type:             s.type,
-          title:            s.title,
-          description:      s.description,
-          order:            s.order,
-          responsibleId:    s.responsibleId,
-          responsibleRole:  s.responsibleRole,
-          slaHours:         s.slaHours,
+          processId: id,
+          type: s.type,
+          title: s.title,
+          description: s.description,
+          order: s.order,
+          responsibleId: s.responsibleId,
+          responsibleRole: s.responsibleRole,
+          slaHours: s.slaHours,
           estimatedMinutes: s.estimatedMinutes,
-          formSchema:       s.formSchema ? JSON.stringify(s.formSchema) : null,
-          exitConditions:   s.exitConditions ? JSON.stringify(s.exitConditions) : null,
-          requiresUpload:   s.requiresUpload ?? false,
-          checklist:        s.checklist ?? [],
+          formSchema: s.formSchema ? JSON.stringify(s.formSchema) : null,
+          exitConditions: s.exitConditions ? JSON.stringify(s.exitConditions) : null,
+          requiresUpload: s.requiresUpload ?? false,
+          checklist: s.checklist ?? [],
         })),
       });
     }
 
-    await this.writeAuditLog({ processId: id, userId: updatedById, action: 'UPDATED', meta: { fields: Object.keys(dto) } });
+    await this.writeAuditLog({
+      processId: id,
+      userId: updatedById,
+      action: 'UPDATED',
+      meta: { fields: Object.keys(dto) },
+    });
 
     return this.findOne(id);
   }
@@ -217,8 +239,8 @@ export class ProcessStandardService {
     await this.prisma.processVersion.create({
       data: {
         processId: id,
-        version:   existing.version,
-        snapshot:  JSON.stringify(existing),
+        version: existing.version,
+        snapshot: JSON.stringify(existing),
         createdById: userId,
       },
     });
@@ -229,11 +251,16 @@ export class ProcessStandardService {
       where: { id },
       data: {
         version: newVersion,
-        status:  'DRAFT',
+        status: 'DRAFT',
       },
     });
 
-    await this.writeAuditLog({ processId: id, userId, action: 'NEW_VERSION', meta: { from: existing.version, to: newVersion } });
+    await this.writeAuditLog({
+      processId: id,
+      userId,
+      action: 'NEW_VERSION',
+      meta: { from: existing.version, to: newVersion },
+    });
 
     return updated;
   }
@@ -280,7 +307,7 @@ export class ProcessStandardService {
     const updated = await this.prisma.processStandard.update({
       where: { id },
       data: {
-        status:     newStatus,
+        status: newStatus,
         publishedAt: dto.action === 'approve' ? new Date() : undefined,
       },
     });
@@ -289,9 +316,9 @@ export class ProcessStandardService {
       data: {
         processId: id,
         userId,
-        action:    dto.action.toUpperCase(),
-        comment:   dto.comment,
-        status:    newStatus,
+        action: dto.action.toUpperCase(),
+        comment: dto.comment,
+        status: newStatus,
       },
     });
 
@@ -344,7 +371,8 @@ export class ProcessStandardService {
     };
 
     return {
-      versionA, versionB,
+      versionA,
+      versionB,
       fieldDiffs: diffFields(a, b),
       stepsA: a.steps ?? [],
       stepsB: b.steps ?? [],
@@ -365,29 +393,27 @@ export class ProcessStandardService {
         processId,
         processVersion: process.version,
         initiatedById,
-        targetUserId:   dto.targetUserId,
-        status:         'IN_PROGRESS',
-        notes:          dto.notes,
-        startedAt:      new Date(),
-        slaDeadline:    process.defaultSlaHours
+        targetUserId: dto.targetUserId,
+        status: 'IN_PROGRESS',
+        notes: dto.notes,
+        startedAt: new Date(),
+        slaDeadline: process.defaultSlaHours
           ? new Date(Date.now() + process.defaultSlaHours * 3600 * 1000)
           : null,
         stepProgress: {
           create: (process.steps as any[]).map((s, idx) => ({
-            stepId:   s.id,
+            stepId: s.id,
             stepOrder: s.order,
-            status:   idx === 0 ? 'PENDING' : 'WAITING',
-            slaDeadline: s.slaHours
-              ? new Date(Date.now() + s.slaHours * 3600 * 1000)
-              : null,
+            status: idx === 0 ? 'PENDING' : 'WAITING',
+            slaDeadline: s.slaHours ? new Date(Date.now() + s.slaHours * 3600 * 1000) : null,
           })),
         },
       },
       include: {
         stepProgress: { orderBy: { stepOrder: 'asc' } },
-        initiatedBy:  { select: { id: true, fullName: true } },
-        targetUser:   { select: { id: true, fullName: true } },
-        process:      { select: { id: true, title: true, code: true } },
+        initiatedBy: { select: { id: true, fullName: true } },
+        targetUser: { select: { id: true, fullName: true } },
+        process: { select: { id: true, title: true, code: true } },
       },
     });
 
@@ -412,23 +438,31 @@ export class ProcessStandardService {
     return instance;
   }
 
-  async getInstances(filters: { processId?: number; status?: string; userId?: number; page?: number; limit?: number }) {
+  async getInstances(filters: {
+    processId?: number;
+    status?: string;
+    userId?: number;
+    page?: number;
+    limit?: number;
+  }) {
     const { page = 1, limit = 20, processId, status, userId } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = {};
     if (processId) where.processId = processId;
-    if (status)    where.status = status;
-    if (userId)    where.OR = [{ initiatedById: userId }, { targetUserId: userId }];
+    if (status) where.status = status;
+    if (userId) where.OR = [{ initiatedById: userId }, { targetUserId: userId }];
 
     const [data, total] = await Promise.all([
       this.prisma.processInstance.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
-          process:     { select: { id: true, title: true, code: true, riskLevel: true } },
+          process: { select: { id: true, title: true, code: true, riskLevel: true } },
           initiatedBy: { select: { id: true, fullName: true } },
-          targetUser:  { select: { id: true, fullName: true } },
-          _count:      { select: { stepProgress: true } },
+          targetUser: { select: { id: true, fullName: true } },
+          _count: { select: { stepProgress: true } },
         },
         orderBy: { startedAt: 'desc' },
       }),
@@ -442,9 +476,9 @@ export class ProcessStandardService {
     const inst = await this.prisma.processInstance.findUnique({
       where: { id: instanceId },
       include: {
-        process:     { include: { steps: { orderBy: { order: 'asc' } } } },
+        process: { include: { steps: { orderBy: { order: 'asc' } } } },
         initiatedBy: { select: { id: true, fullName: true } },
-        targetUser:  { select: { id: true, fullName: true } },
+        targetUser: { select: { id: true, fullName: true } },
         stepProgress: {
           orderBy: { stepOrder: 'asc' },
           include: {
@@ -474,14 +508,14 @@ export class ProcessStandardService {
     const updated = await this.prisma.stepProgress.update({
       where: { instanceId_stepId: { instanceId, stepId } },
       data: {
-        status:      'COMPLETED',
+        status: 'COMPLETED',
         completedById: userId,
         completedAt: new Date(),
-        notes:       dto.notes,
-        formData:    dto.formData ? JSON.stringify(dto.formData) : null,
-        action:      dto.action,
+        notes: dto.notes,
+        formData: dto.formData ? JSON.stringify(dto.formData) : null,
+        action: dto.action,
         evidenceIds: dto.evidenceIds ?? [],
-        duration:    sp.startedAt
+        duration: sp.startedAt
           ? Math.round((Date.now() - new Date(sp.startedAt).getTime()) / 60000)
           : null,
       },
@@ -507,7 +541,7 @@ export class ProcessStandardService {
       await this.prisma.processInstance.update({
         where: { id: instanceId },
         data: {
-          status:      'COMPLETED',
+          status: 'COMPLETED',
           completedAt: new Date(),
         },
       });
@@ -531,7 +565,12 @@ export class ProcessStandardService {
 
     await this.prisma.stepProgress.update({
       where: { instanceId_stepId: { instanceId, stepId } },
-      data: { status: 'REJECTED', notes: dto.reason, completedById: userId, completedAt: new Date() },
+      data: {
+        status: 'REJECTED',
+        notes: dto.reason,
+        completedById: userId,
+        completedAt: new Date(),
+      },
     });
 
     await this.prisma.processInstance.update({
@@ -539,7 +578,12 @@ export class ProcessStandardService {
       data: { status: 'ON_HOLD' },
     });
 
-    await this.writeAuditLog({ instanceId, userId, action: 'STEP_REJECTED', meta: { stepId, reason: dto.reason } });
+    await this.writeAuditLog({
+      instanceId,
+      userId,
+      action: 'STEP_REJECTED',
+      meta: { stepId, reason: dto.reason },
+    });
 
     return { message: 'Passo rejeitado. Instância colocada em espera.' };
   }
@@ -554,7 +598,12 @@ export class ProcessStandardService {
       data: { status: 'CANCELLED', cancelledAt: new Date(), cancelReason: reason },
     });
 
-    await this.writeAuditLog({ instanceId, userId, action: 'INSTANCE_CANCELLED', meta: { reason } });
+    await this.writeAuditLog({
+      instanceId,
+      userId,
+      action: 'INSTANCE_CANCELLED',
+      meta: { reason },
+    });
     return { message: 'Instância cancelada com sucesso' };
   }
 
@@ -563,10 +612,7 @@ export class ProcessStandardService {
   async getMyTasks(userId: number) {
     const tasks = await this.prisma.stepProgress.findMany({
       where: {
-        OR: [
-          { instance: { targetUserId: userId } },
-          { step: { responsibleId: userId } },
-        ],
+        OR: [{ instance: { targetUserId: userId } }, { step: { responsibleId: userId } }],
         status: 'PENDING',
       },
       include: {
@@ -590,28 +636,36 @@ export class ProcessStandardService {
   // ─── DASHBOARD / MÉTRICAS ─────────────────────────────────────────────────
 
   async getDashboard() {
-    const [totalActive, totalDraft, totalReview, instancesInProgress, instancesCompleted, overdueSteps] =
-      await Promise.all([
-        this.prisma.processStandard.count({ where: { status: 'ACTIVE' } }),
-        this.prisma.processStandard.count({ where: { status: 'DRAFT' } }),
-        this.prisma.processStandard.count({ where: { status: 'IN_REVIEW' } }),
-        this.prisma.processInstance.count({ where: { status: 'IN_PROGRESS' } }),
-        this.prisma.processInstance.count({ where: { status: 'COMPLETED' } }),
-        this.prisma.stepProgress.count({
-          where: { status: 'PENDING', slaDeadline: { lt: new Date() } },
-        }),
-      ]);
+    const [
+      totalActive,
+      totalDraft,
+      totalReview,
+      instancesInProgress,
+      instancesCompleted,
+      overdueSteps,
+    ] = await Promise.all([
+      this.prisma.processStandard.count({ where: { status: 'ACTIVE' } }),
+      this.prisma.processStandard.count({ where: { status: 'DRAFT' } }),
+      this.prisma.processStandard.count({ where: { status: 'IN_REVIEW' } }),
+      this.prisma.processInstance.count({ where: { status: 'IN_PROGRESS' } }),
+      this.prisma.processInstance.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.stepProgress.count({
+        where: { status: 'PENDING', slaDeadline: { lt: new Date() } },
+      }),
+    ]);
 
     const avgCycleTime = await this.prisma.processInstance.aggregate({
       where: { status: 'COMPLETED', completedAt: { not: null } },
-      _avg: { /* duration field needed */ },
+      _avg: {
+        /* duration field needed */
+      },
     });
 
     const recentInstances = await this.prisma.processInstance.findMany({
       take: 5,
       orderBy: { startedAt: 'desc' },
       include: {
-        process:    { select: { title: true, code: true } },
+        process: { select: { title: true, code: true } },
         targetUser: { select: { fullName: true } },
       },
     });
@@ -629,12 +683,14 @@ export class ProcessStandardService {
   async getAuditLogs(processId?: number, instanceId?: number, page = 1, limit = 50) {
     const skip = (page - 1) * limit;
     const where: any = {};
-    if (processId)  where.processId = processId;
+    if (processId) where.processId = processId;
     if (instanceId) where.instanceId = instanceId;
 
     const [data, total] = await Promise.all([
       this.prisma.processAuditLog.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: { user: { select: { id: true, fullName: true } } },
         orderBy: { createdAt: 'desc' },
       }),

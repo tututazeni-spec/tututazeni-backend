@@ -1,15 +1,15 @@
 ﻿// src/succession/succession.service.ts
-import {
-  Injectable, NotFoundException, ConflictException,
-  BadRequestException, Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateCriticalPositionDto, UpdateCriticalPositionDto,
-  CreateSuccessionPlanDto, UpdateSuccessionPlanDto,
-  AddToTalentPoolDto, GeneratePDIDto,
-  SuccessionFilterDto, CriticalPositionFilterDto,
-  ReadinessLevel, RiskLevel,
+  CreateCriticalPositionDto,
+  UpdateCriticalPositionDto,
+  CreateSuccessionPlanDto,
+  UpdateSuccessionPlanDto,
+  AddToTalentPoolDto,
+  GeneratePDIDto,
+  SuccessionFilterDto,
+  CriticalPositionFilterDto,
 } from './succession.dto';
 
 @Injectable()
@@ -31,13 +31,13 @@ export class SuccessionService {
 
     return this.prisma.criticalPosition.create({
       data: {
-        positionId:            dto.positionId,
-        businessImpact:        dto.businessImpact,
-        replacementTime:       dto.replacementTime,
-        exitRisk:              dto.exitRisk,
-        expectedExitDate:      dto.expectedExitDate ? new Date(dto.expectedExitDate) : null,
-        criticalReason:        dto.criticalReason,
-        keyPersonRisk:         dto.keyPersonRisk ?? false,
+        positionId: dto.positionId,
+        businessImpact: dto.businessImpact,
+        replacementTime: dto.replacementTime,
+        exitRisk: dto.exitRisk,
+        expectedExitDate: dto.expectedExitDate ? new Date(dto.expectedExitDate) : null,
+        criticalReason: dto.criticalReason,
+        keyPersonRisk: dto.keyPersonRisk ?? false,
         minSuccessorsRequired: dto.minSuccessorsRequired ?? 2,
         requiresDocumentation: dto.requiresDocumentation ?? false,
       },
@@ -46,22 +46,36 @@ export class SuccessionService {
   }
 
   async getCriticalPositions(filters: CriticalPositionFilterDto) {
-    const { page = 1, limit = 20, businessImpact, exitRisk, departmentId, withoutSuccessor } = filters;
+    const {
+      page = 1,
+      limit = 20,
+      businessImpact,
+      exitRisk,
+      departmentId,
+      withoutSuccessor,
+    } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = {};
     if (businessImpact) where.businessImpact = businessImpact;
-    if (exitRisk)       where.exitRisk       = exitRisk;
-    if (departmentId)   where.position       = { departmentId };
+    if (exitRisk) where.exitRisk = exitRisk;
+    if (departmentId) where.position = { departmentId };
 
     const [data, total] = await Promise.all([
       this.prisma.criticalPosition.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
           position: {
             select: {
-              id: true, name: true, level: true,
-              users: { select: { id: true, fullName: true, avatarUrl: true, hireDate: true }, take: 1 },
+              id: true,
+              name: true,
+              level: true,
+              users: {
+                select: { id: true, fullName: true, avatarUrl: true, hireDate: true },
+                take: 1,
+              },
             },
           },
           successionPlans: {
@@ -84,12 +98,16 @@ export class SuccessionService {
     return {
       data: filtered.map(cp => ({
         ...cp,
-        coverageStatus: this.calcCoverageStatus(cp._count.successionPlans, cp.minSuccessorsRequired ?? 2),
-        daysUntilExit:  cp.expectedExitDate ? this.daysUntil(cp.expectedExitDate) : null,
-        alert:          this.buildAlert(cp),
+        coverageStatus: this.calcCoverageStatus(
+          cp._count.successionPlans,
+          cp.minSuccessorsRequired ?? 2,
+        ),
+        daysUntilExit: cp.expectedExitDate ? this.daysUntil(cp.expectedExitDate) : null,
+        alert: this.buildAlert(cp),
       })),
       total,
-      page, limit,
+      page,
+      limit,
       totalPages: Math.ceil(total / limit),
     };
   }
@@ -100,7 +118,9 @@ export class SuccessionService {
       include: {
         position: {
           include: {
-            users: { select: { id: true, fullName: true, avatarUrl: true, hireDate: true, email: true } },
+            users: {
+              select: { id: true, fullName: true, avatarUrl: true, hireDate: true, email: true },
+            },
             competencies: { include: { competency: true } },
           },
         },
@@ -108,7 +128,10 @@ export class SuccessionService {
           include: {
             candidate: {
               select: {
-                id: true, fullName: true, avatarUrl: true, email: true,
+                id: true,
+                fullName: true,
+                avatarUrl: true,
+                email: true,
                 position: { select: { name: true } },
                 department: { select: { name: true } },
                 userCompetencies: { include: { competency: true }, take: 10 },
@@ -133,29 +156,42 @@ export class SuccessionService {
   // ─── PLANOS DE SUCESSÃO ───────────────────────────────────────────────────
 
   async findAll(filters: SuccessionFilterDto) {
-    const { page = 1, limit = 20, criticalPositionId, candidateId, readinessLevel, priority, departmentId } = filters;
+    const {
+      page = 1,
+      limit = 20,
+      criticalPositionId,
+      candidateId,
+      readinessLevel,
+      priority,
+      departmentId,
+    } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = {};
     if (criticalPositionId) where.criticalPositionId = criticalPositionId;
-    if (candidateId)        where.candidateId        = candidateId;
-    if (readinessLevel)     where.readinessLevel     = readinessLevel;
-    if (priority)           where.priority           = priority;
-    if (departmentId)       where.candidate          = { departmentId };
+    if (candidateId) where.candidateId = candidateId;
+    if (readinessLevel) where.readinessLevel = readinessLevel;
+    if (priority) where.priority = priority;
+    if (departmentId) where.candidate = { departmentId };
 
     const [data, total] = await Promise.all([
       this.prisma.successionPlan.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
           criticalPosition: {
             include: { position: { select: { id: true, name: true, level: true } } },
           },
           candidate: {
             select: {
-              id: true, fullName: true, avatarUrl: true, email: true,
-              position:   { select: { name: true } },
+              id: true,
+              fullName: true,
+              avatarUrl: true,
+              email: true,
+              position: { select: { name: true } },
               department: { select: { name: true } },
-              hireDate:   true,
+              hireDate: true,
             },
           },
         },
@@ -187,9 +223,9 @@ export class SuccessionService {
               select: { score: true, category: true, cycle: { select: { name: true } } },
             },
             learningPathEnrollments: {
-              where:  { status: 'COMPLETED' },
-              include:{ learningPath: { select: { title: true } } },
-              take:   5,
+              where: { status: 'COMPLETED' },
+              include: { learningPath: { select: { title: true } } },
+              take: 5,
             },
           },
         },
@@ -205,7 +241,9 @@ export class SuccessionService {
   }
 
   async create(dto: CreateSuccessionPlanDto) {
-    const cp = await this.prisma.criticalPosition.findUnique({ where: { id: dto.criticalPositionId } });
+    const cp = await this.prisma.criticalPosition.findUnique({
+      where: { id: dto.criticalPositionId },
+    });
     if (!cp) throw new NotFoundException('Cargo crítico não encontrado');
 
     const candidate = await this.prisma.user.findUnique({ where: { id: dto.candidateId } });
@@ -221,38 +259,41 @@ export class SuccessionService {
     let matchScore = dto.matchScore;
     if (!matchScore) {
       const autoMatch = await this.calculateMatchScoreForCandidate(
-        dto.criticalPositionId, dto.candidateId
+        dto.criticalPositionId,
+        dto.candidateId,
       );
       matchScore = autoMatch.score;
     }
 
     const plan = await (this.prisma as any).successionPlan.create({
       data: {
-        criticalPositionId:  dto.criticalPositionId,
-        candidateId:         dto.candidateId,
-        readinessLevel:      dto.readinessLevel,
-        priority:            dto.priority,
+        criticalPositionId: dto.criticalPositionId,
+        candidateId: dto.candidateId,
+        readinessLevel: dto.readinessLevel,
+        priority: dto.priority,
         matchScore,
-        geographicMobility:  dto.geographicMobility ?? true,
-        available:           dto.available ?? true,
-        notes:               dto.notes,
-        readinessByDate:     dto.readinessByDate ? new Date(dto.readinessByDate) : null,
+        geographicMobility: dto.geographicMobility ?? true,
+        available: dto.available ?? true,
+        notes: dto.notes,
+        readinessByDate: dto.readinessByDate ? new Date(dto.readinessByDate) : null,
       },
       include: {
         criticalPosition: { include: { position: true } },
-        candidate:        { select: { id: true, fullName: true, avatarUrl: true } },
+        candidate: { select: { id: true, fullName: true, avatarUrl: true } },
       },
     });
 
     // Notificar RH
-    await this.prisma.notificationLog.create({
-      data: {
-      userId:   dto.candidateId,
-      type:     'SUCCESSION_PLAN_ADDED',
-      message:  `Você foi adicionado ao plano de sucessão`,
-      metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: dto.candidateId,
+          type: 'SUCCESSION_PLAN_ADDED',
+          message: `Você foi adicionado ao plano de sucessão`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
     return plan;
   }
@@ -272,11 +313,11 @@ export class SuccessionService {
 
   private async calculateMatchScoreForCandidate(criticalPositionId: number, candidateId: number) {
     const cp = await this.prisma.criticalPosition.findUnique({
-      where:   { id: criticalPositionId },
+      where: { id: criticalPositionId },
       include: { position: { include: { competencies: true } } },
     });
     const candidate = await this.prisma.user.findUnique({
-      where:   { id: candidateId },
+      where: { id: candidateId },
       include: {
         userCompetencies: true,
         performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
@@ -288,14 +329,18 @@ export class SuccessionService {
 
   private async calculateMatchScore(plan: any) {
     const requiredComps = plan.criticalPosition?.position?.competencies ?? [];
-    const userComps     = plan.candidate?.userCompetencies ?? [];
-    const userCompMap   = new Map(userComps.map((uc: any) => [uc.competencyId, uc.currentLevel ?? 0]));
+    const userComps = plan.candidate?.userCompetencies ?? [];
+    const userCompMap = new Map(
+      userComps.map((uc: any) => [uc.competencyId, uc.currentLevel ?? 0]),
+    );
 
     // Score de competências (40%)
     let compScore = 0;
     if (requiredComps.length > 0) {
-      const met = requiredComps.filter((rc: any) => (userCompMap.get(rc.competencyId) ?? 0) >= rc.requiredLevel).length;
-      compScore  = (met / requiredComps.length) * 100;
+      const met = requiredComps.filter(
+        (rc: any) => (userCompMap.get(rc.competencyId) ?? 0) >= rc.requiredLevel,
+      ).length;
+      compScore = (met / requiredComps.length) * 100;
     } else {
       compScore = 50; // sem competências definidas → neutro
     }
@@ -308,23 +353,23 @@ export class SuccessionService {
     }
 
     // Score de experiência / tempo de empresa (20%)
-    const hireDate   = plan.candidate?.hireDate ? new Date(plan.candidate.hireDate) : null;
-    const yearsExp   = hireDate ? (Date.now() - hireDate.getTime()) / (365.25 * 24 * 3600 * 1000) : 0;
-    const expScore   = Math.min(100, yearsExp * 10); // 10 anos = 100%
+    const hireDate = plan.candidate?.hireDate ? new Date(plan.candidate.hireDate) : null;
+    const yearsExp = hireDate ? (Date.now() - hireDate.getTime()) / (365.25 * 24 * 3600 * 1000) : 0;
+    const expScore = Math.min(100, yearsExp * 10); // 10 anos = 100%
 
     const finalScore = Math.round(compScore * 0.4 + perfScore * 0.4 + expScore * 0.2);
 
     const gaps = requiredComps
       .filter((rc: any) => (userCompMap.get(rc.competencyId) ?? 0) < rc.requiredLevel)
       .map((rc: any) => ({
-        competencyId:  rc.competencyId,
+        competencyId: rc.competencyId,
         requiredLevel: rc.requiredLevel,
-        currentLevel:  userCompMap.get(rc.competencyId) ?? 0,
-        gap:           Number(rc.requiredLevel) - Number(userCompMap.get(rc.competencyId) ?? 0),
+        currentLevel: userCompMap.get(rc.competencyId) ?? 0,
+        gap: Number(rc.requiredLevel) - Number(userCompMap.get(rc.competencyId) ?? 0),
       }));
 
     return {
-      score:   finalScore,
+      score: finalScore,
       details: { compScore, perfScore, expScore, gaps },
     };
   }
@@ -336,12 +381,19 @@ export class SuccessionService {
       include: {
         user: {
           select: {
-            id: true, fullName: true, avatarUrl: true, email: true, hireDate: true,
-            position:   { select: { name: true } },
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            email: true,
+            hireDate: true,
+            position: { select: { name: true } },
             department: { select: { name: true } },
             userCompetencies: { include: { competency: true }, take: 5 },
-            performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1,
-              select: { score: true, category: true } },
+            performanceReviews: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { score: true, category: true },
+            },
           },
         },
         mentor: { select: { id: true, fullName: true, position: { select: { name: true } } } },
@@ -356,10 +408,10 @@ export class SuccessionService {
 
     return this.prisma.talentPool.create({
       data: {
-        userId:             dto.userId,
-        readinessLevel:     dto.readinessLevel,
-        mentorId:           dto.mentorId,
-        notes:              dto.notes,
+        userId: dto.userId,
+        readinessLevel: dto.readinessLevel,
+        mentorId: dto.mentorId,
+        notes: dto.notes,
         geographicMobility: dto.geographicMobility ?? true,
       },
       include: {
@@ -378,41 +430,43 @@ export class SuccessionService {
   // ─── PDI ──────────────────────────────────────────────────────────────────
 
   async generatePDI(dto: GeneratePDIDto) {
-    const plan = await this.findOne(dto.successionPlanId) as any;
+    const plan = (await this.findOne(dto.successionPlanId)) as any;
 
     // Buscar gaps automáticos
-    const gaps   = plan.matchDetails?.gaps ?? [];
+    const gaps = plan.matchDetails?.gaps ?? [];
     const gapCompIds = gaps.map((g: any) => g.competencyId);
 
     // Sugerir cursos mapeados aos gaps
     const suggestedCourses = await this.prisma.courseCompetency.findMany({
-      where:   { competencyId: { in: gapCompIds } },
+      where: { competencyId: { in: gapCompIds } },
       include: { course: { select: { id: true, title: true, thumbnailUrl: true } } },
-      take:    10,
+      take: 10,
     });
 
     const suggestedLPs = await this.prisma.learningPath.findMany({
-      where:  { status: 'PUBLISHED' },
+      where: { status: 'PUBLISHED' },
       select: { id: true, title: true, pathType: true },
-      take:   5,
+      take: 5,
     });
 
     const pdi = await this.prisma.successionPDI.upsert({
-      where:  { successionPlanId: dto.successionPlanId },
+      where: { successionPlanId: dto.successionPlanId },
       create: {
         successionPlanId: dto.successionPlanId,
-        gaps:             JSON.stringify(gaps),
-        developmentGoals: dto.developmentGoals ?? `Desenvolver competências para ${plan.criticalPosition?.position?.name}`,
-        learningPathIds:  dto.learningPathIds ?? suggestedLPs.slice(0, 3).map((lp: any) => lp.id),
-        courseIds:        dto.courseIds ?? suggestedCourses.slice(0, 5).map((cc: any) => cc.courseId),
-        status:           'ACTIVE',
-        createdAt:        new Date(),
+        gaps: JSON.stringify(gaps),
+        developmentGoals:
+          dto.developmentGoals ??
+          `Desenvolver competências para ${plan.criticalPosition?.position?.name}`,
+        learningPathIds: dto.learningPathIds ?? suggestedLPs.slice(0, 3).map((lp: any) => lp.id),
+        courseIds: dto.courseIds ?? suggestedCourses.slice(0, 5).map((cc: any) => cc.courseId),
+        status: 'ACTIVE',
+        createdAt: new Date(),
       },
       update: {
-        gaps:             JSON.stringify(gaps),
+        gaps: JSON.stringify(gaps),
         developmentGoals: dto.developmentGoals ?? undefined,
-        learningPathIds:  dto.learningPathIds ?? undefined,
-        courseIds:        dto.courseIds ?? undefined,
+        learningPathIds: dto.learningPathIds ?? undefined,
+        courseIds: dto.courseIds ?? undefined,
       },
     });
 
@@ -423,7 +477,7 @@ export class SuccessionService {
 
   async getPositionSummary(positionId: number) {
     const cp = await this.prisma.criticalPosition.findUnique({
-      where:   { positionId },
+      where: { positionId },
       include: {
         position: {
           include: {
@@ -435,9 +489,15 @@ export class SuccessionService {
           include: {
             candidate: {
               select: {
-                id: true, fullName: true, avatarUrl: true,
+                id: true,
+                fullName: true,
+                avatarUrl: true,
                 position: { select: { name: true } },
-                performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1, select: { score: true, category: true } },
+                performanceReviews: {
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                  select: { score: true, category: true },
+                },
               },
             },
           },
@@ -448,22 +508,23 @@ export class SuccessionService {
     if (!cp) throw new NotFoundException('Posição não encontrada como cargo crítico');
 
     const byReadiness = {
-      READY_NOW:         cp.successionPlans.filter(sp => sp.readinessLevel === 'READY_NOW'),
-      READY_SOON:        cp.successionPlans.filter(sp => sp.readinessLevel === 'READY_SOON'),
+      READY_NOW: cp.successionPlans.filter(sp => sp.readinessLevel === 'READY_NOW'),
+      READY_SOON: cp.successionPlans.filter(sp => sp.readinessLevel === 'READY_SOON'),
       NEEDS_DEVELOPMENT: cp.successionPlans.filter(sp => sp.readinessLevel === 'NEEDS_DEVELOPMENT'),
     };
 
     const coverageStatus = this.calcCoverageStatus(
-      cp.successionPlans.length, cp.minSuccessorsRequired ?? 2
+      cp.successionPlans.length,
+      cp.minSuccessorsRequired ?? 2,
     );
 
     return {
       criticalPosition: cp,
       byReadiness,
-      total:           cp.successionPlans.length,
+      total: cp.successionPlans.length,
       coverageStatus,
-      alert:           this.buildAlert(cp),
-      daysUntilExit:   cp.expectedExitDate ? this.daysUntil(cp.expectedExitDate) : null,
+      alert: this.buildAlert(cp),
+      daysUntilExit: cp.expectedExitDate ? this.daysUntil(cp.expectedExitDate) : null,
     };
   }
 
@@ -474,41 +535,46 @@ export class SuccessionService {
     if (departmentId) where.position = { departmentId };
 
     const criticalPositions = await (this.prisma as any).criticalPosition.findMany({
-        where,
-        include: {
+      where,
+      include: {
         position: {
-        select: {
-        id: true, name: true, level: true,
-        users: { select: { id: true, fullName: true, avatarUrl: true }, take: 1 },
-        department: { select: { id: true, name: true } },
-      },
-    },
+          select: {
+            id: true,
+            name: true,
+            level: true,
+            users: { select: { id: true, fullName: true, avatarUrl: true }, take: 1 },
+            department: { select: { id: true, name: true } },
+          },
+        },
         successionPlans: {
           include: {
             candidate: { select: { id: true, fullName: true, avatarUrl: true } },
           },
           orderBy: { priority: 'asc' },
-          take:    3,
+          take: 3,
         },
         _count: { select: { successionPlans: true } },
       },
       orderBy: [{ businessImpact: 'desc' }, { exitRisk: 'desc' }],
-      take:    50,
+      take: 50,
     });
 
     return criticalPositions.map(cp => ({
-      id:            cp.id,
-      position:      cp.position,
-      exitRisk:      cp.exitRisk,
-      businessImpact:cp.businessImpact,
+      id: cp.id,
+      position: cp.position,
+      exitRisk: cp.exitRisk,
+      businessImpact: cp.businessImpact,
       keyPersonRisk: cp.keyPersonRisk,
       daysUntilExit: cp.expectedExitDate ? this.daysUntil(cp.expectedExitDate) : null,
-      coverageStatus:this.calcCoverageStatus(cp._count.successionPlans, cp.minSuccessorsRequired ?? 2),
-      successors:    cp.successionPlans.map(sp => ({
+      coverageStatus: this.calcCoverageStatus(
+        cp._count.successionPlans,
+        cp.minSuccessorsRequired ?? 2,
+      ),
+      successors: cp.successionPlans.map(sp => ({
         ...sp.candidate,
         readinessLevel: sp.readinessLevel,
-        priority:       sp.priority,
-        matchScore:     sp.matchScore,
+        priority: sp.priority,
+        matchScore: sp.matchScore,
       })),
     }));
   }
@@ -516,13 +582,7 @@ export class SuccessionService {
   // ─── DASHBOARD ────────────────────────────────────────────────────────────
 
   async getDashboard() {
-    const [
-      totalCritical,
-      withoutSuccessor,
-      readyNowCount,
-      highRisk,
-      allPlans,
-    ] = await Promise.all([
+    const [totalCritical, withoutSuccessor, readyNowCount, highRisk, allPlans] = await Promise.all([
       this.prisma.criticalPosition.count(),
       this.prisma.criticalPosition.count({
         where: { successionPlans: { none: {} } },
@@ -538,13 +598,13 @@ export class SuccessionService {
       ? Math.round(allPlans.reduce((s, p) => s + (p.matchScore ?? 0), 0) / allPlans.length)
       : 0;
 
-    const readinessIndex = totalCritical > 0
-      ? Math.round((readyNowCount / totalCritical) * 100)
-      : 0;
+    const readinessIndex =
+      totalCritical > 0 ? Math.round((readyNowCount / totalCritical) * 100) : 0;
 
-    const coverageRate = totalCritical > 0
-      ? Math.round(((totalCritical - withoutSuccessor) / totalCritical) * 100)
-      : 0;
+    const coverageRate =
+      totalCritical > 0
+        ? Math.round(((totalCritical - withoutSuccessor) / totalCritical) * 100)
+        : 0;
 
     // Alertas críticos
     const criticalAlerts = await this.prisma.criticalPosition.findMany({
@@ -569,10 +629,10 @@ export class SuccessionService {
         avgMatchScore,
       },
       criticalAlerts: criticalAlerts.map(ca => ({
-        id:       ca.id,
+        id: ca.id,
         position: ca.position.name,
         exitRisk: ca.exitRisk,
-        alert:    this.buildAlert(ca),
+        alert: this.buildAlert(ca),
         daysUntilExit: ca.expectedExitDate ? this.daysUntil(ca.expectedExitDate) : null,
       })),
     };
@@ -583,21 +643,21 @@ export class SuccessionService {
   async compareProfiles(candidateAId: number, candidateBId: number, criticalPositionId: number) {
     const [a, b, cp] = await Promise.all([
       this.prisma.user.findUnique({
-        where:   { id: candidateAId },
+        where: { id: candidateAId },
         include: {
           userCompetencies: { include: { competency: true } },
           performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
         },
       }),
       this.prisma.user.findUnique({
-        where:   { id: candidateBId },
+        where: { id: candidateBId },
         include: {
           userCompetencies: { include: { competency: true } },
           performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
         },
       }),
       this.prisma.criticalPosition.findUnique({
-        where:   { id: criticalPositionId },
+        where: { id: criticalPositionId },
         include: { position: { include: { competencies: { include: { competency: true } } } } },
       }),
     ]);
@@ -615,9 +675,9 @@ export class SuccessionService {
   // ─── HELPERS ──────────────────────────────────────────────────────────────
 
   private calcCoverageStatus(count: number, required: number): string {
-    if (count === 0)           return 'CRITICAL';
-    if (count < required)      return 'AT_RISK';
-    if (count >= required)     return 'COVERED';
+    if (count === 0) return 'CRITICAL';
+    if (count < required) return 'AT_RISK';
+    if (count >= required) return 'COVERED';
     return 'UNKNOWN';
   }
 
@@ -631,10 +691,9 @@ export class SuccessionService {
       return '🚨 Cargo crítico sem sucessores';
     }
     if (cp.exitRisk === 'CRITICAL') return '🔴 Risco de saída crítico';
-    if (cp.exitRisk === 'HIGH')     return '🟠 Risco de saída alto';
+    if (cp.exitRisk === 'HIGH') return '🟠 Risco de saída alto';
     const days = this.daysUntil(cp.expectedExitDate);
     if (days !== null && days <= 90) return `⏳ Saída prevista em ${days} dias`;
     return null;
   }
 }
-

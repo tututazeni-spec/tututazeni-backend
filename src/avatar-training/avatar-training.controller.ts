@@ -1,24 +1,38 @@
 // src/avatar-training/avatar-training.controller.ts
 import {
-  Controller, Get, Post, Patch, Put, Delete,
-  Param, Body, Query, Req,
-  ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { AvatarTrainingService }  from './avatar-training.service';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { AvatarTrainingService } from './avatar-training.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 import {
-  CreateAvatarDto, UpdateAvatarDto, AvatarFilterDto,
-  CreateScenarioDto, ScenarioFilterDto,
-  StartSessionDto, SendMessageDto, CompleteSessionDto,
+  CreateAvatarDto,
+  UpdateAvatarDto,
+  AvatarFilterDto,
+  CreateScenarioDto,
+  ScenarioFilterDto,
+  StartSessionDto,
+  SendMessageDto,
+  CompleteSessionDto,
   AnalyticsFilterDto,
 } from './avatar-training.dto';
 
-const ALL_ROLES   = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
-const MGMT_ROLES  = ['ADMIN', 'RH', 'LIDER']                as const;
-const ADMIN_ROLES = ['ADMIN', 'RH']                          as const;
+const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
+const MGMT_ROLES = ['ADMIN', 'RH', 'LIDER'] as const;
+const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
 
 @ApiTags('Avatar Training')
 @ApiBearerAuth()
@@ -86,7 +100,9 @@ export class AvatarTrainingController {
 
   @Get('scenarios')
   @Roles(...ALL_ROLES)
-  @ApiOperation({ summary: 'Catálogo de cenários (filtrar por categoria, dificuldade, competência)' })
+  @ApiOperation({
+    summary: 'Catálogo de cenários (filtrar por categoria, dificuldade, competência)',
+  })
   getScenarios(@Query() filters: ScenarioFilterDto) {
     return this.svc.getScenarios(filters);
   }
@@ -108,10 +124,7 @@ export class AvatarTrainingController {
   @Get('scenarios/:scenarioId/leaderboard')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Ranking de pontuação de um cenário' })
-  leaderboard(
-    @Param('scenarioId', ParseIntPipe) id: number,
-    @Query('limit') limit?: string,
-  ) {
+  leaderboard(@Param('scenarioId', ParseIntPipe) id: number, @Query('limit') limit?: string) {
     return this.svc.getLeaderboard(id, limit ? +limit : 10);
   }
 
@@ -137,7 +150,9 @@ export class AvatarTrainingController {
 
   @Post('sessions/:id/complete')
   @Roles(...ALL_ROLES)
-  @ApiOperation({ summary: 'Concluir sessão — score final, XP, feedback comportamental, próximo cenário' })
+  @ApiOperation({
+    summary: 'Concluir sessão — score final, XP, feedback comportamental, próximo cenário',
+  })
   complete(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: any,
@@ -188,10 +203,7 @@ export class AvatarTrainingController {
   @Get('leaderboard')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Leaderboard global (opcionalmente por departamento)' })
-  globalLeaderboard(
-    @Query('departmentId') departmentId?: string,
-    @Query('limit') limit?: string,
-  ) {
+  globalLeaderboard(@Query('departmentId') departmentId?: string, @Query('limit') limit?: string) {
     return this.svc.getGlobalLeaderboard(
       departmentId ? +departmentId : undefined,
       limit ? +limit : 20,

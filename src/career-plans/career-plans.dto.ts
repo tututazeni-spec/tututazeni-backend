@@ -1,8 +1,16 @@
 // ─── src/career-plans/career-plans.dto.ts ────────────────────────────────────
 import {
-  IsString, IsInt, IsOptional, IsEnum, IsDateString,
-  IsBoolean, IsNumber, IsArray, IsObject, ValidateNested,
-  Min, Max,
+  IsString,
+  IsInt,
+  IsOptional,
+  IsEnum,
+  IsDateString,
+  IsBoolean,
+  IsNumber,
+  IsArray,
+  ValidateNested,
+  Min,
+  Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -10,57 +18,57 @@ import { Type } from 'class-transformer';
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export enum CareerPlanStatus {
-  DRAFT     = 'DRAFT',
-  ACTIVE    = 'ACTIVE',
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
   COMPLETED = 'COMPLETED',
-  PAUSED    = 'PAUSED',
-  ARCHIVED  = 'ARCHIVED',
+  PAUSED = 'PAUSED',
+  ARCHIVED = 'ARCHIVED',
 }
 
 export enum CareerPathType {
-  LINEAR     = 'LINEAR',     // Vertical
-  Y_SHAPED   = 'Y_SHAPED',   // Gestão vs Especialista
-  W_SHAPED   = 'W_SHAPED',   // Múltiplos caminhos
+  LINEAR = 'LINEAR', // Vertical
+  Y_SHAPED = 'Y_SHAPED', // Gestão vs Especialista
+  W_SHAPED = 'W_SHAPED', // Múltiplos caminhos
   HORIZONTAL = 'HORIZONTAL', // Mobilidade lateral
-  HYBRID     = 'HYBRID',
+  HYBRID = 'HYBRID',
 }
 
 export enum SkillType {
-  TECHNICAL    = 'TECHNICAL',
-  BEHAVIORAL   = 'BEHAVIORAL',
-  LEADERSHIP   = 'LEADERSHIP',
-  LANGUAGE     = 'LANGUAGE',
-  CERTIFICATION= 'CERTIFICATION',
+  TECHNICAL = 'TECHNICAL',
+  BEHAVIORAL = 'BEHAVIORAL',
+  LEADERSHIP = 'LEADERSHIP',
+  LANGUAGE = 'LANGUAGE',
+  CERTIFICATION = 'CERTIFICATION',
 }
 
 export enum ReadinessLevel {
-  READY      = 'READY',        // ≥ 80%
-  DEVELOPING = 'DEVELOPING',   // 50–79%
-  STARTING   = 'STARTING',     // < 50%
+  READY = 'READY', // ≥ 80%
+  DEVELOPING = 'DEVELOPING', // 50–79%
+  STARTING = 'STARTING', // < 50%
 }
 
 export enum PromotionStatus {
-  DRAFT    = 'DRAFT',
-  PENDING  = 'PENDING',
+  DRAFT = 'DRAFT',
+  PENDING = 'PENDING',
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
   EXECUTED = 'EXECUTED',
 }
 
 export enum GoalType {
-  COURSE      = 'COURSE',
-  PROJECT     = 'PROJECT',
-  MENTORING   = 'MENTORING',
-  CERTIFICATION='CERTIFICATION',
-  SKILL       = 'SKILL',
-  OTHER       = 'OTHER',
+  COURSE = 'COURSE',
+  PROJECT = 'PROJECT',
+  MENTORING = 'MENTORING',
+  CERTIFICATION = 'CERTIFICATION',
+  SKILL = 'SKILL',
+  OTHER = 'OTHER',
 }
 
 export enum GoalStatus {
-  PENDING     = 'PENDING',
+  PENDING = 'PENDING',
   IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED   = 'COMPLETED',
-  CANCELLED   = 'CANCELLED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
 }
 
 // ─── Roles & Levels ───────────────────────────────────────────────────────────
@@ -72,7 +80,7 @@ export class CreateRoleDto {
   @ApiPropertyOptional() @IsOptional() @IsString() seniority?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() salaryMin?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() salaryMax?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() level?: number;   // 1=Junior ... 7=C-Level
+  @ApiPropertyOptional() @IsOptional() @IsInt() level?: number; // 1=Junior ... 7=C-Level
   @ApiPropertyOptional() @IsOptional() @IsInt() parentRoleId?: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
 }
@@ -98,7 +106,9 @@ export class RoleSkillRequirementDto {
 export class SetRoleSkillsDto {
   @ApiProperty() @IsInt() roleId!: number;
   @ApiProperty({ type: [RoleSkillRequirementDto] })
-  @IsArray() @ValidateNested({ each: true }) @Type(() => RoleSkillRequirementDto)
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RoleSkillRequirementDto)
   skills!: RoleSkillRequirementDto[];
 }
 
@@ -116,7 +126,9 @@ export class CreateCareerPathDto {
   @ApiProperty() @IsEnum(CareerPathType) type!: CareerPathType;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
   @ApiProperty({ type: [CareerPathStepDto] })
-  @IsArray() @ValidateNested({ each: true }) @Type(() => CareerPathStepDto)
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CareerPathStepDto)
   steps!: CareerPathStepDto[];
   @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
 }
@@ -127,7 +139,7 @@ export class CreateProgressionRuleDto {
   @ApiProperty() @IsInt() fromRoleId!: number;
   @ApiProperty() @IsInt() toRoleId!: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() minMonthsInRole?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() minPerformanceScore?: number;  // 0-10
+  @ApiPropertyOptional() @IsOptional() @IsNumber() minPerformanceScore?: number; // 0-10
   @ApiPropertyOptional() @IsOptional() @IsInt() minCompletedProjects?: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() requiresManagerApproval?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() requiresHrApproval?: boolean;

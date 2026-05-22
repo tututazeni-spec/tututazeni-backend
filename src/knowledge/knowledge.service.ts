@@ -1,15 +1,23 @@
 ﻿import {
-  Injectable, NotFoundException, ConflictException,
-  BadRequestException, ForbiddenException, Logger,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateKnowledgeCategoryDto, UpdateKnowledgeCategoryDto,
-  CreateKnowledgeArticleDto, UpdateKnowledgeArticleDto,
-  KnowledgeFilterDto, KnowledgeInteractionDto,
-  CreateCommentDto, RateArticleDto,
-  CreateKnowledgeQuestionDto, AnswerQuestionDto,
-  AcknowledgeArticleDto, ArticleStatus, ArticleSortBy,
+  CreateKnowledgeCategoryDto,
+  UpdateKnowledgeCategoryDto,
+  CreateKnowledgeArticleDto,
+  UpdateKnowledgeArticleDto,
+  KnowledgeFilterDto,
+  KnowledgeInteractionDto,
+  CreateCommentDto,
+  RateArticleDto,
+  CreateKnowledgeQuestionDto,
+  AnswerQuestionDto,
+  AcknowledgeArticleDto,
 } from './knowledge.dto';
 
 @Injectable()
@@ -23,9 +31,9 @@ export class KnowledgeService {
   async findAllCategories() {
     const cats = await this.prisma.knowledgeCategory.findMany({
       include: {
-        parent:   { select: { id: true, name: true } },
+        parent: { select: { id: true, name: true } },
         children: { select: { id: true, name: true, _count: { select: { articles: true } } } },
-        _count:   { select: { articles: true } },
+        _count: { select: { articles: true } },
       },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
@@ -33,7 +41,12 @@ export class KnowledgeService {
   }
 
   async createCategory(dto: CreateKnowledgeCategoryDto) {
-    const slug = dto.slug ?? dto.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const slug =
+      dto.slug ??
+      dto.name
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, '');
     const exists = await this.prisma.knowledgeCategory.findFirst({ where: { slug } });
     if (exists) throw new ConflictException(`Categoria com slug "${slug}" já existe`);
 
@@ -49,41 +62,54 @@ export class KnowledgeService {
   // ─── ARTIGOS ──────────────────────────────────────────────────────────────
 
   async findAll(filters: KnowledgeFilterDto) {
-    const { page = 1, limit = 20, search, categoryId, authorId, status, accessLevel, tag, mandatory, sortBy } = filters;
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      categoryId,
+      authorId,
+      status,
+      accessLevel,
+      tag,
+      mandatory,
+      sortBy,
+    } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (status)      where.status      = status;
-    else             where.status      = 'PUBLISHED'; // por defeito apenas publicados
+    if (status) where.status = status;
+    else where.status = 'PUBLISHED'; // por defeito apenas publicados
     if (accessLevel) where.accessLevel = accessLevel;
-    if (categoryId)  where.categoryId  = categoryId;
-    if (authorId)    where.authorId    = authorId;
+    if (categoryId) where.categoryId = categoryId;
+    if (authorId) where.authorId = authorId;
     if (mandatory !== undefined) where.mandatory = mandatory;
-    if (tag)         where.tags = { some: { name: { equals: tag, mode: 'insensitive' } } };
+    if (tag) where.tags = { some: { name: { equals: tag, mode: 'insensitive' } } };
 
     if (search) {
       where.OR = [
-        { title:   { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } },
         { summary: { contains: search, mode: 'insensitive' } },
         { content: { contains: search, mode: 'insensitive' } },
-        { tags:    { some: { name: { contains: search, mode: 'insensitive' } } } },
+        { tags: { some: { name: { contains: search, mode: 'insensitive' } } } },
       ];
     }
 
     // Ordenação
     let orderBy: any = { createdAt: 'desc' };
-    if (sortBy === 'POPULAR')  orderBy = { viewCount:   'desc' };
-    if (sortBy === 'RATING')   orderBy = { avgRating:   'desc' };
-    if (sortBy === 'UPDATED')  orderBy = { updatedAt:   'desc' };
+    if (sortBy === 'POPULAR') orderBy = { viewCount: 'desc' };
+    if (sortBy === 'RATING') orderBy = { avgRating: 'desc' };
+    if (sortBy === 'UPDATED') orderBy = { updatedAt: 'desc' };
 
     const [data, total] = await Promise.all([
       this.prisma.knowledgeArticle.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
-          author:   { select: { id: true, fullName: true, avatarUrl: true } },
+          author: { select: { id: true, fullName: true, avatarUrl: true } },
           category: { select: { id: true, name: true, icon: true, color: true } },
-          tags:     { select: { id: true, name: true } },
-          _count:   { select: { comments: true, questions: true, acknowledgements: true } },
+          tags: { select: { id: true, name: true } },
+          _count: { select: { comments: true, questions: true, acknowledgements: true } },
         },
         orderBy,
       }),
@@ -97,22 +123,32 @@ export class KnowledgeService {
     const article = await this.prisma.knowledgeArticle.findUnique({
       where: { id },
       include: {
-        author:   { select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } } },
+        author: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
+          },
+        },
         category: true,
-        tags:     { select: { id: true, name: true } },
+        tags: { select: { id: true, name: true } },
         comments: {
-          where:   { parentId: null },
+          where: { parentId: null },
           include: {
-            author:   { select: { id: true, fullName: true, avatarUrl: true } },
-            replies:  { include: { author: { select: { id: true, fullName: true, avatarUrl: true } } }, orderBy: { createdAt: 'asc' } },
+            author: { select: { id: true, fullName: true, avatarUrl: true } },
+            replies: {
+              include: { author: { select: { id: true, fullName: true, avatarUrl: true } } },
+              orderBy: { createdAt: 'asc' },
+            },
           },
           orderBy: { createdAt: 'desc' },
-          take:    20,
+          take: 20,
         },
         questions: {
           include: { askedBy: { select: { id: true, fullName: true } } },
           orderBy: { createdAt: 'desc' },
-          take:    10,
+          take: 10,
         },
         _count: { select: { comments: true, questions: true, acknowledgements: true } },
       },
@@ -125,7 +161,7 @@ export class KnowledgeService {
         where: {
           userId,
           articleId: id,
-          action:    'VIEW',
+          action: 'VIEW',
           createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) },
         },
       });
@@ -135,7 +171,7 @@ export class KnowledgeService {
         });
         await this.prisma.knowledgeArticle.update({
           where: { id },
-          data:  { viewCount: { increment: 1 } },
+          data: { viewCount: { increment: 1 } },
         });
       }
 
@@ -154,10 +190,10 @@ export class KnowledgeService {
 
       return {
         ...article,
-        userBookmarked:    !!bookmark,
-        userRating:        rating?.score ?? null,
-        userAcknowledged:  !!acknowledged,
-        acknowledgedAt:    acknowledged?.acknowledgedAt ?? null,
+        userBookmarked: !!bookmark,
+        userRating: rating?.score ?? null,
+        userAcknowledged: !!acknowledged,
+        acknowledgedAt: acknowledged?.acknowledgedAt ?? null,
       };
     }
 
@@ -168,28 +204,26 @@ export class KnowledgeService {
     const { tags, ...data } = dto;
 
     // Calcular tempo de leitura (aprox. 200 palavras/min)
-    const wordCount  = dto.content.split(/\s+/).length;
+    const wordCount = dto.content.split(/\s+/).length;
     const readingMinutes = Math.ceil(wordCount / 200);
 
     const article = await this.prisma.knowledgeArticle.create({
       data: {
-        title:                 data.title,
-        summary:               data.summary,
-        content:               data.content,
-        categoryId:            data.categoryId,
+        title: data.title,
+        summary: data.summary,
+        content: data.content,
+        categoryId: data.categoryId,
         authorId,
-        status:                data.status ?? 'DRAFT',
-        accessLevel:           data.accessLevel ?? 'PUBLIC',
-        mandatory:             data.mandatory ?? false,
-        expiresAt:             data.expiresAt  ? new Date(data.expiresAt)  : null,
-        scheduledAt:           data.scheduledAt? new Date(data.scheduledAt): null,
-        restrictedDepartmentId:data.restrictedDepartmentId,
+        status: data.status ?? 'DRAFT',
+        accessLevel: data.accessLevel ?? 'PUBLIC',
+        mandatory: data.mandatory ?? false,
+        expiresAt: data.expiresAt ? new Date(data.expiresAt) : null,
+        scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
+        restrictedDepartmentId: data.restrictedDepartmentId,
         readingMinutes,
-        viewCount:             0,
-        avgRating:             null,
-        tags: tags?.length
-          ? { create: tags.map(name => ({ name })) }
-          : undefined,
+        viewCount: 0,
+        avgRating: null,
+        tags: tags?.length ? { create: tags.map(name => ({ name })) } : undefined,
       },
       include: { tags: true, category: true },
     });
@@ -198,27 +232,29 @@ export class KnowledgeService {
     await this.prisma.articleVersion.create({
       data: {
         articleId: article.id,
-        version:   1,
-        title:     article.title,
-        content:   article.content,
+        version: 1,
+        title: article.title,
+        content: article.content,
         authorId,
         changeReason: 'Criação inicial',
       },
     });
 
     // Gamificação: pontos por criação
-    await this.prisma.userPoints.upsert({
-      where:  { userId: authorId },
-      create: { userId: authorId, points: 30 },
-      update: { points: { increment: 30 } },
-    }).catch(() => {});
+    await this.prisma.userPoints
+      .upsert({
+        where: { userId: authorId },
+        create: { userId: authorId, points: 30 },
+        update: { points: { increment: 30 } },
+      })
+      .catch(() => {});
 
     return article;
   }
 
   async update(id: number, dto: UpdateKnowledgeArticleDto, updatedById?: number) {
     const existing = await this.prisma.knowledgeArticle.findUnique({
-      where:   { id },
+      where: { id },
       include: { _count: { select: { versions: true } } },
     });
     if (!existing) throw new NotFoundException('Artigo não encontrado');
@@ -233,11 +269,9 @@ export class KnowledgeService {
       where: { id },
       data: {
         ...data,
-        expiresAt:  data.expiresAt  ? new Date(data.expiresAt)  : undefined,
-        scheduledAt:data.scheduledAt? new Date(data.scheduledAt): undefined,
-        tags: tags?.length
-          ? { create: tags.map(name => ({ name })) }
-          : undefined,
+        expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined,
+        scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
+        tags: tags?.length ? { create: tags.map(name => ({ name })) } : undefined,
       },
       include: { tags: true, category: true },
     });
@@ -246,11 +280,11 @@ export class KnowledgeService {
     if (dto.content && dto.content !== (existing as any).content) {
       await this.prisma.articleVersion.create({
         data: {
-          articleId:    id,
-          version:      (existing._count as any).versions + 1,
-          title:        updated.title,
-          content:      dto.content,
-          authorId:     updatedById ?? (existing as any).authorId,
+          articleId: id,
+          version: (existing._count as any).versions + 1,
+          title: updated.title,
+          content: dto.content,
+          authorId: updatedById ?? (existing as any).authorId,
           changeReason: changeReason ?? 'Actualização de conteúdo',
         },
       });
@@ -258,19 +292,21 @@ export class KnowledgeService {
 
     // Notificar seguidores/bookmarkers
     const bookmarkers = await this.prisma.knowledgeInteraction.findMany({
-      where:  { articleId: id, action: 'BOOKMARK' },
+      where: { articleId: id, action: 'BOOKMARK' },
       select: { userId: true },
-      distinct:['userId'],
+      distinct: ['userId'],
     });
     for (const b of bookmarkers) {
-      await this.prisma.notificationLog.create({
-        data: {
-          userId:   b.userId,
-          type:     'KNOWLEDGE_UPDATED',
-          message:  `O artigo "${updated.title}" foi actualizado`,
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: b.userId,
+            type: 'KNOWLEDGE_UPDATED',
+            message: `O artigo "${updated.title}" foi actualizado`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
     }
 
     return updated;
@@ -281,7 +317,7 @@ export class KnowledgeService {
     if (!article) throw new NotFoundException('Artigo não encontrado');
     return this.prisma.knowledgeArticle.update({
       where: { id },
-      data:  { status: 'PUBLISHED', publishedAt: new Date() },
+      data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
   }
 
@@ -291,12 +327,14 @@ export class KnowledgeService {
 
   async remove(id: number) {
     const article = await this.prisma.knowledgeArticle.findUnique({
-      where:   { id },
+      where: { id },
       include: { _count: { select: { acknowledgements: true } } },
     });
     if (!article) throw new NotFoundException('Artigo não encontrado');
     if ((article._count as any).acknowledgements > 0 && article.mandatory) {
-      throw new ForbiddenException('Artigo obrigatório com confirmações não pode ser eliminado. Archive-o.');
+      throw new ForbiddenException(
+        'Artigo obrigatório com confirmações não pode ser eliminado. Archive-o.',
+      );
     }
     await this.prisma.knowledgeArticle.delete({ where: { id } });
     return { message: 'Artigo eliminado' };
@@ -306,7 +344,7 @@ export class KnowledgeService {
 
   async getVersions(articleId: number) {
     return this.prisma.articleVersion.findMany({
-      where:   { articleId },
+      where: { articleId },
       include: { author: { select: { id: true, fullName: true } } },
       orderBy: { version: 'desc' },
     });
@@ -318,11 +356,15 @@ export class KnowledgeService {
     });
     if (!version) throw new NotFoundException('Versão não encontrada');
 
-    return this.update(articleId, {
-      title:        version.title,
-      content:      version.content,
-      changeReason: `Restauro para versão ${version.version}`,
-    }, userId);
+    return this.update(
+      articleId,
+      {
+        title: version.title,
+        content: version.content,
+        changeReason: `Restauro para versão ${version.version}`,
+      },
+      userId,
+    );
   }
 
   // ─── INTERAÇÕES ───────────────────────────────────────────────────────────
@@ -350,7 +392,7 @@ export class KnowledgeService {
 
   async rateArticle(userId: number, dto: RateArticleDto) {
     await this.prisma.articleRating.upsert({
-      where:  { userId_articleId: { userId, articleId: dto.articleId } },
+      where: { userId_articleId: { userId, articleId: dto.articleId } },
       create: { userId, articleId: dto.articleId, score: dto.score, comment: dto.comment },
       update: { score: dto.score, comment: dto.comment },
     });
@@ -358,12 +400,12 @@ export class KnowledgeService {
     // Recalcular média
     const avg = await this.prisma.articleRating.aggregate({
       where: { articleId: dto.articleId },
-      _avg:  { score: true },
+      _avg: { score: true },
     });
 
     await this.prisma.knowledgeArticle.update({
       where: { id: dto.articleId },
-      data:  { avgRating: avg._avg.score },
+      data: { avgRating: avg._avg.score },
     });
 
     return { rated: true, score: dto.score };
@@ -375,9 +417,9 @@ export class KnowledgeService {
     const comment = await this.prisma.articleComment.create({
       data: {
         articleId: dto.articleId,
-        authorId:  userId,
-        content:   dto.content,
-        parentId:  dto.parentId,
+        authorId: userId,
+        content: dto.content,
+        parentId: dto.parentId,
       },
       include: {
         author: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -386,18 +428,20 @@ export class KnowledgeService {
 
     // Notificar autor do artigo
     const article = await this.prisma.knowledgeArticle.findUnique({
-      where:  { id: dto.articleId },
+      where: { id: dto.articleId },
       select: { authorId: true, title: true },
     });
     if (article && article.authorId !== userId) {
-      await this.prisma.notificationLog.create({
-        data: {
-          userId:   article.authorId,
-          type:     'KNOWLEDGE_COMMENT',
-          message:  `Novo comentário no seu artigo "${article.title}"`,
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: article.authorId,
+            type: 'KNOWLEDGE_COMMENT',
+            message: `Novo comentário no seu artigo "${article.title}"`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
     }
 
     return comment;
@@ -418,31 +462,35 @@ export class KnowledgeService {
       data: {
         articleId: dto.articleId,
         askedById: userId,
-        question:  dto.question,
+        question: dto.question,
       },
       include: { askedBy: { select: { id: true, fullName: true } } },
     });
   }
 
   async answerQuestion(userId: number, dto: AnswerQuestionDto) {
-    const question = await this.prisma.articleQuestion.findUnique({ where: { id: dto.questionId } });
+    const question = await this.prisma.articleQuestion.findUnique({
+      where: { id: dto.questionId },
+    });
     if (!question) throw new NotFoundException('Pergunta não encontrada');
 
     const updated = await this.prisma.articleQuestion.update({
       where: { id: dto.questionId },
-      data:  { answer: dto.answer, answeredById: userId, answeredAt: new Date() },
+      data: { answer: dto.answer, answeredById: userId, answeredAt: new Date() },
     });
 
     // Notificar quem perguntou
     if ((question as any).askedById !== userId) {
-      await this.prisma.notificationLog.create({
-        data: {
-          userId:   (question as any).askedById,
-          type:     'KNOWLEDGE_ANSWER',
-          message:  `A sua pergunta foi respondida`,
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: (question as any).askedById,
+            type: 'KNOWLEDGE_ANSWER',
+            message: `A sua pergunta foi respondida`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
     }
 
     return updated;
@@ -469,11 +517,20 @@ export class KnowledgeService {
 
     const [acknowledged, allUsers] = await Promise.all([
       this.prisma.articleAcknowledgement.findMany({
-        where:   { articleId },
-        include: { user: { select: { id: true, fullName: true, avatarUrl: true, department: { select: { name: true } } } } },
+        where: { articleId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              avatarUrl: true,
+              department: { select: { name: true } },
+            },
+          },
+        },
       }),
       this.prisma.user.findMany({
-        where:  { active: true },
+        where: { active: true },
         select: { id: true, fullName: true, department: { select: { name: true } } },
       }),
     ]);
@@ -483,13 +540,13 @@ export class KnowledgeService {
 
     return {
       articleId,
-      title:       article.title,
-      total:       allUsers.length,
-      read:        acknowledged.length,
-      notRead:     notRead.length,
-      readPct:     allUsers.length > 0 ? Math.round((acknowledged.length / allUsers.length) * 100) : 0,
+      title: article.title,
+      total: allUsers.length,
+      read: acknowledged.length,
+      notRead: notRead.length,
+      readPct: allUsers.length > 0 ? Math.round((acknowledged.length / allUsers.length) * 100) : 0,
       acknowledgedUsers: acknowledged.map(a => a.user),
-      pendingUsers:      notRead,
+      pendingUsers: notRead,
     };
   }
 
@@ -497,27 +554,27 @@ export class KnowledgeService {
 
   async getTrending(limit = 10) {
     const articles = await this.prisma.knowledgeArticle.findMany({
-      where:   { status: 'PUBLISHED' },
+      where: { status: 'PUBLISHED' },
       include: {
-        author:   { select: { id: true, fullName: true, avatarUrl: true } },
+        author: { select: { id: true, fullName: true, avatarUrl: true } },
         category: { select: { id: true, name: true, icon: true, color: true } },
-        tags:     { select: { id: true, name: true } },
+        tags: { select: { id: true, name: true } },
       },
       orderBy: { viewCount: 'desc' },
-      take:    limit,
+      take: limit,
     });
     return articles;
   }
 
   async getBookmarks(userId: number) {
     const bookmarks = await this.prisma.knowledgeInteraction.findMany({
-      where:   { userId, action: 'BOOKMARK' },
+      where: { userId, action: 'BOOKMARK' },
       include: {
         article: {
           include: {
-            author:   { select: { id: true, fullName: true, avatarUrl: true } },
+            author: { select: { id: true, fullName: true, avatarUrl: true } },
             category: { select: { id: true, name: true, icon: true, color: true } },
-            tags:     { select: { id: true, name: true } },
+            tags: { select: { id: true, name: true } },
           },
         },
       },
@@ -535,26 +592,28 @@ export class KnowledgeService {
       where: {
         status: 'PUBLISHED',
         OR: [
-          { title:   { contains: query, mode: 'insensitive' } },
+          { title: { contains: query, mode: 'insensitive' } },
           { summary: { contains: query, mode: 'insensitive' } },
           { content: { contains: query, mode: 'insensitive' } },
-          { tags:    { some: { name: { contains: query, mode: 'insensitive' } } } },
+          { tags: { some: { name: { contains: query, mode: 'insensitive' } } } },
         ],
       },
       include: {
-        author:   { select: { id: true, fullName: true } },
+        author: { select: { id: true, fullName: true } },
         category: { select: { id: true, name: true, icon: true, color: true } },
-        tags:     { select: { id: true, name: true } },
+        tags: { select: { id: true, name: true } },
       },
       orderBy: { viewCount: 'desc' },
-      take:    20,
+      take: 20,
     });
 
     // Registar busca sem resultado para gap analysis
     if (results.length === 0) {
-      await this.prisma.knowledgeSearchLog.create({
-        data: { query, userId, resultsCount: 0 },
-      }).catch(() => {});
+      await this.prisma.knowledgeSearchLog
+        .create({
+          data: { query, userId, resultsCount: 0 },
+        })
+        .catch(() => {});
     }
 
     return results;
@@ -563,43 +622,47 @@ export class KnowledgeService {
   // ─── ANALYTICS ────────────────────────────────────────────────────────────
 
   async getDashboard() {
-    const [totalArticles, published, totalViews, emptySearches, topArticles, recentlyUpdated] = await Promise.all([
-      this.prisma.knowledgeArticle.count(),
-      this.prisma.knowledgeArticle.count({ where: { status: 'PUBLISHED' } }),
-      this.prisma.knowledgeArticle.aggregate({ _sum: { viewCount: true } }),
-      this.prisma.knowledgeSearchLog.count({ where: { resultsCount: 0 } }),
-      this.prisma.knowledgeArticle.findMany({
-        where:   { status: 'PUBLISHED' },
-        include: { author: { select: { id: true, fullName: true } }, category: { select: { name: true } } },
-        orderBy: { viewCount: 'desc' },
-        take:    5,
-      }),
-      this.prisma.knowledgeArticle.findMany({
-        where:   { status: 'PUBLISHED' },
-        include: { author: { select: { id: true, fullName: true } } },
-        orderBy: { updatedAt: 'desc' },
-        take:    5,
-      }),
-    ]);
+    const [totalArticles, published, totalViews, emptySearches, topArticles, recentlyUpdated] =
+      await Promise.all([
+        this.prisma.knowledgeArticle.count(),
+        this.prisma.knowledgeArticle.count({ where: { status: 'PUBLISHED' } }),
+        this.prisma.knowledgeArticle.aggregate({ _sum: { viewCount: true } }),
+        this.prisma.knowledgeSearchLog.count({ where: { resultsCount: 0 } }),
+        this.prisma.knowledgeArticle.findMany({
+          where: { status: 'PUBLISHED' },
+          include: {
+            author: { select: { id: true, fullName: true } },
+            category: { select: { name: true } },
+          },
+          orderBy: { viewCount: 'desc' },
+          take: 5,
+        }),
+        this.prisma.knowledgeArticle.findMany({
+          where: { status: 'PUBLISHED' },
+          include: { author: { select: { id: true, fullName: true } } },
+          orderBy: { updatedAt: 'desc' },
+          take: 5,
+        }),
+      ]);
 
     // Artigos desactualizados (sem actualização há >6 meses)
     const staleThreshold = new Date(Date.now() - 180 * 24 * 3600 * 1000);
-    const staleArticles  = await this.prisma.knowledgeArticle.count({
+    const staleArticles = await this.prisma.knowledgeArticle.count({
       where: { status: 'PUBLISHED', updatedAt: { lt: staleThreshold } },
     });
 
     // Top termos de busca sem resultado
     const gapSearches = await this.prisma.knowledgeSearchLog.groupBy({
-      by:      ['query'],
-      where:   { resultsCount: 0 },
-      _count:  true,
+      by: ['query'],
+      where: { resultsCount: 0 },
+      _count: true,
       orderBy: { _count: { query: 'desc' } },
-      take:    10,
+      take: 10,
     });
 
     return {
       articles: { total: totalArticles, published, stale: staleArticles },
-      views:    totalViews._sum.viewCount ?? 0,
+      views: totalViews._sum.viewCount ?? 0,
       emptySearches,
       topArticles,
       recentlyUpdated,

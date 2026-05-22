@@ -1,18 +1,33 @@
 // src/payslips/payslips.controller.ts
 import {
-  Controller, Get, Post, Put, Patch, Body, Param,
-  Query, ParseIntPipe, UseGuards, Req, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  Req,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Request } from 'express';
 
 import { PayslipsService } from './payslips.service';
 import {
-  CreatePayslipDto, UpdatePayslipDto, PayslipFilterDto,
-  BulkCreatePayslipDto, SimulatePayslipDto, CreateDisputeDto,
+  CreatePayslipDto,
+  UpdatePayslipDto,
+  PayslipFilterDto,
+  BulkCreatePayslipDto,
+  SimulatePayslipDto,
+  CreateDisputeDto,
 } from './payslips.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Payslips')

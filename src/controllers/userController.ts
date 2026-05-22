@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
- 
+
 export const getUsers = async (req: Request, res: Response) => {
   try {
     const users = await prisma.user.findMany({
@@ -16,7 +16,7 @@ export const getUsers = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Erro ao buscar utilizadores' });
   }
 };
- 
+
 export const createUser = async (req: Request, res: Response) => {
   const { email, fullName, password } = req.body;
   try {
@@ -28,4 +28,3 @@ export const createUser = async (req: Request, res: Response) => {
     res.status(400).json({ error: 'Erro ao criar utilizador' });
   }
 };
- 

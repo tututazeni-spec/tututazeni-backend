@@ -9,9 +9,9 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { Evaluation360Service } from './evaluation360.service';
 import { Evaluation360Controller } from './evaluation360.controller';
 import { Evaluation360EventListeners } from './evaluation360.events';
-import { PrismaModule }        from '../prisma/prisma.module';
+import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { AuditModule }         from '../audit/audit.module';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
@@ -26,7 +26,6 @@ import { AuditModule }         from '../audit/audit.module';
   exports: [Evaluation360Service],
 })
 export class Evaluation360Module {}
-
 
 // ============================================================
 // INNOVA PLATFORM — AVALIAÇÃO 360º — EVENT LISTENERS

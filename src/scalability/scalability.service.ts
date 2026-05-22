@@ -4,23 +4,38 @@
 // ============================================================
 
 import {
-  Injectable, Logger, NotFoundException, BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/services/audit.service';
 import {
-  CreateTenantConfigDto, UpdateTenantConfigDto,
-  CreateIntegrationConfigDto, UpdateIntegrationConfigDto,
-  CreateAutomationRuleDto, UpdateAutomationRuleDto, ExecuteAutomationRuleDto,
-  CreateSlaConfigDto, UpdateSlaConfigDto,
+  CreateTenantConfigDto,
+  UpdateTenantConfigDto,
+  CreateIntegrationConfigDto,
+  UpdateIntegrationConfigDto,
+  CreateAutomationRuleDto,
+  UpdateAutomationRuleDto,
+  ExecuteAutomationRuleDto,
+  CreateSlaConfigDto,
+  UpdateSlaConfigDto,
   UpdateContentDeliveryConfigDto,
-  MetricsQueryDto, CreateAlertDto, AlertsQueryDto, ResolveAlertDto,
-  BulkUserImportDto, BulkImportResultDto,
-  LoadTestConfigDto, PaginationDto,
+  MetricsQueryDto,
+  CreateAlertDto,
+  AlertsQueryDto,
+  ResolveAlertDto,
+  BulkUserImportDto,
+  BulkImportResultDto,
+  LoadTestConfigDto,
+  PaginationDto,
   ScalabilityDashboardDto,
-  AlertSeverity, AlertCategory, AutomationTrigger,
+  AlertSeverity,
+  AlertCategory,
+  AutomationTrigger,
 } from './scalability.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -100,7 +115,13 @@ export class ScalabilityService {
         contractEndDate: dto.contractEndDate ? new Date(dto.contractEndDate) : undefined,
       },
     });
-    await this.audit.log({ entity: 'TenantConfig', entityId: id, action: 'UPDATE', userId: actorId, details: dto });
+    await this.audit.log({
+      entity: 'TenantConfig',
+      entityId: id,
+      action: 'UPDATE',
+      userId: actorId,
+      details: dto,
+    });
     return updated;
   }
 
@@ -112,7 +133,12 @@ export class ScalabilityService {
 
   async listTenants(query: PaginationDto) {
     const where = query.search
-      ? { OR: [{ tenantName: { contains: query.search } }, { tenantCode: { contains: query.search } }] }
+      ? {
+          OR: [
+            { tenantName: { contains: query.search } },
+            { tenantCode: { contains: query.search } },
+          ],
+        }
       : {};
     const [data, total] = await Promise.all([
       (this.prisma as any).tenantConfig.findMany({
@@ -139,9 +165,15 @@ export class ScalabilityService {
       : undefined;
 
     const integration = await (this.prisma as any).integrationConfig.create({
-     data: { ...dto, credentialsJson: safeCredentials },
-      });
-    await this.audit.log({ entity: 'IntegrationConfig', entityId: integration.id, action: 'CREATE', userId: actorId, details: { type: dto.type, name: dto.name } });
+      data: { ...dto, credentialsJson: safeCredentials },
+    });
+    await this.audit.log({
+      entity: 'IntegrationConfig',
+      entityId: integration.id,
+      action: 'CREATE',
+      userId: actorId,
+      details: { type: dto.type, name: dto.name },
+    });
     return integration;
   }
 
@@ -154,10 +186,16 @@ export class ScalabilityService {
       : undefined;
 
     const updated = await (this.prisma as any).integrationConfig.update({
-       where: { id },
-       data: { ...dto, credentialsJson: safeCredentials ?? existing.credentialsJson },
-       });
-    await this.audit.log({ entity: 'IntegrationConfig', entityId: id, action: 'UPDATE', userId: actorId, details: dto });
+      where: { id },
+      data: { ...dto, credentialsJson: safeCredentials ?? existing.credentialsJson },
+    });
+    await this.audit.log({
+      entity: 'IntegrationConfig',
+      entityId: id,
+      action: 'UPDATE',
+      userId: actorId,
+      details: dto,
+    });
     return updated;
   }
 
@@ -178,7 +216,9 @@ export class ScalabilityService {
   }
 
   async triggerSync(integrationId: string, actorId: string) {
-    const integration = await (this.prisma as any).integrationConfig.findUnique({ where: { id: integrationId } });
+    const integration = await (this.prisma as any).integrationConfig.findUnique({
+      where: { id: integrationId },
+    });
     if (!integration) throw new NotFoundException('Integração não encontrada.');
     if (!integration.isActive) throw new BadRequestException('Integração inativa.');
 
@@ -218,9 +258,15 @@ export class ScalabilityService {
     if (dto.conditionsJson) this.validateJsonField(dto.conditionsJson, 'conditionsJson');
 
     const rule = await (this.prisma as any).automationRule.create({
-    data: { ...dto, createdBy: actorId },
-     });
-    await this.audit.log({ entity: 'AutomationRule', entityId: rule.id, action: 'CREATE', userId: actorId, details: { name: dto.name, triggerType: dto.triggerType } });
+      data: { ...dto, createdBy: actorId },
+    });
+    await this.audit.log({
+      entity: 'AutomationRule',
+      entityId: rule.id,
+      action: 'CREATE',
+      userId: actorId,
+      details: { name: dto.name, triggerType: dto.triggerType },
+    });
     return rule;
   }
 
@@ -232,7 +278,13 @@ export class ScalabilityService {
     if (dto.actionsJson) this.validateJsonField(dto.actionsJson, 'actionsJson');
 
     const updated = await (this.prisma as any).automationRule.update({ where: { id }, data: dto });
-    await this.audit.log({ entity: 'AutomationRule', entityId: id, action: 'UPDATE', userId: actorId, details: dto });
+    await this.audit.log({
+      entity: 'AutomationRule',
+      entityId: id,
+      action: 'UPDATE',
+      userId: actorId,
+      details: dto,
+    });
     return updated;
   }
 
@@ -253,7 +305,9 @@ export class ScalabilityService {
   }
 
   async executeAutomationRule(dto: ExecuteAutomationRuleDto, actorId: string) {
-    const rule = await (this.prisma as any).automationRule.findUnique({ where: { id: dto.ruleId } });
+    const rule = await (this.prisma as any).automationRule.findUnique({
+      where: { id: dto.ruleId },
+    });
     if (!rule) throw new NotFoundException('Regra não encontrada.');
     if (!rule.isActive) throw new BadRequestException('Regra inativa.');
 
@@ -280,7 +334,11 @@ export class ScalabilityService {
   /**
    * Processa evento de automação (chamado por listeners de eventos como USER_HIRED)
    */
-  async processAutomationEvent(tenantId: string, triggerType: AutomationTrigger, payload: Record<string, any>) {
+  async processAutomationEvent(
+    tenantId: string,
+    triggerType: AutomationTrigger,
+    payload: Record<string, any>,
+  ) {
     const rules = await this.prisma.automationRule.findMany({
       where: { tenantId, triggerType, isActive: true },
       orderBy: { priority: 'asc' },
@@ -292,7 +350,12 @@ export class ScalabilityService {
       if (!matches) continue;
 
       const execution = await (this.prisma as any).automationExecution.create({
-        data: { ruleId: rule.id, triggeredBy: 'SYSTEM', targetUserId: payload.userId, status: 'RUNNING' },
+        data: {
+          ruleId: rule.id,
+          triggeredBy: 'SYSTEM',
+          targetUserId: payload.userId,
+          status: 'RUNNING',
+        },
       });
 
       try {
@@ -301,17 +364,27 @@ export class ScalabilityService {
 
         await (this.prisma as any).automationExecution.update({
           where: { id: execution.id },
-          data: { status: 'SUCCESS', finishedAt: new Date(), actionsLog: JSON.stringify(actionsLog) },
+          data: {
+            status: 'SUCCESS',
+            finishedAt: new Date(),
+            actionsLog: JSON.stringify(actionsLog),
+          },
         });
         await this.prisma.automationRule.update({
           where: { id: rule.id },
           data: { runCount: { increment: 1 }, lastRunAt: new Date(), lastRunStatus: 'SUCCESS' },
         });
       } catch (err) {
-        this.logger.error(`Erro na automação ${rule.id}: ${(err instanceof Error ? err.message : String(err))}`);
+        this.logger.error(
+          `Erro na automação ${rule.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
         await (this.prisma as any).automationExecution.update({
           where: { id: execution.id },
-          data: { status: 'FAILED', finishedAt: new Date(), errorMessage: (err instanceof Error ? err.message : String(err)) },
+          data: {
+            status: 'FAILED',
+            finishedAt: new Date(),
+            errorMessage: err instanceof Error ? err.message : String(err),
+          },
         });
         await this.prisma.automationRule.update({
           where: { id: rule.id },
@@ -323,16 +396,23 @@ export class ScalabilityService {
 
   private evaluateConditions(conditions: any[], payload: Record<string, any>): boolean {
     if (!conditions || conditions.length === 0) return true;
-    return conditions.every((cond) => {
+    return conditions.every(cond => {
       const val = payload[cond.field];
       switch (cond.operator) {
-        case 'EQ': return val === cond.value;
-        case 'NEQ': return val !== cond.value;
-        case 'IN': return Array.isArray(cond.value) && cond.value.includes(val);
-        case 'NOT_IN': return Array.isArray(cond.value) && !cond.value.includes(val);
-        case 'GT': return val > cond.value;
-        case 'LT': return val < cond.value;
-        default: return false;
+        case 'EQ':
+          return val === cond.value;
+        case 'NEQ':
+          return val !== cond.value;
+        case 'IN':
+          return Array.isArray(cond.value) && cond.value.includes(val);
+        case 'NOT_IN':
+          return Array.isArray(cond.value) && !cond.value.includes(val);
+        case 'GT':
+          return val > cond.value;
+        case 'LT':
+          return val < cond.value;
+        default:
+          return false;
       }
     });
   }
@@ -346,7 +426,9 @@ export class ScalabilityService {
             // Matricular usuário no curso
             if (payload.userId && action.payload?.courseId) {
               await (this.prisma as any).enrollment.upsert({
-                where: { courseId_userId: { courseId: action.payload.courseId, userId: payload.userId } },
+                where: {
+                  courseId_userId: { courseId: action.payload.courseId, userId: payload.userId },
+                },
                 create: { courseId: action.payload.courseId, userId: payload.userId },
                 update: {},
               });
@@ -365,14 +447,22 @@ export class ScalabilityService {
 
           case 'REVOKE_ACCESS':
             // Revogar acesso: desativar user ou remover de curso
-            results.push({ type: action.type, status: 'OK', note: 'Access revoked via system policy' });
+            results.push({
+              type: action.type,
+              status: 'OK',
+              note: 'Access revoked via system policy',
+            });
             break;
 
           default:
             results.push({ type: action.type, status: 'SKIPPED', reason: 'Unknown action type' });
         }
       } catch (err) {
-        results.push({ type: action.type, status: 'ERROR', error: (err instanceof Error ? err.message : String(err)) });
+        results.push({
+          type: action.type,
+          status: 'ERROR',
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
     return results;
@@ -385,7 +475,13 @@ export class ScalabilityService {
   async createSlaConfig(dto: CreateSlaConfigDto, actorId: string) {
     await this.findTenantOrFail(dto.tenantId);
     const sla = await (this.prisma as any).slaConfig.create({ data: dto });
-    await this.audit.log({ entity: 'SlaConfig', entityId: sla.id, action: 'CREATE', userId: actorId, details: dto });
+    await this.audit.log({
+      entity: 'SlaConfig',
+      entityId: sla.id,
+      action: 'CREATE',
+      userId: actorId,
+      details: dto,
+    });
     return sla;
   }
 
@@ -393,7 +489,13 @@ export class ScalabilityService {
     const sla = await (this.prisma as any).slaConfig.findUnique({ where: { id } });
     if (!sla) throw new NotFoundException('SLA Config não encontrada.');
     const updated = await (this.prisma as any).slaConfig.update({ where: { id }, data: dto });
-    await this.audit.log({ entity: 'SlaConfig', entityId: id, action: 'UPDATE', userId: actorId, details: dto });
+    await this.audit.log({
+      entity: 'SlaConfig',
+      entityId: id,
+      action: 'UPDATE',
+      userId: actorId,
+      details: dto,
+    });
     return updated;
   }
 
@@ -409,18 +511,30 @@ export class ScalabilityService {
   // ============================================================
 
   async getContentDeliveryConfig(tenantId: string) {
-    const config = await (this.prisma as any).contentDeliveryConfig.findUnique({ where: { tenantId } });
+    const config = await (this.prisma as any).contentDeliveryConfig.findUnique({
+      where: { tenantId },
+    });
     if (!config) throw new NotFoundException('Configuração de entrega de conteúdo não encontrada.');
     return config;
   }
 
-  async updateContentDeliveryConfig(tenantId: string, dto: UpdateContentDeliveryConfigDto, actorId: string) {
+  async updateContentDeliveryConfig(
+    tenantId: string,
+    dto: UpdateContentDeliveryConfigDto,
+    actorId: string,
+  ) {
     const config = await (this.prisma as any).contentDeliveryConfig.upsert({
       where: { tenantId },
       create: { tenantId, ...dto },
       update: dto,
     });
-    await this.audit.log({ entity: 'ContentDeliveryConfig', entityId: config.id, action: 'UPDATE', userId: actorId, details: dto });
+    await this.audit.log({
+      entity: 'ContentDeliveryConfig',
+      entityId: config.id,
+      action: 'UPDATE',
+      userId: actorId,
+      details: dto,
+    });
     return config;
   }
 
@@ -429,9 +543,7 @@ export class ScalabilityService {
   // ============================================================
 
   async getMetrics(query: MetricsQueryDto) {
-    const from = query.from
-      ? new Date(query.from)
-      : this.windowToDate(query.window ?? '24h');
+    const from = query.from ? new Date(query.from) : this.windowToDate(query.window ?? '24h');
     const to = query.to ? new Date(query.to) : new Date();
 
     const where: any = { capturedAt: { gte: from, lte: to } };
@@ -445,14 +557,14 @@ export class ScalabilityService {
     if (metrics.length === 0) return { metrics: [], summary: null };
 
     const summary = {
-      avgCpuPercent: this.avg(metrics.map((m) => m.cpuUsagePercent)),
-      avgMemoryPercent: this.avg(metrics.map((m) => m.memoryUsagePercent)),
-      avgLatencyMs: this.avg(metrics.map((m) => m.avgLatencyMs)),
-      maxConcurrentSessions: Math.max(...metrics.map((m) => m.concurrentSessions)),
-      avgErrorRate: this.avg(metrics.map((m) => m.errorRate)),
-      avgUptimePercent: this.avg(metrics.map((m) => m.uptimePercent)),
+      avgCpuPercent: this.avg(metrics.map(m => m.cpuUsagePercent)),
+      avgMemoryPercent: this.avg(metrics.map(m => m.memoryUsagePercent)),
+      avgLatencyMs: this.avg(metrics.map(m => m.avgLatencyMs)),
+      maxConcurrentSessions: Math.max(...metrics.map(m => m.concurrentSessions)),
+      avgErrorRate: this.avg(metrics.map(m => m.errorRate)),
+      avgUptimePercent: this.avg(metrics.map(m => m.uptimePercent)),
       totalStorageUsedGb: metrics[metrics.length - 1].storageUsedGb,
-      peakRequestsPerMinute: Math.max(...metrics.map((m) => m.requestsPerMinute)),
+      peakRequestsPerMinute: Math.max(...metrics.map(m => m.requestsPerMinute)),
     };
 
     return { metrics, summary };
@@ -491,7 +603,9 @@ export class ScalabilityService {
       // Verificar thresholds para gerar alertas
       await this.evaluateAlertThresholds(snapshot);
     } catch (err) {
-      this.logger.warn(`Falha ao capturar métricas: ${(err instanceof Error ? err.message : String(err))}`);
+      this.logger.warn(
+        `Falha ao capturar métricas: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -521,28 +635,34 @@ export class ScalabilityService {
     const slas = await (this.prisma as any).slaConfig.findMany({ where: { isActive: true } });
     for (const sla of slas) {
       if (snapshot.avgLatencyMs > sla.maxLatencyMs) {
-        await this.createAlert({
-          tenantId: sla.tenantId,
-          severity: AlertSeverity.WARNING,
-          category: AlertCategory.PERFORMANCE,
-          title: 'Alta latência detectada',
-          message: `Latência média (${snapshot.avgLatencyMs}ms) excedeu limite do SLA (${sla.maxLatencyMs}ms).`,
-          metricValue: snapshot.avgLatencyMs,
-          threshold: sla.maxLatencyMs,
-          notifiedVia: ['EMAIL'],
-        }, 'SYSTEM');
+        await this.createAlert(
+          {
+            tenantId: sla.tenantId,
+            severity: AlertSeverity.WARNING,
+            category: AlertCategory.PERFORMANCE,
+            title: 'Alta latência detectada',
+            message: `Latência média (${snapshot.avgLatencyMs}ms) excedeu limite do SLA (${sla.maxLatencyMs}ms).`,
+            metricValue: snapshot.avgLatencyMs,
+            threshold: sla.maxLatencyMs,
+            notifiedVia: ['EMAIL'],
+          },
+          'SYSTEM',
+        );
       }
       if (snapshot.errorRate > sla.maxErrorRate * 100) {
-        await this.createAlert({
-          tenantId: sla.tenantId,
-          severity: AlertSeverity.CRITICAL,
-          category: AlertCategory.SLA_BREACH,
-          title: 'Taxa de erro acima do SLA',
-          message: `Taxa de erro atual: ${snapshot.errorRate.toFixed(2)}%. Limite: ${(sla.maxErrorRate * 100).toFixed(2)}%.`,
-          metricValue: snapshot.errorRate,
-          threshold: sla.maxErrorRate * 100,
-          notifiedVia: ['EMAIL', 'PUSH'],
-        }, 'SYSTEM');
+        await this.createAlert(
+          {
+            tenantId: sla.tenantId,
+            severity: AlertSeverity.CRITICAL,
+            category: AlertCategory.SLA_BREACH,
+            title: 'Taxa de erro acima do SLA',
+            message: `Taxa de erro atual: ${snapshot.errorRate.toFixed(2)}%. Limite: ${(sla.maxErrorRate * 100).toFixed(2)}%.`,
+            metricValue: snapshot.errorRate,
+            threshold: sla.maxErrorRate * 100,
+            notifiedVia: ['EMAIL', 'PUSH'],
+          },
+          'SYSTEM',
+        );
       }
     }
   }
@@ -606,7 +726,12 @@ export class ScalabilityService {
     await this.findTenantOrFail(dto.tenantId);
 
     const result: BulkImportResultDto = {
-      total: 0, created: 0, updated: 0, skipped: 0, failed: 0, errors: [],
+      total: 0,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+      errors: [],
     };
 
     let rows: any[] = [];
@@ -663,7 +788,10 @@ export class ScalabilityService {
         }
       } catch (err) {
         result.failed++;
-        result.errors.push({ row: i + 1, reason: (err instanceof Error ? err.message : String(err)) });
+        result.errors.push({
+          row: i + 1,
+          reason: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -689,11 +817,11 @@ export class ScalabilityService {
   }
 
   private parseCSV(raw: string): any[] {
-    const lines = raw.split('\n').filter((l) => l.trim());
+    const lines = raw.split('\n').filter(l => l.trim());
     if (lines.length < 2) throw new Error('CSV sem dados.');
-    const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-    return lines.slice(1).map((line) => {
-      const values = line.split(',').map((v) => v.trim());
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    return lines.slice(1).map(line => {
+      const values = line.split(',').map(v => v.trim());
       return Object.fromEntries(headers.map((h, i) => [h, values[i] ?? '']));
     });
   }
@@ -729,13 +857,23 @@ export class ScalabilityService {
     ]);
 
     const activeUsers = await this.prisma.user.count();
-    const activeIntegrations = integrations.filter((i) => i.status === 'ACTIVE').reduce((s, i) => s + i._count.id, 0);
-    const errorIntegrations = integrations.filter((i) => i.status === 'ERROR').reduce((s, i) => s + i._count.id, 0);
+    const activeIntegrations = integrations
+      .filter(i => i.status === 'ACTIVE')
+      .reduce((s, i) => s + i._count.id, 0);
+    const errorIntegrations = integrations
+      .filter(i => i.status === 'ERROR')
+      .reduce((s, i) => s + i._count.id, 0);
 
-    const openAlerts = alerts.filter((a) => !a.isResolved);
-    const criticalAlerts = openAlerts.filter((a) => a.severity === 'CRITICAL').reduce((s, a) => s + a._count.id, 0);
-    const warningAlerts = openAlerts.filter((a) => a.severity === 'WARNING').reduce((s, a) => s + a._count.id, 0);
-    const infoAlerts = openAlerts.filter((a) => a.severity === 'INFO').reduce((s, a) => s + a._count.id, 0);
+    const openAlerts = alerts.filter(a => !a.isResolved);
+    const criticalAlerts = openAlerts
+      .filter(a => a.severity === 'CRITICAL')
+      .reduce((s, a) => s + a._count.id, 0);
+    const warningAlerts = openAlerts
+      .filter(a => a.severity === 'WARNING')
+      .reduce((s, a) => s + a._count.id, 0);
+    const infoAlerts = openAlerts
+      .filter(a => a.severity === 'INFO')
+      .reduce((s, a) => s + a._count.id, 0);
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -745,7 +883,9 @@ export class ScalabilityService {
     const failedToday = await (this.prisma as any).automationExecution.count({
       where: { startedAt: { gte: todayStart }, status: 'FAILED', rule: { tenantId } },
     });
-    const activeRules = await this.prisma.automationRule.count({ where: { tenantId, isActive: true } });
+    const activeRules = await this.prisma.automationRule.count({
+      where: { tenantId, isActive: true },
+    });
 
     const lastSync = await (this.prisma as any).integrationSyncLog.findFirst({
       where: { integration: { tenantId } },
@@ -819,7 +959,8 @@ export class ScalabilityService {
     this.events.emit('loadtest.scheduled', { ...dto, scheduledBy: actorId });
 
     return {
-      message: 'Teste de carga agendado. Resultados disponíveis em /scalability/metrics após conclusão.',
+      message:
+        'Teste de carga agendado. Resultados disponíveis em /scalability/metrics após conclusão.',
       config: dto,
     };
   }
@@ -831,7 +972,11 @@ export class ScalabilityService {
   private windowToDate(window: string): Date {
     const now = new Date();
     const map: Record<string, number> = {
-      '1h': 1, '6h': 6, '24h': 24, '7d': 24 * 7, '30d': 24 * 30,
+      '1h': 1,
+      '6h': 6,
+      '24h': 24,
+      '7d': 24 * 7,
+      '30d': 24 * 30,
     };
     const hours = map[window] ?? 24;
     return new Date(now.getTime() - hours * 60 * 60 * 1000);

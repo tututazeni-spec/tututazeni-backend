@@ -1,15 +1,13 @@
 // src/dashboard-rh/dashboard-rh.controller.ts
-import {
-  Controller, Get, Query, UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { DashboardRhService }  from './dashboard-rh.service';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
-import { Roles }         from '../common/decorators';
+import { DashboardRhService } from './dashboard-rh.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators';
 
 const ADMIN = ['ADMIN', 'RH', 'DIRECTOR'] as const;
-const MGMT  = ['ADMIN', 'RH', 'DIRECTOR', 'LIDER'] as const;
+const MGMT = ['ADMIN', 'RH', 'DIRECTOR', 'LIDER'] as const;
 
 @ApiTags('Dashboard RH')
 @ApiBearerAuth()
@@ -23,7 +21,9 @@ export class DashboardRhController {
   @Get()
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Dashboard RH completo — todos os KPIs em paralelo' })
-  fullDashboard() { return this.svc.getFullRhDashboard(); }
+  fullDashboard() {
+    return this.svc.getFullRhDashboard();
+  }
 
   // ─── Headcount ───────────────────────────────────────────────
 
@@ -91,7 +91,9 @@ export class DashboardRhController {
   @Get('compliance')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Compliance — formações obrigatórias, certificações, auditoria' })
-  compliance() { return this.svc.getCompliancePanel(); }
+  compliance() {
+    return this.svc.getCompliancePanel();
+  }
 
   // ─── Attendance ──────────────────────────────────────────────
 
@@ -107,59 +109,57 @@ export class DashboardRhController {
   @Get('talent-pipeline')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Pipeline de talento — sucessão, HiPos, posições em risco' })
-  talentPipeline() { return this.svc.getTalentPipeline(); }
+  talentPipeline() {
+    return this.svc.getTalentPipeline();
+  }
 
   // ─── People Events ───────────────────────────────────────────
 
   @Get('birthdays')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Aniversários do mês' })
-  birthdays() { return this.svc.getBirthdaysThisMonth(); }
+  birthdays() {
+    return this.svc.getBirthdaysThisMonth();
+  }
 
   @Get('anniversaries')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Aniversários de empresa este mês' })
-  anniversaries() { return this.svc.getAnniversariesThisMonth(); }
+  anniversaries() {
+    return this.svc.getAnniversariesThisMonth();
+  }
 
   // ─── Payroll ─────────────────────────────────────────────────
 
   @Get('payroll')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Resumo da folha salarial por período' })
-  payroll(@Query('period') period: string) { return this.svc.getPayrollPanel(period); }
+  payroll(@Query('period') period: string) {
+    return this.svc.getPayrollPanel(period);
+  }
 
   // ─── AI Insights ─────────────────────────────────────────────
 
   @Get('alerts')
   @Roles(...MGMT)
   @ApiOperation({ summary: 'Alertas inteligentes — performance, compliance, engagement, PDI' })
-  alerts() { return this.svc.getAlerts(); }
+  alerts() {
+    return this.svc.getAlerts();
+  }
 
   @Get('predictions')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Previsões IA — risco de saída, queda de performance' })
-  predictions() { return this.svc.getPredictions(); }
+  predictions() {
+    return this.svc.getPredictions();
+  }
 
   @Get('correlations')
   @Roles(...ADMIN)
-  @ApiOperation({ summary: 'People Analytics — correlações treino×performance, engagement×performance' })
-  correlations() { return this.svc.getCorrelations(); }
+  @ApiOperation({
+    summary: 'People Analytics — correlações treino×performance, engagement×performance',
+  })
+  correlations() {
+    return this.svc.getCorrelations();
+  }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,18 +1,34 @@
 // src/instructor/instructor.controller.ts
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { InstructorService } from './instructor.service';
 import {
-  CreateInstructorProfileDto, UpdateInstructorProfileDto,
-  CreateMarketplaceCourseDto, InstructorReviewDto, InstructorFilterDto,
-  CreateCohortDto, UpdateCohortDto, AddParticipantsDto, CohortFilterDto,
+  CreateInstructorProfileDto,
+  UpdateInstructorProfileDto,
+  CreateMarketplaceCourseDto,
+  InstructorReviewDto,
+  InstructorFilterDto,
+  CreateCohortDto,
+  UpdateCohortDto,
+  AddParticipantsDto,
+  CohortFilterDto,
 } from './instructor.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Instructors')
@@ -26,7 +42,9 @@ export class InstructorController {
 
   @Get()
   @ApiOperation({ summary: 'Listar instrutores (com filtros e busca)' })
-  findAll(@Query() filters: InstructorFilterDto) { return this.svc.findAll(filters); }
+  findAll(@Query() filters: InstructorFilterDto) {
+    return this.svc.findAll(filters);
+  }
 
   @Get('marketplace')
   @ApiOperation({ summary: 'Cursos do marketplace' })
@@ -38,23 +56,33 @@ export class InstructorController {
 
   @Get('my/profile')
   @ApiOperation({ summary: 'Meu perfil de instrutor' })
-  myProfile(@CurrentUser() user: any) { return this.svc.findByUser(user.id); }
+  myProfile(@CurrentUser() user: any) {
+    return this.svc.findByUser(user.id);
+  }
 
   @Get('my/dashboard')
   @ApiOperation({ summary: 'Dashboard do instrutor (métricas, turmas activas, alertas)' })
-  myDashboard(@CurrentUser() user: any) { return this.svc.getMyDashboard(user.id); }
+  myDashboard(@CurrentUser() user: any) {
+    return this.svc.getMyDashboard(user.id);
+  }
 
   @Get('my/analytics')
   @ApiOperation({ summary: 'Analytics do instrutor (totais, avaliações, rating)' })
-  myAnalytics(@CurrentUser() user: any) { return this.svc.getAnalytics(user.id); }
+  myAnalytics(@CurrentUser() user: any) {
+    return this.svc.getAnalytics(user.id);
+  }
 
   @Get('my/at-risk-students')
   @ApiOperation({ summary: 'Alunos em risco nas minhas turmas activas' })
-  atRisk(@CurrentUser() user: any) { return this.svc.getAtRiskStudents(user.id); }
+  atRisk(@CurrentUser() user: any) {
+    return this.svc.getAtRiskStudents(user.id);
+  }
 
   @Get('my/payouts')
   @ApiOperation({ summary: 'Histórico de pagamentos (instrutores externos)' })
-  myPayouts(@CurrentUser() user: any) { return this.svc.getPayoutHistory(user.id); }
+  myPayouts(@CurrentUser() user: any) {
+    return this.svc.getPayoutHistory(user.id);
+  }
 
   // ── Turmas (Cohorts) ──────────────────────────────────────────────────────
 
@@ -110,7 +138,9 @@ export class InstructorController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe público do instrutor' })
-  findOne(@Param('id', ParseIntPipe) id: number) { return this.svc.findOne(id); }
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findOne(id);
+  }
 
   @Post('profile')
   @ApiOperation({ summary: 'Criar perfil de instrutor' })
@@ -146,13 +176,17 @@ export class InstructorController {
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Aprovar instrutor' })
   @HttpCode(HttpStatus.OK)
-  approve(@Param('id', ParseIntPipe) id: number) { return this.svc.approve(id); }
+  approve(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.approve(id);
+  }
 
   @Patch(':id/revoke')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Revogar aprovação de instrutor' })
   @HttpCode(HttpStatus.OK)
-  revoke(@Param('id', ParseIntPipe) id: number) { return this.svc.revoke(id); }
+  revoke(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.revoke(id);
+  }
 
   @Post(':id/payout')
   @Roles('ADMIN')

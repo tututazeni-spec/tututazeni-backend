@@ -1,51 +1,69 @@
 // src/ai-tutor/ai-tutor.dto.ts
 import {
-  IsString, IsOptional, IsInt, IsPositive, Max, IsEnum, IsBoolean, Min,
+  IsString,
+  IsOptional,
+  IsInt,
+  IsPositive,
+  Max,
+  IsEnum,
+  IsBoolean,
+  Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 export enum TutorPersonality {
   PROFESSIONAL = 'PROFESSIONAL',
-  FRIENDLY     = 'FRIENDLY',
-  COACH        = 'COACH',
-  TECHNICAL    = 'TECHNICAL',
-  GAMIFIED     = 'GAMIFIED',
+  FRIENDLY = 'FRIENDLY',
+  COACH = 'COACH',
+  TECHNICAL = 'TECHNICAL',
+  GAMIFIED = 'GAMIFIED',
 }
 
 export enum AgentAction {
-  ENROLL_COURSE      = 'ENROLL_COURSE',
-  UPDATE_PDI_ACTION  = 'UPDATE_PDI_ACTION',
-  REQUEST_FEEDBACK   = 'REQUEST_FEEDBACK',
-  NOTIFY_MANAGER     = 'NOTIFY_MANAGER',
-  GENERATE_QUIZ      = 'GENERATE_QUIZ',
-  GENERATE_SUMMARY   = 'GENERATE_SUMMARY',
-  GENERATE_FLASHCARDS= 'GENERATE_FLASHCARDS',
+  ENROLL_COURSE = 'ENROLL_COURSE',
+  UPDATE_PDI_ACTION = 'UPDATE_PDI_ACTION',
+  REQUEST_FEEDBACK = 'REQUEST_FEEDBACK',
+  NOTIFY_MANAGER = 'NOTIFY_MANAGER',
+  GENERATE_QUIZ = 'GENERATE_QUIZ',
+  GENERATE_SUMMARY = 'GENERATE_SUMMARY',
+  GENERATE_FLASHCARDS = 'GENERATE_FLASHCARDS',
 }
 
 // ─── Session ──────────────────────────────────────────────────────────────────
 
 export class StartAiSessionDto {
   @ApiPropertyOptional({ description: 'ID do curso para tutor contextualizado' })
-  @IsOptional() @IsInt() courseId?: number;
+  @IsOptional()
+  @IsInt()
+  courseId?: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsInt()
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
   enrollmentId?: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsInt()
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
   lessonId?: number;
 
   @ApiPropertyOptional({ description: 'ID do PDI para contexto de desenvolvimento' })
-  @IsOptional() @IsInt() planId?: number;
+  @IsOptional()
+  @IsInt()
+  planId?: number;
 
   @ApiPropertyOptional({ enum: TutorPersonality, default: TutorPersonality.FRIENDLY })
-  @IsOptional() @IsEnum(TutorPersonality) personality?: TutorPersonality;
+  @IsOptional()
+  @IsEnum(TutorPersonality)
+  personality?: TutorPersonality;
 }
 
 // ─── Message ──────────────────────────────────────────────────────────────────
 
 export class SendAiMessageDto {
-  @ApiProperty() @IsInt()
+  @ApiProperty()
+  @IsInt()
   sessionId!: number;
 
   @ApiProperty({ example: 'Qual a diferença entre crédito pessoal e crédito habitação?' })
@@ -53,32 +71,42 @@ export class SendAiMessageDto {
   message!: string;
 
   @ApiPropertyOptional({ default: 1024 })
-  @IsOptional() @IsInt() @IsPositive() @Max(4096)
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  @Max(4096)
   maxTokens?: number;
 
   @ApiPropertyOptional({ description: 'Contexto extra (ex: conteúdo da lição actual)' })
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   contextHint?: string;
 }
 
 // ─── Rating ───────────────────────────────────────────────────────────────────
 
 export class RateMessageDto {
-  @ApiProperty({ description: 'ID da mensagem ASSISTANT a avaliar' }) @IsInt()
+  @ApiProperty({ description: 'ID da mensagem ASSISTANT a avaliar' })
+  @IsInt()
   messageId!: number;
 
   @ApiProperty({ description: '1-5', minimum: 1, maximum: 5 })
-  @IsInt() @Min(1) @Max(5)
+  @IsInt()
+  @Min(1)
+  @Max(5)
   rating!: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   feedback?: string;
 }
 
 // ─── Agent ────────────────────────────────────────────────────────────────────
 
 export class ExecuteAgentActionDto {
-  @ApiProperty() @IsInt()
+  @ApiProperty()
+  @IsInt()
   sessionId!: number;
 
   @ApiProperty({ enum: AgentAction })
@@ -100,18 +128,26 @@ export class GenerateContentDto {
   @IsString()
   type!: 'QUIZ' | 'FLASHCARDS' | 'SUMMARY' | 'STUDY_PLAN';
 
-  @ApiPropertyOptional() @IsOptional() @IsInt()
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
   courseId?: number;
 
-  @ApiPropertyOptional() @IsOptional() @IsInt()
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
   lessonId?: number;
 
   @ApiPropertyOptional({ description: 'Tema livre se não houver curso' })
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   topic?: string;
 
   @ApiPropertyOptional({ description: 'Número de perguntas/cards', default: 5 })
-  @IsOptional() @IsInt() @Min(2) @Max(20)
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(20)
   count?: number;
 }
 
@@ -120,6 +156,16 @@ export class GenerateContentDto {
 export class AiSessionFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) courseId?: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) activeOnly?: boolean;
-  @ApiPropertyOptional({ default: 1 }) @IsOptional() @IsInt() @Min(1) @Type(() => Number) page?: number;
-  @ApiPropertyOptional({ default: 20 }) @IsOptional() @IsInt() @Min(1) @Type(() => Number) limit?: number;
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+  @ApiPropertyOptional({ default: 20 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  limit?: number;
 }

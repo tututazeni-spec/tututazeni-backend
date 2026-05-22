@@ -1,29 +1,42 @@
 // ─── employees/employees.controller.ts ───────────────────────────────────────
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe, UseGuards,
-  Request, Res, Header, StreamableFile,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
-import {
-  ApiTags, ApiOperation, ApiBearerAuth,
-  ApiResponse, ApiQuery,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
 import {
-  CreateEmployeeDto, UpdateEmployeeDto,
-  CreateContractDto, CreateEmployeeAttendanceDto,
-  CreateFeedback360Dto, CreateEmployeeCareerPlanDto,
-  CreatePdiDto, UpdatePdiProgressDto,
-  CreateDocumentDto, AssignSkillDto, UpdateSkillLevelDto,
+  CreateEmployeeDto,
+  UpdateEmployeeDto,
+  CreateContractDto,
+  CreateEmployeeAttendanceDto,
+  CreateFeedback360Dto,
+  CreateEmployeeCareerPlanDto,
+  CreatePdiDto,
+  UpdatePdiProgressDto,
+  CreateDocumentDto,
+  AssignSkillDto,
+  UpdateSkillLevelDto,
   CreateTimelineEventDto,
-  CreateSelfServiceRequestDto, ReviewRequestDto,
-  BulkAssignCourseDto, BulkUpdateStatusDto,
+  CreateSelfServiceRequestDto,
+  ReviewRequestDto,
+  BulkAssignCourseDto,
+  BulkUpdateStatusDto,
   EmployeeFilterDto,
 } from './employees.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
-import { Roles }         from '../common/decorators';
-import { CurrentUser }   from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -130,10 +143,7 @@ export class EmployeesController {
   @Patch('contracts/:id/status')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Atualizar status do contrato' })
-  updateContractStatus(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: { status: string },
-  ) {
+  updateContractStatus(@Param('id', ParseIntPipe) id: number, @Body() body: { status: string }) {
     return this.svc.updateContractStatus(id, body.status);
   }
 
@@ -169,10 +179,7 @@ export class EmployeesController {
   @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
   @ApiOperation({ summary: 'Histórico de Feedback 360 com média e agrupamento por ciclo' })
   @ApiQuery({ name: 'cycle', required: false })
-  getFeedback360(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('cycle') cycle?: string,
-  ) {
+  getFeedback360(@Param('id', ParseIntPipe) id: number, @Query('cycle') cycle?: string) {
     return this.svc.getFeedback360(id, cycle);
   }
 
@@ -204,10 +211,7 @@ export class EmployeesController {
   @Patch('career-plans/:id/status')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Atualizar status do plano de carreira' })
-  updateCareerPlanStatus(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: { status: string },
-  ) {
+  updateCareerPlanStatus(@Param('id', ParseIntPipe) id: number, @Body() body: { status: string }) {
     return this.svc.updateCareerPlanStatus(id, body.status);
   }
 
@@ -232,10 +236,7 @@ export class EmployeesController {
   @Patch('pdis/:id/progress')
   @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
   @ApiOperation({ summary: 'Atualizar progresso do PDI' })
-  updatePdiProgress(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdatePdiProgressDto,
-  ) {
+  updatePdiProgress(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePdiProgressDto) {
     return this.svc.updatePdiProgress(id, dto);
   }
 
@@ -331,10 +332,7 @@ export class EmployeesController {
   @Post(':id/timeline')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Adicionar evento manual à timeline' })
-  addTimelineEvent(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CreateTimelineEventDto,
-  ) {
+  addTimelineEvent(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateTimelineEventDto) {
     return this.svc.addTimelineEvent({ ...dto, employeeId: id });
   }
 
@@ -346,30 +344,21 @@ export class EmployeesController {
   @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
   @ApiOperation({ summary: 'Solicitações de autoatendimento' })
   @ApiQuery({ name: 'status', required: false })
-  getRequests(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('status') status?: string,
-  ) {
+  getRequests(@Param('id', ParseIntPipe) id: number, @Query('status') status?: string) {
     return this.svc.getRequests(id, status);
   }
 
   @Post(':id/requests')
   @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
   @ApiOperation({ summary: 'Criar solicitação de autoatendimento' })
-  createRequest(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CreateSelfServiceRequestDto,
-  ) {
+  createRequest(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateSelfServiceRequestDto) {
     return this.svc.createRequest({ ...dto, employeeId: id });
   }
 
   @Patch('requests/:id/review')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Aprovar ou rejeitar solicitação' })
-  reviewRequest(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: ReviewRequestDto,
-  ) {
+  reviewRequest(@Param('id', ParseIntPipe) id: number, @Body() dto: ReviewRequestDto) {
     return this.svc.reviewRequest(id, dto);
   }
 
@@ -399,10 +388,7 @@ export class EmployeesController {
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Log de auditoria do perfil do colaborador' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  getAuditLog(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('limit') limit?: string,
-  ) {
+  getAuditLog(@Param('id', ParseIntPipe) id: number, @Query('limit') limit?: string) {
     return this.svc.getAuditLog(id, limit ? +limit : 50);
   }
 }

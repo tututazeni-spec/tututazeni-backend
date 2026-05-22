@@ -4,44 +4,91 @@
 // ============================================================
 
 import {
-  IsString, IsOptional, IsBoolean, IsEnum, IsInt, IsArray,
-  IsNumber, Min, Max, IsUrl, ValidateNested, IsDateString,
-  IsNotEmpty, MaxLength, MinLength, IsPositive,
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsArray,
+  IsNumber,
+  Min,
+  Max,
+  IsUrl,
+  IsDateString,
+  IsNotEmpty,
+  MaxLength,
+  IsPositive,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 // -------------------------------------------------------
 // ENUMS (espelhar do Prisma)
 // -------------------------------------------------------
-export enum TenantPlan { STARTER = 'STARTER', GROWTH = 'GROWTH', ENTERPRISE = 'ENTERPRISE', CUSTOM = 'CUSTOM' }
-export enum SsoProvider { GOOGLE = 'GOOGLE', MICROSOFT = 'MICROSOFT', SAML = 'SAML', OIDC = 'OIDC', SLACK = 'SLACK' }
+export enum TenantPlan {
+  STARTER = 'STARTER',
+  GROWTH = 'GROWTH',
+  ENTERPRISE = 'ENTERPRISE',
+  CUSTOM = 'CUSTOM',
+}
+export enum SsoProvider {
+  GOOGLE = 'GOOGLE',
+  MICROSOFT = 'MICROSOFT',
+  SAML = 'SAML',
+  OIDC = 'OIDC',
+  SLACK = 'SLACK',
+}
 export enum IntegrationType {
-  ERP_HR = 'ERP_HR', PAYROLL = 'PAYROLL', ATS = 'ATS',
-  MICROSOFT_TEAMS = 'MICROSOFT_TEAMS', SLACK = 'SLACK',
-  SSO_GOOGLE = 'SSO_GOOGLE', SSO_MICROSOFT = 'SSO_MICROSOFT',
-  SCORM_PROVIDER = 'SCORM_PROVIDER', XAPI_LRS = 'XAPI_LRS',
-  BI_TOOL = 'BI_TOOL', CUSTOM_WEBHOOK = 'CUSTOM_WEBHOOK',
+  ERP_HR = 'ERP_HR',
+  PAYROLL = 'PAYROLL',
+  ATS = 'ATS',
+  MICROSOFT_TEAMS = 'MICROSOFT_TEAMS',
+  SLACK = 'SLACK',
+  SSO_GOOGLE = 'SSO_GOOGLE',
+  SSO_MICROSOFT = 'SSO_MICROSOFT',
+  SCORM_PROVIDER = 'SCORM_PROVIDER',
+  XAPI_LRS = 'XAPI_LRS',
+  BI_TOOL = 'BI_TOOL',
+  CUSTOM_WEBHOOK = 'CUSTOM_WEBHOOK',
 }
 export enum IntegrationStatus {
-  ACTIVE = 'ACTIVE', INACTIVE = 'INACTIVE', ERROR = 'ERROR',
-  PENDING_AUTH = 'PENDING_AUTH', RATE_LIMITED = 'RATE_LIMITED',
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  ERROR = 'ERROR',
+  PENDING_AUTH = 'PENDING_AUTH',
+  RATE_LIMITED = 'RATE_LIMITED',
 }
 export enum SyncFrequency {
-  REALTIME = 'REALTIME', HOURLY = 'HOURLY', DAILY = 'DAILY',
-  WEEKLY = 'WEEKLY', MANUAL = 'MANUAL',
+  REALTIME = 'REALTIME',
+  HOURLY = 'HOURLY',
+  DAILY = 'DAILY',
+  WEEKLY = 'WEEKLY',
+  MANUAL = 'MANUAL',
 }
 export enum AutomationTrigger {
-  USER_HIRED = 'USER_HIRED', USER_PROMOTED = 'USER_PROMOTED',
-  USER_TRANSFERRED = 'USER_TRANSFERRED', USER_OFFBOARDED = 'USER_OFFBOARDED',
-  COURSE_COMPLETED = 'COURSE_COMPLETED', CERTIFICATE_EXPIRED = 'CERTIFICATE_EXPIRED',
-  TRAIL_COMPLETED = 'TRAIL_COMPLETED', SCHEDULED_CRON = 'SCHEDULED_CRON',
-  WEBHOOK_EVENT = 'WEBHOOK_EVENT', MANUAL = 'MANUAL',
+  USER_HIRED = 'USER_HIRED',
+  USER_PROMOTED = 'USER_PROMOTED',
+  USER_TRANSFERRED = 'USER_TRANSFERRED',
+  USER_OFFBOARDED = 'USER_OFFBOARDED',
+  COURSE_COMPLETED = 'COURSE_COMPLETED',
+  CERTIFICATE_EXPIRED = 'CERTIFICATE_EXPIRED',
+  TRAIL_COMPLETED = 'TRAIL_COMPLETED',
+  SCHEDULED_CRON = 'SCHEDULED_CRON',
+  WEBHOOK_EVENT = 'WEBHOOK_EVENT',
+  MANUAL = 'MANUAL',
 }
-export enum AlertSeverity { INFO = 'INFO', WARNING = 'WARNING', CRITICAL = 'CRITICAL' }
+export enum AlertSeverity {
+  INFO = 'INFO',
+  WARNING = 'WARNING',
+  CRITICAL = 'CRITICAL',
+}
 export enum AlertCategory {
-  PERFORMANCE = 'PERFORMANCE', SECURITY = 'SECURITY', INTEGRATION = 'INTEGRATION',
-  STORAGE = 'STORAGE', SLA_BREACH = 'SLA_BREACH', AUTOMATION = 'AUTOMATION', COMPLIANCE = 'COMPLIANCE',
+  PERFORMANCE = 'PERFORMANCE',
+  SECURITY = 'SECURITY',
+  INTEGRATION = 'INTEGRATION',
+  STORAGE = 'STORAGE',
+  SLA_BREACH = 'SLA_BREACH',
+  AUTOMATION = 'AUTOMATION',
+  COMPLIANCE = 'COMPLIANCE',
 }
 
 // -------------------------------------------------------
@@ -64,7 +111,10 @@ export class CreateTenantConfigDto {
   @ApiPropertyOptional() @IsOptional() @IsString() defaultTimezone?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() defaultCurrency?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() ssoEnabled?: boolean;
-  @ApiPropertyOptional({ enum: SsoProvider }) @IsOptional() @IsEnum(SsoProvider) ssoProvider?: SsoProvider;
+  @ApiPropertyOptional({ enum: SsoProvider })
+  @IsOptional()
+  @IsEnum(SsoProvider)
+  ssoProvider?: SsoProvider;
   @ApiPropertyOptional() @IsOptional() @IsString() ssoConfigJson?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() offlineModeEnabled?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() adaptiveBitrate?: boolean;
@@ -83,9 +133,16 @@ export class CreateIntegrationConfigDto {
   @ApiPropertyOptional() @IsOptional() @IsUrl() baseUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() authType?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() credentialsJson?: string;
-  @ApiPropertyOptional({ enum: SyncFrequency }) @IsOptional() @IsEnum(SyncFrequency) syncFrequency?: SyncFrequency;
+  @ApiPropertyOptional({ enum: SyncFrequency })
+  @IsOptional()
+  @IsEnum(SyncFrequency)
+  syncFrequency?: SyncFrequency;
   @ApiPropertyOptional() @IsOptional() @IsUrl() webhookUrl?: string;
-  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) webhookEvents?: string[];
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  webhookEvents?: string[];
   @ApiPropertyOptional() @IsOptional() @IsString() configJson?: string;
 }
 
@@ -99,13 +156,13 @@ export class TriggerSyncDto {
 // AUTOMATION RULE
 // -------------------------------------------------------
 export class AutomationConditionDto {
-  @ApiProperty() @IsString() field: string;   // ex: "departmentId"
+  @ApiProperty() @IsString() field: string; // ex: "departmentId"
   @ApiProperty() @IsString() operator: string; // EQ | NEQ | IN | NOT_IN | GT | LT
-  @ApiProperty() value: any;                   // valor da condição
+  @ApiProperty() value: any; // valor da condição
 }
 
 export class AutomationActionDto {
-  @ApiProperty() @IsString() type: string;     // ENROLL_COURSE | ASSIGN_TRAIL | SEND_NOTIFICATION | GRANT_BADGE | REVOKE_ACCESS
+  @ApiProperty() @IsString() type: string; // ENROLL_COURSE | ASSIGN_TRAIL | SEND_NOTIFICATION | GRANT_BADGE | REVOKE_ACCESS
   @ApiProperty() payload: Record<string, any>; // dados específicos da ação
 }
 
@@ -113,10 +170,12 @@ export class CreateAutomationRuleDto {
   @ApiProperty() @IsString() @IsNotEmpty() tenantId: string;
   @ApiProperty() @IsString() @IsNotEmpty() @MaxLength(120) name: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
-  @ApiProperty({ enum: AutomationTrigger }) @IsEnum(AutomationTrigger) triggerType: AutomationTrigger;
-  @ApiProperty() @IsString() triggerConfigJson: string;     // JSON serializado
+  @ApiProperty({ enum: AutomationTrigger })
+  @IsEnum(AutomationTrigger)
+  triggerType: AutomationTrigger;
+  @ApiProperty() @IsString() triggerConfigJson: string; // JSON serializado
   @ApiPropertyOptional() @IsOptional() @IsString() conditionsJson?: string;
-  @ApiProperty() @IsString() actionsJson: string;           // JSON serializado
+  @ApiProperty() @IsString() actionsJson: string; // JSON serializado
   @ApiPropertyOptional() @IsOptional() @IsInt() priority?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() createdBy?: string;
 }
@@ -135,16 +194,23 @@ export class ExecuteAutomationRuleDto {
 export class BulkUserImportDto {
   @ApiProperty() @IsString() @IsNotEmpty() tenantId: string;
   @ApiProperty({ description: 'Base64 encoded CSV or JSON string' })
-  @IsString() payload: string;
+  @IsString()
+  payload: string;
 
   @ApiPropertyOptional({ enum: ['CSV', 'JSON'] })
-  @IsOptional() @IsString() format?: 'CSV' | 'JSON';
+  @IsOptional()
+  @IsString()
+  format?: 'CSV' | 'JSON';
 
   @ApiPropertyOptional({ description: 'If true, update existing users' })
-  @IsOptional() @IsBoolean() upsert?: boolean;
+  @IsOptional()
+  @IsBoolean()
+  upsert?: boolean;
 
   @ApiPropertyOptional({ description: 'Notify users after import' })
-  @IsOptional() @IsBoolean() sendWelcomeEmail?: boolean;
+  @IsOptional()
+  @IsBoolean()
+  sendWelcomeEmail?: boolean;
 }
 
 export class BulkImportResultDto {
@@ -186,7 +252,11 @@ export class UpdateContentDeliveryConfigDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) maxOfflineDays?: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() compressionEnabled?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() @IsPositive() maxVideoSizeMb?: number;
-  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) allowedFormats?: string[];
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  allowedFormats?: string[];
 }
 
 // -------------------------------------------------------
@@ -197,7 +267,9 @@ export class MetricsQueryDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
   @ApiPropertyOptional({ enum: ['1h', '6h', '24h', '7d', '30d'] })
-  @IsOptional() @IsString() window?: '1h' | '6h' | '24h' | '7d' | '30d';
+  @IsOptional()
+  @IsString()
+  window?: '1h' | '6h' | '24h' | '7d' | '30d';
 }
 
 export class CreateAlertDto {
@@ -217,8 +289,14 @@ export class ResolveAlertDto {
 
 export class AlertsQueryDto {
   @ApiPropertyOptional() @IsOptional() @IsString() tenantId?: string;
-  @ApiPropertyOptional({ enum: AlertSeverity }) @IsOptional() @IsEnum(AlertSeverity) severity?: AlertSeverity;
-  @ApiPropertyOptional({ enum: AlertCategory }) @IsOptional() @IsEnum(AlertCategory) category?: AlertCategory;
+  @ApiPropertyOptional({ enum: AlertSeverity })
+  @IsOptional()
+  @IsEnum(AlertSeverity)
+  severity?: AlertSeverity;
+  @ApiPropertyOptional({ enum: AlertCategory })
+  @IsOptional()
+  @IsEnum(AlertCategory)
+  category?: AlertCategory;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isResolved?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(200) limit?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) offset?: number;
@@ -279,16 +357,27 @@ export class ScalabilityDashboardDto {
 // -------------------------------------------------------
 export class LoadTestConfigDto {
   @ApiProperty({ description: 'Concurrent virtual users' })
-  @IsInt() @Min(1) @Max(10000) concurrentUsers: number;
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  concurrentUsers: number;
 
   @ApiProperty({ description: 'Duration in seconds' })
-  @IsInt() @Min(30) @Max(3600) durationSeconds: number;
+  @IsInt()
+  @Min(30)
+  @Max(3600)
+  durationSeconds: number;
 
   @ApiPropertyOptional({ description: 'Ramp-up seconds' })
-  @IsOptional() @IsInt() @Min(0) rampUpSeconds?: number;
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  rampUpSeconds?: number;
 
   @ApiProperty({ description: 'Target URL or endpoint pattern' })
-  @IsString() @IsNotEmpty() targetEndpoint: string;
+  @IsString()
+  @IsNotEmpty()
+  targetEndpoint: string;
 
   @ApiPropertyOptional() @IsOptional() @IsString() tenantId?: string;
 }
@@ -301,5 +390,7 @@ export class PaginationDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) offset?: number = 0;
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?: string;
-  @ApiPropertyOptional({ enum: ['asc', 'desc'] }) @IsOptional() @IsString() sortOrder?: 'asc' | 'desc';
+  @ApiPropertyOptional({ enum: ['asc', 'desc'] }) @IsOptional() @IsString() sortOrder?:
+    | 'asc'
+    | 'desc';
 }

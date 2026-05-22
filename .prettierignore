@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+load-tests
+bruno
+.husky
+prisma/migrations
+*.json
+*.md
+*.yml
+*.yaml

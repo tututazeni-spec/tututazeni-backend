@@ -1,12 +1,20 @@
 ﻿import {
-  Injectable, NotFoundException, ConflictException,
-  BadRequestException, ForbiddenException, Logger,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateLearningPathDto, UpdateLearningPathDto, LearningPathFilterDto,
-  AssignLearningPathDto, LearningPathStepDto, ReorderStepsDto,
-  AssignmentTarget, LearningPathStatus,
+  CreateLearningPathDto,
+  UpdateLearningPathDto,
+  LearningPathFilterDto,
+  AssignLearningPathDto,
+  LearningPathStepDto,
+  ReorderStepsDto,
+  AssignmentTarget,
 } from './learning-paths.dto';
 
 @Injectable()
@@ -19,7 +27,7 @@ export class LearningPathsService {
 
   private async calcTotalHours(learningPathId: number): Promise<number> {
     const steps = await this.prisma.learningPathCourse.findMany({
-      where:   { learningPathId },
+      where: { learningPathId },
       include: { course: { select: { workloadHours: true } } },
     });
     return steps.reduce((sum, s) => sum + ((s.course as any)?.workloadHours ?? 0), 0);
@@ -32,22 +40,24 @@ export class LearningPathsService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (status)              where.status    = status;
-    if (level)               where.level     = level;
-    if (pathType)            where.pathType  = pathType;
+    if (status) where.status = status;
+    if (level) where.level = level;
+    if (pathType) where.pathType = pathType;
     if (mandatory !== undefined) where.mandatory = mandatory;
-    if (category)            where.category  = category;
+    if (category) where.category = category;
     if (search) {
       where.OR = [
-        { title:            { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } },
         { shortDescription: { contains: search, mode: 'insensitive' } },
-        { tags:             { has: search } },
+        { tags: { has: search } },
       ];
     }
 
     const [data, total] = await Promise.all([
       this.prisma.learningPath.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
           _count: { select: { courses: true, assignments: true, enrollments: true } },
         },
@@ -68,15 +78,20 @@ export class LearningPathsService {
           include: {
             course: {
               select: {
-                id: true, title: true, thumbnailUrl: true, category: true,
-                level: true, workloadHours: true, status: true,
+                id: true,
+                title: true,
+                thumbnailUrl: true,
+                category: true,
+                level: true,
+                workloadHours: true,
+                status: true,
                 _count: { select: { modules: true } },
               },
             },
           },
         },
         milestones: { orderBy: { seq: 'asc' } },
-        _count:     { select: { courses: true, assignments: true, enrollments: true } },
+        _count: { select: { courses: true, assignments: true, enrollments: true } },
       },
     });
     if (!lp) throw new NotFoundException('Trilha de aprendizagem não encontrada');
@@ -90,27 +105,30 @@ export class LearningPathsService {
 
     const lp = await this.prisma.learningPath.create({
       data: {
-        title:            data.title,
+        title: data.title,
         shortDescription: data.shortDescription,
-        description:      data.description,
-        objective:        data.objective,
-        thumbnailUrl:     data.thumbnailUrl,
-        category:         data.category,
-        tags:             data.tags       ?? [],
-        level:            data.level      ?? 'BEGINNER',
-        pathType:         data.pathType   ?? 'CUSTOM',
-        progressionType:  data.progressionType ?? 'SEQUENTIAL',
-        status:           data.status     ?? 'DRAFT',
-        mandatory:        data.mandatory  ?? false,
-        language:         data.language   ?? 'pt',
-        deadline:         data.deadline   ? new Date(data.deadline) : null,
+        description: data.description,
+        objective: data.objective,
+        thumbnailUrl: data.thumbnailUrl,
+        category: data.category,
+        tags: data.tags ?? [],
+        level: data.level ?? 'BEGINNER',
+        pathType: data.pathType ?? 'CUSTOM',
+        progressionType: data.progressionType ?? 'SEQUENTIAL',
+        status: data.status ?? 'DRAFT',
+        mandatory: data.mandatory ?? false,
+        language: data.language ?? 'pt',
+        deadline: data.deadline ? new Date(data.deadline) : null,
       },
     });
 
     if (courseIds?.length) {
       await this.prisma.learningPathCourse.createMany({
         data: courseIds.map((courseId, seq) => ({
-          learningPathId: lp.id, courseId, seq, required: true,
+          learningPathId: lp.id,
+          courseId,
+          seq,
+          required: true,
         })),
       });
     }
@@ -119,7 +137,7 @@ export class LearningPathsService {
     const totalHours = await this.calcTotalHours(lp.id);
     await this.prisma.learningPath.update({
       where: { id: lp.id },
-      data:  { totalHours },
+      data: { totalHours },
     });
 
     return this.findOne(lp.id);
@@ -133,17 +151,20 @@ export class LearningPathsService {
       await this.prisma.learningPathCourse.deleteMany({ where: { learningPathId: id } });
       await this.prisma.learningPathCourse.createMany({
         data: courseIds.map((courseId, seq) => ({
-          learningPathId: id, courseId, seq, required: true,
+          learningPathId: id,
+          courseId,
+          seq,
+          required: true,
         })),
       });
     }
 
     const updated = await this.prisma.learningPath.update({
       where: { id },
-      data:  {
+      data: {
         ...data,
         deadline: data.deadline ? new Date(data.deadline) : undefined,
-        tags:     data.tags ?? undefined,
+        tags: data.tags ?? undefined,
       },
     });
 
@@ -153,13 +174,13 @@ export class LearningPathsService {
   }
 
   async publish(id: number) {
-    const lp = await this.findOne(id) as any;
+    const lp = (await this.findOne(id)) as any;
     if (lp._count.courses === 0) {
       throw new BadRequestException('Trilha sem conteúdos não pode ser publicada');
     }
     return this.prisma.learningPath.update({
       where: { id },
-      data:  { status: 'PUBLISHED', publishedAt: new Date() },
+      data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
   }
 
@@ -169,13 +190,22 @@ export class LearningPathsService {
   }
 
   async duplicate(id: number) {
-    const original = await this.findOne(id) as any;
-    const { id: _, courses, milestones, _count, createdAt, updatedAt, publishedAt, ...data } = original;
+    const original = (await this.findOne(id)) as any;
+    const {
+      id: _,
+      courses,
+      milestones,
+      _count,
+      createdAt,
+      updatedAt,
+      publishedAt,
+      ...data
+    } = original;
 
     const clone = await this.prisma.learningPath.create({
       data: {
         ...data,
-        title:  `${data.title} (cópia)`,
+        title: `${data.title} (cópia)`,
         status: 'DRAFT',
       },
     });
@@ -185,10 +215,10 @@ export class LearningPathsService {
       await this.prisma.learningPathCourse.createMany({
         data: courses.map((lpc: any) => ({
           learningPathId: clone.id,
-          courseId:       lpc.courseId,
-          seq:            lpc.seq,
-          required:       lpc.required,
-          deadlineDays:   lpc.deadlineDays,
+          courseId: lpc.courseId,
+          seq: lpc.seq,
+          required: lpc.required,
+          deadlineDays: lpc.deadlineDays,
         })),
       });
     }
@@ -197,7 +227,12 @@ export class LearningPathsService {
     if (milestones.length) {
       for (const m of milestones) {
         await this.prisma.learningPathMilestone.create({
-          data: { learningPathId: clone.id, title: m.title, description: m.description, seq: m.seq },
+          data: {
+            learningPathId: clone.id,
+            title: m.title,
+            description: m.description,
+            seq: m.seq,
+          },
         });
       }
     }
@@ -206,9 +241,11 @@ export class LearningPathsService {
   }
 
   async remove(id: number) {
-    const lp = await this.findOne(id) as any;
+    const lp = (await this.findOne(id)) as any;
     if (lp.status === 'PUBLISHED' && lp._count.enrollments > 0) {
-      throw new ForbiddenException('Trilha publicada com matrículas não pode ser eliminada. Archive-a primeiro.');
+      throw new ForbiddenException(
+        'Trilha publicada com matrículas não pode ser eliminada. Archive-a primeiro.',
+      );
     }
     await this.prisma.learningPath.delete({ where: { id } });
     return { message: 'Trilha eliminada' };
@@ -226,16 +263,16 @@ export class LearningPathsService {
       where: { learningPathId_courseId: { learningPathId, courseId: dto.courseId } },
       create: {
         learningPathId,
-        courseId:     dto.courseId,
-        seq:          dto.seq,
-        required:     dto.required ?? true,
-        milestoneId:  dto.milestoneId,
+        courseId: dto.courseId,
+        seq: dto.seq,
+        required: dto.required ?? true,
+        milestoneId: dto.milestoneId,
         deadlineDays: dto.deadlineDays,
       },
       update: {
-        seq:          dto.seq,
-        required:     dto.required ?? true,
-        milestoneId:  dto.milestoneId,
+        seq: dto.seq,
+        required: dto.required ?? true,
+        milestoneId: dto.milestoneId,
         deadlineDays: dto.deadlineDays,
       },
     });
@@ -259,16 +296,19 @@ export class LearningPathsService {
       dto.order.map(({ courseId, seq }) =>
         this.prisma.learningPathCourse.update({
           where: { learningPathId_courseId: { learningPathId, courseId } },
-          data:  { seq },
-        })
-      )
+          data: { seq },
+        }),
+      ),
     );
     return this.findOne(learningPathId);
   }
 
   // ─── MILESTONES ────────────────────────────────────────────────────────────
 
-  async createMilestone(learningPathId: number, dto: { title: string; description?: string; seq: number }) {
+  async createMilestone(
+    learningPathId: number,
+    dto: { title: string; description?: string; seq: number },
+  ) {
     await this.findOne(learningPathId);
     return this.prisma.learningPathMilestone.create({
       data: { learningPathId, ...dto },
@@ -282,7 +322,7 @@ export class LearningPathsService {
   // ─── ATRIBUIÇÃO ───────────────────────────────────────────────────────────
 
   async assign(dto: AssignLearningPathDto) {
-    const lp = await this.findOne(dto.learningPathId) as any;
+    const lp = (await this.findOne(dto.learningPathId)) as any;
     if (lp.status !== 'PUBLISHED') {
       throw new BadRequestException('Apenas trilhas publicadas podem ser atribuídas');
     }
@@ -321,17 +361,17 @@ export class LearningPathsService {
     const assignment = await this.prisma.learningPathAssignment.create({
       data: {
         learningPathId: dto.learningPathId,
-        targetType:     dto.targetType,
-        targetId:       dto.targetId,
-        mandatory:      dto.mandatory ?? lp.mandatory ?? false,
-        deadline:       dto.deadline ? new Date(dto.deadline) : lp.deadline,
+        targetType: dto.targetType,
+        targetId: dto.targetId,
+        mandatory: dto.mandatory ?? lp.mandatory ?? false,
+        deadline: dto.deadline ? new Date(dto.deadline) : lp.deadline,
       },
     });
 
     // Matricular utilizadores
     const results = await this.enrollUsersInPath(dto.learningPathId, userIds, {
       mandatory: dto.mandatory,
-      deadline:  dto.deadline,
+      deadline: dto.deadline,
     });
 
     return { assignment, ...results };
@@ -339,7 +379,7 @@ export class LearningPathsService {
 
   async getAssignments(learningPathId: number) {
     return this.prisma.learningPathAssignment.findMany({
-      where:   { learningPathId },
+      where: { learningPathId },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -351,7 +391,7 @@ export class LearningPathsService {
     userIds: number[],
     opts: { mandatory?: boolean; deadline?: string } = {},
   ) {
-    const lp = await this.findOne(learningPathId) as any;
+    const lp = (await this.findOne(learningPathId)) as any;
     const courses: any[] = lp.courses;
 
     const results = { enrolled: 0, skipped: 0, total: userIds.length };
@@ -359,13 +399,13 @@ export class LearningPathsService {
     for (const userId of userIds) {
       // Criar matrícula na trilha
       await this.prisma.learningPathEnrollment.upsert({
-        where:  { learningPathId_userId: { learningPathId, userId } },
+        where: { learningPathId_userId: { learningPathId, userId } },
         create: {
           learningPathId,
           userId,
-          status:    'NOT_STARTED',
+          status: 'NOT_STARTED',
           mandatory: opts.mandatory ?? lp.mandatory ?? false,
-          deadline:  opts.deadline ? new Date(opts.deadline) : lp.deadline,
+          deadline: opts.deadline ? new Date(opts.deadline) : lp.deadline,
         },
         update: {},
       });
@@ -379,9 +419,9 @@ export class LearningPathsService {
           await this.prisma.enrollment.create({
             data: {
               userId,
-              courseId:  lpc.courseId,
+              courseId: lpc.courseId,
               mandatory: lpc.required && (opts.mandatory ?? lp.mandatory ?? false),
-              status:    'NOT_STARTED',
+              status: 'NOT_STARTED',
             },
           });
           results.enrolled++;
@@ -391,21 +431,23 @@ export class LearningPathsService {
       }
 
       // Notificar
-      await this.prisma.notificationLog.create({
-        data: {
-          userId,
-          type:     'LEARNING_PATH_ASSIGNED',
-          message:  `A trilha "${lp.title}" foi atribuída a si`,
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId,
+            type: 'LEARNING_PATH_ASSIGNED',
+            message: `A trilha "${lp.title}" foi atribuída a si`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
     }
 
     return results;
   }
 
   async selfEnroll(learningPathId: number, userId: number) {
-    const lp = await this.findOne(learningPathId) as any;
+    const lp = (await this.findOne(learningPathId)) as any;
     if (lp.status !== 'PUBLISHED') {
       throw new BadRequestException('Apenas trilhas publicadas aceitam matrículas');
     }
@@ -421,7 +463,7 @@ export class LearningPathsService {
   // ─── PROGRESSO ────────────────────────────────────────────────────────────
 
   async getMyProgress(learningPathId: number, userId: number) {
-    const lp = await this.findOne(learningPathId) as any;
+    const lp = (await this.findOne(learningPathId)) as any;
     const enrollment = await this.prisma.learningPathEnrollment.findFirst({
       where: { learningPathId, userId },
     });
@@ -438,30 +480,33 @@ export class LearningPathsService {
         // Verificar se está desbloqueado
         let locked = false;
         if (progressionType === 'SEQUENTIAL' && idx > 0) {
-          const prevStep      = steps[idx - 1];
-          const prevEnrollment= await this.prisma.enrollment.findFirst({
+          const prevStep = steps[idx - 1];
+          const prevEnrollment = await this.prisma.enrollment.findFirst({
             where: { userId, courseId: prevStep.courseId },
           });
           locked = prevEnrollment?.status !== 'COMPLETED';
         }
 
         return {
-          seq:           step.seq,
-          courseId:      step.courseId,
-          required:      step.required,
-          deadlineDays:  step.deadlineDays,
-          course:        step.course,
-          status:        courseEnrollment?.status ?? 'NOT_ENROLLED',
+          seq: step.seq,
+          courseId: step.courseId,
+          required: step.required,
+          deadlineDays: step.deadlineDays,
+          course: step.course,
+          status: courseEnrollment?.status ?? 'NOT_ENROLLED',
           locked,
-          completedAt:   courseEnrollment?.completedAt ?? null,
-          progress:      courseEnrollment?.status === 'COMPLETED' ? 100 : 0,
+          completedAt: courseEnrollment?.completedAt ?? null,
+          progress: courseEnrollment?.status === 'COMPLETED' ? 100 : 0,
         };
-      })
+      }),
     );
 
-    const completedRequired = stepsWithProgress.filter(s => s.required && s.status === 'COMPLETED').length;
-    const totalRequired     = stepsWithProgress.filter(s => s.required).length;
-    const overallPct        = totalRequired > 0 ? Math.round((completedRequired / totalRequired) * 100) : 0;
+    const completedRequired = stepsWithProgress.filter(
+      s => s.required && s.status === 'COMPLETED',
+    ).length;
+    const totalRequired = stepsWithProgress.filter(s => s.required).length;
+    const overallPct =
+      totalRequired > 0 ? Math.round((completedRequired / totalRequired) * 100) : 0;
 
     // Verificar conclusão automática
     if (enrollment && enrollment.status !== 'COMPLETED' && overallPct >= 100) {
@@ -475,9 +520,9 @@ export class LearningPathsService {
       overallPct,
       completedRequired,
       totalRequired,
-      totalSteps:    steps.length,
-      steps:         stepsWithProgress,
-      isOverdue:     enrollment?.deadline ? new Date() > new Date(enrollment.deadline) : false,
+      totalSteps: steps.length,
+      steps: stepsWithProgress,
+      isOverdue: enrollment?.deadline ? new Date() > new Date(enrollment.deadline) : false,
     };
   }
 
@@ -488,28 +533,32 @@ export class LearningPathsService {
     if (!existing) return;
 
     await this.prisma.learningPathEnrollment.update({
-      where:  { id: existing.id },
-      data:   { status: 'COMPLETED', completedAt: new Date() },
+      where: { id: existing.id },
+      data: { status: 'COMPLETED', completedAt: new Date() },
     });
 
     const lp = await this.prisma.learningPath.findUnique({ where: { id: learningPathId } });
 
     // Gamificação
-    await this.prisma.userPoints.upsert({
-      where:  { userId },
-      create: { userId, points: 200 },
-      update: { points: { increment: 200 } },
-    }).catch(() => {});
+    await this.prisma.userPoints
+      .upsert({
+        where: { userId },
+        create: { userId, points: 200 },
+        update: { points: { increment: 200 } },
+      })
+      .catch(() => {});
 
     // Notificar
-    await this.prisma.notificationLog.create({
-      data: {
-        userId,
-        type:     'LEARNING_PATH_COMPLETED',
-        message:  `Concluíste a trilha "${lp?.title}"! 🎉`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId,
+          type: 'LEARNING_PATH_COMPLETED',
+          message: `Concluíste a trilha "${lp?.title}"! 🎉`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
     this.logger.log(`Learning Path ${learningPathId} concluída por user ${userId}`);
   }
@@ -518,12 +567,18 @@ export class LearningPathsService {
 
   async getMyEnrollments(userId: number) {
     return this.prisma.learningPathEnrollment.findMany({
-      where:   { userId },
+      where: { userId },
       include: {
         learningPath: {
           select: {
-            id: true, title: true, thumbnailUrl: true, category: true,
-            level: true, pathType: true, totalHours: true, status: true,
+            id: true,
+            title: true,
+            thumbnailUrl: true,
+            category: true,
+            level: true,
+            pathType: true,
+            totalHours: true,
+            status: true,
             _count: { select: { courses: true } },
           },
         },
@@ -540,35 +595,38 @@ export class LearningPathsService {
     const [totalEnrollments, completed, inProgress, notStarted, overdueCount] = await Promise.all([
       this.prisma.learningPathEnrollment.count({ where: { learningPathId } }),
       this.prisma.learningPathEnrollment.count({ where: { learningPathId, status: 'COMPLETED' } }),
-      this.prisma.learningPathEnrollment.count({ where: { learningPathId, status: 'IN_PROGRESS' } }),
-      this.prisma.learningPathEnrollment.count({ where: { learningPathId, status: 'NOT_STARTED' } }),
+      this.prisma.learningPathEnrollment.count({
+        where: { learningPathId, status: 'IN_PROGRESS' },
+      }),
+      this.prisma.learningPathEnrollment.count({
+        where: { learningPathId, status: 'NOT_STARTED' },
+      }),
       this.prisma.learningPathEnrollment.count({
         where: {
           learningPathId,
-          deadline:  { lt: new Date() },
-          status:    { notIn: ['COMPLETED', 'EXPIRED'] },
+          deadline: { lt: new Date() },
+          status: { notIn: ['COMPLETED', 'EXPIRED'] },
         },
       }),
     ]);
 
-    const completionRate = totalEnrollments > 0
-      ? Math.round((completed / totalEnrollments) * 100)
-      : 0;
+    const completionRate =
+      totalEnrollments > 0 ? Math.round((completed / totalEnrollments) * 100) : 0;
 
     // Step-level drop-off
-    const lp = await this.findOne(learningPathId) as any;
+    const lp = (await this.findOne(learningPathId)) as any;
     const stepDropoff = await Promise.all(
       (lp.courses as any[]).map(async (step: any) => {
         const stepCompleted = await this.prisma.enrollment.count({
           where: { courseId: step.courseId, status: 'COMPLETED' },
         });
         return {
-          seq:       step.seq,
-          courseId:  step.courseId,
-          title:     step.course?.title ?? '—',
+          seq: step.seq,
+          courseId: step.courseId,
+          title: step.course?.title ?? '—',
           completed: stepCompleted,
         };
-      })
+      }),
     );
 
     return {
@@ -591,18 +649,17 @@ export class LearningPathsService {
     ]);
 
     const topPaths = await this.prisma.learningPath.findMany({
-      where:   { status: 'PUBLISHED' },
+      where: { status: 'PUBLISHED' },
       include: { _count: { select: { enrollments: true } } },
       orderBy: { enrollments: { _count: 'desc' } },
-      take:    5,
+      take: 5,
     });
 
     return {
-      paths:       { total: totalPaths, published },
+      paths: { total: totalPaths, published },
       enrollments: { total: totalEnrollments, completed: completedEnrollments },
-      completionRate: totalEnrollments > 0
-        ? Math.round((completedEnrollments / totalEnrollments) * 100)
-        : 0,
+      completionRate:
+        totalEnrollments > 0 ? Math.round((completedEnrollments / totalEnrollments) * 100) : 0,
       topPaths,
     };
   }

@@ -1,20 +1,30 @@
 // src/leader/leader.controller.ts
 import {
-  Controller, Get, Post, Patch, Body, Param, Query,
-  ParseIntPipe, UseGuards,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { LeaderService }    from './leader.service';
-import { JwtAuthGuard }     from '../common/guards/jwt-auth.guard';
-import { RolesGuard }       from '../common/guards/roles.guard';
+import { LeaderService } from './leader.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 import {
-  CreateLeaderProfileDto, GiveFeedbackDto, CreateOneOnOneDto,
-  AssignCourseDto, TeamFilterDto, AlertFilterDto,
+  CreateLeaderProfileDto,
+  GiveFeedbackDto,
+  CreateOneOnOneDto,
+  AssignCourseDto,
+  TeamFilterDto,
 } from './leader.dto';
 
-const ALL_MGMT  = ['ADMIN', 'RH', 'LIDER', 'DIRECTOR'] as const;
-const ADMIN     = ['ADMIN', 'RH']                       as const;
+const ALL_MGMT = ['ADMIN', 'RH', 'LIDER', 'DIRECTOR'] as const;
+const ADMIN = ['ADMIN', 'RH'] as const;
 
 @ApiTags('Leader — Team Management')
 @ApiBearerAuth()
@@ -28,7 +38,9 @@ export class LeaderController {
   @Get()
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Listar todos os líderes da organização' })
-  getLeaders() { return this.svc.getLeaders(); }
+  getLeaders() {
+    return this.svc.getLeaders();
+  }
 
   // ─── Personal dashboard (my view) ─────────────────────────────
 
@@ -79,10 +91,7 @@ export class LeaderController {
   @Get('my-team/member/:memberId')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Perfil completo de um membro da equipa' })
-  memberProfile(
-    @CurrentUser() user: any,
-    @Param('memberId', ParseIntPipe) memberId: number,
-  ) {
+  memberProfile(@CurrentUser() user: any, @Param('memberId', ParseIntPipe) memberId: number) {
     return this.svc.getMemberProfile(user.id, memberId);
   }
 
@@ -137,10 +146,7 @@ export class LeaderController {
   @Patch('1on1/:id/complete')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Concluir reunião 1:1 com notas/actas' })
-  complete1on1(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: { notes: string },
-  ) {
+  complete1on1(@Param('id', ParseIntPipe) id: number, @Body() body: { notes: string }) {
     return this.svc.completeOneOnOne(id, body.notes);
   }
 

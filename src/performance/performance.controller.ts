@@ -1,19 +1,35 @@
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PerformanceService } from './performance.service';
 import {
-  CreateCycleDto, UpdateCycleDto,
-  CreatePerformanceReviewDto, UpdatePerformanceReviewDto,
-  SubmitReviewDto, CreateGoalDto, UpdateGoalDto, UpdatePerformanceGoalProgressDto,
-  CreateFeedbackDto, CalibrateReviewDto, CreateDisputeDto,
-  Update9BoxDto, PerformanceFilterDto,
+  CreateCycleDto,
+  CreatePerformanceReviewDto,
+  UpdatePerformanceReviewDto,
+  SubmitReviewDto,
+  CreateGoalDto,
+  UpdatePerformanceGoalProgressDto,
+  CreateFeedbackDto,
+  CalibrateReviewDto,
+  CreateDisputeDto,
+  Update9BoxDto,
+  PerformanceFilterDto,
 } from './performance.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Performance')
@@ -27,33 +43,45 @@ export class PerformanceController {
 
   @Get('cycles')
   @ApiOperation({ summary: 'Listar ciclos de avaliação' })
-  getCycles() { return this.svc.getCycles(); }
+  getCycles() {
+    return this.svc.getCycles();
+  }
 
   @Get('cycles/current')
   @ApiOperation({ summary: 'Ciclo de avaliação activo' })
-  getCurrentCycle() { return this.svc.getCurrentCycle(); }
+  getCurrentCycle() {
+    return this.svc.getCurrentCycle();
+  }
 
   @Post('cycles')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar ciclo de avaliação' })
-  createCycle(@Body() dto: CreateCycleDto) { return this.svc.createCycle(dto); }
+  createCycle(@Body() dto: CreateCycleDto) {
+    return this.svc.createCycle(dto);
+  }
 
   @Patch('cycles/:id/activate')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Activar ciclo (notifica todos os colaboradores)' })
   @HttpCode(HttpStatus.OK)
-  activateCycle(@Param('id', ParseIntPipe) id: number) { return this.svc.activateCycle(id); }
+  activateCycle(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.activateCycle(id);
+  }
 
   // ── Reviews ────────────────────────────────────────────────────────────────
 
   @Get()
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Listar avaliações com filtros' })
-  findAll(@Query() filters: PerformanceFilterDto) { return this.svc.findAll(filters); }
+  findAll(@Query() filters: PerformanceFilterDto) {
+    return this.svc.findAll(filters);
+  }
 
   @Get('my')
   @ApiOperation({ summary: 'O meu histórico de performance (reviews, goals, feedback)' })
-  myHistory(@CurrentUser() user: any) { return this.svc.getUserHistory(user.id); }
+  myHistory(@CurrentUser() user: any) {
+    return this.svc.getUserHistory(user.id);
+  }
 
   @Get('my/goals')
   @ApiOperation({ summary: 'Os meus goals activos' })
@@ -80,14 +108,11 @@ export class PerformanceController {
   @Get('9box')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: '9-Box Matrix (Performance vs Potencial)' })
-  @ApiQuery({ name: 'cycleId',      required: false })
+  @ApiQuery({ name: 'cycleId', required: false })
   @ApiQuery({ name: 'departmentId', required: false })
-  get9Box(
-    @Query('cycleId')      cycleId?: string,
-    @Query('departmentId') departmentId?: string,
-  ) {
+  get9Box(@Query('cycleId') cycleId?: string, @Query('departmentId') departmentId?: string) {
     return this.svc.get9Box(
-      cycleId      ? parseInt(cycleId)      : undefined,
+      cycleId ? parseInt(cycleId) : undefined,
       departmentId ? parseInt(departmentId) : undefined,
     );
   }
@@ -102,7 +127,9 @@ export class PerformanceController {
 
   @Get('periods')
   @ApiOperation({ summary: 'Listar ciclos disponíveis' })
-  periods() { return this.svc.getPeriods(); }
+  periods() {
+    return this.svc.getPeriods();
+  }
 
   @Get('department/:departmentId/stats')
   @Roles('ADMIN', 'RH', 'GESTOR')
@@ -124,12 +151,16 @@ export class PerformanceController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe de uma avaliação' })
-  findOne(@Param('id', ParseIntPipe) id: number) { return this.svc.findOne(id); }
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findOne(id);
+  }
 
   @Post()
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar avaliação de desempenho' })
-  create(@Body() dto: CreatePerformanceReviewDto) { return this.svc.create(dto); }
+  create(@Body() dto: CreatePerformanceReviewDto) {
+    return this.svc.create(dto);
+  }
 
   @Post('submit')
   @ApiOperation({ summary: 'Submeter avaliação (self ou manager) com scores ponderados' })
@@ -148,13 +179,17 @@ export class PerformanceController {
   @Delete(':id')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Remover avaliação' })
-  remove(@Param('id', ParseIntPipe) id: number) { return this.svc.remove(id); }
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remove(id);
+  }
 
   // ── Goals ──────────────────────────────────────────────────────────────────
 
   @Post('goals')
   @ApiOperation({ summary: 'Criar goal / OKR' })
-  createGoal(@Body() dto: CreateGoalDto) { return this.svc.createGoal(dto); }
+  createGoal(@Body() dto: CreateGoalDto) {
+    return this.svc.createGoal(dto);
+  }
 
   @Patch('goals/:goalId/progress')
   @ApiOperation({ summary: 'Actualizar progresso de um goal' })
@@ -171,10 +206,7 @@ export class PerformanceController {
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Goals de um utilizador' })
   @ApiQuery({ name: 'cycleId', required: false })
-  userGoals(
-    @Param('userId', ParseIntPipe) userId: number,
-    @Query('cycleId') cycleId?: string,
-  ) {
+  userGoals(@Param('userId', ParseIntPipe) userId: number, @Query('cycleId') cycleId?: string) {
     return this.svc.getUserGoals(userId, cycleId ? parseInt(cycleId) : undefined);
   }
 
@@ -189,10 +221,7 @@ export class PerformanceController {
   @Get('feedback/user/:userId')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Feedback de um colaborador' })
-  userFeedback(
-    @Param('userId', ParseIntPipe) userId: number,
-    @Query('cycleId') cycleId?: string,
-  ) {
+  userFeedback(@Param('userId', ParseIntPipe) userId: number, @Query('cycleId') cycleId?: string) {
     return this.svc.getUserFeedback(userId, cycleId ? parseInt(cycleId) : undefined);
   }
 

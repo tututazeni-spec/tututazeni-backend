@@ -1,12 +1,20 @@
 // src/audit/audit.controller.ts
 import {
-  Controller, Get, Post, Query, Param, ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Param,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { AuditService }    from './audit.service';
-import { AuditFilterDto }  from './audit.dto';
-import { JwtAuthGuard }    from '../common/guards/jwt-auth.guard';
-import { RolesGuard }      from '../common/guards/roles.guard';
+import { AuditService } from './audit.service';
+import { AuditFilterDto } from './audit.dto';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Audit Logs')
@@ -21,28 +29,35 @@ export class AuditController {
 
   @Get()
   @ApiOperation({ summary: 'Listar logs com filtros (entity, action, severity, período, IP)' })
-  findAll(@Query() filters: AuditFilterDto) { return this.svc.findAll(filters); }
+  findAll(@Query() filters: AuditFilterDto) {
+    return this.svc.findAll(filters);
+  }
 
   @Get('stats')
   @ApiOperation({ summary: 'Estatísticas (por acção, entidade, severidade, top utilizadores)' })
-  stats() { return this.svc.getStats(); }
+  stats() {
+    return this.svc.getStats();
+  }
 
   @Get('anomalies')
-  @ApiOperation({ summary: 'Resumo de anomalias (logins suspeitos, exportações em massa, deletes)' })
-  anomalies() { return this.svc.getAnomalySummary(); }
+  @ApiOperation({
+    summary: 'Resumo de anomalias (logins suspeitos, exportações em massa, deletes)',
+  })
+  anomalies() {
+    return this.svc.getAnomalySummary();
+  }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe de um log (com diff antes/depois)' })
-  findOne(@Param('id', ParseIntPipe) id: number) { return this.svc.findOne(id); }
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findOne(id);
+  }
 
   // ── Timeline ──────────────────────────────────────────────────────────────
 
   @Get('timeline/:entity/:entityId')
   @ApiOperation({ summary: 'Timeline completa de um recurso (ex: PDI/42, User/5)' })
-  timeline(
-    @Param('entity')                      entity:   string,
-    @Param('entityId', ParseIntPipe) entityId: number,
-  ) {
+  timeline(@Param('entity') entity: string, @Param('entityId', ParseIntPipe) entityId: number) {
     return this.svc.getTimeline(entity, entityId);
   }
 

@@ -1,14 +1,25 @@
 ﻿import {
-  Injectable, NotFoundException, ConflictException,
-  BadRequestException, ForbiddenException, Logger,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateOnboardingTemplateDto, UpdateOnboardingTemplateDto,
-  CreateTemplateTaskDto, UpdateTemplateTaskDto,
-  CreateOnboardingPlanDto, CompleteTaskDto, SkipTaskDto, ApproveTaskDto,
-  UploadDocumentDto, ValidateDocumentDto, SubmitOnboardingSurveyDto,
-  OnboardingFilterDto, OnboardingStatus, TaskStatus,
+  CreateOnboardingTemplateDto,
+  UpdateOnboardingTemplateDto,
+  CreateTemplateTaskDto,
+  UpdateTemplateTaskDto,
+  CreateOnboardingPlanDto,
+  CompleteTaskDto,
+  SkipTaskDto,
+  ApproveTaskDto,
+  UploadDocumentDto,
+  ValidateDocumentDto,
+  SubmitOnboardingSurveyDto,
+  OnboardingFilterDto,
 } from './onboarding.dto';
 
 @Injectable()
@@ -22,10 +33,10 @@ export class OnboardingService {
   async findAllTemplates() {
     return this.prisma.onboardingTemplate.findMany({
       include: {
-        position:   { select: { id: true, name: true } },
+        position: { select: { id: true, name: true } },
         department: { select: { id: true, name: true } },
-        tasks:      { orderBy: { seq: 'asc' } },
-        _count:     { select: { plans: true, tasks: true } },
+        tasks: { orderBy: { seq: 'asc' } },
+        _count: { select: { plans: true, tasks: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -35,8 +46,8 @@ export class OnboardingService {
     const t = await this.prisma.onboardingTemplate.findUnique({
       where: { id },
       include: {
-        tasks:   { orderBy: { seq: 'asc' } },
-        _count:  { select: { plans: true } },
+        tasks: { orderBy: { seq: 'asc' } },
+        _count: { select: { plans: true } },
       },
     });
     if (!t) throw new NotFoundException('Template não encontrado');
@@ -54,7 +65,7 @@ export class OnboardingService {
 
   async deleteTemplate(id: number) {
     const t = await this.prisma.onboardingTemplate.findUnique({
-      where:   { id },
+      where: { id },
       include: { _count: { select: { plans: true } } },
     });
     if (!t) throw new NotFoundException('Template não encontrado');
@@ -90,19 +101,29 @@ export class OnboardingService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (status)       where.status     = status;
-    if (templateId)   where.templateId = templateId;
-    if (departmentId) where.user       = { departmentId };
+    if (status) where.status = status;
+    if (templateId) where.templateId = templateId;
+    if (departmentId) where.user = { departmentId };
 
     const [data, total] = await Promise.all([
       this.prisma.onboardingPlan.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
-          user:          { select: { id: true, fullName: true, email: true, avatarUrl: true, position: { select: { name: true } } } },
-          template:      { select: { id: true, name: true, durationDays: true } },
-          buddy:         { select: { id: true, fullName: true, avatarUrl: true } },
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              avatarUrl: true,
+              position: { select: { name: true } },
+            },
+          },
+          template: { select: { id: true, name: true, durationDays: true } },
+          buddy: { select: { id: true, fullName: true, avatarUrl: true } },
           hrResponsible: { select: { id: true, fullName: true } },
-          _count:        { select: { taskInstances: true, documents: true } },
+          _count: { select: { taskInstances: true, documents: true } },
         },
         orderBy: { startDate: 'desc' },
       }),
@@ -114,18 +135,32 @@ export class OnboardingService {
 
   async findByUser(userId: number) {
     return this.prisma.onboardingPlan.findMany({
-      where:   { userId },
+      where: { userId },
       include: {
-        template:      { select: { id: true, name: true, durationDays: true, welcomeVideoUrl: true } },
-        buddy:         { select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } } },
-        manager:       { select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } } },
+        template: { select: { id: true, name: true, durationDays: true, welcomeVideoUrl: true } },
+        buddy: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
+          },
+        },
+        manager: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
+          },
+        },
         hrResponsible: { select: { id: true, fullName: true, avatarUrl: true } },
         taskInstances: {
           include: { templateTask: true },
           orderBy: { templateTask: { seq: 'asc' } },
         },
         documents: true,
-        surveys:   { orderBy: { createdAt: 'desc' } },
+        surveys: { orderBy: { createdAt: 'desc' } },
       },
       orderBy: { startDate: 'desc' },
     });
@@ -135,26 +170,42 @@ export class OnboardingService {
     const plan = await this.prisma.onboardingPlan.findUnique({
       where: { id },
       include: {
-        user:          { select: { id: true, fullName: true, email: true, avatarUrl: true, department: { select: { name: true } }, position: { select: { name: true } } } },
-        template:      { include: { tasks: { orderBy: { seq: 'asc' } } } },
-        buddy:         { select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } } },
-        manager:       { select: { id: true, fullName: true, avatarUrl: true } },
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            avatarUrl: true,
+            department: { select: { name: true } },
+            position: { select: { name: true } },
+          },
+        },
+        template: { include: { tasks: { orderBy: { seq: 'asc' } } } },
+        buddy: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
+          },
+        },
+        manager: { select: { id: true, fullName: true, avatarUrl: true } },
         hrResponsible: { select: { id: true, fullName: true, avatarUrl: true } },
         taskInstances: {
           include: { templateTask: true, approvedBy: { select: { id: true, fullName: true } } },
           orderBy: { templateTask: { seq: 'asc' } },
         },
         documents: true,
-        surveys:   true,
+        surveys: true,
       },
     });
     if (!plan) throw new NotFoundException('Plano de onboarding não encontrado');
 
     // Calcular progresso
-    const tasks     = plan.taskInstances;
+    const tasks = plan.taskInstances;
     const completed = tasks.filter(t => t.status === 'COMPLETED').length;
-    const total     = tasks.length;
-    const progress  = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const total = tasks.length;
+    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     // Agrupar tarefas por fase e categoria
     const byPhase: Record<string, any[]> = {};
@@ -168,7 +219,7 @@ export class OnboardingService {
   }
 
   async create(dto: CreateOnboardingPlanDto) {
-    const template = await this.findOneTemplate(dto.templateId) as any;
+    const template = (await this.findOneTemplate(dto.templateId)) as any;
 
     // Verificar se já existe plano activo para este utilizador
     const existing = await this.prisma.onboardingPlan.findFirst({
@@ -180,15 +231,15 @@ export class OnboardingService {
 
     const plan = await this.prisma.onboardingPlan.create({
       data: {
-        userId:          dto.userId,
-        templateId:      dto.templateId,
+        userId: dto.userId,
+        templateId: dto.templateId,
         startDate,
         expectedEndDate: new Date(startDate.getTime() + template.durationDays * 24 * 3600 * 1000),
-        buddyId:         dto.buddyId,
-        managerId:       dto.managerId ?? null,
+        buddyId: dto.buddyId,
+        managerId: dto.managerId ?? null,
         hrResponsibleId: dto.hrResponsibleId,
-        status:          'NOT_STARTED',
-        xpEarned:        0,
+        status: 'NOT_STARTED',
+        xpEarned: 0,
       },
     });
 
@@ -196,10 +247,10 @@ export class OnboardingService {
     if (template.tasks.length > 0) {
       await this.prisma.onboardingTaskInstance.createMany({
         data: template.tasks.map((task: any) => ({
-          planId:         plan.id,
+          planId: plan.id,
           templateTaskId: task.id,
-          status:         'PENDING',
-          dueDate:        task.dueDayOffset
+          status: 'PENDING',
+          dueDate: task.dueDayOffset
             ? new Date(startDate.getTime() + task.dueDayOffset * 24 * 3600 * 1000)
             : null,
         })),
@@ -207,25 +258,29 @@ export class OnboardingService {
     }
 
     // Notificar o colaborador
-    await this.prisma.notificationLog.create({
-      data: {
-        userId:   dto.userId,
-        type:     'ONBOARDING_STARTED',
-        message:  `O seu plano de onboarding "${template.name}" foi iniciado. Bem-vindo(a)!`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: dto.userId,
+          type: 'ONBOARDING_STARTED',
+          message: `O seu plano de onboarding "${template.name}" foi iniciado. Bem-vindo(a)!`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
     // Notificar buddy
     if (dto.buddyId) {
-      await this.prisma.notificationLog.create({
-        data: {
-          userId:   dto.buddyId,
-          type:     'ONBOARDING_BUDDY_ASSIGNED',
-          message:  `Você foi atribuído como buddy de um novo colaborador`,
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: dto.buddyId,
+            type: 'ONBOARDING_BUDDY_ASSIGNED',
+            message: `Você foi atribuído como buddy de um novo colaborador`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
     }
 
     return this.findOne(plan.id);
@@ -251,14 +306,14 @@ export class OnboardingService {
     if (!template) throw new NotFoundException('Nenhum template de onboarding configurado');
 
     const user = await this.prisma.user.findUnique({
-      where:  { id: userId },
+      where: { id: userId },
       select: { managerId: true },
     });
 
     return this.create({
       userId,
-      templateId:  template.id,
-      managerId:   user?.managerId ?? undefined,
+      templateId: template.id,
+      managerId: user?.managerId ?? undefined,
     });
   }
 
@@ -266,22 +321,23 @@ export class OnboardingService {
 
   async completeTask(dto: CompleteTaskDto, userId: number) {
     const instance = await this.prisma.onboardingTaskInstance.findUnique({
-      where:   { id: dto.taskInstanceId },
+      where: { id: dto.taskInstanceId },
       include: { templateTask: true, plan: true },
     });
     if (!instance) throw new NotFoundException('Tarefa não encontrada');
     if ((instance.plan as any).userId !== userId) throw new ForbiddenException('Sem permissão');
     if (instance.status === 'COMPLETED') throw new ConflictException('Tarefa já concluída');
-    if (instance.status === 'BLOCKED') throw new BadRequestException('Tarefa bloqueada por dependências');
+    if (instance.status === 'BLOCKED')
+      throw new BadRequestException('Tarefa bloqueada por dependências');
 
     // Verificar dependências
     const dependencies = (instance.templateTask as any).dependsOn ?? [];
     if (dependencies.length > 0) {
       const blockers = await this.prisma.onboardingTaskInstance.findMany({
         where: {
-          planId:         (instance as any).planId,
+          planId: (instance as any).planId,
           templateTaskId: { in: dependencies },
-          status:         { not: 'COMPLETED' },
+          status: { not: 'COMPLETED' },
         },
       });
       if (blockers.length > 0) {
@@ -294,10 +350,10 @@ export class OnboardingService {
     await this.prisma.onboardingTaskInstance.update({
       where: { id: dto.taskInstanceId },
       data: {
-        status:          needsApproval ? 'IN_PROGRESS' : 'COMPLETED',
-        completedAt:     needsApproval ? null : new Date(),
+        status: needsApproval ? 'IN_PROGRESS' : 'COMPLETED',
+        completedAt: needsApproval ? null : new Date(),
         evidenceComment: dto.evidenceComment,
-        evidenceUrl:     dto.evidenceUrl,
+        evidenceUrl: dto.evidenceUrl,
       },
     });
 
@@ -307,13 +363,15 @@ export class OnboardingService {
       if (xp > 0) {
         await this.prisma.onboardingPlan.update({
           where: { id: (instance as any).planId },
-          data:  { xpEarned: { increment: xp } },
+          data: { xpEarned: { increment: xp } },
         });
-        await this.prisma.userPoints.upsert({
-          where:  { userId },
-          create: { userId, points: xp },
-          update: { points: { increment: xp } },
-        }).catch(() => {});
+        await this.prisma.userPoints
+          .upsert({
+            where: { userId },
+            create: { userId, points: xp },
+            update: { points: { increment: xp } },
+          })
+          .catch(() => {});
       }
 
       // Verificar se o plano está 100% concluído
@@ -332,16 +390,16 @@ export class OnboardingService {
     return this.prisma.onboardingTaskInstance.update({
       where: { id: dto.taskInstanceId },
       data: {
-        status:         'SKIPPED',
-        skipReason:     dto.reason,
-        approvedById:   approverId,
+        status: 'SKIPPED',
+        skipReason: dto.reason,
+        approvedById: approverId,
       },
     });
   }
 
   async approveTask(dto: ApproveTaskDto, approverId: number) {
     const instance = await this.prisma.onboardingTaskInstance.findUnique({
-      where:   { id: dto.taskInstanceId },
+      where: { id: dto.taskInstanceId },
       include: { templateTask: true, plan: true },
     });
     if (!instance) throw new NotFoundException('Tarefa não encontrada');
@@ -351,22 +409,24 @@ export class OnboardingService {
     await this.prisma.onboardingTaskInstance.update({
       where: { id: dto.taskInstanceId },
       data: {
-        status:       newStatus,
+        status: newStatus,
         approvedById: approverId,
-        approvedAt:   new Date(),
+        approvedAt: new Date(),
         approvalNote: dto.comment,
-        completedAt:  dto.decision === 'approve' ? new Date() : null,
+        completedAt: dto.decision === 'approve' ? new Date() : null,
       },
     });
 
     if (dto.decision === 'approve') {
       const xp = (instance.templateTask as any).xpReward ?? 0;
       if (xp > 0) {
-        await this.prisma.userPoints.upsert({
-          where:  { userId: (instance.plan as any).userId },
-          create: { userId: (instance.plan as any).userId, points: xp },
-          update: { points: { increment: xp } },
-        }).catch(() => {});
+        await this.prisma.userPoints
+          .upsert({
+            where: { userId: (instance.plan as any).userId },
+            create: { userId: (instance.plan as any).userId, points: xp },
+            update: { points: { increment: xp } },
+          })
+          .catch(() => {});
       }
       await this.checkPlanCompletion((instance as any).planId);
     }
@@ -377,42 +437,48 @@ export class OnboardingService {
   private async checkPlanCompletion(planId: number) {
     const [total, completed] = await Promise.all([
       this.prisma.onboardingTaskInstance.count({ where: { planId } }),
-      this.prisma.onboardingTaskInstance.count({ where: { planId, status: { in: ['COMPLETED', 'SKIPPED'] } } }),
+      this.prisma.onboardingTaskInstance.count({
+        where: { planId, status: { in: ['COMPLETED', 'SKIPPED'] } },
+      }),
     ]);
 
     if (total > 0 && completed >= total) {
       await this.prisma.onboardingPlan.update({
         where: { id: planId },
-        data:  { status: 'COMPLETED', completedAt: new Date() },
+        data: { status: 'COMPLETED', completedAt: new Date() },
       });
 
       const plan = await this.prisma.onboardingPlan.findUnique({
-        where:  { id: planId },
+        where: { id: planId },
         select: { userId: true, template: { select: { name: true } } },
       });
 
       // Badge e notificação
-      await this.prisma.userPoints.upsert({
-        where:  { userId: plan!.userId },
-        create: { userId: plan!.userId, points: 500 },
-        update: { points: { increment: 500 } },
-      }).catch(() => {});
+      await this.prisma.userPoints
+        .upsert({
+          where: { userId: plan.userId },
+          create: { userId: plan.userId, points: 500 },
+          update: { points: { increment: 500 } },
+        })
+        .catch(() => {});
 
-      await this.prisma.notificationLog.create({
-        data: {
-          userId:   plan!.userId,
-          type:     'ONBOARDING_COMPLETED',
-          message:  `🎉 Parabéns! Concluíste o onboarding "${(plan!.template as any)?.name}"`,
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: plan.userId,
+            type: 'ONBOARDING_COMPLETED',
+            message: `🎉 Parabéns! Concluíste o onboarding "${(plan.template as any)?.name}"`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
 
-      this.logger.log(`Onboarding ${planId} concluído — utilizador ${plan!.userId}`);
+      this.logger.log(`Onboarding ${planId} concluído — utilizador ${plan.userId}`);
     } else {
       // Actualizar para IN_PROGRESS se começou
       await this.prisma.onboardingPlan.updateMany({
         where: { id: planId, status: 'NOT_STARTED' },
-        data:  { status: 'IN_PROGRESS' },
+        data: { status: 'IN_PROGRESS' },
       });
     }
   }
@@ -427,11 +493,11 @@ export class OnboardingService {
 
     return this.prisma.onboardingDocument.create({
       data: {
-        planId:       dto.planId,
+        planId: dto.planId,
         documentType: dto.documentType,
-        fileUrl:      dto.fileUrl,
-        notes:        dto.notes,
-        status:       'PENDING',
+        fileUrl: dto.fileUrl,
+        notes: dto.notes,
+        status: 'PENDING',
         uploadedById: userId,
       },
     });
@@ -444,9 +510,9 @@ export class OnboardingService {
     return this.prisma.onboardingDocument.update({
       where: { id: dto.documentId },
       data: {
-        status:          dto.status,
-        validatedById:   validatorId,
-        validatedAt:     new Date(),
+        status: dto.status,
+        validatedById: validatorId,
+        validatedAt: new Date(),
         rejectionReason: dto.rejectionReason,
       },
     });
@@ -467,11 +533,11 @@ export class OnboardingService {
 
     return this.prisma.onboardingSurvey.create({
       data: {
-        planId:    dto.planId,
+        planId: dto.planId,
         milestone: dto.milestone,
-        score:     dto.score,
-        enps:      dto.enps,
-        comment:   dto.comment,
+        score: dto.score,
+        enps: dto.enps,
+        comment: dto.comment,
       },
     });
   }
@@ -482,39 +548,47 @@ export class OnboardingService {
     const where: any = {};
     if (managerId) where.managerId = managerId;
 
-    const [totalPlans, byStatus, activeWithProgress, overdueTasks, avgSurveyScore] = await Promise.all([
-      this.prisma.onboardingPlan.count({ where }),
-      this.prisma.onboardingPlan.groupBy({
-        by:    ['status'],
-        where,
-        _count: true,
-      }),
-      this.prisma.onboardingPlan.findMany({
-        where: { ...where, status: { in: ['NOT_STARTED', 'IN_PROGRESS'] } },
-        include: {
-          user:     { select: { id: true, fullName: true, avatarUrl: true, department: { select: { name: true } } } },
-          template: { select: { name: true, durationDays: true } },
-          taskInstances: { select: { status: true } },
-        },
-        orderBy: { startDate: 'asc' },
-        take:    20,
-      }),
-      this.prisma.onboardingTaskInstance.count({
-        where: {
-          plan: where,
-          status:  { not: 'COMPLETED' },
-          dueDate: { lt: new Date() },
-        },
-      }),
-      this.prisma.onboardingSurvey.aggregate({ _avg: { score: true } }),
-    ]);
+    const [totalPlans, byStatus, activeWithProgress, overdueTasks, avgSurveyScore] =
+      await Promise.all([
+        this.prisma.onboardingPlan.count({ where }),
+        this.prisma.onboardingPlan.groupBy({
+          by: ['status'],
+          where,
+          _count: true,
+        }),
+        this.prisma.onboardingPlan.findMany({
+          where: { ...where, status: { in: ['NOT_STARTED', 'IN_PROGRESS'] } },
+          include: {
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                avatarUrl: true,
+                department: { select: { name: true } },
+              },
+            },
+            template: { select: { name: true, durationDays: true } },
+            taskInstances: { select: { status: true } },
+          },
+          orderBy: { startDate: 'asc' },
+          take: 20,
+        }),
+        this.prisma.onboardingTaskInstance.count({
+          where: {
+            plan: where,
+            status: { not: 'COMPLETED' },
+            dueDate: { lt: new Date() },
+          },
+        }),
+        this.prisma.onboardingSurvey.aggregate({ _avg: { score: true } }),
+      ]);
 
     const activeWithMetrics = activeWithProgress.map(plan => {
-      const tasks     = plan.taskInstances;
+      const tasks = plan.taskInstances;
       const completed = tasks.filter(t => t.status === 'COMPLETED').length;
-      const total     = tasks.length;
-      const progress  = total > 0 ? Math.round((completed / total) * 100) : 0;
-      const daysIn    = plan.startDate
+      const total = tasks.length;
+      const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+      const daysIn = plan.startDate
         ? Math.floor((Date.now() - new Date(plan.startDate).getTime()) / (1000 * 60 * 60 * 24))
         : 0;
       return { ...plan, progress, completedTasks: completed, totalTasks: total, daysIn };
@@ -522,7 +596,7 @@ export class OnboardingService {
 
     return {
       summary: {
-        total:   totalPlans,
+        total: totalPlans,
         byStatus: Object.fromEntries(byStatus.map(s => [s.status, s._count])),
         overdueTasks,
         avgSurveyScore: Math.round((avgSurveyScore._avg.score ?? 0) * 10) / 10,

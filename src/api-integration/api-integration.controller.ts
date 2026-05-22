@@ -1,16 +1,31 @@
 // src/api-integration/api-integration.controller.ts
 import {
-  Controller, Get, Post, Patch, Put, Delete,
-  Body, Param, Query, ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ApiIntegrationService } from './api-integration.service';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 import {
-  CreateIntegrationDto, UpdateIntegrationDto, IntegrationLogFilterDto,
-  CreateApiKeyDto, CreateWebhookDto, TriggerWebhookDto,
+  CreateIntegrationDto,
+  UpdateIntegrationDto,
+  IntegrationLogFilterDto,
+  CreateApiKeyDto,
+  CreateWebhookDto,
+  TriggerWebhookDto,
 } from './api-integration.dto';
 
 const ADMIN = ['ADMIN', 'RH'] as const;
@@ -27,11 +42,15 @@ export class ApiIntegrationController {
 
   @Get()
   @ApiOperation({ summary: 'Listar integrações com status de saúde' })
-  findAll() { return this.svc.getIntegrations(); }
+  findAll() {
+    return this.svc.getIntegrations();
+  }
 
   @Get('stats')
   @ApiOperation({ summary: 'Dashboard de monitoramento — saúde, logs 24h, latência média' })
-  stats() { return this.svc.getStats(); }
+  stats() {
+    return this.svc.getStats();
+  }
 
   @Get('logs')
   @ApiOperation({ summary: 'Todos os logs de integração (paginados)' })
@@ -118,7 +137,9 @@ export class ApiIntegrationController {
 
   @Get('webhooks/list')
   @ApiOperation({ summary: 'Listar webhooks configurados com estatísticas de entrega' })
-  getWebhooks() { return this.svc.getWebhooks(); }
+  getWebhooks() {
+    return this.svc.getWebhooks();
+  }
 
   @Post('webhooks')
   @ApiOperation({ summary: 'Registar webhook externo (URL + eventos subscritos)' })
@@ -147,10 +168,7 @@ export class ApiIntegrationController {
 
   @Get('webhooks/:id/deliveries')
   @ApiOperation({ summary: 'Histórico de entregas de um webhook (status, attempts, timestamp)' })
-  webhookDeliveries(
-    @Param('id', ParseIntPipe) id: number,
-    @Query('limit') limit?: string,
-  ) {
+  webhookDeliveries(@Param('id', ParseIntPipe) id: number, @Query('limit') limit?: string) {
     return this.svc.getWebhookDeliveries(id, limit ? +limit : 20);
   }
 }

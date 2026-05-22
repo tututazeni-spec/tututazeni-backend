@@ -1,24 +1,36 @@
 // src/evaluation/evaluation.controller.ts
 import {
-  Controller, Get, Post, Patch, Body, Param, Query,
-  ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { EvaluationService }  from './evaluation.service';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { EvaluationService } from './evaluation.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 import {
-  CreateCycleDto, UpdateCycleDto, CycleFilterDto,
-  CreateFormDto, SubmitEvaluationDto,
-  AssignEvaluatorDto, BulkAssignDto,
-  CalibrateScoreDto, AnalyticsFilterDto,
+  CreateCycleDto,
+  UpdateCycleDto,
+  CycleFilterDto,
+  CreateFormDto,
+  SubmitEvaluationDto,
+  AssignEvaluatorDto,
+  BulkAssignDto,
+  CalibrateScoreDto,
+  AnalyticsFilterDto,
   CreateEvaluationDto,
 } from './evaluation.dto';
 
-const ALL_ROLES   = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
-const MGMT_ROLES  = ['ADMIN', 'RH', 'LIDER']                as const;
-const ADMIN_ROLES = ['ADMIN', 'RH']                          as const;
+const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
+const MGMT_ROLES = ['ADMIN', 'RH', 'LIDER'] as const;
+const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
 
 @ApiTags('Evaluation 360°')
 @ApiBearerAuth()
@@ -83,7 +95,9 @@ export class EvaluationController {
   @Get('forms')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Listar formulários (incluindo templates)' })
-  getForms() { return this.svc.getForms(); }
+  getForms() {
+    return this.svc.getForms();
+  }
 
   @Get('forms/:id')
   @Roles(...MGMT_ROLES)
@@ -167,11 +181,10 @@ export class EvaluationController {
 
   @Get('results/:userId')
   @Roles(...ALL_ROLES)
-  @ApiOperation({ summary: 'Resultados 360° completos (score, concordância, competências, qualitativo)' })
-  results(
-    @Param('userId', ParseIntPipe) userId: number,
-    @Query('cycleId') cycleId?: string,
-  ) {
+  @ApiOperation({
+    summary: 'Resultados 360° completos (score, concordância, competências, qualitativo)',
+  })
+  results(@Param('userId', ParseIntPipe) userId: number, @Query('cycleId') cycleId?: string) {
     return this.svc.getResults(userId, cycleId ? +cycleId : undefined);
   }
 
@@ -206,7 +219,9 @@ export class EvaluationController {
 
   @Get('analytics/dashboard')
   @Roles(...ADMIN_ROLES)
-  @ApiOperation({ summary: 'Dashboard de analytics — distribuição, top performers, por departamento' })
+  @ApiOperation({
+    summary: 'Dashboard de analytics — distribuição, top performers, por departamento',
+  })
   analyticsDashboard(@Query() filters: AnalyticsFilterDto) {
     return this.svc.getAnalyticsDashboard(filters);
   }
@@ -226,10 +241,7 @@ export class EvaluationController {
   @Post('results/:userId/trigger-pdi')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Gerar sugestão de PDI baseada nos gaps identificados' })
-  triggerPDI(
-    @Param('userId', ParseIntPipe) userId: number,
-    @Query('cycleId') cycleId?: string,
-  ) {
+  triggerPDI(@Param('userId', ParseIntPipe) userId: number, @Query('cycleId') cycleId?: string) {
     return this.svc.triggerPDIFromResults(userId, cycleId ? +cycleId : undefined);
   }
 }

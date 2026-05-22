@@ -1,7 +1,7 @@
-import prisma from "../lib/prisma";
+import prisma from '../lib/prisma';
 
 // Definido localmente para não depender do generate em tempo de build
-export type EnrollmentStatus = "EM_ANDAMENTO" | "CONCLUIDO" | "CANCELADO";
+export type EnrollmentStatus = 'EM_ANDAMENTO' | 'CONCLUIDO' | 'CANCELADO';
 
 export type Enrollment = {
   id: number;
@@ -21,7 +21,7 @@ export type UpdateEnrollmentInput = {
 export async function getEnrollments(): Promise<Enrollment[]> {
   const enrollments = await prisma.enrollment.findMany();
 
-  return enrollments.map((e) => ({
+  return enrollments.map(e => ({
     id: e.id,
     userId: e.userId,
     courseId: e.courseId,
@@ -31,9 +31,7 @@ export async function getEnrollments(): Promise<Enrollment[]> {
 }
 
 // Buscar enrollment por ID
-export async function getEnrollmentById(
-  id: number
-): Promise<Enrollment | null> {
+export async function getEnrollmentById(id: number): Promise<Enrollment | null> {
   const enrollment = await prisma.enrollment.findUnique({
     where: { id },
   });
@@ -53,7 +51,7 @@ export async function getEnrollmentById(
 export async function createEnrollment(
   userId: number,
   courseId: number,
-  status: EnrollmentStatus = "EM_ANDAMENTO"
+  status: EnrollmentStatus = 'EM_ANDAMENTO',
 ): Promise<Enrollment> {
   const enrollment = await prisma.enrollment.create({
     data: {
@@ -75,7 +73,7 @@ export async function createEnrollment(
 // Actualizar enrollment
 export async function updateEnrollment(
   id: number,
-  data: UpdateEnrollmentInput
+  data: UpdateEnrollmentInput,
 ): Promise<Enrollment> {
   const enrollment = await prisma.enrollment.update({
     where: { id },

@@ -1,16 +1,31 @@
 // src/acl/acl.controller.ts
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param,
-  Query, ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AclService } from './acl.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard }   from '../common/guards/roles.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 import {
-  CreatePermissionDto, BulkAssignPermissionsDto, CreateRoleDto,
-  CloneRoleDto, CreatePolicyDto, CheckPermissionDto, AssignRoleToUserDto,
+  CreatePermissionDto,
+  BulkAssignPermissionsDto,
+  CreateRoleDto,
+  CloneRoleDto,
+  CreatePolicyDto,
+  CheckPermissionDto,
+  AssignRoleToUserDto,
   AclAuditFilterDto,
 } from './acl.dto';
 
@@ -37,7 +52,9 @@ export class AclController {
   @Get('permissions')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Listar todas as permissões' })
-  allPermissions() { return this.svc.getAllPermissions(); }
+  allPermissions() {
+    return this.svc.getAllPermissions();
+  }
 
   @Post('permissions')
   @Roles(...ADMIN)
@@ -51,7 +68,9 @@ export class AclController {
   @Get('roles')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Listar roles com permissões e nº de utilizadores' })
-  getRoles() { return this.svc.getRoles(); }
+  getRoles() {
+    return this.svc.getRoles();
+  }
 
   @Get('roles/:id')
   @Roles(...ADMIN)
@@ -94,7 +113,9 @@ export class AclController {
   assign(
     @Param('roleId', ParseIntPipe) rId: number,
     @Param('permissionId', ParseIntPipe) pId: number,
-  ) { return this.svc.assignPermissionToRole(rId, pId); }
+  ) {
+    return this.svc.assignPermissionToRole(rId, pId);
+  }
 
   @Delete('roles/:roleId/permissions/:permissionId')
   @Roles(...ADMIN)
@@ -103,7 +124,9 @@ export class AclController {
   revoke(
     @Param('roleId', ParseIntPipe) rId: number,
     @Param('permissionId', ParseIntPipe) pId: number,
-  ) { return this.svc.revokePermissionFromRole(rId, pId); }
+  ) {
+    return this.svc.revokePermissionFromRole(rId, pId);
+  }
 
   @Post('roles/bulk-assign')
   @Roles(...ADMIN)
@@ -135,14 +158,18 @@ export class AclController {
   @Get('matrix')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Matriz de permissões — roles × permissões' })
-  matrix() { return this.svc.getPermissionMatrix(); }
+  matrix() {
+    return this.svc.getPermissionMatrix();
+  }
 
   // ─── Policies (ABAC/PBAC) ────────────────────────────────────
 
   @Get('policies')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Listar políticas de acesso (ABAC/PBAC)' })
-  getPolicies() { return this.svc.getPolicies(); }
+  getPolicies() {
+    return this.svc.getPolicies();
+  }
 
   @Post('policies')
   @Roles(...ADMIN)
@@ -172,12 +199,16 @@ export class AclController {
   @Get('stats')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Estatísticas de ACL — distribuição de roles, tentativas negadas' })
-  stats() { return this.svc.getStats(); }
+  stats() {
+    return this.svc.getStats();
+  }
 
   // ─── Seed ────────────────────────────────────────────────────
 
   @Post('seed-permissions')
   @Roles('ADMIN')
   @ApiOperation({ summary: '[ADMIN] Criar permissões built-in (35+) se não existirem' })
-  seedPermissions() { return this.svc.seedBuiltinPermissions(); }
+  seedPermissions() {
+    return this.svc.seedBuiltinPermissions();
+  }
 }

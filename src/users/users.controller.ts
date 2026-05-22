@@ -1,16 +1,31 @@
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import {
-  CreateUserDto, UpdateUserDto, UpdateProfileDto,
-  UserFilterDto, BulkActionDto, InviteUserDto, UserChangePasswordDto,
+  CreateUserDto,
+  UpdateUserDto,
+  UpdateProfileDto,
+  UserFilterDto,
+  BulkActionDto,
+  InviteUserDto,
+  UserChangePasswordDto,
 } from './users.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Users')
@@ -70,12 +85,9 @@ export class UsersController {
 
   @Get('directory')
   @ApiOperation({ summary: 'Diretório interno (pesquisa de colaboradores)' })
-  @ApiQuery({ name: 'search',       required: false })
+  @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'departmentId', required: false })
-  directory(
-    @Query('search')       search?: string,
-    @Query('departmentId') departmentId?: string,
-  ) {
+  directory(@Query('search') search?: string, @Query('departmentId') departmentId?: string) {
     return this.svc.getDirectory(search, departmentId ? parseInt(departmentId) : undefined);
   }
 

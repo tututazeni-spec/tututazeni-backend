@@ -1,20 +1,34 @@
 // src/succession/succession.controller.ts
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { SuccessionService } from './succession.service';
 import {
-  CreateCriticalPositionDto, UpdateCriticalPositionDto,
-  CreateSuccessionPlanDto, UpdateSuccessionPlanDto,
-  AddToTalentPoolDto, GeneratePDIDto,
-  SuccessionFilterDto, CriticalPositionFilterDto,
+  CreateCriticalPositionDto,
+  UpdateCriticalPositionDto,
+  CreateSuccessionPlanDto,
+  UpdateSuccessionPlanDto,
+  AddToTalentPoolDto,
+  GeneratePDIDto,
+  SuccessionFilterDto,
+  CriticalPositionFilterDto,
 } from './succession.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators';
 
 @ApiTags('Succession Planning')
 @ApiBearerAuth()
@@ -28,7 +42,9 @@ export class SuccessionController {
   @Get('dashboard')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Dashboard executivo de sucessão (KPIs, alertas críticos)' })
-  dashboard() { return this.svc.getDashboard(); }
+  dashboard() {
+    return this.svc.getDashboard();
+  }
 
   // ── Cargos críticos ───────────────────────────────────────────────────────
 
@@ -69,7 +85,9 @@ export class SuccessionController {
   @Get()
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Listar planos de sucessão' })
-  findAll(@Query() filters: SuccessionFilterDto) { return this.svc.findAll(filters); }
+  findAll(@Query() filters: SuccessionFilterDto) {
+    return this.svc.findAll(filters);
+  }
 
   @Get('org-chart')
   @Roles('ADMIN', 'RH', 'GESTOR')
@@ -89,12 +107,12 @@ export class SuccessionController {
   @Get('compare')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Comparar dois candidatos para um cargo crítico' })
-  @ApiQuery({ name: 'candidateA',          required: true })
-  @ApiQuery({ name: 'candidateB',          required: true })
-  @ApiQuery({ name: 'criticalPositionId',  required: true })
+  @ApiQuery({ name: 'candidateA', required: true })
+  @ApiQuery({ name: 'candidateB', required: true })
+  @ApiQuery({ name: 'criticalPositionId', required: true })
   compareProfiles(
-    @Query('candidateA')         candidateA: string,
-    @Query('candidateB')         candidateB: string,
+    @Query('candidateA') candidateA: string,
+    @Query('candidateB') candidateB: string,
     @Query('criticalPositionId') criticalPositionId: string,
   ) {
     return this.svc.compareProfiles(
@@ -107,12 +125,16 @@ export class SuccessionController {
   @Get(':id')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Detalhe do plano de sucessão com match score e gaps' })
-  findOne(@Param('id', ParseIntPipe) id: number) { return this.svc.findOne(id); }
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findOne(id);
+  }
 
   @Post()
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar plano de sucessão (match score calculado automaticamente)' })
-  create(@Body() dto: CreateSuccessionPlanDto) { return this.svc.create(dto); }
+  create(@Body() dto: CreateSuccessionPlanDto) {
+    return this.svc.create(dto);
+  }
 
   @Put(':id')
   @Roles('ADMIN', 'RH')
@@ -124,19 +146,25 @@ export class SuccessionController {
   @Delete(':id')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Remover plano de sucessão' })
-  remove(@Param('id', ParseIntPipe) id: number) { return this.svc.remove(id); }
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remove(id);
+  }
 
   // ── Talent Pool ───────────────────────────────────────────────────────────
 
   @Get('talent-pool/all')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Talent Pool — colaboradores de alto potencial' })
-  getTalentPool() { return this.svc.getTalentPool(); }
+  getTalentPool() {
+    return this.svc.getTalentPool();
+  }
 
   @Post('talent-pool')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Adicionar colaborador ao Talent Pool' })
-  addToTalentPool(@Body() dto: AddToTalentPoolDto) { return this.svc.addToTalentPool(dto); }
+  addToTalentPool(@Body() dto: AddToTalentPoolDto) {
+    return this.svc.addToTalentPool(dto);
+  }
 
   @Delete('talent-pool/:userId')
   @Roles('ADMIN', 'RH')
@@ -150,5 +178,7 @@ export class SuccessionController {
   @Post('pdi/generate')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Gerar PDI automático baseado nos gaps do plano de sucessão' })
-  generatePDI(@Body() dto: GeneratePDIDto) { return this.svc.generatePDI(dto); }
+  generatePDI(@Body() dto: GeneratePDIDto) {
+    return this.svc.generatePDI(dto);
+  }
 }

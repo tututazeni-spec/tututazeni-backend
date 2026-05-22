@@ -1,21 +1,38 @@
 // src/career/career.controller.ts
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { CareerService }    from './career.service';
+import { CareerService } from './career.service';
 import {
-  CreateCareerPathDto, UpdateCareerPathDto, AddCareerPathStepDto,
-  CreateCareerPlanDto, UpdateCareerPlanDto, AddCareerGoalDto,
-  CreateInternalVacancyDto, UpdateInternalVacancyDto,
-  ApplyToVacancyDto, UpdateApplicationStatusDto,
-  CreateSuccessionPlanDto, CareerInterestDto,
-  VacancyFilterDto, CareerAnalyticsFilterDto,
+  CreateCareerPathDto,
+  UpdateCareerPathDto,
+  AddCareerPathStepDto,
+  CreateCareerPlanDto,
+  UpdateCareerPlanDto,
+  AddCareerGoalDto,
+  CreateInternalVacancyDto,
+  ApplyToVacancyDto,
+  UpdateApplicationStatusDto,
+  CreateSuccessionPlanDto,
+  CareerInterestDto,
+  VacancyFilterDto,
+  CareerAnalyticsFilterDto,
 } from './career.dto';
-import { JwtAuthGuard }     from '../common/guards/jwt-auth.guard';
-import { RolesGuard }       from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Career')
@@ -89,7 +106,7 @@ export class CareerController {
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Simular carreira de um colaborador' })
   simulateUser(
-    @Param('userId',         ParseIntPipe) userId:           number,
+    @Param('userId', ParseIntPipe) userId: number,
     @Param('targetPositionId', ParseIntPipe) targetPositionId: number,
   ) {
     return this.svc.simulateNextRole(userId, targetPositionId);

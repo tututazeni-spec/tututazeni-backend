@@ -1,16 +1,23 @@
 // src/payslips/payslips.dto.ts
 import {
-  IsInt, IsString, IsOptional, IsNumber,
-  IsEnum, IsArray, IsBoolean, Min, Max,
+  IsInt,
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsEnum,
+  IsArray,
+  IsBoolean,
+  Min,
+  Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 export enum PayslipStatus {
-  DRAFT        = 'DRAFT',
-  ISSUED       = 'ISSUED',
+  DRAFT = 'DRAFT',
+  ISSUED = 'ISSUED',
   ACKNOWLEDGED = 'ACKNOWLEDGED',
-  DISPUTED     = 'DISPUTED',
+  DISPUTED = 'DISPUTED',
 }
 
 // ─── Criação individual ──────────────────────────────────────────────────────
@@ -33,56 +40,69 @@ export class CreatePayslipDto {
   baseSalary: number;
 
   @ApiPropertyOptional({ description: 'Subsídio de alimentação' })
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   mealAllowance?: number;
 
   @ApiPropertyOptional({ description: 'Subsídio de férias' })
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   vacationAllowance?: number;
 
   @ApiPropertyOptional({ description: 'Subsídio de Natal' })
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   christmasAllowance?: number;
 
   @ApiPropertyOptional({ description: 'Horas extras (valor total)' })
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   overtime?: number;
 
   @ApiPropertyOptional({ description: 'Prémios / Comissões' })
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   bonuses?: number;
 
   @ApiPropertyOptional({ description: 'Outros subsídios' })
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   otherAllowances?: number;
 
   // ── Deduções (override automático) ───────────────────────────────────────
   @ApiPropertyOptional({ description: 'IRT manual (sobrepõe cálculo automático)' })
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   irtOverride?: number;
 
   @ApiPropertyOptional({ description: 'INSS colaborador manual' })
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   inssOverride?: number;
 
   @ApiPropertyOptional({ description: 'Seguro de saúde' })
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   healthInsurance?: number;
 
   @ApiPropertyOptional({ description: 'Dedução de empréstimo' })
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   loanDeduction?: number;
 
   @ApiPropertyOptional({ description: 'Adiantamento salarial' })
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   advanceDeduction?: number;
 
   @ApiPropertyOptional({ description: 'Outras deduções' })
-  @IsOptional() @IsNumber()
+  @IsOptional()
+  @IsNumber()
   otherDeductions?: number;
 
   @ApiPropertyOptional({ description: 'Notas internas (não visíveis ao colaborador)' })
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   notes?: string;
 }
 
@@ -90,22 +110,40 @@ export class UpdatePayslipDto extends PartialType(CreatePayslipDto) {}
 
 // ─── Filtros ─────────────────────────────────────────────────────────────────
 export class PayslipFilterDto {
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number)
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
   userId?: number;
 
-  @ApiPropertyOptional({ example: '2026-04' }) @IsOptional() @IsString()
+  @ApiPropertyOptional({ example: '2026-04' })
+  @IsOptional()
+  @IsString()
   period?: string;
 
-  @ApiPropertyOptional({ example: '2026' }) @IsOptional() @IsString()
+  @ApiPropertyOptional({ example: '2026' })
+  @IsOptional()
+  @IsString()
   year?: string;
 
-  @ApiPropertyOptional({ enum: PayslipStatus }) @IsOptional() @IsEnum(PayslipStatus)
+  @ApiPropertyOptional({ enum: PayslipStatus })
+  @IsOptional()
+  @IsEnum(PayslipStatus)
   status?: PayslipStatus;
 
-  @ApiPropertyOptional({ default: 1 }) @IsOptional() @IsInt() @Min(1) @Type(() => Number)
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
   page?: number;
 
-  @ApiPropertyOptional({ default: 20 }) @IsOptional() @IsInt() @Min(1) @Max(100) @Type(() => Number)
+  @ApiPropertyOptional({ default: 20 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @Type(() => Number)
   limit?: number;
 }
 
@@ -120,11 +158,14 @@ export class BulkCreatePayslipDto {
   paymentDate: string;
 
   @ApiPropertyOptional({ description: 'IDs específicos (vazio = todos activos)' })
-  @IsOptional() @IsArray() @IsInt({ each: true })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
   userIds?: number[];
 
   @ApiPropertyOptional({ description: 'Publicar imediatamente após criar' })
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   issueImmediately?: boolean;
 }
 
@@ -143,6 +184,8 @@ export class CreateDisputeDto {
   @IsString()
   reason: string;
 
-  @ApiPropertyOptional() @IsOptional() @IsString()
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   details?: string;
 }

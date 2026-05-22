@@ -1,14 +1,21 @@
 ﻿// src/micro-learning/micro-learning.service.ts
 import {
-  Injectable, NotFoundException, ConflictException,
-  BadRequestException, ForbiddenException, Logger,
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateMicroLearningDto, UpdateMicroLearningDto, MicroLearningFilterDto,
-  CreatePlaylistDto, UpdatePlaylistDto,
-  DispatchMicroLearningDto, UpdateProgressDto,
-  SubmitQuizDto, InteractDto, ContentStatus,
+  CreateMicroLearningDto,
+  UpdateMicroLearningDto,
+  MicroLearningFilterDto,
+  CreatePlaylistDto,
+  DispatchMicroLearningDto,
+  UpdateProgressDto,
+  SubmitQuizDto,
+  InteractDto,
 } from './micro-learning.dto';
 
 @Injectable()
@@ -20,35 +27,47 @@ export class MicroLearningService {
   // ─── CATÁLOGO ─────────────────────────────────────────────────────────────
 
   async findAll(filters: MicroLearningFilterDto) {
-    const { page = 1, limit = 20, search, contentType, level, status, tag, maxDuration, sortBy } = filters;
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      contentType,
+      level,
+      status,
+      tag,
+      maxDuration,
+      sortBy,
+    } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (status)       where.status      = status;
-    if (contentType)  where.contentType = contentType;
-    if (level)        where.level       = level;
-    if (maxDuration)  where.durationSeconds = { lte: maxDuration };
-    if (tag)          where.tags        = { has: tag };
+    if (status) where.status = status;
+    if (contentType) where.contentType = contentType;
+    if (level) where.level = level;
+    if (maxDuration) where.durationSeconds = { lte: maxDuration };
+    if (tag) where.tags = { has: tag };
     if (search) {
       where.OR = [
-        { title:       { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
-        { tags:        { has: search } },
+        { tags: { has: search } },
       ];
     }
 
     let orderBy: any = { createdAt: 'desc' };
-    if (sortBy === 'POPULAR')  orderBy = { viewCount: 'desc' };
+    if (sortBy === 'POPULAR') orderBy = { viewCount: 'desc' };
     if (sortBy === 'DURATION') orderBy = { durationSeconds: 'asc' };
 
     const [data, total] = await Promise.all([
       (this.prisma as any).microLearning.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
-        author:   { select: { id: true, fullName: true, position: { select: { name: true } } } },
-        category: { select: { id: true, name: true } },
-        _count:   { select: { progress: true, likes: true } },
-       },
+          author: { select: { id: true, fullName: true, position: { select: { name: true } } } },
+          category: { select: { id: true, name: true } },
+          _count: { select: { progress: true, likes: true } },
+        },
         orderBy,
       }),
       this.prisma.microLearning.count({ where }),
@@ -61,10 +80,17 @@ export class MicroLearningService {
     const ml = await (this.prisma as any).microLearning.findUnique({
       where: { id },
       include: {
-        author:   { select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } } },
+        author: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
+          },
+        },
         category: { select: { id: true, name: true } },
         quizQuestions: { select: { id: true, question: true, options: true } }, // não expõe respostas correctas
-        _count:   { select: { progress: true, likes: true, comments: true } },
+        _count: { select: { progress: true, likes: true, comments: true } },
       },
     });
     if (!ml) throw new NotFoundException('Micro-learning não encontrado');
@@ -76,23 +102,23 @@ export class MicroLearningService {
 
     const ml = await this.prisma.microLearning.create({
       data: {
-        title:           data.title,
-        description:     data.description,
-        contentType:     data.contentType,
-        level:           data.level,
-        status:          data.status ?? 'DRAFT',
+        title: data.title,
+        description: data.description,
+        contentType: data.contentType,
+        level: data.level,
+        status: data.status ?? 'DRAFT',
         durationSeconds: data.durationSeconds,
-        mediaUrl:        data.mediaUrl,
-        textContent:     data.textContent,
-        thumbnailUrl:    data.thumbnailUrl,
-        tags:            data.tags ?? [],
-        categoryId:      data.categoryId,
-        learningPathId:  data.learningPathId,
-        xpReward:        data.xpReward ?? 10,
-        takeaways:       data.takeaways ?? [],
-        scheduledAt:     data.scheduledAt ? new Date(data.scheduledAt) : null,
-        authorId:        authorId ?? null,
-        viewCount:       0,
+        mediaUrl: data.mediaUrl,
+        textContent: data.textContent,
+        thumbnailUrl: data.thumbnailUrl,
+        tags: data.tags ?? [],
+        categoryId: data.categoryId,
+        learningPathId: data.learningPathId,
+        xpReward: data.xpReward ?? 10,
+        takeaways: data.takeaways ?? [],
+        scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
+        authorId: authorId ?? null,
+        viewCount: 0,
       },
     });
 
@@ -101,9 +127,9 @@ export class MicroLearningService {
       await this.prisma.microQuizQuestion.createMany({
         data: quizQuestions.map((q, seq) => ({
           microLearningId: ml.id,
-          question:        q.question,
-          options:         JSON.stringify(q.options),
-          explanation:     q.explanation,
+          question: q.question,
+          options: JSON.stringify(q.options),
+          explanation: q.explanation,
           seq,
         })),
       });
@@ -122,9 +148,9 @@ export class MicroLearningService {
         await this.prisma.microQuizQuestion.createMany({
           data: quizQuestions.map((q, seq) => ({
             microLearningId: id,
-            question:        q.question,
-            options:         JSON.stringify(q.options),
-            explanation:     q.explanation,
+            question: q.question,
+            options: JSON.stringify(q.options),
+            explanation: q.explanation,
             seq,
           })),
         });
@@ -138,13 +164,13 @@ export class MicroLearningService {
   }
 
   async publish(id: number) {
-    const ml = await this.findOne(id) as any;
+    const ml = await this.findOne(id);
     if (ml.status !== 'DRAFT' && ml.status !== 'ARCHIVED') {
       throw new BadRequestException('Apenas DRAFT ou ARCHIVED podem ser publicados');
     }
     return this.prisma.microLearning.update({
       where: { id },
-      data:  { status: 'PUBLISHED', publishedAt: new Date() },
+      data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
   }
 
@@ -154,9 +180,11 @@ export class MicroLearningService {
   }
 
   async remove(id: number) {
-    const ml = await this.findOne(id) as any;
+    const ml = await this.findOne(id);
     if (ml.status === 'PUBLISHED') {
-      throw new ForbiddenException('Conteúdo publicado não pode ser eliminado. Archive-o primeiro.');
+      throw new ForbiddenException(
+        'Conteúdo publicado não pode ser eliminado. Archive-o primeiro.',
+      );
     }
     await this.prisma.microLearning.delete({ where: { id } });
     return { message: 'Micro-learning eliminado' };
@@ -169,47 +197,60 @@ export class MicroLearningService {
     const skip = (page - 1) * limit;
 
     const where: any = { status: 'PUBLISHED' };
-    if (contentType)  where.contentType      = contentType;
-    if (level)        where.level            = level;
-    if (maxDuration)  where.durationSeconds  = { lte: maxDuration };
+    if (contentType) where.contentType = contentType;
+    if (level) where.level = level;
+    if (maxDuration) where.durationSeconds = { lte: maxDuration };
     if (filters.search) {
       where.OR = [
-        { title:       { contains: filters.search, mode: 'insensitive' } },
+        { title: { contains: filters.search, mode: 'insensitive' } },
         { description: { contains: filters.search, mode: 'insensitive' } },
       ];
     }
 
     let orderBy: any = { publishedAt: 'desc' };
-    if (sortBy === 'POPULAR')  orderBy = { viewCount: 'desc' };
+    if (sortBy === 'POPULAR') orderBy = { viewCount: 'desc' };
     if (sortBy === 'DURATION') orderBy = { durationSeconds: 'asc' };
 
     const [items, total] = await Promise.all([
       (this.prisma as any).microLearning.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
-        author:   { select: { id: true, fullName: true, position: { select: { name: true } } } },
-        category: { select: { id: true, name: true } },
-        _count:   { select: { progress: true, likes: true } },
-      },
+          author: { select: { id: true, fullName: true, position: { select: { name: true } } } },
+          category: { select: { id: true, name: true } },
+          _count: { select: { progress: true, likes: true } },
+        },
         orderBy,
       }),
       this.prisma.microLearning.count({ where }),
     ]);
 
     // Enriquecer com progresso e estado do utilizador
-    const userProgressMap = await this.getUserProgressMap(userId, items.map(i => i.id));
-    const userLikesSet    = await this.getUserLikesSet(userId, items.map(i => i.id));
-    const userSavesSet    = await this.getUserSavesSet(userId, items.map(i => i.id));
+    const userProgressMap = await this.getUserProgressMap(
+      userId,
+      items.map(i => i.id),
+    );
+    const userLikesSet = await this.getUserLikesSet(
+      userId,
+      items.map(i => i.id),
+    );
+    const userSavesSet = await this.getUserSavesSet(
+      userId,
+      items.map(i => i.id),
+    );
 
     return {
       data: items.map(item => ({
         ...item,
-        userProgress:   userProgressMap.get(item.id) ?? null,
-        userLiked:      userLikesSet.has(item.id),
-        userSaved:      userSavesSet.has(item.id),
-        isCompleted:    (userProgressMap.get(item.id)?.progress ?? 0) >= 100,
+        userProgress: userProgressMap.get(item.id) ?? null,
+        userLiked: userLikesSet.has(item.id),
+        userSaved: userSavesSet.has(item.id),
+        isCompleted: (userProgressMap.get(item.id)?.progress ?? 0) >= 100,
       })),
-      total, page, limit,
+      total,
+      page,
+      limit,
       totalPages: Math.ceil(total / limit),
     };
   }
@@ -240,7 +281,7 @@ export class MicroLearningService {
   // ─── PROGRESSO ────────────────────────────────────────────────────────────
 
   async updateProgress(userId: number, dto: UpdateProgressDto) {
-    const ml = await this.findOne(dto.microLearningId) as any;
+    const ml = await this.findOne(dto.microLearningId);
 
     const existing = await this.prisma.microLearningProgress.findFirst({
       where: { userId, microLearningId: dto.microLearningId },
@@ -249,18 +290,18 @@ export class MicroLearningService {
     const isCompleting = dto.progress >= 100 && (!existing || existing.progress < 100);
 
     const record = await this.prisma.microLearningProgress.upsert({
-      where:  { userId_microLearningId: { userId, microLearningId: dto.microLearningId } },
+      where: { userId_microLearningId: { userId, microLearningId: dto.microLearningId } },
       create: {
         userId,
         microLearningId: dto.microLearningId,
-        progress:        dto.progress,
-        watchedSeconds:  dto.watchedSeconds ?? 0,
-        completedAt:     dto.progress >= 100 ? new Date() : null,
+        progress: dto.progress,
+        watchedSeconds: dto.watchedSeconds ?? 0,
+        completedAt: dto.progress >= 100 ? new Date() : null,
       },
       update: {
-        progress:       Math.max(existing?.progress ?? 0, dto.progress),
+        progress: Math.max(existing?.progress ?? 0, dto.progress),
         watchedSeconds: dto.watchedSeconds ?? undefined,
-        completedAt:    isCompleting ? new Date() : undefined,
+        completedAt: isCompleting ? new Date() : undefined,
       },
     });
 
@@ -268,29 +309,33 @@ export class MicroLearningService {
     if (!existing) {
       await this.prisma.microLearning.update({
         where: { id: dto.microLearningId },
-        data:  { viewCount: { increment: 1 } },
+        data: { viewCount: { increment: 1 } },
       });
     }
 
     // XP e streak ao completar
     if (isCompleting) {
       const xp = ml.xpReward ?? 10;
-      await this.prisma.userPoints.upsert({
-        where:  { userId },
-        create: { userId, points: xp },
-        update: { points: { increment: xp } },
-      }).catch(() => {});
+      await this.prisma.userPoints
+        .upsert({
+          where: { userId },
+          create: { userId, points: xp },
+          update: { points: { increment: xp } },
+        })
+        .catch(() => {});
 
       await this.updateStreak(userId);
 
-      await this.prisma.notificationLog.create({
-        data: {
-          userId,
-          type:     'MICROLEARNING_COMPLETED',
-          message:  `✅ Concluíste "${ml.title}" e ganháste ${xp} XP`,
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId,
+            type: 'MICROLEARNING_COMPLETED',
+            message: `✅ Concluíste "${ml.title}" e ganháste ${xp} XP`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
     }
 
     return record;
@@ -298,7 +343,7 @@ export class MicroLearningService {
 
   private async updateStreak(userId: number) {
     const streak = await this.prisma.learningStreak.findUnique({ where: { userId } });
-    const today  = new Date();
+    const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     if (!streak) {
@@ -314,15 +359,13 @@ export class MicroLearningService {
 
     if (diffDays === 0) return; // Já contou hoje
 
-    const newStreak = diffDays === 1
-      ? (streak as any).currentStreak + 1
-      : 1; // Streak quebrou
+    const newStreak = diffDays === 1 ? (streak as any).currentStreak + 1 : 1; // Streak quebrou
 
     await this.prisma.learningStreak.update({
       where: { userId },
-      data:  {
-        currentStreak:  newStreak,
-        longestStreak:  Math.max(newStreak, (streak as any).longestStreak),
+      data: {
+        currentStreak: newStreak,
+        longestStreak: Math.max(newStreak, (streak as any).longestStreak),
         lastActivityDate: today,
       },
     });
@@ -332,7 +375,7 @@ export class MicroLearningService {
 
   async submitQuiz(userId: number, dto: SubmitQuizDto) {
     const questions = await this.prisma.microQuizQuestion.findMany({
-      where:   { microLearningId: dto.microLearningId },
+      where: { microLearningId: dto.microLearningId },
       orderBy: { seq: 'asc' },
     });
 
@@ -340,16 +383,16 @@ export class MicroLearningService {
 
     let correct = 0;
     const results = questions.map((q, idx) => {
-      const opts        = JSON.parse(q.options as any);
-      const correctIdx  = opts.findIndex((o: any) => o.isCorrect);
-      const isCorrect   = dto.answers[idx] === correctIdx;
+      const opts = JSON.parse(q.options as any);
+      const correctIdx = opts.findIndex((o: any) => o.isCorrect);
+      const isCorrect = dto.answers[idx] === correctIdx;
       if (isCorrect) correct++;
       return {
-        question:      q.question,
-        selected:      dto.answers[idx],
-        correctIndex:  correctIdx,
+        question: q.question,
+        selected: dto.answers[idx],
+        correctIndex: correctIdx,
         isCorrect,
-        explanation:   q.explanation,
+        explanation: q.explanation,
       };
     });
 
@@ -360,8 +403,8 @@ export class MicroLearningService {
         userId,
         microLearningId: dto.microLearningId,
         score,
-        answers:         JSON.stringify(dto.answers),
-        completedAt:     new Date(),
+        answers: JSON.stringify(dto.answers),
+        completedAt: new Date(),
       },
     });
 
@@ -390,13 +433,13 @@ export class MicroLearningService {
 
   async getMySaved(userId: number) {
     const saves = await (this.prisma as any).microLearningInteraction.findMany({
-      where:   { userId, action: 'SAVE' },
+      where: { userId, action: 'SAVE' },
       include: {
         microLearning: {
           include: {
-            author:   { select: { id: true, fullName: true } },
+            author: { select: { id: true, fullName: true } },
             category: { select: { id: true, name: true } },
-            _count:   { select: { likes: true } },
+            _count: { select: { likes: true } },
           },
         },
       },
@@ -417,7 +460,7 @@ export class MicroLearningService {
     if (contentIds?.length) {
       await this.prisma.playlistItem.createMany({
         data: contentIds.map((mlId, seq) => ({
-          playlistId:      playlist.id,
+          playlistId: playlist.id,
           microLearningId: mlId,
           seq,
         })),
@@ -429,12 +472,19 @@ export class MicroLearningService {
 
   async getPlaylist(id: number) {
     const pl = await (this.prisma as any).microLearningPlaylist.findUnique({
-      where:   { id },
+      where: { id },
       include: {
         items: {
           include: {
             microLearning: {
-              select: { id: true, title: true, contentType: true, durationSeconds: true, thumbnailUrl: true, level: true },
+              select: {
+                id: true,
+                title: true,
+                contentType: true,
+                durationSeconds: true,
+                thumbnailUrl: true,
+                level: true,
+              },
             },
           },
           orderBy: { seq: 'asc' },
@@ -468,28 +518,30 @@ export class MicroLearningService {
       select: { userId: true },
     });
     const existingIds = new Set(existing.map(e => e.userId));
-    const newIds      = dto.userIds.filter(id => !existingIds.has(id));
+    const newIds = dto.userIds.filter(id => !existingIds.has(id));
 
     if (newIds.length) {
       await this.prisma.microLearningProgress.createMany({
         data: newIds.map(userId => ({
           userId,
           microLearningId: dto.microLearningId,
-          progress:        0,
-          watchedSeconds:  0,
+          progress: 0,
+          watchedSeconds: 0,
         })),
       });
 
       // Notificar
       for (const userId of newIds.slice(0, 100)) {
-        await this.prisma.notificationLog.create({
-          data: {
-            userId,
-            type:     'MICROLEARNING_DISPATCHED',
-            message:  `📚 Novo conteúdo de micro-learning disponível para si`,
-            metadata: JSON.stringify({}),
-          },
-        }).catch(() => {});
+        await this.prisma.notificationLog
+          .create({
+            data: {
+              userId,
+              type: 'MICROLEARNING_DISPATCHED',
+              message: `📚 Novo conteúdo de micro-learning disponível para si`,
+              metadata: JSON.stringify({}),
+            },
+          })
+          .catch(() => {});
       }
     }
 
@@ -499,7 +551,7 @@ export class MicroLearningService {
   async dispatchToAll(microLearningId: number) {
     await this.findOne(microLearningId);
     const users = await this.prisma.user.findMany({
-      where:  { active: true },
+      where: { active: true },
       select: { id: true },
     });
     return this.dispatch({ microLearningId, userIds: users.map(u => u.id) });
@@ -512,18 +564,23 @@ export class MicroLearningService {
       this.prisma.learningStreak.findUnique({ where: { userId } }),
       this.prisma.microLearningProgress.count({ where: { userId, progress: { gte: 100 } } }),
       this.prisma.microLearningProgress.aggregate({
-        where: { userId }, _sum: { watchedSeconds: true },
+        where: { userId },
+        _sum: { watchedSeconds: true },
       }),
       this.prisma.microLearningProgress.findMany({
-        where:   { userId, progress: { gt: 0 } },
+        where: { userId, progress: { gt: 0 } },
         include: {
-          microLearning: { select: { id: true, title: true, contentType: true, thumbnailUrl: true } },
+          microLearning: {
+            select: { id: true, title: true, contentType: true, thumbnailUrl: true },
+          },
         },
         orderBy: { updatedAt: 'desc' },
-        take:    5,
+        take: 5,
       }),
       this.prisma.microQuizAttempt.aggregate({
-        where: { userId }, _avg: { score: true }, _count: true,
+        where: { userId },
+        _avg: { score: true },
+        _count: true,
       }),
     ]);
 
@@ -536,11 +593,11 @@ export class MicroLearningService {
         lastActivity: (streak as any)?.lastActivityDate ?? null,
       },
       stats: {
-        completed:    totalCompleted,
-        totalMinutes: Math.round(((totalMinutes._sum.watchedSeconds ?? 0) / 60)),
-        totalXp:      userPoints?.points ?? 0,
+        completed: totalCompleted,
+        totalMinutes: Math.round((totalMinutes._sum.watchedSeconds ?? 0) / 60),
+        totalXp: userPoints?.points ?? 0,
         avgQuizScore: Math.round(quizAttempts._avg.score ?? 0),
-        quizCount:    quizAttempts._count,
+        quizCount: quizAttempts._count,
       },
       recentActivity,
     };
@@ -553,29 +610,36 @@ export class MicroLearningService {
 
     const [totalViews, completions, avgProgress, quizStats, likeCount] = await Promise.all([
       this.prisma.microLearningProgress.count({ where: { microLearningId: id } }),
-      this.prisma.microLearningProgress.count({ where: { microLearningId: id, progress: { gte: 100 } } }),
+      this.prisma.microLearningProgress.count({
+        where: { microLearningId: id, progress: { gte: 100 } },
+      }),
       this.prisma.microLearningProgress.aggregate({
-        where: { microLearningId: id }, _avg: { progress: true, watchedSeconds: true },
+        where: { microLearningId: id },
+        _avg: { progress: true, watchedSeconds: true },
       }),
       this.prisma.microQuizAttempt.aggregate({
-        where: { microLearningId: id }, _avg: { score: true }, _count: true,
+        where: { microLearningId: id },
+        _avg: { score: true },
+        _count: true,
       }),
-      this.prisma.microLearningInteraction.count({ where: { microLearningId: id, action: 'LIKE' } }),
+      this.prisma.microLearningInteraction.count({
+        where: { microLearningId: id, action: 'LIKE' },
+      }),
     ]);
 
     const completionRate = totalViews > 0 ? Math.round((completions / totalViews) * 100) : 0;
 
     return {
       microLearningId: id,
-      views:           totalViews,
+      views: totalViews,
       completions,
       completionRate,
-      avgProgress:     Math.round(avgProgress._avg.progress ?? 0),
+      avgProgress: Math.round(avgProgress._avg.progress ?? 0),
       avgWatchSeconds: Math.round(avgProgress._avg.watchedSeconds ?? 0),
-      likes:           likeCount,
+      likes: likeCount,
       quiz: {
-      attempts:  quizStats._count,
-      avgScore:  Math.round(quizStats._avg.score ?? 0),
+        attempts: quizStats._count,
+        avgScore: Math.round(quizStats._avg.score ?? 0),
       },
     };
   }
@@ -586,10 +650,10 @@ export class MicroLearningService {
       this.prisma.microLearning.count({ where: { status: 'PUBLISHED' } }),
       this.prisma.microLearning.aggregate({ _sum: { viewCount: true } }),
       (this.prisma as any).microLearning.findMany({
-        where:   { status: 'PUBLISHED' },
+        where: { status: 'PUBLISHED' },
         include: { author: { select: { fullName: true } }, _count: { select: { likes: true } } },
         orderBy: { viewCount: 'desc' },
-        take:    5,
+        take: 5,
       }),
       this.prisma.learningStreak.count({ where: { currentStreak: { gt: 0 } } }),
     ]);
@@ -600,7 +664,7 @@ export class MicroLearningService {
 
     return {
       content: { total, published },
-      views:   totalViews._sum.viewCount ?? 0,
+      views: totalViews._sum.viewCount ?? 0,
       avgCompletionRate: Math.round(avgCompletionRate._avg.progress ?? 0),
       activeStreaks,
       topContent,

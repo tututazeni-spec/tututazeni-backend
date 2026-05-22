@@ -1,15 +1,25 @@
 ﻿import {
-  Injectable, NotFoundException, ConflictException,
-  BadRequestException, ForbiddenException, Logger,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateCycleDto, UpdateCycleDto,
-  CreatePerformanceReviewDto, UpdatePerformanceReviewDto,
-  SubmitReviewDto, CreateGoalDto, UpdateGoalDto, UpdatePerformanceGoalProgressDto,
-  CreateFeedbackDto, CalibrateReviewDto, CreateDisputeDto,
-  Update9BoxDto, PerformanceFilterDto,
-  ReviewStatus, CycleStatus, PerformanceCategory,
+  CreateCycleDto,
+  CreatePerformanceReviewDto,
+  UpdatePerformanceReviewDto,
+  SubmitReviewDto,
+  CreateGoalDto,
+  UpdatePerformanceGoalProgressDto,
+  CreateFeedbackDto,
+  CalibrateReviewDto,
+  CreateDisputeDto,
+  Update9BoxDto,
+  PerformanceFilterDto,
+  ReviewStatus,
 } from './performance.dto';
 
 @Injectable()
@@ -21,28 +31,28 @@ export class PerformanceService {
   // ─── CICLOS ───────────────────────────────────────────────────────────────
 
   async createCycle(dto: CreateCycleDto) {
-    const goalsW  = dto.goalsWeight         ?? 40;
-    const compW   = dto.competenciesWeight  ?? 40;
-    const behavW  = dto.behaviorsWeight     ?? 20;
+    const goalsW = dto.goalsWeight ?? 40;
+    const compW = dto.competenciesWeight ?? 40;
+    const behavW = dto.behaviorsWeight ?? 20;
     if (goalsW + compW + behavW !== 100) {
       throw new BadRequestException('A soma dos pesos deve ser 100%');
     }
 
     return this.prisma.performanceCycle.create({
       data: {
-        name:                dto.name,
-        type:                dto.type,
-        startDate:           new Date(dto.startDate),
-        endDate:             new Date(dto.endDate),
-        selfEvalDeadline:    dto.selfEvalDeadline    ? new Date(dto.selfEvalDeadline)    : null,
+        name: dto.name,
+        type: dto.type,
+        startDate: new Date(dto.startDate),
+        endDate: new Date(dto.endDate),
+        selfEvalDeadline: dto.selfEvalDeadline ? new Date(dto.selfEvalDeadline) : null,
         managerEvalDeadline: dto.managerEvalDeadline ? new Date(dto.managerEvalDeadline) : null,
-        goalsWeight:         goalsW,
-        competenciesWeight:  compW,
-        behaviorsWeight:     behavW,
-        selfBeforeManager:   dto.selfBeforeManager ?? true,
-        anonymous360:        dto.anonymous360 ?? true,
-        scoreScale:          dto.scoreScale ?? 5,
-        status:              'PLANNED',
+        goalsWeight: goalsW,
+        competenciesWeight: compW,
+        behaviorsWeight: behavW,
+        selfBeforeManager: dto.selfBeforeManager ?? true,
+        anonymous360: dto.anonymous360 ?? true,
+        scoreScale: dto.scoreScale ?? 5,
+        status: 'PLANNED',
       },
     });
   }
@@ -58,9 +68,9 @@ export class PerformanceService {
     const now = new Date();
     return this.prisma.performanceCycle.findFirst({
       where: {
-        status:    'ACTIVE',
+        status: 'ACTIVE',
         startDate: { lte: now },
-        endDate:   { gte: now },
+        endDate: { gte: now },
       },
       include: { _count: { select: { reviews: true } } },
     });
@@ -69,28 +79,34 @@ export class PerformanceService {
   async activateCycle(cycleId: number) {
     const cycle = await this.prisma.performanceCycle.findUnique({ where: { id: cycleId } });
     if (!cycle) throw new NotFoundException('Ciclo não encontrado');
-    if (cycle.status !== 'PLANNED') throw new BadRequestException('Apenas ciclos em PLANNED podem ser activados');
+    if (cycle.status !== 'PLANNED')
+      throw new BadRequestException('Apenas ciclos em PLANNED podem ser activados');
 
     await this.prisma.performanceCycle.updateMany({
       where: { status: 'ACTIVE' },
-      data:  { status: 'CLOSED' },
+      data: { status: 'CLOSED' },
     });
 
     const updated = await this.prisma.performanceCycle.update({
       where: { id: cycleId },
-      data:  { status: 'ACTIVE' },
+      data: { status: 'ACTIVE' },
     });
 
-    const users = await this.prisma.user.findMany({ where: { active: true }, select: { id: true } });
+    const users = await this.prisma.user.findMany({
+      where: { active: true },
+      select: { id: true },
+    });
     for (const u of users) {
-      await this.prisma.notificationLog.create({
-        data: {
-          userId:   u.id,
-          type:     'PERFORMANCE_CYCLE_STARTED',
-          message:  `O ciclo de avaliação "${cycle.name}" foi iniciado`,
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: u.id,
+            type: 'PERFORMANCE_CYCLE_STARTED',
+            message: `O ciclo de avaliação "${cycle.name}" foi iniciado`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
     }
 
     return updated;
@@ -103,18 +119,22 @@ export class PerformanceService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (userId)  where.userId  = userId;
+    if (userId) where.userId = userId;
     if (cycleId) where.cycleId = cycleId;
-    if (status)  where.status  = status;
-    if (type)    where.type    = type;
+    if (status) where.status = status;
+    if (type) where.type = type;
 
     const [data, total] = await Promise.all([
       this.prisma.performanceReview.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
-          user:     { select: { id: true, fullName: true, email: true, position: { select: { name: true } } } },
+          user: {
+            select: { id: true, fullName: true, email: true, position: { select: { name: true } } },
+          },
           reviewer: { select: { id: true, fullName: true } },
-          cycle:    { select: { id: true, name: true, type: true } },
+          cycle: { select: { id: true, name: true, type: true } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -128,13 +148,15 @@ export class PerformanceService {
     const r = await this.prisma.performanceReview.findUnique({
       where: { id },
       include: {
-        user:            { select: { id: true, fullName: true, email: true, position: { select: { name: true } } } },
-        reviewer:        { select: { id: true, fullName: true } },
-        cycle:           true,
-        goals:           { include: { goal: true } },
+        user: {
+          select: { id: true, fullName: true, email: true, position: { select: { name: true } } },
+        },
+        reviewer: { select: { id: true, fullName: true } },
+        cycle: true,
+        goals: { include: { goal: true } },
         competencyEvals: true,
         calibrationLogs: { orderBy: { createdAt: 'desc' } },
-        disputes:        { orderBy: { createdAt: 'desc' } },
+        disputes: { orderBy: { createdAt: 'desc' } },
       },
     });
     if (!r) throw new NotFoundException('Avaliação não encontrada');
@@ -156,26 +178,28 @@ export class PerformanceService {
 
     const review = await this.prisma.performanceReview.create({
       data: {
-        userId:     dto.userId,
-        cycleId:    dto.cycleId,
-        type:       dto.type,
+        userId: dto.userId,
+        cycleId: dto.cycleId,
+        type: dto.type,
         reviewerId: dto.reviewerId,
-        status:     initialStatus,
+        status: initialStatus,
       },
       include: {
-        user:  { select: { id: true, fullName: true } },
+        user: { select: { id: true, fullName: true } },
         cycle: { select: { id: true, name: true } },
       },
     });
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId:   dto.userId,
-        type:     'PERFORMANCE_REVIEW_CREATED',
-        message:  `Uma avaliação de desempenho foi iniciada para si no ciclo "${cycle.name}"`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: dto.userId,
+          type: 'PERFORMANCE_REVIEW_CREATED',
+          message: `Uma avaliação de desempenho foi iniciada para si no ciclo "${cycle.name}"`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
     return review;
   }
@@ -197,7 +221,7 @@ export class PerformanceService {
   // ─── SUBMETER AVALIAÇÃO ───────────────────────────────────────────────────
 
   async submitReview(submitterId: number, dto: SubmitReviewDto) {
-    const review = await this.findOne(dto.reviewId) as any;
+    const review = (await this.findOne(dto.reviewId)) as any;
 
     if (review.status === 'FINALIZED') {
       throw new ForbiddenException('Avaliação já finalizada');
@@ -216,8 +240,13 @@ export class PerformanceService {
 
         for (const ge of dto.goalEvaluations) {
           await this.prisma.goalEvaluation.upsert({
-            where:  { reviewId_goalId: { reviewId: dto.reviewId, goalId: ge.goalId } },
-            create: { reviewId: dto.reviewId, goalId: ge.goalId, score: ge.score, comment: ge.comment },
+            where: { reviewId_goalId: { reviewId: dto.reviewId, goalId: ge.goalId } },
+            create: {
+              reviewId: dto.reviewId,
+              goalId: ge.goalId,
+              score: ge.score,
+              comment: ge.comment,
+            },
             update: { score: ge.score, comment: ge.comment },
           });
         }
@@ -229,26 +258,33 @@ export class PerformanceService {
 
         for (const ce of dto.competencyEvaluations) {
           await this.prisma.competencyEvaluation.upsert({
-            where:  { reviewId_competencyId: { reviewId: dto.reviewId, competencyId: ce.competencyId } },
-            create: { reviewId: dto.reviewId, competencyId: ce.competencyId, evaluatedLevel: ce.evaluatedLevel, feedback: ce.feedback },
+            where: {
+              reviewId_competencyId: { reviewId: dto.reviewId, competencyId: ce.competencyId },
+            },
+            create: {
+              reviewId: dto.reviewId,
+              competencyId: ce.competencyId,
+              evaluatedLevel: ce.evaluatedLevel,
+              feedback: ce.feedback,
+            },
             update: { evaluatedLevel: ce.evaluatedLevel, feedback: ce.feedback },
           });
         }
       }
 
-      const gW = (cycle.goalsWeight        ?? 40) / 100;
+      const gW = (cycle.goalsWeight ?? 40) / 100;
       const cW = (cycle.competenciesWeight ?? 40) / 100;
-      const bW = (cycle.behaviorsWeight    ?? 20) / 100;
+      const bW = (cycle.behaviorsWeight ?? 20) / 100;
       finalScore = goalScore * gW + compScore * cW + (dto.score ?? 0) * bW;
       finalScore = Math.round(finalScore * 10) / 10;
     }
 
-    const scale     = (review.cycle?.scoreScale ?? 5) * 20;
-    const scoreNorm = (finalScore ?? 0) / scale * 100;
+    const scale = (review.cycle?.scoreScale ?? 5) * 20;
+    const scoreNorm = ((finalScore ?? 0) / scale) * 100;
     let category: string;
-    if (scoreNorm >= 75)      category = 'HIGH';
+    if (scoreNorm >= 75) category = 'HIGH';
     else if (scoreNorm >= 45) category = 'MEDIUM';
-    else                      category = 'LOW';
+    else category = 'LOW';
 
     const threshold = review.cycle?.scoreScale ?? 5;
     const isExtreme = (finalScore ?? 0) <= 1 || (finalScore ?? 0) >= threshold;
@@ -256,37 +292,38 @@ export class PerformanceService {
       throw new BadRequestException('Justificativa obrigatória para scores extremos');
     }
 
-    const nextStatus = review.type === 'SELF'
-      ? ReviewStatus.PENDING_MANAGER
-      : ReviewStatus.CALIBRATION;
+    const nextStatus =
+      review.type === 'SELF' ? ReviewStatus.PENDING_MANAGER : ReviewStatus.CALIBRATION;
 
     const updated = await this.prisma.performanceReview.update({
       where: { id: dto.reviewId },
       data: {
-        score:          finalScore,
+        score: finalScore,
         potentialScore: dto.potentialScore,
-        feedback:       dto.feedback,
-        justification:  dto.justification,
+        feedback: dto.feedback,
+        justification: dto.justification,
         category,
-        status:         nextStatus,
-        submittedAt:    new Date(),
+        status: nextStatus,
+        submittedAt: new Date(),
       },
     });
 
     if (review.type === 'SELF') {
       const user = await this.prisma.user.findUnique({
-        where:  { id: review.userId },
+        where: { id: review.userId },
         select: { managerId: true, fullName: true },
       });
       if (user?.managerId) {
-        await this.prisma.notificationLog.create({
-          data: {
-            userId:   user.managerId,
-            type:     'SELF_REVIEW_COMPLETED',
-            message:  `${user.fullName} concluiu a autoavaliação. A sua avaliação está pendente.`,
-            metadata: JSON.stringify({}),
-          },
-        }).catch(() => {});
+        await this.prisma.notificationLog
+          .create({
+            data: {
+              userId: user.managerId,
+              type: 'SELF_REVIEW_COMPLETED',
+              message: `${user.fullName} concluiu a autoavaliação. A sua avaliação está pendente.`,
+              metadata: JSON.stringify({}),
+            },
+          })
+          .catch(() => {});
       }
     }
 
@@ -301,17 +338,17 @@ export class PerformanceService {
 
     return this.prisma.performanceGoal.create({
       data: {
-        userId:       dto.userId,
-        cycleId:      dto.cycleId,
-        title:        dto.title,
-        description:  dto.description,
-        targetValue:  dto.targetValue,
+        userId: dto.userId,
+        cycleId: dto.cycleId,
+        title: dto.title,
+        description: dto.description,
+        targetValue: dto.targetValue,
         currentValue: dto.currentValue ?? 0,
-        weight:       dto.weight ?? 100,
-        unit:         dto.unit,
-        dueDate:      dto.dueDate ? new Date(dto.dueDate) : null,
-        status:       'ON_TRACK',
-        progress:     0,
+        weight: dto.weight ?? 100,
+        unit: dto.unit,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+        status: 'ON_TRACK',
+        progress: 0,
       },
     });
   }
@@ -321,18 +358,19 @@ export class PerformanceService {
     if (!goal) throw new NotFoundException('Goal não encontrado');
     if ((goal as any).userId !== userId) throw new ForbiddenException('Sem permissão');
 
-    const progress = Math.min(100, Math.round(
-      (dto.currentValue / ((goal as any).targetValue || 1)) * 100
-    ));
+    const progress = Math.min(
+      100,
+      Math.round((dto.currentValue / ((goal as any).targetValue || 1)) * 100),
+    );
 
     let status = 'ON_TRACK';
-    if (progress >= 100)    status = 'COMPLETED';
+    if (progress >= 100) status = 'COMPLETED';
     else if (progress < 25) status = 'OFF_TRACK';
     else if (progress < 60) status = 'AT_RISK';
 
     return this.prisma.performanceGoal.update({
       where: { id: goalId },
-      data:  { currentValue: dto.currentValue, progress, status, notes: dto.notes },
+      data: { currentValue: dto.currentValue, progress, status, notes: dto.notes },
     });
   }
 
@@ -350,24 +388,26 @@ export class PerformanceService {
   async createFeedback(giverId: number, dto: CreateFeedbackDto) {
     const feedback = await (this.prisma as any).continuousFeedback.create({
       data: {
-        giverId:       giverId,
-        userId:        dto.targetUserId,
-        type:          dto.type,
-        message:       dto.message,
+        giverId: giverId,
+        userId: dto.targetUserId,
+        type: dto.type,
+        message: dto.message,
         visibleToUser: dto.visibleToUser ?? true,
-        cycleId:       dto.cycleId,
+        cycleId: dto.cycleId,
       },
     });
 
     if (dto.visibleToUser) {
-      await this.prisma.notificationLog.create({
-        data: {
-          userId:   dto.targetUserId,
-          type:     'FEEDBACK_RECEIVED',
-          message:  `Recebeu um feedback do tipo ${dto.type}`,
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: dto.targetUserId,
+            type: 'FEEDBACK_RECEIVED',
+            message: `Recebeu um feedback do tipo ${dto.type}`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
     }
 
     return feedback;
@@ -379,7 +419,14 @@ export class PerformanceService {
     return (this.prisma as any).continuousFeedback.findMany({
       where,
       include: {
-        giver: { select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } } },
+        giver: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -388,7 +435,7 @@ export class PerformanceService {
   // ─── CALIBRAÇÃO ───────────────────────────────────────────────────────────
 
   async calibrateReview(calibratorId: number, dto: CalibrateReviewDto) {
-    const review = await this.findOne(dto.reviewId) as any;
+    const review = (await this.findOne(dto.reviewId)) as any;
     if (review.status !== 'CALIBRATION') {
       throw new BadRequestException('Avaliação não está em fase de calibração');
     }
@@ -398,30 +445,32 @@ export class PerformanceService {
     await this.prisma.performanceReview.update({
       where: { id: dto.reviewId },
       data: {
-        score:    dto.calibratedScore,
+        score: dto.calibratedScore,
         category: dto.category ?? review.category,
-        status:   ReviewStatus.PUBLISHED,
+        status: ReviewStatus.PUBLISHED,
       },
     });
 
     await this.prisma.calibrationLog.create({
       data: {
-        reviewId:        dto.reviewId,
+        reviewId: dto.reviewId,
         calibratorId,
         previousScore,
         calibratedScore: dto.calibratedScore,
-        reason:          dto.reason,
+        reason: dto.reason,
       },
     });
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId:   review.userId,
-        type:     'PERFORMANCE_PUBLISHED',
-        message:  `O resultado da sua avaliação de desempenho foi publicado`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: review.userId,
+          type: 'PERFORMANCE_PUBLISHED',
+          message: `O resultado da sua avaliação de desempenho foi publicado`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
     return { message: 'Calibração aplicada e avaliação publicada' };
   }
@@ -429,8 +478,8 @@ export class PerformanceService {
   // ─── DISPUTA ──────────────────────────────────────────────────────────────
 
   async createDispute(userId: number, dto: CreateDisputeDto) {
-    const review = await this.findOne(dto.reviewId) as any;
-    if ((review as any).userId !== userId) throw new ForbiddenException('Sem permissão');
+    const review = (await this.findOne(dto.reviewId)) as any;
+    if (review.userId !== userId) throw new ForbiddenException('Sem permissão');
     if (review.status !== 'PUBLISHED') {
       throw new BadRequestException('Apenas avaliações publicadas podem ser contestadas');
     }
@@ -439,30 +488,32 @@ export class PerformanceService {
       data: {
         reviewId: dto.reviewId,
         userId,
-        reason:   dto.reason,
+        reason: dto.reason,
         evidence: dto.evidence,
-        status:   'OPEN',
+        status: 'OPEN',
       },
     });
 
     await this.prisma.performanceReview.update({
       where: { id: dto.reviewId },
-      data:  { status: ReviewStatus.DISPUTE },
+      data: { status: ReviewStatus.DISPUTE },
     });
 
-      const rhUsers = await (this.prisma as any).user.findMany({
-      where:  { role: { code: { in: ['ADMIN', 'RH'] } } },
+    const rhUsers = await (this.prisma as any).user.findMany({
+      where: { role: { code: { in: ['ADMIN', 'RH'] } } },
       select: { id: true },
-      });
+    });
     for (const rh of rhUsers) {
-      await this.prisma.notificationLog.create({
-        data: {
-          userId:   rh.id,
-          type:     'PERFORMANCE_DISPUTE',
-          message:  `Disputa aberta para avaliação #${dto.reviewId}`,
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: rh.id,
+            type: 'PERFORMANCE_DISPUTE',
+            message: `Disputa aberta para avaliação #${dto.reviewId}`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
     }
 
     return dispute;
@@ -473,21 +524,21 @@ export class PerformanceService {
   async getUserHistory(userId: number) {
     const [reviews, goals, feedback] = await Promise.all([
       this.prisma.performanceReview.findMany({
-        where:   { userId },
+        where: { userId },
         include: { cycle: { select: { id: true, name: true, type: true, startDate: true } } },
         orderBy: { createdAt: 'desc' },
-        take:    10,
+        take: 10,
       }),
       this.prisma.performanceGoal.findMany({
-        where:   { userId, status: { not: 'COMPLETED' } },
+        where: { userId, status: { not: 'COMPLETED' } },
         orderBy: { dueDate: 'asc' },
-        take:    5,
+        take: 5,
       }),
       (this.prisma as any).continuousFeedback.findMany({
-        where:   { userId, visibleToUser: true },
+        where: { userId, visibleToUser: true },
         include: { giver: { select: { id: true, fullName: true, avatarUrl: true } } },
         orderBy: { createdAt: 'desc' },
-        take:    5,
+        take: 5,
       }),
     ]);
 
@@ -500,48 +551,52 @@ export class PerformanceService {
 
   async getTeamPerformance(managerId: number, cycleId?: number) {
     const team = await this.prisma.user.findMany({
-      where:  { managerId, active: true },
+      where: { managerId, active: true },
       select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } },
     });
 
-    const teamData = await Promise.all(team.map(async member => {
-      const where: any = { userId: member.id };
-      if (cycleId) where.cycleId = cycleId;
+    const teamData = await Promise.all(
+      team.map(async member => {
+        const where: any = { userId: member.id };
+        if (cycleId) where.cycleId = cycleId;
 
-      const [latestReview, goals, feedbackCount] = await Promise.all([
-        this.prisma.performanceReview.findFirst({
-          where:   { ...where, type: 'MANAGER' },
-          orderBy: { createdAt: 'desc' },
-        }),
-        this.prisma.performanceGoal.findMany({ where: { userId: member.id, ...(cycleId ? { cycleId } : {}) } }),
-        (this.prisma as any).continuousFeedback.count({ where: { userId: member.id } }),
-      ]);
+        const [latestReview, goals, feedbackCount] = await Promise.all([
+          this.prisma.performanceReview.findFirst({
+            where: { ...where, type: 'MANAGER' },
+            orderBy: { createdAt: 'desc' },
+          }),
+          this.prisma.performanceGoal.findMany({
+            where: { userId: member.id, ...(cycleId ? { cycleId } : {}) },
+          }),
+          (this.prisma as any).continuousFeedback.count({ where: { userId: member.id } }),
+        ]);
 
-      const avgGoalProgress = goals.length
-        ? goals.reduce((s, g) => s + ((g as any).progress ?? 0), 0) / goals.length
-        : 0;
+        const avgGoalProgress = goals.length
+          ? goals.reduce((s, g) => s + ((g as any).progress ?? 0), 0) / goals.length
+          : 0;
 
-      const pendingSelfReview = await this.prisma.performanceReview.findFirst({
-        where: { ...where, type: 'SELF', status: { in: ['PENDING_SELF'] } },
-      });
+        const pendingSelfReview = await this.prisma.performanceReview.findFirst({
+          where: { ...where, type: 'SELF', status: { in: ['PENDING_SELF'] } },
+        });
 
-      return {
-        user:              member,
-        latestReview,
-        avgGoalProgress:   Math.round(avgGoalProgress),
-        goalCount:         goals.length,
-        feedbackCount,
-        pendingSelfReview: !!pendingSelfReview,
-        status:            latestReview ? (latestReview as any).status : 'NOT_STARTED',
-      };
-    }));
+        return {
+          user: member,
+          latestReview,
+          avgGoalProgress: Math.round(avgGoalProgress),
+          goalCount: goals.length,
+          feedbackCount,
+          pendingSelfReview: !!pendingSelfReview,
+          status: latestReview ? (latestReview as any).status : 'NOT_STARTED',
+        };
+      }),
+    );
 
     return { team: teamData, managerId, total: team.length };
   }
 
   async getDepartmentStats(departmentId: number, cycleId?: number) {
     const users = await this.prisma.user.findMany({
-      where:  { departmentId, active: true },
+      where: { departmentId, active: true },
       select: { id: true },
     });
     const userIds = users.map(u => u.id);
@@ -552,31 +607,31 @@ export class PerformanceService {
     const [stats, categoryDist, avgScore] = await Promise.all([
       this.prisma.performanceReview.aggregate({
         where,
-        _avg:   { score: true },
-        _min:   { score: true },
-        _max:   { score: true },
+        _avg: { score: true },
+        _min: { score: true },
+        _max: { score: true },
         _count: true,
       }),
       this.prisma.performanceReview.groupBy({
-        by:     ['category'],
-        where:  { ...where, category: { not: null } },
+        by: ['category'],
+        where: { ...where, category: { not: null } },
         _count: true,
       }),
       this.prisma.performanceGoal.aggregate({
         where: { userId: { in: userIds }, ...(cycleId ? { cycleId } : {}) },
-        _avg:  { progress: true },
+        _avg: { progress: true },
       }),
     ]);
 
     return {
       departmentId,
-      userCount:            users.length,
-      reviewCount:          stats._count,
-      avgScore:             Math.round((stats._avg.score ?? 0) * 10) / 10,
-      minScore:             stats._min.score ?? 0,
-      maxScore:             stats._max.score ?? 0,
+      userCount: users.length,
+      reviewCount: stats._count,
+      avgScore: Math.round((stats._avg.score ?? 0) * 10) / 10,
+      minScore: stats._min.score ?? 0,
+      maxScore: stats._max.score ?? 0,
       categoryDistribution: categoryDist,
-      avgGoalProgress:      Math.round(avgScore._avg.progress ?? 0),
+      avgGoalProgress: Math.round(avgScore._avg.progress ?? 0),
     };
   }
 
@@ -587,33 +642,35 @@ export class PerformanceService {
     if (!user) throw new NotFoundException('Utilizador não encontrado');
 
     return this.prisma.nineBoxPlacement.upsert({
-      where:  { userId_cycleId: { userId: dto.userId, cycleId: dto.cycleId ?? 0 } },
+      where: { userId_cycleId: { userId: dto.userId, cycleId: dto.cycleId ?? 0 } },
       create: {
-        userId:          dto.userId,
-        cycleId:         dto.cycleId,
+        userId: dto.userId,
+        cycleId: dto.cycleId,
         performanceAxis: dto.performanceAxis,
-        potentialAxis:   dto.potentialAxis,
-        justification:   dto.justification,
+        potentialAxis: dto.potentialAxis,
+        justification: dto.justification,
         updatedById,
       },
       update: {
         performanceAxis: dto.performanceAxis,
-        potentialAxis:   dto.potentialAxis,
-        justification:   dto.justification,
+        potentialAxis: dto.potentialAxis,
+        justification: dto.justification,
         updatedById,
-        updatedAt:       new Date(),
+        updatedAt: new Date(),
       },
     });
   }
 
   async get9Box(cycleId?: number, departmentId?: number) {
     const placements = await this.prisma.nineBoxPlacement.findMany({
-      where:   { ...(cycleId ? { cycleId } : {}) },
+      where: { ...(cycleId ? { cycleId } : {}) },
       include: {
         user: {
           select: {
-            id: true, fullName: true, avatarUrl: true,
-            position:   { select: { name: true } },
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
             department: { select: { name: true } },
           },
         },
@@ -646,30 +703,44 @@ export class PerformanceService {
 
     const [totalReviews, byStatus, byCategory, avgScores] = await Promise.all([
       this.prisma.performanceReview.count({ where }),
-      this.prisma.performanceReview.groupBy({ by: ['status'],   where, _count: true }),
-      this.prisma.performanceReview.groupBy({ by: ['category'], where: { ...where, category: { not: null } }, _count: true }),
-      this.prisma.performanceReview.aggregate({ where, _avg: { score: true }, _min: { score: true }, _max: { score: true } }),
+      this.prisma.performanceReview.groupBy({ by: ['status'], where, _count: true }),
+      this.prisma.performanceReview.groupBy({
+        by: ['category'],
+        where: { ...where, category: { not: null } },
+        _count: true,
+      }),
+      this.prisma.performanceReview.aggregate({
+        where,
+        _avg: { score: true },
+        _min: { score: true },
+        _max: { score: true },
+      }),
     ]);
 
     const topPerformers = await this.prisma.performanceReview.findMany({
-      where:   { ...where, score: { not: null } },
-      include: { user: { select: { id: true, fullName: true, position: { select: { name: true } } } } },
+      where: { ...where, score: { not: null } },
+      include: {
+        user: { select: { id: true, fullName: true, position: { select: { name: true } } } },
+      },
       orderBy: { score: 'desc' },
-      take:    5,
+      take: 5,
     });
 
     const selfReviews = await this.prisma.performanceReview.findMany({
-      where:  { ...where, type: 'SELF',    score: { not: null } },
+      where: { ...where, type: 'SELF', score: { not: null } },
       select: { userId: true, score: true },
     });
     const mgRviews = await this.prisma.performanceReview.findMany({
-      where:  { ...where, type: 'MANAGER', score: { not: null } },
+      where: { ...where, type: 'MANAGER', score: { not: null } },
       select: { userId: true, score: true },
     });
 
     const selfMap = new Map(selfReviews.map(r => [r.userId, r.score ?? 0]));
     const divergences = mgRviews
-      .map(r => ({ userId: r.userId, divergence: Math.abs((r.score ?? 0) - (selfMap.get(r.userId) ?? 0)) }))
+      .map(r => ({
+        userId: r.userId,
+        divergence: Math.abs((r.score ?? 0) - (selfMap.get(r.userId) ?? 0)),
+      }))
       .filter(d => d.divergence >= 1)
       .sort((a, b) => b.divergence - a.divergence)
       .slice(0, 10);
@@ -678,9 +749,9 @@ export class PerformanceService {
       totalReviews,
       byStatus,
       byCategory,
-      avgScore:        Math.round((avgScores._avg.score ?? 0) * 10) / 10,
-      minScore:        avgScores._min.score,
-      maxScore:        avgScores._max.score,
+      avgScore: Math.round((avgScores._avg.score ?? 0) * 10) / 10,
+      minScore: avgScores._min.score,
+      maxScore: avgScores._max.score,
       topPerformers,
       highDivergences: divergences,
     };
@@ -689,7 +760,7 @@ export class PerformanceService {
   async getPeriods() {
     return this.prisma.performanceCycle.findMany({
       orderBy: { startDate: 'desc' },
-      select:  { id: true, name: true, type: true, status: true, startDate: true, endDate: true },
+      select: { id: true, name: true, type: true, status: true, startDate: true, endDate: true },
     });
   }
 }

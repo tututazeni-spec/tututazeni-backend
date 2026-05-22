@@ -1,15 +1,25 @@
 ﻿// src/evaluation/evaluation.service.ts
 import {
-  Injectable, NotFoundException, BadRequestException, ConflictException,
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateCycleDto, UpdateCycleDto, CycleFilterDto,
-  CreateFormDto, SubmitEvaluationDto,
-  AssignEvaluatorDto, BulkAssignDto,
-  CalibrateScoreDto, AnalyticsFilterDto,
+  CreateCycleDto,
+  UpdateCycleDto,
+  CycleFilterDto,
+  CreateFormDto,
+  SubmitEvaluationDto,
+  AssignEvaluatorDto,
+  BulkAssignDto,
+  CalibrateScoreDto,
+  AnalyticsFilterDto,
   CreateEvaluationDto,
-  EvalType, CycleStatus, RequestStatus,
+  EvalType,
+  CycleStatus,
+  RequestStatus,
 } from './evaluation.dto';
 
 // ─────────────────────────────────────────────────────────────────
@@ -21,11 +31,12 @@ function weightedScore(
   scores: Record<string, number>,
   weights: { type: string; weight: number; selfEvalIncluded: boolean }[],
 ): number {
-  let total = 0, totalWeight = 0;
+  let total = 0,
+    totalWeight = 0;
   for (const w of weights) {
     if (w.type === EvalType.SELF && !w.selfEvalIncluded) continue;
     if (scores[w.type] !== undefined) {
-      total       += scores[w.type] * w.weight;
+      total += scores[w.type] * w.weight;
       totalWeight += w.weight;
     }
   }
@@ -36,7 +47,7 @@ function weightedScore(
 function removeOutliers(values: number[]): number[] {
   if (values.length < 4) return values;
   const mean = values.reduce((a, b) => a + b, 0) / values.length;
-  const sd   = Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length);
+  const sd = Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length);
   return values.filter(v => Math.abs(v - mean) <= 2 * sd);
 }
 
@@ -48,18 +59,19 @@ function percentile(value: number, allValues: number[]): number {
 }
 
 /** Safe model access for optional Prisma models */
-const safeM = (prisma: any, name: string) => (prisma as any)[name] ?? {
-  findMany:  async () => [],
-  findFirst: async () => null,
-  findUnique:async () => null,
-  create:    async (d: any) => d.data,
-  createMany:async () => ({ count: 0 }),
-  upsert:    async (d: any) => d.create,
-  update:    async (d: any) => d.data,
-  delete:    async () => null,
-  count:     async () => 0,
-  groupBy:   async () => [],
-};
+const safeM = (prisma: any, name: string) =>
+  prisma[name] ?? {
+    findMany: async () => [],
+    findFirst: async () => null,
+    findUnique: async () => null,
+    create: async (d: any) => d.data,
+    createMany: async () => ({ count: 0 }),
+    upsert: async (d: any) => d.create,
+    update: async (d: any) => d.data,
+    delete: async () => null,
+    count: async () => 0,
+    groupBy: async () => [],
+  };
 
 // ─────────────────────────────────────────────────────────────────
 // SERVICE
@@ -79,62 +91,84 @@ export class EvaluationService {
       throw new BadRequestException(`A soma dos pesos deve ser 100% (actual: ${totalWeight}%)`);
     }
 
-    const cycle = await safeM(this.prisma, 'evaluationCycle').create({
-      data: {
-        name:        dto.name,
-        description: dto.description,
-        model:       dto.model,
-        status:      CycleStatus.DRAFT,
-        startDate:   new Date(dto.startDate),
-        endDate:     new Date(dto.endDate),
-        formId:      dto.formId,
-        createdById,
-        selfEvalIncludedInScore: dto.selfEvalIncludedInScore ?? false,
-        weights:     JSON.stringify(dto.weights),
-        targetDeptIds: dto.targetDeptIds ?? [],
-      },
-    }).catch(async () => {
-      // Fallback to performanceEvaluation approach if cycle model missing
-      return { id: null, name: dto.name, status: 'DRAFT', message: 'Criado (modo compatibilidade)' };
-    });
+    const cycle = await safeM(this.prisma, 'evaluationCycle')
+      .create({
+        data: {
+          name: dto.name,
+          description: dto.description,
+          model: dto.model,
+          status: CycleStatus.DRAFT,
+          startDate: new Date(dto.startDate),
+          endDate: new Date(dto.endDate),
+          formId: dto.formId,
+          createdById,
+          selfEvalIncludedInScore: dto.selfEvalIncludedInScore ?? false,
+          weights: JSON.stringify(dto.weights),
+          targetDeptIds: dto.targetDeptIds ?? [],
+        },
+      })
+      .catch(async () => {
+        // Fallback to performanceEvaluation approach if cycle model missing
+        return {
+          id: null,
+          name: dto.name,
+          status: 'DRAFT',
+          message: 'Criado (modo compatibilidade)',
+        };
+      });
 
     return cycle;
   }
 
   async getCycles(filters: CycleFilterDto = {}) {
     const { page = 1, limit = 20, status } = filters;
-    const skip  = (page - 1) * limit;
+    const skip = (page - 1) * limit;
     const where: any = {};
     if (status) where.status = status;
 
-    const data  = await safeM(this.prisma, 'evaluationCycle').findMany({
-      where, skip, take: limit, orderBy: { createdAt: 'desc' },
-    }).catch(() => [] as any[]);
+    const data = await safeM(this.prisma, 'evaluationCycle')
+      .findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      })
+      .catch(() => [] as any[]);
 
-    const total = await safeM(this.prisma, 'evaluationCycle').count({ where }).catch(() => 0);
+    const total = await safeM(this.prisma, 'evaluationCycle')
+      .count({ where })
+      .catch(() => 0);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async getCycle(id: number) {
-    const cycle = await safeM(this.prisma, 'evaluationCycle').findUnique({
-      where: { id },
-      include: { form: true },
-    }).catch(() => null);
+    const cycle = await safeM(this.prisma, 'evaluationCycle')
+      .findUnique({
+        where: { id },
+        include: { form: true },
+      })
+      .catch(() => null);
 
     if (!cycle) throw new NotFoundException('Ciclo não encontrado');
 
     // Participation stats
-    const requests = await (this.prisma as any).evaluationRequest.findMany({
-    where: (cycle.id ? { cycleId: cycle.id } : {}),
-    }).catch(() => [] as any[]);
+    const requests = await (this.prisma as any).evaluationRequest
+      .findMany({
+        where: cycle.id ? { cycleId: cycle.id } : {},
+      })
+      .catch(() => [] as any[]);
 
-    const total     = requests.length;
+    const total = requests.length;
     const completed = requests.filter((r: any) => r.status === 'COMPLETED').length;
 
     return {
       ...cycle,
-      participation: { total, completed, rate: total > 0 ? +((completed / total) * 100).toFixed(1) : 0 },
+      participation: {
+        total,
+        completed,
+        rate: total > 0 ? +((completed / total) * 100).toFixed(1) : 0,
+      },
     };
   }
 
@@ -142,14 +176,18 @@ export class EvaluationService {
     const data: any = { ...dto };
     if (dto.endDate) data.endDate = new Date(dto.endDate);
 
-    return safeM(this.prisma, 'evaluationCycle').update({ where: { id }, data })
+    return safeM(this.prisma, 'evaluationCycle')
+      .update({ where: { id }, data })
       .catch(() => ({ id, message: 'Actualizado', ...dto }));
   }
 
   async publishCycle(id: number) {
-    return safeM(this.prisma, 'evaluationCycle').update({
-      where: { id }, data: { status: CycleStatus.PUBLISHED, publishedAt: new Date() },
-    }).catch(() => ({ id, status: 'PUBLISHED' }));
+    return safeM(this.prisma, 'evaluationCycle')
+      .update({
+        where: { id },
+        data: { status: CycleStatus.PUBLISHED, publishedAt: new Date() },
+      })
+      .catch(() => ({ id, status: 'PUBLISHED' }));
   }
 
   async activateCycle(id: number) {
@@ -158,26 +196,33 @@ export class EvaluationService {
     // Auto-assign evaluation requests based on team structure
     await this.autoAssignCycleRequests(id, cycle);
 
-    const updated = await safeM(this.prisma, 'evaluationCycle').update({
-      where: { id }, data: { status: CycleStatus.ACTIVE, activatedAt: new Date() },
-    }).catch(() => ({ id, status: 'ACTIVE' }));
+    const updated = await safeM(this.prisma, 'evaluationCycle')
+      .update({
+        where: { id },
+        data: { status: CycleStatus.ACTIVE, activatedAt: new Date() },
+      })
+      .catch(() => ({ id, status: 'ACTIVE' }));
 
     // Notify all participants
-      const requests = await (this.prisma as any).evaluationRequest.findMany({
-      where: { ...(id ? { cycleId: id } : {}) },
-      select: { evaluatorId: true },
-      }).catch(() => [] as any[]);
+    const requests = await (this.prisma as any).evaluationRequest
+      .findMany({
+        where: { ...(id ? { cycleId: id } : {}) },
+        select: { evaluatorId: true },
+      })
+      .catch(() => [] as any[]);
 
     const uniqueIds = [...new Set((requests as any[]).map((r: any) => r.evaluatorId))];
-    await this.prisma.notificationLog.createMany({
-      data: uniqueIds.map(uid => ({
-        userId:   uid,
-        type:     'EVALUATION_CYCLE_STARTED',
-        message:  `Ciclo de avaliação "${cycle.name}" foi iniciado — tens avaliações pendentes`,
-        metadata: JSON.stringify({}),
-      })),
-      skipDuplicates: true,
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .createMany({
+        data: uniqueIds.map(uid => ({
+          userId: uid,
+          type: 'EVALUATION_CYCLE_STARTED',
+          message: `Ciclo de avaliação "${cycle.name}" foi iniciado — tens avaliações pendentes`,
+          metadata: JSON.stringify({}),
+        })),
+        skipDuplicates: true,
+      })
+      .catch(() => {});
 
     return updated;
   }
@@ -188,8 +233,8 @@ export class EvaluationService {
     if (cycle.targetDeptIds?.length) deptFilter.departmentId = { in: cycle.targetDeptIds };
 
     const users = await this.prisma.user.findMany({
-      where:   { active: true, ...deptFilter },
-      select:  { id: true, managerId: true },
+      where: { active: true, ...deptFilter },
+      select: { id: true, managerId: true },
     });
 
     const assignments: any[] = [];
@@ -203,15 +248,26 @@ export class EvaluationService {
       }
       // Manager
       if (['90', '180', '270', '360'].includes(model) && u.managerId) {
-        assignments.push({ cycleId, evaluatorId: u.managerId, evaluatedId: u.id, type: EvalType.MANAGER });
+        assignments.push({
+          cycleId,
+          evaluatorId: u.managerId,
+          evaluatedId: u.id,
+          type: EvalType.MANAGER,
+        });
       }
     }
 
     if (assignments.length) {
-      await this.prisma.evaluationRequest.createMany({
-        data:           assignments.map(a => ({ ...a, status: 'PENDING', dueDate: new Date(cycle.endDate) })),
-        skipDuplicates: true,
-      }).catch(() => {});
+      await this.prisma.evaluationRequest
+        .createMany({
+          data: assignments.map(a => ({
+            ...a,
+            status: 'PENDING',
+            dueDate: new Date(cycle.endDate),
+          })),
+          skipDuplicates: true,
+        })
+        .catch(() => {});
     }
   }
 
@@ -220,43 +276,49 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async createForm(dto: CreateFormDto, createdById: number) {
-    return safeM(this.prisma, 'evaluationForm').create({
-      data: {
-        title:       dto.title,
-        description: dto.description,
-        isTemplate:  dto.isTemplate ?? false,
-        createdById,
-        questions: {
-          create: dto.questions.map((q, i) => ({
-            text:         q.text,
-            type:         q.type,
-            order:        q.order ?? i + 1,
-            required:     q.required ?? true,
-            scaleMax:     q.scaleMax ?? 5,
-            competencyId: q.competencyId,
-            weight:       q.weight ?? 100,
-          })),
+    return safeM(this.prisma, 'evaluationForm')
+      .create({
+        data: {
+          title: dto.title,
+          description: dto.description,
+          isTemplate: dto.isTemplate ?? false,
+          createdById,
+          questions: {
+            create: dto.questions.map((q, i) => ({
+              text: q.text,
+              type: q.type,
+              order: q.order ?? i + 1,
+              required: q.required ?? true,
+              scaleMax: q.scaleMax ?? 5,
+              competencyId: q.competencyId,
+              weight: q.weight ?? 100,
+            })),
+          },
         },
-      },
-      include: { questions: { orderBy: { order: 'asc' } } },
-    }).catch(async () => {
-      // Fallback: return DTO as confirmation
-      return { ...dto, id: null, message: 'Formulário registado (modo compatibilidade)' };
-    });
+        include: { questions: { orderBy: { order: 'asc' } } },
+      })
+      .catch(async () => {
+        // Fallback: return DTO as confirmation
+        return { ...dto, id: null, message: 'Formulário registado (modo compatibilidade)' };
+      });
   }
 
   async getForms() {
-    return safeM(this.prisma, 'evaluationForm').findMany({
-      include: { _count: { select: { questions: true } } },
-      orderBy: { createdAt: 'desc' },
-    }).catch(() => [] as any[]);
+    return safeM(this.prisma, 'evaluationForm')
+      .findMany({
+        include: { _count: { select: { questions: true } } },
+        orderBy: { createdAt: 'desc' },
+      })
+      .catch(() => [] as any[]);
   }
 
   async getForm(id: number) {
-    const form = await safeM(this.prisma, 'evaluationForm').findUnique({
-      where:   { id },
-      include: { questions: { orderBy: { order: 'asc' } } },
-    }).catch(() => null);
+    const form = await safeM(this.prisma, 'evaluationForm')
+      .findUnique({
+        where: { id },
+        include: { questions: { orderBy: { order: 'asc' } } },
+      })
+      .catch(() => null);
     if (!form) throw new NotFoundException('Formulário não encontrado');
     return form;
   }
@@ -266,13 +328,16 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async assignEvaluator(dto: AssignEvaluatorDto) {
-    const existing = await (this.prisma as any).evaluationRequest.findFirst({
-      where: {
-        evaluatorId: dto.evaluatorId, evaluatedId: dto.evaluatedId,
-        type: dto.type as any,
-        ...(dto.cycleId ? { cycleId: dto.cycleId } : {}),
-      },
-    }).catch(() => null);
+    const existing = await (this.prisma as any).evaluationRequest
+      .findFirst({
+        where: {
+          evaluatorId: dto.evaluatorId,
+          evaluatedId: dto.evaluatedId,
+          type: dto.type as any,
+          ...(dto.cycleId ? { cycleId: dto.cycleId } : {}),
+        },
+      })
+      .catch(() => null);
 
     if (existing) throw new ConflictException('Avaliador já atribuído para este par neste ciclo');
 
@@ -280,10 +345,10 @@ export class EvaluationService {
       data: {
         evaluatorId: dto.evaluatorId,
         evaluatedId: dto.evaluatedId,
-        type:        dto.type as any,
-        cycleId:     dto.cycleId,
-        status:      RequestStatus.PENDING,
-        dueDate:     new Date(Date.now() + 14 * 86400000),
+        type: dto.type as any,
+        cycleId: dto.cycleId,
+        status: RequestStatus.PENDING,
+        dueDate: new Date(Date.now() + 14 * 86400000),
       },
       include: {
         evaluator: { select: { id: true, fullName: true } },
@@ -291,14 +356,16 @@ export class EvaluationService {
       },
     });
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId:   dto.evaluatorId,
-        type:     'EVALUATION_REQUEST',
-        message:  `Tens uma nova avaliação para preencher`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: dto.evaluatorId,
+          type: 'EVALUATION_REQUEST',
+          message: `Tens uma nova avaliação para preencher`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
     return request;
   }
@@ -308,7 +375,7 @@ export class EvaluationService {
       dto.assignments.map(a => this.assignEvaluator({ ...a, cycleId: dto.cycleId })),
     );
     const succeeded = results.filter(r => r.status === 'fulfilled').length;
-    const failed    = results.filter(r => r.status === 'rejected').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
     return { total: dto.assignments.length, succeeded, failed };
   }
 
@@ -317,16 +384,18 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async submitEvaluation(evaluatorId: number, dto: SubmitEvaluationDto) {
-    const request = await (this.prisma as any).evaluationRequest.findUnique({
-      where: { id: dto.requestId },
-      include: { cycle: true },
-    }).catch(() => null);
+    const request = await (this.prisma as any).evaluationRequest
+      .findUnique({
+        where: { id: dto.requestId },
+        include: { cycle: true },
+      })
+      .catch(() => null);
 
     if (!request) throw new NotFoundException('Pedido de avaliação não encontrado');
-    if ((request as any).evaluatorId !== evaluatorId) {
+    if (request.evaluatorId !== evaluatorId) {
       throw new BadRequestException('Não tens permissão para submeter esta avaliação');
     }
-    if ((request as any).status === RequestStatus.COMPLETED && !dto.isDraft) {
+    if (request.status === RequestStatus.COMPLETED && !dto.isDraft) {
       throw new ConflictException('Avaliação já submetida');
     }
 
@@ -337,11 +406,13 @@ export class EvaluationService {
 
     // Group scores by competency (questionId → competency via form)
     const competencyScores: Record<number, number[]> = {};
-    if ((request as any).cycle?.formId) {
-      const questions = await safeM(this.prisma, 'evaluationQuestion').findMany({
-        where: { formId: (request as any).cycle.formId, competencyId: { not: null } },
-        select: { id: true, competencyId: true, weight: true },
-      }).catch(() => [] as any[]);
+    if (request.cycle?.formId) {
+      const questions = await safeM(this.prisma, 'evaluationQuestion')
+        .findMany({
+          where: { formId: request.cycle.formId, competencyId: { not: null } },
+          select: { id: true, competencyId: true, weight: true },
+        })
+        .catch(() => [] as any[]);
 
       for (const q of questions as any[]) {
         const ans = dto.answers.find(a => a.questionId === q.id);
@@ -362,27 +433,31 @@ export class EvaluationService {
     // Create / update evaluation record
     const evalData = {
       evaluatorId,
-      evaluatedId:        (request as any).evaluatedId,
-      type:               (request as any).type,
-      period:             (request as any).cycle?.name ?? new Date().getFullYear().toString(),
-      criteria:           dto.answers as any,
-      overallScore:       avgScore,
-      competencyScores:   JSON.stringify(compAvg),
-      strengths:          dto.strengths,
-      improvements:       dto.improvements,
-      recommendations:    dto.recommendations,
-      generalComment:     [dto.strengths, dto.improvements, dto.recommendations].filter(Boolean).join(' | '),
-      isDraft:            dto.isDraft ?? false,
-      cycleId:            (request as any).cycleId,
+      evaluatedId: request.evaluatedId,
+      type: request.type,
+      period: request.cycle?.name ?? new Date().getFullYear().toString(),
+      criteria: dto.answers as any,
+      overallScore: avgScore,
+      competencyScores: JSON.stringify(compAvg),
+      strengths: dto.strengths,
+      improvements: dto.improvements,
+      recommendations: dto.recommendations,
+      generalComment: [dto.strengths, dto.improvements, dto.recommendations]
+        .filter(Boolean)
+        .join(' | '),
+      isDraft: dto.isDraft ?? false,
+      cycleId: request.cycleId,
     };
 
     const evaluation = await (this.prisma as any).performanceEvaluation.upsert({
-      where:  { evaluatorId_evaluatedId_type_period: {
-        evaluatorId,
-        evaluatedId:  (request as any).evaluatedId,
-        type:         (request as any).type as any,
-        period:       evalData.period,
-      }},
+      where: {
+        evaluatorId_evaluatedId_type_period: {
+          evaluatorId,
+          evaluatedId: request.evaluatedId,
+          type: request.type,
+          period: evalData.period,
+        },
+      },
       create: evalData as any,
       update: evalData as any,
       include: {
@@ -393,20 +468,22 @@ export class EvaluationService {
 
     // Mark request as completed
     if (!dto.isDraft) {
-      await (this.prisma as any).evaluationRequest.update({
-        where: { id: dto.requestId },
-        data:  { status: 'COMPLETED', completedAt: new Date() },
-      }).catch(() => {});
+      await (this.prisma as any).evaluationRequest
+        .update({
+          where: { id: dto.requestId },
+          data: { status: 'COMPLETED', completedAt: new Date() },
+        })
+        .catch(() => {});
 
       // XP for completing evaluation
       await this.prisma.userPoints.upsert({
-        where:  { userId: evaluatorId },
+        where: { userId: evaluatorId },
         create: { userId: evaluatorId, points: 20 },
         update: { points: { increment: 20 } },
       });
 
       // Notify evaluated when all evaluators done
-      await this.checkCycleCompletion((request as any).evaluatedId, (request as any).cycleId);
+      await this.checkCycleCompletion(request.evaluatedId, request.cycleId);
     }
 
     return evaluation;
@@ -414,22 +491,27 @@ export class EvaluationService {
 
   private async checkCycleCompletion(evaluatedId: number, cycleId?: number) {
     if (!cycleId) return;
-    const allRequests = await (this.prisma as any).evaluationRequest.findMany({
-      where: { evaluatedId, cycleId },
-    }).catch(() => [] as any[]);
+    const allRequests = await (this.prisma as any).evaluationRequest
+      .findMany({
+        where: { evaluatedId, cycleId },
+      })
+      .catch(() => [] as any[]);
 
-    const allDone = (allRequests as any[]).length > 0
-      && (allRequests as any[]).every((r: any) => r.status === 'COMPLETED');
+    const allDone =
+      (allRequests as any[]).length > 0 &&
+      (allRequests as any[]).every((r: any) => r.status === 'COMPLETED');
 
     if (allDone) {
-      await this.prisma.notificationLog.create({
-        data: {
-          userId:   evaluatedId,
-          type:     'EVALUATION_CYCLE_COMPLETED',
-          message:  `Todas as tuas avaliações do ciclo foram submetidas`,
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: evaluatedId,
+            type: 'EVALUATION_CYCLE_COMPLETED',
+            message: `Todas as tuas avaliações do ciclo foram submetidas`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
     }
   }
 
@@ -445,12 +527,12 @@ export class EvaluationService {
     return this.prisma.performanceEvaluation.create({
       data: {
         evaluatorId,
-        evaluatedId:    dto.evaluatedId,
-        type:           dto.type as any,
-        period:         dto.period,
-        criteria:       dto.criteria as any,
+        evaluatedId: dto.evaluatedId,
+        type: dto.type as any,
+        period: dto.period,
+        criteria: dto.criteria as any,
         generalComment: dto.generalComment,
-        overallScore:   avgScore,
+        overallScore: avgScore,
       },
       include: {
         evaluator: { select: { id: true, fullName: true } },
@@ -464,26 +546,40 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async getPendingEvaluations(evaluatorId: number) {
-    return (this.prisma as any).evaluationRequest.findMany({
-      where:   { evaluatorId, status: 'PENDING' },
-      include: {
-        evaluated: { select: { id: true, fullName: true, avatarUrl: true,
-          position: { select: { name: true } },
-          department: { select: { name: true } } } },
-        cycle: { select: { id: true, name: true, endDate: true, model: true } },
-      },
-      orderBy: { dueDate: 'asc' },
-    }).catch(() => [] as any[]);
+    return (this.prisma as any).evaluationRequest
+      .findMany({
+        where: { evaluatorId, status: 'PENDING' },
+        include: {
+          evaluated: {
+            select: {
+              id: true,
+              fullName: true,
+              avatarUrl: true,
+              position: { select: { name: true } },
+              department: { select: { name: true } },
+            },
+          },
+          cycle: { select: { id: true, name: true, endDate: true, model: true } },
+        },
+        orderBy: { dueDate: 'asc' },
+      })
+      .catch(() => [] as any[]);
   }
 
   async getMyProgress(evaluatorId: number) {
     const [pending, completed] = await Promise.all([
-      this.prisma.evaluationRequest.count({ where: { evaluatorId, status: 'PENDING' } }).catch(() => 0),
-      this.prisma.evaluationRequest.count({ where: { evaluatorId, status: 'COMPLETED' } }).catch(() => 0),
+      this.prisma.evaluationRequest
+        .count({ where: { evaluatorId, status: 'PENDING' } })
+        .catch(() => 0),
+      this.prisma.evaluationRequest
+        .count({ where: { evaluatorId, status: 'COMPLETED' } })
+        .catch(() => 0),
     ]);
     const total = pending + completed;
     return {
-      total, pending, completed,
+      total,
+      pending,
+      completed,
       completionRate: total > 0 ? +((completed / total) * 100).toFixed(1) : 0,
     };
   }
@@ -505,15 +601,19 @@ export class EvaluationService {
 
   async getResults(evaluatedId: number, cycleId?: number) {
     const evaluated = await this.prisma.user.findUnique({
-      where:  { id: evaluatedId },
-      select: { id: true, fullName: true, avatarUrl: true,
-        position:   { select: { name: true, level: true } },
-        department: { select: { name: true } } },
+      where: { id: evaluatedId },
+      select: {
+        id: true,
+        fullName: true,
+        avatarUrl: true,
+        position: { select: { name: true, level: true } },
+        department: { select: { name: true } },
+      },
     });
     if (!evaluated) throw new NotFoundException('Utilizador não encontrado');
 
     const where: any = { evaluatedId };
-    if (cycleId) (where as any).cycleId = cycleId;
+    if (cycleId) where.cycleId = cycleId;
 
     const evaluations = await this.prisma.performanceEvaluation.findMany({
       where,
@@ -526,7 +626,9 @@ export class EvaluationService {
     // Get cycle weights
     let weights: any[] = [];
     if (cycleId) {
-      const cycle = await safeM(this.prisma, 'evaluationCycle').findUnique({ where: { id: cycleId } }).catch(() => null);
+      const cycle = await safeM(this.prisma, 'evaluationCycle')
+        .findUnique({ where: { id: cycleId } })
+        .catch(() => null);
       if (cycle?.weights) weights = JSON.parse(cycle.weights);
     }
 
@@ -548,8 +650,13 @@ export class EvaluationService {
     // Weighted final score
     const selfIncluded = weights.find(w => w.type === EvalType.SELF)?.selfEvalIncluded !== false;
     const finalScore = weights.length
-      ? weightedScore(typeAvg, weights.map(w => ({ ...w, selfEvalIncluded: selfIncluded })))
-      : +(Object.values(typeAvg).reduce((a, b) => a + b, 0) / Object.keys(typeAvg).length).toFixed(2);
+      ? weightedScore(
+          typeAvg,
+          weights.map(w => ({ ...w, selfEvalIncluded: selfIncluded })),
+        )
+      : +(Object.values(typeAvg).reduce((a, b) => a + b, 0) / Object.keys(typeAvg).length).toFixed(
+          2,
+        );
 
     // Competency breakdown
     const compScores: Record<string, number[]> = {};
@@ -570,35 +677,52 @@ export class EvaluationService {
     );
 
     // Concordance: self vs others
-    const selfScore   = typeAvg[EvalType.SELF] ?? null;
-    const othersAvg   = Object.entries(typeAvg)
+    const selfScore = typeAvg[EvalType.SELF] ?? null;
+    const othersAvg = Object.entries(typeAvg)
       .filter(([t]) => t !== EvalType.SELF)
       .reduce<{ sum: number; count: number }>(
-        (acc, [, v]) => ({ sum: acc.sum + v, count: acc.count + 1 }), { sum: 0, count: 0 },
+        (acc, [, v]) => ({ sum: acc.sum + v, count: acc.count + 1 }),
+        { sum: 0, count: 0 },
       );
     const othersScore = othersAvg.count > 0 ? +(othersAvg.sum / othersAvg.count).toFixed(2) : null;
-    const concordance = selfScore !== null && othersScore !== null
-      ? {
-          selfScore, othersScore,
-          gap:   +(selfScore - othersScore).toFixed(2),
-          label: Math.abs(selfScore - (othersScore ?? 0)) <= 0.5 ? 'Alinhado'
-            : selfScore > (othersScore ?? 0) ? 'Superestima-se' : 'Subestima-se',
-        }
-      : null;
+    const concordance =
+      selfScore !== null && othersScore !== null
+        ? {
+            selfScore,
+            othersScore,
+            gap: +(selfScore - othersScore).toFixed(2),
+            label:
+              Math.abs(selfScore - (othersScore ?? 0)) <= 0.5
+                ? 'Alinhado'
+                : selfScore > (othersScore ?? 0)
+                  ? 'Superestima-se'
+                  : 'Subestima-se',
+          }
+        : null;
 
     return {
       evaluated,
       finalScore,
-      scoreLabel: finalScore >= 4 ? 'Excepcional' : finalScore >= 3 ? 'Acima Esperado' :
-        finalScore >= 2 ? 'Dentro do Esperado' : 'Abaixo do Esperado',
-      byType:        typeAvg,
-      competencies:  compAvg,
+      scoreLabel:
+        finalScore >= 4
+          ? 'Excepcional'
+          : finalScore >= 3
+            ? 'Acima Esperado'
+            : finalScore >= 2
+              ? 'Dentro do Esperado'
+              : 'Abaixo do Esperado',
+      byType: typeAvg,
+      competencies: compAvg,
       concordance,
       totalEvaluators: evaluations.length,
       qualitative: {
-        strengths:      evaluations.filter(e => (e as any).strengths).map(e => (e as any).strengths),
-        improvements:   evaluations.filter(e => (e as any).improvements).map(e => (e as any).improvements),
-        recommendations:evaluations.filter(e => (e as any).recommendations).map(e => (e as any).recommendations),
+        strengths: evaluations.filter(e => (e as any).strengths).map(e => (e as any).strengths),
+        improvements: evaluations
+          .filter(e => (e as any).improvements)
+          .map(e => (e as any).improvements),
+        recommendations: evaluations
+          .filter(e => (e as any).recommendations)
+          .map(e => (e as any).recommendations),
       },
     };
   }
@@ -609,9 +733,11 @@ export class EvaluationService {
     });
     if (!evals.length) return { userId, period, total: 0, avgScore: 0, byType: {} };
 
-    const avgScore = +(evals.reduce((s, e) => s + (e.overallScore ?? 0), 0) / evals.length).toFixed(2);
+    const avgScore = +(evals.reduce((s, e) => s + (e.overallScore ?? 0), 0) / evals.length).toFixed(
+      2,
+    );
     const byType: Record<string, number> = {};
-    for (const e of evals) byType[e.type] = (e.overallScore ?? 0);
+    for (const e of evals) byType[e.type] = e.overallScore ?? 0;
 
     return { userId, period, total: evals.length, avgScore, byType };
   }
@@ -622,10 +748,17 @@ export class EvaluationService {
 
   async getCycleForCalibration(cycleId: number) {
     const evals = await this.prisma.performanceEvaluation.findMany({
-      where:   { ...(cycleId ? ({ cycleId } as any) : {}) },
+      where: { ...(cycleId ? ({ cycleId } as any) : {}) },
       include: {
-        evaluated: { select: { id: true, fullName: true, avatarUrl: true,
-          department: { select: { name: true } }, position: { select: { name: true } } } },
+        evaluated: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            department: { select: { name: true } },
+            position: { select: { name: true } },
+          },
+        },
         evaluator: { select: { id: true, fullName: true } },
       },
     });
@@ -639,19 +772,25 @@ export class EvaluationService {
       byEval[id].types[e.type] = e.overallScore;
     }
 
-    const allScores = Object.values(byEval).map(b => +(b.scores.reduce((a: number, v: number) => a + v, 0) / b.scores.length).toFixed(2));
+    const allScores = Object.values(byEval).map(
+      b => +(b.scores.reduce((a: number, v: number) => a + v, 0) / b.scores.length).toFixed(2),
+    );
 
-    const result = Object.values(byEval).map((b: any) => {
-      const avg = +(b.scores.reduce((a: number, v: number) => a + v, 0) / b.scores.length).toFixed(2);
-      return {
-        evaluated:    b.evaluated,
-        avgScore:     avg,
-        byType:       b.types,
-        percentile:   percentile(avg, allScores),
-        dispersion:   b.scores.length > 1
-          ? +(Math.max(...b.scores) - Math.min(...b.scores)).toFixed(2) : 0,
-      };
-    }).sort((a, b) => b.avgScore - a.avgScore);
+    const result = Object.values(byEval)
+      .map((b: any) => {
+        const avg = +(
+          b.scores.reduce((a: number, v: number) => a + v, 0) / b.scores.length
+        ).toFixed(2);
+        return {
+          evaluated: b.evaluated,
+          avgScore: avg,
+          byType: b.types,
+          percentile: percentile(avg, allScores),
+          dispersion:
+            b.scores.length > 1 ? +(Math.max(...b.scores) - Math.min(...b.scores)).toFixed(2) : 0,
+        };
+      })
+      .sort((a, b) => b.avgScore - a.avgScore);
 
     // Detect biased evaluators
     const evaluatorStats: Record<number, number[]> = {};
@@ -659,11 +798,17 @@ export class EvaluationService {
       if (!evaluatorStats[e.evaluatorId]) evaluatorStats[e.evaluatorId] = [];
       evaluatorStats[e.evaluatorId].push(e.overallScore ?? 0);
     }
-    const globalAvg = allScores.length ? allScores.reduce((a, b) => a + b, 0) / allScores.length : 0;
+    const globalAvg = allScores.length
+      ? allScores.reduce((a, b) => a + b, 0) / allScores.length
+      : 0;
     const biasedEvaluators = Object.entries(evaluatorStats)
       .map(([evId, scores]) => {
         const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-        return { evaluatorId: +evId, avg: +avg.toFixed(2), deviation: +(avg - globalAvg).toFixed(2) };
+        return {
+          evaluatorId: +evId,
+          avg: +avg.toFixed(2),
+          deviation: +(avg - globalAvg).toFixed(2),
+        };
       })
       .filter(e => Math.abs(e.deviation) > 0.8);
 
@@ -672,33 +817,43 @@ export class EvaluationService {
 
   async calibrateScore(cycleId: number, dto: CalibrateScoreDto, calibratedById: number) {
     const where: any = { evaluatedId: dto.evaluatedId };
-    if (cycleId) (where as any).cycleId = cycleId;
+    if (cycleId) where.cycleId = cycleId;
 
-    await this.prisma.performanceEvaluation.updateMany({
-      where,
-      data:  { overallScore: dto.calibratedScore } as any,
-    }).catch(() => {});
+    await this.prisma.performanceEvaluation
+      .updateMany({
+        where,
+        data: { overallScore: dto.calibratedScore } as any,
+      })
+      .catch(() => {});
 
     // Log calibration in audit
-    await this.prisma.auditLog.create({
-      data: {
-        userId:   calibratedById,
-        action:   'CALIBRATION',
-        entity:   'PerformanceEvaluation',
-        entityId: dto.evaluatedId,
-      },
-    }).catch(() => {});
+    await this.prisma.auditLog
+      .create({
+        data: {
+          userId: calibratedById,
+          action: 'CALIBRATION',
+          entity: 'PerformanceEvaluation',
+          entityId: dto.evaluatedId,
+        },
+      })
+      .catch(() => {});
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId:   dto.evaluatedId,
-        type:     'EVALUATION_CALIBRATED',
-        message:  `A tua avaliação foi calibrada`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: dto.evaluatedId,
+          type: 'EVALUATION_CALIBRATED',
+          message: `A tua avaliação foi calibrada`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
-    return { message: 'Score calibrado', evaluatedId: dto.evaluatedId, newScore: dto.calibratedScore };
+    return {
+      message: 'Score calibrado',
+      evaluatedId: dto.evaluatedId,
+      newScore: dto.calibratedScore,
+    };
   }
 
   // ══════════════════════════════════════════════════════
@@ -708,27 +863,38 @@ export class EvaluationService {
   async getAnalyticsDashboard(filters: AnalyticsFilterDto = {}) {
     const { cycleId, departmentId } = filters;
     const where: any = {};
-    if (cycleId)      (where as any).cycleId = cycleId;
+    if (cycleId) where.cycleId = cycleId;
     if (departmentId) where.evaluated = { departmentId };
 
     const [evals, totalRequests, completedRequests] = await Promise.all([
       this.prisma.performanceEvaluation.findMany({
         where,
         include: {
-          evaluated: { select: { id: true, fullName: true, avatarUrl: true,
-            department: { select: { name: true } } } },
+          evaluated: {
+            select: {
+              id: true,
+              fullName: true,
+              avatarUrl: true,
+              department: { select: { name: true } },
+            },
+          },
         },
       }),
-      (this.prisma as any).evaluationRequest.count({ where: cycleId ? { cycleId } : {} }).catch(() => 0),
-      (this.prisma as any).evaluationRequest.count({
-        where: { ...(cycleId ? { cycleId } : {}), status: 'COMPLETED' },
-      }).catch(() => 0),
+      (this.prisma as any).evaluationRequest
+        .count({ where: cycleId ? { cycleId } : {} })
+        .catch(() => 0),
+      (this.prisma as any).evaluationRequest
+        .count({
+          where: { ...(cycleId ? { cycleId } : {}), status: 'COMPLETED' },
+        })
+        .catch(() => 0),
     ]);
 
-    if (!evals.length) return { hasData: false, message: 'Sem dados para o período/ciclo seleccionado' };
+    if (!evals.length)
+      return { hasData: false, message: 'Sem dados para o período/ciclo seleccionado' };
 
     const scores = evals.map(e => e.overallScore ?? 0);
-    const avgScore   = +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2);
+    const avgScore = +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2);
 
     // Distribution buckets
     const dist = { exceptional: 0, above: 0, expected: 0, below: 0 };
@@ -746,11 +912,13 @@ export class EvaluationService {
       if (!deptMap[dept]) deptMap[dept] = [];
       deptMap[dept].push(e.overallScore ?? 0);
     }
-    const byDept = Object.entries(deptMap).map(([dept, sc]) => ({
-      department: dept,
-      avgScore:   +(sc.reduce((a, b) => a + b, 0) / sc.length).toFixed(2),
-      count:      sc.length,
-    })).sort((a, b) => b.avgScore - a.avgScore);
+    const byDept = Object.entries(deptMap)
+      .map(([dept, sc]) => ({
+        department: dept,
+        avgScore: +(sc.reduce((a, b) => a + b, 0) / sc.length).toFixed(2),
+        count: sc.length,
+      }))
+      .sort((a, b) => b.avgScore - a.avgScore);
 
     // Top performers
     const userAvg: Record<number, { user: any; scores: number[] }> = {};
@@ -760,71 +928,86 @@ export class EvaluationService {
       userAvg[id].scores.push(e.overallScore ?? 0);
     }
 
-    const ranked = Object.values(userAvg).map(u => ({
-      user:     u.user,
-      avgScore: +(u.scores.reduce((a, b) => a + b, 0) / u.scores.length).toFixed(2),
-      evals:    u.scores.length,
-    })).sort((a, b) => b.avgScore - a.avgScore);
+    const ranked = Object.values(userAvg)
+      .map(u => ({
+        user: u.user,
+        avgScore: +(u.scores.reduce((a, b) => a + b, 0) / u.scores.length).toFixed(2),
+        evals: u.scores.length,
+      }))
+      .sort((a, b) => b.avgScore - a.avgScore);
 
     const allScores = ranked.map(r => r.avgScore);
 
     return {
       hasData: true,
       kpis: {
-        totalEvaluations:   evals.length,
+        totalEvaluations: evals.length,
         avgScore,
-        participationRate:  totalRequests > 0
-          ? +((completedRequests / totalRequests) * 100).toFixed(1) : 0,
-        totalParticipants:  ranked.length,
+        participationRate:
+          totalRequests > 0 ? +((completedRequests / totalRequests) * 100).toFixed(1) : 0,
+        totalParticipants: ranked.length,
       },
       distribution: dist,
       byDepartment: byDept,
-      topPerformers:   ranked.slice(0, 10).map(r => ({ ...r, percentile: percentile(r.avgScore, allScores) })),
-      bottomPerformers:ranked.slice(-5).reverse().map(r => ({ ...r, percentile: percentile(r.avgScore, allScores) })),
+      topPerformers: ranked
+        .slice(0, 10)
+        .map(r => ({ ...r, percentile: percentile(r.avgScore, allScores) })),
+      bottomPerformers: ranked
+        .slice(-5)
+        .reverse()
+        .map(r => ({ ...r, percentile: percentile(r.avgScore, allScores) })),
     };
   }
 
   async getTeamDashboard(managerId: number, cycleId?: number) {
     const team = await this.prisma.user.findMany({
-      where:  { managerId, active: true },
-      select: { id: true, fullName: true, avatarUrl: true,
-        position:   { select: { name: true } },
-        department: { select: { name: true } } },
+      where: { managerId, active: true },
+      select: {
+        id: true,
+        fullName: true,
+        avatarUrl: true,
+        position: { select: { name: true } },
+        department: { select: { name: true } },
+      },
     });
     if (!team.length) return { team: [], message: 'Sem equipa directa' };
 
     const teamIds = team.map(u => u.id);
     const where: any = { evaluatedId: { in: teamIds } };
-    if (cycleId) (where as any).cycleId = cycleId;
+    if (cycleId) where.cycleId = cycleId;
 
     const evals = await this.prisma.performanceEvaluation.findMany({ where });
 
-    const pending = await this.prisma.evaluationRequest.findMany({
-      where: { evaluatorId: managerId, status: 'PENDING' },
-    }).catch(() => [] as any[]);
+    const pending = await this.prisma.evaluationRequest
+      .findMany({
+        where: { evaluatorId: managerId, status: 'PENDING' },
+      })
+      .catch(() => [] as any[]);
 
     const enriched = team.map(u => {
-      const uEvals  = evals.filter(e => e.evaluatedId === u.id);
-      const avg     = uEvals.length
+      const uEvals = evals.filter(e => e.evaluatedId === u.id);
+      const avg = uEvals.length
         ? +(uEvals.reduce((s, e) => s + (e.overallScore ?? 0), 0) / uEvals.length).toFixed(2)
         : null;
       const hasPending = (pending as any[]).some((r: any) => r.evaluatedId === u.id);
       return {
-        user: u, avgScore: avg, evals: uEvals.length,
+        user: u,
+        avgScore: avg,
+        evals: uEvals.length,
         hasPendingEval: hasPending,
         trend: null, // TODO: compare with previous cycle
       };
     });
 
-    const withScores = enriched.filter(u => u.avgScore !== null).map(u => u.avgScore as number);
-    const teamAvg    = withScores.length
+    const withScores = enriched.filter(u => u.avgScore !== null).map(u => u.avgScore);
+    const teamAvg = withScores.length
       ? +(withScores.reduce((a, b) => a + b, 0) / withScores.length).toFixed(2)
       : null;
 
     return {
       teamAvg,
       pendingCount: (pending as any[]).length,
-      team:         enriched.map(u => ({
+      team: enriched.map(u => ({
         ...u,
         percentile: u.avgScore !== null ? percentile(u.avgScore, withScores) : null,
       })),
@@ -833,9 +1016,9 @@ export class EvaluationService {
 
   async getUserEvolution(userId: number) {
     const evals = await this.prisma.performanceEvaluation.findMany({
-      where:   { evaluatedId: userId },
+      where: { evaluatedId: userId },
       orderBy: { createdAt: 'asc' },
-      select:  { overallScore: true, type: true, period: true, createdAt: true },
+      select: { overallScore: true, type: true, period: true, createdAt: true },
     });
 
     const byPeriod: Record<string, number[]> = {};
@@ -847,11 +1030,11 @@ export class EvaluationService {
     const evolution = Object.entries(byPeriod).map(([period, scores]) => ({
       period,
       avgScore: +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2),
-      evals:    scores.length,
+      evals: scores.length,
     }));
 
-    const last  = evolution[evolution.length - 1]?.avgScore ?? 0;
-    const prev  = evolution[evolution.length - 2]?.avgScore ?? null;
+    const last = evolution[evolution.length - 1]?.avgScore ?? 0;
+    const prev = evolution[evolution.length - 2]?.avgScore ?? null;
     const trend = prev !== null ? +(last - prev).toFixed(2) : null;
 
     return { userId, evolution, latestScore: last, trend };
@@ -863,7 +1046,8 @@ export class EvaluationService {
 
   async triggerPDIFromResults(evaluatedId: number, cycleId?: number) {
     const results = await this.getResults(evaluatedId, cycleId);
-    if (!(results as any).competencies) return { message: 'Sem dados de competências para gerar PDI' };
+    if (!(results as any).competencies)
+      return { message: 'Sem dados de competências para gerar PDI' };
 
     // Identify top 3 gap competencies (lowest scores)
     const gaps = Object.entries((results as any).competencies as Record<string, number>)
@@ -872,28 +1056,32 @@ export class EvaluationService {
       .slice(0, 3);
 
     // Create notification for manager to create PDI
-    const user = await this.prisma.user.findUnique({
-      where:  { evaluatedId } as any,
-      select: { id: true, fullName: true, managerId: true },
-    }).catch(() => null);
+    const user = await this.prisma.user
+      .findUnique({
+        where: { evaluatedId } as any,
+        select: { id: true, fullName: true, managerId: true },
+      })
+      .catch(() => null);
 
     if (user?.managerId) {
-      await this.prisma.notificationLog.create({
-        data: {
-          userId:   user.managerId,
-          type:     'PDI_SUGGESTED',
-          message:  `Sugestão de PDI gerado para ${user.fullName} com base em resultados de avaliação`,
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: user.managerId,
+            type: 'PDI_SUGGESTED',
+            message: `Sugestão de PDI gerado para ${user.fullName} com base em resultados de avaliação`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
     }
 
     return {
       evaluatedId,
-      suggestedGaps:    gaps,
-      recommendation:   `Foco de desenvolvimento: ${gaps.length} competências identificadas com gaps`,
+      suggestedGaps: gaps,
+      recommendation: `Foco de desenvolvimento: ${gaps.length} competências identificadas com gaps`,
       pdiAutoGenerated: false,
-      managerNotified:  !!user?.managerId,
+      managerNotified: !!user?.managerId,
     };
   }
 }

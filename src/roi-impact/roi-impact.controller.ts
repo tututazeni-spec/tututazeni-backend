@@ -1,12 +1,10 @@
 // src/roi-impact/roi-impact.controller.ts
-import {
-  Controller, Get, Post, Query, Body, UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Query, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { RoiImpactService }  from './roi-impact.service';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
-import { Roles }         from '../common/decorators';
+import { RoiImpactService } from './roi-impact.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators';
 import { RoiFilterDto, CalculateRoiDto, WhatIfDto } from './roi-impact.dto';
 
 const ADMIN = ['ADMIN', 'RH', 'DIRECTOR'] as const;
@@ -38,7 +36,9 @@ export class RoiImpactController {
 
   @Get('impact-metrics')
   @ApiOperation({ summary: '[Legacy] Métricas de impacto organizacional' })
-  impactMetrics() { return this.svc.getImpactMetrics(); }
+  impactMetrics() {
+    return this.svc.getImpactMetrics();
+  }
 
   @Get('impact/levels')
   @ApiOperation({ summary: 'Impacto por nível Kirkpatrick: L1 Reação → L5 ROI Financeiro' })
@@ -69,7 +69,9 @@ export class RoiImpactController {
   // ─── Executive Dashboard ──────────────────────────────────────
 
   @Get('executive')
-  @ApiOperation({ summary: 'Dashboard executivo — ROI total + todos os domínios + narrativa automática' })
+  @ApiOperation({
+    summary: 'Dashboard executivo — ROI total + todos os domínios + narrativa automática',
+  })
   executive(@Query() filter: RoiFilterDto) {
     return this.svc.getExecutiveDashboard(filter);
   }
@@ -90,6 +92,3 @@ export class RoiImpactController {
     return this.svc.simulateWhatIf(dto);
   }
 }
-
-
-

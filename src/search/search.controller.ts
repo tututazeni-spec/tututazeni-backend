@@ -1,15 +1,11 @@
 // src/search/search.controller.ts
-import {
-  Controller, Get, Delete, Query, Param, UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Delete, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { SearchService }  from './search.service';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { SearchService } from './search.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
-import {
-  GlobalSearchDto, TypedSearchDto, AutocompleteDto, SearchEntityType,
-} from './search.dto';
+import { GlobalSearchDto, TypedSearchDto, AutocompleteDto, SearchEntityType } from './search.dto';
 
 const ADMIN = ['ADMIN', 'RH'] as const;
 
@@ -23,7 +19,9 @@ export class SearchController {
   // ─── Global search ────────────────────────────────────────────
 
   @Get()
-  @ApiOperation({ summary: 'Pesquisa global — colaboradores, cursos, conteúdos, PDIs, documentos, competências' })
+  @ApiOperation({
+    summary: 'Pesquisa global — colaboradores, cursos, conteúdos, PDIs, documentos, competências',
+  })
   globalSearch(@Query() dto: GlobalSearchDto, @CurrentUser() user: any) {
     return this.svc.globalSearch(dto.q, user.id, dto);
   }
@@ -83,7 +81,9 @@ export class SearchController {
   // ─── Suggestions ──────────────────────────────────────────────
 
   @Get('suggestions')
-  @ApiOperation({ summary: 'Sugestões personalizadas — cursos recomendados, conteúdo popular, trending' })
+  @ApiOperation({
+    summary: 'Sugestões personalizadas — cursos recomendados, conteúdo popular, trending',
+  })
   suggestions(@CurrentUser() user: any) {
     return this.svc.getSuggestions(user.id);
   }
@@ -107,7 +107,10 @@ export class SearchController {
   @Get('analytics')
   @UseGuards(RolesGuard)
   @Roles(...ADMIN)
-  @ApiOperation({ summary: 'Analytics de pesquisa — top termos, zero resultados, utilizadores únicos' })
-  analytics() { return this.svc.getAnalytics(); }
+  @ApiOperation({
+    summary: 'Analytics de pesquisa — top termos, zero resultados, utilizadores únicos',
+  })
+  analytics() {
+    return this.svc.getAnalytics();
+  }
 }
-

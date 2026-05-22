@@ -1,26 +1,42 @@
 // src/engagement/engagement.controller.ts
 import {
-  Controller, Get, Post, Patch, Delete,
-  Param, Body, Query, Req,
-  ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  Query,
+  ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { EngagementService }   from './engagement.service';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { EngagementService } from './engagement.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 import {
-  CreateSurveyDto, UpdateSurveyDto, SurveyFilterDto,
-  SubmitSurveyDto, SubmitENPSDto, SubmitMoodDto,
-  CreateFeedbackDto, FeedbackFilterDto, FeedbackReplyDto,
-  CreateRecognitionDto, RecognitionFilterDto,
-  CreateOneOnOneDto, UpdateOneOnOneDto,
-  CreateActionPlanDto, UpdateActionPlanDto, EngagementFilterDto,
+  CreateSurveyDto,
+  UpdateSurveyDto,
+  SurveyFilterDto,
+  SubmitSurveyDto,
+  SubmitENPSDto,
+  SubmitMoodDto,
+  CreateFeedbackDto,
+  FeedbackFilterDto,
+  FeedbackReplyDto,
+  CreateRecognitionDto,
+  RecognitionFilterDto,
+  CreateOneOnOneDto,
+  UpdateOneOnOneDto,
+  CreateActionPlanDto,
+  UpdateActionPlanDto,
+  EngagementFilterDto,
 } from './engagement.dto';
 
-const ALL_ROLES   = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
-const MGMT_ROLES  = ['ADMIN', 'RH', 'LIDER']                as const;
-const ADMIN_ROLES = ['ADMIN', 'RH']                          as const;
+const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
+const MGMT_ROLES = ['ADMIN', 'RH', 'LIDER'] as const;
+const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
 
 @ApiTags('Engagement')
 @ApiBearerAuth()
@@ -41,7 +57,9 @@ export class EngagementController {
   @Get('surveys/templates')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Templates de surveys reutilizáveis' })
-  getTemplates() { return this.svc.getTemplates(); }
+  getTemplates() {
+    return this.svc.getTemplates();
+  }
 
   @Get('surveys/:id')
   @Roles(...ALL_ROLES)
@@ -182,7 +200,11 @@ export class EngagementController {
     @Query('departmentId') departmentId?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.svc.getLeaderboard(type, departmentId ? +departmentId : undefined, limit ? +limit : 10);
+    return this.svc.getLeaderboard(
+      type,
+      departmentId ? +departmentId : undefined,
+      limit ? +limit : 10,
+    );
   }
 
   // ─── 1:1 Meetings ────────────────────────────────────────────
@@ -232,7 +254,9 @@ export class EngagementController {
   ) {
     return this.svc.getActionPlans({
       departmentId: departmentId ? +departmentId : undefined,
-      status, page: page ? +page : 1, limit: limit ? +limit : 20,
+      status,
+      page: page ? +page : 1,
+      limit: limit ? +limit : 20,
     });
   }
 
@@ -254,14 +278,18 @@ export class EngagementController {
 
   @Get('index')
   @Roles(...MGMT_ROLES)
-  @ApiOperation({ summary: 'Índice de engajamento histórico + nível (EXCELLENT/GOOD/FAIR/AT_RISK)' })
+  @ApiOperation({
+    summary: 'Índice de engajamento histórico + nível (EXCELLENT/GOOD/FAIR/AT_RISK)',
+  })
   index(@Query('departmentId') departmentId?: string) {
     return this.svc.getEngagementIndex(departmentId ? +departmentId : undefined);
   }
 
   @Get('heatmap')
   @Roles(...ADMIN_ROLES)
-  @ApiOperation({ summary: 'Heatmap de engajamento por departamento (score | participation | mood)' })
+  @ApiOperation({
+    summary: 'Heatmap de engajamento por departamento (score | participation | mood)',
+  })
   heatmap(@Query('metric') metric: 'score' | 'participation' | 'mood' = 'score') {
     return this.svc.getEngagementHeatmap(metric);
   }

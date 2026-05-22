@@ -1,23 +1,39 @@
 // ─── src/attendance/attendance.controller.ts ─────────────────────────────────
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe, UseGuards,
-  Request,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AttendanceService } from './attendance.service';
 import {
-  AttendanceFilterDto, LeaveFilterDto,
-  CreateAttendanceDto, UpdateAttendanceDto,
-  ClockInDto, ClockOutDto,
-  CreateLeaveRequestDto, ReviewLeaveDto,
-  CreateWorkScheduleDto, AssignScheduleDto,
-  CreateOvertimeDto, ReviewOvertimeDto,
-  CreateJustificationDto, ReviewJustificationDto,
-  GenerateQrDto, ValidateQrDto,
+  AttendanceFilterDto,
+  LeaveFilterDto,
+  CreateAttendanceDto,
+  UpdateAttendanceDto,
+  ClockInDto,
+  ClockOutDto,
+  CreateLeaveRequestDto,
+  ReviewLeaveDto,
+  CreateWorkScheduleDto,
+  AssignScheduleDto,
+  CreateOvertimeDto,
+  ReviewOvertimeDto,
+  CreateJustificationDto,
+  ReviewJustificationDto,
+  GenerateQrDto,
+  ValidateQrDto,
 } from './attendance.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard }   from '../common/guards/roles.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -74,10 +90,7 @@ export class AttendanceController {
   @ApiOperation({ summary: 'Tendência de KPIs (últimos N dias)' })
   @ApiQuery({ name: 'userId', required: false, type: Number })
   @ApiQuery({ name: 'days', required: false, type: Number })
-  getKpiTrend(
-    @Query('userId') userId?: string,
-    @Query('days') days?: string,
-  ) {
+  getKpiTrend(@Query('userId') userId?: string, @Query('days') days?: string) {
     return this.svc.getKpiTrend(userId ? +userId : undefined, days ? +days : 30);
   }
 
@@ -105,11 +118,7 @@ export class AttendanceController {
   @ApiOperation({ summary: 'Minhas presenças com resumo' })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
-  myAttendance(
-    @CurrentUser() user: any,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
+  myAttendance(@CurrentUser() user: any, @Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.findByUser(user.id, from, to);
   }
 

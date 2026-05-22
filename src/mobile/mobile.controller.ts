@@ -21,7 +21,11 @@ export class MobileController {
   }
 
   @Post('sync-log')
-  logSync(@Body('userId') userId: number, @Body('entity') entity: string, @Body('status') status: 'SUCCESS' | 'FAILED') {
+  logSync(
+    @Body('userId') userId: number,
+    @Body('entity') entity: string,
+    @Body('status') status: 'SUCCESS' | 'FAILED',
+  ) {
     return this.mobileService.logSync(userId, entity, status);
   }
 

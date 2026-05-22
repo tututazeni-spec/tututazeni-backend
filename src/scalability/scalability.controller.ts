@@ -4,28 +4,44 @@
 // ============================================================
 
 import {
-  Controller, Get, Post, Patch, Body, Param, Query,
-  UseGuards, Request, HttpCode, HttpStatus, ParseBoolPipe,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+  HttpCode,
+  HttpStatus,
   DefaultValuePipe,
 } from '@nestjs/common';
-import {
-  ApiTags, ApiBearerAuth, ApiOperation, ApiResponse,
-  ApiParam, ApiQuery,
-} from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { ScalabilityService } from './scalability.service';
 import {
-  CreateTenantConfigDto, UpdateTenantConfigDto,
-  CreateIntegrationConfigDto, UpdateIntegrationConfigDto, TriggerSyncDto,
-  CreateAutomationRuleDto, UpdateAutomationRuleDto, ExecuteAutomationRuleDto,
-  CreateSlaConfigDto, UpdateSlaConfigDto,
+  CreateTenantConfigDto,
+  UpdateTenantConfigDto,
+  CreateIntegrationConfigDto,
+  UpdateIntegrationConfigDto,
+  TriggerSyncDto,
+  CreateAutomationRuleDto,
+  UpdateAutomationRuleDto,
+  ExecuteAutomationRuleDto,
+  CreateSlaConfigDto,
+  UpdateSlaConfigDto,
   UpdateContentDeliveryConfigDto,
-  MetricsQueryDto, CreateAlertDto, AlertsQueryDto, ResolveAlertDto,
-  BulkUserImportDto, LoadTestConfigDto, PaginationDto,
-  AlertSeverity, AlertCategory,
+  MetricsQueryDto,
+  CreateAlertDto,
+  AlertsQueryDto,
+  ResolveAlertDto,
+  BulkUserImportDto,
+  LoadTestConfigDto,
+  PaginationDto,
 } from './scalability.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard }   from '../common/guards/roles.guard';
-import { Roles }        from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 
 @ApiTags('Escalabilidade')
 @ApiBearerAuth()
@@ -107,10 +123,7 @@ export class ScalabilityController {
   @Get('integrations/tenant/:tenantId')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Listar integrações de um tenant' })
-  async listIntegrations(
-    @Param('tenantId') tenantId: string,
-    @Query() query: PaginationDto,
-  ) {
+  async listIntegrations(@Param('tenantId') tenantId: string, @Query() query: PaginationDto) {
     return this.service.listIntegrations(tenantId, query);
   }
 
@@ -158,10 +171,7 @@ export class ScalabilityController {
   @Get('automations/tenant/:tenantId')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Listar regras de automação de um tenant' })
-  async listAutomationRules(
-    @Param('tenantId') tenantId: string,
-    @Query() query: PaginationDto,
-  ) {
+  async listAutomationRules(@Param('tenantId') tenantId: string, @Query() query: PaginationDto) {
     return this.service.listAutomationRules(tenantId, query);
   }
 
@@ -187,11 +197,7 @@ export class ScalabilityController {
   @Patch('sla/:id')
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Actualizar SLA' })
-  async updateSla(
-    @Param('id') id: string,
-    @Body() dto: UpdateSlaConfigDto,
-    @Request() req: any,
-  ) {
+  async updateSla(@Param('id') id: string, @Body() dto: UpdateSlaConfigDto, @Request() req: any) {
     return this.service.updateSlaConfig(id, dto, req.user.id);
   }
 

@@ -1,19 +1,35 @@
 // src/competencies/competencies.controller.ts
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CompetenciesService } from './competencies.service';
 import {
-  CreateCompetencyDto, UpdateCompetencyDto, CompetencyFilterDto,
-  UpsertUserCompetencyDto, SelfAssessmentDto, ManagerAssessmentDto,
-  MapCompetencyToPositionDto, MapCompetencyToCourseDto,
-  CreateProficiencyLevelDto, CreateEndorsementDto,
+  CreateCompetencyDto,
+  UpdateCompetencyDto,
+  CompetencyFilterDto,
+  UpsertUserCompetencyDto,
+  SelfAssessmentDto,
+  ManagerAssessmentDto,
+  MapCompetencyToPositionDto,
+  MapCompetencyToCourseDto,
+  CreateProficiencyLevelDto,
+  CreateEndorsementDto,
 } from './competencies.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Competencies')
@@ -43,14 +59,14 @@ export class CompetenciesController {
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Skill Matrix — grid utilizadores × competências' })
   @ApiQuery({ name: 'departmentId', required: false })
-  @ApiQuery({ name: 'positionId',   required: false })
+  @ApiQuery({ name: 'positionId', required: false })
   skillMatrix(
     @Query('departmentId') departmentId?: string,
-    @Query('positionId')   positionId?:   string,
+    @Query('positionId') positionId?: string,
   ) {
     return this.svc.getSkillMatrix(
       departmentId ? parseInt(departmentId) : undefined,
-      positionId   ? parseInt(positionId)   : undefined,
+      positionId ? parseInt(positionId) : undefined,
     );
   }
 
@@ -128,7 +144,7 @@ export class CompetenciesController {
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Remover mapeamento cargo → competência' })
   unmapFromPosition(
-    @Param('positionId',   ParseIntPipe) positionId:   number,
+    @Param('positionId', ParseIntPipe) positionId: number,
     @Param('competencyId', ParseIntPipe) competencyId: number,
   ) {
     return this.svc.unmapFromPosition(positionId, competencyId);
@@ -164,11 +180,11 @@ export class CompetenciesController {
   @Get('my/evolution')
   @ApiOperation({ summary: 'Histórico de evolução das minhas competências' })
   @ApiQuery({ name: 'competencyId', required: false })
-  myEvolution(
-    @CurrentUser() user: any,
-    @Query('competencyId') competencyId?: string,
-  ) {
-    return this.svc.getCompetencyEvolution(user.id, competencyId ? parseInt(competencyId) : undefined);
+  myEvolution(@CurrentUser() user: any, @Query('competencyId') competencyId?: string) {
+    return this.svc.getCompetencyEvolution(
+      user.id,
+      competencyId ? parseInt(competencyId) : undefined,
+    );
   }
 
   @Post('my/self-assess')
@@ -197,7 +213,7 @@ export class CompetenciesController {
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Gap analysis de um utilizador para um cargo' })
   gapAnalysis(
-    @Param('userId',     ParseIntPipe) userId:     number,
+    @Param('userId', ParseIntPipe) userId: number,
     @Param('positionId', ParseIntPipe) positionId: number,
   ) {
     return this.svc.getCompetencyGap(userId, positionId);
@@ -210,7 +226,10 @@ export class CompetenciesController {
     @Param('userId', ParseIntPipe) userId: number,
     @Query('competencyId') competencyId?: string,
   ) {
-    return this.svc.getCompetencyEvolution(userId, competencyId ? parseInt(competencyId) : undefined);
+    return this.svc.getCompetencyEvolution(
+      userId,
+      competencyId ? parseInt(competencyId) : undefined,
+    );
   }
 
   @Get('user/:userId/endorsements')

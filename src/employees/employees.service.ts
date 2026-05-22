@@ -1,20 +1,30 @@
 ﻿// ─── employees/employees.service.ts ──────────────────────────────────────────
 import {
-  Injectable, NotFoundException, BadRequestException,
-  ForbiddenException, ConflictException,
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuditService }  from '../common/services/audit.service';
+import { AuditService } from '../common/services/audit.service';
 import {
-  CreateEmployeeDto, UpdateEmployeeDto,
-  CreateContractDto, CreateEmployeeAttendanceDto,
-  CreateFeedback360Dto, CreateEmployeeCareerPlanDto,
-  CreatePdiDto, UpdatePdiProgressDto,
+  CreateEmployeeDto,
+  UpdateEmployeeDto,
+  CreateContractDto,
+  CreateEmployeeAttendanceDto,
+  CreateFeedback360Dto,
+  CreateEmployeeCareerPlanDto,
+  CreatePdiDto,
+  UpdatePdiProgressDto,
   CreateDocumentDto,
   CreateTimelineEventDto,
-  CreateSelfServiceRequestDto, ReviewRequestDto,
-  BulkAssignCourseDto, BulkUpdateStatusDto, BulkSendMessageDto,
-  EmployeeFilterDto, EmployeeStatus, TimelineEventType,
+  CreateSelfServiceRequestDto,
+  ReviewRequestDto,
+  BulkAssignCourseDto,
+  BulkUpdateStatusDto,
+  EmployeeFilterDto,
+  EmployeeStatus,
+  TimelineEventType,
 } from './employees.dto';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -44,10 +54,25 @@ export class EmployeesService {
 
   async findAll(filters: EmployeeFilterDto) {
     const {
-      page = 1, limit = 20, search, role, department, location,
-      status, seniority, contractType, workMode, managerId,
-      joinedFrom, joinedTo, pdiStatus, skillName, skillLevel,
-      costCenter, sortBy, sortOrder,
+      page = 1,
+      limit = 20,
+      search,
+      role,
+      department,
+      location,
+      status,
+      seniority,
+      contractType,
+      workMode,
+      managerId,
+      joinedFrom,
+      joinedTo,
+      pdiStatus,
+      skillName,
+      skillLevel,
+      costCenter,
+      sortBy,
+      sortOrder,
     } = filters;
 
     const skip = (page - 1) * limit;
@@ -66,20 +91,20 @@ export class EmployeesService {
       ];
     }
 
-    if (role)         where.role       = { contains: role, mode: 'insensitive' };
-    if (department)   where.department = { contains: department, mode: 'insensitive' };
-    if (location)     where.location   = { contains: location, mode: 'insensitive' };
-    if (status)       where.status     = status;
-    if (seniority)    where.seniority  = seniority;
+    if (role) where.role = { contains: role, mode: 'insensitive' };
+    if (department) where.department = { contains: department, mode: 'insensitive' };
+    if (location) where.location = { contains: location, mode: 'insensitive' };
+    if (status) where.status = status;
+    if (seniority) where.seniority = seniority;
     if (contractType) where.contractType = contractType;
-    if (workMode)     where.workMode   = workMode;
-    if (managerId)    where.managerId  = managerId;
-    if (costCenter)   where.costCenter = { contains: costCenter, mode: 'insensitive' };
+    if (workMode) where.workMode = workMode;
+    if (managerId) where.managerId = managerId;
+    if (costCenter) where.costCenter = { contains: costCenter, mode: 'insensitive' };
 
     if (joinedFrom || joinedTo) {
       where.joinedAt = {};
       if (joinedFrom) where.joinedAt.gte = new Date(joinedFrom);
-      if (joinedTo)   where.joinedAt.lte = new Date(joinedTo);
+      if (joinedTo) where.joinedAt.lte = new Date(joinedTo);
     }
 
     // Filtro por skills
@@ -195,7 +220,7 @@ export class EmployeesService {
     if (exists) throw new ConflictException('E-mail já cadastrado');
 
     // Gerar matrícula se não fornecida
-    const matricula = dto.matricula ?? await this.generateMatricula();
+    const matricula = dto.matricula ?? (await this.generateMatricula());
 
     const employee = await this.prisma.employee.create({
       data: {
@@ -204,8 +229,8 @@ export class EmployeesService {
         joinedAt: new Date(dto.joinedAt),
         birthDate: toDate(dto.birthDate),
         status: dto.status ?? EmployeeStatus.ACTIVE,
-        address: dto.address ? dto.address as any : undefined,
-        emergencyContact: dto.emergencyContact ? dto.emergencyContact as any : undefined,
+        address: dto.address ? (dto.address as any) : undefined,
+        emergencyContact: dto.emergencyContact ? (dto.emergencyContact as any) : undefined,
       },
     });
 
@@ -289,8 +314,14 @@ export class EmployeesService {
     await this.findOne(id);
 
     const [
-      contracts, feedbacks, activeCareerPlans, attendances,
-      activePdi, completedCourses, skills, badges,
+      contracts,
+      feedbacks,
+      activeCareerPlans,
+      attendances,
+      activePdi,
+      completedCourses,
+      skills,
+      badges,
     ] = await Promise.all([
       this.prisma.contract.count({ where: { employeeId: id } }),
       this.prisma.feedback360.aggregate({
@@ -309,9 +340,11 @@ export class EmployeesService {
         where: { employeeId: id, status: 'ACTIVE' },
         select: { progressPercent: true, title: true },
       }),
-      this.prisma.enrollment?.count({
-        where: { userId: id, completedAt: { not: null } },
-      }).catch(() => 0),
+      this.prisma.enrollment
+        ?.count({
+          where: { userId: id, completedAt: { not: null } },
+        })
+        .catch(() => 0),
       this.prisma.employeeSkill.count({ where: { employeeId: id } }),
       this.prisma.badgeAward.count({ where: { userId: id } }).catch(() => 0),
     ]);
@@ -333,23 +366,38 @@ export class EmployeesService {
   }
 
   async getHeadcountStats() {
-    const [
-      total, byStatus, byDepartment, bySeniority,
-      byContractType, byWorkMode, recentHires,
-    ] = await Promise.all([
-      this.prisma.employee.count({ where: { status: EmployeeStatus.ACTIVE } }),
-      this.prisma.employee.groupBy({ by: ['status'], _count: true }),
-      this.prisma.employee.groupBy({ by: ['department'], _count: true, where: { status: 'ACTIVE' }, orderBy: { _count: { department: 'desc' } } }),
-      this.prisma.employee.groupBy({ by: ['seniority'], _count: true, where: { status: 'ACTIVE' } }),
-      this.prisma.employee.groupBy({ by: ['contractType'], _count: true, where: { status: 'ACTIVE' } }),
-      this.prisma.employee.groupBy({ by: ['workMode'], _count: true, where: { status: 'ACTIVE' } }),
-      this.prisma.employee.count({
-        where: {
-          status: 'ACTIVE',
-          joinedAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-        },
-      }),
-    ]);
+    const [total, byStatus, byDepartment, bySeniority, byContractType, byWorkMode, recentHires] =
+      await Promise.all([
+        this.prisma.employee.count({ where: { status: EmployeeStatus.ACTIVE } }),
+        this.prisma.employee.groupBy({ by: ['status'], _count: true }),
+        this.prisma.employee.groupBy({
+          by: ['department'],
+          _count: true,
+          where: { status: 'ACTIVE' },
+          orderBy: { _count: { department: 'desc' } },
+        }),
+        this.prisma.employee.groupBy({
+          by: ['seniority'],
+          _count: true,
+          where: { status: 'ACTIVE' },
+        }),
+        this.prisma.employee.groupBy({
+          by: ['contractType'],
+          _count: true,
+          where: { status: 'ACTIVE' },
+        }),
+        this.prisma.employee.groupBy({
+          by: ['workMode'],
+          _count: true,
+          where: { status: 'ACTIVE' },
+        }),
+        this.prisma.employee.count({
+          where: {
+            status: 'ACTIVE',
+            joinedAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+          },
+        }),
+      ]);
 
     return { total, byStatus, byDepartment, bySeniority, byContractType, byWorkMode, recentHires };
   }
@@ -402,18 +450,19 @@ export class EmployeesService {
     if (from || to) {
       where.date = {};
       if (from) where.date.gte = new Date(from);
-      if (to)   where.date.lte = new Date(to);
+      if (to) where.date.lte = new Date(to);
     }
 
     const records = await this.prisma.attendance.findMany({
-      where, orderBy: { date: 'desc' },
+      where,
+      orderBy: { date: 'desc' },
     });
 
     const totalHours = records.reduce((acc, r) => acc + (r.hoursWorked ?? 0), 0);
-    const totalDays  = records.length;
-    const avgHours   = totalDays ? +(totalHours / totalDays).toFixed(2) : 0;
+    const totalDays = records.length;
+    const avgHours = totalDays ? +(totalHours / totalDays).toFixed(2) : 0;
     const presentDays = records.filter(r => r.status === 'PRESENT').length;
-    const absentDays  = records.filter(r => r.status === 'ABSENT').length;
+    const absentDays = records.filter(r => r.status === 'ABSENT').length;
 
     return { records, totalHours, avgHours, totalDays, presentDays, absentDays };
   }
@@ -445,7 +494,8 @@ export class EmployeesService {
     if (cycle) where.cycle = cycle;
 
     const feedbacks = await this.prisma.feedback360.findMany({
-      where, orderBy: { evaluatedAt: 'desc' },
+      where,
+      orderBy: { evaluatedAt: 'desc' },
     });
     const avg = feedbacks.length
       ? +(feedbacks.reduce((a, f) => a + f.score, 0) / feedbacks.length).toFixed(2)
@@ -480,7 +530,8 @@ export class EmployeesService {
   async getCareerPlans(employeeId: number) {
     await this.findOne(employeeId);
     return this.prisma.careerPlan.findMany({
-      where: { employeeId }, orderBy: { createdAt: 'desc' },
+      where: { employeeId },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -503,7 +554,9 @@ export class EmployeesService {
         endDate: new Date(dto.endDate),
         status: 'ACTIVE',
         progressPercent: 0,
-        actions: actions ? { create: actions.map(a => ({ ...a, deadline: new Date(a.deadline) })) } : undefined,
+        actions: actions
+          ? { create: actions.map(a => ({ ...a, deadline: new Date(a.deadline) })) }
+          : undefined,
       },
       include: { actions: true },
     });
@@ -555,8 +608,11 @@ export class EmployeesService {
     // Gap analysis
     const gapAnalysis = skills.map(s => ({
       ...s,
-      gap: ((s as any).desiredLevel ?? (s as any).currentLevel ?? 0) - ((s as any).currentLevel ?? 0),
-      gapLabel: this.getGapLabel(((s as any).desiredLevel ?? (s as any).currentLevel ?? 0) - ((s as any).currentLevel ?? 0)),
+      gap:
+        ((s as any).desiredLevel ?? (s as any).currentLevel ?? 0) - ((s as any).currentLevel ?? 0),
+      gapLabel: this.getGapLabel(
+        ((s as any).desiredLevel ?? (s as any).currentLevel ?? 0) - ((s as any).currentLevel ?? 0),
+      ),
     }));
 
     const byType = skills.reduce((acc: any, s: any) => {
@@ -642,10 +698,11 @@ export class EmployeesService {
 
     // Verificar documentos expirados
     const now = new Date();
-    const expiringSoon = docs.filter(d =>
-      d.expiresAt &&
-      d.expiresAt > now &&
-      d.expiresAt < new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+    const expiringSoon = docs.filter(
+      d =>
+        d.expiresAt &&
+        d.expiresAt > now &&
+        d.expiresAt < new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
     );
     const expired = docs.filter(d => d.expiresAt && d.expiresAt < now);
 
@@ -758,8 +815,13 @@ export class EmployeesService {
     const root = await this.prisma.employee.findMany({
       where,
       select: {
-        id: true, name: true, role: true, jobTitle: true,
-        department: true, avatarUrl: true, managerId: true,
+        id: true,
+        name: true,
+        role: true,
+        jobTitle: true,
+        department: true,
+        avatarUrl: true,
+        managerId: true,
         _count: { select: { subordinates: true } },
       },
     });
@@ -773,8 +835,13 @@ export class EmployeesService {
         const children = await this.prisma.employee.findMany({
           where: { managerId: node.id, status: EmployeeStatus.ACTIVE },
           select: {
-            id: true, name: true, role: true, jobTitle: true,
-            department: true, avatarUrl: true, managerId: true,
+            id: true,
+            name: true,
+            role: true,
+            jobTitle: true,
+            department: true,
+            avatarUrl: true,
+            managerId: true,
             _count: { select: { subordinates: true } },
           },
         });
@@ -782,7 +849,7 @@ export class EmployeesService {
           ...node,
           children: children.length > 0 ? await this.buildTree(children) : [],
         };
-      })
+      }),
     );
   }
 
@@ -794,14 +861,16 @@ export class EmployeesService {
     const results = await Promise.allSettled(
       dto.employeeIds.flatMap(empId =>
         dto.courseIds.map(courseId =>
-          this.prisma.enrollment?.create?.({
-            data: { userId: empId, courseId, enrolledAt: new Date() },
-          }).catch(() => null)
-        )
-      )
+          this.prisma.enrollment
+            ?.create?.({
+              data: { userId: empId, courseId, enrolledAt: new Date() },
+            })
+            .catch(() => null),
+        ),
+      ),
     );
     const success = results.filter(r => r.status === 'fulfilled').length;
-    const failed  = results.filter(r => r.status === 'rejected').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
     return { success, failed, total: results.length };
   }
 
@@ -867,4 +936,3 @@ export class EmployeesService {
     return `INN${year}${seq}`;
   }
 }
-

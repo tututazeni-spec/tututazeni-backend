@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔍 A verificar lint antes do push..."
+npm run lint:check
+echo "✅ Push autorizado"

@@ -1,28 +1,37 @@
 ﻿// ─── src/document-repository/document-repository.service.ts ──────────────────
 import {
-  Injectable, NotFoundException, ForbiddenException,
-  BadRequestException, ConflictException,
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuditService }  from '../common/services/audit.service';
-import * as crypto       from 'crypto';
+import { AuditService } from '../common/services/audit.service';
+import * as crypto from 'crypto';
 import {
   DocumentFilterDto,
-  CreateDocumentDto, UpdateDocumentDto, NewVersionDto,
-  GrantPermissionDto, CreateShareLinkDto, CreateDocCategoryDto,
-  DocSensitivity, DocStatus, DocCategory, DocAuditAction, DocPermission,
+  CreateDocumentDto,
+  UpdateDocumentDto,
+  NewVersionDto,
+  GrantPermissionDto,
+  CreateShareLinkDto,
+  CreateDocCategoryDto,
+  DocSensitivity,
+  DocStatus,
+  DocCategory,
+  DocAuditAction,
 } from './document-repository.dto';
 
 // ─── Retention policies (Angola defaults, configurável por categoria) ─────────
 const DEFAULT_RETENTION: Partial<Record<DocCategory, number>> = {
-  [DocCategory.HEALTH]:      20,
-  [DocCategory.LABOUR]:      10,
-  [DocCategory.PAYROLL]:     10,
-  [DocCategory.COMPLIANCE]:  10,
-  [DocCategory.CORPORATE]:   5,
+  [DocCategory.HEALTH]: 20,
+  [DocCategory.LABOUR]: 10,
+  [DocCategory.PAYROLL]: 10,
+  [DocCategory.COMPLIANCE]: 10,
+  [DocCategory.CORPORATE]: 5,
   [DocCategory.RECRUITMENT]: 1,
-  [DocCategory.LEARNING]:    5,
-  [DocCategory.PERSONAL]:    5,
+  [DocCategory.LEARNING]: 5,
+  [DocCategory.PERSONAL]: 5,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -67,7 +76,10 @@ export class DocumentRepositoryService {
   }
 
   async getCategories() {
-    return this.prisma.docCategoryModel.findMany({ where: { active: true }, orderBy: { name: 'asc' } });
+    return this.prisma.docCategoryModel.findMany({
+      where: { active: true },
+      orderBy: { name: 'asc' },
+    });
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -76,9 +88,21 @@ export class DocumentRepositoryService {
 
   async findAll(filters: DocumentFilterDto, userId: number, userDept?: string, role?: string) {
     const {
-      page = 1, limit = 20, search, category, sensitivity, status = DocStatus.ACTIVE,
-      department, ownerId, tag, from, to, expiringSoon, expired,
-      sortBy = 'createdAt', sortOrder = 'desc',
+      page = 1,
+      limit = 20,
+      search,
+      category,
+      sensitivity,
+      status = DocStatus.ACTIVE,
+      department,
+      ownerId,
+      tag,
+      from,
+      to,
+      expiringSoon,
+      expired,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
     } = filters;
     const skip = (page - 1) * limit;
 
@@ -87,24 +111,26 @@ export class DocumentRepositoryService {
 
     if (search) {
       where.AND = [
-        { OR: [
-          { title: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } },
-          { tags: { has: search } },
-          { ocrText: { contains: search, mode: 'insensitive' } },
-        ]},
+        {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+            { tags: { has: search } },
+            { ocrText: { contains: search, mode: 'insensitive' } },
+          ],
+        },
       ];
     }
 
-    if (category)    where.category   = category;
+    if (category) where.category = category;
     if (sensitivity) where.sensitivity = sensitivity;
-    if (department)  where.department  = { contains: department, mode: 'insensitive' };
-    if (ownerId)     where.ownerId     = ownerId;
-    if (tag)         where.tags        = { has: tag };
+    if (department) where.department = { contains: department, mode: 'insensitive' };
+    if (ownerId) where.ownerId = ownerId;
+    if (tag) where.tags = { has: tag };
     if (from || to) {
       where.createdAt = {};
       if (from) where.createdAt.gte = new Date(from);
-      if (to)   where.createdAt.lte = new Date(to);
+      if (to) where.createdAt.lte = new Date(to);
     }
     if (expiringSoon) {
       const soon = new Date(Date.now() + 30 * 86400000);
@@ -112,17 +138,19 @@ export class DocumentRepositoryService {
     }
     if (expired) {
       where.expiresAt = { lt: new Date() };
-      where.status    = DocStatus.ACTIVE;
+      where.status = DocStatus.ACTIVE;
     }
 
     const [data, total] = await Promise.all([
       this.prisma.document.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         orderBy: { [sortBy]: sortOrder },
         include: {
           createdBy: { select: { id: true, fullName: true, avatarUrl: true } },
-          owner:     { select: { id: true, fullName: true } },
-          _count:    { select: { versions: true, downloads: true, permissions: true } },
+          owner: { select: { id: true, fullName: true } },
+          _count: { select: { versions: true, downloads: true, permissions: true } },
         },
       }),
       this.prisma.document.count({ where }),
@@ -162,7 +190,9 @@ export class DocumentRepositoryService {
   async create(createdById: number, dto: CreateDocumentDto) {
     // DLP: documentos sensíveis não podem ser PUBLIC
     if (
-      [DocSensitivity.CONFIDENTIAL, DocSensitivity.RESTRICTED, DocSensitivity.SECRET].includes(dto.sensitivity) &&
+      [DocSensitivity.CONFIDENTIAL, DocSensitivity.RESTRICTED, DocSensitivity.SECRET].includes(
+        dto.sensitivity,
+      ) &&
       dto.sensitivity === DocSensitivity.PUBLIC
     ) {
       throw new BadRequestException('Documentos confidenciais não podem ter acesso público');
@@ -176,22 +206,22 @@ export class DocumentRepositoryService {
     const doc = await this.prisma.document.create({
       data: {
         ...dto,
-        tags:          dto.tags ?? [],
-        status:        DocStatus.ACTIVE,
-        origin:        dto.origin ?? 'UPLOAD',
-        version:       '1.0',
-        expiresAt:     dto.expiresAt ? new Date(dto.expiresAt) : null,
+        tags: dto.tags ?? [],
+        status: DocStatus.ACTIVE,
+        origin: dto.origin ?? 'UPLOAD',
+        version: '1.0',
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
         retentionUntil,
         createdById,
         // Criar versão inicial
         versions: {
           create: {
             versionNumber: 1,
-            fileUrl:       dto.fileUrl,
-            mimeType:      dto.mimeType,
-            fileSize:      dto.fileSize,
-            fileName:      dto.fileName ?? dto.title,
-            uploadedById:  createdById,
+            fileUrl: dto.fileUrl,
+            mimeType: dto.mimeType,
+            fileSize: dto.fileSize,
+            fileName: dto.fileName ?? dto.title,
+            uploadedById: createdById,
             changeDescription: 'Versão inicial',
           },
         },
@@ -199,12 +229,22 @@ export class DocumentRepositoryService {
       include: { createdBy: { select: { id: true, fullName: true } } },
     });
 
-    await this.audit.log({ action: 'DOC_UPLOADED', entityType: 'Document', entityId: doc.id, userId: createdById, metadata: {} });
+    await this.audit.log({
+      action: 'DOC_UPLOADED',
+      entityType: 'Document',
+      entityId: doc.id,
+      userId: createdById,
+      metadata: {},
+    });
     await this.logAudit(doc.id, createdById, DocAuditAction.UPLOADED);
 
     // Auto-notificar owner se diferente do criador
     if (dto.ownerId && dto.ownerId !== createdById) {
-      await this.notify(dto.ownerId, 'DOC_LINKED', `Um documento foi vinculado ao seu perfil: "${dto.title}"`);
+      await this.notify(
+        dto.ownerId,
+        'DOC_LINKED',
+        `Um documento foi vinculado ao seu perfil: "${dto.title}"`,
+      );
     }
 
     return doc;
@@ -219,7 +259,10 @@ export class DocumentRepositoryService {
     }
 
     // DLP check
-    if (dto.sensitivity && [DocSensitivity.CONFIDENTIAL, DocSensitivity.SECRET].includes(dto.sensitivity as DocSensitivity)) {
+    if (
+      dto.sensitivity &&
+      [DocSensitivity.CONFIDENTIAL, DocSensitivity.SECRET].includes(dto.sensitivity)
+    ) {
       // Só admin/RH pode tornar um doc confidencial (controlado no controller)
     }
 
@@ -239,19 +282,20 @@ export class DocumentRepositoryService {
     const doc = await this.findOne(id);
 
     const lastVersion = await this.prisma.docVersion.findFirst({
-      where: { documentId: id }, orderBy: { versionNumber: 'desc' },
+      where: { documentId: id },
+      orderBy: { versionNumber: 'desc' },
     });
     const nextNum = (lastVersion?.versionNumber ?? 0) + 1;
     const nextVer = `${Math.floor(nextNum)}.0`;
 
     await this.prisma.docVersion.create({
       data: {
-        documentId:    id,
+        documentId: id,
         versionNumber: nextNum,
-        fileUrl:       dto.fileUrl,
-        mimeType:      dto.mimeType,
-        fileSize:      dto.fileSize,
-        fileName:      dto.fileName,
+        fileUrl: dto.fileUrl,
+        mimeType: dto.mimeType,
+        fileSize: dto.fileSize,
+        fileName: dto.fileName,
         uploadedById,
         changeDescription: dto.changeDescription,
       },
@@ -268,14 +312,17 @@ export class DocumentRepositoryService {
 
   async restoreVersion(documentId: number, versionId: number, restoredById: number) {
     const version = await this.prisma.docVersion.findUnique({ where: { id: versionId } });
-    if (!version || version.documentId !== documentId) throw new NotFoundException('Versão não encontrada');
+    if (!version || version.documentId !== documentId)
+      throw new NotFoundException('Versão não encontrada');
 
     await this.prisma.document.update({
       where: { id: documentId },
       data: { fileUrl: version.fileUrl, version: `${version.versionNumber}.0 (restaurado)` },
     });
 
-    await this.logAudit(documentId, restoredById, DocAuditAction.VERSIONED, { restored: version.versionNumber });
+    await this.logAudit(documentId, restoredById, DocAuditAction.VERSIONED, {
+      restored: version.versionNumber,
+    });
     return this.findOne(documentId);
   }
 
@@ -285,7 +332,7 @@ export class DocumentRepositoryService {
     // Verificar retenção legal: não pode arquivar antes do prazo
     if (doc.retentionUntil && doc.retentionUntil > new Date()) {
       throw new BadRequestException(
-        `Documento não pode ser arquivado antes de ${doc.retentionUntil.toLocaleDateString('pt-AO')} (retenção legal)`
+        `Documento não pode ser arquivado antes de ${doc.retentionUntil.toLocaleDateString('pt-AO')} (retenção legal)`,
       );
     }
 
@@ -303,7 +350,7 @@ export class DocumentRepositoryService {
 
     if (doc.retentionUntil && doc.retentionUntil > new Date()) {
       throw new ForbiddenException(
-        `Não pode ser eliminado antes de ${doc.retentionUntil.toLocaleDateString('pt-AO')} (retenção legal)`
+        `Não pode ser eliminado antes de ${doc.retentionUntil.toLocaleDateString('pt-AO')} (retenção legal)`,
       );
     }
 
@@ -343,11 +390,11 @@ export class DocumentRepositoryService {
 
     return this.prisma.docPermission.create({
       data: {
-        documentId:  dto.documentId,
-        userId:      dto.userId,
-        department:  dto.department,
+        documentId: dto.documentId,
+        userId: dto.userId,
+        department: dto.department,
         permissions: dto.permissions,
-        expiresAt:   dto.expiresAt ? new Date(dto.expiresAt) : null,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
         grantedById,
       },
     });
@@ -365,20 +412,24 @@ export class DocumentRepositoryService {
     const doc = await this.findOne(dto.documentId);
 
     // DLP: documentos confidenciais/secretos não compartilháveis externamente
-    if ([DocSensitivity.SECRET, DocSensitivity.RESTRICTED].includes(doc.sensitivity as DocSensitivity)) {
+    if (
+      [DocSensitivity.SECRET, DocSensitivity.RESTRICTED].includes(doc.sensitivity as DocSensitivity)
+    ) {
       throw new ForbiddenException('Este documento não pode ser partilhado externamente');
     }
 
-    const token      = crypto.randomBytes(32).toString('hex');
-    const expiry     = dto.expiresAt ? new Date(dto.expiresAt) : new Date(Date.now() + 7 * 86400000);
-    const hashedPass = dto.password ? crypto.createHash('sha256').update(dto.password).digest('hex') : null;
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiry = dto.expiresAt ? new Date(dto.expiresAt) : new Date(Date.now() + 7 * 86400000);
+    const hashedPass = dto.password
+      ? crypto.createHash('sha256').update(dto.password).digest('hex')
+      : null;
 
     const link = await this.prisma.docShareLink.create({
       data: {
-        documentId:   dto.documentId,
+        documentId: dto.documentId,
         token,
-        access:       dto.access,
-        expiresAt:    expiry,
+        access: dto.access,
+        expiresAt: expiry,
         passwordHash: hashedPass,
         maxDownloads: dto.maxDownloads,
         createdById,
@@ -406,7 +457,10 @@ export class DocumentRepositoryService {
     }
 
     if (link.passwordHash) {
-      const hash = crypto.createHash('sha256').update(password ?? '').digest('hex');
+      const hash = crypto
+        .createHash('sha256')
+        .update(password ?? '')
+        .digest('hex');
       if (hash !== link.passwordHash) throw new ForbiddenException('Password incorrecta');
     }
 
@@ -435,8 +489,10 @@ export class DocumentRepositoryService {
       });
 
       // Notificar owner
-      if (doc.ownerId)    await this.notify(doc.ownerId,    'DOC_EXPIRED', `O documento "${doc.title}" expirou`);
-      if (doc.createdById) await this.notify(doc.createdById, 'DOC_EXPIRED', `O documento "${doc.title}" expirou`);
+      if (doc.ownerId)
+        await this.notify(doc.ownerId, 'DOC_EXPIRED', `O documento "${doc.title}" expirou`);
+      if (doc.createdById)
+        await this.notify(doc.createdById, 'DOC_EXPIRED', `O documento "${doc.title}" expirou`);
     }
 
     return { processed: expired.length };
@@ -444,12 +500,12 @@ export class DocumentRepositoryService {
 
   async getExpiringSoon(days = 30) {
     const from = new Date();
-    const to   = new Date(Date.now() + days * 86400000);
+    const to = new Date(Date.now() + days * 86400000);
 
     return this.prisma.document.findMany({
       where: { expiresAt: { gt: from, lte: to }, status: DocStatus.ACTIVE },
       include: {
-        owner:     { select: { id: true, fullName: true, email: true } },
+        owner: { select: { id: true, fullName: true, email: true } },
         createdBy: { select: { id: true, fullName: true } },
       },
       orderBy: { expiresAt: 'asc' },
@@ -461,7 +517,10 @@ export class DocumentRepositoryService {
       where: { id },
       data: { expiresAt: new Date(newExpiresAt), status: DocStatus.ACTIVE },
     });
-    await this.logAudit(id, renewedById, DocAuditAction.UPDATED, { action: 'RENEWED', newExpiresAt });
+    await this.logAudit(id, renewedById, DocAuditAction.UPDATED, {
+      action: 'RENEWED',
+      newExpiresAt,
+    });
     return this.findOne(id);
   }
 
@@ -495,24 +554,50 @@ export class DocumentRepositoryService {
     const soon = new Date(Date.now() + 30 * 86400000);
 
     const [
-      total, active, expired, expiringSoon, archived,
-      byCategory, totalSize, newThisMonth, recentDownloads,
+      total,
+      active,
+      expired,
+      expiringSoon,
+      archived,
+      byCategory,
+      totalSize,
+      newThisMonth,
+      recentDownloads,
     ] = await Promise.all([
       this.prisma.document.count(),
       this.prisma.document.count({ where: { status: DocStatus.ACTIVE } }),
       this.prisma.document.count({ where: { status: DocStatus.EXPIRED } }),
-      this.prisma.document.count({ where: { expiresAt: { gt: now, lte: soon }, status: DocStatus.ACTIVE } }),
+      this.prisma.document.count({
+        where: { expiresAt: { gt: now, lte: soon }, status: DocStatus.ACTIVE },
+      }),
       this.prisma.document.count({ where: { status: DocStatus.ARCHIVED } }),
-      this.prisma.document.groupBy({ by: ['category'], where: { status: DocStatus.ACTIVE }, _count: true, orderBy: { _count: { category: 'desc' } } }),
-      this.prisma.document.aggregate({ where: { status: DocStatus.ACTIVE }, _sum: { fileSize: true } }),
-      this.prisma.document.count({ where: { createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } } }),
-      this.prisma.docDownload.count({ where: { downloadedAt: { gte: new Date(Date.now() - 30 * 86400000) } } }),
+      this.prisma.document.groupBy({
+        by: ['category'],
+        where: { status: DocStatus.ACTIVE },
+        _count: true,
+        orderBy: { _count: { category: 'desc' } },
+      }),
+      this.prisma.document.aggregate({
+        where: { status: DocStatus.ACTIVE },
+        _sum: { fileSize: true },
+      }),
+      this.prisma.document.count({
+        where: { createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
+      }),
+      this.prisma.docDownload.count({
+        where: { downloadedAt: { gte: new Date(Date.now() - 30 * 86400000) } },
+      }),
     ]);
 
     return {
       kpis: {
-        total, active, expired, expiringSoon, archived,
-        newThisMonth, recentDownloads,
+        total,
+        active,
+        expired,
+        expiringSoon,
+        archived,
+        newThisMonth,
+        recentDownloads,
         totalSizeGB: +((totalSize._sum.fileSize ?? 0) / 1073741824).toFixed(2),
       },
       byCategory,
@@ -527,12 +612,22 @@ export class DocumentRepositoryService {
       this.prisma.document.groupBy({ by: ['category'], where, _count: true }),
       this.prisma.document.groupBy({ by: ['sensitivity'], where, _count: true }),
       this.prisma.document.findMany({
-        where, orderBy: { downloadCount: 'desc' }, take: 5,
+        where,
+        orderBy: { downloadCount: 'desc' },
+        take: 5,
         select: { id: true, title: true, downloadCount: true, category: true },
       }),
       this.prisma.document.findMany({
-        where, orderBy: { createdAt: 'desc' }, take: 5,
-        select: { id: true, title: true, createdAt: true, category: true, createdBy: { select: { fullName: true } } },
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          title: true,
+          createdAt: true,
+          category: true,
+          createdBy: { select: { fullName: true } },
+        },
       }),
     ]);
 
@@ -563,10 +658,15 @@ export class DocumentRepositoryService {
   // INTERNAL HELPERS
   // ══════════════════════════════════════════════════════════════════
 
-  private async logAudit(documentId: number, userId: number, action: DocAuditAction, metadata?: any) {
+  private async logAudit(
+    documentId: number,
+    userId: number,
+    action: DocAuditAction,
+    metadata?: any,
+  ) {
     try {
       await this.prisma.docAuditLog.create({
-        data: { documentId, userId, action, metadata: metadata as any },
+        data: { documentId, userId, action, metadata: metadata },
       });
     } catch {}
   }

@@ -1,17 +1,30 @@
 // src/ai-tutor/ai-tutor.controller.ts
 import {
-  Controller, Get, Post, Patch, Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { AiTutorService }    from './ai-tutor.service';
-import { AiProvidersService }from './ai-providers.service';
+import { AiTutorService } from './ai-tutor.service';
+import { AiProvidersService } from './ai-providers.service';
 import {
-  StartAiSessionDto, SendAiMessageDto, AiSessionFilterDto,
-  RateMessageDto, ExecuteAgentActionDto, GenerateContentDto,
+  StartAiSessionDto,
+  SendAiMessageDto,
+  AiSessionFilterDto,
+  RateMessageDto,
+  ExecuteAgentActionDto,
+  GenerateContentDto,
 } from './ai-tutor.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('AI Tutor — NOVA (Groq / Gemini / Ollama)')
@@ -20,20 +33,24 @@ import { CurrentUser, Roles } from '../common/decorators';
 @Controller('ai-tutor')
 export class AiTutorController {
   constructor(
-    private readonly svc:      AiTutorService,
-    private readonly providers:AiProvidersService,
+    private readonly svc: AiTutorService,
+    private readonly providers: AiProvidersService,
   ) {}
 
   // ── Info ──────────────────────────────────────────────────────────────────
 
   @Get('provider')
   @ApiOperation({ summary: 'Fornecedor IA activo (Groq/Gemini/Ollama)' })
-  getProvider() { return this.providers.getProviderInfo(); }
+  getProvider() {
+    return this.providers.getProviderInfo();
+  }
 
   @Get('stats')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Estatísticas de uso (sessões, mensagens, rating, tokens)' })
-  stats() { return this.svc.getUsageStats(); }
+  stats() {
+    return this.svc.getUsageStats();
+  }
 
   // ── Sessões ───────────────────────────────────────────────────────────────
 
@@ -50,7 +67,9 @@ export class AiTutorController {
   }
 
   @Post('sessions')
-  @ApiOperation({ summary: 'Iniciar sessão com NOVA (contexto de curso, lição, PDI, personalidade)' })
+  @ApiOperation({
+    summary: 'Iniciar sessão com NOVA (contexto de curso, lição, PDI, personalidade)',
+  })
   startSession(@CurrentUser() user: any, @Body() dto: StartAiSessionDto) {
     return this.svc.startSession(user.id, dto);
   }
@@ -80,7 +99,9 @@ export class AiTutorController {
   // ── Agentic Actions ───────────────────────────────────────────────────────
 
   @Post('agent/execute')
-  @ApiOperation({ summary: 'Executar acção agentic (inscrever curso, actualizar PDI, notificar gestor)' })
+  @ApiOperation({
+    summary: 'Executar acção agentic (inscrever curso, actualizar PDI, notificar gestor)',
+  })
   executeAction(@CurrentUser() user: any, @Body() dto: ExecuteAgentActionDto) {
     return this.svc.executeAgentAction(user.id, dto);
   }

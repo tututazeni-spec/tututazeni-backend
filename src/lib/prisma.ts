@@ -10,20 +10,14 @@ declare const globalThis: {
 function createPrismaClient(): PrismaClient {
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl:
-      process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: false }
-        : false,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
   });
 
   const adapter = new PrismaPg(pool);
 
   return new PrismaClient({
     adapter,
-    log:
-      process.env.NODE_ENV === 'development'
-        ? ['query', 'error', 'warn']
-        : ['error'],
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   } as ConstructorParameters<typeof PrismaClient>[0]);
 }
 

@@ -1,18 +1,33 @@
 // src/assessments/assessments.controller.ts
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AssessmentsService } from './assessments.service';
 import {
-  CreateAssessmentDto, UpdateAssessmentDto, AssessmentFilterDto,
-  StartAttemptDto, SubmitAttemptDto, AutoSaveDto,
-  ReviewAnswerDto, CreateQuestionDto,
+  CreateAssessmentDto,
+  UpdateAssessmentDto,
+  AssessmentFilterDto,
+  StartAttemptDto,
+  SubmitAttemptDto,
+  AutoSaveDto,
+  ReviewAnswerDto,
+  CreateQuestionDto,
 } from './assessments.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Assessments')
@@ -40,10 +55,7 @@ export class AssessmentsController {
   @Get('my/attempts')
   @ApiOperation({ summary: 'As minhas tentativas' })
   @ApiQuery({ name: 'assessmentId', required: false })
-  myAttempts(
-    @CurrentUser() user: any,
-    @Query('assessmentId') assessmentId?: string,
-  ) {
+  myAttempts(@CurrentUser() user: any, @Query('assessmentId') assessmentId?: string) {
     return this.svc.getUserAttempts(user.id, assessmentId ? parseInt(assessmentId) : undefined);
   }
 
@@ -62,10 +74,7 @@ export class AssessmentsController {
 
   @Get('attempts/:attemptId')
   @ApiOperation({ summary: 'Detalhe de uma tentativa (para revisão)' })
-  attemptDetail(
-    @Param('attemptId', ParseIntPipe) attemptId: number,
-    @CurrentUser() user: any,
-  ) {
+  attemptDetail(@Param('attemptId', ParseIntPipe) attemptId: number, @CurrentUser() user: any) {
     return this.svc.getAttemptDetail(attemptId, user.id);
   }
 

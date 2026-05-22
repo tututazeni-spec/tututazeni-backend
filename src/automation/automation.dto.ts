@@ -1,8 +1,5 @@
 // src/automation/automation.dto.ts
-import {
-  IsString, IsOptional, IsEnum, IsBoolean, IsArray,
-  IsInt, IsObject, MaxLength, Min, IsNumber,
-} from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsBoolean, IsInt, MaxLength, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -10,63 +7,63 @@ import { Type } from 'class-transformer';
 
 export enum TriggerType {
   // Event-based
-  EMPLOYEE_CREATED     = 'employee.created',
-  EMPLOYEE_UPDATED     = 'employee.updated',
+  EMPLOYEE_CREATED = 'employee.created',
+  EMPLOYEE_UPDATED = 'employee.updated',
   EMPLOYEE_DEACTIVATED = 'employee.deactivated',
-  COURSE_COMPLETED     = 'course.completed',
-  COURSE_ENROLLED      = 'course.enrolled',
-  PDI_APPROVED         = 'pdi.approved',
-  PDI_COMPLETED        = 'pdi.completed',
+  COURSE_COMPLETED = 'course.completed',
+  COURSE_ENROLLED = 'course.enrolled',
+  PDI_APPROVED = 'pdi.approved',
+  PDI_COMPLETED = 'pdi.completed',
   EVALUATION_SUBMITTED = 'evaluation.submitted',
-  BADGE_AWARDED        = 'badge.awarded',
+  BADGE_AWARDED = 'badge.awarded',
   // Scheduled
-  CRON_DAILY           = 'cron.daily',
-  CRON_WEEKLY          = 'cron.weekly',
-  CRON_MONTHLY         = 'cron.monthly',
+  CRON_DAILY = 'cron.daily',
+  CRON_WEEKLY = 'cron.weekly',
+  CRON_MONTHLY = 'cron.monthly',
   // Legacy (from original)
-  BIRTHDAY_TODAY       = 'BIRTHDAY_TODAY',
+  BIRTHDAY_TODAY = 'BIRTHDAY_TODAY',
   PENDING_LEAVE_3_DAYS = 'PENDING_LEAVE_3_DAYS',
-  ENROLLMENT_EXPIRING  = 'ENROLLMENT_EXPIRING',
-  PAYSLIP_DUE          = 'PAYSLIP_DUE',
+  ENROLLMENT_EXPIRING = 'ENROLLMENT_EXPIRING',
+  PAYSLIP_DUE = 'PAYSLIP_DUE',
   // Manual
-  MANUAL               = 'manual',
+  MANUAL = 'manual',
 }
 
 export enum ActionType {
-  SEND_EMAIL            = 'send_email',
-  SEND_NOTIFICATION     = 'send_notification',
-  ASSIGN_COURSE         = 'assign_course',
-  CREATE_PDI            = 'create_pdi',
-  APPROVE_PDI           = 'approve_pdi',
-  AWARD_BADGE           = 'award_badge',
-  AWARD_POINTS          = 'award_points',
-  UPDATE_EMPLOYEE       = 'update_employee',
-  WEBHOOK               = 'webhook',
-  HTTP_REQUEST          = 'http_request',
-  LOG                   = 'log',
-  WAIT                  = 'wait',
+  SEND_EMAIL = 'send_email',
+  SEND_NOTIFICATION = 'send_notification',
+  ASSIGN_COURSE = 'assign_course',
+  CREATE_PDI = 'create_pdi',
+  APPROVE_PDI = 'approve_pdi',
+  AWARD_BADGE = 'award_badge',
+  AWARD_POINTS = 'award_points',
+  UPDATE_EMPLOYEE = 'update_employee',
+  WEBHOOK = 'webhook',
+  HTTP_REQUEST = 'http_request',
+  LOG = 'log',
+  WAIT = 'wait',
   // Legacy
   SEND_BIRTHDAY_NOTIFICATION = 'SEND_BIRTHDAY_NOTIFICATION',
-  NOTIFY_MANAGER        = 'NOTIFY_MANAGER',
-  NOTIFY_LEARNER        = 'NOTIFY_LEARNER',
-  NOTIFY_HR             = 'NOTIFY_HR',
+  NOTIFY_MANAGER = 'NOTIFY_MANAGER',
+  NOTIFY_LEARNER = 'NOTIFY_LEARNER',
+  NOTIFY_HR = 'NOTIFY_HR',
 }
 
 export enum AutomationCategory {
-  HR          = 'HR',
-  LMS         = 'LMS',
+  HR = 'HR',
+  LMS = 'LMS',
   PERFORMANCE = 'PERFORMANCE',
-  ENGAGEMENT  = 'ENGAGEMENT',
-  GAMIFICATION= 'GAMIFICATION',
+  ENGAGEMENT = 'ENGAGEMENT',
+  GAMIFICATION = 'GAMIFICATION',
   OPERATIONAL = 'OPERATIONAL',
-  CUSTOM      = 'CUSTOM',
+  CUSTOM = 'CUSTOM',
 }
 
 export enum ExecutionStatus {
   PENDING = 'PENDING',
   RUNNING = 'RUNNING',
   SUCCESS = 'SUCCESS',
-  FAILED  = 'FAILED',
+  FAILED = 'FAILED',
   SKIPPED = 'SKIPPED',
 }
 
@@ -147,11 +144,23 @@ export class TriggerEventDto {
 }
 
 export class ExecutionFilterDto {
-  @ApiPropertyOptional({ enum: ExecutionStatus }) @IsOptional() @IsEnum(ExecutionStatus) status?: ExecutionStatus;
+  @ApiPropertyOptional({ enum: ExecutionStatus })
+  @IsOptional()
+  @IsEnum(ExecutionStatus)
+  status?: ExecutionStatus;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
-  @ApiPropertyOptional({ default: 1 })  @IsOptional() @IsInt() @Min(1) @Type(() => Number) page?: number;
-  @ApiPropertyOptional({ default: 30 }) @IsOptional() @IsInt() @Min(1) @Type(() => Number) limit?: number;
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+  @ApiPropertyOptional({ default: 30 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  limit?: number;
 }
-

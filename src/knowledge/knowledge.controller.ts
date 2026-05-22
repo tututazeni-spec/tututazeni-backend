@@ -1,20 +1,35 @@
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { KnowledgeService } from './knowledge.service';
 import {
-  CreateKnowledgeCategoryDto, UpdateKnowledgeCategoryDto,
-  CreateKnowledgeArticleDto, UpdateKnowledgeArticleDto,
-  KnowledgeFilterDto, KnowledgeInteractionDto,
-  CreateCommentDto, RateArticleDto,
-  CreateKnowledgeQuestionDto, AnswerQuestionDto,
+  CreateKnowledgeCategoryDto,
+  UpdateKnowledgeCategoryDto,
+  CreateKnowledgeArticleDto,
+  UpdateKnowledgeArticleDto,
+  KnowledgeFilterDto,
+  KnowledgeInteractionDto,
+  CreateCommentDto,
+  RateArticleDto,
+  CreateKnowledgeQuestionDto,
+  AnswerQuestionDto,
   AcknowledgeArticleDto,
 } from './knowledge.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Knowledge Base')
@@ -29,18 +44,24 @@ export class KnowledgeController {
   @Get('admin/dashboard')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Dashboard admin (métricas, gaps, artigos desactualizados)' })
-  dashboard() { return this.svc.getDashboard(); }
+  dashboard() {
+    return this.svc.getDashboard();
+  }
 
   // ── Categorias ────────────────────────────────────────────────────────────
 
   @Get('categories')
   @ApiOperation({ summary: 'Listar categorias (com subcategorias e contagens)' })
-  categories() { return this.svc.findAllCategories(); }
+  categories() {
+    return this.svc.findAllCategories();
+  }
 
   @Post('categories')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar categoria' })
-  createCategory(@Body() dto: CreateKnowledgeCategoryDto) { return this.svc.createCategory(dto); }
+  createCategory(@Body() dto: CreateKnowledgeCategoryDto) {
+    return this.svc.createCategory(dto);
+  }
 
   @Put('categories/:id')
   @Roles('ADMIN', 'RH')
@@ -53,7 +74,9 @@ export class KnowledgeController {
 
   @Get()
   @ApiOperation({ summary: 'Listar artigos publicados com filtros, paginação e ordenação' })
-  findAll(@Query() filters: KnowledgeFilterDto) { return this.svc.findAll(filters); }
+  findAll(@Query() filters: KnowledgeFilterDto) {
+    return this.svc.findAll(filters);
+  }
 
   @Get('trending')
   @ApiOperation({ summary: 'Artigos mais vistos' })
@@ -71,7 +94,9 @@ export class KnowledgeController {
 
   @Get('my/bookmarks')
   @ApiOperation({ summary: 'Os meus artigos guardados (bookmarks)' })
-  myBookmarks(@CurrentUser() user: any) { return this.svc.getBookmarks(user.id); }
+  myBookmarks(@CurrentUser() user: any) {
+    return this.svc.getBookmarks(user.id);
+  }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do artigo (regista visualização única/30min)' })
@@ -82,7 +107,9 @@ export class KnowledgeController {
   @Get(':id/versions')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Histórico de versões do artigo' })
-  versions(@Param('id', ParseIntPipe) id: number) { return this.svc.getVersions(id); }
+  versions(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getVersions(id);
+  }
 
   @Get(':id/acknowledgements')
   @Roles('ADMIN', 'RH')
@@ -113,19 +140,23 @@ export class KnowledgeController {
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Publicar artigo (DRAFT → PUBLISHED)' })
   @HttpCode(HttpStatus.OK)
-  publish(@Param('id', ParseIntPipe) id: number) { return this.svc.publish(id); }
+  publish(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.publish(id);
+  }
 
   @Patch(':id/archive')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Arquivar artigo' })
   @HttpCode(HttpStatus.OK)
-  archive(@Param('id', ParseIntPipe) id: number) { return this.svc.archive(id); }
+  archive(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.archive(id);
+  }
 
   @Post(':id/versions/:versionId/restore')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Restaurar versão anterior do artigo' })
   restoreVersion(
-    @Param('id',        ParseIntPipe) id:        number,
+    @Param('id', ParseIntPipe) id: number,
     @Param('versionId', ParseIntPipe) versionId: number,
     @CurrentUser() user: any,
   ) {
@@ -135,7 +166,9 @@ export class KnowledgeController {
   @Delete(':id')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Eliminar artigo (não permitido se obrigatório com confirmações)' })
-  remove(@Param('id', ParseIntPipe) id: number) { return this.svc.remove(id); }
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remove(id);
+  }
 
   // ── Interacções ───────────────────────────────────────────────────────────
 
@@ -170,10 +203,7 @@ export class KnowledgeController {
 
   @Delete('comments/:commentId')
   @ApiOperation({ summary: 'Remover comentário próprio' })
-  deleteComment(
-    @Param('commentId', ParseIntPipe) commentId: number,
-    @CurrentUser() user: any,
-  ) {
+  deleteComment(@Param('commentId', ParseIntPipe) commentId: number, @CurrentUser() user: any) {
     return this.svc.deleteComment(commentId, user.id);
   }
 

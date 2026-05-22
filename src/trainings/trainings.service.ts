@@ -1,15 +1,24 @@
 ﻿// src/trainings/trainings.service.ts
 import {
-  Injectable, NotFoundException, ConflictException,
-  BadRequestException, ForbiddenException, Logger,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateTrainingDto, UpdateTrainingDto, TrainingFilterDto,
-  CreateTrainingSessionDto, UpdateTrainingSessionDto,
-  RegisterParticipantDto, UpdateParticipantStatusDto,
-  BulkAttendanceDto, RateTrainingDto,
-  TrainingStatus, ParticipantStatus,
+  CreateTrainingDto,
+  UpdateTrainingDto,
+  TrainingFilterDto,
+  CreateTrainingSessionDto,
+  UpdateTrainingSessionDto,
+  RegisterParticipantDto,
+  UpdateParticipantStatusDto,
+  BulkAttendanceDto,
+  RateTrainingDto,
+  ParticipantStatus,
 } from './trainings.dto';
 
 @Injectable()
@@ -21,31 +30,50 @@ export class TrainingService {
   // ─── CATÁLOGO ─────────────────────────────────────────────────────────────
 
   async findAll(filters: TrainingFilterDto) {
-    const { page = 1, limit = 20, search, type, level, status, category, instructorId, mandatory } = filters;
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      type,
+      level,
+      status,
+      category,
+      instructorId,
+      mandatory,
+    } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (status)       where.status       = status;
-    else              where.status       = 'PUBLISHED';
-    if (type)         where.type         = type;
-    if (level)        where.level        = level;
-    if (category)     where.category     = category;
+    if (status) where.status = status;
+    else where.status = 'PUBLISHED';
+    if (type) where.type = type;
+    if (level) where.level = level;
+    if (category) where.category = category;
     if (instructorId) where.instructorId = instructorId;
     if (mandatory !== undefined) where.mandatory = mandatory;
     if (search) {
       where.OR = [
-        { title:            { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } },
         { shortDescription: { contains: search, mode: 'insensitive' } },
-        { tags:             { has: search } },
+        { tags: { has: search } },
       ];
     }
 
     const [data, total] = await Promise.all([
       this.prisma.training.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
-          instructor: { select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } } },
-          _count:     { select: { sessions: true, participants: true, ratings: true } },
+          instructor: {
+            select: {
+              id: true,
+              fullName: true,
+              avatarUrl: true,
+              position: { select: { name: true } },
+            },
+          },
+          _count: { select: { sessions: true, participants: true, ratings: true } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -59,7 +87,15 @@ export class TrainingService {
     const t = await this.prisma.training.findUnique({
       where: { id },
       include: {
-        instructor:    { select: { id: true, fullName: true, email: true, avatarUrl: true, position: { select: { name: true } } } },
+        instructor: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
+          },
+        },
         sessions: {
           include: {
             _count: { select: { participants: true } },
@@ -68,7 +104,7 @@ export class TrainingService {
         },
         ratings: {
           include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
-          take:    10,
+          take: 10,
           orderBy: { createdAt: 'desc' },
         },
         _count: { select: { sessions: true, participants: true, ratings: true } },
@@ -79,7 +115,7 @@ export class TrainingService {
     // Calcular rating médio
     const avgRating = await this.prisma.trainingRating.aggregate({
       where: { trainingId: id },
-      _avg:  { rating: true },
+      _avg: { rating: true },
     });
 
     return { ...t, avgRating: Math.round((avgRating._avg.rating ?? 0) * 10) / 10 };
@@ -90,28 +126,28 @@ export class TrainingService {
 
     return this.prisma.training.create({
       data: {
-        title:                 data.title,
-        shortDescription:      data.shortDescription,
-        description:           data.description,
-        objectives:            data.objectives,
-        targetAudience:        data.targetAudience,
-        type:                  data.type,
-        level:                 data.level,
-        status:                data.status ?? 'DRAFT',
-        category:              data.category,
-        tags:                  data.tags ?? [],
-        language:              data.language ?? 'pt',
-        workloadHours:         data.workloadHours,
-        thumbnailUrl:          data.thumbnailUrl,
-        prerequisites:         data.prerequisites,
-        instructorId:          data.instructorId,
-        mandatory:             data.mandatory ?? false,
-        passingScore:          data.passingScore ?? 70,
-        issueCertificate:      data.issueCertificate ?? false,
-        cost:                  data.cost,
-        startDate:             data.startDate  ? new Date(data.startDate)  : null,
-        endDate:               data.endDate    ? new Date(data.endDate)    : null,
-        completionDeadlineDays:data.completionDeadlineDays,
+        title: data.title,
+        shortDescription: data.shortDescription,
+        description: data.description,
+        objectives: data.objectives,
+        targetAudience: data.targetAudience,
+        type: data.type,
+        level: data.level,
+        status: data.status ?? 'DRAFT',
+        category: data.category,
+        tags: data.tags ?? [],
+        language: data.language ?? 'pt',
+        workloadHours: data.workloadHours,
+        thumbnailUrl: data.thumbnailUrl,
+        prerequisites: data.prerequisites,
+        instructorId: data.instructorId,
+        mandatory: data.mandatory ?? false,
+        passingScore: data.passingScore ?? 70,
+        issueCertificate: data.issueCertificate ?? false,
+        cost: data.cost,
+        startDate: data.startDate ? new Date(data.startDate) : null,
+        endDate: data.endDate ? new Date(data.endDate) : null,
+        completionDeadlineDays: data.completionDeadlineDays,
       },
       include: { instructor: { select: { id: true, fullName: true } } },
     });
@@ -123,11 +159,11 @@ export class TrainingService {
 
     return this.prisma.training.update({
       where: { id },
-      data:  {
+      data: {
         ...data,
-        tags:      data.tags ?? undefined,
+        tags: data.tags ?? undefined,
         startDate: data.startDate ? new Date(data.startDate) : undefined,
-        endDate:   data.endDate   ? new Date(data.endDate)   : undefined,
+        endDate: data.endDate ? new Date(data.endDate) : undefined,
       },
     });
   }
@@ -136,7 +172,7 @@ export class TrainingService {
     await this.findOne(id);
     return this.prisma.training.update({
       where: { id },
-      data:  { status: 'PUBLISHED', publishedAt: new Date() },
+      data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
   }
 
@@ -146,9 +182,11 @@ export class TrainingService {
   }
 
   async remove(id: number) {
-    const t = await this.findOne(id) as any;
+    const t = (await this.findOne(id)) as any;
     if (t._count.participants > 0 && t.status === 'PUBLISHED') {
-      throw new ForbiddenException('Treinamento com participantes não pode ser eliminado. Archive-o primeiro.');
+      throw new ForbiddenException(
+        'Treinamento com participantes não pode ser eliminado. Archive-o primeiro.',
+      );
     }
     await this.prisma.training.delete({ where: { id } });
     return { message: 'Treinamento eliminado' };
@@ -160,16 +198,16 @@ export class TrainingService {
     await this.findOne(dto.trainingId);
     return this.prisma.trainingSession.create({
       data: {
-        trainingId:      dto.trainingId,
-        sessionDate:     new Date(dto.sessionDate),
-        sessionEndDate:  dto.sessionEndDate ? new Date(dto.sessionEndDate) : null,
+        trainingId: dto.trainingId,
+        sessionDate: new Date(dto.sessionDate),
+        sessionEndDate: dto.sessionEndDate ? new Date(dto.sessionEndDate) : null,
         durationMinutes: dto.durationMinutes,
-        modality:        dto.modality,
-        location:        dto.location,
-        meetingUrl:      dto.meetingUrl,
+        modality: dto.modality,
+        location: dto.location,
+        meetingUrl: dto.meetingUrl,
         maxParticipants: dto.maxParticipants ?? 0,
         waitlistEnabled: dto.waitlistEnabled ?? true,
-        notes:           dto.notes,
+        notes: dto.notes,
       },
     });
   }
@@ -182,7 +220,7 @@ export class TrainingService {
 
   async removeSession(id: number) {
     const session = await this.prisma.trainingSession.findUnique({
-      where:   { id },
+      where: { id },
       include: { _count: { select: { participants: true } } },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
@@ -203,20 +241,24 @@ export class TrainingService {
     if (existing) throw new ConflictException('Utilizador já inscrito nesta sessão');
 
     const session = await this.prisma.trainingSession.findUnique({
-      where:   { id: dto.sessionId },
+      where: { id: dto.sessionId },
       include: { _count: { select: { participants: true } } },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
 
     // Verificar vagas
-    const hasVacancy = (session as any).maxParticipants === 0 ||
+    const hasVacancy =
+      (session as any).maxParticipants === 0 ||
       (session._count as any).participants < (session as any).maxParticipants;
 
-    const status = !hasVacancy && (session as any).waitlistEnabled
-      ? ParticipantStatus.WAITLIST
-      : !hasVacancy
-      ? (() => { throw new BadRequestException('Sessão sem vagas disponíveis'); })()
-      : ParticipantStatus.REGISTERED;
+    const status =
+      !hasVacancy && (session as any).waitlistEnabled
+        ? ParticipantStatus.WAITLIST
+        : !hasVacancy
+          ? (() => {
+              throw new BadRequestException('Sessão sem vagas disponíveis');
+            })()
+          : ParticipantStatus.REGISTERED;
 
     const participant = await this.prisma.trainingParticipant.create({
       data: { sessionId: dto.sessionId, userId: dto.userId, status },
@@ -224,16 +266,19 @@ export class TrainingService {
     });
 
     // Notificar
-    await this.prisma.notificationLog.create({
-      data: {
-        userId:   dto.userId,
-        type:     'TRAINING_REGISTERED',
-        message:  status === 'WAITLIST'
-          ? 'Ficaste na lista de espera para um treinamento'
-          : 'Inscrição confirmada num treinamento',
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: dto.userId,
+          type: 'TRAINING_REGISTERED',
+          message:
+            status === 'WAITLIST'
+              ? 'Ficaste na lista de espera para um treinamento'
+              : 'Inscrição confirmada num treinamento',
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
     return participant;
   }
@@ -245,27 +290,29 @@ export class TrainingService {
 
     await this.prisma.trainingParticipant.update({
       where: { id: participantId },
-      data:  { status: 'CANCELLED', cancellationReason: reason },
+      data: { status: 'CANCELLED', cancellationReason: reason },
     });
 
     // Promover o primeiro da lista de espera
     const nextWaitlist = await this.prisma.trainingParticipant.findFirst({
-      where:   { sessionId: (p as any).sessionId, status: 'WAITLIST' },
+      where: { sessionId: (p as any).sessionId, status: 'WAITLIST' },
       orderBy: { createdAt: 'asc' },
     });
     if (nextWaitlist) {
       await this.prisma.trainingParticipant.update({
         where: { id: nextWaitlist.id },
-        data:  { status: 'REGISTERED' },
+        data: { status: 'REGISTERED' },
       });
-      await this.prisma.notificationLog.create({
-        data: {
-          userId:   nextWaitlist.userId,
-          type:     'TRAINING_WAITLIST_PROMOTED',
-          message:  '🎉 Saíste da lista de espera! Inscrição confirmada.',
-          metadata: JSON.stringify({}),
-        },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: nextWaitlist.userId,
+            type: 'TRAINING_WAITLIST_PROMOTED',
+            message: '🎉 Saíste da lista de espera! Inscrição confirmada.',
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {});
     }
 
     return { message: 'Inscrição cancelada', waitlistPromoted: !!nextWaitlist };
@@ -277,19 +324,19 @@ export class TrainingService {
 
     const updated = await this.prisma.trainingParticipant.update({
       where: { id },
-      data:  {
-        status:             dto.status,
-        finalScore:         dto.finalScore,
-        attendedHours:      dto.attendedHours,
+      data: {
+        status: dto.status,
+        finalScore: dto.finalScore,
+        attendedHours: dto.attendedHours,
         cancellationReason: dto.cancellationReason,
-        completedAt:        dto.status === 'COMPLETED' ? new Date() : undefined,
+        completedAt: dto.status === 'COMPLETED' ? new Date() : undefined,
       },
     });
 
     // Emitir certificado automaticamente se COMPLETED e passou
     if (dto.status === 'COMPLETED') {
       const session = await this.prisma.trainingSession.findUnique({
-        where:   { id: (p as any).sessionId },
+        where: { id: (p as any).sessionId },
         include: { training: true },
       });
       const training = (session as any)?.training;
@@ -302,11 +349,13 @@ export class TrainingService {
       }
 
       // XP
-      await this.prisma.userPoints.upsert({
-        where:  { userId: (p as any).userId },
-        create: { userId: (p as any).userId, points: 100 },
-        update: { points: { increment: 100 } },
-      }).catch(() => {});
+      await this.prisma.userPoints
+        .upsert({
+          where: { userId: (p as any).userId },
+          create: { userId: (p as any).userId, points: 100 },
+          update: { points: { increment: 100 } },
+        })
+        .catch(() => {});
     }
 
     return updated;
@@ -324,26 +373,28 @@ export class TrainingService {
 
     const presentSet = new Set(dto.presentUserIds);
     let attended = 0;
-    let absent   = 0;
+    let absent = 0;
 
     for (const p of participants) {
       const isPresent = presentSet.has((p as any).userId);
       await this.prisma.trainingParticipant.update({
         where: { id: p.id },
-        data:  { status: isPresent ? 'ATTENDED' : 'ABSENT' },
+        data: { status: isPresent ? 'ATTENDED' : 'ABSENT' },
       });
       isPresent ? attended++ : absent++;
     }
 
     // Registar no log de auditoria
-    await this.prisma.notificationLog.create({
-      data: {
-        userId:   registrarId,
-        type:     'TRAINING_ATTENDANCE_RECORDED',
-        message:  `Presença registada: ${attended} presentes, ${absent} ausentes`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: registrarId,
+          type: 'TRAINING_ATTENDANCE_RECORDED',
+          message: `Presença registada: ${attended} presentes, ${absent} ausentes`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
 
     return { sessionId: dto.sessionId, attended, absent, total: participants.length };
   }
@@ -352,23 +403,27 @@ export class TrainingService {
 
   private async issueCertificate(userId: number, sessionId: number, score: number) {
     const code = `CERT-${Date.now()}-${userId}-${sessionId}`;
-    await this.prisma.certificate.create({
-      data: {
-        userId,
-        type:           'TRAINING',
-        validationCode: code,
-        fileUrl:        `/certificates/${code}.pdf`,
-      },
-    }).catch(() => {});
+    await this.prisma.certificate
+      .create({
+        data: {
+          userId,
+          type: 'TRAINING',
+          validationCode: code,
+          fileUrl: `/certificates/${code}.pdf`,
+        },
+      })
+      .catch(() => {});
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId,
-        type:     'CERTIFICATE_ISSUED',
-        message:  `🏆 Certificado emitido! Nota: ${score}%`,
-        metadata: JSON.stringify({}),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId,
+          type: 'CERTIFICATE_ISSUED',
+          message: `🏆 Certificado emitido! Nota: ${score}%`,
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(() => {});
   }
 
   // ─── RATING ───────────────────────────────────────────────────────────────
@@ -377,7 +432,7 @@ export class TrainingService {
     await this.findOne(dto.trainingId);
 
     return this.prisma.trainingRating.upsert({
-      where:  { userId_trainingId: { userId, trainingId: dto.trainingId } },
+      where: { userId_trainingId: { userId, trainingId: dto.trainingId } },
       create: { userId, trainingId: dto.trainingId, rating: dto.rating, comment: dto.comment },
       update: { rating: dto.rating, comment: dto.comment },
     });
@@ -387,14 +442,19 @@ export class TrainingService {
 
   async getMyTrainings(userId: number) {
     return this.prisma.trainingParticipant.findMany({
-      where:   { userId },
+      where: { userId },
       include: {
         session: {
           include: {
             training: {
               select: {
-                id: true, title: true, type: true, level: true,
-                thumbnailUrl: true, workloadHours: true, issueCertificate: true,
+                id: true,
+                title: true,
+                type: true,
+                level: true,
+                thumbnailUrl: true,
+                workloadHours: true,
+                issueCertificate: true,
                 instructor: { select: { id: true, fullName: true, avatarUrl: true } },
               },
             },
@@ -409,13 +469,16 @@ export class TrainingService {
 
   async getSessionParticipants(sessionId: number) {
     return this.prisma.trainingParticipant.findMany({
-      where:   { sessionId },
+      where: { sessionId },
       include: {
         user: {
           select: {
-            id: true, fullName: true, email: true, avatarUrl: true,
+            id: true,
+            fullName: true,
+            email: true,
+            avatarUrl: true,
             department: { select: { name: true } },
-            position:   { select: { name: true } },
+            position: { select: { name: true } },
           },
         },
       },
@@ -426,13 +489,15 @@ export class TrainingService {
   // ─── RELATÓRIO DE PRESENÇA ────────────────────────────────────────────────
 
   async getAttendanceReport(trainingId: number) {
-    const training = await this.findOne(trainingId) as any;
+    const training = (await this.findOne(trainingId)) as any;
 
     const sessions = await this.prisma.trainingSession.findMany({
-      where:   { trainingId },
+      where: { trainingId },
       include: {
         participants: {
-          include: { user: { select: { id: true, fullName: true, department: { select: { name: true } } } } },
+          include: {
+            user: { select: { id: true, fullName: true, department: { select: { name: true } } } },
+          },
         },
       },
       orderBy: { sessionDate: 'asc' },
@@ -440,43 +505,46 @@ export class TrainingService {
 
     const report = sessions.map(session => {
       const participants = session.participants as any[];
-      const total     = participants.filter(p => p.status !== 'WAITLIST').length;
-      const attended  = participants.filter(p => p.status === 'ATTENDED' || p.status === 'COMPLETED').length;
+      const total = participants.filter(p => p.status !== 'WAITLIST').length;
+      const attended = participants.filter(
+        p => p.status === 'ATTENDED' || p.status === 'COMPLETED',
+      ).length;
       const completed = participants.filter(p => p.status === 'COMPLETED').length;
-      const waitlist  = participants.filter(p => p.status === 'WAITLIST').length;
+      const waitlist = participants.filter(p => p.status === 'WAITLIST').length;
 
       return {
-        sessionId:      session.id,
-        sessionDate:    session.sessionDate,
-        modality:       session.modality,
-        location:       session.location,
-        durationMinutes:session.durationMinutes,
-        maxParticipants:session.maxParticipants,
-        totalRegistered:total,
+        sessionId: session.id,
+        sessionDate: session.sessionDate,
+        modality: session.modality,
+        location: session.location,
+        durationMinutes: session.durationMinutes,
+        maxParticipants: session.maxParticipants,
+        totalRegistered: total,
         attended,
-        absent:         total - attended,
+        absent: total - attended,
         completed,
         waitlist,
         attendanceRate: total > 0 ? Math.round((attended / total) * 100) : 0,
         completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
-        participants:   participants,
+        participants: participants,
       };
     });
 
-    const totalAttended  = report.reduce((s, r) => s + r.attended, 0);
-    const totalRegistered= report.reduce((s, r) => s + r.totalRegistered, 0);
+    const totalAttended = report.reduce((s, r) => s + r.attended, 0);
+    const totalRegistered = report.reduce((s, r) => s + r.totalRegistered, 0);
 
     return {
       trainingId,
-      title:           training.title,
-      type:            training.type,
-      workloadHours:   training.workloadHours,
-      sessions:        report,
+      title: training.title,
+      type: training.type,
+      workloadHours: training.workloadHours,
+      sessions: report,
       summary: {
-        totalSessions:    sessions.length,
+        totalSessions: sessions.length,
         totalRegistered,
         totalAttended,
-        globalAttendanceRate: totalRegistered > 0 ? Math.round((totalAttended / totalRegistered) * 100) : 0,
+        globalAttendanceRate:
+          totalRegistered > 0 ? Math.round((totalAttended / totalRegistered) * 100) : 0,
       },
     };
   }
@@ -493,10 +561,10 @@ export class TrainingService {
     ]);
 
     const topTrainings = await this.prisma.training.findMany({
-      where:   { status: 'PUBLISHED' },
+      where: { status: 'PUBLISHED' },
       include: { _count: { select: { participants: true, ratings: true } } },
       orderBy: { participants: { _count: 'desc' } },
-      take:    5,
+      take: 5,
     });
 
     const mandatory = await this.prisma.training.count({
@@ -504,12 +572,11 @@ export class TrainingService {
     });
 
     return {
-      trainings:    { total, published, mandatory },
+      trainings: { total, published, mandatory },
       participants: { total: totalParticipants, completed },
       completionRate: totalParticipants > 0 ? Math.round((completed / totalParticipants) * 100) : 0,
-      avgRating:    Math.round((avgRating._avg.rating ?? 0) * 10) / 10,
+      avgRating: Math.round((avgRating._avg.rating ?? 0) * 10) / 10,
       topTrainings,
     };
   }
 }
-

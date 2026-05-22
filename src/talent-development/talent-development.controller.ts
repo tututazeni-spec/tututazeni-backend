@@ -1,26 +1,48 @@
 // src/talent-development/talent-development.controller.ts
 import {
-  Controller, Get, Post, Patch, Delete,
-  Param, Body, Query, Req,
-  ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  Req,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { TalentDevelopmentService }  from './talent-development.service';
-import { JwtAuthGuard }   from '../common/guards/jwt-auth.guard';
-import { RolesGuard }     from '../common/guards/roles.guard';
-import { Roles }          from '../common/decorators';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { TalentDevelopmentService } from './talent-development.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators';
 import {
-  PlanFilterDto, CreateDevelopmentPlanDto, UpdateDevelopmentPlanDto, CancelPlanDto,
-  CreateGoalDto, UpdateGoalDto,
-  CreateActionDto, UpdateActionDto, UpdateProgressDto, ApproveActionDto,
-  TalentFilterDto, SkillGapFilterDto,
-  CreateMentoringDto, CreateMentoringSessionDto, MentoringFilterDto,
-  CareerSimulationDto, CreateFromTemplateDto, DashboardFilterDto,
+  PlanFilterDto,
+  CreateDevelopmentPlanDto,
+  UpdateDevelopmentPlanDto,
+  CancelPlanDto,
+  CreateGoalDto,
+  UpdateGoalDto,
+  CreateActionDto,
+  UpdateActionDto,
+  UpdateProgressDto,
+  ApproveActionDto,
+  TalentFilterDto,
+  SkillGapFilterDto,
+  CreateMentoringDto,
+  CreateMentoringSessionDto,
+  MentoringFilterDto,
+  CareerSimulationDto,
+  CreateFromTemplateDto,
+  DashboardFilterDto,
 } from './talent-development.dto';
 
-const ALL_ROLES   = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
-const MGMT_ROLES  = ['ADMIN', 'RH', 'LIDER']                as const;
-const ADMIN_ROLES = ['ADMIN', 'RH']                          as const;
+const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
+const MGMT_ROLES = ['ADMIN', 'RH', 'LIDER'] as const;
+const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
 
 @ApiTags('Talent Development')
 @ApiBearerAuth()
@@ -41,12 +63,9 @@ export class TalentDevelopmentController {
   @Get('high-potentials')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Lista de High Potentials (HiPos)' })
-  highPotentials(
-    @Query('limit') limit?: string,
-    @Query('departmentId') departmentId?: string,
-  ) {
+  highPotentials(@Query('limit') limit?: string, @Query('departmentId') departmentId?: string) {
     return this.svc.getHighPotentials(
-      limit        ? +limit        : 20,
+      limit ? +limit : 20,
       departmentId ? +departmentId : undefined,
     );
   }
@@ -54,14 +73,18 @@ export class TalentDevelopmentController {
   @Get('matrix')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Matriz de talento 9-box' })
-  matrix() { return this.svc.getTalentMatrix(); }
+  matrix() {
+    return this.svc.getTalentMatrix();
+  }
 
   // ─── Succession ──────────────────────────────────────────────
 
   @Get('succession/dashboard')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Dashboard de sucessão — cobertura de todas as posições' })
-  successionDashboard() { return this.svc.getSuccessionDashboard(); }
+  successionDashboard() {
+    return this.svc.getSuccessionDashboard();
+  }
 
   @Get('succession/:positionId')
   @Roles(...MGMT_ROLES)
@@ -75,7 +98,9 @@ export class TalentDevelopmentController {
   @Get('plans/templates')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Templates de planos de desenvolvimento' })
-  templates() { return this.svc.getTemplates(); }
+  templates() {
+    return this.svc.getTemplates();
+  }
 
   @Post('plans/from-template/:templateId')
   @Roles(...MGMT_ROLES)
@@ -270,10 +295,7 @@ export class TalentDevelopmentController {
   @Post('mentoring/:id/sessions')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Registar sessão de mentoria' })
-  addSession(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CreateMentoringSessionDto,
-  ) {
+  addSession(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateMentoringSessionDto) {
     return this.svc.addMentoringSession(id, dto);
   }
 

@@ -1,7 +1,5 @@
 // src/pdf/pdf.controller.ts
-import {
-  Controller, Get, Param, Query, Res, UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Param, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { PdfService } from './pdf.service';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -9,15 +7,11 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 @ApiTags('PDF')
 @Controller('pdf')
 export class PdfController {
-
   constructor(private readonly pdfService: PdfService) {}
 
   @Get('declaration/:id')
   @ApiOperation({ summary: 'Exportar declaração em PDF' })
-  async downloadDeclaration(
-    @Param('id') id: string,
-    @Res() res: Response,
-  ) {
+  async downloadDeclaration(@Param('id') id: string, @Res() res: Response) {
     // TODO: buscar dados reais da declaração pelo id
     const buffer = await this.pdfService.generateDeclaration({
       employeeName: 'Nome do Colaborador',
@@ -38,10 +32,7 @@ export class PdfController {
 
   @Get('certificate/:id')
   @ApiOperation({ summary: 'Exportar certificado em PDF' })
-  async downloadCertificate(
-    @Param('id') id: string,
-    @Res() res: Response,
-  ) {
+  async downloadCertificate(@Param('id') id: string, @Res() res: Response) {
     const buffer = await this.pdfService.generateCertificate({
       employeeName: 'Nome do Colaborador',
       courseName: 'Nome do Curso',
@@ -59,17 +50,17 @@ export class PdfController {
 
   @Get('payslip/:id')
   @ApiOperation({ summary: 'Exportar recibo de vencimento em PDF' })
-  async downloadPayslip(
-    @Param('id') id: string,
-    @Res() res: Response,
-  ) {
+  async downloadPayslip(@Param('id') id: string, @Res() res: Response) {
     const buffer = await this.pdfService.generatePayslip({
       employeeName: 'Nome do Colaborador',
       employeeId: id,
       period: 'Janeiro 2025',
       baseSalary: 1500,
       allowances: [{ label: 'Subsídio de Alimentação', amount: 150 }],
-      deductions: [{ label: 'IRS', amount: 200 }, { label: 'Segurança Social', amount: 165 }],
+      deductions: [
+        { label: 'IRS', amount: 200 },
+        { label: 'Segurança Social', amount: 165 },
+      ],
       netSalary: 1285,
     });
 
@@ -83,10 +74,7 @@ export class PdfController {
 
   @Get('report/:id')
   @ApiOperation({ summary: 'Exportar relatório executivo em PDF' })
-  async downloadReport(
-    @Param('id') id: string,
-    @Res() res: Response,
-  ) {
+  async downloadReport(@Param('id') id: string, @Res() res: Response) {
     const buffer = await this.pdfService.generateExecutiveReport({
       title: 'Relatório Executivo',
       period: 'Janeiro 2025',
@@ -94,9 +82,7 @@ export class PdfController {
         { label: 'Total Colaboradores', value: 0 },
         { label: 'Formações Concluídas', value: 0 },
       ],
-      sections: [
-        { title: 'Resumo', content: 'Conteúdo do relatório.' },
-      ],
+      sections: [{ title: 'Resumo', content: 'Conteúdo do relatório.' }],
     });
 
     res.set({

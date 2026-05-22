@@ -1,20 +1,32 @@
 ﻿import {
-  Injectable, NotFoundException, ConflictException,
-  BadRequestException, ForbiddenException, Logger,
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { CertificateType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateCourseDto, UpdateCourseDto, CourseFilterDto,
-  CreateCourseModuleDto, UpdateCourseModuleDto,
-  CreateLessonDto, UpdateLessonDto,
-  MarkLessonCompleteDto, EnrollDto, AssignCourseDto,
-  CreateQuizDto, SubmitQuizDto, CourseFeedbackDto,
-  CourseStatus, EnrollmentStatus, AssignmentTarget,
+  CreateCourseDto,
+  UpdateCourseDto,
+  CourseFilterDto,
+  CreateCourseModuleDto,
+  UpdateCourseModuleDto,
+  CreateLessonDto,
+  UpdateLessonDto,
+  MarkLessonCompleteDto,
+  EnrollDto,
+  AssignCourseDto,
+  CreateQuizDto,
+  SubmitQuizDto,
+  CourseFeedbackDto,
+  AssignmentTarget,
 } from './courses.dto';
 
 const COURSE_BASE_INCLUDE = {
-  _count:       { select: { enrollments: true, feedbacks: true, modules: true } },
+  _count: { select: { enrollments: true, feedbacks: true, modules: true } },
   competencies: { include: { competency: true } },
 } as const;
 
@@ -27,27 +39,38 @@ export class CoursesService {
   // ─── Catálogo ─────────────────────────────────────────────────────────────
 
   async findAll(filters: CourseFilterDto) {
-    const { page = 1, limit = 20, search, category, level, status, mandatory, departmentId } = filters;
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      category,
+      level,
+      status,
+      mandatory,
+      departmentId,
+    } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (status)       where.status = status;
-    if (category)     where.category = category;
-    if (level)        where.level = level;
+    if (status) where.status = status;
+    if (category) where.category = category;
+    if (level) where.level = level;
     if (mandatory !== undefined) where.mandatory = mandatory;
     if (departmentId) where.departmentId = departmentId;
     if (search) {
       where.OR = [
-        { title:            { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } },
         { shortDescription: { contains: search, mode: 'insensitive' } },
-        { tags:             { has: search } },
-        { internalCode:     { contains: search, mode: 'insensitive' } },
+        { tags: { has: search } },
+        { internalCode: { contains: search, mode: 'insensitive' } },
       ];
     }
 
     const [data, total] = await Promise.all([
       this.prisma.course.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: COURSE_BASE_INCLUDE,
         orderBy: { createdAt: 'desc' },
       }),
@@ -69,7 +92,7 @@ export class CoursesService {
         feedbacks: {
           include: { user: { select: { id: true, fullName: true } } },
           orderBy: { createdAt: 'desc' },
-          take:    10,
+          take: 10,
         },
         department: { select: { id: true, name: true, code: true } },
       },
@@ -80,7 +103,7 @@ export class CoursesService {
 
   async getCategories() {
     const cats = await this.prisma.course.groupBy({
-      by:    ['category'],
+      by: ['category'],
       where: { category: { not: null }, status: 'PUBLISHED' },
       _count: { id: true },
     });
@@ -91,17 +114,19 @@ export class CoursesService {
 
   async create(dto: CreateCourseDto) {
     if (dto.internalCode) {
-      const exists = await this.prisma.course.findFirst({ where: { internalCode: dto.internalCode } });
+      const exists = await this.prisma.course.findFirst({
+        where: { internalCode: dto.internalCode },
+      });
       if (exists) throw new ConflictException(`Código interno ${dto.internalCode} já existe`);
     }
 
     const course = await this.prisma.course.create({
       data: {
         ...dto,
-        tags:               dto.tags ?? [],
+        tags: dto.tags ?? [],
         learningObjectives: dto.learningObjectives ?? [],
-        status:             dto.status ?? 'DRAFT',
-        language:           dto.language ?? 'pt',
+        status: dto.status ?? 'DRAFT',
+        language: dto.language ?? 'pt',
       },
     });
 
@@ -122,7 +147,10 @@ export class CoursesService {
     if ((course as any)._count.modules === 0) {
       throw new BadRequestException('Curso sem módulos não pode ser publicado');
     }
-    return this.prisma.course.update({ where: { id }, data: { status: 'PUBLISHED', publishedAt: new Date() } });
+    return this.prisma.course.update({
+      where: { id },
+      data: { status: 'PUBLISHED', publishedAt: new Date() },
+    });
   }
 
   async archive(id: number) {
@@ -131,35 +159,44 @@ export class CoursesService {
   }
 
   async duplicate(id: number) {
-    const original = await this.findOne(id) as any;
-    const { id: _id, createdAt, updatedAt, publishedAt, modules, feedbacks, _count, ...data } = original;
+    const original = (await this.findOne(id)) as any;
+    const {
+      id: _id,
+      createdAt,
+      updatedAt,
+      publishedAt,
+      modules,
+      feedbacks,
+      _count,
+      ...data
+    } = original;
 
     const copy = await this.prisma.course.create({
       data: {
         ...data,
-        title:        `${data.title} (cópia)`,
-        status:       'DRAFT',
+        title: `${data.title} (cópia)`,
+        status: 'DRAFT',
         internalCode: data.internalCode ? `${data.internalCode}-COPY` : undefined,
       },
     });
 
-    for (const mod of (modules as any[])) {
+    for (const mod of modules as any[]) {
       const newMod = await this.prisma.courseModule.create({
         data: { courseId: copy.id, title: mod.title, description: mod.description, seq: mod.seq },
       });
       for (const lesson of mod.lessons) {
         await this.prisma.lesson.create({
           data: {
-            moduleId:        newMod.id,
-            title:           lesson.title,
-            description:     lesson.description,
-            type:            lesson.type,
-            contentUrl:      lesson.contentUrl,
-            textContent:     lesson.textContent,
-            seq:             lesson.seq,
+            moduleId: newMod.id,
+            title: lesson.title,
+            description: lesson.description,
+            type: lesson.type,
+            contentUrl: lesson.contentUrl,
+            textContent: lesson.textContent,
+            seq: lesson.seq,
             durationMinutes: lesson.durationMinutes,
-            isFree:          lesson.isFree,
-            allowDownload:   lesson.allowDownload,
+            isFree: lesson.isFree,
+            allowDownload: lesson.allowDownload,
           },
         });
       }
@@ -173,9 +210,11 @@ export class CoursesService {
   }
 
   async remove(id: number) {
-    const course = await this.findOne(id) as any;
+    const course = (await this.findOne(id)) as any;
     if (course.status === 'PUBLISHED' && course._count.enrollments > 0) {
-      throw new ForbiddenException('Curso publicado com matrículas não pode ser eliminado. Archive-o primeiro.');
+      throw new ForbiddenException(
+        'Curso publicado com matrículas não pode ser eliminado. Archive-o primeiro.',
+      );
     }
     await this.prisma.course.delete({ where: { id } });
     return { message: 'Curso eliminado' };
@@ -186,7 +225,7 @@ export class CoursesService {
   async addCompetency(courseId: number, competencyId: number) {
     await this.findOne(courseId);
     return this.prisma.courseCompetency.upsert({
-      where:  { courseId_competencyId: { courseId, competencyId } },
+      where: { courseId_competencyId: { courseId, competencyId } },
       create: { courseId, competencyId },
       update: {},
     });
@@ -212,8 +251,8 @@ export class CoursesService {
   async reorderModules(courseId: number, orderedIds: number[]) {
     await Promise.all(
       orderedIds.map((id, idx) =>
-        this.prisma.courseModule.update({ where: { id }, data: { seq: idx } })
-      )
+        this.prisma.courseModule.update({ where: { id }, data: { seq: idx } }),
+      ),
     );
     return { message: 'Módulos reordenados' };
   }
@@ -240,9 +279,7 @@ export class CoursesService {
 
   async reorderLessons(moduleId: number, orderedIds: number[]) {
     await Promise.all(
-      orderedIds.map((id, idx) =>
-        this.prisma.lesson.update({ where: { id }, data: { seq: idx } })
-      )
+      orderedIds.map((id, idx) => this.prisma.lesson.update({ where: { id }, data: { seq: idx } })),
     );
     return { message: 'Aulas reordenadas' };
   }
@@ -256,7 +293,7 @@ export class CoursesService {
   // ─── Matrículas ───────────────────────────────────────────────────────────
 
   async enroll(courseId: number, userId: number, dto: EnrollDto) {
-    const course = await this.findOne(courseId) as any;
+    const course = (await this.findOne(courseId)) as any;
     if (course.status !== 'PUBLISHED') {
       throw new BadRequestException('Apenas cursos publicados aceitam matrículas');
     }
@@ -268,23 +305,24 @@ export class CoursesService {
 
     const enrollment = await this.prisma.enrollment.create({
       data: {
-        courseId, userId,
-        status:    'NOT_STARTED',
+        courseId,
+        userId,
+        status: 'NOT_STARTED',
         mandatory: dto.mandatory ?? course.mandatory ?? false,
-        deadline:  dto.deadline ? new Date(dto.deadline) : null,
+        deadline: dto.deadline ? new Date(dto.deadline) : null,
       },
     });
 
     await this.prisma.courseAnalytics.updateMany({
       where: { courseId },
-      data:  { totalEnrollments: { increment: 1 } },
+      data: { totalEnrollments: { increment: 1 } },
     });
 
     await this.prisma.notificationLog.create({
       data: {
         userId,
-        type:     'COURSE_ENROLLED',
-        message:  `Está matriculado no curso "${course.title}"`,
+        type: 'COURSE_ENROLLED',
+        message: `Está matriculado no curso "${course.title}"`,
         metadata: JSON.stringify({}),
       },
     });
@@ -293,7 +331,7 @@ export class CoursesService {
   }
 
   async assignCourse(courseId: number, dto: AssignCourseDto, assignedById: number) {
-    const course = await this.findOne(courseId) as any;
+    const course = (await this.findOne(courseId)) as any;
     if (course.status !== 'PUBLISHED') {
       throw new BadRequestException('Apenas cursos publicados podem ser atribuídos');
     }
@@ -304,12 +342,14 @@ export class CoursesService {
       userIds = [dto.targetId];
     } else if (dto.targetType === AssignmentTarget.DEPARTMENT) {
       const users = await this.prisma.user.findMany({
-        where: { departmentId: dto.targetId, active: true }, select: { id: true },
+        where: { departmentId: dto.targetId, active: true },
+        select: { id: true },
       });
       userIds = users.map(u => u.id);
     } else if (dto.targetType === AssignmentTarget.POSITION) {
       const users = await this.prisma.user.findMany({
-        where: { positionId: dto.targetId, active: true }, select: { id: true },
+        where: { positionId: dto.targetId, active: true },
+        select: { id: true },
       });
       userIds = users.map(u => u.id);
     }
@@ -320,14 +360,18 @@ export class CoursesService {
       const exists = await this.prisma.enrollment.findFirst({
         where: { courseId, userId, status: { not: 'EXPIRED' } },
       });
-      if (exists) { results.skipped++; continue; }
+      if (exists) {
+        results.skipped++;
+        continue;
+      }
 
       await this.prisma.enrollment.create({
         data: {
-          courseId, userId,
-          mandatory:   dto.mandatory ?? false,
-          deadline:    dto.deadline ? new Date(dto.deadline) : null,
-          status:      'NOT_STARTED',
+          courseId,
+          userId,
+          mandatory: dto.mandatory ?? false,
+          deadline: dto.deadline ? new Date(dto.deadline) : null,
+          status: 'NOT_STARTED',
           assignedById,
         },
       });
@@ -335,8 +379,8 @@ export class CoursesService {
       await this.prisma.notificationLog.create({
         data: {
           userId,
-          type:     'COURSE_ASSIGNED',
-          message:  `O curso "${course.title}" foi atribuído a si`,
+          type: 'COURSE_ASSIGNED',
+          message: `O curso "${course.title}" foi atribuído a si`,
           metadata: JSON.stringify({}),
         },
       });
@@ -346,7 +390,7 @@ export class CoursesService {
 
     await this.prisma.courseAnalytics.updateMany({
       where: { courseId },
-      data:  { totalEnrollments: { increment: results.enrolled } },
+      data: { totalEnrollments: { increment: results.enrolled } },
     });
 
     return results;
@@ -354,12 +398,17 @@ export class CoursesService {
 
   async getMyEnrollments(userId: number) {
     return this.prisma.enrollment.findMany({
-      where:   { userId },
+      where: { userId },
       include: {
         course: {
           select: {
-            id: true, title: true, thumbnailUrl: true, category: true,
-            level: true, workloadHours: true, status: true,
+            id: true,
+            title: true,
+            thumbnailUrl: true,
+            category: true,
+            level: true,
+            workloadHours: true,
+            status: true,
             _count: { select: { modules: true } },
           },
         },
@@ -372,31 +421,37 @@ export class CoursesService {
 
   async markLessonComplete(lessonId: number, userId: number, dto: MarkLessonCompleteDto) {
     const lesson = await this.prisma.lesson.findUnique({
-      where:   { id: lessonId },
+      where: { id: lessonId },
       include: { module: { include: { course: true } } },
     });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
 
-    const courseId   = (lesson as any).module.courseId;
+    const courseId = (lesson as any).module.courseId;
     const enrollment = await this.prisma.enrollment.findFirst({ where: { userId, courseId } });
     if (!enrollment) throw new ForbiddenException('Não está matriculado neste curso');
 
     const progress = await this.prisma.lessonProgress.upsert({
-      where:  { lessonId_userId: { lessonId, userId } },
+      where: { lessonId_userId: { lessonId, userId } },
       create: {
-        lessonId, userId, completed: true, completedAt: new Date(),
-        watchedSeconds: dto.watchedSeconds, resumePosition: dto.resumePosition,
+        lessonId,
+        userId,
+        completed: true,
+        completedAt: new Date(),
+        watchedSeconds: dto.watchedSeconds,
+        resumePosition: dto.resumePosition,
       },
       update: {
-        completed: true, completedAt: new Date(),
-        watchedSeconds: dto.watchedSeconds, resumePosition: dto.resumePosition,
+        completed: true,
+        completedAt: new Date(),
+        watchedSeconds: dto.watchedSeconds,
+        resumePosition: dto.resumePosition,
       },
     });
 
     if (enrollment.status === 'NOT_STARTED') {
       await this.prisma.enrollment.update({
         where: { id: enrollment.id },
-        data:  { status: 'IN_PROGRESS', startedAt: new Date() },
+        data: { status: 'IN_PROGRESS', startedAt: new Date() },
       });
     }
 
@@ -425,12 +480,12 @@ export class CoursesService {
 
     await this.prisma.enrollment.update({
       where: { id: enrollmentId },
-      data:  { status: 'COMPLETED', completedAt: new Date() },
+      data: { status: 'COMPLETED', completedAt: new Date() },
     });
 
     await this.prisma.courseAnalytics.updateMany({
       where: { courseId },
-      data:  { totalCompleted: { increment: 1 } },
+      data: { totalCompleted: { increment: 1 } },
     });
 
     await this.issueCertificate(enrollmentId, userId, courseId);
@@ -440,9 +495,9 @@ export class CoursesService {
     const enrollment = await this.prisma.enrollment.findFirst({ where: { userId, courseId } });
     if (!enrollment) return null;
 
-    const courseProgress  = await this.calculateCourseProgress(courseId, userId);
-    const moduleProgress  = await this.prisma.courseModule.findMany({
-      where:   { courseId },
+    const courseProgress = await this.calculateCourseProgress(courseId, userId);
+    const moduleProgress = await this.prisma.courseModule.findMany({
+      where: { courseId },
       orderBy: { seq: 'asc' },
       include: { lessons: { include: { progress: { where: { userId } } } } },
     });
@@ -451,19 +506,19 @@ export class CoursesService {
       enrollment,
       courseProgress,
       modules: moduleProgress.map(mod => ({
-        id:             mod.id,
-        title:          mod.title,
-        seq:            mod.seq,
-        lessons:        mod.lessons.map(l => ({
-          id:             l.id,
-          title:          l.title,
-          type:           l.type,
-          seq:            l.seq,
-          completed:      (l as any).progress[0]?.completed ?? false,
+        id: mod.id,
+        title: mod.title,
+        seq: mod.seq,
+        lessons: mod.lessons.map(l => ({
+          id: l.id,
+          title: l.title,
+          type: l.type,
+          seq: l.seq,
+          completed: (l as any).progress[0]?.completed ?? false,
           resumePosition: (l as any).progress[0]?.resumePosition ?? 0,
         })),
         completedCount: mod.lessons.filter(l => (l as any).progress[0]?.completed).length,
-        totalCount:     mod.lessons.length,
+        totalCount: mod.lessons.length,
       })),
     };
   }
@@ -471,8 +526,8 @@ export class CoursesService {
   // ─── Certificados ─────────────────────────────────────────────────────────
 
   private async issueCertificate(enrollmentId: number, userId: number, courseId: number) {
-    const course    = await this.prisma.course.findUnique({ where: { id: courseId } });
-    const code      = `CERT-${courseId}-${userId}-${Date.now()}`;
+    const course = await this.prisma.course.findUnique({ where: { id: courseId } });
+    const code = `CERT-${courseId}-${userId}-${Date.now()}`;
     const expiresAt = course?.certificateValidityDays
       ? new Date(Date.now() + course.certificateValidityDays * 86400 * 1000)
       : null;
@@ -482,9 +537,9 @@ export class CoursesService {
         enrollmentId,
         userId,
         courseId,
-        issuedAt:       new Date(),
+        issuedAt: new Date(),
         expiresAt,
-        type:           CertificateType.COURSE,
+        type: CertificateType.COURSE,
         validationCode: code,
       },
     });
@@ -492,8 +547,8 @@ export class CoursesService {
     await this.prisma.notificationLog.create({
       data: {
         userId,
-        type:     'CERTIFICATE_ISSUED',
-        message:  `Certificado emitido para o curso "${course?.title}"`,
+        type: 'CERTIFICATE_ISSUED',
+        message: `Certificado emitido para o curso "${course?.title}"`,
         metadata: JSON.stringify({}),
       },
     });
@@ -503,18 +558,20 @@ export class CoursesService {
 
   async getMyCertificates(userId: number) {
     return this.prisma.certificate.findMany({
-      where:   { userId },
-      include: { course: { select: { id: true, title: true, thumbnailUrl: true, category: true } } },
+      where: { userId },
+      include: {
+        course: { select: { id: true, title: true, thumbnailUrl: true, category: true } },
+      },
       orderBy: { issuedAt: 'desc' },
     });
   }
 
   async verifyCertificate(validationCode: string) {
     const cert = await this.prisma.certificate.findFirst({
-      where:   { validationCode },
+      where: { validationCode },
       include: {
         course: { select: { id: true, title: true } },
-        user:   { select: { id: true, fullName: true } },
+        user: { select: { id: true, fullName: true } },
       },
     });
     if (!cert) throw new NotFoundException('Certificado não encontrado ou inválido');
@@ -531,34 +588,34 @@ export class CoursesService {
     const quiz = await this.prisma.quiz.create({
       data: {
         lessonId,
-        title:            dto.title,
-        passingScore:     dto.passingScore ?? 70,
-        maxAttempts:      dto.maxAttempts ?? 0,
+        title: dto.title,
+        passingScore: dto.passingScore ?? 70,
+        maxAttempts: dto.maxAttempts ?? 0,
         timeLimitMinutes: dto.timeLimitMinutes,
       },
     });
 
     await this.prisma.quizQuestion.createMany({
       data: dto.questions.map((q, idx) => ({
-        quizId:        quiz.id,
-        question:      q.question,
-        type:          q.type,
-        options:       q.options ? JSON.stringify(q.options) : null,
+        quizId: quiz.id,
+        question: q.question,
+        type: q.type,
+        options: q.options ? JSON.stringify(q.options) : null,
         correctAnswer: q.correctAnswer,
-        points:        q.points ?? 1,
-        seq:           idx,
+        points: q.points ?? 1,
+        seq: idx,
       })),
     });
 
     return this.prisma.quiz.findUnique({
-      where:   { id: quiz.id },
+      where: { id: quiz.id },
       include: { questions: { orderBy: { seq: 'asc' } } },
     });
   }
 
   async submitQuiz(quizId: number, userId: number, dto: SubmitQuizDto) {
     const quiz = await this.prisma.quiz.findUnique({
-      where:   { id: quizId },
+      where: { id: quizId },
       include: { questions: true },
     });
     if (!quiz) throw new NotFoundException('Quiz não encontrado');
@@ -579,24 +636,32 @@ export class CoursesService {
       totalPoints += q.points;
 
       if (q.type === 'MULTIPLE_CHOICE' || q.type === 'TRUE_FALSE') {
-        const options   = q.options ? JSON.parse(q.options) : [];
-        const correct   = options.find((o: any) => o.isCorrect)?.text ?? q.correctAnswer;
+        const options = q.options ? JSON.parse(q.options) : [];
+        const correct = options.find((o: any) => o.isCorrect)?.text ?? q.correctAnswer;
         const isCorrect = answer?.toLowerCase() === correct?.toLowerCase();
         if (isCorrect) earnedPoints += q.points;
         results.push({ questionId: q.id, answer, correct: isCorrect, correctAnswer: correct });
       } else {
-        results.push({ questionId: q.id, answer, correct: null, note: 'Correção manual necessária' });
+        results.push({
+          questionId: q.id,
+          answer,
+          correct: null,
+          note: 'Correção manual necessária',
+        });
       }
     }
 
-    const score  = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
+    const score = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
     const passed = score >= quiz.passingScore;
 
     const attempt = await this.prisma.quizAttempt.create({
       data: {
-        quizId, userId, score, passed,
-        answers:     JSON.stringify(dto.answers),
-        results:     JSON.stringify(results),
+        quizId,
+        userId,
+        score,
+        passed,
+        answers: JSON.stringify(dto.answers),
+        results: JSON.stringify(results),
         submittedAt: new Date(),
       },
     });
@@ -613,7 +678,7 @@ export class CoursesService {
     if (existing) {
       const updated = await this.prisma.courseFeedback.update({
         where: { id: existing.id },
-        data:  { comment: dto.comment, rating: dto.rating },
+        data: { comment: dto.comment, rating: dto.rating },
       });
       await this.updateAvgRating(courseId);
       return updated;
@@ -628,11 +693,13 @@ export class CoursesService {
 
   private async updateAvgRating(courseId: number) {
     const avg = await this.prisma.courseFeedback.aggregate({
-      where: { courseId }, _avg: { rating: true }, _count: true,
+      where: { courseId },
+      _avg: { rating: true },
+      _count: true,
     });
     await this.prisma.courseAnalytics.updateMany({
       where: { courseId },
-      data:  { avgRating: avg._avg.rating ?? 0, totalRatings: avg._count },
+      data: { avgRating: avg._avg.rating ?? 0, totalRatings: avg._count },
     });
   }
 
@@ -645,18 +712,22 @@ export class CoursesService {
       await Promise.all([
         this.prisma.courseAnalytics.findFirst({ where: { courseId } }),
         this.prisma.enrollment.groupBy({ by: ['status'], where: { courseId }, _count: true }),
-        this.prisma.courseFeedback.aggregate({ where: { courseId }, _avg: { rating: true }, _count: true }),
+        this.prisma.courseFeedback.aggregate({
+          where: { courseId },
+          _avg: { rating: true },
+          _count: true,
+        }),
         this.prisma.enrollment.findMany({
-          where:   { courseId },
+          where: { courseId },
           include: { user: { select: { id: true, fullName: true } } },
           orderBy: { enrolledAt: 'desc' },
-          take:    10,
+          take: 10,
         }),
         this.prisma.lesson.findMany({
-          where:   { module: { courseId } },
+          where: { module: { courseId } },
           include: {
             progress: { where: { completed: true }, select: { id: true } },
-            _count:   { select: { progress: true } },
+            _count: { select: { progress: true } },
           },
           orderBy: [{ module: { seq: 'asc' } }, { seq: 'asc' }],
         }),
@@ -668,8 +739,8 @@ export class CoursesService {
       feedbackStats,
       recentActivity,
       lessonCompletion: lessonCompletion.map(l => ({
-        id:          l.id,
-        title:       l.title,
+        id: l.id,
+        title: l.title,
         completions: (l as any)._count.progress,
       })),
     };
@@ -688,18 +759,22 @@ export class CoursesService {
       ]);
 
     const topCourses = await this.prisma.course.findMany({
-      where:   { status: 'PUBLISHED' },
+      where: { status: 'PUBLISHED' },
       include: { _count: { select: { enrollments: true } } },
       orderBy: { enrollments: { _count: 'desc' } },
-      take:    5,
+      take: 5,
     });
 
-    const completionRate = totalEnrollments > 0
-      ? Math.round((completedEnrollments / totalEnrollments) * 100) : 0;
+    const completionRate =
+      totalEnrollments > 0 ? Math.round((completedEnrollments / totalEnrollments) * 100) : 0;
 
     return {
-      courses:     { total: totalCourses, published },
-      enrollments: { total: totalEnrollments, completed: completedEnrollments, overdue: overdueEnrollments },
+      courses: { total: totalCourses, published },
+      enrollments: {
+        total: totalEnrollments,
+        completed: completedEnrollments,
+        overdue: overdueEnrollments,
+      },
       completionRate,
       topCourses,
     };

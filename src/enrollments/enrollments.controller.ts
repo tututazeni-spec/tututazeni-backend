@@ -1,17 +1,29 @@
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { EnrollmentsService } from './enrollments.service';
 import {
-  CreateEnrollmentDto, UpdateEnrollmentStatusDto,
-  EnrollmentFilterDto, BulkEnrollDto,
-  CancelEnrollmentDto, UpdateDeadlineDto,
+  CreateEnrollmentDto,
+  UpdateEnrollmentStatusDto,
+  EnrollmentFilterDto,
+  BulkEnrollDto,
+  CancelEnrollmentDto,
+  UpdateDeadlineDto,
 } from './enrollments.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Enrollments')
@@ -31,14 +43,11 @@ export class EnrollmentsController {
 
   @Post('self-enroll/:courseId')
   @ApiOperation({ summary: 'Auto-matrícula num curso' })
-  selfEnroll(
-    @Param('courseId', ParseIntPipe) courseId: number,
-    @CurrentUser() user: any,
-  ) {
+  selfEnroll(@Param('courseId', ParseIntPipe) courseId: number, @CurrentUser() user: any) {
     return this.svc.enroll({
-      userId:   user.id,
+      userId: user.id,
       courseId,
-      origin: 'MANUAL' as any
+      origin: 'MANUAL' as any,
     });
   }
 
@@ -88,10 +97,7 @@ export class EnrollmentsController {
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Progresso da equipa (para gestores)' })
   @ApiQuery({ name: 'courseId', required: false })
-  teamProgress(
-    @CurrentUser() user: any,
-    @Query('courseId') courseId?: string,
-  ) {
+  teamProgress(@CurrentUser() user: any, @Query('courseId') courseId?: string) {
     return this.svc.getTeamProgress(user.id, courseId ? parseInt(courseId) : undefined);
   }
 
@@ -128,10 +134,7 @@ export class EnrollmentsController {
   @Put(':id/status')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Actualizar status da matrícula' })
-  updateStatus(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateEnrollmentStatusDto,
-  ) {
+  updateStatus(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEnrollmentStatusDto) {
     return this.svc.updateStatus(id, dto);
   }
 
@@ -155,7 +158,7 @@ export class EnrollmentsController {
     // Admin ignora a verificação de mandatory
     return this.prisma.enrollment.update({
       where: { id },
-      data:  { status: 'CANCELLED', cancelReason: dto.reason, cancelledAt: new Date() },
+      data: { status: 'CANCELLED', cancelReason: dto.reason, cancelledAt: new Date() },
     });
   }
 
@@ -177,6 +180,6 @@ export class EnrollmentsController {
 
   // ─── Fix: usar o prisma da service para o admin cancel ─────────────────
   private get prisma() {
-    return (this.svc as any).prisma as any;
+    return (this.svc as any).prisma;
   }
 }

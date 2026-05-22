@@ -1,16 +1,26 @@
 // src/career/career.service.ts
 import {
-  Injectable, NotFoundException, BadRequestException,
-  ConflictException, Logger,
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateCareerPathDto, UpdateCareerPathDto, AddCareerPathStepDto,
-  CreateCareerPlanDto, UpdateCareerPlanDto, AddCareerGoalDto,
-  CreateInternalVacancyDto, UpdateInternalVacancyDto,
-  ApplyToVacancyDto, UpdateApplicationStatusDto,
-  CreateSuccessionPlanDto, CareerInterestDto,
-  VacancyFilterDto, CareerAnalyticsFilterDto,
+  CreateCareerPathDto,
+  UpdateCareerPathDto,
+  AddCareerPathStepDto,
+  CreateCareerPlanDto,
+  UpdateCareerPlanDto,
+  AddCareerGoalDto,
+  CreateInternalVacancyDto,
+  ApplyToVacancyDto,
+  UpdateApplicationStatusDto,
+  CreateSuccessionPlanDto,
+  CareerInterestDto,
+  VacancyFilterDto,
+  CareerAnalyticsFilterDto,
 } from './career.dto';
 
 @Injectable()
@@ -23,19 +33,19 @@ export class CareerService {
 
   async getCareerProfile(userId: number) {
     const user = await (this.prisma as any).user.findUnique({
-       where: { id: userId },
+      where: { id: userId },
       include: {
-        position:   { select: { id: true, name: true, level: true } },
+        position: { select: { id: true, name: true, level: true } },
         department: { select: { id: true, name: true } },
-        manager:    { select: { id: true, fullName: true, avatarUrl: true } },
-        profile:    true,
-        points:     { select: { points: true } },
+        manager: { select: { id: true, fullName: true, avatarUrl: true } },
+        profile: true,
+        points: { select: { points: true } },
         userCompetencies: {
           include: { competency: { select: { id: true, name: true, category: true } } },
           orderBy: { currentLevel: 'desc' },
         },
         userCareerPlans: {
-          where:   { status: { in: ['ACTIVE', 'DRAFT'] } },
+          where: { status: { in: ['ACTIVE', 'DRAFT'] } },
           include: { goals: { orderBy: { createdAt: 'desc' }, take: 5 } },
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -51,13 +61,13 @@ export class CareerService {
           take: 10,
         },
         enrollments: {
-          where:   { status: 'COMPLETED' },
+          where: { status: 'COMPLETED' },
           include: { course: { select: { id: true, title: true, category: true } } },
           orderBy: { completedAt: 'desc' },
           take: 10,
         },
         performanceReviews: {
-          where:   { status: 'SUBMITTED' },
+          where: { status: 'SUBMITTED' },
           orderBy: { createdAt: 'desc' },
           take: 5,
           select: { id: true, type: true, score: true, feedback: true, createdAt: true },
@@ -72,8 +82,11 @@ export class CareerService {
         },
         _count: {
           select: {
-            certificates: true, enrollments: true, userCompetencies: true,
-            userCareerPlans: true, badgeAwards: true,
+            certificates: true,
+            enrollments: true,
+            userCompetencies: true,
+            userCareerPlans: true,
+            badgeAwards: true,
           },
         },
       },
@@ -123,45 +136,49 @@ export class CareerService {
 
   async getCompetencyGapsForUser(userId: number) {
     const user = await (this.prisma as any).user.findUnique({
-      where:  { id: userId },
+      where: { id: userId },
       select: { positionId: true },
     });
     if (!user?.positionId) return [];
 
     const [positionCompetencies, userCompetencies] = await Promise.all([
       this.prisma.positionCompetency.findMany({
-        where:   { positionId: user.positionId },
+        where: { positionId: user.positionId },
         include: { competency: true },
       }),
       this.prisma.userCompetency.findMany({ where: { userId } }),
     ]);
 
-    const userCompetencyMap = new Map(userCompetencies.map(uc => [uc.competencyId, uc.currentLevel]));
+    const userCompetencyMap = new Map(
+      userCompetencies.map(uc => [uc.competencyId, uc.currentLevel]),
+    );
 
-    return positionCompetencies.map(pc => {
-      const currentLevel = userCompetencyMap.get(pc.competencyId) ?? 0;
-      const gap = pc.requiredLevel - currentLevel;
-      return {
-        competency:    pc.competency,
-        requiredLevel: pc.requiredLevel,
-        currentLevel,
-        gap,
-        status: gap <= 0 ? 'MET' : gap <= 1 ? 'PARTIAL' : 'MISSING',
-      };
-    }).sort((a, b) => b.gap - a.gap);
+    return positionCompetencies
+      .map(pc => {
+        const currentLevel = userCompetencyMap.get(pc.competencyId) ?? 0;
+        const gap = pc.requiredLevel - currentLevel;
+        return {
+          competency: pc.competency,
+          requiredLevel: pc.requiredLevel,
+          currentLevel,
+          gap,
+          status: gap <= 0 ? 'MET' : gap <= 1 ? 'PARTIAL' : 'MISSING',
+        };
+      })
+      .sort((a, b) => b.gap - a.gap);
   }
 
   // ─── SIMULADOR DE CARREIRA (Próximo cargo) ────────────────────────────────
 
   async simulateNextRole(userId: number, targetPositionId: number) {
     const user = await (this.prisma as any).user.findUnique({
-      where:  { id: userId },
+      where: { id: userId },
       select: { positionId: true, hireDate: true },
     });
     if (!user) throw new NotFoundException('Utilizador não encontrado');
 
     const targetPosition = await this.prisma.position.findUnique({
-      where:   { id: targetPositionId },
+      where: { id: targetPositionId },
       include: { competencies: { include: { competency: true } } },
     });
     if (!targetPosition) throw new NotFoundException('Cargo alvo não encontrado');
@@ -169,45 +186,48 @@ export class CareerService {
     const [userCompetencies, completedCourseIds, performanceAvg] = await Promise.all([
       this.prisma.userCompetency.findMany({ where: { userId }, include: { competency: true } }),
       this.prisma.enrollment.findMany({
-        where:  { userId, status: 'COMPLETED' },
+        where: { userId, status: 'COMPLETED' },
         select: { courseId: true },
       }),
       this.prisma.performanceReview.aggregate({
         where: { userId, score: { not: null } },
-        _avg:  { score: true },
+        _avg: { score: true },
       }),
     ]);
 
-    const userCompMap   = new Map(userCompetencies.map(uc => [uc.competencyId, uc.currentLevel]));
-    const completedSet  = new Set(completedCourseIds.map(e => e.courseId));
+    const userCompMap = new Map(userCompetencies.map(uc => [uc.competencyId, uc.currentLevel]));
+    const completedSet = new Set(completedCourseIds.map(e => e.courseId));
 
     // Verificar requisitos de competências
     const competencyGaps = targetPosition.competencies.map(pc => {
       const current = userCompMap.get(pc.competencyId) ?? 0;
       return {
-        competency:    pc.competency,
+        competency: pc.competency,
         requiredLevel: pc.requiredLevel,
-        currentLevel:  current,
-        gap:           Math.max(0, pc.requiredLevel - current),
-        met:           current >= pc.requiredLevel,
+        currentLevel: current,
+        gap: Math.max(0, pc.requiredLevel - current),
+        met: current >= pc.requiredLevel,
       };
     });
 
     // Calcular % completitude
-    const metCount  = competencyGaps.filter(g => g.met).length;
+    const metCount = competencyGaps.filter(g => g.met).length;
     const totalReqs = competencyGaps.length;
     const readinessScore = totalReqs > 0 ? Math.round((metCount / totalReqs) * 100) : 100;
 
     // Cursos recomendados para fechar gaps
     const gapCompetencyIds = competencyGaps.filter(g => !g.met).map(g => g.competency.id);
-    const recommendedCourses = gapCompetencyIds.length > 0
-      ? await this.prisma.courseCompetency.findMany({
-          where:   { competencyId: { in: gapCompetencyIds } },
-          include: { course: { select: { id: true, title: true, thumbnailUrl: true, status: true } } },
-          distinct: ['courseId'],
-          take:    10,
-        })
-      : [];
+    const recommendedCourses =
+      gapCompetencyIds.length > 0
+        ? await this.prisma.courseCompetency.findMany({
+            where: { competencyId: { in: gapCompetencyIds } },
+            include: {
+              course: { select: { id: true, title: true, thumbnailUrl: true, status: true } },
+            },
+            distinct: ['courseId'],
+            take: 10,
+          })
+        : [];
 
     // Tempo mínimo no cargo atual
     const monthsInCurrentRole = user.hireDate
@@ -215,7 +235,11 @@ export class CareerService {
       : 0;
 
     return {
-      targetPosition: { id: targetPosition.id, name: targetPosition.name, level: targetPosition.level },
+      targetPosition: {
+        id: targetPosition.id,
+        name: targetPosition.name,
+        level: targetPosition.level,
+      },
       readinessScore,
       competencyGaps,
       monthsInCurrentRole,
@@ -223,9 +247,9 @@ export class CareerService {
       recommendedCourses: recommendedCourses.map(rc => rc.course),
       summary: {
         totalRequirements: totalReqs,
-        requirementsMet:   metCount,
-        requirementsGap:   totalReqs - metCount,
-        ready:             readinessScore >= 80,
+        requirementsMet: metCount,
+        requirementsGap: totalReqs - metCount,
+        ready: readinessScore >= 80,
         estimatedTimeMonths: readinessScore >= 80 ? 0 : Math.ceil((100 - readinessScore) / 10) * 3,
       },
     };
@@ -259,7 +283,7 @@ export class CareerService {
 
   async findOneCareerPath(id: number) {
     const path = await this.prisma.careerPath.findUnique({
-      where:   { id },
+      where: { id },
       include: {
         department: { select: { id: true, name: true } },
         steps: {
@@ -283,11 +307,11 @@ export class CareerService {
   async createCareerPath(dto: CreateCareerPathDto) {
     return this.prisma.careerPath.create({
       data: {
-        name:         dto.name,
-        description:  dto.description,
-        type:         dto.type,
+        name: dto.name,
+        description: dto.description,
+        type: dto.type,
         departmentId: dto.departmentId,
-        active:       dto.active ?? true,
+        active: dto.active ?? true,
       },
       include: { department: { select: { id: true, name: true } } },
     });
@@ -308,13 +332,13 @@ export class CareerService {
 
     return (this.prisma as any).careerPathStep.create({
       data: {
-        careerPathId:           pathId,
-        positionId:             dto.positionId,
-        order:                  dto.order,
-        minMonthsRequired:      dto.minMonthsRequired,
-        minPerformanceScore:    dto.minPerformanceScore,
-        requiredCourseIds:      dto.requiredCourseIds ?? [],
-        requiredCompetencyIds:  dto.requiredCompetencyIds ?? [],
+        careerPathId: pathId,
+        positionId: dto.positionId,
+        order: dto.order,
+        minMonthsRequired: dto.minMonthsRequired,
+        minPerformanceScore: dto.minPerformanceScore,
+        requiredCourseIds: dto.requiredCourseIds ?? [],
+        requiredCompetencyIds: dto.requiredCompetencyIds ?? [],
       },
       include: { position: { select: { id: true, name: true, level: true } } },
     });
@@ -331,10 +355,17 @@ export class CareerService {
 
   async getMyCareerPlan(userId: number) {
     return this.prisma.userCareerPlan.findFirst({
-      where:   { userId, status: { in: ['ACTIVE', 'DRAFT'] } },
+      where: { userId, status: { in: ['ACTIVE', 'DRAFT'] } },
       include: {
         goals: { orderBy: [{ createdAt: 'asc' }] },
-        mentor: { select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } } },
+        mentor: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -346,17 +377,19 @@ export class CareerService {
       where: { userId, status: 'ACTIVE' },
     });
     if (existing) {
-      throw new ConflictException('Já existe um plano de carreira activo. Arquive o actual antes de criar um novo.');
+      throw new ConflictException(
+        'Já existe um plano de carreira activo. Arquive o actual antes de criar um novo.',
+      );
     }
 
     return (this.prisma as any).userCareerPlan.create({
-        data: {
+      data: {
         userId,
-        title:            dto.title,
-        description:      dto.description,
-        mentorId:         dto.mentorId,
-        targetDate:       dto.targetDate ? new Date(dto.targetDate) : null,
-        status:           'ACTIVE',
+        title: dto.title,
+        description: dto.description,
+        mentorId: dto.mentorId,
+        targetDate: dto.targetDate ? new Date(dto.targetDate) : null,
+        status: 'ACTIVE',
       },
       include: {
         goals: true,
@@ -389,28 +422,29 @@ export class CareerService {
     return (this.prisma as any).careerGoal.create({
       data: {
         careerPlanId: planId,
-        title:        dto.title,
-        description:  dto.description,
-        category:     dto.timeframe,
-        dueDate:      dto.dueDate ? new Date(dto.dueDate) : null,
-        status:       'PENDING',
-        progress:     0,
+        title: dto.title,
+        description: dto.description,
+        category: dto.timeframe,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+        status: 'PENDING',
+        progress: 0,
       },
     });
   }
 
   async updateGoalProgress(goalId: number, userId: number, progress: number) {
     const goal = await this.prisma.careerGoal.findUnique({
-      where:   { id: goalId },
+      where: { id: goalId },
       include: { careerPlan: { select: { userId: true } } },
     });
-    if (!goal || goal.careerPlan.userId !== userId) throw new NotFoundException('Objetivo não encontrado');
+    if (!goal || goal.careerPlan.userId !== userId)
+      throw new NotFoundException('Objetivo não encontrado');
 
     const status = progress >= 100 ? 'COMPLETED' : progress > 0 ? 'IN_PROGRESS' : 'PENDING';
 
     return this.prisma.careerGoal.update({
       where: { id: goalId },
-      data:  {
+      data: {
         progress,
         status,
         completedAt: progress >= 100 ? new Date() : null,
@@ -425,20 +459,22 @@ export class CareerService {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (search)      where.title        = { contains: search, mode: 'insensitive' };
-    if (type)        where.type         = type;
+    if (search) where.title = { contains: search, mode: 'insensitive' };
+    if (type) where.type = type;
     if (departmentId) where.departmentId = departmentId;
-    if (status)      where.status       = status;
-    else             where.status       = 'OPEN'; // por defeito só abertas
+    if (status) where.status = status;
+    else where.status = 'OPEN'; // por defeito só abertas
 
     const [data, total] = await Promise.all([
       this.prisma.internalVacancy.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
-          position:   { select: { id: true, name: true, level: true } },
+          position: { select: { id: true, name: true, level: true } },
           department: { select: { id: true, name: true } },
-          createdBy:  { select: { id: true, fullName: true, avatarUrl: true } },
-          _count:     { select: { applications: true } },
+          createdBy: { select: { id: true, fullName: true, avatarUrl: true } },
+          _count: { select: { applications: true } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -449,7 +485,8 @@ export class CareerService {
     let enriched = data as any[];
     if (userId) {
       const userComps = await this.prisma.userCompetency.findMany({
-        where: { userId }, select: { competencyId: true, currentLevel: true },
+        where: { userId },
+        select: { competencyId: true, currentLevel: true },
       });
       const userCompMap = new Map(userComps.map(uc => [uc.competencyId, uc.currentLevel]));
 
@@ -461,16 +498,22 @@ export class CareerService {
 
       enriched = data.map(v => {
         const reqIds = (v as any).requiredCompetencyIds as number[];
-        const matchScore = reqIds.length === 0 ? 100
-          : Math.round(reqIds.filter(id => {
-              const lvl = userCompMap.get(id) ?? 0;
-              return lvl >= 1;
-            }).length / reqIds.length * 100);
+        const matchScore =
+          reqIds.length === 0
+            ? 100
+            : Math.round(
+                (reqIds.filter(id => {
+                  const lvl = userCompMap.get(id) ?? 0;
+                  return lvl >= 1;
+                }).length /
+                  reqIds.length) *
+                  100,
+              );
 
         return {
           ...v,
           matchScore,
-          applied:           appliedMap.has(v.id),
+          applied: appliedMap.has(v.id),
           applicationStatus: appliedMap.get(v.id) ?? null,
         };
       });
@@ -482,21 +525,21 @@ export class CareerService {
   async createVacancy(createdById: number, dto: CreateInternalVacancyDto) {
     return this.prisma.internalVacancy.create({
       data: {
-        title:                  dto.title,
-        description:            dto.description,
-        type:                   dto.type,
-        positionId:             dto.positionId,
-        departmentId:           dto.departmentId,
-        closingDate:            dto.closingDate ? new Date(dto.closingDate) : null,
-        durationDays:           dto.durationDays,
-        requiredCompetencyIds:  dto.requiredCompetencyIds ?? [],
-        requiredCourseIds:      dto.requiredCourseIds ?? [],
-        slots:                  dto.slots ?? 1,
-        status:                 'DRAFT',
+        title: dto.title,
+        description: dto.description,
+        type: dto.type,
+        positionId: dto.positionId,
+        departmentId: dto.departmentId,
+        closingDate: dto.closingDate ? new Date(dto.closingDate) : null,
+        durationDays: dto.durationDays,
+        requiredCompetencyIds: dto.requiredCompetencyIds ?? [],
+        requiredCourseIds: dto.requiredCourseIds ?? [],
+        slots: dto.slots ?? 1,
+        status: 'DRAFT',
         createdById,
       },
       include: {
-        position:   { select: { id: true, name: true } },
+        position: { select: { id: true, name: true } },
         department: { select: { id: true, name: true } },
       },
     });
@@ -505,11 +548,12 @@ export class CareerService {
   async publishVacancy(id: number) {
     const v = await this.prisma.internalVacancy.findUnique({ where: { id } });
     if (!v) throw new NotFoundException('Vaga não encontrada');
-    if (v.status !== 'DRAFT') throw new BadRequestException('Apenas vagas em rascunho podem ser publicadas');
+    if (v.status !== 'DRAFT')
+      throw new BadRequestException('Apenas vagas em rascunho podem ser publicadas');
 
     const updated = await this.prisma.internalVacancy.update({
       where: { id },
-      data:  { status: 'OPEN', publishedAt: new Date() },
+      data: { status: 'OPEN', publishedAt: new Date() },
     });
 
     // Notificar colaboradores com match >= 70%
@@ -533,56 +577,60 @@ export class CareerService {
         vacancyId,
         userId,
         motivation: dto.motivation,
-        status:     'PENDING',
+        status: 'PENDING',
       },
       include: {
         vacancy: { select: { id: true, title: true } },
-        user:    { select: { id: true, fullName: true } },
+        user: { select: { id: true, fullName: true } },
       },
     });
 
     // XP por candidatura
-    await this.prisma.userPoints.upsert({
-      where:  { userId },
-      create: { userId, points: 5 },
-      update: { points: { increment: 5 } },
-    }).catch(() => {});
+    await this.prisma.userPoints
+      .upsert({
+        where: { userId },
+        create: { userId, points: 5 },
+        update: { points: { increment: 5 } },
+      })
+      .catch(() => {});
 
     return app;
   }
 
   async updateApplicationStatus(appId: number, dto: UpdateApplicationStatusDto) {
     const app = await this.prisma.internalApplication.findUnique({
-      where:   { id: appId },
+      where: { id: appId },
       include: { user: { select: { id: true } }, vacancy: { select: { title: true } } },
     });
     if (!app) throw new NotFoundException('Candidatura não encontrada');
 
     const updated = await this.prisma.internalApplication.update({
       where: { id: appId },
-      data:  { status: dto.status, feedback: dto.feedback },
+      data: { status: dto.status, feedback: dto.feedback },
     });
 
     // Notificar candidato
-    await this.prisma.notificationLog.create({
-      data: {
-      userId:  app.user.id,
-      type:    'APPLICATION_STATUS_UPDATED',
-      message: `A tua candidatura para "${app.vacancy.title}" foi actualizada para: ${dto.status}`,
-      metadata: JSON.stringify({ priority: 'MEDIUM', category: 'CAREER' }),
-      },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: app.user.id,
+          type: 'APPLICATION_STATUS_UPDATED',
+          message: `A tua candidatura para "${app.vacancy.title}" foi actualizada para: ${dto.status}`,
+          metadata: JSON.stringify({ priority: 'MEDIUM', category: 'CAREER' }),
+        },
+      })
+      .catch(() => {});
 
     return updated;
   }
 
   async getMyApplications(userId: number) {
     return this.prisma.internalApplication.findMany({
-      where:   { userId },
+      where: { userId },
       include: {
         vacancy: {
           include: {
-            position:   { select: { id: true, name: true } },
+            position: { select: { id: true, name: true } },
             department: { select: { id: true, name: true } },
           },
         },
@@ -595,21 +643,29 @@ export class CareerService {
 
   private async getMatchingVacanciesForUser(userId: number, limit = 5) {
     const userComps = await this.prisma.userCompetency.findMany({
-      where: { userId }, select: { competencyId: true, currentLevel: true },
+      where: { userId },
+      select: { competencyId: true, currentLevel: true },
     });
     const userCompMap = new Map(userComps.map(uc => [uc.competencyId, uc.currentLevel]));
 
     const openVacancies = await this.prisma.internalVacancy.findMany({
-      where:   { status: 'OPEN' },
-      include: { position: { select: { id: true, name: true } }, department: { select: { name: true } } },
-      take:    50,
+      where: { status: 'OPEN' },
+      include: {
+        position: { select: { id: true, name: true } },
+        department: { select: { name: true } },
+      },
+      take: 50,
     });
 
     return openVacancies
       .map(v => {
         const reqIds = (v as any).requiredCompetencyIds as number[];
-        const matchScore = reqIds.length === 0 ? 100
-          : Math.round(reqIds.filter(id => (userCompMap.get(id) ?? 0) >= 1).length / reqIds.length * 100);
+        const matchScore =
+          reqIds.length === 0
+            ? 100
+            : Math.round(
+                (reqIds.filter(id => (userCompMap.get(id) ?? 0) >= 1).length / reqIds.length) * 100,
+              );
         return { ...v, matchScore };
       })
       .filter(v => v.matchScore >= 50)
@@ -619,8 +675,8 @@ export class CareerService {
 
   private async notifyMatchingUsers(vacancyId: number) {
     const vacancy = await this.prisma.internalVacancy.findUnique({
-      where:   { id: vacancyId },
-      select:  { title: true, requiredCompetencyIds: true },
+      where: { id: vacancyId },
+      select: { title: true, requiredCompetencyIds: true },
     });
     if (!vacancy) return;
 
@@ -636,7 +692,7 @@ export class CareerService {
     const userMatch = new Map<number, Set<number>>();
     usersWithComps.forEach(uc => {
       if (!userMatch.has(uc.userId)) userMatch.set(uc.userId, new Set());
-      userMatch.get(uc.userId)!.add(uc.competencyId);
+      userMatch.get(uc.userId).add(uc.competencyId);
     });
 
     const threshold = Math.ceil(reqIds.length * 0.5);
@@ -647,12 +703,16 @@ export class CareerService {
 
     if (matchingUserIds.length > 0) {
       await this.prisma.notificationLog.createMany({
-           data: matchingUserIds.map(uid => ({
-           userId:  uid,
-           type:    'MATCHING_VACANCY',
-           message: `Nova vaga interna compatível com o teu perfil: "${vacancy.title}"`,
-            metadata: JSON.stringify({ priority: 'MEDIUM', category: 'CAREER', actionUrl: `/career/vacancies/${vacancyId}` }),
-           })),
+        data: matchingUserIds.map(uid => ({
+          userId: uid,
+          type: 'MATCHING_VACANCY',
+          message: `Nova vaga interna compatível com o teu perfil: "${vacancy.title}"`,
+          metadata: JSON.stringify({
+            priority: 'MEDIUM',
+            category: 'CAREER',
+            actionUrl: `/career/vacancies/${vacancyId}`,
+          }),
+        })),
       });
     }
   }
@@ -661,7 +721,7 @@ export class CareerService {
 
   async checkPromotionEligibility(userId: number) {
     const user = await (this.prisma as any).user.findUnique({
-      where:  { id: userId },
+      where: { id: userId },
       select: { positionId: true, hireDate: true },
     });
     if (!user?.positionId) return null;
@@ -670,32 +730,48 @@ export class CareerService {
       this.getCompetencyGapsForUser(userId),
       this.prisma.performanceReview.aggregate({
         where: { userId, score: { not: null } },
-        _avg:  { score: true },
+        _avg: { score: true },
       }),
       Promise.resolve(
         user.hireDate
-          ? Math.floor((Date.now() - new Date(user.hireDate).getTime()) / (1000 * 60 * 60 * 24 * 30))
-          : 0
+          ? Math.floor(
+              (Date.now() - new Date(user.hireDate).getTime()) / (1000 * 60 * 60 * 24 * 30),
+            )
+          : 0,
       ),
     ]);
 
-    const metGaps        = gaps.filter(g => g.status === 'MET').length;
-    const totalGaps      = gaps.length;
-    const gapsPct        = totalGaps > 0 ? Math.round((metGaps / totalGaps) * 100) : 100;
-    const perfScore      = avgPerformance._avg.score ?? 0;
-    const timeReqMet     = monthsInRole >= 12;
+    const metGaps = gaps.filter(g => g.status === 'MET').length;
+    const totalGaps = gaps.length;
+    const gapsPct = totalGaps > 0 ? Math.round((metGaps / totalGaps) * 100) : 100;
+    const perfScore = avgPerformance._avg.score ?? 0;
+    const timeReqMet = monthsInRole >= 12;
     const performanceMet = perfScore >= 3.5;
-    const competenciesMet= gapsPct >= 80;
+    const competenciesMet = gapsPct >= 80;
 
     return {
-      eligible:        timeReqMet && performanceMet && competenciesMet,
+      eligible: timeReqMet && performanceMet && competenciesMet,
       criteria: {
-        time:        { met: timeReqMet,    value: monthsInRole, required: 12, label: 'Meses no cargo' },
-        performance: { met: performanceMet, value: Math.round(perfScore * 10) / 10, required: 3.5, label: 'Score de performance' },
-        competencies:{ met: competenciesMet, value: gapsPct, required: 80, label: '% de competências cumpridas' },
+        time: { met: timeReqMet, value: monthsInRole, required: 12, label: 'Meses no cargo' },
+        performance: {
+          met: performanceMet,
+          value: Math.round(perfScore * 10) / 10,
+          required: 3.5,
+          label: 'Score de performance',
+        },
+        competencies: {
+          met: competenciesMet,
+          value: gapsPct,
+          required: 80,
+          label: '% de competências cumpridas',
+        },
       },
-      recommendation: timeReqMet && performanceMet && competenciesMet
-        ? 'READY_NOW' : performanceMet && gapsPct >= 60 ? 'READY_12M' : 'NOT_READY',
+      recommendation:
+        timeReqMet && performanceMet && competenciesMet
+          ? 'READY_NOW'
+          : performanceMet && gapsPct >= 60
+            ? 'READY_12M'
+            : 'NOT_READY',
     };
   }
 
@@ -703,30 +779,40 @@ export class CareerService {
     // Verificar eligibilidade
     const eligibility = await this.checkPromotionEligibility(userId);
     if (!eligibility?.eligible) {
-      throw new BadRequestException('Não cumpres os critérios mínimos para promoção. Consulta o teu dashboard de carreira.');
+      throw new BadRequestException(
+        'Não cumpres os critérios mínimos para promoção. Consulta o teu dashboard de carreira.',
+      );
     }
 
     // Criar notificação para RH e gestor
     const user = await (this.prisma as any).user.findUnique({
-      where:  { id: userId },
+      where: { id: userId },
       select: { fullName: true, managerId: true },
     });
     if (!user) throw new NotFoundException('Utilizador não encontrado');
 
     // Notificar gestor
     if (user.managerId) {
-      await this.prisma.notificationLog.create({
-       data: {
-       userId:  user.managerId,
-       type:    'PROMOTION_REQUEST',
-       message: `${user.fullName} submeteu um pedido de promoção. Revê a elegibilidade.`,
-       metadata: JSON.stringify({ priority: 'HIGH', category: 'CAREER', userId, targetPositionId, justification }),
-       },
-      }).catch(() => {});
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: user.managerId,
+            type: 'PROMOTION_REQUEST',
+            message: `${user.fullName} submeteu um pedido de promoção. Revê a elegibilidade.`,
+            metadata: JSON.stringify({
+              priority: 'HIGH',
+              category: 'CAREER',
+              userId,
+              targetPositionId,
+              justification,
+            }),
+          },
+        })
+        .catch(() => {});
     }
 
     return {
-      message:    'Pedido de promoção submetido com sucesso.',
+      message: 'Pedido de promoção submetido com sucesso.',
       eligibility,
     };
   }
@@ -735,13 +821,15 @@ export class CareerService {
 
   async getSuccessionPlans(positionId?: number) {
     return this.prisma.successionPlan.findMany({
-      where:   positionId ? { positionId } : undefined,
+      where: positionId ? { positionId } : undefined,
       include: {
-        position:  { select: { id: true, name: true, level: true } },
+        position: { select: { id: true, name: true, level: true } },
         candidate: {
           select: {
-            id: true, fullName: true, avatarUrl: true,
-            position:   { select: { name: true } },
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
             department: { select: { name: true } },
           },
         },
@@ -758,26 +846,28 @@ export class CareerService {
 
     const plan = await (this.prisma as any).successionPlan.create({
       data: {
-        positionId:    dto.positionId,
-        candidateId:   dto.candidateId,
-        readiness:     dto.readiness,
+        positionId: dto.positionId,
+        candidateId: dto.candidateId,
+        readiness: dto.readiness,
         justification: dto.justification,
       },
       include: {
-        position:  { select: { id: true, name: true } },
+        position: { select: { id: true, name: true } },
         candidate: { select: { id: true, fullName: true } },
       },
     });
 
     // Notificar candidato
-    await this.prisma.notificationLog.create({
-      data: {
-      userId:  dto.candidateId,
-      type:    'SUCCESSION_MAPPED',
-      message: `Foste identificado como candidato a sucessor para um cargo estratégico.`,
-      metadata: JSON.stringify({ priority: 'HIGH', category: 'CAREER' }),
-     },
-    }).catch(() => {});
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: dto.candidateId,
+          type: 'SUCCESSION_MAPPED',
+          message: `Foste identificado como candidato a sucessor para um cargo estratégico.`,
+          metadata: JSON.stringify({ priority: 'HIGH', category: 'CAREER' }),
+        },
+      })
+      .catch(() => {});
 
     return plan;
   }
@@ -788,7 +878,7 @@ export class CareerService {
 
     return (this.prisma as any).successionPlan.update({
       where: { id: planId },
-      data:  { readiness, justification: justification ?? (plan as any).justification },
+      data: { readiness, justification: justification ?? (plan as any).justification },
     });
   }
 
@@ -796,24 +886,24 @@ export class CareerService {
 
   async updateCareerInterests(userId: number, dto: CareerInterestDto) {
     return this.prisma.profile.upsert({
-      where:  { userId },
+      where: { userId },
       create: {
         userId,
-        interests:   dto.areas ?? [],
+        interests: dto.areas ?? [],
         careerGoals: JSON.stringify({
-          workStyles:       dto.workStyles ?? [],
-          desiredRole:      dto.desiredRole,
+          workStyles: dto.workStyles ?? [],
+          desiredRole: dto.desiredRole,
           openToRelocation: dto.openToRelocation ?? false,
-          openToRemote:     dto.openToRemote ?? false,
+          openToRemote: dto.openToRemote ?? false,
         }),
       },
       update: {
-        interests:   dto.areas ?? [],
+        interests: dto.areas ?? [],
         careerGoals: JSON.stringify({
-          workStyles:       dto.workStyles ?? [],
-          desiredRole:      dto.desiredRole,
+          workStyles: dto.workStyles ?? [],
+          desiredRole: dto.desiredRole,
           openToRelocation: dto.openToRelocation ?? false,
-          openToRemote:     dto.openToRemote ?? false,
+          openToRemote: dto.openToRemote ?? false,
         }),
       },
     });
@@ -825,15 +915,19 @@ export class CareerService {
     const { departmentId, period, includeRisk } = filters;
     const year = period ? parseInt(period) : new Date().getFullYear();
     const startDate = new Date(`${year}-01-01`);
-    const endDate   = new Date(`${year}-12-31`);
+    const endDate = new Date(`${year}-12-31`);
 
     const where: any = {};
     if (departmentId) where.departmentId = departmentId;
 
     const [
-      totalUsers, usersWithPlan, activeVacancies,
-      totalApplications, promotionRequests,
-      avgCompetencyGap, topSkillGaps,
+      totalUsers,
+      usersWithPlan,
+      activeVacancies,
+      totalApplications,
+      promotionRequests,
+      avgCompetencyGap,
+      topSkillGaps,
     ] = await Promise.all([
       this.prisma.user.count({ where: { ...where, active: true } }),
       this.prisma.userCareerPlan.count({
@@ -853,8 +947,7 @@ export class CareerService {
       }),
     ]);
 
-    const pdiEngagementRate = totalUsers > 0
-      ? Math.round((usersWithPlan / totalUsers) * 100) : 0;
+    const pdiEngagementRate = totalUsers > 0 ? Math.round((usersWithPlan / totalUsers) * 100) : 0;
 
     // Risco de saída (utilizadores sem PDI + sem avaliação recente)
     let riskUsers: any[] = [];
@@ -868,9 +961,11 @@ export class CareerService {
           performanceReviews: { none: { createdAt: { gte: sixMonthsAgo } } },
         },
         select: {
-          id: true, fullName: true, avatarUrl: true,
+          id: true,
+          fullName: true,
+          avatarUrl: true,
           hireDate: true,
-          position:   { select: { name: true } },
+          position: { select: { name: true } },
           department: { select: { name: true } },
         },
         take: 20,
@@ -880,8 +975,8 @@ export class CareerService {
 
     // Carreira mais populares (vagas)
     const topVacancyTypes = await this.prisma.internalVacancy.groupBy({
-      by:      ['type'],
-      _count:  true,
+      by: ['type'],
+      _count: true,
       orderBy: { _count: { type: 'desc' } },
     });
 
@@ -889,12 +984,15 @@ export class CareerService {
       overview: {
         totalUsers,
         usersWithActivePlan: usersWithPlan,
-        pdiEngagementRate:   `${pdiEngagementRate}%`,
+        pdiEngagementRate: `${pdiEngagementRate}%`,
         activeVacancies,
         totalApplications,
       },
       topVacancyTypes,
-      topSkillGaps: topSkillGaps.map(g => ({ competencyId: g.competencyId, positionCount: (g._count as any).competencyId ?? 0 })),
+      topSkillGaps: topSkillGaps.map(g => ({
+        competencyId: g.competencyId,
+        positionCount: (g._count as any).competencyId ?? 0,
+      })),
       riskUsers: includeRisk ? riskUsers : undefined,
     };
   }
@@ -906,13 +1004,15 @@ export class CareerService {
     const users = await this.prisma.user.findMany({
       where,
       select: {
-        id: true, fullName: true, avatarUrl: true,
+        id: true,
+        fullName: true,
+        avatarUrl: true,
         department: { select: { id: true, name: true } },
-        position:   { select: { id: true, name: true, level: true } },
+        position: { select: { id: true, name: true, level: true } },
         nineBoxPlacements: {
           orderBy: { updatedAt: 'desc' },
-          take:    1,
-          select:  { performanceAxis: true, potentialAxis: true },
+          take: 1,
+          select: { performanceAxis: true, potentialAxis: true },
         },
         _count: { select: { userCompetencies: true, certificates: true } },
       },
@@ -923,7 +1023,7 @@ export class CareerService {
     return users.map(u => {
       const placement = u.nineBoxPlacements[0];
       const perf = placement?.performanceAxis ?? 0;
-      const pot  = placement?.potentialAxis  ?? 0;
+      const pot = placement?.potentialAxis ?? 0;
 
       let category = 'UNKNOWN';
       if (perf >= 4 && pot >= 4) category = 'HIGH_POTENTIAL';
@@ -934,8 +1034,8 @@ export class CareerService {
 
       return {
         ...u,
-        performance:   perf,
-        potential:     pot,
+        performance: perf,
+        potential: pot,
         talentCategory: category,
       };
     });

@@ -1,18 +1,37 @@
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CoursesService } from './courses.service';
 import {
-  CreateCourseDto, UpdateCourseDto, CourseFilterDto,
-  CreateCourseModuleDto, UpdateCourseModuleDto,
-  CreateLessonDto, UpdateLessonDto,
-  MarkLessonCompleteDto, EnrollDto, AssignCourseDto,
-  CreateQuizDto, SubmitQuizDto, CourseFeedbackDto,
+  CreateCourseDto,
+  UpdateCourseDto,
+  CourseFilterDto,
+  CreateCourseModuleDto,
+  UpdateCourseModuleDto,
+  CreateLessonDto,
+  UpdateLessonDto,
+  MarkLessonCompleteDto,
+  EnrollDto,
+  AssignCourseDto,
+  CreateQuizDto,
+  SubmitQuizDto,
+  CourseFeedbackDto,
 } from './courses.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Courses')
@@ -206,7 +225,10 @@ export class CoursesController {
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Reordenar aulas (drag & drop)' })
   @HttpCode(HttpStatus.OK)
-  reorderLessons(@Param('moduleId', ParseIntPipe) moduleId: number, @Body('orderedIds') ids: number[]) {
+  reorderLessons(
+    @Param('moduleId', ParseIntPipe) moduleId: number,
+    @Body('orderedIds') ids: number[],
+  ) {
     return this.svc.reorderLessons(moduleId, ids);
   }
 
@@ -232,11 +254,7 @@ export class CoursesController {
 
   @Post(':id/enroll')
   @ApiOperation({ summary: 'Matricular utilizador autenticado' })
-  enroll(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
-    @Body() dto: EnrollDto,
-  ) {
+  enroll(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any, @Body() dto: EnrollDto) {
     return this.svc.enroll(id, user.id, dto);
   }
 

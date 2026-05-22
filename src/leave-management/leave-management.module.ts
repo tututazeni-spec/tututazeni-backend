@@ -1,11 +1,11 @@
 // ─── src/leave-management/leave-management.module.ts ─────────────────────────
 
 import { Module } from '@nestjs/common';
-import { LeaveManagementService }    from './leave-management.service';
+import { LeaveManagementService } from './leave-management.service';
 import { LeaveManagementController } from './leave-management.controller';
-import { PrismaModule }              from '../prisma/prisma.module';
-import { AuditModule }               from '../common/modules/audit.module';
- 
+import { PrismaModule } from '../prisma/prisma.module';
+import { AuditModule } from '../common/modules/audit.module';
+
 @Module({
   imports: [PrismaModule, AuditModule],
   providers: [LeaveManagementService],
@@ -13,5 +13,3 @@ import { AuditModule }               from '../common/modules/audit.module';
   exports: [LeaveManagementService],
 })
 export class LeaveManagementModule {}
-
- 

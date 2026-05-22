@@ -42,11 +42,7 @@ export class WorkDeclarationService {
   // TEMPLATES
   // ══════════════════════════════════════════════════════════
 
-  async createTemplate(
-    tenantId: string,
-    userId: string,
-    dto: CreateDeclarationTemplateDto,
-  ) {
+  async createTemplate(tenantId: string, userId: string, dto: CreateDeclarationTemplateDto) {
     // Se novo template for default, remover default anterior do mesmo tipo
     if (dto.isDefault) {
       await (this.prisma as any).declarationTemplate.updateMany({
@@ -79,7 +75,7 @@ export class WorkDeclarationService {
       });
     }
 
-     return (this.prisma as any).declarationTemplate.update({
+    return (this.prisma as any).declarationTemplate.update({
       where: { id: templateId },
       data: { ...dto, updatedById: userId, version: { increment: 1 } },
     });
@@ -131,8 +127,8 @@ export class WorkDeclarationService {
     const usage = await (this.prisma as any).declaration.count({ where: { templateId } });
     if (usage > 0) {
       // Soft delete — apenas desativa
-       return (this.prisma as any).declarationTemplate.update({
-      where: { id: templateId },
+      return (this.prisma as any).declarationTemplate.update({
+        where: { id: templateId },
         data: { isActive: false },
       });
     }
@@ -144,11 +140,7 @@ export class WorkDeclarationService {
   // ══════════════════════════════════════════════════════════
 
   /** Colaborador solicita uma declaração */
-  async requestDeclaration(
-    tenantId: string,
-    requestedById: string,
-    dto: RequestDeclarationDto,
-  ) {
+  async requestDeclaration(tenantId: string, requestedById: string, dto: RequestDeclarationDto) {
     const template = await this.findTemplateOrThrow(tenantId, dto.templateId);
     const config = await this.getTenantConfig(tenantId);
 
@@ -179,7 +171,13 @@ export class WorkDeclarationService {
       include: this.declarationIncludes(),
     });
 
-    await this.createAuditLog(declaration.id, requestedById, 'REQUESTED', null, DeclarationStatus.DRAFT);
+    await this.createAuditLog(
+      declaration.id,
+      requestedById,
+      'REQUESTED',
+      null,
+      DeclarationStatus.DRAFT,
+    );
 
     // Notificar RH
     if (config?.emailNotifications) {
@@ -194,11 +192,7 @@ export class WorkDeclarationService {
   // ══════════════════════════════════════════════════════════
 
   /** RH cria declaração diretamente */
-  async createDeclaration(
-    tenantId: string,
-    createdById: string,
-    dto: CreateDeclarationDto,
-  ) {
+  async createDeclaration(tenantId: string, createdById: string, dto: CreateDeclarationDto) {
     const template = await this.findTemplateOrThrow(tenantId, dto.templateId);
     const config = await this.getTenantConfig(tenantId);
 
@@ -233,7 +227,13 @@ export class WorkDeclarationService {
       include: this.declarationIncludes(),
     });
 
-    await this.createAuditLog(declaration.id, createdById, 'CREATED', null, DeclarationStatus.DRAFT);
+    await this.createAuditLog(
+      declaration.id,
+      createdById,
+      'CREATED',
+      null,
+      DeclarationStatus.DRAFT,
+    );
     return declaration;
   }
 
@@ -253,7 +253,7 @@ export class WorkDeclarationService {
       const template = await this.findTemplateOrThrow(tenantId, declaration.templateId);
       const config = await this.getTenantConfig(tenantId);
       const variables = this.buildVariableMap(
-        declaration.employeeSnapshot as any,
+        declaration.employeeSnapshot,
         tenantId,
         config,
         dto.customFields,
@@ -267,11 +267,23 @@ export class WorkDeclarationService {
       include: this.declarationIncludes(),
     });
 
-    await this.createAuditLog(updated.id, userId, 'UPDATED', declaration.status, declaration.status, { changes: Object.keys(dto) });
+    await this.createAuditLog(
+      updated.id,
+      userId,
+      'UPDATED',
+      declaration.status,
+      declaration.status,
+      { changes: Object.keys(dto) },
+    );
     return updated;
   }
 
-  async listDeclarations(tenantId: string, userId: string, role: string, query: DeclarationQueryDto) {
+  async listDeclarations(
+    tenantId: string,
+    userId: string,
+    role: string,
+    query: DeclarationQueryDto,
+  ) {
     const where: any = { tenantId };
 
     // Colaborador vê apenas as suas
@@ -363,7 +375,14 @@ export class WorkDeclarationService {
       include: this.declarationIncludes(),
     });
 
-    await this.createAuditLog(updated.id, userId, 'STATUS_CHANGED', declaration.status, dto.status, { reason: dto.reason });
+    await this.createAuditLog(
+      updated.id,
+      userId,
+      'STATUS_CHANGED',
+      declaration.status,
+      dto.status,
+      { reason: dto.reason },
+    );
 
     // Notificar colaborador quando emitida
     if (dto.status === DeclarationStatus.ISSUED) {
@@ -388,7 +407,11 @@ export class WorkDeclarationService {
   ) {
     const declaration = await this.findDeclarationOrThrow(tenantId, declarationId);
 
-    if (![DeclarationStatus.DRAFT, DeclarationStatus.PENDING].includes(declaration.status as DeclarationStatus)) {
+    if (
+      ![DeclarationStatus.DRAFT, DeclarationStatus.PENDING].includes(
+        declaration.status as DeclarationStatus,
+      )
+    ) {
       throw new BadRequestException('Esta declaração não pode ser assinada no estado atual.');
     }
 
@@ -418,7 +441,9 @@ export class WorkDeclarationService {
     const config = await this.getTenantConfig(tenantId);
     await this.checkAndAdvanceStatus(declaration, config);
 
-    await this.createAuditLog(declarationId, userId, 'SIGNED', declaration.status, null, { signerRole: dto.signerRole });
+    await this.createAuditLog(declarationId, userId, 'SIGNED', declaration.status, null, {
+      signerRole: dto.signerRole,
+    });
 
     return signature;
   }
@@ -439,7 +464,9 @@ export class WorkDeclarationService {
       throw new BadRequestException('Não é possível exportar uma declaração em rascunho.');
     }
 
-    await this.createAuditLog(declarationId, userId, 'EXPORTED', null, null, { format: dto.format });
+    await this.createAuditLog(declarationId, userId, 'EXPORTED', null, null, {
+      format: dto.format,
+    });
     await (this.prisma as any).declarationAccessLog.create({
       data: {
         declarationId,
@@ -451,12 +478,12 @@ export class WorkDeclarationService {
       if (declaration.pdfUrl && !dto.includeWatermark) {
         return { url: declaration.pdfUrl };
       }
-      const { pdfUrl } = await this.generateDocument(declaration as any, dto.includeWatermark);
+      const { pdfUrl } = await this.generateDocument(declaration, dto.includeWatermark);
       return { url: pdfUrl };
     }
 
     // DOCX
-    const docxUrl = await this.generateDocx(declaration as any);
+    const docxUrl = await this.generateDocx(declaration);
     return { url: docxUrl };
   }
 
@@ -478,8 +505,8 @@ export class WorkDeclarationService {
     }
 
     for (const email of dto.recipientEmails) {
-  // TODO: enviar email via MailService quando disponível
-  this.logger?.log?.(`Declaração a enviar para ${email}`);
+      // TODO: enviar email via MailService quando disponível
+      this.logger?.log?.(`Declaração a enviar para ${email}`);
     }
 
     await this.createAuditLog(declarationId, userId, 'SENT', null, null, {
@@ -524,8 +551,7 @@ export class WorkDeclarationService {
       },
     });
 
-    const isExpired =
-      declaration.expiresAt && new Date() > declaration.expiresAt;
+    const isExpired = declaration.expiresAt && new Date() > declaration.expiresAt;
     const isRevoked = declaration.status === DeclarationStatus.REVOKED;
 
     return {
@@ -536,10 +562,10 @@ export class WorkDeclarationService {
       status: declaration.status,
       issuedAt: declaration.issuedAt,
       expiresAt: declaration.expiresAt,
-      company: (declaration.tenant as any)?.name,
+      company: declaration.tenant?.name,
       employee: {
-        name: (declaration.employeeSnapshot as any)?.name,
-        role: (declaration.employeeSnapshot as any)?.role,
+        name: declaration.employeeSnapshot?.name,
+        role: declaration.employeeSnapshot?.role,
       },
       signatures: declaration.signatures,
       hash: declaration.verificationHash,
@@ -635,7 +661,7 @@ export class WorkDeclarationService {
       requestedBy: { select: { id: true, fullName: true, email: true } },
       assignedTo: { select: { id: true, fullName: true, email: true } },
       signatures: {
-       include: { signer: { select: { id: true, fullName: true } } },
+        include: { signer: { select: { id: true, fullName: true } } },
       },
     };
   }
@@ -658,13 +684,41 @@ export class WorkDeclarationService {
 
   private generateTitle(type: string, templateName: string, locale?: string): string {
     const titles: Record<string, Record<string, string>> = {
-      EMPLOYMENT: { PT: 'Declaração de Vínculo Empregatício', EN: 'Employment Declaration', FR: 'Déclaration d\'Emploi' },
-      TRAINING: { PT: 'Declaração de Participação em Formação', EN: 'Training Participation Declaration', FR: 'Déclaration de Formation' },
-      ATTENDANCE: { PT: 'Declaração de Frequência', EN: 'Attendance Declaration', FR: 'Déclaration de Présence' },
-      PERFORMANCE: { PT: 'Declaração de Desempenho', EN: 'Performance Declaration', FR: 'Déclaration de Performance' },
-      BANKING: { PT: 'Declaração para Fins Bancários', EN: 'Banking Purpose Declaration', FR: 'Déclaration Bancaire' },
-      LEGAL: { PT: 'Declaração para Fins Legais', EN: 'Legal Declaration', FR: 'Déclaration Légale' },
-      ACADEMIC: { PT: 'Declaração para Fins Académicos', EN: 'Academic Declaration', FR: 'Déclaration Académique' },
+      EMPLOYMENT: {
+        PT: 'Declaração de Vínculo Empregatício',
+        EN: 'Employment Declaration',
+        FR: "Déclaration d'Emploi",
+      },
+      TRAINING: {
+        PT: 'Declaração de Participação em Formação',
+        EN: 'Training Participation Declaration',
+        FR: 'Déclaration de Formation',
+      },
+      ATTENDANCE: {
+        PT: 'Declaração de Frequência',
+        EN: 'Attendance Declaration',
+        FR: 'Déclaration de Présence',
+      },
+      PERFORMANCE: {
+        PT: 'Declaração de Desempenho',
+        EN: 'Performance Declaration',
+        FR: 'Déclaration de Performance',
+      },
+      BANKING: {
+        PT: 'Declaração para Fins Bancários',
+        EN: 'Banking Purpose Declaration',
+        FR: 'Déclaration Bancaire',
+      },
+      LEGAL: {
+        PT: 'Declaração para Fins Legais',
+        EN: 'Legal Declaration',
+        FR: 'Déclaration Légale',
+      },
+      ACADEMIC: {
+        PT: 'Declaração para Fins Académicos',
+        EN: 'Academic Declaration',
+        FR: 'Déclaration Académique',
+      },
       CUSTOM: { PT: templateName, EN: templateName, FR: templateName },
     };
     return titles[type]?.[locale ?? 'PT'] ?? templateName;
@@ -672,21 +726,21 @@ export class WorkDeclarationService {
 
   private async buildEmployeeSnapshot(employeeId: string, tenantId: string) {
     const employee = await (this.prisma as any).user.findFirst({
-    where: { id: employeeId },
-    include: {
-    department: true,
-    position: true,
-     },
-      });
-      if (!employee) throw new NotFoundException('Colaborador não encontrado.');
-      return {
+      where: { id: employeeId },
+      include: {
+        department: true,
+        position: true,
+      },
+    });
+    if (!employee) throw new NotFoundException('Colaborador não encontrado.');
+    return {
       id: employee.id,
       name: employee.fullName,
       email: employee.email,
-      role: (employee as any).position?.name ?? '',
-      department: (employee as any).department?.name ?? '',
-      admissionDate: (employee as any).admissionDate ?? null,
-      nationalId: (employee as any).nationalId ?? null,
+      role: employee.position?.name ?? '',
+      department: employee.department?.name ?? '',
+      admissionDate: employee.admissionDate ?? null,
+      nationalId: employee.nationalId ?? null,
     };
   }
 
@@ -744,8 +798,8 @@ export class WorkDeclarationService {
       where: { declarationId: declaration.id },
     });
 
-    const hasHr = signatures.some((s) => s.signerRole === 'RH');
-    const hasManager = signatures.some((s) => s.signerRole === 'MANAGER');
+    const hasHr = signatures.some(s => s.signerRole === 'RH');
+    const hasManager = signatures.some(s => s.signerRole === 'MANAGER');
     const requireManager = config?.requireManagerSignature ?? false;
 
     const allSigned = hasHr && (!requireManager || hasManager);
@@ -759,27 +813,27 @@ export class WorkDeclarationService {
   }
 
   private async generateDocument(declaration: any, withWatermark = false) {
-  const config = await this.getTenantConfig(declaration.tenantId);
-  const content = declaration.renderedContent ?? '';
+    const config = await this.getTenantConfig(declaration.tenantId);
+    const content = declaration.renderedContent ?? '';
 
-  await this.pdf.generateDeclarationPdf({
-    content,
-    config,
-    declaration,
-    withWatermark,
-  });
+    await this.pdf.generateDeclarationPdf({
+      content,
+      config,
+      declaration,
+      withWatermark,
+    });
 
-  const verificationHash = crypto
-    .createHash('sha256')
-    .update(content + declaration.code)
-    .digest('hex');
+    const verificationHash = crypto
+      .createHash('sha256')
+      .update(content + declaration.code)
+      .digest('hex');
 
-  // TODO: integrar StorageService para upload real quando disponível
-  const pdfUrl = `${process.env.APP_URL}/declarations/${declaration.code}.pdf`;
-  const qrCodeUrl = `${process.env.APP_URL}/declarations/${declaration.code}-qr.png`;
+    // TODO: integrar StorageService para upload real quando disponível
+    const pdfUrl = `${process.env.APP_URL}/declarations/${declaration.code}.pdf`;
+    const qrCodeUrl = `${process.env.APP_URL}/declarations/${declaration.code}-qr.png`;
 
-  return { pdfUrl, qrCodeUrl, verificationHash };
-}
+    return { pdfUrl, qrCodeUrl, verificationHash };
+  }
 
   private async generateDocx(declaration: any): Promise<string> {
     // Integração com biblioteca docx (eg: docx npm)
@@ -795,12 +849,12 @@ export class WorkDeclarationService {
   }
 
   private async notifyHrTeam(tenantId: string, declaration: any) {
-  // TODO: notificar via NotificationsService quando disponível
-}
+    // TODO: notificar via NotificationsService quando disponível
+  }
 
   private async notifyEmployeeIssued(declaration: any) {
-  // TODO: notificar via NotificationsService quando disponível
-}
+    // TODO: notificar via NotificationsService quando disponível
+  }
 
   private async createAuditLog(
     declarationId: string,

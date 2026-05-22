@@ -1,16 +1,30 @@
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { LearningPathsService } from './learning-paths.service';
 import {
-  CreateLearningPathDto, UpdateLearningPathDto, LearningPathFilterDto,
-  AssignLearningPathDto, LearningPathStepDto, ReorderStepsDto,
+  CreateLearningPathDto,
+  UpdateLearningPathDto,
+  LearningPathFilterDto,
+  AssignLearningPathDto,
+  LearningPathStepDto,
+  ReorderStepsDto,
 } from './learning-paths.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Learning Paths')
@@ -63,10 +77,7 @@ export class LearningPathsController {
 
   @Get(':id/progress')
   @ApiOperation({ summary: 'Progresso do utilizador autenticado na trilha' })
-  progress(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
-  ) {
+  progress(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
     return this.svc.getMyProgress(id, user.id);
   }
 
@@ -137,7 +148,7 @@ export class LearningPathsController {
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Remover curso da trilha' })
   removeStep(
-    @Param('id', ParseIntPipe)       id: number,
+    @Param('id', ParseIntPipe) id: number,
     @Param('courseId', ParseIntPipe) courseId: number,
   ) {
     return this.svc.removeStep(id, courseId);

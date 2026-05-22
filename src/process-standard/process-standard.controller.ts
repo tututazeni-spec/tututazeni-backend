@@ -1,17 +1,32 @@
 // src/process-standard/process-standard.controller.ts
 import {
-  Controller, Get, Post, Put, Patch, Delete, Body, Param,
-  Query, ParseIntPipe, UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ProcessStandardService } from './process-standard.service';
 import {
-  CreateProcessDto, UpdateProcessDto, ProcessFilterDto,
-  StartInstanceDto, CompleteStepDto, RejectStepDto,
-  ApprovalActionDto, CompareVersionsDto,
+  CreateProcessDto,
+  UpdateProcessDto,
+  ProcessFilterDto,
+  StartInstanceDto,
+  CompleteStepDto,
+  RejectStepDto,
+  ApprovalActionDto,
 } from './process-standard.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Process Standard')
@@ -45,16 +60,16 @@ export class ProcessStandardController {
   @Get('audit-logs')
   @Roles('ADMIN', 'AUDITOR')
   @ApiOperation({ summary: 'Logs de auditoria globais' })
-  @ApiQuery({ name: 'processId',  required: false })
+  @ApiQuery({ name: 'processId', required: false })
   @ApiQuery({ name: 'instanceId', required: false })
-  @ApiQuery({ name: 'page',       required: false })
+  @ApiQuery({ name: 'page', required: false })
   auditLogs(
-    @Query('processId')  processId?: string,
+    @Query('processId') processId?: string,
     @Query('instanceId') instanceId?: string,
-    @Query('page')       page?: string,
+    @Query('page') page?: string,
   ) {
     return this.svc.getAuditLogs(
-      processId  ? parseInt(processId)  : undefined,
+      processId ? parseInt(processId) : undefined,
       instanceId ? parseInt(instanceId) : undefined,
       page ? parseInt(page) : 1,
     );
@@ -154,12 +169,12 @@ export class ProcessStandardController {
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Listar instâncias de processos' })
   @ApiQuery({ name: 'processId', required: false })
-  @ApiQuery({ name: 'status',    required: false })
+  @ApiQuery({ name: 'status', required: false })
   getInstances(
     @CurrentUser() user: any,
     @Query('processId') processId?: string,
-    @Query('status')    status?: string,
-    @Query('page')      page?: string,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
   ) {
     return this.svc.getInstances({
       processId: processId ? parseInt(processId) : undefined,
@@ -204,7 +219,7 @@ export class ProcessStandardController {
   @HttpCode(HttpStatus.OK)
   completeStep(
     @Param('instanceId', ParseIntPipe) instanceId: number,
-    @Param('stepId', ParseIntPipe)     stepId: number,
+    @Param('stepId', ParseIntPipe) stepId: number,
     @CurrentUser() user: any,
     @Body() dto: CompleteStepDto,
   ) {
@@ -216,7 +231,7 @@ export class ProcessStandardController {
   @HttpCode(HttpStatus.OK)
   rejectStep(
     @Param('instanceId', ParseIntPipe) instanceId: number,
-    @Param('stepId', ParseIntPipe)     stepId: number,
+    @Param('stepId', ParseIntPipe) stepId: number,
     @CurrentUser() user: any,
     @Body() dto: RejectStepDto,
   ) {

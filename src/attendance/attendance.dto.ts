@@ -1,8 +1,14 @@
 // ─── src/attendance/attendance.dto.ts ────────────────────────────────────────
 import {
-  IsInt, IsOptional, IsString, IsEnum, IsDateString,
-  IsBoolean, IsNumber, IsObject, IsArray, Min, Max,
-  IsLatitude, IsLongitude, IsUrl,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsEnum,
+  IsDateString,
+  IsBoolean,
+  IsNumber,
+  IsObject,
+  IsArray,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -10,80 +16,80 @@ import { Type } from 'class-transformer';
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export enum AttendanceStatus {
-  PRESENT       = 'PRESENT',       // Presente (100%)
-  LATE          = 'LATE',          // Presente com atraso
-  PARTIAL       = 'PARTIAL',       // Presença parcial (>X%)
-  ABSENT        = 'ABSENT',        // Ausente sem justificativa
-  JUSTIFIED     = 'JUSTIFIED',     // Ausente justificado
-  REMOTE        = 'REMOTE',        // Trabalho remoto
-  ON_LEAVE      = 'ON_LEAVE',      // Em licença/férias aprovada
-  HALF_DAY_AM   = 'HALF_DAY_AM',   // Meio período manhã
-  HALF_DAY_PM   = 'HALF_DAY_PM',   // Meio período tarde
-  RECORDED      = 'RECORDED',      // Assistiu gravação (LMS)
-  HOLIDAY       = 'HOLIDAY',       // Feriado
+  PRESENT = 'PRESENT', // Presente (100%)
+  LATE = 'LATE', // Presente com atraso
+  PARTIAL = 'PARTIAL', // Presença parcial (>X%)
+  ABSENT = 'ABSENT', // Ausente sem justificativa
+  JUSTIFIED = 'JUSTIFIED', // Ausente justificado
+  REMOTE = 'REMOTE', // Trabalho remoto
+  ON_LEAVE = 'ON_LEAVE', // Em licença/férias aprovada
+  HALF_DAY_AM = 'HALF_DAY_AM', // Meio período manhã
+  HALF_DAY_PM = 'HALF_DAY_PM', // Meio período tarde
+  RECORDED = 'RECORDED', // Assistiu gravação (LMS)
+  HOLIDAY = 'HOLIDAY', // Feriado
 }
 
 export enum CheckInMethod {
-  MANUAL        = 'MANUAL',        // Registo manual pelo RH
-  QR_STATIC     = 'QR_STATIC',     // QR code estático
-  QR_DYNAMIC    = 'QR_DYNAMIC',    // QR code dinâmico (expira)
-  GEOLOCATION   = 'GEOLOCATION',   // GPS / Geofencing
-  FACIAL        = 'FACIAL',        // Reconhecimento facial
-  NFC           = 'NFC',           // NFC / crachá
-  TOKEN         = 'TOKEN',         // Código único manual
-  VIRTUAL_LINK  = 'VIRTUAL_LINK',  // Link único (webinar/LMS)
-  FACILITATOR   = 'FACILITATOR',   // Lista marcada pelo facilitador
+  MANUAL = 'MANUAL', // Registo manual pelo RH
+  QR_STATIC = 'QR_STATIC', // QR code estático
+  QR_DYNAMIC = 'QR_DYNAMIC', // QR code dinâmico (expira)
+  GEOLOCATION = 'GEOLOCATION', // GPS / Geofencing
+  FACIAL = 'FACIAL', // Reconhecimento facial
+  NFC = 'NFC', // NFC / crachá
+  TOKEN = 'TOKEN', // Código único manual
+  VIRTUAL_LINK = 'VIRTUAL_LINK', // Link único (webinar/LMS)
+  FACILITATOR = 'FACILITATOR', // Lista marcada pelo facilitador
 }
 
 export enum AttendanceContext {
-  WORK          = 'WORK',          // Jornada de trabalho
-  EVENT         = 'EVENT',         // Evento presencial
-  WEBINAR       = 'WEBINAR',       // Evento virtual ao vivo
-  LMS           = 'LMS',           // Atividade LMS assíncrona
-  MENTORING     = 'MENTORING',     // Mentoria 1:1
-  PRACTICAL     = 'PRACTICAL',     // Atividade prática/entrega
+  WORK = 'WORK', // Jornada de trabalho
+  EVENT = 'EVENT', // Evento presencial
+  WEBINAR = 'WEBINAR', // Evento virtual ao vivo
+  LMS = 'LMS', // Atividade LMS assíncrona
+  MENTORING = 'MENTORING', // Mentoria 1:1
+  PRACTICAL = 'PRACTICAL', // Atividade prática/entrega
 }
 
 export enum LeaveType {
-  VACATION           = 'VACATION',           // Férias
-  SICK_LEAVE         = 'SICK_LEAVE',         // Licença médica
-  MATERNITY          = 'MATERNITY',          // Licença maternidade
-  PATERNITY          = 'PATERNITY',          // Licença paternidade
-  JUSTIFIED_ABSENCE  = 'JUSTIFIED_ABSENCE',  // Falta justificada
-  UNJUSTIFIED_ABSENCE= 'UNJUSTIFIED_ABSENCE',// Falta injustificada
-  BEREAVEMENT        = 'BEREAVEMENT',        // Luto
-  TRAINING           = 'TRAINING',           // Formação externa
-  PUBLIC_DUTY        = 'PUBLIC_DUTY',        // Serviço público/militar
-  OTHER              = 'OTHER',              // Outras licenças
+  VACATION = 'VACATION', // Férias
+  SICK_LEAVE = 'SICK_LEAVE', // Licença médica
+  MATERNITY = 'MATERNITY', // Licença maternidade
+  PATERNITY = 'PATERNITY', // Licença paternidade
+  JUSTIFIED_ABSENCE = 'JUSTIFIED_ABSENCE', // Falta justificada
+  UNJUSTIFIED_ABSENCE = 'UNJUSTIFIED_ABSENCE', // Falta injustificada
+  BEREAVEMENT = 'BEREAVEMENT', // Luto
+  TRAINING = 'TRAINING', // Formação externa
+  PUBLIC_DUTY = 'PUBLIC_DUTY', // Serviço público/militar
+  OTHER = 'OTHER', // Outras licenças
 }
 
 export enum LeaveStatus {
-  PENDING   = 'PENDING',
-  APPROVED  = 'APPROVED',
-  REJECTED  = 'REJECTED',
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
   CANCELLED = 'CANCELLED',
 }
 
 export enum ShiftType {
-  MORNING   = 'MORNING',   // Manhã
+  MORNING = 'MORNING', // Manhã
   AFTERNOON = 'AFTERNOON', // Tarde
-  NIGHT     = 'NIGHT',     // Noturno
-  FULL_DAY  = 'FULL_DAY',  // Dia completo
-  ROTATING  = 'ROTATING',  // Rotativo
-  ON_CALL   = 'ON_CALL',   // Plantão
-  FLEXIBLE  = 'FLEXIBLE',  // Flexível
+  NIGHT = 'NIGHT', // Noturno
+  FULL_DAY = 'FULL_DAY', // Dia completo
+  ROTATING = 'ROTATING', // Rotativo
+  ON_CALL = 'ON_CALL', // Plantão
+  FLEXIBLE = 'FLEXIBLE', // Flexível
 }
 
 export enum OvertimeStatus {
-  PENDING    = 'PENDING',
-  APPROVED   = 'APPROVED',
-  REJECTED   = 'REJECTED',
-  COMPENSATED= 'COMPENSATED',
-  PAID       = 'PAID',
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  COMPENSATED = 'COMPENSATED',
+  PAID = 'PAID',
 }
 
 export enum JustificationStatus {
-  PENDING  = 'PENDING',
+  PENDING = 'PENDING',
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
 }
@@ -99,7 +105,11 @@ export class GeoLocationDto {
 export class ClockInDto {
   @ApiPropertyOptional() @IsOptional() @IsEnum(CheckInMethod) method?: CheckInMethod;
   @ApiPropertyOptional() @IsOptional() @IsEnum(AttendanceContext) context?: AttendanceContext;
-  @ApiPropertyOptional() @IsOptional() @IsObject() @Type(() => GeoLocationDto) location?: GeoLocationDto;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
+  @Type(() => GeoLocationDto)
+  location?: GeoLocationDto;
   @ApiPropertyOptional() @IsOptional() @IsString() locationLabel?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() qrToken?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() deviceInfo?: string;
@@ -114,7 +124,11 @@ export class ClockInDto {
 }
 
 export class ClockOutDto {
-  @ApiPropertyOptional() @IsOptional() @IsObject() @Type(() => GeoLocationDto) location?: GeoLocationDto;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
+  @Type(() => GeoLocationDto)
+  location?: GeoLocationDto;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() breakMinutes?: number;
 }
@@ -165,10 +179,10 @@ export class CreateWorkScheduleDto {
   @ApiProperty() @IsString() name!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiProperty() @IsEnum(ShiftType) shiftType!: ShiftType;
-  @ApiProperty() @IsString() startTime!: string;   // HH:mm
-  @ApiProperty() @IsString() endTime!: string;     // HH:mm
+  @ApiProperty() @IsString() startTime!: string; // HH:mm
+  @ApiProperty() @IsString() endTime!: string; // HH:mm
   @ApiPropertyOptional() @IsOptional() @IsInt() breakMinutes?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() toleranceMinutes?: number;  // Tolerância de atraso
+  @ApiPropertyOptional() @IsOptional() @IsInt() toleranceMinutes?: number; // Tolerância de atraso
   @ApiPropertyOptional() @IsOptional() @IsNumber() minPresencePercent?: number;
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsInt({ each: true }) workDays?: number[]; // 0=Dom, 6=Sáb
 }
@@ -221,7 +235,11 @@ export class GenerateQrDto {
 
 export class ValidateQrDto {
   @ApiProperty() @IsString() token!: string;
-  @ApiPropertyOptional() @IsOptional() @IsObject() @Type(() => GeoLocationDto) location?: GeoLocationDto;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
+  @Type(() => GeoLocationDto)
+  location?: GeoLocationDto;
   @ApiPropertyOptional() @IsOptional() @IsString() deviceInfo?: string;
 }
 
@@ -229,7 +247,7 @@ export class ValidateQrDto {
 
 export class CreateAdjustmentDto {
   @ApiProperty() @IsInt() attendanceId!: number;
-  @ApiProperty() @IsString() field!: string;       // Ex: 'clockIn', 'clockOut', 'status'
+  @ApiProperty() @IsString() field!: string; // Ex: 'clockIn', 'clockOut', 'status'
   @ApiProperty() oldValue!: any;
   @ApiProperty() newValue!: any;
   @ApiProperty() @IsString() reason!: string;

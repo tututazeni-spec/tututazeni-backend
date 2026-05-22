@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
-import { LearningPathsService }    from './learning-paths.service';
+import { LearningPathsService } from './learning-paths.service';
 import { LearningPathsController } from './learning-paths.controller';
-import { PrismaModule }            from '../prisma/prisma.module';
+import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-  imports:     [PrismaModule],
-  providers:   [LearningPathsService],
+  imports: [PrismaModule],
+  providers: [LearningPathsService],
   controllers: [LearningPathsController],
-  exports:     [LearningPathsService],
+  exports: [LearningPathsService],
 })
 export class LearningPathsModule {}

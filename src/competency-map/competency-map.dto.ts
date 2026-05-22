@@ -1,8 +1,15 @@
 // ─── src/competency-map/competency-map.dto.ts ─────────────────────────────────
 import {
-  IsString, IsInt, IsOptional, IsEnum, IsBoolean,
-  IsNumber, IsArray, IsObject, ValidateNested,
-  Min, Max,
+  IsString,
+  IsInt,
+  IsOptional,
+  IsEnum,
+  IsBoolean,
+  IsNumber,
+  IsArray,
+  ValidateNested,
+  Min,
+  Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -10,28 +17,28 @@ import { Type } from 'class-transformer';
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export enum SkillType {
-  TECHNICAL    = 'TECHNICAL',
-  BEHAVIORAL   = 'BEHAVIORAL',
-  LEADERSHIP   = 'LEADERSHIP',
-  LANGUAGE     = 'LANGUAGE',
-  CERTIFICATION= 'CERTIFICATION',
+  TECHNICAL = 'TECHNICAL',
+  BEHAVIORAL = 'BEHAVIORAL',
+  LEADERSHIP = 'LEADERSHIP',
+  LANGUAGE = 'LANGUAGE',
+  CERTIFICATION = 'CERTIFICATION',
 }
 
 export enum AssessmentSource {
-  SELF         = 'SELF',
-  MANAGER      = 'MANAGER',
-  HR           = 'HR',
-  PEER_360     = 'PEER_360',
-  TEST         = 'TEST',
-  PROJECT      = 'PROJECT',
-  CERTIFICATION= 'CERTIFICATION',
-  COURSE       = 'COURSE',
+  SELF = 'SELF',
+  MANAGER = 'MANAGER',
+  HR = 'HR',
+  PEER_360 = 'PEER_360',
+  TEST = 'TEST',
+  PROJECT = 'PROJECT',
+  CERTIFICATION = 'CERTIFICATION',
+  COURSE = 'COURSE',
 }
 
 export enum GapPriority {
-  LOW    = 'LOW',
+  LOW = 'LOW',
   MEDIUM = 'MEDIUM',
-  HIGH   = 'HIGH',
+  HIGH = 'HIGH',
 }
 
 // ─── Skill Categories ─────────────────────────────────────────────────────────
@@ -39,8 +46,8 @@ export enum GapPriority {
 export class CreateSkillCategoryDto {
   @ApiProperty() @IsString() name!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() family?: string;   // Família (topo da taxonomia)
-  @ApiPropertyOptional() @IsOptional() @IsString() domain?: string;   // Domínio (nível intermédio)
+  @ApiPropertyOptional() @IsOptional() @IsString() family?: string; // Família (topo da taxonomia)
+  @ApiPropertyOptional() @IsOptional() @IsString() domain?: string; // Domínio (nível intermédio)
   @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
 }
 
@@ -53,7 +60,7 @@ export class CreateSkillMapDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() categoryId?: number;
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsString({ each: true }) tags?: string[];
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(1) strategicWeight?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() maxLevel?: number;    // 5 por defeito
+  @ApiPropertyOptional() @IsOptional() @IsInt() maxLevel?: number; // 5 por defeito
   @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
 }
 
@@ -64,7 +71,7 @@ export class UpdateSkillDto extends PartialType(CreateSkillMapDto) {}
 export class CreateSkillProficiencyLevelDto {
   @ApiProperty() @IsInt() skillId!: number;
   @ApiProperty() @IsInt() @Min(1) @Max(10) level!: number;
-  @ApiProperty() @IsString() name!: string;             // Ex: "Iniciante", "Avançado"
+  @ApiProperty() @IsString() name!: string; // Ex: "Iniciante", "Avançado"
   @ApiProperty() @IsString() description!: string;
   @ApiProperty() @IsString() observableBehavior!: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() expectedMonths?: number; // tempo médio para atingir
@@ -80,10 +87,12 @@ export class RoleSkillEntryDto {
 }
 
 export class SetRoleSkillMatrixDto {
-  @ApiProperty() @IsString() roleCode!: string;          // código único do cargo
+  @ApiProperty() @IsString() roleCode!: string; // código único do cargo
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
   @ApiProperty({ type: [RoleSkillEntryDto] })
-  @IsArray() @ValidateNested({ each: true }) @Type(() => RoleSkillEntryDto)
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RoleSkillEntryDto)
   skills!: RoleSkillEntryDto[];
 }
 
@@ -97,7 +106,7 @@ export class UpsertEmployeeSkillDto {
   @ApiProperty() @IsEnum(AssessmentSource) source!: AssessmentSource;
   @ApiPropertyOptional() @IsOptional() @IsInt() assessedById?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() evidenceUrl?: string;  // certificado, link de projecto
+  @ApiPropertyOptional() @IsOptional() @IsString() evidenceUrl?: string; // certificado, link de projecto
   @ApiPropertyOptional() @IsOptional() @IsBoolean() managerValidated?: boolean;
 }
 
@@ -114,7 +123,9 @@ export class BatchAssessmentDto {
   @ApiProperty() @IsEnum(AssessmentSource) source!: AssessmentSource;
   @ApiPropertyOptional() @IsOptional() @IsInt() assessedById?: number;
   @ApiProperty({ type: [BatchAssessmentItemDto] })
-  @IsArray() @ValidateNested({ each: true }) @Type(() => BatchAssessmentItemDto)
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BatchAssessmentItemDto)
   assessments!: BatchAssessmentItemDto[];
 }
 

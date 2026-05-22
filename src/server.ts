@@ -1,6 +1,6 @@
-import express, { Request, Response, NextFunction } from "express";
-import enrollmentsRoutes from "./routes/enrollmentsRoutes";
-import authRoutes from "./routes/authRoutes";
+import express, { Request, Response, NextFunction } from 'express';
+import enrollmentsRoutes from './routes/enrollmentsRoutes';
+import authRoutes from './routes/authRoutes';
 
 const app = express();
 
@@ -9,13 +9,13 @@ app.use(express.json());
 
 // CORS — trata preflight OPTIONS obrigatório para o browser
 app.use((req: Request, res: Response, next: NextFunction): void => {
-  const allowedOrigin = process.env.FRONTEND_URL || "http://localhost:3000";
-  res.header("Access-Control-Allow-Origin", allowedOrigin);
-  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  const allowedOrigin = process.env.FRONTEND_URL || 'http://localhost:3000';
+  res.header('Access-Control-Allow-Origin', allowedOrigin);
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   // Responde imediatamente aos pedidos preflight
-  if (req.method === "OPTIONS") {
+  if (req.method === 'OPTIONS') {
     res.sendStatus(204);
     return;
   }
@@ -24,17 +24,17 @@ app.use((req: Request, res: Response, next: NextFunction): void => {
 });
 
 // Registo das rotas
-app.use("/auth", authRoutes);           // ← NOVO: rota de autenticação
-app.use("/enrollments", enrollmentsRoutes);
+app.use('/auth', authRoutes); // ← NOVO: rota de autenticação
+app.use('/enrollments', enrollmentsRoutes);
 
 // Health check
-app.get("/health", (_req: Request, res: Response): void => {
-  res.json({ status: "ok" });
+app.get('/health', (_req: Request, res: Response): void => {
+  res.json({ status: 'ok' });
 });
 
 // Rota raiz
-app.get("/", (_req: Request, res: Response): void => {
-  res.send("API Innova funcionando 🚀");
+app.get('/', (_req: Request, res: Response): void => {
+  res.send('API Innova funcionando 🚀');
 });
 
 // IMPORTANTE: porta 4000 para não colidir com o Next.js (porta 3000)

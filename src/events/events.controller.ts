@@ -1,17 +1,31 @@
 // src/events/events.controller.ts
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { EventsService }   from './events.service';
+import { EventsService } from './events.service';
 import {
-  CreateEventDto, UpdateEventDto, EventFilterDto,
-  UpdateParticipantStatusDto, CheckInDto, SubmitFeedbackDto,
+  CreateEventDto,
+  UpdateEventDto,
+  EventFilterDto,
+  UpdateParticipantStatusDto,
+  CheckInDto,
+  SubmitFeedbackDto,
 } from './events.dto';
-import { JwtAuthGuard }    from '../common/guards/jwt-auth.guard';
-import { RolesGuard }      from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Events')
@@ -25,29 +39,41 @@ export class EventsController {
 
   @Get()
   @ApiOperation({ summary: 'Listar eventos (com filtros de tipo, modalidade, estado, busca)' })
-  findAll(@Query() filters: EventFilterDto) { return this.svc.findAll(filters); }
+  findAll(@Query() filters: EventFilterDto) {
+    return this.svc.findAll(filters);
+  }
 
   @Get('upcoming')
   @ApiOperation({ summary: 'Próximos eventos publicados (para homepage/widget)' })
-  upcoming() { return this.svc.getUpcoming(); }
+  upcoming() {
+    return this.svc.getUpcoming();
+  }
 
   @Get('stats')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Estatísticas globais de eventos' })
-  stats() { return this.svc.getStats(); }
+  stats() {
+    return this.svc.getStats();
+  }
 
   @Get('my')
   @ApiOperation({ summary: 'Os meus eventos (inscrições futuras e passadas)' })
-  myEvents(@CurrentUser() user: any) { return this.svc.getMyEvents(user.id); }
+  myEvents(@CurrentUser() user: any) {
+    return this.svc.getMyEvents(user.id);
+  }
 
   @Get('organizer/dashboard')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Dashboard do organizador (métricas, NPS, ocupação)' })
-  organizerDashboard(@CurrentUser() user: any) { return this.svc.getOrganizerDashboard(user.id); }
+  organizerDashboard(@CurrentUser() user: any) {
+    return this.svc.getOrganizerDashboard(user.id);
+  }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do evento (participantes, feedback, NPS)' })
-  findOne(@Param('id', ParseIntPipe) id: number) { return this.svc.findOne(id); }
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findOne(id);
+  }
 
   // ── Gestão ────────────────────────────────────────────────────────────────
 
@@ -69,18 +95,24 @@ export class EventsController {
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Publicar evento (DRAFT → PUBLISHED)' })
   @HttpCode(HttpStatus.OK)
-  publish(@Param('id', ParseIntPipe) id: number) { return this.svc.publish(id); }
+  publish(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.publish(id);
+  }
 
   @Patch(':id/cancel')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Cancelar evento (notifica participantes)' })
   @HttpCode(HttpStatus.OK)
-  cancel(@Param('id', ParseIntPipe) id: number) { return this.svc.cancel(id); }
+  cancel(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.cancel(id);
+  }
 
   @Delete(':id')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Eliminar evento (apenas DRAFT)' })
-  remove(@Param('id', ParseIntPipe) id: number) { return this.svc.remove(id); }
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remove(id);
+  }
 
   // ── Inscrição ─────────────────────────────────────────────────────────────
 
@@ -101,8 +133,8 @@ export class EventsController {
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Atualizar status de participante (CONFIRMED, PRESENT, NO_SHOW…)' })
   participantStatus(
-    @Param('id', ParseIntPipe)     eventId: number,
-    @Param('userId', ParseIntPipe) userId:  number,
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: UpdateParticipantStatusDto,
   ) {
     return this.svc.updateParticipantStatus(eventId, userId, dto);

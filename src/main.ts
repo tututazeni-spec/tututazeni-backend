@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder, ApiExtraModels } from '@nestjs/swagger';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
 import { AppModule } from './app.module';
@@ -72,21 +72,21 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config, {
-  operationIdFactory: (controllerKey: string, methodKey: string) =>
-    `${controllerKey}_${methodKey}`,
-  extraModels: [],
-});
+    operationIdFactory: (controllerKey: string, methodKey: string) =>
+      `${controllerKey}_${methodKey}`,
+    extraModels: [],
+  });
 
-const schemas = document.components?.schemas ?? {};
-const seen = new Set<string>();
-for (const key of Object.keys(schemas)) {
-  const baseName = key.replace(/_\d+$/, '');
-  if (seen.has(baseName)) {
-    delete schemas[key];
-  } else {
-    seen.add(baseName);
+  const schemas = document.components?.schemas ?? {};
+  const seen = new Set<string>();
+  for (const key of Object.keys(schemas)) {
+    const baseName = key.replace(/_\d+$/, '');
+    if (seen.has(baseName)) {
+      delete schemas[key];
+    } else {
+      seen.add(baseName);
+    }
   }
-}
 
   SwaggerModule.setup('docs', app, document, {
     swaggerOptions: {
@@ -96,14 +96,14 @@ for (const key of Object.keys(schemas)) {
   });
 
   app.getHttpAdapter().get('/', (_req: any, res: any) => {
-  res.json({
-    name: 'INNOVA API',
-    version: '1.0',
-    status: 'running',
-    docs: `http://localhost:${port}/docs`,
-    timestamp: new Date().toISOString(),
+    res.json({
+      name: 'INNOVA API',
+      version: '1.0',
+      status: 'running',
+      docs: `http://localhost:${port}/docs`,
+      timestamp: new Date().toISOString(),
+    });
   });
-});
 
   const port = process.env.PORT ?? 4000;
   await app.listen(port);

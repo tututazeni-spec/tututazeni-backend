@@ -1,14 +1,19 @@
 ﻿// ─── src/competency-map/competency-map.service.ts ────────────────────────────
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuditService }  from '../common/services/audit.service';
+import { AuditService } from '../common/services/audit.service';
 import {
-  SkillFilterDto, GapAnalysisFilterDto,
-  CreateSkillCategoryDto, CreateSkillMapDto, UpdateSkillDto,
+  SkillFilterDto,
+  GapAnalysisFilterDto,
+  CreateSkillCategoryDto,
+  CreateSkillMapDto,
+  UpdateSkillDto,
   CreateSkillProficiencyLevelDto,
   SetRoleSkillMatrixDto,
-  UpsertEmployeeSkillDto, BatchAssessmentDto,
-  SkillType, GapPriority, AssessmentSource,
+  UpsertEmployeeSkillDto,
+  BatchAssessmentDto,
+  GapPriority,
+  AssessmentSource,
 } from './competency-map.dto';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -22,18 +27,18 @@ function getGapPriority(gap: number, mandatory: boolean): GapPriority {
 
 function calcWeightedScore(
   employeeSkills: Map<number, number>,
-  roleSkills: Array<{ skillId: number; requiredLevel: number; weight: number; mandatory: boolean }>
+  roleSkills: Array<{ skillId: number; requiredLevel: number; weight: number; mandatory: boolean }>,
 ): number {
   if (!roleSkills.length) return 0;
   let totalWeight = 0;
-  let metWeight   = 0;
+  let metWeight = 0;
   for (const req of roleSkills) {
     totalWeight += req.weight;
     const current = employeeSkills.get(req.skillId) ?? 0;
-    const ratio   = Math.min(1, current / req.requiredLevel);
-    metWeight    += req.weight * ratio;
+    const ratio = Math.min(1, current / req.requiredLevel);
+    metWeight += req.weight * ratio;
   }
-  return totalWeight > 0 ? +(metWeight / totalWeight * 100).toFixed(1) : 0;
+  return totalWeight > 0 ? +((metWeight / totalWeight) * 100).toFixed(1) : 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,13 +74,18 @@ export class CompetencyMapService {
     const skill = await this.prisma.skill.create({
       data: {
         ...dto,
-        tags:      dto.tags ?? [],
-        maxLevel:  dto.maxLevel ?? 5,
-        active:    dto.active ?? true,
+        tags: dto.tags ?? [],
+        maxLevel: dto.maxLevel ?? 5,
+        active: dto.active ?? true,
       },
       include: { category: true },
     });
-    await this.audit.log({ action: 'SKILL_CREATED', entity: 'Skill', entityId: String(skill.id), userId: createdById });
+    await this.audit.log({
+      action: 'SKILL_CREATED',
+      entity: 'Skill',
+      entityId: String(skill.id),
+      userId: createdById,
+    });
     return skill;
   }
 
@@ -83,13 +93,15 @@ export class CompetencyMapService {
     const { page = 1, limit = 50, search, type, categoryId, active = true } = filters;
     const skip = (page - 1) * limit;
     const where: any = { active };
-    if (search)     where.name       = { contains: search, mode: 'insensitive' };
-    if (type)       where.type       = type;
+    if (search) where.name = { contains: search, mode: 'insensitive' };
+    if (type) where.type = type;
     if (categoryId) where.categoryId = categoryId;
 
     const [data, total] = await Promise.all([
       this.prisma.skill.findMany({
-        where, skip, take: limit,
+        where,
+        skip,
+        take: limit,
         include: {
           category: true,
           proficiencyLevels: { orderBy: { level: 'asc' } },
@@ -130,7 +142,12 @@ export class CompetencyMapService {
     return this.prisma.skillProficiencyLevel.upsert({
       where: { skillId_level: { skillId: dto.skillId, level: dto.level } },
       create: { ...dto },
-      update: { name: dto.name, description: dto.description, observableBehavior: dto.observableBehavior, expectedMonths: dto.expectedMonths },
+      update: {
+        name: dto.name,
+        description: dto.description,
+        observableBehavior: dto.observableBehavior,
+        expectedMonths: dto.expectedMonths,
+      },
     });
   }
 
@@ -157,11 +174,11 @@ export class CompetencyMapService {
     await this.prisma.roleSkillRequirement.deleteMany({ where: { matrixId: matrix.id } });
     await this.prisma.roleSkillRequirement.createMany({
       data: dto.skills.map(s => ({
-        matrixId:      matrix.id,
-        skillId:       s.skillId,
+        matrixId: matrix.id,
+        skillId: s.skillId,
         requiredLevel: s.requiredLevel,
-        weight:        s.weight,
-        mandatory:     s.mandatory,
+        weight: s.weight,
+        mandatory: s.mandatory,
       })),
     });
 
@@ -208,13 +225,13 @@ export class CompetencyMapService {
     if (existing) {
       await this.prisma.skillAssessmentHistory.create({
         data: {
-          userId:        dto.userId,
-          skillId:       dto.skillId,
-          level:         existing.currentLevel,
-          source:        existing.source,
-          assessedById:  existing.assessedById,
-          notes:         existing.notes,
-          snapshotAt:    existing.assessedAt ?? new Date(),
+          userId: dto.userId,
+          skillId: dto.skillId,
+          level: existing.currentLevel,
+          source: existing.source,
+          assessedById: existing.assessedById,
+          notes: existing.notes,
+          snapshotAt: existing.assessedAt ?? new Date(),
         },
       });
     }
@@ -222,35 +239,44 @@ export class CompetencyMapService {
     const skill = await this.prisma.legacyEmployeeSkill.upsert({
       where: { userId_skillId: { userId: dto.userId, skillId: dto.skillId } },
       create: {
-        userId:          dto.userId,
-        skillId:         dto.skillId,
-        currentLevel:    dto.currentLevel,
-        targetLevel:     dto.targetLevel ?? dto.currentLevel,
-        source:          dto.source,
-        assessedById:    dto.assessedById,
-        managerValidated:dto.managerValidated ?? dto.source === AssessmentSource.MANAGER,
-        notes:           dto.notes,
-        evidenceUrl:     dto.evidenceUrl,
-        assessedAt:      new Date(),
+        userId: dto.userId,
+        skillId: dto.skillId,
+        currentLevel: dto.currentLevel,
+        targetLevel: dto.targetLevel ?? dto.currentLevel,
+        source: dto.source,
+        assessedById: dto.assessedById,
+        managerValidated: dto.managerValidated ?? dto.source === AssessmentSource.MANAGER,
+        notes: dto.notes,
+        evidenceUrl: dto.evidenceUrl,
+        assessedAt: new Date(),
       },
       update: {
-        currentLevel:    dto.currentLevel,
-        targetLevel:     dto.targetLevel,
-        source:          dto.source,
-        assessedById:    dto.assessedById,
-        managerValidated:dto.managerValidated ?? dto.source === AssessmentSource.MANAGER,
-        notes:           dto.notes,
-        evidenceUrl:     dto.evidenceUrl,
-        assessedAt:      new Date(),
+        currentLevel: dto.currentLevel,
+        targetLevel: dto.targetLevel,
+        source: dto.source,
+        assessedById: dto.assessedById,
+        managerValidated: dto.managerValidated ?? dto.source === AssessmentSource.MANAGER,
+        notes: dto.notes,
+        evidenceUrl: dto.evidenceUrl,
+        assessedAt: new Date(),
       },
       include: { skill: { include: { category: true } } },
     });
 
-    await this.audit.log({ action: 'SKILL_ASSESSED', entity: 'LegacyEmployeeSkill', entityId: String(skill.id), userId: submittedById });
+    await this.audit.log({
+      action: 'SKILL_ASSESSED',
+      entity: 'LegacyEmployeeSkill',
+      entityId: String(skill.id),
+      userId: submittedById,
+    });
 
     // Notificar gestor se autoavaliação
     if (dto.source === AssessmentSource.SELF) {
-      await this.notifyManager(dto.userId, 'SKILL_SELF_ASSESSED', `Nova autoavaliação de skill pendente de validação`);
+      await this.notifyManager(
+        dto.userId,
+        'SKILL_SELF_ASSESSED',
+        `Nova autoavaliação de skill pendente de validação`,
+      );
     }
 
     return skill;
@@ -259,19 +285,22 @@ export class CompetencyMapService {
   async batchAssessment(dto: BatchAssessmentDto, submittedById: number) {
     const results = await Promise.allSettled(
       dto.assessments.map(a =>
-        this.upsertEmployeeSkill({
-          userId: dto.userId,
-          skillId: a.skillId,
-          currentLevel: a.currentLevel,
-          source: dto.source,
-          assessedById: dto.assessedById,
-          notes: a.notes,
-        }, submittedById)
-      )
+        this.upsertEmployeeSkill(
+          {
+            userId: dto.userId,
+            skillId: a.skillId,
+            currentLevel: a.currentLevel,
+            source: dto.source,
+            assessedById: dto.assessedById,
+            notes: a.notes,
+          },
+          submittedById,
+        ),
+      ),
     );
     return {
       success: results.filter(r => r.status === 'fulfilled').length,
-      failed:  results.filter(r => r.status === 'rejected').length,
+      failed: results.filter(r => r.status === 'rejected').length,
     };
   }
 
@@ -336,22 +365,22 @@ export class CompetencyMapService {
       try {
         matrix = await this.getRoleSkillMatrix(targetRole);
         for (const req of matrix.requirements as any[]) {
-          const current  = skillMap.get(req.skillId) ?? 0;
-          const gap      = req.requiredLevel - current;
+          const current = skillMap.get(req.skillId) ?? 0;
+          const gap = req.requiredLevel - current;
           const priority = getGapPriority(gap, req.mandatory);
 
           gaps.push({
-            skillId:       req.skillId,
-            skillName:     req.skill.name,
-            skillType:     req.skill.type,
-            category:      req.skill.category?.name,
-            currentLevel:  current,
+            skillId: req.skillId,
+            skillName: req.skill.name,
+            skillType: req.skill.type,
+            category: req.skill.category?.name,
+            currentLevel: current,
             requiredLevel: req.requiredLevel,
-            gap:           Math.max(0, gap),
-            weight:        req.weight,
-            mandatory:     req.mandatory,
+            gap: Math.max(0, gap),
+            weight: req.weight,
+            mandatory: req.mandatory,
             priority,
-            hasGap:        gap > 0,
+            hasGap: gap > 0,
           });
         }
         readinessScore = calcWeightedScore(skillMap, matrix.requirements as any[]);
@@ -363,17 +392,20 @@ export class CompetencyMapService {
     }
 
     const missingMandatory = gaps.filter(g => g.hasGap && g.mandatory);
-    const skillsGap        = gaps.filter(g => g.hasGap && !g.mandatory);
-    const metRequirements  = gaps.filter(g => !g.hasGap).length;
+    const skillsGap = gaps.filter(g => g.hasGap && !g.mandatory);
+    const metRequirements = gaps.filter(g => !g.hasGap).length;
 
     // Cursos recomendados para os gaps
-    const recommendedCourses = await this.getCoursesForGaps(gaps.filter(g => g.hasGap).map(g => g.skillId));
+    const recommendedCourses = await this.getCoursesForGaps(
+      gaps.filter(g => g.hasGap).map(g => g.skillId),
+    );
 
     return {
       userId,
       targetRole,
       readinessScore,
-      readinessLevel: readinessScore >= 80 ? 'READY' : readinessScore >= 50 ? 'DEVELOPING' : 'STARTING',
+      readinessLevel:
+        readinessScore >= 80 ? 'READY' : readinessScore >= 50 ? 'DEVELOPING' : 'STARTING',
       totalRequirements: gaps.length,
       metRequirements,
       gaps: { mandatory: missingMandatory, optional: skillsGap, all: gaps },
@@ -384,7 +416,10 @@ export class CompetencyMapService {
 
   async getOrganisationalGapAnalysis(filters: GapAnalysisFilterDto) {
     const where: any = {};
-    if (filters.department) where.user = { /* employee department filter removed — no direct relation */ } as any;
+    if (filters.department)
+      where.user = {
+        /* employee department filter removed — no direct relation */
+      } as any;
     if (filters.userId) where.userId = filters.userId;
     if (filters.skillType) where.skill = { type: filters.skillType };
 
@@ -392,7 +427,7 @@ export class CompetencyMapService {
       where,
       include: {
         skill: { include: { category: true } },
-        user:  { select: { id: true, fullName: true, avatarUrl: true } as any },
+        user: { select: { id: true, fullName: true, avatarUrl: true } as any },
       },
     });
 
@@ -402,29 +437,36 @@ export class CompetencyMapService {
       const id = es.skillId;
       if (!bySkill[id]) {
         bySkill[id] = {
-          skillId:   id,
+          skillId: id,
           skillName: es.skill.name,
           skillType: es.skill.type,
-          category:  es.skill.category?.name,
-          levels:    [],
-          count:     0,
+          category: es.skill.category?.name,
+          levels: [],
+          count: 0,
         };
       }
       bySkill[id].levels.push(es.currentLevel);
       bySkill[id].count++;
     }
 
-    const skillSummary = Object.values(bySkill).map((s: any) => {
-      const avg   = +(s.levels.reduce((a: number, b: number) => a + b, 0) / s.levels.length).toFixed(2);
-      const below3 = s.levels.filter((l: number) => l < 3).length;
-      return {
-        ...s,
-        avgLevel:    avg,
-        belowThreshold: below3,
-        belowThresholdRate: +((below3 / s.levels.length) * 100).toFixed(1),
-        levelDistribution: [1,2,3,4,5].map(l => ({ level: l, count: s.levels.filter((x: number) => x === l).length })),
-      };
-    }).sort((a, b) => a.avgLevel - b.avgLevel);
+    const skillSummary = Object.values(bySkill)
+      .map((s: any) => {
+        const avg = +(
+          s.levels.reduce((a: number, b: number) => a + b, 0) / s.levels.length
+        ).toFixed(2);
+        const below3 = s.levels.filter((l: number) => l < 3).length;
+        return {
+          ...s,
+          avgLevel: avg,
+          belowThreshold: below3,
+          belowThresholdRate: +((below3 / s.levels.length) * 100).toFixed(1),
+          levelDistribution: [1, 2, 3, 4, 5].map(l => ({
+            level: l,
+            count: s.levels.filter((x: number) => x === l).length,
+          })),
+        };
+      })
+      .sort((a, b) => a.avgLevel - b.avgLevel);
 
     // Skills mais críticas (abaixo de 3 em muitos colaboradores)
     const criticalGaps = skillSummary.filter(s => s.belowThresholdRate > 30);
@@ -443,7 +485,8 @@ export class CompetencyMapService {
       skillSummary,
       criticalGaps,
       departmentSummary: Object.values(deptSummary).map((d: any) => ({
-        ...d, avgLevel: +(d.sumLevels / d.totalAssessments).toFixed(2),
+        ...d,
+        avgLevel: +(d.sumLevels / d.totalAssessments).toFixed(2),
       })),
     };
   }
@@ -462,7 +505,9 @@ export class CompetencyMapService {
 
   async getDepartmentMap(department: string) {
     const users = await this.prisma.user.findMany({
-      where: { /* employee department filter removed — no direct relation */ } as any,
+      where: {
+        /* employee department filter removed — no direct relation */
+      } as any,
       select: { id: true, fullName: true, avatarUrl: true } as any,
     });
 
@@ -479,13 +524,17 @@ export class CompetencyMapService {
       bySkill[s.skillId].count++;
     }
 
-    const summary = Object.values(bySkill).map((s: any) => ({
-      skill:       s.skill,
-      avgLevel:    +(s.levels.reduce((a: number, b: number) => a + b, 0) / s.levels.length).toFixed(2),
-      count:       s.count,
-    })).sort((a, b) => b.avgLevel - a.avgLevel);
+    const summary = Object.values(bySkill)
+      .map((s: any) => ({
+        skill: s.skill,
+        avgLevel: +(s.levels.reduce((a: number, b: number) => a + b, 0) / s.levels.length).toFixed(
+          2,
+        ),
+        count: s.count,
+      }))
+      .sort((a, b) => b.avgLevel - a.avgLevel);
 
-    const topSkills    = summary.slice(0, 5);
+    const topSkills = summary.slice(0, 5);
     const bottomSkills = summary.slice(-5).reverse();
 
     return { department, totalUsers: users.length, summary, topSkills, bottomSkills, users };
@@ -497,15 +546,21 @@ export class CompetencyMapService {
 
   async getTeamMap(managerId: number) {
     const subordinates = await this.prisma.user.findMany({
-     where: { managerId },
+      where: { managerId },
       select: { id: true, fullName: true, avatarUrl: true } as any,
     });
 
     const teamSkills = await Promise.all(
       subordinates.map(async (s: any) => {
         const gap = await this.getUserGapAnalysis(s.id);
-        return { user: s, readinessScore: gap.readinessScore, readinessLevel: gap.readinessLevel, topGaps: gap.gaps.mandatory.slice(0, 3), employeeSkills: gap.employeeSkills };
-      })
+        return {
+          user: s,
+          readinessScore: gap.readinessScore,
+          readinessLevel: gap.readinessLevel,
+          topGaps: gap.gaps.mandatory.slice(0, 3),
+          employeeSkills: gap.employeeSkills,
+        };
+      }),
     );
 
     teamSkills.sort((a, b) => b.readinessScore - a.readinessScore);
@@ -513,7 +568,9 @@ export class CompetencyMapService {
     return {
       managerId,
       teamSize: subordinates.length,
-      avgReadiness: +(teamSkills.reduce((a, t) => a + t.readinessScore, 0) / (teamSkills.length || 1)).toFixed(1),
+      avgReadiness: +(
+        teamSkills.reduce((a, t) => a + t.readinessScore, 0) / (teamSkills.length || 1)
+      ).toFixed(1),
       members: teamSkills,
     };
   }
@@ -538,12 +595,12 @@ export class CompetencyMapService {
         else acc[type].required += s.currentLevel;
         acc[type].count++;
         return acc;
-      }, {})
+      }, {}),
     ).map(([_, v]: any) => ({
-      type:         v.type,
-      avgCurrent:   +(v.current / v.count).toFixed(2),
-      avgRequired:  +(v.required / v.count).toFixed(2),
-      count:        v.count,
+      type: v.type,
+      avgCurrent: +(v.current / v.count).toFixed(2),
+      avgRequired: +(v.required / v.count).toFixed(2),
+      count: v.count,
     }));
 
     return { userId, radarByType, readinessScore: gapAnalysis.readinessScore };
@@ -551,7 +608,10 @@ export class CompetencyMapService {
 
   async getHeatmapData(department?: string) {
     const where: any = {};
-    if (department) where.user = { /* employee department filter removed — no direct relation */ } as any;
+    if (department)
+      where.user = {
+        /* employee department filter removed — no direct relation */
+      } as any;
 
     const data = await this.prisma.legacyEmployeeSkill.findMany({
       where,
@@ -574,20 +634,26 @@ export class CompetencyMapService {
   private async getCoursesForGaps(skillIds: number[]) {
     if (!skillIds.length) return [];
     try {
-      return this.prisma.course?.findMany?.({
-        where: { /* skills filter removed — Course has no skills relation */ } as any,
-        select: { id: true, title: true },
-        take: 5,
-      }) ?? [];
-    } catch { return []; }
+      return (
+        this.prisma.course?.findMany?.({
+          where: {
+            /* skills filter removed — Course has no skills relation */
+          } as any,
+          select: { id: true, title: true },
+          take: 5,
+        }) ?? []
+      );
+    } catch {
+      return [];
+    }
   }
 
   private async notifyManager(userId: number, type: string, message: string) {
     try {
       const user = await this.prisma.user.findUnique({ where: { id: userId } });
       const managerId = (user as any)?.employee?.managerId;
-      if (managerId) await this.prisma.notificationLog.create({ data: { userId: managerId, type, message } });
+      if (managerId)
+        await this.prisma.notificationLog.create({ data: { userId: managerId, type, message } });
     } catch {}
   }
 }
-

@@ -1,7 +1,5 @@
 // src/roles-permissions/roles-permissions.dto.ts
-import {
-  IsString, IsOptional, IsArray, IsInt, IsBoolean, Min, MaxLength,
-} from 'class-validator';
+import { IsString, IsOptional, IsArray, IsInt, IsBoolean, Min, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -24,19 +22,28 @@ export class CreateRoleDto {
   @MaxLength(60)
   code?: string;
 
-  @ApiPropertyOptional({ default: 0, description: 'Prioridade — valor mais alto = maior prioridade' })
+  @ApiPropertyOptional({
+    default: 0,
+    description: 'Prioridade — valor mais alto = maior prioridade',
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
   @Type(() => Number)
   priority?: number;
 
-  @ApiPropertyOptional({ default: false, description: 'Roles de sistema não podem ser removidos ou renomeados' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Roles de sistema não podem ser removidos ou renomeados',
+  })
   @IsOptional()
   @IsBoolean()
   isSystem?: boolean;
 
-  @ApiPropertyOptional({ type: [Number], description: 'IDs de permissões a atribuir ao criar o role' })
+  @ApiPropertyOptional({
+    type: [Number],
+    description: 'IDs de permissões a atribuir ao criar o role',
+  })
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
@@ -107,4 +114,3 @@ export class RoleTemplateDto {
   @IsInt()
   positionId?: number;
 }
-

@@ -23,9 +23,18 @@ export class ScalabilityEventListeners {
    * → Disparar automações USER_HIRED
    */
   @OnEvent('user.hired')
-  async onUserHired(payload: { userId: string; tenantId: string; departmentId?: string; positionId?: string }) {
+  async onUserHired(payload: {
+    userId: string;
+    tenantId: string;
+    departmentId?: string;
+    positionId?: string;
+  }) {
     this.logger.log(`[AutomationEvent] USER_HIRED → userId:${payload.userId}`);
-    await this.service.processAutomationEvent(payload.tenantId, AutomationTrigger.USER_HIRED, payload);
+    await this.service.processAutomationEvent(
+      payload.tenantId,
+      AutomationTrigger.USER_HIRED,
+      payload,
+    );
   }
 
   /**
@@ -34,7 +43,11 @@ export class ScalabilityEventListeners {
   @OnEvent('user.promoted')
   async onUserPromoted(payload: { userId: string; tenantId: string; newPositionId: string }) {
     this.logger.log(`[AutomationEvent] USER_PROMOTED → userId:${payload.userId}`);
-    await this.service.processAutomationEvent(payload.tenantId, AutomationTrigger.USER_PROMOTED, payload);
+    await this.service.processAutomationEvent(
+      payload.tenantId,
+      AutomationTrigger.USER_PROMOTED,
+      payload,
+    );
   }
 
   /**
@@ -42,8 +55,14 @@ export class ScalabilityEventListeners {
    */
   @OnEvent('course.completed')
   async onCourseCompleted(payload: { userId: string; tenantId: string; courseId: string }) {
-    this.logger.log(`[AutomationEvent] COURSE_COMPLETED → userId:${payload.userId}, courseId:${payload.courseId}`);
-    await this.service.processAutomationEvent(payload.tenantId, AutomationTrigger.COURSE_COMPLETED, payload);
+    this.logger.log(
+      `[AutomationEvent] COURSE_COMPLETED → userId:${payload.userId}, courseId:${payload.courseId}`,
+    );
+    await this.service.processAutomationEvent(
+      payload.tenantId,
+      AutomationTrigger.COURSE_COMPLETED,
+      payload,
+    );
   }
 
   /**
@@ -52,7 +71,11 @@ export class ScalabilityEventListeners {
   @OnEvent('certificate.expired')
   async onCertificateExpired(payload: { userId: string; tenantId: string; certificateId: string }) {
     this.logger.log(`[AutomationEvent] CERTIFICATE_EXPIRED → userId:${payload.userId}`);
-    await this.service.processAutomationEvent(payload.tenantId, AutomationTrigger.CERTIFICATE_EXPIRED, payload);
+    await this.service.processAutomationEvent(
+      payload.tenantId,
+      AutomationTrigger.CERTIFICATE_EXPIRED,
+      payload,
+    );
   }
 
   /**
@@ -60,13 +83,17 @@ export class ScalabilityEventListeners {
    */
   @OnEvent('integration.sync.requested')
   async onSyncRequested(payload: {
-    integrationId: string; syncLogId: string; type: string; configJson?: string | null; actorId: string;
+    integrationId: string;
+    syncLogId: string;
+    type: string;
+    configJson?: string | null;
+    actorId: string;
   }) {
     this.logger.log(`[IntegrationSync] Starting sync for integration:${payload.integrationId}`);
     try {
       // Em produção: chamar adaptador específico por tipo (ERPAdapter, SlackAdapter, etc.)
       // Por agora: simular sucesso e actualizar log
-      await new Promise((r) => setTimeout(r, 1500)); // simular tempo de processamento
+      await new Promise(r => setTimeout(r, 1500)); // simular tempo de processamento
 
       await (this.prisma as any).integrationSyncLog.update({
         where: { id: payload.syncLogId },
@@ -80,19 +107,25 @@ export class ScalabilityEventListeners {
       await (this.prisma as any).integrationConfig.update({
         where: { id: payload.integrationId },
         data: { lastSyncAt: new Date(), lastSyncStatus: 'SUCCESS', lastSyncError: null },
-         });
+      });
 
       this.logger.log(`[IntegrationSync] Completed: ${payload.integrationId}`);
     } catch (err) {
-      this.logger.error(`[IntegrationSync] Failed: ${(err instanceof Error ? err.message : String(err))}`);
+      this.logger.error(
+        `[IntegrationSync] Failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
       await (this.prisma as any).integrationSyncLog.update({
         where: { id: payload.syncLogId },
-        data: { status: 'FAILED', finishedAt: new Date(), errorMessage: (err instanceof Error ? err.message : String(err)) },
+        data: {
+          status: 'FAILED',
+          finishedAt: new Date(),
+          errorMessage: err instanceof Error ? err.message : String(err),
+        },
       });
-        await (this.prisma as any).integrationConfig.update({
+      await (this.prisma as any).integrationConfig.update({
         where: { id: payload.integrationId },
         data: { lastSyncAt: new Date(), lastSyncStatus: 'SUCCESS', lastSyncError: null },
-       });
+      });
     }
   }
 
@@ -101,20 +134,23 @@ export class ScalabilityEventListeners {
    */
   @OnEvent('automation.rule.execute')
   async onAutomationExecute(payload: {
-    executionId: string; rule: any; targetUserId?: string; actorId: string;
+    executionId: string;
+    rule: any;
+    targetUserId?: string;
+    actorId: string;
   }) {
-    this.logger.log(`[Automation] Executing rule:${payload.rule.id}, execution:${payload.executionId}`);
+    this.logger.log(
+      `[Automation] Executing rule:${payload.rule.id}, execution:${payload.executionId}`,
+    );
     try {
       await (this.prisma as any).automationExecution.update({
         where: { id: payload.executionId },
         data: { status: 'RUNNING' },
       });
 
-      await this.service.processAutomationEvent(
-        payload.rule.tenantId,
-        payload.rule.triggerType,
-        { userId: payload.targetUserId },
-      );
+      await this.service.processAutomationEvent(payload.rule.tenantId, payload.rule.triggerType, {
+        userId: payload.targetUserId,
+      });
 
       await (this.prisma as any).automationExecution.update({
         where: { id: payload.executionId },
@@ -123,7 +159,11 @@ export class ScalabilityEventListeners {
     } catch (err) {
       await (this.prisma as any).automationExecution.update({
         where: { id: payload.executionId },
-        data: { status: 'FAILED', finishedAt: new Date(), errorMessage: (err instanceof Error ? err.message : String(err)) },
+        data: {
+          status: 'FAILED',
+          finishedAt: new Date(),
+          errorMessage: err instanceof Error ? err.message : String(err),
+        },
       });
     }
   }
@@ -172,7 +212,9 @@ export class ScalabilityEventListeners {
    */
   @OnEvent('loadtest.scheduled')
   async onLoadTestScheduled(payload: any) {
-    this.logger.log(`[LoadTest] Scheduled: ${payload.concurrentUsers} users, ${payload.durationSeconds}s on ${payload.targetEndpoint}`);
+    this.logger.log(
+      `[LoadTest] Scheduled: ${payload.concurrentUsers} users, ${payload.durationSeconds}s on ${payload.targetEndpoint}`,
+    );
     // TODO: Integrar com k6 / Locust via subprocess ou API externa
   }
 }

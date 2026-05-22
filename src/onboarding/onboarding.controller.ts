@@ -1,19 +1,36 @@
 import {
-  Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, ParseIntPipe,
-  UseGuards, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { OnboardingService } from './onboarding.service';
 import {
-  CreateOnboardingTemplateDto, UpdateOnboardingTemplateDto,
-  CreateTemplateTaskDto, UpdateTemplateTaskDto,
-  CreateOnboardingPlanDto, CompleteTaskDto, SkipTaskDto, ApproveTaskDto,
-  UploadDocumentDto, ValidateDocumentDto, SubmitOnboardingSurveyDto,
+  CreateOnboardingTemplateDto,
+  UpdateOnboardingTemplateDto,
+  CreateTemplateTaskDto,
+  UpdateTemplateTaskDto,
+  CreateOnboardingPlanDto,
+  CompleteTaskDto,
+  SkipTaskDto,
+  ApproveTaskDto,
+  UploadDocumentDto,
+  ValidateDocumentDto,
+  SubmitOnboardingSurveyDto,
   OnboardingFilterDto,
 } from './onboarding.dto';
-import { JwtAuthGuard }  from '../common/guards/jwt-auth.guard';
-import { RolesGuard }    from '../common/guards/roles.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 
 @ApiTags('Onboarding')
@@ -37,16 +54,22 @@ export class OnboardingController {
 
   @Get('templates')
   @ApiOperation({ summary: 'Listar templates de onboarding' })
-  findAllTemplates() { return this.svc.findAllTemplates(); }
+  findAllTemplates() {
+    return this.svc.findAllTemplates();
+  }
 
   @Get('templates/:id')
   @ApiOperation({ summary: 'Detalhe do template (com tarefas)' })
-  findOneTemplate(@Param('id', ParseIntPipe) id: number) { return this.svc.findOneTemplate(id); }
+  findOneTemplate(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findOneTemplate(id);
+  }
 
   @Post('templates')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar template de onboarding' })
-  createTemplate(@Body() dto: CreateOnboardingTemplateDto) { return this.svc.createTemplate(dto); }
+  createTemplate(@Body() dto: CreateOnboardingTemplateDto) {
+    return this.svc.createTemplate(dto);
+  }
 
   @Put('templates/:id')
   @Roles('ADMIN', 'RH')
@@ -58,17 +81,24 @@ export class OnboardingController {
   @Delete('templates/:id')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Eliminar template (apenas sem planos activos)' })
-  deleteTemplate(@Param('id', ParseIntPipe) id: number) { return this.svc.deleteTemplate(id); }
+  deleteTemplate(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.deleteTemplate(id);
+  }
 
   @Post('templates/tasks')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Adicionar tarefa a um template' })
-  addTemplateTask(@Body() dto: CreateTemplateTaskDto) { return this.svc.addTemplateTask(dto); }
+  addTemplateTask(@Body() dto: CreateTemplateTaskDto) {
+    return this.svc.addTemplateTask(dto);
+  }
 
   @Put('templates/tasks/:taskId')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Actualizar tarefa do template' })
-  updateTemplateTask(@Param('taskId', ParseIntPipe) taskId: number, @Body() dto: UpdateTemplateTaskDto) {
+  updateTemplateTask(
+    @Param('taskId', ParseIntPipe) taskId: number,
+    @Body() dto: UpdateTemplateTaskDto,
+  ) {
     return this.svc.updateTemplateTask(taskId, dto);
   }
 
@@ -84,39 +114,49 @@ export class OnboardingController {
   @Get()
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Listar planos de onboarding com filtros' })
-  findAll(@Query() filters: OnboardingFilterDto) { return this.svc.findAll(filters); }
+  findAll(@Query() filters: OnboardingFilterDto) {
+    return this.svc.findAll(filters);
+  }
 
   @Get('my')
   @ApiOperation({ summary: 'O meu plano de onboarding' })
-  my(@CurrentUser() user: any) { return this.svc.findByUser(user.id); }
+  my(@CurrentUser() user: any) {
+    return this.svc.findByUser(user.id);
+  }
 
   @Get('user/:userId')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Plano de onboarding de um colaborador' })
-  byUser(@Param('userId', ParseIntPipe) userId: number) { return this.svc.findByUser(userId); }
+  byUser(@Param('userId', ParseIntPipe) userId: number) {
+    return this.svc.findByUser(userId);
+  }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do plano (tarefas por fase, progresso)' })
-  findOne(@Param('id', ParseIntPipe) id: number) { return this.svc.findOne(id); }
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findOne(id);
+  }
 
   @Post()
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar plano de onboarding para colaborador' })
-  create(@Body() dto: CreateOnboardingPlanDto) { return this.svc.create(dto); }
+  create(@Body() dto: CreateOnboardingPlanDto) {
+    return this.svc.create(dto);
+  }
 
   @Post('auto-assign/:userId')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Atribuir automaticamente o template mais adequado' })
-  @ApiQuery({ name: 'positionId',   required: false })
+  @ApiQuery({ name: 'positionId', required: false })
   @ApiQuery({ name: 'departmentId', required: false })
   autoAssign(
-    @Param('userId',      ParseIntPipe) userId: number,
-    @Query('positionId')   positionId?:   string,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Query('positionId') positionId?: string,
     @Query('departmentId') departmentId?: string,
   ) {
     return this.svc.createFromTemplate(
       userId,
-      positionId   ? parseInt(positionId)   : undefined,
+      positionId ? parseInt(positionId) : undefined,
       departmentId ? parseInt(departmentId) : undefined,
     );
   }
@@ -124,7 +164,9 @@ export class OnboardingController {
   @Delete(':id')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Remover plano de onboarding' })
-  remove(@Param('id', ParseIntPipe) id: number) { return this.svc.remove(id); }
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remove(id);
+  }
 
   // ── Tarefas ───────────────────────────────────────────────────────────────
 
