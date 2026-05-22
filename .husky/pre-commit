@@ -1,6 +1,1 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
-echo "🔍 A verificar qualidade do código antes do commit..."
 npx lint-staged
-echo "✅ Verificação concluída"
