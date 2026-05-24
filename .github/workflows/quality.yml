@@ -25,6 +25,9 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      - name: Gerar cliente Prisma
+        run: npx prisma generate
+
       - name: Verificar lint
         run: npm run lint:check
 
@@ -36,6 +39,8 @@ jobs:
 
       - name: Cobertura de código
         run: npm run test:coverage
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/innova_test
 
       - name: Análise SonarCloud
         uses: SonarSource/sonarcloud-github-action@master
