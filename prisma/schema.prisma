@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1476,6 +1475,7 @@ model Course {
   @@index([status])
   @@index([category])
   @@index([mandatory])
+  @@index([createdAt])
 }
 
 model CourseModule {
@@ -1538,6 +1538,8 @@ model LessonProgress {
   enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
   @@unique([lessonId, userId])
   @@index([userId])
+  @@index([userId, completed])
+  @@index([enrollmentId])
 }
 
 model ModuleMaterial {

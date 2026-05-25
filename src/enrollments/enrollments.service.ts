@@ -113,16 +113,47 @@ export class EnrollmentsService {
       this.prisma.enrollment.count({ where }),
     ]);
 
-    const enriched = await Promise.all(
-      data.map(async e => {
-        const prog = await this.computeProgress(e.id, (e as any).courseId, (e as any).userId);
-        return {
-          ...e,
-          ...prog,
-          isOverdue: this.isOverdue((e as any).deadline, (e as any).status),
-        };
+    // Batch progress for all enrollments in this page (eliminates N+1)
+    const courseIds = [...new Set(data.map(e => (e as any).courseId as number))];
+    const enrollmentIds = data.map(e => e.id);
+
+    // groupBy on enrollmentId uses direct index — avoids 3-table JOIN (lesson → module → courseId)
+    const [moduleGroups, completedByEnrollment] = await Promise.all([
+      this.prisma.courseModule.findMany({
+        where: { courseId: { in: courseIds } },
+        select: { courseId: true, _count: { select: { lessons: true } } },
       }),
-    );
+      this.prisma.lessonProgress.groupBy({
+        by: ['enrollmentId'],
+        where: { enrollmentId: { in: enrollmentIds }, completed: true },
+        _count: { id: true },
+      }),
+    ]);
+
+    const totalLessonsMap: Record<number, number> = {};
+    for (const mod of moduleGroups) {
+      totalLessonsMap[mod.courseId] = (totalLessonsMap[mod.courseId] || 0) + mod._count.lessons;
+    }
+
+    const completedLessonsMap: Record<number, number> = {};
+    for (const g of completedByEnrollment) {
+      if (g.enrollmentId) completedLessonsMap[g.enrollmentId] = g._count.id;
+    }
+
+    const enriched = data.map(e => {
+      const courseId = (e as any).courseId as number;
+      const totalLessons = totalLessonsMap[courseId] || 0;
+      const completedLessons = completedLessonsMap[e.id] || 0;
+      const progressPercent =
+        totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+      return {
+        ...e,
+        totalLessons,
+        completedLessons,
+        progressPercent,
+        isOverdue: this.isOverdue((e as any).deadline, (e as any).status),
+      };
+    });
 
     return { data: enriched, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -188,23 +219,25 @@ export class EnrollmentsService {
       include: ENROLLMENT_INCLUDE_BASIC,
     });
 
-    await this.prisma.courseAnalytics
-      .updateMany({
-        where: { courseId: dto.courseId },
-        data: { totalEnrollments: { increment: 1 } },
-      })
-      .catch(() => {});
-
-    await this.prisma.notificationLog
-      .create({
-        data: {
-          userId: dto.userId,
-          type: 'COURSE_ENROLLED',
-          message: `Matriculado no curso "${course.title}"`,
-          metadata: JSON.stringify({}),
-        },
-      })
-      .catch(() => {});
+    // Fire-and-forget: non-critical side effects run in parallel without blocking the response
+    void Promise.all([
+      this.prisma.courseAnalytics
+        .updateMany({
+          where: { courseId: dto.courseId },
+          data: { totalEnrollments: { increment: 1 } },
+        })
+        .catch(() => {}),
+      this.prisma.notificationLog
+        .create({
+          data: {
+            userId: dto.userId,
+            type: 'COURSE_ENROLLED',
+            message: `Matriculado no curso "${course.title}"`,
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(() => {}),
+    ]);
 
     return enrollment;
   }
@@ -389,13 +422,48 @@ export class EnrollmentsService {
       orderBy: [{ mandatory: 'desc' }, { deadline: 'asc' }, { enrolledAt: 'desc' }],
     });
 
-    const enriched = await Promise.all(
-      enrollments.map(async e => {
-        const prog = await this.computeProgress(e.id, (e as any).courseId, userId);
-        const overdue = this.isOverdue((e as any).deadline, (e as any).status);
-        return { ...e, ...prog, isOverdue: overdue };
+    if (enrollments.length === 0) {
+      return {
+        enrollments: [],
+        groups: { overdue: [], inProgress: [], notStarted: [], completed: [], cancelled: [] },
+      };
+    }
+
+    const courseIds = [...new Set(enrollments.map(e => (e as any).courseId as number))];
+    const enrollmentIds = enrollments.map(e => e.id);
+
+    // groupBy on enrollmentId uses direct index — avoids 3-table JOIN (lesson → module → courseId)
+    const [moduleGroups, completedByEnrollment] = await Promise.all([
+      this.prisma.courseModule.findMany({
+        where: { courseId: { in: courseIds } },
+        select: { courseId: true, _count: { select: { lessons: true } } },
       }),
-    );
+      this.prisma.lessonProgress.groupBy({
+        by: ['enrollmentId'],
+        where: { enrollmentId: { in: enrollmentIds }, completed: true },
+        _count: { id: true },
+      }),
+    ]);
+
+    const totalLessonsMap: Record<number, number> = {};
+    for (const mod of moduleGroups) {
+      totalLessonsMap[mod.courseId] = (totalLessonsMap[mod.courseId] || 0) + mod._count.lessons;
+    }
+
+    const completedLessonsMap: Record<number, number> = {};
+    for (const g of completedByEnrollment) {
+      if (g.enrollmentId) completedLessonsMap[g.enrollmentId] = g._count.id;
+    }
+
+    const enriched = enrollments.map(e => {
+      const courseId = (e as any).courseId as number;
+      const totalLessons = totalLessonsMap[courseId] || 0;
+      const completedLessons = completedLessonsMap[e.id] || 0;
+      const progressPercent =
+        totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+      const isOverdue = this.isOverdue((e as any).deadline, (e as any).status);
+      return { ...e, totalLessons, completedLessons, progressPercent, isOverdue };
+    });
 
     const groups = {
       overdue: enriched.filter(e => e.isOverdue),

@@ -18,7 +18,7 @@ config:
     timeout: 30
     pool: 100
 
-  processor: "./hooks/functions.js"
+  processor: "../hooks/functions.js"
 
   # Fases por defeito — override via --config load-tests/phases/<fase>.yml
   phases:
