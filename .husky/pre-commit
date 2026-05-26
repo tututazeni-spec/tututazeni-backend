@@ -1,2 +1,4 @@
 #!/bin/sh
+echo "Verificar qualidade antes do commit..."
 npx lint-staged
+echo "Qualidade verificada"

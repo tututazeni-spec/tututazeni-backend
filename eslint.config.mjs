@@ -1,6 +1,7 @@
 // @ts-check
 import eslint from '@eslint/js';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
+import importPlugin from 'eslint-plugin-import';
 import unusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -14,6 +15,9 @@ export default tseslint.config(
       'load-tests/**',
       'bruno/**',
       'prisma/migrations/**',
+      'coverage/**',
+      '.claude/**',
+      'frontend/**',
     ],
   },
   eslint.configs.recommended,
@@ -22,6 +26,7 @@ export default tseslint.config(
   {
     plugins: {
       'unused-imports': unusedImports,
+      import: importPlugin,
     },
     languageOptions: {
       globals: {
@@ -42,9 +47,11 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
+      '@typescript-eslint/await-thenable': 'error',
+      '@typescript-eslint/no-misused-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
 
-      // Imports não utilizados — detecta código morto
+      // Imports
       'unused-imports/no-unused-imports': 'error',
       'unused-imports/no-unused-vars': [
         'warn',
@@ -55,13 +62,21 @@ export default tseslint.config(
           argsIgnorePattern: '^_',
         },
       ],
+      'no-duplicate-imports': 'error',
 
-      // Prettier
-      'prettier/prettier': ['error', { endOfLine: 'auto' }],
+      // Segurança — regras nativas ESLint (sem plugin externo)
+      'no-eval': 'error',
+      'no-implied-eval': 'error',
+      'no-new-func': 'error',
+      'no-script-url': 'error',
+      'no-proto': 'error',
 
       // Boas práticas
       'no-console': 'warn',
-      'no-duplicate-imports': 'error',
+      'no-return-await': 'warn',
+
+      // Prettier
+      'prettier/prettier': ['error', { endOfLine: 'auto' }],
     },
   },
 );

@@ -36,7 +36,7 @@
     "test": "jest --forceExit",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage --forceExit",
-    "test:coverage": "jest --coverage --forceExit",
+    "test:coverage": "jest --coverage --forceExit --passWithNoTests",
     "test:coverage:watch": "jest --coverage --watch",
     "test:e2e": "jest --config ./test/jest-e2e.json --forceExit",
     "test:unit": "jest --testPathPattern=spec --forceExit",
@@ -187,7 +187,8 @@
     "coverageReporters": [
       "text",
       "lcov",
-      "html"
+      "html",
+      "json-summary"
     ],
     "testEnvironment": "node"
   }
