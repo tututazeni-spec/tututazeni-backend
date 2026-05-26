@@ -1,4 +1,2 @@
 #!/bin/sh
-echo "Verificar lint antes do push..."
-npm run lint:check
-echo "Push autorizado"
+npm run format:check
