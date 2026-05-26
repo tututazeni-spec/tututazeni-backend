@@ -33,8 +33,10 @@ Logs
 =========================
 
 logs/
+*.log
 .log
 npm-debug.log
+load-tests/reports/server-*.log
 yarn-debug.log*
 yarn-error.log*
 

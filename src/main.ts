@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
+import { Request, Response } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -95,7 +96,7 @@ async function bootstrap() {
     },
   });
 
-  app.getHttpAdapter().get('/', (_req: any, res: any) => {
+  app.getHttpAdapter().get('/', (_req: Request, res: Response) => {
     res.json({
       name: 'INNOVA API',
       version: '1.0',
@@ -103,6 +104,10 @@ async function bootstrap() {
       docs: `http://localhost:${port}/docs`,
       timestamp: new Date().toISOString(),
     });
+  });
+
+  app.getHttpAdapter().get('/health', (_req: Request, res: Response) => {
+    res.json({ status: 'ok', uptime: process.uptime() });
   });
 
   const port = process.env.PORT ?? 4000;

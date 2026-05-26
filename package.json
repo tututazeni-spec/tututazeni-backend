@@ -69,7 +69,10 @@
     "test:api:report": "cd bruno && node ../node_modules/@usebruno/cli/bin/bru.js run . -r --env local --reporter-json reports/results.json",
     "sonar": "sonar-scanner",
     "sonar:local": "sonar-scanner -Dsonar.host.url=http://localhost:9000",
-    "prepare": "husky"
+    "prepare": "husky",
+    "build:loadtest": "nest build",
+    "start:loadtest": "cross-env UV_THREADPOOL_SIZE=16 NODE_ENV=test node dist/main.js",
+    "test:wait-server": "node -e \"const h=require(\"http\");let t=0;const f=()=>{const r=h.get(\"http://127.0.0.1:4000/health\",res=>{if(res.statusCode<500){console.log(\"✅ Servidor pronto!\");process.exit(0);}else retry();}).on(\"error\",retry);function retry(){if(++t>60){console.error(\"❌ Timeout: servidor não iniciou em 60s\");process.exit(1);}setTimeout(f,1000);}};f();\""
   },
   "lint-staged": {
     "src/**/*.ts": [
