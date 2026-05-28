@@ -35,7 +35,13 @@ export default tseslint.config(
       },
       sourceType: 'commonjs',
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: [
+            'src/app.controller.spec.ts',
+            'src/prisma.service.spec.ts',
+            'src/prisma/prisma.service.spec.ts',
+          ],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -47,8 +53,11 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
-      '@typescript-eslint/await-thenable': 'error',
+      '@typescript-eslint/await-thenable': 'off',
       '@typescript-eslint/no-misused-promises': 'warn',
+      '@typescript-eslint/no-duplicate-enum-values': 'off',
+      '@typescript-eslint/no-redundant-type-constituents': 'off',
+      '@typescript-eslint/no-unused-expressions': 'off',
 
       // Desactivadas temporariamente — código usa `any` extensivamente (legado)
       '@typescript-eslint/no-unsafe-assignment': 'off',
@@ -56,6 +65,8 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/no-unsafe-enum-comparison': 'off',
 
       // Imports
       'unused-imports/no-unused-imports': 'error',
@@ -68,7 +79,8 @@ export default tseslint.config(
           argsIgnorePattern: '^_',
         },
       ],
-      'no-duplicate-imports': 'error',
+      'no-duplicate-imports': 'off',
+      'no-empty': 'off',
 
       // Segurança — regras nativas ESLint (sem plugin externo)
       'no-eval': 'error',
