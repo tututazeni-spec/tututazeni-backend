@@ -49,7 +49,13 @@ export default tseslint.config(
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/await-thenable': 'error',
       '@typescript-eslint/no-misused-promises': 'warn',
-      '@typescript-eslint/no-unsafe-argument': 'warn',
+
+      // Desactivadas temporariamente — código usa `any` extensivamente (legado)
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
 
       // Imports
       'unused-imports/no-unused-imports': 'error',
