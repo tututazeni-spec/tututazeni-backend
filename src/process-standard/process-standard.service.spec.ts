@@ -5,16 +5,35 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
   processStandard: {
-    findUnique: jest.fn(), findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]),
-    create: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(0), delete: jest.fn(),
+    findUnique: jest.fn(),
+    findFirst: jest.fn().mockResolvedValue(null),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    delete: jest.fn(),
   },
-  processStep: { createMany: jest.fn().mockResolvedValue({ count: 0 }), deleteMany: jest.fn().mockResolvedValue({ count: 0 }), findMany: jest.fn().mockResolvedValue([]) },
-  processParticipant: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]), delete: jest.fn() },
+  processStep: {
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  processParticipant: {
+    create: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    delete: jest.fn(),
+  },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
-const baseProcess = { id: 1, title: 'Processo Onboarding', type: 'ONBOARDING', status: 'PUBLISHED', steps: [] };
+const baseProcess = {
+  id: 1,
+  title: 'Processo Onboarding',
+  type: 'ONBOARDING',
+  status: 'PUBLISHED',
+  steps: [],
+};
 
 describe('ProcessStandardService', () => {
   let service: ProcessStandardService;
@@ -51,7 +70,12 @@ describe('ProcessStandardService', () => {
   describe('create', () => {
     it('deve criar processo', async () => {
       mockPrisma.processStandard.create.mockResolvedValue(baseProcess);
-      const result = await service.create(1, { title: 'Processo Onboarding', type: 'ONBOARDING', code: 'PROC001', steps: [] } as any);
+      const result = await service.create(1, {
+        title: 'Processo Onboarding',
+        type: 'ONBOARDING',
+        code: 'PROC001',
+        steps: [],
+      } as any);
       expect(result).toBeDefined();
     });
   });

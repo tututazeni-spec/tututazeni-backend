@@ -5,23 +5,44 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
   training: {
-    findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]),
-    create: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(0), delete: jest.fn(),
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    delete: jest.fn(),
   },
   trainingParticipant: {
-    findFirst: jest.fn(), create: jest.fn(), findMany: jest.fn().mockResolvedValue([]),
-    update: jest.fn(), count: jest.fn().mockResolvedValue(0), delete: jest.fn(), createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    delete: jest.fn(),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
-  trainingSession: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), count: jest.fn().mockResolvedValue(0) },
-  trainingRating: { upsert: jest.fn(), aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 } }) },
+  trainingSession: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  trainingRating: {
+    upsert: jest.fn(),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 } }),
+  },
   certificate: { create: jest.fn() },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { update: jest.fn().mockResolvedValue({}) },
 };
 
 const baseTraining = {
-  id: 1, title: 'Formação NestJS', status: 'PUBLISHED', type: 'ONLINE',
-  participants: [], _count: { participants: 0, sessions: 1 },
+  id: 1,
+  title: 'Formação NestJS',
+  status: 'PUBLISHED',
+  type: 'ONLINE',
+  participants: [],
+  _count: { participants: 0, sessions: 1 },
 };
 
 describe('TrainingsService', () => {

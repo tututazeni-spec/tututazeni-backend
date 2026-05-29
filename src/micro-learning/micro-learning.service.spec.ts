@@ -5,16 +5,35 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
   microLearning: {
-    findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]),
-    create: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(0), delete: jest.fn(),
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    delete: jest.fn(),
   },
-  microLearningInteraction: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
-  microLearningProgress: { upsert: jest.fn().mockResolvedValue({}), findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+  microLearningInteraction: {
+    create: jest.fn().mockResolvedValue({}),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  microLearningProgress: {
+    upsert: jest.fn().mockResolvedValue({}),
+    findFirst: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   microLearningPlaylist: {
-    findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(),
-    create: jest.fn(), update: jest.fn(), delete: jest.fn(), count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   },
-  playlistItem: { createMany: jest.fn().mockResolvedValue({ count: 0 }), deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+  playlistItem: {
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   microQuizQuestion: { findMany: jest.fn().mockResolvedValue([]) },
   microQuizAttempt: { create: jest.fn(), findFirst: jest.fn() },
   learningStreak: { upsert: jest.fn().mockResolvedValue({}) },
@@ -22,7 +41,13 @@ const mockPrisma = {
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
-const baseMicro = { id: 1, title: 'Quick NestJS Tip', type: 'ARTICLE', status: 'PUBLISHED', durationSeconds: 60 };
+const baseMicro = {
+  id: 1,
+  title: 'Quick NestJS Tip',
+  type: 'ARTICLE',
+  status: 'PUBLISHED',
+  durationSeconds: 60,
+};
 
 describe('MicroLearningService', () => {
   let service: MicroLearningService;

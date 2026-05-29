@@ -1605,6 +1605,10 @@ model Certificate {
   developmentPlan   DevelopmentPlan?   @relation(fields: [developmentPlanId], references: [id])
   eventId           Int?
   event             Event?             @relation(fields: [eventId], references: [id])
+
+  @@index([userId])
+  @@index([courseId])
+  @@index([enrollmentId])
 }
 
 model Quiz {
@@ -1642,6 +1646,9 @@ model QuizAttempt {
   submittedAt DateTime @default(now())
   quiz        Quiz     @relation(fields: [quizId], references: [id])
   user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([quizId])
 }
 
 model CourseCompetency {

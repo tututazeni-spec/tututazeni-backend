@@ -5,24 +5,38 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
   executiveReport: {
-    findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]),
-    create: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(0),
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   },
-  executiveMetric: { createMany: jest.fn().mockResolvedValue({ count: 0 }), findMany: jest.fn().mockResolvedValue([]) },
+  executiveMetric: {
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   executiveSnapshot: { create: jest.fn().mockResolvedValue({}), findFirst: jest.fn() },
   reportAccessLog: { create: jest.fn().mockResolvedValue({}) },
   reportApproval: { create: jest.fn().mockResolvedValue({}) },
   reportLog: { create: jest.fn().mockResolvedValue({}) },
   enrollment: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
-  performanceReview: { count: jest.fn().mockResolvedValue(0), aggregate: jest.fn().mockResolvedValue({ _avg: {} }) },
+  performanceReview: {
+    count: jest.fn().mockResolvedValue(0),
+    aggregate: jest.fn().mockResolvedValue({ _avg: {} }),
+  },
   developmentPlan: { count: jest.fn().mockResolvedValue(0) },
   developmentPlanAction: { count: jest.fn().mockResolvedValue(0) },
   certificate: { count: jest.fn().mockResolvedValue(0) },
 };
 
 const baseReport = {
-  id: 1, title: 'Relatório Q1', type: 'QUARTERLY', status: 'DRAFT',
-  generatedById: 1, metrics: [],
+  id: 1,
+  title: 'Relatório Q1',
+  type: 'QUARTERLY',
+  status: 'DRAFT',
+  generatedById: 1,
+  metrics: [],
 };
 
 describe('ExecutiveReportsService', () => {

@@ -5,7 +5,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 
 const mockPrisma = {
-  skillCategory: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), update: jest.fn() },
+  skillCategory: {
+    create: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+  },
   skill: {
     findFirst: jest.fn(),
     findUnique: jest.fn(),
@@ -16,9 +21,15 @@ const mockPrisma = {
     delete: jest.fn(),
   },
   legacyEmployeeSkill: { upsert: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
-  skillAssessmentHistory: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
+  skillAssessmentHistory: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   skillProficiencyLevel: { findMany: jest.fn().mockResolvedValue([]) },
-  roleSkillRequirement: { deleteMany: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({}) },
+  roleSkillRequirement: {
+    deleteMany: jest.fn().mockResolvedValue({}),
+    createMany: jest.fn().mockResolvedValue({}),
+  },
   roleSkillMatrix: { upsert: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
   course: { findMany: jest.fn().mockResolvedValue([]) },
   user: { findUnique: jest.fn(), count: jest.fn().mockResolvedValue(0) },
@@ -84,7 +95,10 @@ describe('CompetencyMapService', () => {
       mockPrisma.skill.create.mockResolvedValue(baseSkill);
       mockPrisma.skill.findUnique.mockResolvedValue(baseSkill);
 
-      const result = await service.createSkill({ name: 'TypeScript', type: 'HARD_SKILL' } as any, 1);
+      const result = await service.createSkill(
+        { name: 'TypeScript', type: 'HARD_SKILL' } as any,
+        1,
+      );
       expect(result.name).toBe('TypeScript');
     });
   });

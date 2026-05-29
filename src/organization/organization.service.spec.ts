@@ -20,7 +20,11 @@ const mockPrisma = {
   },
   position: { count: makeCount(20), findMany: makeFind() },
   unit: { count: makeCount(5), findMany: makeFind() },
-  orgChangeLog: { create: jest.fn().mockResolvedValue({}), findMany: makeFind(), count: makeCount() },
+  orgChangeLog: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: makeFind(),
+    count: makeCount(),
+  },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
@@ -30,10 +34,7 @@ describe('OrganizationService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        OrganizationService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [OrganizationService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<OrganizationService>(OrganizationService);
   });
@@ -54,7 +55,14 @@ describe('OrganizationService', () => {
   describe('getOrgChart', () => {
     it('deve retornar org chart', async () => {
       mockPrisma.user.findMany.mockResolvedValue([
-        { id: 1, fullName: 'CEO', managerId: null, position: null, department: null, subordinates: [] },
+        {
+          id: 1,
+          fullName: 'CEO',
+          managerId: null,
+          position: null,
+          department: null,
+          subordinates: [],
+        },
       ]);
 
       const result = await service.getOrgChart({});

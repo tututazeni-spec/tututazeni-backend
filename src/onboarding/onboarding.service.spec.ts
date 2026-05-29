@@ -36,7 +36,12 @@ const mockPrisma = {
     count: jest.fn(),
     findFirst: jest.fn(),
   },
-  onboardingDocument: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+  onboardingDocument: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+  },
   onboardingSurvey: { create: jest.fn(), findMany: jest.fn() },
   user: { findUnique: jest.fn() },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
@@ -66,10 +71,7 @@ describe('OnboardingService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        OnboardingService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [OnboardingService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<OnboardingService>(OnboardingService);
   });
@@ -98,7 +100,11 @@ describe('OnboardingService', () => {
   describe('createTemplate', () => {
     it('deve criar template', async () => {
       mockPrisma.onboardingTemplate.create.mockResolvedValue(baseTemplate);
-      const result = await service.createTemplate({ name: 'Template Padrão', description: 'Desc', durationDays: 30 } as any);
+      const result = await service.createTemplate({
+        name: 'Template Padrão',
+        description: 'Desc',
+        durationDays: 30,
+      } as any);
       expect(result.name).toBe('Template Padrão');
     });
   });

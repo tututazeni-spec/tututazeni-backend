@@ -23,7 +23,10 @@ const mockPrisma = {
     update: jest.fn(),
     updateMany: jest.fn(),
   },
-  notificationLog: { create: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+  notificationLog: {
+    create: jest.fn().mockResolvedValue({}),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { update: jest.fn().mockResolvedValue({}), upsert: jest.fn().mockResolvedValue({}) },
 };
@@ -37,10 +40,7 @@ describe('EvaluationService', () => {
     mockPrisma.user.findMany.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EvaluationService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [EvaluationService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<EvaluationService>(EvaluationService);
   });
@@ -53,7 +53,10 @@ describe('EvaluationService', () => {
           model: EvalModel.DEG_360,
           startDate: '2024-01-01',
           endDate: '2024-12-31',
-          weights: [{ type: EvalType.SELF, weight: 30 }, { type: EvalType.MANAGER, weight: 70 }],
+          weights: [
+            { type: EvalType.SELF, weight: 30 },
+            { type: EvalType.MANAGER, weight: 70 },
+          ],
         },
         1,
       );
@@ -68,7 +71,10 @@ describe('EvaluationService', () => {
             model: EvalModel.DEG_360,
             startDate: '2024-01-01',
             endDate: '2024-12-31',
-            weights: [{ type: EvalType.SELF, weight: 40 }, { type: EvalType.MANAGER, weight: 40 }],
+            weights: [
+              { type: EvalType.SELF, weight: 40 },
+              { type: EvalType.MANAGER, weight: 40 },
+            ],
           },
           1,
         ),

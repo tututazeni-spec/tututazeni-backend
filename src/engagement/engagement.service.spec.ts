@@ -47,7 +47,10 @@ const mockPrisma = {
   recognition: recognitionMock,
   oneOnOne: oneOnOneMock,
   user: { findMany: jest.fn(), count: jest.fn() },
-  notificationLog: { create: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+  notificationLog: {
+    create: jest.fn().mockResolvedValue({}),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { update: jest.fn().mockResolvedValue({}) },
 };
@@ -77,10 +80,7 @@ describe('EngagementService', () => {
     mockPrisma.user.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EngagementService,
-        { provide: PrismaService, useValue: mockPrismaProxy },
-      ],
+      providers: [EngagementService, { provide: PrismaService, useValue: mockPrismaProxy }],
     }).compile();
     service = module.get<EngagementService>(EngagementService);
   });
@@ -152,7 +152,10 @@ describe('EngagementService', () => {
 
   describe('activateSurvey', () => {
     it('deve activar survey e notificar utilizadores', async () => {
-      engagementSurveyMock.findUnique.mockResolvedValue({ ...baseSurvey, status: SurveyStatus.DRAFT });
+      engagementSurveyMock.findUnique.mockResolvedValue({
+        ...baseSurvey,
+        status: SurveyStatus.DRAFT,
+      });
       engagementSurveyMock.update.mockResolvedValue({ ...baseSurvey, status: 'ACTIVE' });
 
       const result = await service.activateSurvey(1);
@@ -160,7 +163,10 @@ describe('EngagementService', () => {
     });
 
     it('deve lançar BadRequestException se já activo', async () => {
-      engagementSurveyMock.findUnique.mockResolvedValue({ ...baseSurvey, status: SurveyStatus.ACTIVE });
+      engagementSurveyMock.findUnique.mockResolvedValue({
+        ...baseSurvey,
+        status: SurveyStatus.ACTIVE,
+      });
       await expect(service.activateSurvey(1)).rejects.toThrow(BadRequestException);
     });
   });

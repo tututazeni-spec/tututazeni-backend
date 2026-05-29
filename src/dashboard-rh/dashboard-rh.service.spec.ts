@@ -8,11 +8,26 @@ const makeAgg = () => jest.fn().mockResolvedValue({ _avg: {}, _sum: {}, _count: 
 const makeGroupBy = () => jest.fn().mockResolvedValue([]);
 
 const mockPrisma = {
-  user: { count: makeCount(100), findMany: makeFind(), groupBy: makeGroupBy(), aggregate: makeAgg() },
-  enrollment: { count: makeCount(50), findMany: makeFind(), groupBy: makeGroupBy(), aggregate: makeAgg() },
+  user: {
+    count: makeCount(100),
+    findMany: makeFind(),
+    groupBy: makeGroupBy(),
+    aggregate: makeAgg(),
+  },
+  enrollment: {
+    count: makeCount(50),
+    findMany: makeFind(),
+    groupBy: makeGroupBy(),
+    aggregate: makeAgg(),
+  },
   certificate: { count: makeCount(10), findMany: makeFind() },
   badgeAward: { count: makeCount(5), groupBy: makeGroupBy(), findMany: makeFind() },
-  performanceReview: { count: makeCount(), findMany: makeFind(), aggregate: makeAgg(), groupBy: makeGroupBy() },
+  performanceReview: {
+    count: makeCount(),
+    findMany: makeFind(),
+    aggregate: makeAgg(),
+    groupBy: makeGroupBy(),
+  },
   developmentPlan: { count: makeCount(), findMany: makeFind() },
   developmentPlanAction: { count: makeCount(), findMany: makeFind() },
   department: { findMany: makeFind(), count: makeCount() },
@@ -27,8 +42,10 @@ const mockPrisma = {
 
 const mockPrismaProxy = new Proxy(mockPrisma, {
   get(target, prop) {
-    if (prop === 'attendance') return { count: makeCount(), findMany: makeFind(), aggregate: makeAgg() };
-    if (prop === 'leaveRequest') return { count: makeCount(), findMany: makeFind(), groupBy: makeGroupBy() };
+    if (prop === 'attendance')
+      return { count: makeCount(), findMany: makeFind(), aggregate: makeAgg() };
+    if (prop === 'leaveRequest')
+      return { count: makeCount(), findMany: makeFind(), groupBy: makeGroupBy() };
     if (prop === 'surveyResponse') return { count: makeCount() };
     return (target as any)[prop];
   },
@@ -40,10 +57,7 @@ describe('DashboardRhService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        DashboardRhService,
-        { provide: PrismaService, useValue: mockPrismaProxy },
-      ],
+      providers: [DashboardRhService, { provide: PrismaService, useValue: mockPrismaProxy }],
     }).compile();
     service = module.get<DashboardRhService>(DashboardRhService);
   });

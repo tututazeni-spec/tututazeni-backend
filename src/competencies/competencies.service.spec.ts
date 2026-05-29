@@ -67,10 +67,7 @@ describe('CompetenciesService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        CompetenciesService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [CompetenciesService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<CompetenciesService>(CompetenciesService);
   });
@@ -93,7 +90,9 @@ describe('CompetenciesService', () => {
       await service.findAll({ category: CompetencyCategory.HARD_SKILL });
 
       expect(mockPrisma.competency.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ category: CompetencyCategory.HARD_SKILL }) }),
+        expect.objectContaining({
+          where: expect.objectContaining({ category: CompetencyCategory.HARD_SKILL }),
+        }),
       );
     });
   });
@@ -117,13 +116,18 @@ describe('CompetenciesService', () => {
       mockPrisma.competency.create.mockResolvedValue(baseCompetency);
       mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
 
-      const result = await service.create({ name: 'TypeScript', category: CompetencyCategory.HARD_SKILL });
+      const result = await service.create({
+        name: 'TypeScript',
+        category: CompetencyCategory.HARD_SKILL,
+      });
       expect(result.name).toBe('TypeScript');
     });
 
     it('deve lançar ConflictException se nome duplicado', async () => {
       mockPrisma.competency.findFirst.mockResolvedValue(baseCompetency);
-      await expect(service.create({ name: 'TypeScript', category: CompetencyCategory.HARD_SKILL })).rejects.toThrow(ConflictException);
+      await expect(
+        service.create({ name: 'TypeScript', category: CompetencyCategory.HARD_SKILL }),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
@@ -146,7 +150,12 @@ describe('CompetenciesService', () => {
     it('deve fazer upsert da competência do utilizador', async () => {
       mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
       mockPrisma.userCompetency.findFirst.mockResolvedValue(null);
-      mockPrisma.userCompetency.upsert.mockResolvedValue({ id: 1, userId: 1, competencyId: 1, currentLevel: 3 });
+      mockPrisma.userCompetency.upsert.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        competencyId: 1,
+        currentLevel: 3,
+      });
 
       const result = await service.upsertUserCompetency({
         userId: 1,

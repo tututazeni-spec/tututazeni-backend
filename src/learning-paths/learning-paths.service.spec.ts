@@ -41,7 +41,10 @@ const mockPrisma = {
   course: { findUnique: jest.fn() },
   user: { findMany: jest.fn().mockResolvedValue([]) },
   enrollment: { create: jest.fn(), findFirst: jest.fn() },
-  notificationLog: { create: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+  notificationLog: {
+    create: jest.fn().mockResolvedValue({}),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   userPoints: { update: jest.fn().mockResolvedValue({}) },
 };
 
@@ -65,10 +68,7 @@ describe('LearningPathsService', () => {
     mockPrisma.learningPathCourse.findMany.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        LearningPathsService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [LearningPathsService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<LearningPathsService>(LearningPathsService);
   });

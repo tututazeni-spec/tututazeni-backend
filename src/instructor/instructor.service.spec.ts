@@ -5,21 +5,46 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
   instructorProfile: {
-    findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]),
-    create: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(0),
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   },
-  instructorCourse: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), delete: jest.fn() },
-  instructorCohort: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), count: jest.fn().mockResolvedValue(0) },
-  cohortParticipant: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), count: jest.fn().mockResolvedValue(0) },
-  instructorReview: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 } }) },
+  instructorCourse: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    delete: jest.fn(),
+  },
+  instructorCohort: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  cohortParticipant: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  instructorReview: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 } }),
+  },
   instructorPayout: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
   marketplaceCourse: { findMany: jest.fn().mockResolvedValue([]) },
   enrollment: { count: jest.fn().mockResolvedValue(0) },
 };
 
 const baseProfile = {
-  id: 1, userId: 1, bio: 'Expert em NestJS', specialties: ['TypeScript'],
-  status: 'ACTIVE', rating: 4.8, totalStudents: 100,
+  id: 1,
+  userId: 1,
+  bio: 'Expert em NestJS',
+  specialties: ['TypeScript'],
+  status: 'ACTIVE',
+  rating: 4.8,
+  totalStudents: 100,
 };
 
 describe('InstructorService', () => {
@@ -58,7 +83,10 @@ describe('InstructorService', () => {
     it('deve retornar perfil por userId', async () => {
       mockPrisma.instructorProfile.findUnique.mockResolvedValue({
         ...baseProfile,
-        reviews: [], marketplaceCourses: [], cohorts: [], _count: { reviews: 0, cohorts: 0 },
+        reviews: [],
+        marketplaceCourses: [],
+        cohorts: [],
+        _count: { reviews: 0, cohorts: 0 },
       });
       const result = await service.findByUser(1);
       expect(result).toBeDefined();

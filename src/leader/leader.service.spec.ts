@@ -7,7 +7,12 @@ const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
 
 const mockPrisma = {
   user: { findUnique: jest.fn(), findMany: makeFind(), count: makeCount() },
-  performanceReview: { findMany: makeFind(), count: makeCount(), aggregate: jest.fn().mockResolvedValue({ _avg: {} }), groupBy: jest.fn().mockResolvedValue([]) },
+  performanceReview: {
+    findMany: makeFind(),
+    count: makeCount(),
+    aggregate: jest.fn().mockResolvedValue({ _avg: {} }),
+    groupBy: jest.fn().mockResolvedValue([]),
+  },
   enrollment: { findMany: makeFind(), count: makeCount() },
   developmentPlan: { findMany: makeFind(), count: makeCount() },
   developmentPlanAction: { findMany: makeFind(), count: makeCount() },
@@ -40,8 +45,12 @@ describe('LeaderService', () => {
   describe('getLeaderDashboard', () => {
     it('deve retornar dashboard do líder', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
-        id: 1, fullName: 'Manager', _count: { subordinates: 3 },
-        subordinates: [], position: null, department: null,
+        id: 1,
+        fullName: 'Manager',
+        _count: { subordinates: 3 },
+        subordinates: [],
+        position: null,
+        department: null,
       });
       const result = await service.getLeaderDashboard(1);
       expect(result).toBeDefined();

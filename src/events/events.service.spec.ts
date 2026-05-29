@@ -54,10 +54,7 @@ describe('EventsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EventsService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [EventsService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<EventsService>(EventsService);
   });
@@ -77,11 +74,13 @@ describe('EventsService', () => {
     });
 
     it('deve marcar isFull quando maxCapacity atingida', async () => {
-      mockPrisma.event.findMany.mockResolvedValue([{
-        ...baseEvent,
-        maxCapacity: 10,
-        _count: { participants: 10, feedbacks: 0 },
-      }]);
+      mockPrisma.event.findMany.mockResolvedValue([
+        {
+          ...baseEvent,
+          maxCapacity: 10,
+          _count: { participants: 10, feedbacks: 0 },
+        },
+      ]);
       mockPrisma.event.count.mockResolvedValue(1);
 
       const result = await service.findAll({});

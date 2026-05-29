@@ -9,12 +9,27 @@ const makeAgg = () => jest.fn().mockResolvedValue({ _avg: {}, _sum: {}, _count: 
 const makeGroupBy = () => jest.fn().mockResolvedValue([]);
 
 const mockPrisma = {
-  user: { count: makeCount(100), findMany: makeFind(), findUnique: jest.fn(), groupBy: makeGroupBy() },
-  enrollment: { count: makeCount(50), findMany: makeFind(), aggregate: makeAgg(), groupBy: makeGroupBy() },
+  user: {
+    count: makeCount(100),
+    findMany: makeFind(),
+    findUnique: jest.fn(),
+    groupBy: makeGroupBy(),
+  },
+  enrollment: {
+    count: makeCount(50),
+    findMany: makeFind(),
+    aggregate: makeAgg(),
+    groupBy: makeGroupBy(),
+  },
   course: { count: makeCount(20), findMany: makeFind(), groupBy: makeGroupBy() },
   certificate: { count: makeCount(10), findMany: makeFind() },
   badgeAward: { count: makeCount(5), findMany: makeFind() },
-  performanceReview: { count: makeCount(), findMany: makeFind(), aggregate: makeAgg(), groupBy: makeGroupBy() },
+  performanceReview: {
+    count: makeCount(),
+    findMany: makeFind(),
+    aggregate: makeAgg(),
+    groupBy: makeGroupBy(),
+  },
   developmentPlan: { count: makeCount(), findMany: makeFind() },
   department: { findMany: makeFind() },
   courseAnalytics: { findMany: makeFind() },
@@ -24,15 +39,27 @@ const mockPrisma = {
   assessmentAttempt: { count: makeCount(), findMany: makeFind(), aggregate: makeAgg() },
   aiTutorSession: { count: makeCount(), findMany: makeFind() },
   knowledgeInteraction: { count: makeCount() },
-  dashboardSnapshot: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+  dashboardSnapshot: {
+    findFirst: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({}),
+  },
   userCompetency: { findMany: makeFind(), count: makeCount(), aggregate: makeAgg() },
-  userPoints: { findMany: makeFind(), findUnique: jest.fn().mockResolvedValue({ points: 100 }), aggregate: makeAgg(), count: makeCount() },
+  userPoints: {
+    findMany: makeFind(),
+    findUnique: jest.fn().mockResolvedValue({ points: 100 }),
+    aggregate: makeAgg(),
+    count: makeCount(),
+  },
   competency: { count: makeCount() },
   developmentPlanAction: { count: makeCount(), findMany: makeFind() },
   engagementSurvey: { findMany: makeFind() },
   surveyResponse: { count: makeCount() },
   leaveRequest: { count: makeCount(), groupBy: makeGroupBy() },
-  learningStreak: { count: makeCount(), findMany: makeFind(), findUnique: jest.fn().mockResolvedValue(null) },
+  learningStreak: {
+    count: makeCount(),
+    findMany: makeFind(),
+    findUnique: jest.fn().mockResolvedValue(null),
+  },
   microLearningProgress: { count: makeCount(), findMany: makeFind() },
   nineBoxPlacement: { count: makeCount(), findMany: makeFind() },
   trainingImpact: { count: makeCount(), findMany: makeFind() },
@@ -43,7 +70,8 @@ const mockPrisma = {
 const mockPrismaProxy = new Proxy(mockPrisma, {
   get(target, prop) {
     if (prop === 'attendanceRecord') return { count: makeCount(), aggregate: makeAgg() };
-    if (prop === 'learningPathEnrollment') return { count: makeCount(), findMany: makeFind(), groupBy: makeGroupBy() };
+    if (prop === 'learningPathEnrollment')
+      return { count: makeCount(), findMany: makeFind(), groupBy: makeGroupBy() };
     return (target as any)[prop];
   },
 });
@@ -54,10 +82,7 @@ describe('AnalyticsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AnalyticsService,
-        { provide: PrismaService, useValue: mockPrismaProxy },
-      ],
+      providers: [AnalyticsService, { provide: PrismaService, useValue: mockPrismaProxy }],
     }).compile();
     service = module.get<AnalyticsService>(AnalyticsService);
   });
@@ -72,8 +97,12 @@ describe('AnalyticsService', () => {
   describe('getCollaboratorDashboard', () => {
     it('deve retornar dashboard do colaborador', async () => {
       (mockPrismaProxy as any).user.findUnique.mockResolvedValue({
-        id: 1, fullName: 'Test', position: null, department: null,
-        manager: null, points: { points: 100 },
+        id: 1,
+        fullName: 'Test',
+        position: null,
+        department: null,
+        manager: null,
+        points: { points: 100 },
         _count: { enrollments: 5, certificates: 2, badgeAwards: 1 },
       });
       const result = await service.getCollaboratorDashboard(1);

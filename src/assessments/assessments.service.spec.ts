@@ -54,10 +54,7 @@ describe('AssessmentsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AssessmentsService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [AssessmentsService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<AssessmentsService>(AssessmentsService);
   });
@@ -83,7 +80,13 @@ describe('AssessmentsService', () => {
         title: 'Com Questões',
         type: AssessmentType.QUIZ,
         questions: [
-          { type: QuestionType.MULTIPLE_CHOICE_SINGLE, questionText: 'Pergunta 1', correctAnswer: 'A', seq: 1, weight: 1 },
+          {
+            type: QuestionType.MULTIPLE_CHOICE_SINGLE,
+            questionText: 'Pergunta 1',
+            correctAnswer: 'A',
+            seq: 1,
+            weight: 1,
+          },
         ],
       });
 
@@ -131,7 +134,13 @@ describe('AssessmentsService', () => {
         ...baseAssessment,
         feedbackMode: 'ON_SUBMIT',
         questions: [
-          { id: 1, questionText: 'Q1', correctAnswer: 'A', options: JSON.stringify([{ text: 'A', correct: true }]), explanation: 'Resp A' },
+          {
+            id: 1,
+            questionText: 'Q1',
+            correctAnswer: 'A',
+            options: JSON.stringify([{ text: 'A', correct: true }]),
+            explanation: 'Resp A',
+          },
         ],
       });
 
@@ -170,7 +179,15 @@ describe('AssessmentsService', () => {
       mockPrisma.assessment.update.mockResolvedValue(baseAssessment);
 
       await service.update(1, {
-        questions: [{ type: QuestionType.MULTIPLE_CHOICE_SINGLE, questionText: 'Nova', correctAnswer: 'B', seq: 1, weight: 1 }],
+        questions: [
+          {
+            type: QuestionType.MULTIPLE_CHOICE_SINGLE,
+            questionText: 'Nova',
+            correctAnswer: 'B',
+            seq: 1,
+            weight: 1,
+          },
+        ],
       });
 
       expect(mockPrisma.assessmentQuestion.deleteMany).toHaveBeenCalled();

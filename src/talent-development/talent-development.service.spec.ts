@@ -8,7 +8,12 @@ const makeAgg = () => jest.fn().mockResolvedValue({ _avg: {}, _sum: {}, _count: 
 
 const mockPrisma = {
   user: { findMany: makeFind(), count: makeCount(), findUnique: jest.fn() },
-  performanceReview: { findMany: makeFind(), count: makeCount(), aggregate: makeAgg(), groupBy: jest.fn().mockResolvedValue([]) },
+  performanceReview: {
+    findMany: makeFind(),
+    count: makeCount(),
+    aggregate: makeAgg(),
+    groupBy: jest.fn().mockResolvedValue([]),
+  },
   developmentPlan: {
     findMany: makeFind(),
     findUnique: jest.fn(),
@@ -43,10 +48,7 @@ describe('TalentDevelopmentService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        TalentDevelopmentService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [TalentDevelopmentService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<TalentDevelopmentService>(TalentDevelopmentService);
   });

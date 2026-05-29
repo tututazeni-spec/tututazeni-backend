@@ -60,7 +60,14 @@ const basePlan = {
   approvals: [],
   certificates: [],
   _count: { actions: 0, goals: 0, checkpoints: 0 },
-  user: { id: 1, fullName: 'Test User', email: 'test@innova.com', avatarUrl: null, position: null, department: null },
+  user: {
+    id: 1,
+    fullName: 'Test User',
+    email: 'test@innova.com',
+    avatarUrl: null,
+    position: null,
+    department: null,
+  },
   manager: { id: 2, fullName: 'Manager', avatarUrl: null },
 };
 
@@ -70,10 +77,7 @@ describe('DevelopmentPlansService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        DevelopmentPlansService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [DevelopmentPlansService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<DevelopmentPlansService>(DevelopmentPlansService);
   });
@@ -88,7 +92,10 @@ describe('DevelopmentPlansService', () => {
           { id: 1, status: 'COMPLETED' },
           { id: 2, status: 'IN_PROGRESS' },
         ],
-        goals: [{ id: 1, progress: 50 }, { id: 2, progress: 80 }],
+        goals: [
+          { id: 1, progress: 50 },
+          { id: 2, progress: 80 },
+        ],
       };
       mockPrisma.developmentPlan.findMany.mockResolvedValue([plan]);
       mockPrisma.developmentPlan.count.mockResolvedValue(1);
@@ -114,7 +121,9 @@ describe('DevelopmentPlansService', () => {
     });
 
     it('deve calcular 0% se sem acções', async () => {
-      mockPrisma.developmentPlan.findMany.mockResolvedValue([{ ...basePlan, actions: [], goals: [] }]);
+      mockPrisma.developmentPlan.findMany.mockResolvedValue([
+        { ...basePlan, actions: [], goals: [] },
+      ]);
       mockPrisma.developmentPlan.count.mockResolvedValue(1);
 
       const result = await service.findAll({});
@@ -177,7 +186,11 @@ describe('DevelopmentPlansService', () => {
 
   describe('update', () => {
     it('deve actualizar plano com sucesso', async () => {
-      mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, actions: [], goals: [] });
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        actions: [],
+        goals: [],
+      });
       mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, name: 'PDI Actualizado' });
 
       const result = await service.update(1, { name: 'PDI Actualizado' });

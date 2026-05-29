@@ -29,10 +29,7 @@ describe('HistoryService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        HistoryService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [HistoryService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<HistoryService>(HistoryService);
   });
@@ -61,8 +58,14 @@ describe('HistoryService', () => {
   describe('createEvent', () => {
     it('deve criar evento', async () => {
       mockPrisma.auditLog.create.mockResolvedValue({
-        id: 1, userId: 1, action: 'COURSE_COMPLETED', entity: 'Enrollment', entityId: 1,
-        timestamp: new Date(), changes: null, reason: null,
+        id: 1,
+        userId: 1,
+        action: 'COURSE_COMPLETED',
+        entity: 'Enrollment',
+        entityId: 1,
+        timestamp: new Date(),
+        changes: null,
+        reason: null,
       });
       const result = await service.createEvent({
         userId: 1,

@@ -21,20 +21,48 @@ const mockPrisma = {
     count: jest.fn().mockResolvedValue(0),
     delete: jest.fn(),
   },
-  knowledgeTag: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), create: jest.fn() },
+  knowledgeTag: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn(),
+    create: jest.fn(),
+  },
   knowledgeInteraction: { create: jest.fn().mockResolvedValue({}) },
   knowledgeSearchLog: { create: jest.fn().mockResolvedValue({}) },
-  articleAcknowledgement: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(0) },
-  articleComment: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
-  articleRating: { upsert: jest.fn(), aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 } }) },
-  articleQuestion: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), update: jest.fn() },
+  articleAcknowledgement: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  articleComment: {
+    create: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
+  articleRating: {
+    upsert: jest.fn(),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 } }),
+  },
+  articleQuestion: {
+    create: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+  },
   articleVersion: { create: jest.fn().mockResolvedValue({}) },
   user: { findUnique: jest.fn() },
 };
 
 const baseArticle = {
-  id: 1, title: 'Como usar NestJS', status: 'PUBLISHED', category: null,
-  tags: [], views: 0, _count: { views: 0, comments: 0, acknowledgements: 0 },
+  id: 1,
+  title: 'Como usar NestJS',
+  status: 'PUBLISHED',
+  category: null,
+  tags: [],
+  views: 0,
+  _count: { views: 0, comments: 0, acknowledgements: 0 },
 };
 
 describe('KnowledgeService', () => {
@@ -43,10 +71,7 @@ describe('KnowledgeService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        KnowledgeService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [KnowledgeService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<KnowledgeService>(KnowledgeService);
   });

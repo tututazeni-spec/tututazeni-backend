@@ -30,17 +30,28 @@ const mockPrisma = {
     count: jest.fn().mockResolvedValue(0),
   },
   goalEvaluation: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
-  competencyEvaluation: { createMany: jest.fn().mockResolvedValue({ count: 0 }), findMany: jest.fn().mockResolvedValue([]) },
+  competencyEvaluation: {
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   calibrationLog: { create: jest.fn().mockResolvedValue({}) },
   nineBoxPlacement: { upsert: jest.fn().mockResolvedValue({}) },
   performanceDispute: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
   user: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
-  notificationLog: { create: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+  notificationLog: {
+    create: jest.fn().mockResolvedValue({}),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
 };
 
 const baseCycle = {
-  id: 1, name: 'Ciclo 2024', status: 'DRAFT', startDate: new Date(), endDate: new Date(),
-  reviews: [], _count: { reviews: 0 },
+  id: 1,
+  name: 'Ciclo 2024',
+  status: 'DRAFT',
+  startDate: new Date(),
+  endDate: new Date(),
+  reviews: [],
+  _count: { reviews: 0 },
 };
 
 describe('PerformanceService', () => {
@@ -49,10 +60,7 @@ describe('PerformanceService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        PerformanceService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [PerformanceService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<PerformanceService>(PerformanceService);
   });
@@ -68,7 +76,11 @@ describe('PerformanceService', () => {
   describe('createCycle', () => {
     it('deve criar ciclo de performance', async () => {
       mockPrisma.performanceCycle.create.mockResolvedValue(baseCycle);
-      const result = await service.createCycle({ name: 'Ciclo 2024', startDate: '2024-01-01', endDate: '2024-12-31' } as any);
+      const result = await service.createCycle({
+        name: 'Ciclo 2024',
+        startDate: '2024-01-01',
+        endDate: '2024-12-31',
+      } as any);
       expect(result).toBeDefined();
     });
   });

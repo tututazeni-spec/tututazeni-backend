@@ -7,8 +7,21 @@ const makeFind = (data: any[] = []) => jest.fn().mockResolvedValue(data);
 const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
 
 const mockPrisma = {
-  avatarScenario: { findMany: makeFind(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), count: makeCount() },
-  avatarSession: { findMany: makeFind(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), count: makeCount(), groupBy: jest.fn().mockResolvedValue([]) },
+  avatarScenario: {
+    findMany: makeFind(),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: makeCount(),
+  },
+  avatarSession: {
+    findMany: makeFind(),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: makeCount(),
+    groupBy: jest.fn().mockResolvedValue([]),
+  },
   badge: { findMany: makeFind() },
   badgeAward: { create: jest.fn().mockResolvedValue({}), findFirst: jest.fn() },
   user: { findUnique: jest.fn() },
@@ -17,8 +30,12 @@ const mockPrisma = {
 };
 
 const baseScenario = {
-  id: 1, title: 'Entrevista de Vendas', category: 'SALES', difficulty: 'MEDIUM',
-  status: 'PUBLISHED', _count: { sessions: 5 },
+  id: 1,
+  title: 'Entrevista de Vendas',
+  category: 'SALES',
+  difficulty: 'MEDIUM',
+  status: 'PUBLISHED',
+  _count: { sessions: 5 },
 };
 
 describe('AvatarTrainingService', () => {

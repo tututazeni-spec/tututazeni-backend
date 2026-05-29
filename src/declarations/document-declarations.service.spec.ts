@@ -5,14 +5,27 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 
 const mockPrisma = {
-  declarationPurpose: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
+  declarationPurpose: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    update: jest.fn(),
+    findUnique: jest.fn(),
+  },
   declarationTemplate: {
-    findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), findUnique: jest.fn(),
-    create: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn(),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   },
   declarationRequest: {
-    findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), findFirst: jest.fn(),
-    create: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   },
   declarationApproval: { create: jest.fn(), update: jest.fn(), findFirst: jest.fn() },
   user: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },

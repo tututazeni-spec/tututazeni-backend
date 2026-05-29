@@ -93,13 +93,18 @@ describe('LeaveManagementService', () => {
       leaveTypeConfig.findUnique.mockResolvedValue(null);
       leaveTypeConfig.create.mockResolvedValue({ code: 'ANNUAL', name: 'Férias Anuais' });
 
-      const result = await service.createLeaveType({ code: 'ANNUAL', name: 'Férias Anuais' } as any);
+      const result = await service.createLeaveType({
+        code: 'ANNUAL',
+        name: 'Férias Anuais',
+      } as any);
       expect((result as any).code).toBe('ANNUAL');
     });
 
     it('deve lançar ConflictException se código duplicado', async () => {
       leaveTypeConfig.findUnique.mockResolvedValue({ code: 'ANNUAL' });
-      await expect(service.createLeaveType({ code: 'ANNUAL' } as any)).rejects.toThrow(ConflictException);
+      await expect(service.createLeaveType({ code: 'ANNUAL' } as any)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -125,7 +130,9 @@ describe('LeaveManagementService', () => {
 
     it('deve lançar NotFoundException se não encontrado', async () => {
       leaveTypeConfig.findUnique.mockResolvedValue(null);
-      await expect(service.updateLeaveType('INVALID', {} as any)).rejects.toThrow(NotFoundException);
+      await expect(service.updateLeaveType('INVALID', {} as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

@@ -50,10 +50,7 @@ describe('NotificationsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        NotificationsService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [NotificationsService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<NotificationsService>(NotificationsService);
   });

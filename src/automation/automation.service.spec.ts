@@ -19,13 +19,23 @@ const mockPrisma = {
   badgeAward: { create: jest.fn().mockResolvedValue({}), findFirst: jest.fn() },
   enrollment: { create: jest.fn(), findFirst: jest.fn() },
   developmentPlan: { create: jest.fn() },
-  notificationLog: { create: jest.fn().mockResolvedValue({}), createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+  notificationLog: {
+    create: jest.fn().mockResolvedValue({}),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   historyRecord: { create: jest.fn().mockResolvedValue({}) },
   payslip: { create: jest.fn() },
 };
 
-const baseRule = { id: 1, name: 'Auto Badge', trigger: 'COURSE_COMPLETED', active: true, actions: [], conditions: [] };
+const baseRule = {
+  id: 1,
+  name: 'Auto Badge',
+  trigger: 'COURSE_COMPLETED',
+  active: true,
+  actions: [],
+  conditions: [],
+};
 
 describe('AutomationService', () => {
   let service: AutomationService;

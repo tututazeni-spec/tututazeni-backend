@@ -172,7 +172,12 @@ describe('AuthService', () => {
 
   describe('me', () => {
     it('deve retornar utilizador sem password', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, profile: null, points: null, badgeAwards: [] });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...baseUser,
+        profile: null,
+        points: null,
+        badgeAwards: [],
+      });
 
       const result = await service.me(1);
 

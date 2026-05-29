@@ -6,18 +6,36 @@ import { AuditService } from '../common/services/audit.service';
 
 const mockPrisma = {
   workDeclForm: {
-    findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(),
-    create: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   },
-  workDeclQuestion: { createMany: jest.fn().mockResolvedValue({ count: 0 }), deleteMany: jest.fn().mockResolvedValue({ count: 0 }), findMany: jest.fn().mockResolvedValue([]) },
-  workDeclSubmission: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), findFirst: jest.fn(), count: jest.fn().mockResolvedValue(0) },
+  workDeclQuestion: {
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  workDeclSubmission: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    findFirst: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+  },
   workDeclAnswer: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
   workDeclReview: { create: jest.fn(), update: jest.fn() },
   user: { findMany: jest.fn().mockResolvedValue([]) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
-const baseForm = { id: 1, title: 'Declaração de Trabalho', type: 'WORKLOAD', active: true, questions: [] };
+const baseForm = {
+  id: 1,
+  title: 'Declaração de Trabalho',
+  type: 'WORKLOAD',
+  active: true,
+  questions: [],
+};
 
 describe('WorkDeclarationsService', () => {
   let service: WorkDeclarationsService;

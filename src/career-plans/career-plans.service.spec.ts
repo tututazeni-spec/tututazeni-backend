@@ -87,7 +87,11 @@ describe('CareerPlansService', () => {
   describe('createRole', () => {
     it('deve criar role de carreira', async () => {
       mockPrisma.careerRole.create.mockResolvedValue(baseRole);
-      const result = await service.createRole({ name: 'Dev Senior', department: 'TI', level: 3 } as any);
+      const result = await service.createRole({
+        name: 'Dev Senior',
+        department: 'TI',
+        level: 3,
+      } as any);
       expect(result.name).toBe('Dev Senior');
     });
   });

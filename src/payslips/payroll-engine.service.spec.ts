@@ -3,8 +3,20 @@ import { PayrollEngineService } from './payroll-engine.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
-  countryConfig: { findFirst: jest.fn().mockResolvedValue({ countryCode: 'AO', taxYear: 2024, irtBrackets: [], inssRate: 3, inssEmployerRate: 8 }) },
-  employeeCompensation: { findFirst: jest.fn().mockResolvedValue({ baseSalary: 5000, currency: 'AOA' }) },
+  countryConfig: {
+    findFirst: jest
+      .fn()
+      .mockResolvedValue({
+        countryCode: 'AO',
+        taxYear: 2024,
+        irtBrackets: [],
+        inssRate: 3,
+        inssEmployerRate: 8,
+      }),
+  },
+  employeeCompensation: {
+    findFirst: jest.fn().mockResolvedValue({ baseSalary: 5000, currency: 'AOA' }),
+  },
 };
 
 describe('PayrollEngineService', () => {

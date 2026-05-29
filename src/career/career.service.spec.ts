@@ -113,7 +113,13 @@ const baseUser = {
   performanceReviews: [],
   successionPlans: [],
   badgeAwards: [],
-  _count: { certificates: 0, enrollments: 0, userCompetencies: 0, userCareerPlans: 0, badgeAwards: 0 },
+  _count: {
+    certificates: 0,
+    enrollments: 0,
+    userCompetencies: 0,
+    userCareerPlans: 0,
+    badgeAwards: 0,
+  },
 };
 
 describe('CareerService', () => {
@@ -130,10 +136,7 @@ describe('CareerService', () => {
     mockPrisma.internalVacancy.count.mockResolvedValue(0);
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        CareerService,
-        { provide: PrismaService, useValue: mockPrismaProxy },
-      ],
+      providers: [CareerService, { provide: PrismaService, useValue: mockPrismaProxy }],
     }).compile();
     service = module.get<CareerService>(CareerService);
   });
@@ -218,9 +221,9 @@ describe('CareerService', () => {
 
     it('deve lançar NotFoundException se vaga não existe', async () => {
       mockPrisma.internalVacancy.findUnique.mockResolvedValue(null);
-      await expect(
-        service.applyToVacancy(99, 1, { motivation: 'Test' }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.applyToVacancy(99, 1, { motivation: 'Test' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

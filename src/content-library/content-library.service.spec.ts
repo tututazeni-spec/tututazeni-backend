@@ -19,7 +19,12 @@ const mockPrisma = {
   },
   user: { findUnique: jest.fn() },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
-  auditLog: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0), groupBy: jest.fn().mockResolvedValue([]), findMany: jest.fn().mockResolvedValue([]) },
+  auditLog: {
+    create: jest.fn().mockResolvedValue({}),
+    count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   userPoints: { update: jest.fn().mockResolvedValue({}) },
 };
 
@@ -39,10 +44,7 @@ describe('ContentLibraryService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ContentLibraryService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [ContentLibraryService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<ContentLibraryService>(ContentLibraryService);
   });

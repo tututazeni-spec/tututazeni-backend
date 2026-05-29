@@ -53,8 +53,21 @@ const baseEnrollment = {
   mandatory: false,
   origin: 'MANUAL',
   enrolledAt: new Date(),
-  user: { id: 1, fullName: 'Test User', email: 'test@innova.com', avatarUrl: null, department: null },
-  course: { id: 1, title: 'Curso Teste', thumbnailUrl: null, category: null, workloadHours: 0, status: 'PUBLISHED' },
+  user: {
+    id: 1,
+    fullName: 'Test User',
+    email: 'test@innova.com',
+    avatarUrl: null,
+    department: null,
+  },
+  course: {
+    id: 1,
+    title: 'Curso Teste',
+    thumbnailUrl: null,
+    category: null,
+    workloadHours: 0,
+    status: 'PUBLISHED',
+  },
   certificate: null,
   progresses: [],
 };
@@ -65,10 +78,7 @@ describe('EnrollmentsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EnrollmentsService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [EnrollmentsService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<EnrollmentsService>(EnrollmentsService);
   });
@@ -79,12 +89,8 @@ describe('EnrollmentsService', () => {
     it('deve retornar lista paginada de matrículas com progresso', async () => {
       mockPrisma.enrollment.findMany.mockResolvedValue([baseEnrollment]);
       mockPrisma.enrollment.count.mockResolvedValue(1);
-      mockPrisma.courseModule.findMany.mockResolvedValue([
-        { courseId: 1, _count: { lessons: 5 } },
-      ]);
-      mockPrisma.lessonProgress.groupBy.mockResolvedValue([
-        { enrollmentId: 1, _count: { id: 3 } },
-      ]);
+      mockPrisma.courseModule.findMany.mockResolvedValue([{ courseId: 1, _count: { lessons: 5 } }]);
+      mockPrisma.lessonProgress.groupBy.mockResolvedValue([{ enrollmentId: 1, _count: { id: 3 } }]);
 
       const result = await service.findAll({ page: 1, limit: 20 });
 
@@ -146,7 +152,10 @@ describe('EnrollmentsService', () => {
     });
 
     it('deve lançar ConflictException se já existe matrícula activa', async () => {
-      mockPrisma.enrollment.findFirst.mockResolvedValue({ ...baseEnrollment, status: 'IN_PROGRESS' });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'IN_PROGRESS',
+      });
       await expect(service.enroll(enrollDto)).rejects.toThrow(ConflictException);
     });
 

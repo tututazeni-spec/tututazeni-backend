@@ -10,15 +10,30 @@ const integrationMock = {
   count: jest.fn().mockResolvedValue(0),
 };
 
-const mockPrisma = new Proxy({
-  integrationConfig: integrationMock,
-  apiIntegrationLog: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0) },
-  auditLog: { create: jest.fn().mockResolvedValue({}) },
-}, {
-  get(target, prop) {
-    return (target as any)[prop] ?? { findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0), findUnique: jest.fn() };
+const mockPrisma = new Proxy(
+  {
+    integrationConfig: integrationMock,
+    apiIntegrationLog: {
+      create: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+      findFirst: jest.fn().mockResolvedValue(null),
+      count: jest.fn().mockResolvedValue(0),
+    },
+    auditLog: { create: jest.fn().mockResolvedValue({}) },
   },
-});
+  {
+    get(target, prop) {
+      return (
+        (target as any)[prop] ?? {
+          findMany: jest.fn().mockResolvedValue([]),
+          create: jest.fn().mockResolvedValue({}),
+          count: jest.fn().mockResolvedValue(0),
+          findUnique: jest.fn(),
+        }
+      );
+    },
+  },
+);
 
 const baseIntegration = { id: 1, name: 'LDAP', type: 'LDAP', active: true, config: {} };
 

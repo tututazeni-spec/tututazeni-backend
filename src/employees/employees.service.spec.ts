@@ -22,7 +22,12 @@ const mockPrisma = {
   pdiAction: { updateMany: jest.fn() },
   employeeDocument: { create: jest.fn(), findMany: jest.fn() },
   employeeTimeline: { create: jest.fn() },
-  selfServiceRequest: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+  selfServiceRequest: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+  },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
 };
@@ -118,7 +123,13 @@ describe('EmployeesService', () => {
       mockPrisma.employee.create.mockResolvedValue(baseEmployee);
 
       const result = await service.create(
-        { name: 'João', email: 'joao@innova.com', joinedAt: '2024-01-01', role: 'Dev', department: 'TI' } as any,
+        {
+          name: 'João',
+          email: 'joao@innova.com',
+          joinedAt: '2024-01-01',
+          role: 'Dev',
+          department: 'TI',
+        } as any,
         1,
       );
 

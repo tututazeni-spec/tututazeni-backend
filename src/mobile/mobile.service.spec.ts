@@ -43,7 +43,11 @@ describe('MobileService', () => {
 
   describe('getUserMobileDashboard', () => {
     it('deve retornar dashboard mobile', async () => {
-      mockPrisma.mobileSession.findFirst.mockResolvedValue({ id: 1, deviceId: 'dev-1', pushToken: 'token' });
+      mockPrisma.mobileSession.findFirst.mockResolvedValue({
+        id: 1,
+        deviceId: 'dev-1',
+        pushToken: 'token',
+      });
       const result = await service.getUserMobileDashboard(1);
       expect(result).toBeDefined();
     });

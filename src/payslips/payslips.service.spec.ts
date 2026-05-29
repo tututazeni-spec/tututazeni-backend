@@ -5,19 +5,31 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
   payslip: {
-    findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]),
-    create: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(0),
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
-  payslipAccessLog: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
+  payslipAccessLog: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   payslipDispute: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
   user: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
 const basePayslip = {
-  id: 1, userId: 1, month: '2024-01', year: 2024, status: 'ISSUED',
-  grossSalary: 5000, netSalary: 4000,
+  id: 1,
+  userId: 1,
+  month: '2024-01',
+  year: 2024,
+  status: 'ISSUED',
+  grossSalary: 5000,
+  netSalary: 4000,
   user: { id: 1, fullName: 'Test User', email: 'test@innova.com' },
 };
 

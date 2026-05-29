@@ -9,27 +9,51 @@ const makeGroupBy = () => jest.fn().mockResolvedValue([]);
 
 const mockPrisma = {
   user: { findUnique: jest.fn(), findMany: makeFind(), count: makeCount(), groupBy: makeGroupBy() },
-  enrollment: { count: makeCount(), findMany: makeFind(), groupBy: makeGroupBy(), aggregate: makeAgg() },
+  enrollment: {
+    count: makeCount(),
+    findMany: makeFind(),
+    groupBy: makeGroupBy(),
+    aggregate: makeAgg(),
+  },
   course: { count: makeCount(), findMany: makeFind(), groupBy: makeGroupBy() },
   certificate: { count: makeCount(), findMany: makeFind() },
   badgeAward: { count: makeCount(), findMany: makeFind() },
   performanceReview: { count: makeCount(), findMany: makeFind(), aggregate: makeAgg() },
-  developmentPlan: { count: makeCount(), findMany: makeFind(), findFirst: jest.fn().mockResolvedValue(null) },
+  developmentPlan: {
+    count: makeCount(),
+    findMany: makeFind(),
+    findFirst: jest.fn().mockResolvedValue(null),
+  },
   developmentPlanAction: { count: makeCount(), findMany: makeFind() },
   department: { findMany: makeFind() },
-  notificationLog: { count: makeCount(), findMany: makeFind(), create: jest.fn().mockResolvedValue({}) },
+  notificationLog: {
+    count: makeCount(),
+    findMany: makeFind(),
+    create: jest.fn().mockResolvedValue({}),
+  },
   auditLog: { findMany: makeFind(), count: makeCount(), groupBy: makeGroupBy() },
   engagementSurvey: { findMany: makeFind(), count: makeCount() },
   surveyResponse: { count: makeCount(), findMany: makeFind() },
-  userCompetency: { findMany: makeFind(), count: makeCount(), aggregate: makeAgg(), groupBy: makeGroupBy() },
+  userCompetency: {
+    findMany: makeFind(),
+    count: makeCount(),
+    aggregate: makeAgg(),
+    groupBy: makeGroupBy(),
+  },
   evaluationRequest: { count: makeCount(), findMany: makeFind() },
   successionPlan: { count: makeCount(), findMany: makeFind() },
   position: { findMany: makeFind() },
   assessmentAttempt: { count: makeCount(), findMany: makeFind() },
   avatarSession: { count: makeCount(), findMany: makeFind() },
   contentAsset: { count: makeCount(), findMany: makeFind() },
-  dashboardSnapshot: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
-  userPoints: { findUnique: jest.fn().mockResolvedValue({ points: 100 }), findFirst: jest.fn().mockResolvedValue({ points: 100 }) },
+  dashboardSnapshot: {
+    findFirst: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({}),
+  },
+  userPoints: {
+    findUnique: jest.fn().mockResolvedValue({ points: 100 }),
+    findFirst: jest.fn().mockResolvedValue({ points: 100 }),
+  },
 };
 
 const baseUser = {
@@ -53,10 +77,7 @@ describe('DashboardService', () => {
     mockPrisma.certificate.count.mockResolvedValue(10);
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        DashboardService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [DashboardService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<DashboardService>(DashboardService);
   });

@@ -5,16 +5,30 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
   liveClass: {
-    findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]),
-    create: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(0),
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   },
-  liveAttendance: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), upsert: jest.fn() },
+  liveAttendance: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    upsert: jest.fn(),
+  },
   liveChatMessage: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
   postClassEvaluation: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
   postClassResponse: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
 };
 
-const baseClass = { id: 1, title: 'Live NestJS', status: 'SCHEDULED', startAt: new Date(), endAt: new Date() };
+const baseClass = {
+  id: 1,
+  title: 'Live NestJS',
+  status: 'SCHEDULED',
+  startAt: new Date(),
+  endAt: new Date(),
+};
 
 describe('LiveClassesService', () => {
   let service: LiveClassesService;
@@ -51,7 +65,10 @@ describe('LiveClassesService', () => {
   describe('create', () => {
     it('deve criar aula ao vivo', async () => {
       mockPrisma.liveClass.create.mockResolvedValue(baseClass);
-      const result = await service.create({ title: 'Live NestJS', startAt: new Date().toISOString() } as any);
+      const result = await service.create({
+        title: 'Live NestJS',
+        startAt: new Date().toISOString(),
+      } as any);
       expect(result).toBeDefined();
     });
   });

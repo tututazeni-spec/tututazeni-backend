@@ -67,10 +67,7 @@ describe('SuccessionService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        SuccessionService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [SuccessionService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<SuccessionService>(SuccessionService);
   });
@@ -81,19 +78,26 @@ describe('SuccessionService', () => {
       mockPrisma.criticalPosition.findUnique.mockResolvedValue(null);
       mockPrisma.criticalPosition.create.mockResolvedValue(baseCritical);
 
-      const result = await service.createCriticalPosition({ positionId: 1, riskLevel: 'HIGH' } as any);
+      const result = await service.createCriticalPosition({
+        positionId: 1,
+        riskLevel: 'HIGH',
+      } as any);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se posição não encontrada', async () => {
       mockPrisma.position.findUnique.mockResolvedValue(null);
-      await expect(service.createCriticalPosition({ positionId: 99 } as any)).rejects.toThrow(NotFoundException);
+      await expect(service.createCriticalPosition({ positionId: 99 } as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('deve lançar ConflictException se já é crítica', async () => {
       mockPrisma.position.findUnique.mockResolvedValue(basePosition);
       mockPrisma.criticalPosition.findUnique.mockResolvedValue(baseCritical);
-      await expect(service.createCriticalPosition({ positionId: 1 } as any)).rejects.toThrow(ConflictException);
+      await expect(service.createCriticalPosition({ positionId: 1 } as any)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 

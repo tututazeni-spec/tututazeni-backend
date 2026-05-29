@@ -48,10 +48,7 @@ describe('RolesPermissionsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        RolesPermissionsService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [RolesPermissionsService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<RolesPermissionsService>(RolesPermissionsService);
   });

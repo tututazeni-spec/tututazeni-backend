@@ -24,7 +24,13 @@ const mockPrisma = {
   leadershipScore: { create: jest.fn(), findMany: jest.fn() },
   leadershipFeedback360: { create: jest.fn(), findMany: jest.fn() },
   leadershipPulse: { create: jest.fn(), findMany: jest.fn() },
-  mentoring: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), count: jest.fn() },
+  mentoring: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn(),
+  },
   mentoringSession: { create: jest.fn(), findMany: jest.fn() },
   oneOnOne: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
   teamHealth: { create: jest.fn(), findMany: jest.fn() },
@@ -51,10 +57,7 @@ describe('LeadershipService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        LeadershipService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [LeadershipService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<LeadershipService>(LeadershipService);
   });
@@ -85,7 +88,10 @@ describe('LeadershipService', () => {
   describe('create', () => {
     it('deve criar programa', async () => {
       mockPrisma.leadershipProgram.create.mockResolvedValue(baseProgram);
-      const result = await service.create({ title: 'Programa de Liderança', description: 'Desc' } as any);
+      const result = await service.create({
+        title: 'Programa de Liderança',
+        description: 'Desc',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -93,9 +99,15 @@ describe('LeadershipService', () => {
   describe('enroll', () => {
     it('deve inscrever utilizador no programa', async () => {
       mockPrisma.leadershipParticipant.findUnique.mockResolvedValue(null);
-      mockPrisma.leadershipProgram.findUnique.mockResolvedValue({ ...baseProgram, status: 'ACTIVE' });
+      mockPrisma.leadershipProgram.findUnique.mockResolvedValue({
+        ...baseProgram,
+        status: 'ACTIVE',
+      });
       mockPrisma.leadershipParticipant.create.mockResolvedValue({
-        id: 1, userId: 1, programId: 1, program: { name: 'Programa de Liderança' },
+        id: 1,
+        userId: 1,
+        programId: 1,
+        program: { name: 'Programa de Liderança' },
       });
 
       const result = await service.enroll({ userId: 1, programId: 1 });

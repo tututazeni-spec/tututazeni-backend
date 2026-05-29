@@ -38,8 +38,17 @@ const mockPrisma = {
   },
   attendanceRecord: { findMany: jest.fn().mockResolvedValue([]) },
   competency: { count: jest.fn(), findMany: jest.fn() },
-  userCompetency: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn(), aggregate: jest.fn() },
-  performanceReview: { aggregate: jest.fn().mockResolvedValue({ _avg: { score: null } }), findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0), groupBy: jest.fn().mockResolvedValue([]) },
+  userCompetency: {
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn(),
+    aggregate: jest.fn(),
+  },
+  performanceReview: {
+    aggregate: jest.fn().mockResolvedValue({ _avg: { score: null } }),
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
+  },
   badgeAward: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
   engagementSurvey: { findMany: jest.fn().mockResolvedValue([]) },
   savedReport: { create: jest.fn().mockResolvedValue({ id: 1 }), findMany: jest.fn() },
@@ -75,10 +84,7 @@ describe('ReportsService', () => {
     positionMock.findMany.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ReportsService,
-        { provide: PrismaService, useValue: mockPrismaProxy },
-      ],
+      providers: [ReportsService, { provide: PrismaService, useValue: mockPrismaProxy }],
     }).compile();
     service = module.get<ReportsService>(ReportsService);
   });

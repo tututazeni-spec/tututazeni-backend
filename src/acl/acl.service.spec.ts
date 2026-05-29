@@ -31,8 +31,12 @@ const mockPrisma = {
 };
 
 const baseRole = {
-  id: 1, name: 'COLABORADOR', code: 'COLABORADOR',
-  permissions: [], users: [], _count: { users: 10 },
+  id: 1,
+  name: 'COLABORADOR',
+  code: 'COLABORADOR',
+  permissions: [],
+  users: [],
+  _count: { users: 10 },
 };
 const basePerm = { id: 1, name: 'courses:read', action: 'read', subject: 'courses' };
 

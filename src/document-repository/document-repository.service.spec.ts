@@ -7,20 +7,42 @@ import { AuditService } from '../common/services/audit.service';
 const mockPrisma = {
   docCategoryModel: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
   document: {
-    findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]),
-    create: jest.fn(), update: jest.fn(), count: jest.fn().mockResolvedValue(0), delete: jest.fn(),
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    delete: jest.fn(),
   },
-  docPermission: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+  docPermission: {
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn(),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   docAuditLog: { create: jest.fn().mockResolvedValue({}) },
-  docShareLink: { findUnique: jest.fn(), create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+  docShareLink: {
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   docDownload: { create: jest.fn().mockResolvedValue({}) },
-  docVersion: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
+  docVersion: {
+    create: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn(),
+  },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
 const baseDoc = {
-  id: 1, title: 'Regulamento', type: 'POLICY', status: 'PUBLISHED',
-  category: null, permissions: [], _count: { downloads: 5 },
+  id: 1,
+  title: 'Regulamento',
+  type: 'POLICY',
+  status: 'PUBLISHED',
+  category: null,
+  permissions: [],
+  _count: { downloads: 5 },
 };
 
 describe('DocumentRepositoryService', () => {

@@ -47,10 +47,7 @@ describe('UsersService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        UsersService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [UsersService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<UsersService>(UsersService);
   });
@@ -130,9 +127,9 @@ describe('UsersService', () => {
     it('deve lançar ConflictException se employeeNumber duplicado', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
       mockPrisma.user.findFirst.mockResolvedValue(baseUser);
-      await expect(
-        service.create({ ...createDto, employeeNumber: 'EMP001' }),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.create({ ...createDto, employeeNumber: 'EMP001' })).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 

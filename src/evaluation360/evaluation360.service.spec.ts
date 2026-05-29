@@ -34,15 +34,23 @@ const requestMock = {
   count: jest.fn().mockResolvedValue(0),
 };
 
-const mockPrisma = new Proxy({}, {
-  get(_target, prop) {
-    if (prop === 'competency') return competencyMock;
-    if (prop === 'evaluationCycle') return cycleMock;
-    if (prop === 'cycleQuestion') return questionMock;
-    if (prop === 'evaluationRequest') return requestMock;
-    return { findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0), findUnique: jest.fn() };
+const mockPrisma = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      if (prop === 'competency') return competencyMock;
+      if (prop === 'evaluationCycle') return cycleMock;
+      if (prop === 'cycleQuestion') return questionMock;
+      if (prop === 'evaluationRequest') return requestMock;
+      return {
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({}),
+        count: jest.fn().mockResolvedValue(0),
+        findUnique: jest.fn(),
+      };
+    },
   },
-});
+);
 
 const mockAudit = { log: jest.fn().mockResolvedValue({}) };
 const mockEvents = { emit: jest.fn() };
@@ -69,7 +77,10 @@ describe('Evaluation360Service', () => {
   describe('createCompetency', () => {
     it('deve criar competência 360', async () => {
       competencyMock.create.mockResolvedValue(baseCompetency);
-      const result = await service.createCompetency({ name: 'Comunicação', type: 'BEHAVIORAL' } as any, 'user-1');
+      const result = await service.createCompetency(
+        { name: 'Comunicação', type: 'BEHAVIORAL' } as any,
+        'user-1',
+      );
       expect(result.name).toBe('Comunicação');
     });
   });
@@ -87,7 +98,11 @@ describe('Evaluation360Service', () => {
     it('deve actualizar competência', async () => {
       competencyMock.findUnique.mockResolvedValue(baseCompetency);
       competencyMock.update.mockResolvedValue({ ...baseCompetency, name: 'Actualizado' });
-      const result = await service.updateCompetency('comp-1', { name: 'Actualizado' } as any, 'user-1');
+      const result = await service.updateCompetency(
+        'comp-1',
+        { name: 'Actualizado' } as any,
+        'user-1',
+      );
       expect(result.name).toBe('Actualizado');
     });
 
