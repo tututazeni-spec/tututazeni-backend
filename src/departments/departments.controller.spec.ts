@@ -44,8 +44,10 @@ describe('DepartmentsController', () => {
       controllers: [DepartmentsController],
       providers: [{ provide: DepartmentsService, useValue: mockDeptSvc }],
     })
-      .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
-      .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get(DepartmentsController);
   });
@@ -135,8 +137,10 @@ describe('UnitsController', () => {
       controllers: [UnitsController],
       providers: [{ provide: UnitsService, useValue: mockUnitsSvc }],
     })
-      .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
-      .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get(UnitsController);
   });
@@ -191,8 +195,10 @@ describe('RolesController', () => {
       controllers: [RolesController],
       providers: [{ provide: RolesService, useValue: mockRolesSvc }],
     })
-      .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
-      .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get(RolesController);
   });
@@ -267,8 +273,10 @@ describe('PositionsController', () => {
       controllers: [PositionsController],
       providers: [{ provide: PositionsService, useValue: mockPositionsSvc }],
     })
-      .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
-      .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get(PositionsController);
   });
@@ -319,8 +327,10 @@ describe('CareersController', () => {
       controllers: [CareersController],
       providers: [{ provide: CareersService, useValue: mockCareersSvc }],
     })
-      .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
-      .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get(CareersController);
   });

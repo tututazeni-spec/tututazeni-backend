@@ -38,8 +38,10 @@ describe('NotificationsController', () => {
       controllers: [NotificationsController],
       providers: [{ provide: NotificationsService, useValue: mockSvc }],
     })
-      .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
-      .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get<NotificationsController>(NotificationsController);
   });

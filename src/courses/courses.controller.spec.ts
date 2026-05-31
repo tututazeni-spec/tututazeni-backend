@@ -49,8 +49,10 @@ describe('CoursesController', () => {
       controllers: [CoursesController],
       providers: [{ provide: CoursesService, useValue: mockSvc }],
     })
-      .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
-      .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get<CoursesController>(CoursesController);
   });

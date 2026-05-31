@@ -47,8 +47,10 @@ describe('AttendanceController', () => {
       controllers: [AttendanceController],
       providers: [{ provide: AttendanceService, useValue: mockSvc }],
     })
-      .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
-      .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get(AttendanceController);
   });
@@ -70,7 +72,11 @@ describe('AttendanceController', () => {
 
   it('getAbsenteeism', async () => {
     await controller.getAbsenteeism('2024-01-01', '2024-01-31');
-    expect(mockSvc.getAbsenteeismReport).toHaveBeenCalledWith('2024-01-01', '2024-01-31', undefined);
+    expect(mockSvc.getAbsenteeismReport).toHaveBeenCalledWith(
+      '2024-01-01',
+      '2024-01-31',
+      undefined,
+    );
   });
 
   it('getKpiTrend sem params', async () => {

@@ -33,8 +33,10 @@ describe('DashboardRhController', () => {
       controllers: [DashboardRhController],
       providers: [{ provide: DashboardRhService, useValue: mockSvc }],
     })
-      .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
-      .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get(DashboardRhController);
   });

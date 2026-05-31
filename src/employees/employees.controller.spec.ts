@@ -55,8 +55,10 @@ describe('EmployeesController', () => {
       controllers: [EmployeesController],
       providers: [{ provide: EmployeesService, useValue: mockSvc }],
     })
-      .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
-      .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get(EmployeesController);
   });
@@ -232,7 +234,11 @@ describe('EmployeesController', () => {
   it('addTimelineEvent', async () => {
     const dto = { type: 'NOTE', description: 'test' } as any;
     await controller.addTimelineEvent(1, dto);
-    expect(mockSvc.addTimelineEvent).toHaveBeenCalledWith({ type: 'NOTE', description: 'test', employeeId: 1 });
+    expect(mockSvc.addTimelineEvent).toHaveBeenCalledWith({
+      type: 'NOTE',
+      description: 'test',
+      employeeId: 1,
+    });
   });
 
   it('getRequests sem status', async () => {

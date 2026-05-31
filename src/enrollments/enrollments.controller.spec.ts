@@ -4,7 +4,9 @@ import { EnrollmentsService } from './enrollments.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
-const mockPrismaEnrollment = { update: jest.fn().mockResolvedValue({ id: 1, status: 'CANCELLED' }) };
+const mockPrismaEnrollment = {
+  update: jest.fn().mockResolvedValue({ id: 1, status: 'CANCELLED' }),
+};
 
 const mockSvc = {
   prisma: { enrollment: mockPrismaEnrollment },
@@ -34,8 +36,10 @@ describe('EnrollmentsController', () => {
       controllers: [EnrollmentsController],
       providers: [{ provide: EnrollmentsService, useValue: mockSvc }],
     })
-      .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
-      .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     controller = module.get<EnrollmentsController>(EnrollmentsController);
   });
