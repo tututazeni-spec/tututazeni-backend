@@ -136,25 +136,24 @@ describe('AutomationService (additional)', () => {
     it('deve disparar evento e executar regras activas', async () => {
       mockPrisma.automationRule.findMany.mockResolvedValue([baseRule]);
       mockPrisma.automationExecution.create.mockResolvedValue({ id: 1 });
-      await service.triggerEvent({ type: 'COURSE_COMPLETED' as any, userId: 1, data: { score: 90 } });
+      await service.triggerEvent({ event: 'COURSE_COMPLETED' as any, userId: 1, payload: { score: 90 } });
       expect(mockPrisma.automationRule.findMany).toHaveBeenCalled();
     });
 
     it('deve ignorar evento sem regras activas', async () => {
       mockPrisma.automationRule.findMany.mockResolvedValue([]);
-      await service.triggerEvent({ type: 'COURSE_COMPLETED' as any, userId: 1, data: {} });
+      await service.triggerEvent({ event: 'COURSE_COMPLETED' as any, userId: 1, payload: {} });
       expect(mockPrisma.automationExecution.create).not.toHaveBeenCalled();
     });
   });
 
-  // ─── seedDefaultRules ─────────────────────────────────────────
+  // ─── runAllActiveRules ────────────────────────────────────────
 
-  describe('seedDefaultRules', () => {
-    it('deve criar regras padrão usando upsert', async () => {
-      mockPrisma.automationRule.upsert.mockResolvedValue(baseRule);
-      const result = await service.seedDefaultRules();
+  describe('runAllActiveRules', () => {
+    it('deve correr todas as regras activas', async () => {
+      mockPrisma.automationRule.findMany.mockResolvedValue([baseRule]);
+      const result = await service.runAllActiveRules();
       expect(result).toBeDefined();
-      expect(mockPrisma.automationRule.upsert).toHaveBeenCalled();
     });
   });
 
