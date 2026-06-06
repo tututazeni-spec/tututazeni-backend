@@ -134,4 +134,60 @@ describe('AnalyticsService', () => {
       expect(result).toBeDefined();
     });
   });
+
+  // ─── getManagerDashboard ──────────────────────────────────────────────────
+
+  describe('getManagerDashboard', () => {
+    it('deve retornar dashboard do gestor', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      mockPrisma.user.count.mockResolvedValue(5);
+      const result = await service.getManagerDashboard(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getPeopleAnalytics ───────────────────────────────────────────────────
+
+  describe('getPeopleAnalytics', () => {
+    it('deve retornar analytics de pessoas', async () => {
+      const result = await service.getPeopleAnalytics({});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getCompetencyGapAnalytics ────────────────────────────────────────────
+
+  describe('getCompetencyGapAnalytics', () => {
+    it('deve retornar analytics de gap de competências', async () => {
+      const result = await service.getCompetencyGapAnalytics({});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getPDIAnalytics ──────────────────────────────────────────────────────
+
+  describe('getPDIAnalytics', () => {
+    it('deve retornar analytics de PDI', async () => {
+      const result = await service.getPDIAnalytics({});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getRiskAlerts ────────────────────────────────────────────────────────
+
+  describe('getRiskAlerts', () => {
+    it('deve retornar alertas de risco', async () => {
+      const result = await service.getRiskAlerts({});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getCoursePerformance ─────────────────────────────────────────────────
+
+  describe('getCoursePerformance', () => {
+    it('deve retornar performance dos cursos', async () => {
+      const result = await service.getCoursePerformance();
+      expect(result).toBeDefined();
+    });
+  });
 });

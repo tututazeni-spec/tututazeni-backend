@@ -132,4 +132,87 @@ describe('ReportsService', () => {
       expect(result).toBeDefined();
     });
   });
+
+  // ─── trainingReportFull ───────────────────────────────────────────────────
+
+  describe('trainingReportFull', () => {
+    it('deve retornar relatório de formação completo', async () => {
+      mockPrisma.enrollment.count.mockResolvedValue(50);
+      mockPrisma.enrollment.aggregate.mockResolvedValue({ _avg: { progressPercent: 70 } });
+      const result = await service.trainingReportFull({});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── skillGapReport ───────────────────────────────────────────────────────
+
+  describe('skillGapReport', () => {
+    it('deve retornar relatório de gap de competências', async () => {
+      const result = await service.skillGapReport({});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── performanceReportFull ────────────────────────────────────────────────
+
+  describe('performanceReportFull', () => {
+    it('deve retornar relatório de performance completo', async () => {
+      const result = await service.performanceReportFull({});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── engagementReport ─────────────────────────────────────────────────────
+
+  describe('engagementReport', () => {
+    it('deve retornar relatório de engagement', async () => {
+      const result = await service.engagementReport({});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── talentReport ─────────────────────────────────────────────────────────
+
+  describe('talentReport', () => {
+    it('deve retornar relatório de talentos', async () => {
+      const result = await service.talentReport({});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── complianceReport ─────────────────────────────────────────────────────
+
+  describe('complianceReport', () => {
+    it('deve retornar relatório de compliance', async () => {
+      const result = await service.complianceReport({});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── attendanceReport ─────────────────────────────────────────────────────
+
+  describe('attendanceReport', () => {
+    it('deve retornar relatório de presenças', async () => {
+      const result = await service.attendanceReport('2024-01-01', '2024-12-31');
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── payrollSummary ───────────────────────────────────────────────────────
+
+  describe('payrollSummary', () => {
+    it('deve retornar resumo de payroll', async () => {
+      const result = await service.payrollSummary('2024-01');
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── competencyGapReport ──────────────────────────────────────────────────
+
+  describe('competencyGapReport', () => {
+    it('deve retornar relatório de gap de competências', async () => {
+      const result = await service.competencyGapReport();
+      expect(result).toBeDefined();
+    });
+  });
 });

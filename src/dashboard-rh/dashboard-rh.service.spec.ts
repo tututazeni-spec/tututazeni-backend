@@ -90,4 +90,99 @@ describe('DashboardRhService', () => {
       expect(result).toBeDefined();
     });
   });
+
+  // ─── getHeadcountTrend ────────────────────────────────────────────────────
+
+  describe('getHeadcountTrend', () => {
+    it('deve retornar tendência de headcount', async () => {
+      mockPrisma.user.count.mockResolvedValue(95);
+      const result = await service.getHeadcountTrend(6);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getEngagementPanel ───────────────────────────────────────────────────
+
+  describe('getEngagementPanel', () => {
+    it('deve retornar painel de engagement', async () => {
+      mockPrisma.user.count.mockResolvedValue(100);
+      const result = await service.getEngagementPanel();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getPerformancePanel ──────────────────────────────────────────────────
+
+  describe('getPerformancePanel', () => {
+    it('deve retornar painel de performance', async () => {
+      const result = await service.getPerformancePanel();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getSkillsPanel ───────────────────────────────────────────────────────
+
+  describe('getSkillsPanel', () => {
+    it('deve retornar painel de competências', async () => {
+      const result = await service.getSkillsPanel();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getTrainingPanel ─────────────────────────────────────────────────────
+
+  describe('getTrainingPanel', () => {
+    it('deve retornar painel de formação', async () => {
+      const result = await service.getTrainingPanel();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getCompliancePanel ───────────────────────────────────────────────────
+
+  describe('getCompliancePanel', () => {
+    it('deve retornar painel de compliance', async () => {
+      const result = await service.getCompliancePanel();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getBirthdaysThisMonth ────────────────────────────────────────────────
+
+  describe('getBirthdaysThisMonth', () => {
+    it('deve retornar aniversários do mês', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      const result = await service.getBirthdaysThisMonth();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getAnniversariesThisMonth ────────────────────────────────────────────
+
+  describe('getAnniversariesThisMonth', () => {
+    it('deve retornar aniversários de empresa do mês', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      const result = await service.getAnniversariesThisMonth();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getAttendancePanel ───────────────────────────────────────────────────
+
+  describe('getAttendancePanel', () => {
+    it('deve retornar painel de presenças', async () => {
+      const result = await service.getAttendancePanel();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getTalentPipeline ────────────────────────────────────────────────────
+
+  describe('getTalentPipeline', () => {
+    it('deve retornar pipeline de talentos', async () => {
+      mockPrisma.user.count.mockResolvedValue(50);
+      const result = await service.getTalentPipeline();
+      expect(result).toBeDefined();
+    });
+  });
 });

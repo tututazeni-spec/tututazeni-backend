@@ -101,4 +101,105 @@ describe('PerformanceService', () => {
       expect(result).toBeDefined();
     });
   });
+
+  // ─── getCycles ────────────────────────────────────────────────────────────
+
+  describe('getCycles', () => {
+    it('deve retornar todos os ciclos', async () => {
+      mockPrisma.performanceCycle.findMany.mockResolvedValue([]);
+      const result = await service.getCycles();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── activateCycle ────────────────────────────────────────────────────────
+
+  describe('activateCycle', () => {
+    it('deve activar ciclo e criar avaliações', async () => {
+      mockPrisma.performanceCycle.findUnique.mockResolvedValue(baseCycle);
+      mockPrisma.performanceCycle.update.mockResolvedValue({ ...baseCycle, status: 'ACTIVE' });
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      const result = await service.activateCycle(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── findOne ──────────────────────────────────────────────────────────────
+
+  describe('findOne', () => {
+    it('deve retornar avaliação por id', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue({
+        id: 1,
+        evaluatorId: 1,
+        evaluatedId: 2,
+        status: 'DRAFT',
+      });
+      const result = await service.findOne(1);
+      expect(result).toBeDefined();
+    });
+
+    it('deve lançar NotFoundException se não encontrado', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue(null);
+      await expect(service.findOne(99)).rejects.toThrow();
+    });
+  });
+
+  // ─── create ───────────────────────────────────────────────────────────────
+
+  describe('create', () => {
+    it('deve criar avaliação de performance', async () => {
+      mockPrisma.performanceReview.create.mockResolvedValue({ id: 1, score: 0 });
+      const result = await service.create({
+        evaluatorId: 1,
+        evaluatedId: 2,
+        type: 'SELF',
+        period: '2024-Q1',
+      } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── createGoal ───────────────────────────────────────────────────────────
+
+  describe('createGoal', () => {
+    it('deve criar meta de performance', async () => {
+      const result = await service.createGoal({
+        userId: 1,
+        title: 'Aumentar vendas',
+        target: 100,
+      } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getUserGoals ─────────────────────────────────────────────────────────
+
+  describe('getUserGoals', () => {
+    it('deve retornar metas do utilizador', async () => {
+      mockPrisma.performanceGoal.findMany.mockResolvedValue([]);
+      const result = await service.getUserGoals(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── createFeedback ───────────────────────────────────────────────────────
+
+  describe('createFeedback', () => {
+    it('deve criar feedback de performance', async () => {
+      const result = await service.createFeedback(1, {
+        receiverId: 2,
+        message: 'Excelente trabalho',
+      } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getUserFeedback ──────────────────────────────────────────────────────
+
+  describe('getUserFeedback', () => {
+    it('deve retornar feedback do utilizador', async () => {
+      const result = await service.getUserFeedback(1);
+      expect(result).toBeDefined();
+    });
+  });
 });

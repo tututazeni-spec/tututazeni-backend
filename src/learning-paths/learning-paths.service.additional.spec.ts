@@ -31,6 +31,7 @@ const mockPrisma = {
     findMany: makeFindMany([]),
     findFirst: makeFind(null),
     create: makeFind({ id: 1 }),
+    upsert: makeFind({ id: 1 }),
     update: makeFind({}),
     delete: makeFind({}),
     deleteMany: makeFind({ count: 0 }),
@@ -47,6 +48,7 @@ const mockPrisma = {
   learningPathEnrollment: {
     findFirst: makeFind(null),
     create: makeFind({ id: 1 }),
+    upsert: makeFind({ id: 1 }),
     findMany: makeFindMany([]),
     update: makeFind({}),
     count: makeCount(0),
@@ -115,9 +117,9 @@ describe('LearningPathsService — additional coverage', () => {
     });
   });
 
-  // ─── addCourse ────────────────────────────────────────────────────────────
+  // ─── addStep ────────────────────────────────────────────────────────────
 
-  describe('addCourse', () => {
+  describe('addStep', () => {
     it('deve adicionar curso à trilha', async () => {
       mockPrisma.learningPath.findUnique.mockResolvedValue(baseLearningPath);
       mockPrisma.course.findUnique.mockResolvedValue({ id: 5, title: 'Curso 5' });
@@ -125,16 +127,15 @@ describe('LearningPathsService — additional coverage', () => {
       mockPrisma.learningPathCourse.create.mockResolvedValue({ id: 1, courseId: 5 });
       mockPrisma.learningPathCourse.findMany.mockResolvedValue([]);
 
-      const result = await service.addCourse(1, { courseId: 5, seq: 1 } as any);
+      const result = await service.addStep(1, { courseId: 5, seq: 1 } as any);
       expect(result).toBeDefined();
     });
 
-    it('deve lançar ConflictException se curso já está na trilha', async () => {
+    it('deve lançar NotFoundException se curso não existe', async () => {
       mockPrisma.learningPath.findUnique.mockResolvedValue(baseLearningPath);
-      mockPrisma.course.findUnique.mockResolvedValue({ id: 5 });
-      mockPrisma.learningPathCourse.findFirst.mockResolvedValue({ id: 1, courseId: 5 });
+      mockPrisma.course.findUnique.mockResolvedValue(null);
 
-      await expect(service.addCourse(1, { courseId: 5 } as any)).rejects.toThrow(ConflictException);
+      await expect(service.addStep(1, { courseId: 99 } as any)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -151,7 +152,7 @@ describe('LearningPathsService — additional coverage', () => {
       mockPrisma.enrollment.findFirst.mockResolvedValue(null);
       mockPrisma.enrollment.create.mockResolvedValue({});
 
-      const result = await service.enroll(1, 1);
+      const result = await service.selfEnroll(1, 1);
       expect(result).toBeDefined();
     });
 
@@ -159,7 +160,7 @@ describe('LearningPathsService — additional coverage', () => {
       mockPrisma.learningPath.findUnique.mockResolvedValue(baseLearningPath);
       mockPrisma.learningPathEnrollment.findFirst.mockResolvedValue({ id: 1 });
 
-      await expect(service.enroll(1, 1)).rejects.toThrow(ConflictException);
+      await expect(service.selfEnroll(1, 1)).rejects.toThrow(ConflictException);
     });
   });
 

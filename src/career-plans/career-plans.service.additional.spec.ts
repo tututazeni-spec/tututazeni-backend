@@ -228,14 +228,22 @@ describe('CareerPlansService — additional coverage', () => {
         fromRules: [],
         toRules: [],
       });
-      mockPrisma.userCareerPlan.create.mockResolvedValue({
+      const createdPlan = {
         id: 1,
         userId: 1,
         targetRoleId: 2,
         status: 'ACTIVE',
-      });
+        goals: [],
+        user: null,
+        currentRole: null,
+        targetRole: { id: 2, skillRequirements: [], fromRules: [], toRules: [] },
+        careerPath: null,
+        mentor: null,
+      };
+      mockPrisma.userCareerPlan.create.mockResolvedValue(createdPlan);
+      mockPrisma.userCareerPlan.findUnique.mockResolvedValue(createdPlan);
 
-      const result = await service.create(1, { targetRoleId: 2, title: 'Plano 2024' } as any);
+      const result = await service.create({ targetRoleId: 2, title: 'Plano 2024' } as any, 1);
       expect(result).toBeDefined();
     });
   });
@@ -251,7 +259,7 @@ describe('CareerPlansService — additional coverage', () => {
       });
       mockPrisma.careerGoal.create.mockResolvedValue({ id: 1, title: 'Meta 1', status: 'IN_PROGRESS' });
 
-      const result = await service.addGoal(1, 1, { title: 'Meta 1', description: 'Desc' } as any);
+      const result = await service.addGoal({ planId: 1, title: 'Meta 1', description: 'Desc' } as any);
       expect(result).toBeDefined();
     });
   });

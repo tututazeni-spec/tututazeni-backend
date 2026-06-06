@@ -79,4 +79,105 @@ describe('ContentLibraryService', () => {
       expect(result).toBeDefined();
     });
   });
+
+  // ─── update ───────────────────────────────────────────────────────────────
+
+  describe('update', () => {
+    it('deve actualizar asset', async () => {
+      mockPrisma.contentAsset.findUnique.mockResolvedValue(baseAsset);
+      mockPrisma.contentAsset.update.mockResolvedValue({ ...baseAsset, title: 'Actualizado' });
+      const result = await service.update(1, { title: 'Actualizado' } as any, 1);
+      expect(result).toBeDefined();
+    });
+
+    it('deve lançar NotFoundException se asset não existe', async () => {
+      mockPrisma.contentAsset.findUnique.mockResolvedValue(null);
+      await expect(service.update(99, {} as any, 1)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── publish ──────────────────────────────────────────────────────────────
+
+  describe('publish', () => {
+    it('deve publicar asset', async () => {
+      mockPrisma.contentAsset.findUnique.mockResolvedValue(baseAsset);
+      mockPrisma.contentAsset.update.mockResolvedValue({ ...baseAsset, status: 'PUBLISHED' });
+      const result = await service.publish(1, 1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── deprecate ────────────────────────────────────────────────────────────
+
+  describe('deprecate', () => {
+    it('deve deprecar asset', async () => {
+      mockPrisma.contentAsset.findUnique.mockResolvedValue(baseAsset);
+      mockPrisma.contentAsset.update.mockResolvedValue({ ...baseAsset, status: 'DEPRECATED' });
+      const result = await service.deprecate(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── bookmark ─────────────────────────────────────────────────────────────
+
+  describe('bookmark', () => {
+    it('deve adicionar/remover bookmark', async () => {
+      mockPrisma.contentAsset.findUnique.mockResolvedValue({
+        ...baseAsset,
+        bookmarkedBy: [],
+      });
+      mockPrisma.contentAsset.update.mockResolvedValue(baseAsset);
+      const result = await service.bookmark(1, 1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getMyBookmarks ───────────────────────────────────────────────────────
+
+  describe('getMyBookmarks', () => {
+    it('deve retornar bookmarks do utilizador', async () => {
+      mockPrisma.contentAsset.findMany.mockResolvedValue([baseAsset]);
+      const result = await service.getMyBookmarks(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── view ─────────────────────────────────────────────────────────────────
+
+  describe('view', () => {
+    it('deve registar visualização', async () => {
+      mockPrisma.contentAsset.findUnique.mockResolvedValue({
+        ...baseAsset,
+        status: 'PUBLISHED',
+        views: 10,
+      });
+      mockPrisma.contentAsset.update.mockResolvedValue({ ...baseAsset, views: 11 });
+      const result = await service.view(1, 1);
+      expect(result).toBeDefined();
+    });
+
+    it('deve lançar NotFoundException se não encontrado', async () => {
+      mockPrisma.contentAsset.findUnique.mockResolvedValue(null);
+      await expect(service.view(99, 1)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── updateProgress ───────────────────────────────────────────────────────
+
+  describe('updateProgress', () => {
+    it('deve actualizar progresso de leitura', async () => {
+      mockPrisma.contentAsset.findUnique.mockResolvedValue(baseAsset);
+      const result = await service.updateProgress(1, 1, { progress: 50 } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getMyProgress ────────────────────────────────────────────────────────
+
+  describe('getMyProgress', () => {
+    it('deve retornar progresso do utilizador', async () => {
+      const result = await service.getMyProgress(1);
+      expect(result).toBeDefined();
+    });
+  });
 });

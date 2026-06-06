@@ -33,11 +33,6 @@ const mockPrisma = {
     delete: makeFind({}),
     updateMany: makeFind({ count: 0 }),
   },
-  departmentHeadHistory: {
-    create: makeFind({}),
-    updateMany: makeFind({ count: 0 }),
-  },
-  departmentTransferLog: { create: makeFind({}) },
   user: {
     findMany: makeFindMany([]),
     update: makeFind({}),

@@ -93,4 +93,72 @@ describe('HistoryService', () => {
       expect(result).toBeDefined();
     });
   });
+
+  // ─── findAll ──────────────────────────────────────────────────────────────
+
+  describe('findAll', () => {
+    it('deve retornar histórico paginado', async () => {
+      const result = await service.findAll({ page: 1, limit: 20 });
+      expect(result).toBeDefined();
+    });
+
+    it('deve filtrar por userId', async () => {
+      const result = await service.findAll({ userId: 1, page: 1, limit: 10 });
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getUserActivity ──────────────────────────────────────────────────────
+
+  describe('getUserActivity', () => {
+    it('deve retornar actividade recente do utilizador', async () => {
+      const result = await service.getUserActivity(1, 50);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getEntityHistory ─────────────────────────────────────────────────────
+
+  describe('getEntityHistory', () => {
+    it('deve retornar histórico de uma entidade', async () => {
+      const result = await service.getEntityHistory('Course', 1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getUserTimeline ──────────────────────────────────────────────────────
+
+  describe('getUserTimeline', () => {
+    it('deve retornar timeline do utilizador', async () => {
+      const result = await service.getUserTimeline(1, {});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getTeamTimeline ──────────────────────────────────────────────────────
+
+  describe('getTeamTimeline', () => {
+    it('deve retornar timeline da equipa', async () => {
+      const result = await service.getTeamTimeline(1, {});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getUpcomingEvents ────────────────────────────────────────────────────
+
+  describe('getUpcomingEvents', () => {
+    it('deve retornar eventos futuros', async () => {
+      const result = await service.getUpcomingEvents();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getAuditStats ────────────────────────────────────────────────────────
+
+  describe('getAuditStats', () => {
+    it('deve retornar estatísticas de auditoria', async () => {
+      const result = await service.getAuditStats('2024-01-01', '2024-12-31');
+      expect(result).toBeDefined();
+    });
+  });
 });

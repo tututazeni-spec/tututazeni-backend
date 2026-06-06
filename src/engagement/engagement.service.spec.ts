@@ -6,6 +6,7 @@ import { SurveyStatus, SurveyType } from './engagement.dto';
 
 const engagementSurveyMock = {
   findUnique: jest.fn(),
+  findFirst: jest.fn().mockResolvedValue(null),
   findMany: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
@@ -46,7 +47,7 @@ const mockPrisma = {
   feedback: feedbackMock,
   recognition: recognitionMock,
   oneOnOne: oneOnOneMock,
-  user: { findMany: jest.fn(), count: jest.fn() },
+  user: { findMany: jest.fn(), count: jest.fn(), findUnique: jest.fn() },
   notificationLog: {
     create: jest.fn().mockResolvedValue({}),
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -180,6 +181,214 @@ describe('EngagementService', () => {
 
       const result = await service.closeSurvey(1);
       expect((result as any).status).toBe('CLOSED');
+    });
+  });
+
+  // ─── submitSurvey ─────────────────────────────────────────────────────────
+
+  describe('submitSurvey', () => {
+    it('deve submeter survey com sucesso', async () => {
+      engagementSurveyMock.findUnique.mockResolvedValue({
+        ...baseSurvey,
+        status: 'ACTIVE',
+        questions: [],
+        minResponsesForResults: 3,
+      });
+      surveyResponseMock.findFirst.mockResolvedValue(null);
+      surveyResponseMock.create.mockResolvedValue({ id: 1, score: 4.0 });
+      (mockPrisma.userPoints as any).upsert = jest.fn().mockResolvedValue({});
+
+      const result = await service.submitSurvey(1, {
+        surveyId: 1,
+        answers: [{ questionId: 1, value: 4 }],
+      } as any);
+      expect((result as any).message).toContain('sucesso');
+    });
+
+    it('deve retornar alreadySubmitted se já respondeu', async () => {
+      engagementSurveyMock.findUnique.mockResolvedValue({ ...baseSurvey, status: 'ACTIVE' });
+      surveyResponseMock.findFirst.mockResolvedValue({ id: 1 });
+
+      const result = await service.submitSurvey(1, { surveyId: 1, answers: [] } as any);
+      expect((result as any).alreadySubmitted).toBe(true);
+    });
+
+    it('deve lançar NotFoundException se survey não encontrado', async () => {
+      engagementSurveyMock.findUnique.mockResolvedValue(null);
+      await expect(service.submitSurvey(1, { surveyId: 99, answers: [] } as any)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  // ─── getSurveyResults ─────────────────────────────────────────────────────
+
+  describe('getSurveyResults', () => {
+    it('deve retornar resultados do survey', async () => {
+      engagementSurveyMock.findUnique.mockResolvedValue({
+        ...baseSurvey,
+        questions: [],
+        responses: [],
+        minResponsesForResults: 3,
+      });
+
+      const result = await service.getSurveyResults(1, 1);
+      expect(result).toBeDefined();
+    });
+
+    it('deve lançar NotFoundException se survey não existe', async () => {
+      engagementSurveyMock.findUnique.mockResolvedValue(null);
+      await expect(service.getSurveyResults(99, 1)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── submitENPS ───────────────────────────────────────────────────────────
+
+  describe('submitENPS', () => {
+    it('deve lançar NotFoundException se não há survey eNPS activo', async () => {
+      engagementSurveyMock.findFirst.mockResolvedValue(null);
+      await expect(service.submitENPS(1, { score: 8, comment: 'Bom' } as any)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  // ─── getENPSScore ─────────────────────────────────────────────────────────
+
+  describe('getENPSScore', () => {
+    it('deve retornar null se não há survey eNPS', async () => {
+      engagementSurveyMock.findFirst.mockResolvedValue(null);
+      const result = await service.getENPSScore();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── submitMood ───────────────────────────────────────────────────────────
+
+  describe('submitMood', () => {
+    it('deve submeter mood (retorna fallback se moodCheckin não existe)', async () => {
+      (mockPrisma.userPoints as any).upsert = jest.fn().mockResolvedValue({});
+      const result = await service.submitMood(1, { mood: 4 } as any);
+      expect(result).toBeDefined();
+      expect((result as any).mood).toBe(4);
+    });
+  });
+
+  // ─── getMoodTrend ─────────────────────────────────────────────────────────
+
+  describe('getMoodTrend', () => {
+    it('deve retornar tendência de mood', async () => {
+      (mockPrisma as any).moodCheckin = { findMany: jest.fn().mockResolvedValue([]) };
+      const result = await service.getMoodTrend(1, 14);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getTeamMoodOverview ──────────────────────────────────────────────────
+
+  describe('getTeamMoodOverview', () => {
+    it('deve retornar visão do mood da equipa', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 2 }, { id: 3 }]);
+      (mockPrisma as any).moodCheckin = { findMany: jest.fn().mockResolvedValue([]) };
+      const result = await service.getTeamMoodOverview(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── createFeedback ───────────────────────────────────────────────────────
+
+  describe('createFeedback', () => {
+    it('deve criar feedback', async () => {
+      feedbackMock.create.mockResolvedValue({ id: 1, fromUserId: 1, toUserId: 2 });
+      const result = await service.createFeedback(1, {
+        toUserId: 2,
+        type: 'POSITIVE',
+        message: 'Excelente trabalho',
+      } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getFeedback ──────────────────────────────────────────────────────────
+
+  describe('getFeedback', () => {
+    it('deve retornar lista de feedbacks', async () => {
+      feedbackMock.findMany.mockResolvedValue([]);
+      feedbackMock.count.mockResolvedValue(0);
+      const result = await service.getFeedback({ page: 1, limit: 20 });
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── replyToFeedback ──────────────────────────────────────────────────────
+
+  describe('replyToFeedback', () => {
+    it('deve retornar fallback se update falha', async () => {
+      feedbackMock.update.mockRejectedValue(new Error('DB error'));
+      const result = await service.replyToFeedback(99, 1, { reply: 'Obrigado' } as any);
+      expect((result as any).message).toBeDefined();
+    });
+
+    it('deve adicionar resposta ao feedback', async () => {
+      feedbackMock.update.mockResolvedValue({ id: 1, reply: 'Obrigado' });
+
+      const result = await service.replyToFeedback(1, 1, { reply: 'Obrigado' } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── giveRecognition ──────────────────────────────────────────────────────
+
+  describe('giveRecognition', () => {
+    it('deve dar reconhecimento', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 2, fullName: 'Destinatário' });
+      recognitionMock.create.mockResolvedValue({ id: 1, fromUserId: 1, toUserId: 2 });
+      (mockPrisma.userPoints as any).upsert = jest.fn().mockResolvedValue({});
+      const result = await service.giveRecognition(1, {
+        toUserId: 2,
+        type: 'EXCELLENCE',
+        message: 'Parabéns!',
+      } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getRecognitionFeed ───────────────────────────────────────────────────
+
+  describe('getRecognitionFeed', () => {
+    it('deve retornar feed de reconhecimentos', async () => {
+      recognitionMock.findMany.mockResolvedValue([]);
+      recognitionMock.count.mockResolvedValue(0);
+      const result = await service.getRecognitionFeed({});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getLeaderboard ───────────────────────────────────────────────────────
+
+  describe('getLeaderboard', () => {
+    it('deve retornar leaderboard', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      const result = await service.getLeaderboard('points');
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── createOneOnOne ───────────────────────────────────────────────────────
+
+  describe('createOneOnOne', () => {
+    it('deve criar 1:1', async () => {
+      oneOnOneMock.create.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        managerId: 2,
+        scheduledAt: new Date(),
+      });
+      const result = await service.createOneOnOne(1, {
+        managerId: 2,
+        scheduledAt: new Date().toISOString(),
+      } as any);
+      expect(result).toBeDefined();
     });
   });
 });

@@ -25,6 +25,7 @@ const mockPrisma = {
   position: {
     count: makeCount(20),
     findMany: makeFindMany([]),
+    findFirst: jest.fn().mockResolvedValue(null),
     findUnique: jest.fn().mockResolvedValue(null),
     create: jest.fn().mockResolvedValue({ id: 1, name: 'Position A', level: 1 }),
     update: jest.fn().mockResolvedValue({}),
@@ -102,7 +103,9 @@ describe('OrganizationService — additional coverage', () => {
 
   describe('getPositions', () => {
     it('deve retornar cargos paginados', async () => {
-      mockPrisma.position.findMany.mockResolvedValue([{ id: 1, name: 'Dev' }]);
+      mockPrisma.position.findMany.mockResolvedValue([
+        { id: 1, name: 'Dev', headcountPlanned: 2, _count: { users: 1 } },
+      ]);
       mockPrisma.position.count.mockResolvedValue(1);
 
       const result = await service.getPositions({});
@@ -114,7 +117,7 @@ describe('OrganizationService — additional coverage', () => {
       mockPrisma.position.findMany.mockResolvedValue([]);
       mockPrisma.position.count.mockResolvedValue(0);
 
-      await service.getPositions({ departmentId: 1, level: 2 });
+      await service.getPositions({ departmentId: 1, level: 'MID' as any });
 
       expect(mockPrisma.position.findMany).toHaveBeenCalled();
     });

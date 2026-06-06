@@ -64,4 +64,102 @@ describe('LeaderService', () => {
       expect(result).toBeDefined();
     });
   });
+
+  // ─── getTeam ──────────────────────────────────────────────────────────────
+
+  describe('getTeam', () => {
+    it('deve retornar equipa do líder', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      mockPrisma.user.count.mockResolvedValue(0);
+      const result = await service.getTeam(1, {});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getMemberProfile ─────────────────────────────────────────────────────
+
+  describe('getMemberProfile', () => {
+    it('deve retornar perfil do membro', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 2,
+        fullName: 'Team Member',
+        managerId: 1,
+        enrollments: [],
+        certificates: [],
+        badgeAwards: [],
+        performanceReviews: [],
+        developmentPlans: [],
+        userCompetencies: [],
+      });
+      const result = await service.getMemberProfile(1, 2);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── giveFeedback ─────────────────────────────────────────────────────────
+
+  describe('giveFeedback', () => {
+    it('deve dar feedback a membro da equipa', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 2, managerId: 1 });
+      const result = await service.giveFeedback(1, {
+        toUserId: 2,
+        type: 'RECOGNITION',
+        message: 'Excelente trabalho',
+      } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getTeamFeedbacks ─────────────────────────────────────────────────────
+
+  describe('getTeamFeedbacks', () => {
+    it('deve retornar feedbacks da equipa', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 2 }, { id: 3 }]);
+      const result = await service.getTeamFeedbacks(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── createOneOnOne ───────────────────────────────────────────────────────
+
+  describe('createOneOnOne', () => {
+    it('deve criar 1:1 com membro da equipa', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 2, managerId: 1 });
+      const result = await service.createOneOnOne(1, {
+        memberId: 2,
+        scheduledAt: new Date().toISOString(),
+        topics: [],
+      } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getOneOnOnes ─────────────────────────────────────────────────────────
+
+  describe('getOneOnOnes', () => {
+    it('deve retornar 1:1s do líder', async () => {
+      const result = await service.getOneOnOnes(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getTeamPlans ─────────────────────────────────────────────────────────
+
+  describe('getTeamPlans', () => {
+    it('deve retornar planos de desenvolvimento da equipa', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      const result = await service.getTeamPlans(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getTalentPipeline ────────────────────────────────────────────────────
+
+  describe('getTalentPipeline', () => {
+    it('deve retornar pipeline de talentos da equipa', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      const result = await service.getTalentPipeline(1);
+      expect(result).toBeDefined();
+    });
+  });
 });

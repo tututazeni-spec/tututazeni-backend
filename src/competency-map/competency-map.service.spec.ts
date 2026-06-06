@@ -102,4 +102,98 @@ describe('CompetencyMapService', () => {
       expect(result.name).toBe('TypeScript');
     });
   });
+
+  // ─── updateSkill ──────────────────────────────────────────────────────────
+
+  describe('updateSkill', () => {
+    it('deve actualizar skill', async () => {
+      mockPrisma.skill.findUnique.mockResolvedValue(baseSkill);
+      mockPrisma.skill.update.mockResolvedValue({ ...baseSkill, name: 'TypeScript Advanced' });
+      const result = await service.updateSkill(1, { name: 'TypeScript Advanced' } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── setProficiencyLevels ─────────────────────────────────────────────────
+
+  describe('setProficiencyLevels', () => {
+    it('deve definir níveis de proficiência', async () => {
+      mockPrisma.skill.findUnique.mockResolvedValue(baseSkill);
+      const result = await service.setProficiencyLevels({
+        skillId: 1,
+        levels: [{ level: 1, name: 'Básico', description: 'Conhecimento básico' }],
+      } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getProficiencyLevels ─────────────────────────────────────────────────
+
+  describe('getProficiencyLevels', () => {
+    it('deve retornar níveis de proficiência', async () => {
+      const result = await service.getProficiencyLevels(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── setRoleSkillMatrix ───────────────────────────────────────────────────
+
+  describe('setRoleSkillMatrix', () => {
+    it('deve definir matriz de competências por role', async () => {
+      const result = await service.setRoleSkillMatrix({
+        roleCode: 'DEV',
+        skills: [{ skillId: 1, requiredLevel: 3 }],
+      } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getRoleSkillMatrix ───────────────────────────────────────────────────
+
+  describe('getRoleSkillMatrix', () => {
+    it('deve retornar matriz de um role', async () => {
+      const result = await service.getRoleSkillMatrix('DEV');
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getAllRoleMatrices ────────────────────────────────────────────────────
+
+  describe('getAllRoleMatrices', () => {
+    it('deve retornar todas as matrizes de roles', async () => {
+      const result = await service.getAllRoleMatrices();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── upsertEmployeeSkill ──────────────────────────────────────────────────
+
+  describe('upsertEmployeeSkill', () => {
+    it('deve actualizar competência do colaborador', async () => {
+      mockPrisma.skill.findUnique.mockResolvedValue(baseSkill);
+      const result = await service.upsertEmployeeSkill(
+        { userId: 1, skillId: 1, currentLevel: 3 } as any,
+        1,
+      );
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getEmployeeSkills ────────────────────────────────────────────────────
+
+  describe('getEmployeeSkills', () => {
+    it('deve retornar competências do colaborador', async () => {
+      const result = await service.getEmployeeSkills(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getSkillHistory ──────────────────────────────────────────────────────
+
+  describe('getSkillHistory', () => {
+    it('deve retornar histórico de uma competência', async () => {
+      const result = await service.getSkillHistory(1, 1);
+      expect(result).toBeDefined();
+    });
+  });
 });

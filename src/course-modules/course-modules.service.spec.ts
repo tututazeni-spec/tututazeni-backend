@@ -84,5 +84,106 @@ describe('CourseModulesService', () => {
       mockPrisma.courseModule.findUnique.mockResolvedValue({ ...baseMod, _count: { lessons: 0 } });
       await expect(service.publishModule(1)).rejects.toThrow(BadRequestException);
     });
+
+    it('deve publicar módulo com lições', async () => {
+      mockPrisma.courseModule.findUnique.mockResolvedValue({ ...baseMod, _count: { lessons: 3 } });
+      mockPrisma.courseModule.update.mockResolvedValue({ ...baseMod, status: 'PUBLISHED' });
+      const result = await service.publishModule(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── updateModule ─────────────────────────────────────────────────────────
+
+  describe('updateModule', () => {
+    it('deve actualizar módulo', async () => {
+      mockPrisma.courseModule.findUnique.mockResolvedValue(baseMod);
+      mockPrisma.courseModule.update.mockResolvedValue({ ...baseMod, title: 'Actualizado' });
+      const result = await service.updateModule(1, { title: 'Actualizado' } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── deleteModule ─────────────────────────────────────────────────────────
+
+  describe('deleteModule', () => {
+    it('deve eliminar módulo', async () => {
+      mockPrisma.courseModule.findUnique.mockResolvedValue(baseMod);
+      mockPrisma.courseModule.update.mockResolvedValue({});
+      const result = await service.deleteModule(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── reorderModules ───────────────────────────────────────────────────────
+
+  describe('reorderModules', () => {
+    it('deve reordenar módulos', async () => {
+      mockPrisma.course.findUnique.mockResolvedValue({ id: 1 });
+      mockPrisma.courseModule.updateMany = jest.fn().mockResolvedValue({});
+      const result = await service.reorderModules(1, {
+        order: [{ id: 1, seq: 2 }, { id: 2, seq: 1 }],
+      });
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── createLesson ─────────────────────────────────────────────────────────
+
+  describe('createLesson', () => {
+    it('deve criar lição num módulo', async () => {
+      mockPrisma.courseModule.findUnique.mockResolvedValue(baseMod);
+      mockPrisma.lesson.count.mockResolvedValue(2);
+      mockPrisma.lesson.create.mockResolvedValue({
+        id: 1,
+        title: 'Lição 1',
+        textContent: 'Conteúdo',
+      });
+      const result = await service.createLesson({
+        moduleId: 1,
+        title: 'Lição 1',
+        textContent: 'Conteúdo',
+      } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── markLessonComplete ───────────────────────────────────────────────────
+
+  describe('markLessonComplete', () => {
+    it('deve marcar lição como completa', async () => {
+      mockPrisma.lesson.findUnique.mockResolvedValue({
+        id: 1,
+        moduleId: 1,
+        courseId: 1,
+        module: { courseId: 1 },
+      });
+      const result = await service.markLessonComplete(1, { lessonId: 1, courseId: 1 } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getLessonProgress ────────────────────────────────────────────────────
+
+  describe('getLessonProgress', () => {
+    it('deve retornar progresso por lição', async () => {
+      mockPrisma.courseModule.findMany.mockResolvedValue([]);
+      const result = await service.getLessonProgress(1, 1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getModuleAnalytics ───────────────────────────────────────────────────
+
+  describe('getModuleAnalytics', () => {
+    it('deve retornar analytics do módulo', async () => {
+      mockPrisma.courseModule.findUnique.mockResolvedValue({
+        ...baseMod,
+        lessons: [],
+        _count: { lessons: 0 },
+      });
+      const result = await service.getModuleAnalytics(1);
+      expect(result).toBeDefined();
+    });
   });
 });

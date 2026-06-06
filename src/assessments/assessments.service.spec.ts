@@ -17,6 +17,7 @@ const mockPrisma = {
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
     deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     findMany: jest.fn(),
+    create: jest.fn(),
   },
   assessmentAttempt: {
     findFirst: jest.fn(),
@@ -192,6 +193,110 @@ describe('AssessmentsService', () => {
 
       expect(mockPrisma.assessmentQuestion.deleteMany).toHaveBeenCalled();
       expect(mockPrisma.assessmentQuestion.createMany).toHaveBeenCalled();
+    });
+  });
+
+  // ─── publish ──────────────────────────────────────────────────────────────
+
+  describe('publish', () => {
+    it('deve publicar avaliação', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue(baseAssessment);
+      mockPrisma.assessment.update.mockResolvedValue({ ...baseAssessment, status: 'ACTIVE' });
+      const result = await service.publish(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── archive ──────────────────────────────────────────────────────────────
+
+  describe('archive', () => {
+    it('deve arquivar avaliação', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue(baseAssessment);
+      mockPrisma.assessment.update.mockResolvedValue({ ...baseAssessment, status: 'ARCHIVED' });
+      const result = await service.archive(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── duplicate ────────────────────────────────────────────────────────────
+
+  describe('duplicate', () => {
+    it('deve duplicar avaliação', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({
+        ...baseAssessment,
+        questions: [],
+      });
+      mockPrisma.assessment.create.mockResolvedValue({ ...baseAssessment, id: 2 });
+      const result = await service.duplicate(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── startAttempt ─────────────────────────────────────────────────────────
+
+  describe('startAttempt', () => {
+    it('deve iniciar tentativa de avaliação', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({
+        ...baseAssessment,
+        status: 'PUBLISHED',
+        maxAttempts: 3,
+        questions: [{ id: 1, questionText: 'Q1', seq: 1 }],
+      });
+      mockPrisma.assessmentAttempt.count.mockResolvedValue(0);
+      mockPrisma.assessmentAttempt.create.mockResolvedValue({ id: 1, userId: 1, status: 'IN_PROGRESS' });
+      const result = await service.startAttempt(1, { assessmentId: 1 } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getUserAttempts ──────────────────────────────────────────────────────
+
+  describe('getUserAttempts', () => {
+    it('deve retornar tentativas do utilizador', async () => {
+      mockPrisma.assessmentAttempt.findMany.mockResolvedValue([]);
+      const result = await service.getUserAttempts(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── addQuestion ──────────────────────────────────────────────────────────
+
+  describe('addQuestion', () => {
+    it('deve adicionar questão à avaliação', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue(baseAssessment);
+      mockPrisma.assessmentQuestion.create.mockResolvedValue({ id: 5, questionText: 'Nova Q' });
+      const result = await service.addQuestion(1, {
+        type: QuestionType.MULTIPLE_CHOICE_SINGLE,
+        questionText: 'Nova Q',
+        correctAnswer: 'A',
+        seq: 5,
+        weight: 1,
+      });
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getAnalytics ─────────────────────────────────────────────────────────
+
+  describe('getAnalytics', () => {
+    it('deve retornar analytics da avaliação', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({
+        ...baseAssessment,
+        questions: [],
+      });
+      mockPrisma.assessmentAttempt.count.mockResolvedValue(10);
+      const result = await service.getAnalytics(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getPendingReviews ────────────────────────────────────────────────────
+
+  describe('getPendingReviews', () => {
+    it('deve retornar respostas pendentes de revisão', async () => {
+      mockPrisma.assessmentAttempt.findMany.mockResolvedValue([]);
+      const result = await service.getPendingReviews();
+      expect(result).toBeDefined();
     });
   });
 });

@@ -88,5 +88,119 @@ describe('ScalabilityService', () => {
       tenantMock.findUnique.mockResolvedValue(null);
       await expect(service.findTenantOrFail('invalid')).rejects.toThrow(NotFoundException);
     });
+
+    it('deve retornar tenant existente', async () => {
+      tenantMock.findUnique.mockResolvedValue(baseTenant);
+      const result = await service.findTenantOrFail('tenant-1');
+      expect(result.id).toBe('tenant-1');
+    });
+  });
+
+  // ─── updateTenant ─────────────────────────────────────────────────────────
+
+  describe('updateTenant', () => {
+    it('deve actualizar tenant', async () => {
+      tenantMock.findUnique.mockResolvedValue(baseTenant);
+      tenantMock.update.mockResolvedValue({ ...baseTenant, name: 'Updated' });
+      const result = await service.updateTenant('tenant-1', { name: 'Updated' } as any, 'admin');
+      expect(result).toBeDefined();
+    });
+
+    it('deve lançar NotFoundException se não encontrado', async () => {
+      tenantMock.findUnique.mockResolvedValue(null);
+      await expect(
+        service.updateTenant('bad-id', { name: 'X' } as any, 'admin'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── createIntegration ────────────────────────────────────────────────────
+
+  describe('createIntegration', () => {
+    it('deve criar integração', async () => {
+      tenantMock.findUnique.mockResolvedValue(baseTenant);
+      integrationMock.create.mockResolvedValue({ id: 'int-1', name: 'SAP', active: true });
+      const result = await service.createIntegration(
+        { tenantId: 'tenant-1', name: 'SAP', type: 'LDAP' } as any,
+        'admin',
+      );
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── listIntegrations ─────────────────────────────────────────────────────
+
+  describe('listIntegrations', () => {
+    it('deve listar integrações', async () => {
+      tenantMock.findUnique.mockResolvedValue(baseTenant);
+      integrationMock.findMany.mockResolvedValue([]);
+      integrationMock.count.mockResolvedValue(0);
+      const result = await service.listIntegrations('tenant-1', {});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── createAutomationRule ─────────────────────────────────────────────────
+
+  describe('createAutomationRule', () => {
+    it('deve criar regra de automação', async () => {
+      tenantMock.findUnique.mockResolvedValue(baseTenant);
+      automationMock.create.mockResolvedValue({ id: 'rule-1', name: 'Welcome Email', active: true });
+      const result = await service.createAutomationRule(
+        { tenantId: 'tenant-1', name: 'Welcome Email', trigger: 'USER_CREATED', action: 'SEND_EMAIL', condition: '{}' } as any,
+        'admin',
+      );
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── listAutomationRules ──────────────────────────────────────────────────
+
+  describe('listAutomationRules', () => {
+    it('deve listar regras de automação', async () => {
+      tenantMock.findUnique.mockResolvedValue(baseTenant);
+      automationMock.findMany.mockResolvedValue([]);
+      const result = await service.listAutomationRules('tenant-1', {});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getMetrics ───────────────────────────────────────────────────────────
+
+  describe('getMetrics', () => {
+    it('deve retornar métricas do sistema', async () => {
+      const result = await service.getMetrics({ tenantId: 'tenant-1' } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getRealtimeMetrics ───────────────────────────────────────────────────
+
+  describe('getRealtimeMetrics', () => {
+    it('deve retornar métricas em tempo real', async () => {
+      const result = await service.getRealtimeMetrics('tenant-1');
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── createAlert ──────────────────────────────────────────────────────────
+
+  describe('createAlert', () => {
+    it('deve criar alerta', async () => {
+      const result = await service.createAlert(
+        { tenantId: 'tenant-1', title: 'High Load', severity: 'CRITICAL', message: 'CPU > 90%' } as any,
+        'admin',
+      );
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── listAlerts ───────────────────────────────────────────────────────────
+
+  describe('listAlerts', () => {
+    it('deve listar alertas', async () => {
+      const result = await service.listAlerts({ page: 1, limit: 20 } as any);
+      expect(result).toBeDefined();
+    });
   });
 });

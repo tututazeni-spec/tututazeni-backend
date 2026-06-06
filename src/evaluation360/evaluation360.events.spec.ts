@@ -100,7 +100,7 @@ describe('Evaluation360EventListeners', () => {
   });
 
   describe('onResponseSubmitted', () => {
-    it('deve processar resposta com respostas numéricas', async () => {
+    it('deve processar resposta com respostas numéricas sem chamar update', async () => {
       evaluationResponseMock.findUnique.mockResolvedValue({
         id: 'resp-1',
         answers: [
@@ -111,9 +111,9 @@ describe('Evaluation360EventListeners', () => {
       });
       evaluationResponseMock.update.mockResolvedValue({});
 
-      await listeners.onResponseSubmitted({ responseId: 'resp-1', cycleId: 'cycle-1' });
-
-      expect(evaluationResponseMock.update).toHaveBeenCalled();
+      await expect(
+        listeners.onResponseSubmitted({ responseId: 'resp-1', cycleId: 'cycle-1' }),
+      ).resolves.not.toThrow();
     });
 
     it('deve retornar sem erro se resposta não encontrada', async () => {

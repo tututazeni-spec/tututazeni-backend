@@ -3,21 +3,52 @@ import { NotFoundException, ConflictException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-const mockPrisma = {
-  user: {
-    findUnique: jest.fn(),
-    findFirst: jest.fn(),
-    findMany: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-    count: jest.fn(),
-    delete: jest.fn(),
-  },
-  userPoints: { create: jest.fn().mockResolvedValue({}) },
-  notificationLog: { create: jest.fn().mockResolvedValue({}) },
-  auditLog: { create: jest.fn().mockResolvedValue({}) },
-  badgeAward: { findMany: jest.fn().mockResolvedValue([]) },
+const userMock = {
+  findUnique: jest.fn(),
+  findFirst: jest.fn(),
+  findMany: jest.fn(),
+  create: jest.fn(),
+  update: jest.fn(),
+  count: jest.fn(),
+  delete: jest.fn(),
 };
+
+const mockPrismaBase = {
+  user: userMock,
+  userPoints: {
+    create: jest.fn().mockResolvedValue({}),
+    findUnique: jest.fn().mockResolvedValue({ points: 100 }),
+    upsert: jest.fn().mockResolvedValue({}),
+    update: jest.fn().mockResolvedValue({}),
+  },
+  notificationLog: { create: jest.fn().mockResolvedValue({}) },
+  auditLog: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  badgeAward: {
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  enrollment: {
+    count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  userCompetency: { count: jest.fn().mockResolvedValue(0) },
+};
+
+const mockPrisma = new Proxy(mockPrismaBase, {
+  get(target, prop) {
+    return (target as any)[prop] ?? {
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue(null),
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn().mockResolvedValue({}),
+      update: jest.fn().mockResolvedValue({}),
+    };
+  },
+});
 
 const baseUser = {
   id: 1,
@@ -158,6 +189,105 @@ describe('UsersService', () => {
       await expect(service.update(1, { email: 'outro@innova.com' })).rejects.toThrow(
         ConflictException,
       );
+    });
+  });
+
+  // ─── activate / deactivate / suspend ──────────────────────────────────────
+
+  describe('activate', () => {
+    it('deve activar utilizador', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, active: false });
+      mockPrisma.user.update.mockResolvedValue({ ...baseUser, active: true });
+      const result = await service.activate(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('deactivate', () => {
+    it('deve desactivar utilizador', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+      mockPrisma.user.update.mockResolvedValue({ ...baseUser, active: false });
+      const result = await service.deactivate(1, 'Saída da empresa');
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('suspend', () => {
+    it('deve suspender utilizador', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+      mockPrisma.user.update.mockResolvedValue({ ...baseUser, active: false });
+      const result = await service.suspend(1, 'Disciplinar');
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── changePassword ───────────────────────────────────────────────────────
+
+  describe('changePassword', () => {
+    it('deve lançar BadRequestException se password actual errada', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...baseUser,
+        password: '$2b$10$wronghash',
+      });
+      await expect(
+        service.changePassword(1, { currentPassword: 'wrong', newPassword: 'NewPass@123' } as any),
+      ).rejects.toThrow();
+    });
+  });
+
+  // ─── getTeam ──────────────────────────────────────────────────────────────
+
+  describe('getTeam', () => {
+    it('deve retornar equipa do gestor', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      const result = await service.getTeam(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getUserStats ─────────────────────────────────────────────────────────
+
+  describe('getUserStats', () => {
+    it('deve retornar estatísticas do utilizador', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+      const result = await service.getUserStats(1);
+      expect(result).toBeDefined();
+    });
+
+    it('deve lançar NotFoundException se não encontrado', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.getUserStats(99)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── getDirectory ─────────────────────────────────────────────────────────
+
+  describe('getDirectory', () => {
+    it('deve retornar directório de utilizadores', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([baseUser]);
+      const result = await service.getDirectory();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getAdminDashboard ────────────────────────────────────────────────────
+
+  describe('getAdminDashboard', () => {
+    it('deve retornar dashboard admin', async () => {
+      mockPrisma.user.count.mockResolvedValue(100);
+      const result = await service.getAdminDashboard();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getAuditLogs ─────────────────────────────────────────────────────────
+
+  describe('getAuditLogs', () => {
+    it('deve retornar logs de auditoria do utilizador', async () => {
+      mockPrisma.auditLog.findMany.mockResolvedValue([]);
+      mockPrisma.auditLog.count.mockResolvedValue(0);
+      const result = await service.getAuditLogs(1);
+      expect(result).toBeDefined();
     });
   });
 });

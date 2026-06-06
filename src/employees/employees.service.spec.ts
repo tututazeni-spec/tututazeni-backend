@@ -158,4 +158,63 @@ describe('EmployeesService', () => {
       await expect(service.update(99, {} as any, 1)).rejects.toThrow(NotFoundException);
     });
   });
+
+  // ─── remove ───────────────────────────────────────────────────────────────
+
+  describe('remove', () => {
+    it('deve desactivar colaborador', async () => {
+      mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
+      mockPrisma.employee.update.mockResolvedValue({ ...baseEmployee, active: false });
+      const result = await service.remove(1, 1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getEmployeeStats ─────────────────────────────────────────────────────
+
+  describe('getEmployeeStats', () => {
+    it('deve retornar estatísticas do colaborador', async () => {
+      mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
+      const result = await service.getEmployeeStats(1);
+      expect(result).toBeDefined();
+    });
+
+    it('deve lançar NotFoundException se não encontrado', async () => {
+      mockPrisma.employee.findUnique.mockResolvedValue(null);
+      await expect(service.getEmployeeStats(99)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── getHeadcountStats ────────────────────────────────────────────────────
+
+  describe('getHeadcountStats', () => {
+    it('deve retornar estatísticas de headcount', async () => {
+      mockPrisma.employee.count.mockResolvedValue(100);
+      const result = await service.getHeadcountStats();
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── createContract ───────────────────────────────────────────────────────
+
+  describe('createContract', () => {
+    it('deve criar contrato', async () => {
+      mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
+      const result = await service.createContract({
+        employeeId: 1,
+        type: 'PERMANENT',
+        startDate: '2024-01-01',
+      } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getContracts ─────────────────────────────────────────────────────────
+
+  describe('getContracts', () => {
+    it('deve retornar contratos do colaborador', async () => {
+      const result = await service.getContracts(1);
+      expect(result).toBeDefined();
+    });
+  });
 });

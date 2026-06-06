@@ -89,4 +89,74 @@ describe('MicroLearningService', () => {
       expect(result).toBeDefined();
     });
   });
+
+  // ─── update ───────────────────────────────────────────────────────────────
+
+  describe('update', () => {
+    it('deve actualizar micro-learning', async () => {
+      mockPrisma.microLearning.findUnique
+        .mockResolvedValueOnce(baseMicro)
+        .mockResolvedValueOnce({ ...baseMicro, title: 'Actualizado' });
+      mockPrisma.microLearning.update.mockResolvedValue({ ...baseMicro, title: 'Actualizado' });
+      const result = await service.update(1, { title: 'Actualizado' } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── publish ──────────────────────────────────────────────────────────────
+
+  describe('publish', () => {
+    it('deve publicar micro-learning', async () => {
+      mockPrisma.microLearning.findUnique.mockResolvedValue(baseMicro);
+      mockPrisma.microLearning.update.mockResolvedValue({ ...baseMicro, status: 'PUBLISHED' });
+      const result = await service.publish(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── archive ──────────────────────────────────────────────────────────────
+
+  describe('archive', () => {
+    it('deve arquivar micro-learning', async () => {
+      mockPrisma.microLearning.findUnique.mockResolvedValue(baseMicro);
+      mockPrisma.microLearning.update.mockResolvedValue({ ...baseMicro, status: 'ARCHIVED' });
+      const result = await service.archive(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getMyFeed ────────────────────────────────────────────────────────────
+
+  describe('getMyFeed', () => {
+    it('deve retornar feed personalizado', async () => {
+      mockPrisma.microLearning.findMany.mockResolvedValue([baseMicro]);
+      mockPrisma.microLearning.count.mockResolvedValue(1);
+      const result = await service.getMyFeed(1, {});
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── updateProgress ───────────────────────────────────────────────────────
+
+  describe('updateProgress', () => {
+    it('deve actualizar progresso de leitura', async () => {
+      mockPrisma.microLearning.findUnique.mockResolvedValue({
+        ...baseMicro,
+        xpReward: 20,
+        status: 'PUBLISHED',
+      });
+      const result = await service.updateProgress(1, { microLearningId: 1, progress: 80 } as any);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getMySaved ───────────────────────────────────────────────────────────
+
+  describe('getMySaved', () => {
+    it('deve retornar micro-learnings guardados', async () => {
+      mockPrisma.microLearning.findMany.mockResolvedValue([]);
+      const result = await service.getMySaved(1);
+      expect(result).toBeDefined();
+    });
+  });
 });
