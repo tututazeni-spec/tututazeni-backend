@@ -35,6 +35,12 @@ const mockPrisma: any = {
     create: jest.fn(),
     delete: jest.fn(),
   },
+  moduleMaterial: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({}),
+    delete: jest.fn().mockResolvedValue({}),
+  },
   enrollment: { findFirst: jest.fn().mockResolvedValue(null) },
 };
 
@@ -155,21 +161,6 @@ describe('CourseModulesService (additional)', () => {
     });
   });
 
-  // ─── getLesson ────────────────────────────────────────────────
-
-  describe('getLesson', () => {
-    it('deve retornar lição por id', async () => {
-      mockPrisma.lesson.findUnique.mockResolvedValue({ id: 1, title: 'Lição 1', moduleId: 1 });
-      const result = await service.getLesson(1, 1);
-      expect(result).toBeDefined();
-    });
-
-    it('deve lançar NotFoundException se lição não existe', async () => {
-      mockPrisma.lesson.findUnique.mockResolvedValue(null);
-      await expect(service.getLesson(99, 1)).rejects.toThrow(NotFoundException);
-    });
-  });
-
   // ─── updateLesson ─────────────────────────────────────────────
 
   describe('updateLesson', () => {
@@ -196,12 +187,21 @@ describe('CourseModulesService (additional)', () => {
 
   describe('markLessonComplete', () => {
     it('deve marcar lição como completa para utilizador inscrito', async () => {
-      mockPrisma.lesson.findUnique.mockResolvedValue({ id: 1, moduleId: 1, module: { courseId: 1 } });
-      mockPrisma.enrollment.findFirst.mockResolvedValue({ id: 1, userId: 1, courseId: 1 });
+      const fullLesson = {
+        id: 1, moduleId: 1,
+        module: { id: 1, courseId: 1, status: 'PUBLISHED', seq: 0,
+          progressionType: 'FREE', dripDays: null, availableFrom: null,
+          course: { id: 1 } },
+      };
+      mockPrisma.lesson.findUnique.mockResolvedValue(fullLesson);
+      mockPrisma.enrollment.findFirst.mockResolvedValue({ id: 1, userId: 1, courseId: 1, status: 'IN_PROGRESS', enrolledAt: new Date() });
       mockPrisma.lessonProgress.upsert.mockResolvedValue({ id: 1, completed: true });
-      mockPrisma.lesson.count.mockResolvedValue(5);
-      mockPrisma.lessonProgress.count.mockResolvedValue(3);
-      const result = await service.markLessonComplete(1, { userId: 1, timeSpentSeconds: 300 } as any);
+      mockPrisma.courseModule.findUnique.mockResolvedValue({ id: 1, completionRule: 'ALL_LESSONS', lessons: [{ id: 1 }] });
+      mockPrisma.lessonProgress.count.mockResolvedValue(1);
+      mockPrisma.enrollment.findUnique = jest.fn().mockResolvedValue(null);
+      mockPrisma.courseModule.findMany = jest.fn().mockResolvedValue([]);
+      mockPrisma.courseModule.findFirst = jest.fn().mockResolvedValue(null);
+      const result = await service.markLessonComplete(1, { lessonId: 1, watchedSeconds: 300 });
       expect(result).toBeDefined();
     });
   });

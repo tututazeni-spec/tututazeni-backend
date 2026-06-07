@@ -3,26 +3,29 @@ import { DashboardService } from './dashboard.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma: any = {
-  user: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+  user: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
   enrollment: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
   userPoints: { findUnique: jest.fn().mockResolvedValue(null) },
   badgeAward: { findMany: jest.fn().mockResolvedValue([]) },
   assessmentAttempt: { count: jest.fn().mockResolvedValue(0) },
-  developmentPlan: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
+  developmentPlan: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+  surveyResponse: { count: jest.fn().mockResolvedValue(0), aggregate: jest.fn().mockResolvedValue({ _avg: { score: 0 } }) },
   evaluationRequest: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
   avatarSession: { count: jest.fn().mockResolvedValue(0) },
-  userCompetency: { findMany: jest.fn().mockResolvedValue([]) },
+  userCompetency: { findMany: jest.fn().mockResolvedValue([]), groupBy: jest.fn().mockResolvedValue([]) },
+  developmentPlanAction: { count: jest.fn().mockResolvedValue(0) },
   notificationLog: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
   performanceCycle: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
   performanceReview: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0), aggregate: jest.fn().mockResolvedValue({ _avg: { score: 0 } }) },
   course: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
   certificate: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
   department: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
-  position: { findMany: jest.fn().mockResolvedValue([]) },
+  position: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+  successionPlan: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
   competency: { findMany: jest.fn().mockResolvedValue([]) },
   role: { findMany: jest.fn().mockResolvedValue([]) },
-  auditLog: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
-  engagementSurvey: { findMany: jest.fn().mockResolvedValue([]) },
+  auditLog: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0), groupBy: jest.fn().mockResolvedValue([]) },
+  engagementSurvey: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0) },
   engagementResponse: { count: jest.fn().mockResolvedValue(0), aggregate: jest.fn().mockResolvedValue({ _avg: { score: 0 } }) },
   careerPath: { findMany: jest.fn().mockResolvedValue([]) },
   internalVacancy: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
@@ -95,27 +98,26 @@ describe('DashboardService (additional)', () => {
     });
   });
 
-  // ─── getHRDashboard ────────────────────────────────────────────
+  // ─── getOrganizationSummary ────────────────────────────────────
 
-  describe('getHRDashboard', () => {
-    it('deve retornar dashboard de RH', async () => {
-      mockPrisma.user.findMany.mockResolvedValue([baseUser]);
-      const result = await service.getHRDashboard({});
+  describe('getOrganizationSummary', () => {
+    it('deve retornar sumário organizacional', async () => {
+      const result = await service.getOrganizationSummary({});
       expect(result).toBeDefined();
     });
 
     it('deve funcionar com período WEEK', async () => {
-      const result = await service.getHRDashboard({ period: 'WEEK' as any });
+      const result = await service.getOrganizationSummary({ period: 'WEEK' as any });
       expect(result).toBeDefined();
     });
 
     it('deve funcionar com período QUARTER', async () => {
-      const result = await service.getHRDashboard({ period: 'QUARTER' as any });
+      const result = await service.getOrganizationSummary({ period: 'QUARTER' as any });
       expect(result).toBeDefined();
     });
 
     it('deve funcionar com período YEAR', async () => {
-      const result = await service.getHRDashboard({ period: 'YEAR' as any });
+      const result = await service.getOrganizationSummary({ period: 'YEAR' as any });
       expect(result).toBeDefined();
     });
   });
@@ -130,11 +132,11 @@ describe('DashboardService (additional)', () => {
     });
   });
 
-  // ─── getLMSDashboard ───────────────────────────────────────────
+  // ─── getDepartmentDashboard ────────────────────────────────────
 
-  describe('getLMSDashboard', () => {
-    it('deve retornar dashboard do LMS', async () => {
-      const result = await service.getLMSDashboard({});
+  describe('getDepartmentDashboard', () => {
+    it('deve retornar dashboard do departamento', async () => {
+      const result = await service.getDepartmentDashboard(1);
       expect(result).toBeDefined();
     });
   });
@@ -149,16 +151,17 @@ describe('DashboardService (additional)', () => {
     });
   });
 
-  // ─── getOrgChart ──────────────────────────────────────────────
+  // ─── getLeaderboard ────────────────────────────────────────────
 
-  describe('getOrgChart', () => {
-    it('deve retornar organigrama', async () => {
+  describe('getLeaderboard', () => {
+    it('deve retornar leaderboard de utilizadores', async () => {
       mockPrisma.user.findMany.mockResolvedValue([
-        { id: 1, fullName: 'CEO', managerId: null, position: null, department: null, avatarUrl: null },
-        { id: 2, fullName: 'CTO', managerId: 1, position: null, department: null, avatarUrl: null },
+        { id: 1, fullName: 'Ana', avatarUrl: null, position: null,
+          points: { points: 500 }, _count: { badgeAwards: 2 } },
       ]);
-      const result = await service.getOrgChart({});
+      const result = await service.getLeaderboard();
       expect(result).toBeDefined();
+      expect(Array.isArray(result)).toBe(true);
     });
   });
 });
