@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { TrainingService as TrainingsService } from './trainings.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -178,16 +183,20 @@ describe('TrainingsService — additional coverage', () => {
       mockPrisma.training.findUnique.mockResolvedValue(baseTraining);
       mockPrisma.trainingRating.upsert.mockResolvedValue({ id: 1, rating: 5 });
 
-      const result = await service.rateTraining(1, { trainingId: 1, rating: 5, comment: 'Excelente' } as any);
+      const result = await service.rateTraining(1, {
+        trainingId: 1,
+        rating: 5,
+        comment: 'Excelente',
+      } as any);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se formação não encontrada', async () => {
       mockPrisma.training.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.rateTraining(1, { trainingId: 99, rating: 5 } as any),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.rateTraining(1, { trainingId: 99, rating: 5 } as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

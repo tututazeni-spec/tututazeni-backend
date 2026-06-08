@@ -136,9 +136,7 @@ describe('KnowledgeService — additional coverage', () => {
     it('deve lançar NotFoundException se artigo não encontrado', async () => {
       mockPrisma.knowledgeArticle.findUnique.mockResolvedValue(null);
 
-      await expect(service.update(99, { title: 'X' } as any, 1)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.update(99, { title: 'X' } as any, 1)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -175,7 +173,11 @@ describe('KnowledgeService — additional coverage', () => {
       mockPrisma.articleRating.aggregate.mockResolvedValue({ _avg: { rating: 4.5 } });
       mockPrisma.knowledgeArticle.update.mockResolvedValue({});
 
-      const result = await service.rateArticle(1, { articleId: 1, rating: 5, comment: 'Excelente' } as any);
+      const result = await service.rateArticle(1, {
+        articleId: 1,
+        rating: 5,
+        comment: 'Excelente',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -187,7 +189,10 @@ describe('KnowledgeService — additional coverage', () => {
       mockPrisma.knowledgeArticle.findUnique.mockResolvedValue(baseArticle);
       mockPrisma.articleComment.create.mockResolvedValue({ id: 1, content: 'Ótimo artigo!' });
 
-      const result = await service.createComment(1, { articleId: 1, content: 'Ótimo artigo!' } as any);
+      const result = await service.createComment(1, {
+        articleId: 1,
+        content: 'Ótimo artigo!',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -199,7 +204,11 @@ describe('KnowledgeService — additional coverage', () => {
       mockPrisma.knowledgeArticle.findMany.mockResolvedValue([]);
       mockPrisma.knowledgeArticle.count.mockResolvedValue(0);
 
-      const result = await service.findAll({ categoryId: 1, search: 'NestJS', sortBy: 'POPULAR' as any });
+      const result = await service.findAll({
+        categoryId: 1,
+        search: 'NestJS',
+        sortBy: 'POPULAR' as any,
+      });
       expect(result).toHaveProperty('data');
     });
 

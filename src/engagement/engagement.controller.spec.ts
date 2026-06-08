@@ -204,7 +204,12 @@ describe('EngagementController', () => {
 
   it('getActionPlans com defaults → getActionPlans com page=1 limit=20', async () => {
     await controller.getActionPlans();
-    expect(mockSvc.getActionPlans).toHaveBeenCalledWith({ departmentId: undefined, status: undefined, page: 1, limit: 20 });
+    expect(mockSvc.getActionPlans).toHaveBeenCalledWith({
+      departmentId: undefined,
+      status: undefined,
+      page: 1,
+      limit: 20,
+    });
   });
 
   it('updateActionPlan → updateActionPlan(id, dto)', async () => {

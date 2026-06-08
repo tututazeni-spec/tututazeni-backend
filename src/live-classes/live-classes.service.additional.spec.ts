@@ -24,11 +24,17 @@ const mockPrisma: any = {
 };
 
 const baseLiveClass = {
-  id: 1, title: 'Aula ao Vivo TypeScript', courseId: 1,
-  scheduledAt: new Date('2026-07-15T10:00:00'), durationMinutes: 90,
-  status: 'SCHEDULED', meetUrl: 'https://meet.google.com/abc',
+  id: 1,
+  title: 'Aula ao Vivo TypeScript',
+  courseId: 1,
+  scheduledAt: new Date('2026-07-15T10:00:00'),
+  durationMinutes: 90,
+  status: 'SCHEDULED',
+  meetUrl: 'https://meet.google.com/abc',
   course: { id: 1, title: 'TypeScript Avançado' },
-  attendances: [], messages: [], postEvaluation: null,
+  attendances: [],
+  messages: [],
+  postEvaluation: null,
   _count: { attendances: 5, messages: 20 },
 };
 
@@ -86,8 +92,10 @@ describe('LiveClassesService (additional)', () => {
     it('deve criar aula ao vivo', async () => {
       mockPrisma.liveClass.create.mockResolvedValue(baseLiveClass);
       const result = await service.create({
-        title: 'Aula TypeScript', courseId: 1,
-        scheduledAt: '2026-07-15T10:00:00', durationMinutes: 90,
+        title: 'Aula TypeScript',
+        courseId: 1,
+        scheduledAt: '2026-07-15T10:00:00',
+        durationMinutes: 90,
       } as any);
       expect(result).toBeDefined();
     });
@@ -149,8 +157,17 @@ describe('LiveClassesService (additional)', () => {
   describe('sendMessage', () => {
     it('deve enviar mensagem de chat na aula', async () => {
       mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
-      mockPrisma.liveMessage.create.mockResolvedValue({ id: 1, liveClassId: 1, content: 'Olá!', userId: 2 });
-      const result = await service.sendMessage(1, { content: 'Olá!', type: 'TEXT' as any } as any, 2);
+      mockPrisma.liveMessage.create.mockResolvedValue({
+        id: 1,
+        liveClassId: 1,
+        content: 'Olá!',
+        userId: 2,
+      });
+      const result = await service.sendMessage(
+        1,
+        { content: 'Olá!', type: 'TEXT' as any } as any,
+        2,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -171,7 +188,8 @@ describe('LiveClassesService (additional)', () => {
   describe('respondPostEvaluation', () => {
     it('deve submeter respostas à avaliação pós-aula', async () => {
       mockPrisma.liveClass.findUnique.mockResolvedValue({
-        ...baseLiveClass, postEvaluation: { id: 1, questions: [] },
+        ...baseLiveClass,
+        postEvaluation: { id: 1, questions: [] },
       });
       mockPrisma.postClassResponse.createMany.mockResolvedValue({ count: 3 });
       const result = await service.respondPostEvaluation(1, { responses: [] } as any, 2);

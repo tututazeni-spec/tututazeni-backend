@@ -1,9 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  NotFoundException,
-  BadRequestException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Evaluation360Service } from './evaluation360.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
@@ -140,7 +136,10 @@ describe('Evaluation360Service (additional)', () => {
     });
 
     it('deve criar ciclo com competências', async () => {
-      cycleMock.create.mockResolvedValue({ ...baseCycle, competencies: [{ competencyId: 'c1', weight: 1 }] });
+      cycleMock.create.mockResolvedValue({
+        ...baseCycle,
+        competencies: [{ competencyId: 'c1', weight: 1 }],
+      });
       const result = await service.createCycle(
         {
           name: 'Ciclo com Competências',
@@ -157,7 +156,9 @@ describe('Evaluation360Service (additional)', () => {
         'user-1',
       );
       expect(result).toBeDefined();
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'CREATE', entity: 'EvaluationCycle' }));
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'CREATE', entity: 'EvaluationCycle' }),
+      );
     });
   });
 
@@ -173,12 +174,16 @@ describe('Evaluation360Service (additional)', () => {
 
     it('deve rejeitar update de ciclo IN_PROGRESS', async () => {
       cycleMock.findUnique.mockResolvedValue({ ...baseCycle, status: 'IN_PROGRESS' });
-      await expect(service.updateCycle('cycle-1', { name: 'X' } as any, 'user-1')).rejects.toThrow(BadRequestException);
+      await expect(service.updateCycle('cycle-1', { name: 'X' } as any, 'user-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('deve rejeitar update de ciclo COMPLETED', async () => {
       cycleMock.findUnique.mockResolvedValue({ ...baseCycle, status: 'COMPLETED' });
-      await expect(service.updateCycle('cycle-1', { name: 'X' } as any, 'user-1')).rejects.toThrow(BadRequestException);
+      await expect(service.updateCycle('cycle-1', { name: 'X' } as any, 'user-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('deve rejeitar pesos inválidos no update', async () => {
@@ -186,7 +191,13 @@ describe('Evaluation360Service (additional)', () => {
       await expect(
         service.updateCycle(
           'cycle-1',
-          { weightSelf: 60, weightManager: 60, weightPeer: 0, weightSubordinate: 0, weightExternal: 0 } as any,
+          {
+            weightSelf: 60,
+            weightManager: 60,
+            weightPeer: 0,
+            weightSubordinate: 0,
+            weightExternal: 0,
+          } as any,
           'user-1',
         ),
       ).rejects.toThrow(BadRequestException);
@@ -203,28 +214,56 @@ describe('Evaluation360Service (additional)', () => {
   describe('publishCycle', () => {
     it('deve rejeitar se ciclo não está em DRAFT', async () => {
       cycleMock.findUnique.mockResolvedValue({ ...baseCycle, status: 'PUBLISHED' });
-      await expect(service.publishCycle('cycle-1', {}, 'user-1')).rejects.toThrow(BadRequestException);
+      await expect(service.publishCycle('cycle-1', {}, 'user-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('deve rejeitar se não há participantes', async () => {
       cycleMock.findUnique.mockResolvedValue({ ...baseCycle, status: 'DRAFT' });
       // cycleParticipant.count returns 0 (default)
-      await expect(service.publishCycle('cycle-1', {}, 'user-1')).rejects.toThrow(BadRequestException);
+      await expect(service.publishCycle('cycle-1', {}, 'user-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('deve rejeitar se não há questões', async () => {
       cycleMock.findUnique.mockResolvedValue({ ...baseCycle, status: 'DRAFT' });
       // Override: participant count > 0, question count = 0
-      mockPrisma.cycleParticipant = { count: jest.fn().mockResolvedValue(5), findUnique: jest.fn(), create: jest.fn(), updateMany: jest.fn(), findMany: jest.fn().mockResolvedValue([]) };
-      mockPrisma.evaluationQuestion = { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), findUnique: jest.fn() };
-      await expect(service.publishCycle('cycle-1', {}, 'user-1')).rejects.toThrow(BadRequestException);
+      mockPrisma.cycleParticipant = {
+        count: jest.fn().mockResolvedValue(5),
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        updateMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+      };
+      mockPrisma.evaluationQuestion = {
+        count: jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn(),
+        findUnique: jest.fn(),
+      };
+      await expect(service.publishCycle('cycle-1', {}, 'user-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('deve publicar ciclo com participantes e questões', async () => {
       cycleMock.findUnique.mockResolvedValue({ ...baseCycle, status: 'DRAFT' });
       cycleMock.update.mockResolvedValue({ ...baseCycle, status: 'PUBLISHED' });
-      mockPrisma.cycleParticipant = { count: jest.fn().mockResolvedValue(5), findUnique: jest.fn(), create: jest.fn(), updateMany: jest.fn(), findMany: jest.fn().mockResolvedValue([]) };
-      mockPrisma.evaluationQuestion = { count: jest.fn().mockResolvedValue(3), findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), findUnique: jest.fn() };
+      mockPrisma.cycleParticipant = {
+        count: jest.fn().mockResolvedValue(5),
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        updateMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+      };
+      mockPrisma.evaluationQuestion = {
+        count: jest.fn().mockResolvedValue(3),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn(),
+        findUnique: jest.fn(),
+      };
       const result = await service.publishCycle('cycle-1', { sendInvitesNow: false }, 'user-1');
       expect(result).toBeDefined();
       expect(mockEvents.emit).toHaveBeenCalledWith('cycle.published', expect.any(Object));
@@ -233,8 +272,19 @@ describe('Evaluation360Service (additional)', () => {
     it('deve publicar e enviar convites imediatamente', async () => {
       cycleMock.findUnique.mockResolvedValue({ ...baseCycle, status: 'DRAFT' });
       cycleMock.update.mockResolvedValue({ ...baseCycle, status: 'PUBLISHED' });
-      mockPrisma.cycleParticipant = { count: jest.fn().mockResolvedValue(5), findUnique: jest.fn(), create: jest.fn(), updateMany: jest.fn(), findMany: jest.fn().mockResolvedValue([]) };
-      mockPrisma.evaluationQuestion = { count: jest.fn().mockResolvedValue(2), findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), findUnique: jest.fn() };
+      mockPrisma.cycleParticipant = {
+        count: jest.fn().mockResolvedValue(5),
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        updateMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+      };
+      mockPrisma.evaluationQuestion = {
+        count: jest.fn().mockResolvedValue(2),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn(),
+        findUnique: jest.fn(),
+      };
       mockPrisma.evaluatorAssignment = {
         findMany: jest.fn().mockResolvedValue([{ id: 'a1' }]),
         update: jest.fn().mockResolvedValue({}),
@@ -253,7 +303,9 @@ describe('Evaluation360Service (additional)', () => {
   describe('giveConsent', () => {
     it('deve registar consentimento', async () => {
       mockPrisma.cycleParticipant = {
-        findUnique: jest.fn().mockResolvedValue({ cycleId: 'c1', userId: 'u1', consentGiven: false }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ cycleId: 'c1', userId: 'u1', consentGiven: false }),
         update: jest.fn().mockResolvedValue({ consentGiven: true }),
         count: jest.fn().mockResolvedValue(0),
         create: jest.fn().mockResolvedValue({}),
@@ -273,7 +325,9 @@ describe('Evaluation360Service (additional)', () => {
         findMany: jest.fn().mockResolvedValue([]),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       };
-      await expect(service.giveConsent('cycle-1', 'user-x', { consent: false })).rejects.toThrow(NotFoundException);
+      await expect(service.giveConsent('cycle-1', 'user-x', { consent: false })).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -287,10 +341,7 @@ describe('Evaluation360Service (additional)', () => {
         managerId: 'mgr-1',
         departmentId: 'dept-1',
       });
-      mockPrisma.user.findMany.mockResolvedValue([
-        { id: 'peer-1' },
-        { id: 'sub-1' },
-      ]);
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 'peer-1' }, { id: 'sub-1' }]);
       const result = await service.suggestEvaluators('cycle-1', { evaluateeId: 'user-1' });
       expect(result.length).toBeGreaterThan(0);
       expect(result.some(s => s.role === 'SELF')).toBe(true);
@@ -299,7 +350,11 @@ describe('Evaluation360Service (additional)', () => {
 
     it('deve sugerir apenas autoavaliação se sem manager ou departamento', async () => {
       cycleMock.findUnique.mockResolvedValue(baseCycle);
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-1', managerId: null, departmentId: null });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        managerId: null,
+        departmentId: null,
+      });
       mockPrisma.user.findMany.mockResolvedValue([]);
       const result = await service.suggestEvaluators('cycle-1', { evaluateeId: 'user-1' });
       expect(result.some(s => s.role === 'SELF')).toBe(true);
@@ -308,7 +363,9 @@ describe('Evaluation360Service (additional)', () => {
     it('deve lançar NotFoundException se avaliado não existe', async () => {
       cycleMock.findUnique.mockResolvedValue(baseCycle);
       mockPrisma.user.findUnique.mockResolvedValue(null);
-      await expect(service.suggestEvaluators('cycle-1', { evaluateeId: 'ghost' })).rejects.toThrow(NotFoundException);
+      await expect(service.suggestEvaluators('cycle-1', { evaluateeId: 'ghost' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -376,9 +433,16 @@ describe('Evaluation360Service (additional)', () => {
         create: jest.fn().mockResolvedValue({}),
         update: jest.fn().mockResolvedValue({}),
       };
-      const result = await service.approveEvaluators('cycle-1', { assignmentIds: ['a1', 'a2'] }, 'admin-1');
+      const result = await service.approveEvaluators(
+        'cycle-1',
+        { assignmentIds: ['a1', 'a2'] },
+        'admin-1',
+      );
       expect(result.approved).toBe(2);
-      expect(mockEvents.emit).toHaveBeenCalledWith('evaluation.invitation.send', expect.any(Object));
+      expect(mockEvents.emit).toHaveBeenCalledWith(
+        'evaluation.invitation.send',
+        expect.any(Object),
+      );
     });
   });
 
@@ -396,7 +460,10 @@ describe('Evaluation360Service (additional)', () => {
       };
       const result = await service.sendCycleInvites('cycle-1', 'admin-1');
       expect(result.sent).toBe(2);
-      expect(mockEvents.emit).toHaveBeenCalledWith('evaluation.invitation.send', expect.any(Object));
+      expect(mockEvents.emit).toHaveBeenCalledWith(
+        'evaluation.invitation.send',
+        expect.any(Object),
+      );
     });
 
     it('deve retornar 0 se não há assignments pendentes', async () => {
@@ -458,7 +525,9 @@ describe('Evaluation360Service (additional)', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         findUnique: jest.fn().mockResolvedValue(null),
       };
-      await expect(service.getEvaluationForm('cycle-1', 'user-1', 'user-2')).rejects.toThrow(NotFoundException);
+      await expect(service.getEvaluationForm('cycle-1', 'user-1', 'user-2')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('deve lançar BadRequestException se avaliação expirada', async () => {
@@ -470,7 +539,9 @@ describe('Evaluation360Service (additional)', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         findUnique: jest.fn().mockResolvedValue(null),
       };
-      await expect(service.getEvaluationForm('cycle-1', 'user-1', 'user-2')).rejects.toThrow(BadRequestException);
+      await expect(service.getEvaluationForm('cycle-1', 'user-1', 'user-2')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('deve lançar BadRequestException se avaliação já submetida', async () => {
@@ -482,7 +553,9 @@ describe('Evaluation360Service (additional)', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         findUnique: jest.fn().mockResolvedValue(null),
       };
-      await expect(service.getEvaluationForm('cycle-1', 'user-1', 'user-2')).rejects.toThrow(BadRequestException);
+      await expect(service.getEvaluationForm('cycle-1', 'user-1', 'user-2')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('deve retornar formulário de avaliação', async () => {
@@ -526,7 +599,13 @@ describe('Evaluation360Service (additional)', () => {
         findUnique: jest.fn().mockResolvedValue(null),
       };
       await expect(
-        service.submitResponse('cycle-1', 'user-1', 'user-2', { submit: false, answers: [] }, 'user-1'),
+        service.submitResponse(
+          'cycle-1',
+          'user-1',
+          'user-2',
+          { submit: false, answers: [] },
+          'user-1',
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -541,7 +620,13 @@ describe('Evaluation360Service (additional)', () => {
       };
       cycleMock.findUnique.mockResolvedValue(baseCycle);
       await expect(
-        service.submitResponse('cycle-1', 'user-1', 'user-2', { submit: true, answers: [] }, 'user-1'),
+        service.submitResponse(
+          'cycle-1',
+          'user-1',
+          'user-2',
+          { submit: true, answers: [] },
+          'user-1',
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -574,7 +659,9 @@ describe('Evaluation360Service (additional)', () => {
         create: jest.fn().mockResolvedValue({}),
       };
       const result = await service.submitResponse(
-        'cycle-1', 'user-1', 'user-2',
+        'cycle-1',
+        'user-1',
+        'user-2',
         { submit: false, answers: [] },
         'user-1',
       );
@@ -587,7 +674,9 @@ describe('Evaluation360Service (additional)', () => {
   describe('calculateCycleResults', () => {
     it('deve lançar NotFoundException se ciclo não existe', async () => {
       cycleMock.findUnique.mockResolvedValue(null);
-      await expect(service.calculateCycleResults('invalid', 'admin-1')).rejects.toThrow(NotFoundException);
+      await expect(service.calculateCycleResults('invalid', 'admin-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('deve calcular resultados sem participantes', async () => {
@@ -690,8 +779,24 @@ describe('Evaluation360Service (additional)', () => {
       ]);
       mockPrisma.evaluationResult = {
         findMany: jest.fn().mockResolvedValue([
-          { participantId: 'u1', weightedScore: 4.0, overallScore: 3.8, isEligiblePromotion: true, isEligibleBonus: false, gaps: '[]', strengths: '[]' },
-          { participantId: 'u2', weightedScore: 3.2, overallScore: 3.5, isEligiblePromotion: false, isEligibleBonus: true, gaps: '[]', strengths: '[]' },
+          {
+            participantId: 'u1',
+            weightedScore: 4.0,
+            overallScore: 3.8,
+            isEligiblePromotion: true,
+            isEligibleBonus: false,
+            gaps: '[]',
+            strengths: '[]',
+          },
+          {
+            participantId: 'u2',
+            weightedScore: 3.2,
+            overallScore: 3.5,
+            isEligiblePromotion: false,
+            isEligibleBonus: true,
+            gaps: '[]',
+            strengths: '[]',
+          },
         ]),
         findUnique: jest.fn().mockResolvedValue(null),
         findFirst: jest.fn().mockResolvedValue(null),
@@ -710,8 +815,18 @@ describe('Evaluation360Service (additional)', () => {
     it('deve calcular média organizacional', async () => {
       mockPrisma.evaluationResult = {
         findMany: jest.fn().mockResolvedValue([
-          { overallScore: 4.0, weightedScore: 4.0, scoresByCompetency: '{"c1":{"score":4.0}}', isEligiblePromotion: true },
-          { overallScore: 3.0, weightedScore: 3.5, scoresByCompetency: '{"c1":{"score":3.5}}', isEligiblePromotion: false },
+          {
+            overallScore: 4.0,
+            weightedScore: 4.0,
+            scoresByCompetency: '{"c1":{"score":4.0}}',
+            isEligiblePromotion: true,
+          },
+          {
+            overallScore: 3.0,
+            weightedScore: 3.5,
+            scoresByCompetency: '{"c1":{"score":3.5}}',
+            isEligiblePromotion: false,
+          },
         ]),
         findUnique: jest.fn().mockResolvedValue(null),
         findFirst: jest.fn().mockResolvedValue(null),
@@ -743,7 +858,8 @@ describe('Evaluation360Service (additional)', () => {
   describe('getNineBox', () => {
     it('deve classificar participantes no nine-box', async () => {
       mockPrisma.evaluationResult = {
-        findMany: jest.fn()
+        findMany: jest
+          .fn()
           .mockResolvedValueOnce([
             { participantId: 'u1', weightedScore: 4.5 },
             { participantId: 'u2', weightedScore: 2.0 },
@@ -791,7 +907,11 @@ describe('Evaluation360Service (additional)', () => {
         upsert: jest.fn().mockResolvedValue({}),
       };
       await expect(
-        service.calibrateScore('cycle-1', { participantId: 'ghost', calibratedScore: 4.0, justification: 'N/A' }, 'rh-1'),
+        service.calibrateScore(
+          'cycle-1',
+          { participantId: 'ghost', calibratedScore: 4.0, justification: 'N/A' },
+          'rh-1',
+        ),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -814,7 +934,12 @@ describe('Evaluation360Service (additional)', () => {
         update: jest.fn().mockResolvedValue({}),
       };
       const result = await service.generateReport(
-        { cycleId: 'cycle-1', scope: 'INDIVIDUAL', participantId: 'user-1', includeAiInsights: false },
+        {
+          cycleId: 'cycle-1',
+          scope: 'INDIVIDUAL',
+          participantId: 'user-1',
+          includeAiInsights: false,
+        },
         'admin-1',
       );
       expect(result).toHaveProperty('scope', 'INDIVIDUAL');
@@ -843,7 +968,10 @@ describe('Evaluation360Service (additional)', () => {
         update: jest.fn().mockResolvedValue({}),
       };
       await expect(
-        service.generateReport({ cycleId: 'cycle-1', scope: 'INDIVIDUAL', participantId: 'ghost' }, 'admin-1'),
+        service.generateReport(
+          { cycleId: 'cycle-1', scope: 'INDIVIDUAL', participantId: 'ghost' },
+          'admin-1',
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -862,7 +990,12 @@ describe('Evaluation360Service (additional)', () => {
         update: jest.fn().mockResolvedValue({}),
       };
       const result = await service.generateReport(
-        { cycleId: 'cycle-1', scope: 'INDIVIDUAL', participantId: 'user-1', includeAiInsights: true },
+        {
+          cycleId: 'cycle-1',
+          scope: 'INDIVIDUAL',
+          participantId: 'user-1',
+          includeAiInsights: true,
+        },
         'admin-1',
       );
       expect(result).toHaveProperty('aiInsights');
@@ -896,7 +1029,9 @@ describe('Evaluation360Service (additional)', () => {
         findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({}),
       };
-      const result = await service.submitPulseSurveyResponse('survey-1', 'user-1', { answersJson: '{"q1":5}' });
+      const result = await service.submitPulseSurveyResponse('survey-1', 'user-1', {
+        answersJson: '{"q1":5}',
+      });
       expect(result).toBeDefined();
     });
   });

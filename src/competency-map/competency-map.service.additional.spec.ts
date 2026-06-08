@@ -45,14 +45,25 @@ const mockPrisma: any = {
 };
 
 const baseSkill = {
-  id: 1, name: 'TypeScript', type: 'TECHNICAL', categoryId: 1, maxLevel: 5, active: true,
-  tags: ['programming'], category: { id: 1, name: 'Programação' },
-  proficiencyLevels: [], _count: { employeeSkills: 0, roleRequirements: 0 },
+  id: 1,
+  name: 'TypeScript',
+  type: 'TECHNICAL',
+  categoryId: 1,
+  maxLevel: 5,
+  active: true,
+  tags: ['programming'],
+  category: { id: 1, name: 'Programação' },
+  proficiencyLevels: [],
+  _count: { employeeSkills: 0, roleRequirements: 0 },
 };
 
 const baseMatrix = {
-  id: 1, roleCode: 'SENIOR_DEV', department: 'TI',
-  requirements: [{ id: 1, skillId: 1, requiredLevel: 4, weight: 100, mandatory: true, skill: baseSkill }],
+  id: 1,
+  roleCode: 'SENIOR_DEV',
+  department: 'TI',
+  requirements: [
+    { id: 1, skillId: 1, requiredLevel: 4, weight: 100, mandatory: true, skill: baseSkill },
+  ],
 };
 
 describe('CompetencyMapService (additional)', () => {
@@ -95,9 +106,14 @@ describe('CompetencyMapService (additional)', () => {
   describe('createSkill', () => {
     it('deve criar skill e registar auditoria', async () => {
       mockPrisma.skill.create.mockResolvedValue(baseSkill);
-      const result = await service.createSkill({ name: 'TypeScript', type: 'TECHNICAL', categoryId: 1 } as any, 1);
+      const result = await service.createSkill(
+        { name: 'TypeScript', type: 'TECHNICAL', categoryId: 1 } as any,
+        1,
+      );
       expect(result).toBeDefined();
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'SKILL_CREATED' }));
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'SKILL_CREATED' }),
+      );
     });
   });
 
@@ -153,7 +169,10 @@ describe('CompetencyMapService (additional)', () => {
     it('deve criar/actualizar níveis de proficiência', async () => {
       mockPrisma.skillProficiencyLevel.upsert.mockResolvedValue({ id: 1, skillId: 1, level: 3 });
       const result = await service.setProficiencyLevels({
-        skillId: 1, level: 3, name: 'Avançado', description: 'Domínio avançado',
+        skillId: 1,
+        level: 3,
+        name: 'Avançado',
+        description: 'Domínio avançado',
       } as any);
       expect(result).toBeDefined();
     });
@@ -167,7 +186,8 @@ describe('CompetencyMapService (additional)', () => {
       mockPrisma.roleSkillRequirement.createMany.mockResolvedValue({ count: 1 });
       mockPrisma.roleSkillMatrix.findUnique.mockResolvedValue(baseMatrix);
       const result = await service.setRoleSkillMatrix({
-        roleCode: 'SENIOR_DEV', department: 'TI',
+        roleCode: 'SENIOR_DEV',
+        department: 'TI',
         skills: [{ skillId: 1, requiredLevel: 4, weight: 100, mandatory: true }],
       } as any);
       expect(result).toBeDefined();
@@ -194,17 +214,37 @@ describe('CompetencyMapService (additional)', () => {
   describe('upsertEmployeeSkill', () => {
     it('deve criar/actualizar skill do colaborador', async () => {
       mockPrisma.legacyEmployeeSkill.findUnique.mockResolvedValue(null);
-      mockPrisma.legacyEmployeeSkill.upsert.mockResolvedValue({ id: 1, userId: 1, skillId: 1, currentLevel: 3 });
-      const result = await service.upsertEmployeeSkill({
-        userId: 1, skillId: 1, currentLevel: 3, source: 'MANAGER' as any,
-      } as any, 2);
+      mockPrisma.legacyEmployeeSkill.upsert.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        skillId: 1,
+        currentLevel: 3,
+      });
+      const result = await service.upsertEmployeeSkill(
+        {
+          userId: 1,
+          skillId: 1,
+          currentLevel: 3,
+          source: 'MANAGER' as any,
+        } as any,
+        2,
+      );
       expect(result).toBeDefined();
     });
 
     it('deve lançar BadRequestException para autoavaliação de nível 5 sem validação', async () => {
-      await expect(service.upsertEmployeeSkill({
-        userId: 1, skillId: 1, currentLevel: 5, source: 'SELF' as any, managerValidated: false,
-      } as any, 1)).rejects.toThrow(BadRequestException);
+      await expect(
+        service.upsertEmployeeSkill(
+          {
+            userId: 1,
+            skillId: 1,
+            currentLevel: 5,
+            source: 'SELF' as any,
+            managerValidated: false,
+          } as any,
+          1,
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -212,7 +252,9 @@ describe('CompetencyMapService (additional)', () => {
 
   describe('getEmployeeSkills', () => {
     it('deve retornar skills do colaborador', async () => {
-      mockPrisma.legacyEmployeeSkill.findMany.mockResolvedValue([{ id: 1, userId: 1, skill: baseSkill, currentLevel: 3 }]);
+      mockPrisma.legacyEmployeeSkill.findMany.mockResolvedValue([
+        { id: 1, userId: 1, skill: baseSkill, currentLevel: 3 },
+      ]);
       const result = await service.getEmployeeSkills(1);
       expect(result).toBeDefined();
     });
@@ -222,9 +264,7 @@ describe('CompetencyMapService (additional)', () => {
 
   describe('getGapAnalysis', () => {
     it('deve retornar análise de gaps para colaborador com role definido', async () => {
-      mockPrisma.legacyEmployeeSkill.findMany.mockResolvedValue([
-        { skillId: 1, currentLevel: 3 },
-      ]);
+      mockPrisma.legacyEmployeeSkill.findMany.mockResolvedValue([{ skillId: 1, currentLevel: 3 }]);
       mockPrisma.roleSkillMatrix.findUnique.mockResolvedValue(baseMatrix);
       const result = await service.getGapAnalysis('SENIOR_DEV', 1);
       expect(result).toBeDefined();

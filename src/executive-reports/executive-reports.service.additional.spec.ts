@@ -27,9 +27,15 @@ const mockPrisma: any = {
     findMany: jest.fn().mockResolvedValue([]),
   },
   reportAccessLog: { create: jest.fn().mockResolvedValue({}) },
-  user: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null) },
+  user: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+  },
   enrollment: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
-  performanceReview: { findMany: jest.fn().mockResolvedValue([]), aggregate: jest.fn().mockResolvedValue({ _avg: { score: 0 } }) },
+  performanceReview: {
+    findMany: jest.fn().mockResolvedValue([]),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { score: 0 } }),
+  },
   course: { count: jest.fn().mockResolvedValue(0) },
   certificate: { count: jest.fn().mockResolvedValue(0) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
@@ -38,10 +44,17 @@ const mockPrisma: any = {
 };
 
 const baseReport = {
-  id: 1, title: 'Relatório Q1 2026', type: 'LMS_OVERVIEW', status: 'DRAFT',
-  period: '2026-Q1', generatedById: 1,
+  id: 1,
+  title: 'Relatório Q1 2026',
+  type: 'LMS_OVERVIEW',
+  status: 'DRAFT',
+  period: '2026-Q1',
+  generatedById: 1,
   generatedBy: { id: 1, fullName: 'Admin', avatarUrl: null },
-  department: null, metrics: [], approvals: [], accessLogs: [],
+  department: null,
+  metrics: [],
+  approvals: [],
+  accessLogs: [],
   _count: { accessLogs: 0 },
 };
 
@@ -70,7 +83,12 @@ describe('ExecutiveReportsService (additional)', () => {
     it('deve filtrar por type, status, departmentId, period', async () => {
       mockPrisma.executiveReport.findMany.mockResolvedValue([]);
       mockPrisma.executiveReport.count.mockResolvedValue(0);
-      await service.findAll({ type: 'LMS_OVERVIEW' as any, status: 'PUBLISHED' as any, departmentId: 1, period: '2026-Q1' });
+      await service.findAll({
+        type: 'LMS_OVERVIEW' as any,
+        status: 'PUBLISHED' as any,
+        departmentId: 1,
+        period: '2026-Q1',
+      });
       expect(mockPrisma.executiveReport.findMany).toHaveBeenCalled();
     });
   });
@@ -101,7 +119,10 @@ describe('ExecutiveReportsService (additional)', () => {
   describe('create', () => {
     it('deve criar relatório executivo', async () => {
       mockPrisma.executiveReport.create.mockResolvedValue(baseReport);
-      const result = await service.create({ title: 'Relatório Q1', type: 'LMS_OVERVIEW' as any, period: '2026-Q1' } as any, 1);
+      const result = await service.create(
+        { title: 'Relatório Q1', type: 'LMS_OVERVIEW' as any, period: '2026-Q1' } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -126,14 +147,22 @@ describe('ExecutiveReportsService (additional)', () => {
 
   describe('publish', () => {
     it('deve publicar relatório DRAFT', async () => {
-      mockPrisma.executiveReport.findUnique.mockResolvedValue({ ...baseReport, generatedById: 1, status: 'DRAFT' });
+      mockPrisma.executiveReport.findUnique.mockResolvedValue({
+        ...baseReport,
+        generatedById: 1,
+        status: 'DRAFT',
+      });
       mockPrisma.executiveReport.update.mockResolvedValue({ ...baseReport, status: 'PUBLISHED' });
       const result = await service.publish(1, 1);
       expect(result).toBeDefined();
     });
 
     it('deve lançar BadRequestException se já publicado', async () => {
-      mockPrisma.executiveReport.findUnique.mockResolvedValue({ ...baseReport, generatedById: 1, status: 'PUBLISHED' });
+      mockPrisma.executiveReport.findUnique.mockResolvedValue({
+        ...baseReport,
+        generatedById: 1,
+        status: 'PUBLISHED',
+      });
       await expect(service.publish(1, 1)).rejects.toThrow(BadRequestException);
     });
   });
@@ -154,8 +183,16 @@ describe('ExecutiveReportsService (additional)', () => {
   describe('addMetric', () => {
     it('deve adicionar métrica ao relatório', async () => {
       mockPrisma.executiveReport.findUnique.mockResolvedValue(baseReport);
-      mockPrisma.reportMetric.create.mockResolvedValue({ id: 1, reportId: 1, name: 'Total Utilizadores' });
-      const result = await service.addMetric(1, { name: 'Total Utilizadores', value: 100, unit: 'users' } as any, 1);
+      mockPrisma.reportMetric.create.mockResolvedValue({
+        id: 1,
+        reportId: 1,
+        name: 'Total Utilizadores',
+      });
+      const result = await service.addMetric(
+        1,
+        { name: 'Total Utilizadores', value: 100, unit: 'users' } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -189,7 +226,10 @@ describe('ExecutiveReportsService (additional)', () => {
       mockPrisma.enrollment.count.mockResolvedValue(150);
       mockPrisma.course.count.mockResolvedValue(50);
       mockPrisma.certificate.count.mockResolvedValue(30);
-      const result = await service.generateFromData({ type: 'LMS_OVERVIEW' as any, period: '2026-Q1' } as any, 1);
+      const result = await service.generateFromData(
+        { type: 'LMS_OVERVIEW' as any, period: '2026-Q1' } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -198,8 +238,15 @@ describe('ExecutiveReportsService (additional)', () => {
 
   describe('requestApproval', () => {
     it('deve solicitar aprovação do relatório', async () => {
-      mockPrisma.executiveReport.findUnique.mockResolvedValue({ ...baseReport, generatedById: 1, status: 'DRAFT' });
-      mockPrisma.executiveReport.update.mockResolvedValue({ ...baseReport, status: 'PENDING_APPROVAL' });
+      mockPrisma.executiveReport.findUnique.mockResolvedValue({
+        ...baseReport,
+        generatedById: 1,
+        status: 'DRAFT',
+      });
+      mockPrisma.executiveReport.update.mockResolvedValue({
+        ...baseReport,
+        status: 'PENDING_APPROVAL',
+      });
       mockPrisma.notificationLog.create.mockResolvedValue({});
       const result = await service.requestApproval(1, 2, 1);
       expect(result).toBeDefined();
@@ -210,7 +257,10 @@ describe('ExecutiveReportsService (additional)', () => {
 
   describe('approve', () => {
     it('deve aprovar relatório', async () => {
-      mockPrisma.executiveReport.findUnique.mockResolvedValue({ ...baseReport, status: 'PENDING_APPROVAL' });
+      mockPrisma.executiveReport.findUnique.mockResolvedValue({
+        ...baseReport,
+        status: 'PENDING_APPROVAL',
+      });
       mockPrisma.reportApproval.create.mockResolvedValue({ id: 1 });
       mockPrisma.executiveReport.update.mockResolvedValue({ ...baseReport, status: 'PUBLISHED' });
       mockPrisma.notificationLog.create.mockResolvedValue({});

@@ -249,7 +249,10 @@ describe('LeaveManagementService', () => {
         ...baseLeaveRequest,
         status: LeaveStatus.PENDING,
       });
-      mockPrisma.leaveRequest.update.mockResolvedValue({ ...baseLeaveRequest, status: 'CANCELLED' });
+      mockPrisma.leaveRequest.update.mockResolvedValue({
+        ...baseLeaveRequest,
+        status: 'CANCELLED',
+      });
       const result = await service.cancel(1, 1);
       expect(result).toBeDefined();
     });

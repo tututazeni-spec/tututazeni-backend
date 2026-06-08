@@ -122,7 +122,11 @@ describe('ProcessStandardController', () => {
 
   it('getInstances → getInstances(query)', async () => {
     await controller.getInstances(mockUser as any);
-    expect(mockSvc.getInstances).toHaveBeenCalledWith({ processId: undefined, status: undefined, page: 1 });
+    expect(mockSvc.getInstances).toHaveBeenCalledWith({
+      processId: undefined,
+      status: undefined,
+      page: 1,
+    });
   });
 
   it('getInstance → getInstanceDetail(id)', async () => {

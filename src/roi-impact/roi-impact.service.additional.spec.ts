@@ -126,7 +126,8 @@ describe('RoiImpactService (additional)', () => {
       mockPrisma.enrollment.count.mockResolvedValue(100);
       mockPrisma.certificate.count.mockResolvedValue(80);
       const result = await service.whatIfAnalysis({
-        from: '2026-01-01', to: '2026-12-31',
+        from: '2026-01-01',
+        to: '2026-12-31',
         enrollmentIncrease: 20,
         completionRateTarget: 90,
       } as any);

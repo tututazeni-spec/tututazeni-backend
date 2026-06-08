@@ -10,7 +10,10 @@ const mockEvalCycle = {
   model: '360',
   startDate: new Date('2026-01-01'),
   endDate: new Date('2026-03-31'),
-  weights: JSON.stringify([{ type: 'SELF', weight: 30, selfEvalIncluded: true }, { type: 'MANAGER', weight: 70, selfEvalIncluded: false }]),
+  weights: JSON.stringify([
+    { type: 'SELF', weight: 30, selfEvalIncluded: true },
+    { type: 'MANAGER', weight: 70, selfEvalIncluded: false },
+  ]),
   targetDeptIds: [],
 };
 
@@ -189,7 +192,10 @@ describe('EvaluationService (additional)', () => {
 
   describe('updateCycle', () => {
     it('deve actualizar ciclo', async () => {
-      mockPrisma.evaluationCycle.update.mockResolvedValue({ ...mockEvalCycle, name: 'Actualizado' });
+      mockPrisma.evaluationCycle.update.mockResolvedValue({
+        ...mockEvalCycle,
+        name: 'Actualizado',
+      });
       const result = await service.updateCycle(1, { name: 'Actualizado' });
       expect(result).toBeDefined();
     });
@@ -207,7 +213,10 @@ describe('EvaluationService (additional)', () => {
 
   describe('publishCycle', () => {
     it('deve publicar ciclo', async () => {
-      mockPrisma.evaluationCycle.update.mockResolvedValue({ ...mockEvalCycle, status: 'PUBLISHED' });
+      mockPrisma.evaluationCycle.update.mockResolvedValue({
+        ...mockEvalCycle,
+        status: 'PUBLISHED',
+      });
       const result = await service.publishCycle(1);
       expect(result).toBeDefined();
     });
@@ -308,7 +317,11 @@ describe('EvaluationService (additional)', () => {
 
   describe('submitEvaluation', () => {
     it('deve submeter avaliação', async () => {
-      mockPrisma.performanceEvaluation.findFirst.mockResolvedValue({ id: 1, evaluatorId: 1, status: 'DRAFT' });
+      mockPrisma.performanceEvaluation.findFirst.mockResolvedValue({
+        id: 1,
+        evaluatorId: 1,
+        status: 'DRAFT',
+      });
       mockPrisma.performanceEvaluation.update.mockResolvedValue({ id: 1, status: 'SUBMITTED' });
       mockPrisma.evaluationRequest.updateMany.mockResolvedValue({ count: 1 });
       const result = await service.submitEvaluation(1, 1, { scores: [] } as any);
@@ -317,7 +330,9 @@ describe('EvaluationService (additional)', () => {
 
     it('deve lançar NotFoundException se avaliação não encontrada', async () => {
       mockPrisma.performanceEvaluation.findFirst.mockResolvedValue(null);
-      await expect(service.submitEvaluation(99, 1, { scores: [] } as any)).rejects.toThrow(NotFoundException);
+      await expect(service.submitEvaluation(99, 1, { scores: [] } as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -335,7 +350,12 @@ describe('EvaluationService (additional)', () => {
   describe('assignEvaluator', () => {
     it('deve criar pedido de avaliação', async () => {
       mockPrisma.evaluationRequest.create.mockResolvedValue({ id: 1 });
-      const result = await service.assignEvaluator({ evaluatorId: 2, evaluatedId: 1, cycleId: 1, type: 'PEER' as any });
+      const result = await service.assignEvaluator({
+        evaluatorId: 2,
+        evaluatedId: 1,
+        cycleId: 1,
+        type: 'PEER' as any,
+      });
       expect(result).toBeDefined();
     });
   });
@@ -347,9 +367,7 @@ describe('EvaluationService (additional)', () => {
       mockPrisma.evaluationRequest.createMany.mockResolvedValue({ count: 3 });
       const result = await service.bulkAssign({
         cycleId: 1,
-        assignments: [
-          { evaluatorId: 2, evaluatedId: 1, type: 'MANAGER' as any },
-        ],
+        assignments: [{ evaluatorId: 2, evaluatedId: 1, type: 'MANAGER' as any }],
       });
       expect(result).toBeDefined();
     });
@@ -360,7 +378,11 @@ describe('EvaluationService (additional)', () => {
   describe('calibrateScore', () => {
     it('deve calibrar score de avaliação', async () => {
       mockPrisma.performanceEvaluation.update.mockResolvedValue({ id: 1, calibratedScore: 4.5 });
-      const result = await service.calibrateScore(1, { calibratedScore: 4.5, justification: 'OK' }, 2);
+      const result = await service.calibrateScore(
+        1,
+        { calibratedScore: 4.5, justification: 'OK' },
+        2,
+      );
       expect(result).toBeDefined();
     });
   });

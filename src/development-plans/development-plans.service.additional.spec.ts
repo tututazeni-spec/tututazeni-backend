@@ -40,11 +40,24 @@ const mockPrisma: any = {
 };
 
 const basePlan = {
-  id: 1, userId: 2, managerId: 1, status: 'DRAFT', priority: 'MEDIUM',
+  id: 1,
+  userId: 2,
+  managerId: 1,
+  status: 'DRAFT',
+  priority: 'MEDIUM',
   title: 'Plano de Desenvolvimento 2026',
-  actions: [], goals: [], checkpoints: [],
+  actions: [],
+  goals: [],
+  checkpoints: [],
   _count: { actions: 0, goals: 0, checkpoints: 0 },
-  user: { id: 2, fullName: 'Colaborador', email: 'colab@innova.com', avatarUrl: null, position: { name: 'Dev', level: 2 }, department: { name: 'TI' } },
+  user: {
+    id: 2,
+    fullName: 'Colaborador',
+    email: 'colab@innova.com',
+    avatarUrl: null,
+    position: { name: 'Dev', level: 2 },
+    department: { name: 'TI' },
+  },
   manager: { id: 1, fullName: 'Gestor', avatarUrl: null },
 };
 
@@ -65,8 +78,14 @@ describe('DevelopmentPlansService (additional)', () => {
     it('deve retornar planos paginados com progresso calculado', async () => {
       const planWithActions = {
         ...basePlan,
-        actions: [{ id: 1, status: 'COMPLETED' }, { id: 2, status: 'PENDING' }],
-        goals: [{ id: 1, progress: 60 }, { id: 2, progress: 80 }],
+        actions: [
+          { id: 1, status: 'COMPLETED' },
+          { id: 2, status: 'PENDING' },
+        ],
+        goals: [
+          { id: 1, progress: 60 },
+          { id: 2, progress: 80 },
+        ],
       };
       mockPrisma.developmentPlan.findMany.mockResolvedValue([planWithActions]);
       mockPrisma.developmentPlan.count.mockResolvedValue(1);
@@ -79,7 +98,12 @@ describe('DevelopmentPlansService (additional)', () => {
     it('deve filtrar por userId, managerId, status, priority', async () => {
       mockPrisma.developmentPlan.findMany.mockResolvedValue([]);
       mockPrisma.developmentPlan.count.mockResolvedValue(0);
-      await service.findAll({ userId: 1, managerId: 2, status: 'ACTIVE' as any, priority: 'HIGH' as any });
+      await service.findAll({
+        userId: 1,
+        managerId: 2,
+        status: 'ACTIVE' as any,
+        priority: 'HIGH' as any,
+      });
       expect(mockPrisma.developmentPlan.findMany).toHaveBeenCalled();
     });
 
@@ -88,12 +112,16 @@ describe('DevelopmentPlansService (additional)', () => {
       mockPrisma.developmentPlan.count.mockResolvedValue(0);
       await service.findAll({ overdue: true });
       expect(mockPrisma.developmentPlan.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ endDate: { lt: expect.any(Date) } }) }),
+        expect.objectContaining({
+          where: expect.objectContaining({ endDate: { lt: expect.any(Date) } }),
+        }),
       );
     });
 
     it('deve retornar 0% progresso quando sem acções', async () => {
-      mockPrisma.developmentPlan.findMany.mockResolvedValue([{ ...basePlan, actions: [], goals: [] }]);
+      mockPrisma.developmentPlan.findMany.mockResolvedValue([
+        { ...basePlan, actions: [], goals: [] },
+      ]);
       mockPrisma.developmentPlan.count.mockResolvedValue(1);
       const result = await service.findAll({});
       expect(result.data[0].actionProgress).toBe(0);
@@ -146,7 +174,11 @@ describe('DevelopmentPlansService (additional)', () => {
 
   describe('approve', () => {
     it('deve aprovar plano pendente', async () => {
-      mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, status: 'PENDING_APPROVAL', managerId: 1 });
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        status: 'PENDING_APPROVAL',
+        managerId: 1,
+      });
       mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'ACTIVE' });
       mockPrisma.notificationLog.create.mockResolvedValue({});
       const result = await service.approve(1, { approved: true, feedback: 'Aprovado' }, 1);
@@ -154,10 +186,18 @@ describe('DevelopmentPlansService (additional)', () => {
     });
 
     it('deve rejeitar plano e notificar utilizador', async () => {
-      mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, status: 'PENDING_APPROVAL', managerId: 1 });
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        status: 'PENDING_APPROVAL',
+        managerId: 1,
+      });
       mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'REJECTED' });
       mockPrisma.notificationLog.create.mockResolvedValue({});
-      const result = await service.approve(1, { approved: false, feedback: 'Precisa de revisão' }, 1);
+      const result = await service.approve(
+        1,
+        { approved: false, feedback: 'Precisa de revisão' },
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -167,8 +207,16 @@ describe('DevelopmentPlansService (additional)', () => {
   describe('addAction', () => {
     it('deve adicionar acção ao plano', async () => {
       mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
-      mockPrisma.developmentPlanAction.create.mockResolvedValue({ id: 1, planId: 1, title: 'Acção 1' });
-      const result = await service.addAction(1, { title: 'Acção 1', type: 'COURSE' as any } as any, 1);
+      mockPrisma.developmentPlanAction.create.mockResolvedValue({
+        id: 1,
+        planId: 1,
+        title: 'Acção 1',
+      });
+      const result = await service.addAction(
+        1,
+        { title: 'Acção 1', type: 'COURSE' as any } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -177,7 +225,11 @@ describe('DevelopmentPlansService (additional)', () => {
 
   describe('updateAction', () => {
     it('deve actualizar acção', async () => {
-      mockPrisma.developmentPlanAction.findUnique.mockResolvedValue({ id: 1, planId: 1, status: 'PENDING' });
+      mockPrisma.developmentPlanAction.findUnique.mockResolvedValue({
+        id: 1,
+        planId: 1,
+        status: 'PENDING',
+      });
       mockPrisma.developmentPlanAction.update.mockResolvedValue({ id: 1, status: 'IN_PROGRESS' });
       const result = await service.updateAction(1, { status: 'IN_PROGRESS' } as any, 1);
       expect(result).toBeDefined();
@@ -195,7 +247,11 @@ describe('DevelopmentPlansService (additional)', () => {
     it('deve adicionar evidência a uma acção', async () => {
       mockPrisma.developmentPlanAction.findUnique.mockResolvedValue({ id: 1 });
       mockPrisma.actionEvidence.create.mockResolvedValue({ id: 1, actionId: 1 });
-      const result = await service.addEvidence(1, { description: 'Certificado concluído', type: 'CERTIFICATE' as any } as any, 1);
+      const result = await service.addEvidence(
+        1,
+        { description: 'Certificado concluído', type: 'CERTIFICATE' as any } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -228,7 +284,11 @@ describe('DevelopmentPlansService (additional)', () => {
     it('deve adicionar checkpoint ao plano', async () => {
       mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
       mockPrisma.planCheckpoint.create.mockResolvedValue({ id: 1, planId: 1 });
-      const result = await service.addCheckpoint(1, { title: 'Checkpoint 1', scheduledDate: '2026-06-01' } as any, 1);
+      const result = await service.addCheckpoint(
+        1,
+        { title: 'Checkpoint 1', scheduledDate: '2026-06-01' } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });

@@ -47,13 +47,22 @@ const mockPrisma: any = {
 const baseCourse = { id: 1, title: 'Curso TypeScript', status: 'PUBLISHED' };
 
 const baseModule = {
-  id: 1, courseId: 1, title: 'Módulo 1 — Fundamentos', seq: 1, status: 'DRAFT',
-  type: 'CONTENT', progressionType: 'SEQUENTIAL', completionRule: 'ALL_LESSONS',
-  lessons: [], materials: [], _count: { lessons: 0 },
+  id: 1,
+  courseId: 1,
+  title: 'Módulo 1 — Fundamentos',
+  seq: 1,
+  status: 'DRAFT',
+  type: 'CONTENT',
+  progressionType: 'SEQUENTIAL',
+  completionRule: 'ALL_LESSONS',
+  lessons: [],
+  materials: [],
+  _count: { lessons: 0 },
 };
 
 const baseModuleWithLessons = {
-  ...baseModule, status: 'DRAFT',
+  ...baseModule,
+  status: 'DRAFT',
   lessons: [{ id: 1, title: 'Lição 1', seq: 1 }],
   _count: { lessons: 1 },
 };
@@ -82,7 +91,9 @@ describe('CourseModulesService (additional)', () => {
 
     it('deve lançar NotFoundException se curso não existe', async () => {
       mockPrisma.course.findUnique.mockResolvedValue(null);
-      await expect(service.createModule({ courseId: 99, title: 'Módulo X', seq: 1 } as any)).rejects.toThrow(NotFoundException);
+      await expect(
+        service.createModule({ courseId: 99, title: 'Módulo X', seq: 1 } as any),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -106,7 +117,10 @@ describe('CourseModulesService (additional)', () => {
   describe('updateModule', () => {
     it('deve actualizar módulo', async () => {
       mockPrisma.courseModule.findUnique.mockResolvedValue(baseModule);
-      mockPrisma.courseModule.update.mockResolvedValue({ ...baseModule, title: 'Módulo Actualizado' });
+      mockPrisma.courseModule.update.mockResolvedValue({
+        ...baseModule,
+        title: 'Módulo Actualizado',
+      });
       const result = await service.updateModule(1, { title: 'Módulo Actualizado' } as any);
       expect(result).toBeDefined();
     });
@@ -117,7 +131,10 @@ describe('CourseModulesService (additional)', () => {
   describe('publishModule', () => {
     it('deve publicar módulo com lições', async () => {
       mockPrisma.courseModule.findUnique.mockResolvedValue(baseModuleWithLessons);
-      mockPrisma.courseModule.update.mockResolvedValue({ ...baseModuleWithLessons, status: 'PUBLISHED' });
+      mockPrisma.courseModule.update.mockResolvedValue({
+        ...baseModuleWithLessons,
+        status: 'PUBLISHED',
+      });
       const result = await service.publishModule(1);
       expect(result).toBeDefined();
     });
@@ -145,7 +162,12 @@ describe('CourseModulesService (additional)', () => {
     it('deve reordenar módulos do curso', async () => {
       mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
       mockPrisma.courseModule.update.mockResolvedValue(baseModule);
-      const result = await service.reorderModules(1, { modules: [{ id: 1, seq: 2 }, { id: 2, seq: 1 }] } as any);
+      const result = await service.reorderModules(1, {
+        modules: [
+          { id: 1, seq: 2 },
+          { id: 2, seq: 1 },
+        ],
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -155,8 +177,19 @@ describe('CourseModulesService (additional)', () => {
   describe('createLesson', () => {
     it('deve criar lição no módulo', async () => {
       mockPrisma.courseModule.findUnique.mockResolvedValue(baseModule);
-      mockPrisma.lesson.create.mockResolvedValue({ id: 1, moduleId: 1, title: 'Lição 1', seq: 1, textContent: 'Conteúdo' });
-      const result = await service.createLesson({ moduleId: 1, title: 'Lição 1', seq: 1, textContent: 'Conteúdo' } as any);
+      mockPrisma.lesson.create.mockResolvedValue({
+        id: 1,
+        moduleId: 1,
+        title: 'Lição 1',
+        seq: 1,
+        textContent: 'Conteúdo',
+      });
+      const result = await service.createLesson({
+        moduleId: 1,
+        title: 'Lição 1',
+        seq: 1,
+        textContent: 'Conteúdo',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -188,15 +221,33 @@ describe('CourseModulesService (additional)', () => {
   describe('markLessonComplete', () => {
     it('deve marcar lição como completa para utilizador inscrito', async () => {
       const fullLesson = {
-        id: 1, moduleId: 1,
-        module: { id: 1, courseId: 1, status: 'PUBLISHED', seq: 0,
-          progressionType: 'FREE', dripDays: null, availableFrom: null,
-          course: { id: 1 } },
+        id: 1,
+        moduleId: 1,
+        module: {
+          id: 1,
+          courseId: 1,
+          status: 'PUBLISHED',
+          seq: 0,
+          progressionType: 'FREE',
+          dripDays: null,
+          availableFrom: null,
+          course: { id: 1 },
+        },
       };
       mockPrisma.lesson.findUnique.mockResolvedValue(fullLesson);
-      mockPrisma.enrollment.findFirst.mockResolvedValue({ id: 1, userId: 1, courseId: 1, status: 'IN_PROGRESS', enrolledAt: new Date() });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        courseId: 1,
+        status: 'IN_PROGRESS',
+        enrolledAt: new Date(),
+      });
       mockPrisma.lessonProgress.upsert.mockResolvedValue({ id: 1, completed: true });
-      mockPrisma.courseModule.findUnique.mockResolvedValue({ id: 1, completionRule: 'ALL_LESSONS', lessons: [{ id: 1 }] });
+      mockPrisma.courseModule.findUnique.mockResolvedValue({
+        id: 1,
+        completionRule: 'ALL_LESSONS',
+        lessons: [{ id: 1 }],
+      });
       mockPrisma.lessonProgress.count.mockResolvedValue(1);
       mockPrisma.enrollment.findUnique = jest.fn().mockResolvedValue(null);
       mockPrisma.courseModule.findMany = jest.fn().mockResolvedValue([]);
@@ -211,8 +262,16 @@ describe('CourseModulesService (additional)', () => {
   describe('addMaterial', () => {
     it('deve adicionar material ao módulo', async () => {
       mockPrisma.courseModule.findUnique.mockResolvedValue(baseModule);
-      mockPrisma.courseMaterial.create.mockResolvedValue({ id: 1, moduleId: 1, title: 'PDF Fundamentos' });
-      const result = await service.addMaterial(1, { title: 'PDF Fundamentos', url: '/files/fund.pdf', type: 'PDF' as any } as any);
+      mockPrisma.courseMaterial.create.mockResolvedValue({
+        id: 1,
+        moduleId: 1,
+        title: 'PDF Fundamentos',
+      });
+      const result = await service.addMaterial(1, {
+        title: 'PDF Fundamentos',
+        url: '/files/fund.pdf',
+        type: 'PDF' as any,
+      } as any);
       expect(result).toBeDefined();
     });
   });

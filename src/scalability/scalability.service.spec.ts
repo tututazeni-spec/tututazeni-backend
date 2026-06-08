@@ -108,9 +108,9 @@ describe('ScalabilityService', () => {
 
     it('deve lançar NotFoundException se não encontrado', async () => {
       tenantMock.findUnique.mockResolvedValue(null);
-      await expect(
-        service.updateTenant('bad-id', { name: 'X' } as any, 'admin'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.updateTenant('bad-id', { name: 'X' } as any, 'admin')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -145,9 +145,19 @@ describe('ScalabilityService', () => {
   describe('createAutomationRule', () => {
     it('deve criar regra de automação', async () => {
       tenantMock.findUnique.mockResolvedValue(baseTenant);
-      automationMock.create.mockResolvedValue({ id: 'rule-1', name: 'Welcome Email', active: true });
+      automationMock.create.mockResolvedValue({
+        id: 'rule-1',
+        name: 'Welcome Email',
+        active: true,
+      });
       const result = await service.createAutomationRule(
-        { tenantId: 'tenant-1', name: 'Welcome Email', trigger: 'USER_CREATED', action: 'SEND_EMAIL', condition: '{}' } as any,
+        {
+          tenantId: 'tenant-1',
+          name: 'Welcome Email',
+          trigger: 'USER_CREATED',
+          action: 'SEND_EMAIL',
+          condition: '{}',
+        } as any,
         'admin',
       );
       expect(result).toBeDefined();
@@ -188,7 +198,12 @@ describe('ScalabilityService', () => {
   describe('createAlert', () => {
     it('deve criar alerta', async () => {
       const result = await service.createAlert(
-        { tenantId: 'tenant-1', title: 'High Load', severity: 'CRITICAL', message: 'CPU > 90%' } as any,
+        {
+          tenantId: 'tenant-1',
+          title: 'High Load',
+          severity: 'CRITICAL',
+          message: 'CPU > 90%',
+        } as any,
         'admin',
       );
       expect(result).toBeDefined();

@@ -128,7 +128,11 @@ describe('TrainingController', () => {
 
   it('selfRegister → registerParticipant com userId e allowWaitlist', async () => {
     await controller.selfRegister(mockUser as any, 5);
-    expect(mockSvc.registerParticipant).toHaveBeenCalledWith({ sessionId: 5, userId: 1, allowWaitlist: true });
+    expect(mockSvc.registerParticipant).toHaveBeenCalledWith({
+      sessionId: 5,
+      userId: 1,
+      allowWaitlist: true,
+    });
   });
 
   it('cancelParticipant → cancelParticipant(id, userId)', async () => {

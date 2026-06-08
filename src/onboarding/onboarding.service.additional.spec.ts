@@ -123,7 +123,11 @@ describe('OnboardingService — additional coverage', () => {
       });
       mockPrisma.onboardingTemplateTask.create.mockResolvedValue({ id: 1, title: 'Tarefa 1' });
 
-      const result = await service.addTemplateTask({ templateId: 1, title: 'Tarefa 1', seq: 1 } as any);
+      const result = await service.addTemplateTask({
+        templateId: 1,
+        title: 'Tarefa 1',
+        seq: 1,
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -164,7 +168,13 @@ describe('OnboardingService — additional coverage', () => {
         id: 1,
         userId: 1,
         status: 'IN_PROGRESS',
-        user: { id: 1, fullName: 'Test', email: 'test@innova.com', department: null, position: null },
+        user: {
+          id: 1,
+          fullName: 'Test',
+          email: 'test@innova.com',
+          department: null,
+          position: null,
+        },
         template: { id: 1, name: 'Padrão', tasks: [] },
         buddy: null,
         manager: null,

@@ -4,7 +4,10 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import {
-  NotFoundException, BadRequestException, ForbiddenException, ConflictException,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { EnrollmentsService } from './enrollments.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,7 +24,9 @@ function buildMockPrisma() {
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
     course: {
-      findUnique: jest.fn().mockResolvedValue({ id: 1, title: 'Curso', status: 'PUBLISHED', workloadHours: 10 }),
+      findUnique: jest
+        .fn()
+        .mockResolvedValue({ id: 1, title: 'Curso', status: 'PUBLISHED', workloadHours: 10 }),
       findFirst: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockResolvedValue({}),
     },
@@ -48,12 +53,26 @@ function buildMockPrisma() {
 }
 
 const baseEnrollment: any = {
-  id: 1, userId: 5, courseId: 1, status: 'NOT_STARTED',
-  deadline: null, mandatory: false, origin: 'MANUAL', enrolledAt: new Date(),
+  id: 1,
+  userId: 5,
+  courseId: 1,
+  status: 'NOT_STARTED',
+  deadline: null,
+  mandatory: false,
+  origin: 'MANUAL',
+  enrolledAt: new Date(),
   completedAt: null,
   user: { id: 5, fullName: 'Ana', email: 'ana@test.com', avatarUrl: null, department: null },
-  course: { id: 1, title: 'Curso Teste', thumbnailUrl: null, category: null, workloadHours: 10, status: 'PUBLISHED' },
-  certificate: null, progresses: [],
+  course: {
+    id: 1,
+    title: 'Curso Teste',
+    thumbnailUrl: null,
+    category: null,
+    workloadHours: 10,
+    status: 'PUBLISHED',
+  },
+  certificate: null,
+  progresses: [],
 };
 
 describe('EnrollmentsService (progress)', () => {
@@ -65,10 +84,7 @@ describe('EnrollmentsService (progress)', () => {
     mockPrisma = buildMockPrisma();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EnrollmentsService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [EnrollmentsService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
 
     service = module.get<EnrollmentsService>(EnrollmentsService);
@@ -79,7 +95,10 @@ describe('EnrollmentsService (progress)', () => {
   describe('updateStatus', () => {
     it('deve actualizar status para CANCELLED a partir de NOT_STARTED', async () => {
       // invalidTransitions['CANCELLED'] = ['COMPLETED'] — NOT_STARTED não está na lista → válido
-      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, status: 'NOT_STARTED' });
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'NOT_STARTED',
+      });
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(0);
       mockPrisma.enrollment.update.mockResolvedValue({ id: 1, status: 'CANCELLED' });
@@ -91,22 +110,30 @@ describe('EnrollmentsService (progress)', () => {
 
     it('deve lançar BadRequestException ao tentar COMPLETED a partir de IN_PROGRESS', async () => {
       // invalidTransitions['COMPLETED'] inclui 'IN_PROGRESS' → inválido
-      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, status: 'IN_PROGRESS' });
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'IN_PROGRESS',
+      });
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(3);
 
-      await expect(service.updateStatus(1, { status: 'COMPLETED' } as any))
-        .rejects.toThrow(BadRequestException);
+      await expect(service.updateStatus(1, { status: 'COMPLETED' } as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('deve lançar BadRequestException ao tentar CANCELLED a partir de COMPLETED', async () => {
       // invalidTransitions['CANCELLED'] inclui 'COMPLETED' → inválido
-      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, status: 'COMPLETED' });
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'COMPLETED',
+      });
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(5);
 
-      await expect(service.updateStatus(1, { status: 'CANCELLED' } as any))
-        .rejects.toThrow(BadRequestException);
+      await expect(service.updateStatus(1, { status: 'CANCELLED' } as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
@@ -114,22 +141,29 @@ describe('EnrollmentsService (progress)', () => {
 
   describe('cancel', () => {
     it('deve cancelar matrícula com sucesso', async () => {
-      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, status: 'IN_PROGRESS' });
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'IN_PROGRESS',
+      });
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(3);
       mockPrisma.enrollment.update.mockResolvedValue({ id: 1, status: 'CANCELLED' });
 
-      const result = await service.cancel(1, { reason: 'Sem tempo' } as any, 5) as any;
+      const result = (await service.cancel(1, { reason: 'Sem tempo' } as any, 5)) as any;
       expect(result.message).toBeDefined();
     });
 
     it('deve lançar ForbiddenException se matrícula já concluída', async () => {
-      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, status: 'COMPLETED' });
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'COMPLETED',
+      });
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(5);
 
-      await expect(service.cancel(1, { reason: 'Teste' } as any, 5))
-        .rejects.toThrow(ForbiddenException);
+      await expect(service.cancel(1, { reason: 'Teste' } as any, 5)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('deve lançar ForbiddenException se matrícula é obrigatória', async () => {
@@ -137,8 +171,9 @@ describe('EnrollmentsService (progress)', () => {
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(0);
 
-      await expect(service.cancel(1, { reason: 'Teste' } as any, 5))
-        .rejects.toThrow(ForbiddenException);
+      await expect(service.cancel(1, { reason: 'Teste' } as any, 5)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 
@@ -161,7 +196,10 @@ describe('EnrollmentsService (progress)', () => {
 
   describe('generateCertificate', () => {
     it('deve lançar BadRequestException se curso não concluído', async () => {
-      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, status: 'IN_PROGRESS' });
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'IN_PROGRESS',
+      });
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(3);
 
@@ -169,7 +207,10 @@ describe('EnrollmentsService (progress)', () => {
     });
 
     it('deve retornar certificado existente sem criar novo', async () => {
-      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, status: 'COMPLETED' });
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'COMPLETED',
+      });
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(5);
       const existingCert = { id: 99, validationCode: 'CERT-OLD' };
@@ -181,7 +222,10 @@ describe('EnrollmentsService (progress)', () => {
     });
 
     it('deve gerar novo certificado para curso concluído', async () => {
-      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, status: 'COMPLETED' });
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'COMPLETED',
+      });
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(5);
       mockPrisma.certificate.findFirst.mockResolvedValue(null);
@@ -200,7 +244,7 @@ describe('EnrollmentsService (progress)', () => {
     it('deve retornar objeto vazio se utilizador sem matrículas', async () => {
       mockPrisma.enrollment.findMany.mockResolvedValue([]);
 
-      const result = await service.getUserEnrollments(5) as any;
+      const result = (await service.getUserEnrollments(5)) as any;
       expect(result.enrollments).toHaveLength(0);
       expect(result.groups).toBeDefined();
     });
@@ -215,7 +259,7 @@ describe('EnrollmentsService (progress)', () => {
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(3);
 
-      const result = await service.getUserEnrollments(5) as any;
+      const result = (await service.getUserEnrollments(5)) as any;
       expect(result.enrollments.length).toBeGreaterThan(0);
     });
   });
@@ -225,30 +269,46 @@ describe('EnrollmentsService (progress)', () => {
   describe('bulkEnroll', () => {
     it('deve inscrever múltiplos utilizadores com sucesso', async () => {
       // course exists + not enrolled yet
-      mockPrisma.course.findUnique.mockResolvedValue({ id: 1, status: 'PUBLISHED', workloadHours: 10, title: 'Curso', mandatory: false });
+      mockPrisma.course.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'PUBLISHED',
+        workloadHours: 10,
+        title: 'Curso',
+        mandatory: false,
+      });
       mockPrisma.enrollment.findFirst.mockResolvedValue(null); // no existing enrollment
       mockPrisma.enrollment.create.mockResolvedValue({ id: 1 });
       mockPrisma.lesson.count.mockResolvedValue(0);
       mockPrisma.lessonProgress.count.mockResolvedValue(0);
       mockPrisma.courseAnalytics.updateMany.mockResolvedValue({});
 
-      const result = await service.bulkEnroll({
-        courseId: 1, userIds: [1, 2], mandatory: false,
-      } as any) as any;
+      const result = (await service.bulkEnroll({
+        courseId: 1,
+        userIds: [1, 2],
+        mandatory: false,
+      } as any)) as any;
 
       expect(result.total).toBe(2);
       expect(result.success + result.skipped + result.errors).toBe(2);
     });
 
     it('deve contar skipped quando utilizador já inscrito (ConflictException)', async () => {
-      mockPrisma.course.findUnique.mockResolvedValue({ id: 1, status: 'PUBLISHED', workloadHours: 10, title: 'Curso', mandatory: false });
+      mockPrisma.course.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'PUBLISHED',
+        workloadHours: 10,
+        title: 'Curso',
+        mandatory: false,
+      });
       mockPrisma.enrollment.findFirst.mockResolvedValue({ id: 99 }); // already enrolled → conflict
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(5);
 
-      const result = await service.bulkEnroll({
-        courseId: 1, userIds: [3], mandatory: false,
-      } as any) as any;
+      const result = (await service.bulkEnroll({
+        courseId: 1,
+        userIds: [3],
+        mandatory: false,
+      } as any)) as any;
 
       expect(result.skipped).toBe(1);
       expect(result.success).toBe(0);

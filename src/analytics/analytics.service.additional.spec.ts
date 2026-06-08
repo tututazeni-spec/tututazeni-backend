@@ -16,9 +16,15 @@ const mockPrisma: any = {
   badgeAward: { count: jest.fn().mockResolvedValue(0) },
   learningPath: { count: jest.fn().mockResolvedValue(0) },
   developmentPlan: { count: jest.fn().mockResolvedValue(0) },
-  performanceReview: { aggregate: jest.fn().mockResolvedValue({ _avg: { score: null } }), count: jest.fn().mockResolvedValue(0) },
+  performanceReview: {
+    aggregate: jest.fn().mockResolvedValue({ _avg: { score: null } }),
+    count: jest.fn().mockResolvedValue(0),
+  },
   department: { findMany: jest.fn().mockResolvedValue([]) },
-  lessonProgress: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
+  lessonProgress: {
+    count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   attendanceRecord: { count: jest.fn().mockResolvedValue(0) },
   notificationLog: { count: jest.fn().mockResolvedValue(0) },
 };

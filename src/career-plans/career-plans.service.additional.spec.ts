@@ -88,7 +88,11 @@ describe('CareerPlansService — additional coverage', () => {
 
   describe('createSkill', () => {
     it('deve criar skill de carreira', async () => {
-      mockPrisma.careerSkill.create.mockResolvedValue({ id: 1, name: 'TypeScript', type: 'TECHNICAL' });
+      mockPrisma.careerSkill.create.mockResolvedValue({
+        id: 1,
+        name: 'TypeScript',
+        type: 'TECHNICAL',
+      });
 
       const result = await service.createSkill({ name: 'TypeScript', type: 'TECHNICAL' as any });
       expect(result).toBeDefined();
@@ -194,7 +198,13 @@ describe('CareerPlansService — additional coverage', () => {
       mockPrisma.careerRole.findUnique.mockResolvedValue({
         id: 1,
         skillRequirements: [
-          { skillId: 1, requiredLevel: 3, weight: 100, mandatory: true, skill: { id: 1, name: 'NestJS', type: 'TECHNICAL' } },
+          {
+            skillId: 1,
+            requiredLevel: 3,
+            weight: 100,
+            mandatory: true,
+            skill: { id: 1, name: 'NestJS', type: 'TECHNICAL' },
+          },
         ],
         fromRules: [],
         toRules: [],
@@ -257,9 +267,17 @@ describe('CareerPlansService — additional coverage', () => {
         userId: 1,
         status: 'ACTIVE',
       });
-      mockPrisma.careerGoal.create.mockResolvedValue({ id: 1, title: 'Meta 1', status: 'IN_PROGRESS' });
+      mockPrisma.careerGoal.create.mockResolvedValue({
+        id: 1,
+        title: 'Meta 1',
+        status: 'IN_PROGRESS',
+      });
 
-      const result = await service.addGoal({ planId: 1, title: 'Meta 1', description: 'Desc' } as any);
+      const result = await service.addGoal({
+        planId: 1,
+        title: 'Meta 1',
+        description: 'Desc',
+      } as any);
       expect(result).toBeDefined();
     });
   });

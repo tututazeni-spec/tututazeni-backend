@@ -130,17 +130,20 @@ describe('LeaveManagementService (progress)', () => {
   describe('processApproval', () => {
     it('deve rejeitar pedido não pendente (BadRequestException)', async () => {
       mockPrismaBase.leaveRequest.findUnique.mockResolvedValue({
-        ...pendingRequest, status: 'APPROVED',
+        ...pendingRequest,
+        status: 'APPROVED',
       });
-      await expect(service.processApproval(1, 99, { action: 'APPROVE' } as any))
-        .rejects.toThrow(BadRequestException);
+      await expect(service.processApproval(1, 99, { action: 'APPROVE' } as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('deve lançar ForbiddenException se aprovador não tem aprovação pendente', async () => {
       mockPrismaBase.leaveRequest.findUnique.mockResolvedValue(pendingRequest);
       leaveApproval.findFirst.mockResolvedValue(null);
-      await expect(service.processApproval(1, 99, { action: 'APPROVE' } as any))
-        .rejects.toThrow(ForbiddenException);
+      await expect(service.processApproval(1, 99, { action: 'APPROVE' } as any)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('deve processar REJECT — actualiza status e notifica', async () => {
@@ -157,7 +160,10 @@ describe('LeaveManagementService (progress)', () => {
         expect.objectContaining({ where: { id: 7 } }),
       );
       expect(mockPrismaBase.leaveRequest.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 1 }, data: expect.objectContaining({ status: 'REJECTED' }) }),
+        expect.objectContaining({
+          where: { id: 1 },
+          data: expect.objectContaining({ status: 'REJECTED' }),
+        }),
       );
       expect(mockAudit.log).toHaveBeenCalled();
     });
@@ -328,7 +334,7 @@ describe('LeaveManagementService (progress)', () => {
       ]);
       leaveBalance.update.mockResolvedValue({});
 
-      const result = await service.processCarryOver(2025) as any;
+      const result = (await service.processCarryOver(2025)) as any;
 
       expect(leaveBalance.update).toHaveBeenCalledTimes(2);
       expect(result.processed).toBe(2);
@@ -339,7 +345,7 @@ describe('LeaveManagementService (progress)', () => {
     it('deve retornar 0 resultados se nenhum tipo tem allowCarryOver', async () => {
       leaveTypeConfig.findMany.mockResolvedValue([]);
 
-      const result = await service.processCarryOver(2025) as any;
+      const result = (await service.processCarryOver(2025)) as any;
       expect(result.processed).toBe(0);
     });
   });
@@ -354,7 +360,7 @@ describe('LeaveManagementService (progress)', () => {
       ];
       mockPrismaBase.leaveBalanceHistory.findMany.mockResolvedValue(history);
 
-      const result = await service.getBalanceHistory(5) as any[];
+      const result = (await service.getBalanceHistory(5)) as any[];
       expect(result).toHaveLength(2);
       expect(mockPrismaBase.leaveBalanceHistory.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { userId: 5 } }),
@@ -380,7 +386,7 @@ describe('LeaveManagementService (progress)', () => {
       mockPrismaBase.leaveRequest.findMany.mockResolvedValue([]);
       leavePolicy.findFirst.mockResolvedValue(null);
 
-      const result = await service.getConflictCheck(3, '2026-08-01', '2026-08-05') as any;
+      const result = (await service.getConflictCheck(3, '2026-08-01', '2026-08-05')) as any;
 
       expect(result.hasUserConflict).toBe(false);
       expect(result.teamConflictCount).toBe(0);
@@ -394,7 +400,7 @@ describe('LeaveManagementService (progress)', () => {
         .mockResolvedValueOnce([{ id: 99, userId: 3, status: 'APPROVED' }]); // user conflicts
       leavePolicy.findFirst.mockResolvedValue(null);
 
-      const result = await service.getConflictCheck(3, '2026-08-01', '2026-08-05') as any;
+      const result = (await service.getConflictCheck(3, '2026-08-01', '2026-08-05')) as any;
 
       expect(result.hasUserConflict).toBe(true);
     });
@@ -411,7 +417,7 @@ describe('LeaveManagementService (progress)', () => {
       mockPrismaBase.user.findUnique.mockResolvedValueOnce({ id: 4, departmentId: 10 });
       leavePolicy.findFirst.mockResolvedValue({ maxAbsencePercent: 20 });
 
-      const result = await service.getConflictCheck(4, '2026-08-01', '2026-08-05') as any;
+      const result = (await service.getConflictCheck(4, '2026-08-01', '2026-08-05')) as any;
 
       expect(result.teamConflictCount).toBe(2);
       expect(result.isAtRisk).toBe(true);

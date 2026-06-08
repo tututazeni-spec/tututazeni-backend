@@ -54,17 +54,17 @@ describe('JwtStrategy', () => {
     it('deve lançar UnauthorizedException se utilizador não encontrado', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(
-        strategy.validate({ sub: 99, email: 'notfound@innova.com' }),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(strategy.validate({ sub: 99, email: 'notfound@innova.com' })).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('deve lançar UnauthorizedException se utilizador inactivo', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ ...baseUser, active: false });
 
-      await expect(
-        strategy.validate({ sub: 1, email: 'user@innova.com' }),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(strategy.validate({ sub: 1, email: 'user@innova.com' })).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 });

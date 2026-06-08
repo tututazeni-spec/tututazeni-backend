@@ -76,10 +76,11 @@ describe('EngagementService (progress)', () => {
   describe('getSurvey', () => {
     it('deve retornar inquérito com taxa de participação', async () => {
       mockPrisma.engagementSurvey.findUnique.mockResolvedValue({
-        ...baseSurvey, _count: { responses: 5 },
+        ...baseSurvey,
+        _count: { responses: 5 },
       });
       mockPrisma.user.count.mockResolvedValue(10);
-      const result = await service.getSurvey(1) as any;
+      const result = (await service.getSurvey(1)) as any;
       expect(result.participationRate).toBe(50);
     });
 
@@ -90,10 +91,11 @@ describe('EngagementService (progress)', () => {
 
     it('deve retornar 0% quando sem utilizadores activos', async () => {
       mockPrisma.engagementSurvey.findUnique.mockResolvedValue({
-        ...baseSurvey, _count: { responses: 2 },
+        ...baseSurvey,
+        _count: { responses: 2 },
       });
       mockPrisma.user.count.mockResolvedValue(0);
-      const result = await service.getSurvey(1) as any;
+      const result = (await service.getSurvey(1)) as any;
       expect(result.participationRate).toBe(0);
     });
   });
@@ -103,7 +105,8 @@ describe('EngagementService (progress)', () => {
   describe('updateSurvey', () => {
     it('deve actualizar inquérito existente', async () => {
       mockPrisma.engagementSurvey.findUnique.mockResolvedValue({
-        ...baseSurvey, _count: { responses: 0 },
+        ...baseSurvey,
+        _count: { responses: 0 },
       });
       mockPrisma.user.count.mockResolvedValue(5);
       mockPrisma.engagementSurvey.update.mockResolvedValue({ ...baseSurvey, title: 'Novo título' });
@@ -114,7 +117,8 @@ describe('EngagementService (progress)', () => {
 
     it('deve converter endDate para Date object', async () => {
       mockPrisma.engagementSurvey.findUnique.mockResolvedValue({
-        ...baseSurvey, _count: { responses: 0 },
+        ...baseSurvey,
+        _count: { responses: 0 },
       });
       mockPrisma.user.count.mockResolvedValue(5);
       mockPrisma.engagementSurvey.update.mockResolvedValue(baseSurvey);
@@ -130,7 +134,9 @@ describe('EngagementService (progress)', () => {
   describe('activateSurvey', () => {
     it('deve activar inquérito e notificar utilizadores', async () => {
       mockPrisma.engagementSurvey.findUnique.mockResolvedValue({
-        ...baseSurvey, status: 'DRAFT', _count: { responses: 0 },
+        ...baseSurvey,
+        status: 'DRAFT',
+        _count: { responses: 0 },
       });
       mockPrisma.user.count.mockResolvedValue(3);
       mockPrisma.engagementSurvey.update.mockResolvedValue({ ...baseSurvey, status: 'ACTIVE' });
@@ -143,7 +149,9 @@ describe('EngagementService (progress)', () => {
 
     it('deve lançar BadRequestException se já activo', async () => {
       mockPrisma.engagementSurvey.findUnique.mockResolvedValue({
-        ...baseSurvey, status: 'ACTIVE', _count: { responses: 0 },
+        ...baseSurvey,
+        status: 'ACTIVE',
+        _count: { responses: 0 },
       });
       mockPrisma.user.count.mockResolvedValue(5);
       await expect(service.activateSurvey(1)).rejects.toThrow(BadRequestException);
@@ -155,7 +163,9 @@ describe('EngagementService (progress)', () => {
   describe('closeSurvey', () => {
     it('deve fechar inquérito activo', async () => {
       mockPrisma.engagementSurvey.findUnique.mockResolvedValue({
-        ...baseSurvey, status: 'ACTIVE', _count: { responses: 5 },
+        ...baseSurvey,
+        status: 'ACTIVE',
+        _count: { responses: 5 },
       });
       mockPrisma.user.count.mockResolvedValue(10);
       mockPrisma.engagementSurvey.update.mockResolvedValue({ ...baseSurvey, status: 'COMPLETED' });
@@ -182,12 +192,14 @@ describe('EngagementService (progress)', () => {
         { score: 5, answers: [], user: { department: { name: 'RH' } } },
       ];
       mockPrisma.engagementSurvey.findUnique.mockResolvedValue({
-        ...baseSurvey, anonymous: false, minResponsesForResults: 3,
+        ...baseSurvey,
+        anonymous: false,
+        minResponsesForResults: 3,
         questions: [{ id: 1, text: 'Q1', type: 'SCALE', scaleMax: 5 }],
         responses,
       });
       mockPrisma.user.count.mockResolvedValue(10);
-      const result = await service.getSurveyResults(1, 1) as any;
+      const result = (await service.getSurveyResults(1, 1)) as any;
       expect(result.totalResponses).toBe(3);
       expect(result.thresholdReached).toBe(true);
       expect(result.participationRate).toBe(30);
@@ -196,12 +208,14 @@ describe('EngagementService (progress)', () => {
     it('deve ocultar detalhes quando abaixo do threshold', async () => {
       const responses = [{ score: 4, answers: [], user: { department: { name: 'TI' } } }];
       mockPrisma.engagementSurvey.findUnique.mockResolvedValue({
-        ...baseSurvey, anonymous: false, minResponsesForResults: 3,
+        ...baseSurvey,
+        anonymous: false,
+        minResponsesForResults: 3,
         questions: [],
         responses,
       });
       mockPrisma.user.count.mockResolvedValue(10);
-      const result = await service.getSurveyResults(1, 1) as any;
+      const result = (await service.getSurveyResults(1, 1)) as any;
       expect(result.thresholdReached).toBe(false);
       expect(result.byDepartment).toHaveLength(0);
     });
@@ -214,7 +228,7 @@ describe('EngagementService (progress)', () => {
       mockPrisma.engagementSurvey.findMany.mockResolvedValue([
         { ...baseSurvey, isTemplate: true, questions: [] },
       ]);
-      const result = await service.getTemplates() as any[];
+      const result = (await service.getTemplates()) as any[];
       expect(Array.isArray(result)).toBe(true);
     });
   });
@@ -224,19 +238,20 @@ describe('EngagementService (progress)', () => {
   describe('getENPSScore', () => {
     it('deve retornar valores nulos quando sem inquérito eNPS', async () => {
       mockPrisma.engagementSurvey.findFirst.mockResolvedValue(null);
-      const result = await service.getENPSScore() as any;
+      const result = (await service.getENPSScore()) as any;
       expect(result.enps).toBeNull();
       expect(result.total).toBe(0);
     });
 
     it('deve calcular eNPS com promotores e detractores', async () => {
       mockPrisma.engagementSurvey.findFirst.mockResolvedValue({
-        ...baseSurvey, type: 'ENPS',
+        ...baseSurvey,
+        type: 'ENPS',
         responses: [
           {
             answers: [
               { question: { type: 'ENPS' }, value: 10 }, // promotor
-              { question: { type: 'ENPS' }, value: 9 },  // promotor
+              { question: { type: 'ENPS' }, value: 9 }, // promotor
             ],
           },
           {
@@ -244,7 +259,7 @@ describe('EngagementService (progress)', () => {
           },
         ],
       });
-      const result = await service.getENPSScore() as any;
+      const result = (await service.getENPSScore()) as any;
       expect(result.promoters).toBe(2);
       expect(result.detractors).toBe(1);
       expect(result.total).toBe(3);
@@ -259,7 +274,7 @@ describe('EngagementService (progress)', () => {
           { answers: [{ question: { type: 'ENPS' }, value: 10 }] },
         ],
       });
-      const result = await service.getENPSScore() as any;
+      const result = (await service.getENPSScore()) as any;
       expect(result.label).toBe('Excelente');
     });
   });
@@ -269,13 +284,13 @@ describe('EngagementService (progress)', () => {
   describe('getMoodTrend', () => {
     it('deve retornar trend de humor dos últimos N dias', async () => {
       // moodCheckin usa optional chain — retorna null (undefined ?.findMany) → []
-      const result = await service.getMoodTrend(1, 14) as any;
+      const result = (await service.getMoodTrend(1, 14)) as any;
       expect(result.days).toBe(14);
       expect(result.trend).toBeDefined();
     });
 
     it('deve usar 14 dias como padrão', async () => {
-      const result = await service.getMoodTrend(1) as any;
+      const result = (await service.getMoodTrend(1)) as any;
       expect(result.days).toBe(14);
     });
   });
@@ -285,16 +300,14 @@ describe('EngagementService (progress)', () => {
   describe('getTeamMoodOverview', () => {
     it('deve retornar overview sem equipa', async () => {
       mockPrisma.user.findMany.mockResolvedValue([]);
-      const result = await service.getTeamMoodOverview(1) as any;
+      const result = (await service.getTeamMoodOverview(1)) as any;
       expect(result.team).toHaveLength(0);
       expect(result.alerts).toHaveLength(0);
     });
 
     it('deve retornar mood da equipa com fallback sem moodCheckin', async () => {
-      mockPrisma.user.findMany.mockResolvedValue([
-        { id: 2, fullName: 'Ana', avatarUrl: null },
-      ]);
-      const result = await service.getTeamMoodOverview(1) as any;
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 2, fullName: 'Ana', avatarUrl: null }]);
+      const result = (await service.getTeamMoodOverview(1)) as any;
       expect(result.team).toHaveLength(1);
       expect(result.team[0].avgMood).toBeNull();
     });
@@ -304,13 +317,13 @@ describe('EngagementService (progress)', () => {
 
   describe('getFeedback', () => {
     it('deve retornar lista de feedback paginada (modelo opcional)', async () => {
-      const result = await service.getFeedback({}) as any;
+      const result = (await service.getFeedback({})) as any;
       expect(result).toHaveProperty('data');
       expect(result).toHaveProperty('meta');
     });
 
     it('deve filtrar por tipo e userId', async () => {
-      const result = await service.getFeedback({ type: 'SUGGESTION' as any, toUserId: 5 }) as any;
+      const result = (await service.getFeedback({ type: 'SUGGESTION' as any, toUserId: 5 })) as any;
       expect(result).toHaveProperty('data');
     });
   });
@@ -343,9 +356,11 @@ describe('EngagementService (progress)', () => {
     it('deve atribuir reconhecimento e XP (KUDOS → 15 XP)', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 2, fullName: 'Ana' });
       mockPrisma.userPoints.upsert.mockResolvedValue({ userId: 2, points: 15 });
-      const result = await service.giveRecognition(1, {
-        toUserId: 2, type: 'KUDOS', message: 'Excelente!',
-      } as any) as any;
+      const result = (await service.giveRecognition(1, {
+        toUserId: 2,
+        type: 'KUDOS',
+        message: 'Excelente!',
+      } as any)) as any;
       expect(mockPrisma.userPoints.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ create: { userId: 2, points: 15 } }),
       );
@@ -353,7 +368,11 @@ describe('EngagementService (progress)', () => {
 
     it('deve atribuir ACHIEVEMENT → 50 XP', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 2, fullName: 'Ana' });
-      await service.giveRecognition(1, { toUserId: 2, type: 'ACHIEVEMENT', message: 'Parabéns!' } as any);
+      await service.giveRecognition(1, {
+        toUserId: 2,
+        type: 'ACHIEVEMENT',
+        message: 'Parabéns!',
+      } as any);
       expect(mockPrisma.userPoints.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ create: { userId: 2, points: 50 } }),
       );
@@ -361,7 +380,11 @@ describe('EngagementService (progress)', () => {
 
     it('deve atribuir MILESTONE → 100 XP', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 2, fullName: 'Ana' });
-      await service.giveRecognition(1, { toUserId: 2, type: 'MILESTONE', message: '5 anos!' } as any);
+      await service.giveRecognition(1, {
+        toUserId: 2,
+        type: 'MILESTONE',
+        message: '5 anos!',
+      } as any);
       expect(mockPrisma.userPoints.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ create: { userId: 2, points: 100 } }),
       );
@@ -370,7 +393,10 @@ describe('EngagementService (progress)', () => {
     it('deve atribuir badge se badgeId fornecido', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 2, fullName: 'Ana' });
       await service.giveRecognition(1, {
-        toUserId: 2, type: 'KUDOS', message: 'Excelente!', badgeId: 5,
+        toUserId: 2,
+        type: 'KUDOS',
+        message: 'Excelente!',
+        badgeId: 5,
       } as any);
       expect(mockPrisma.badgeAward.create).toHaveBeenCalled();
     });
@@ -380,12 +406,12 @@ describe('EngagementService (progress)', () => {
 
   describe('createOneOnOne', () => {
     it('deve criar reunião 1:1 e notificar participante', async () => {
-      const result = await service.createOneOnOne(1, {
+      const result = (await service.createOneOnOne(1, {
         participantId: 2,
         scheduledAt: '2026-07-01T10:00:00',
         durationMinutes: 30,
         agenda: 'Revisão mensal',
-      } as any) as any;
+      } as any)) as any;
       expect(result).toBeDefined();
       expect(mockPrisma.notificationLog.create).toHaveBeenCalled();
     });
@@ -395,7 +421,7 @@ describe('EngagementService (progress)', () => {
 
   describe('getOneOnOnes', () => {
     it('deve retornar lista de reuniões 1:1 (modelo opcional)', async () => {
-      const result = await service.getOneOnOnes(1) as any;
+      const result = (await service.getOneOnOnes(1)) as any;
       expect(result).toBeDefined();
     });
   });
@@ -441,13 +467,13 @@ describe('EngagementService (progress)', () => {
 
   describe('getActionPlans', () => {
     it('deve retornar planos de acção paginados (modelo opcional)', async () => {
-      const result = await service.getActionPlans({}) as any;
+      const result = (await service.getActionPlans({})) as any;
       expect(result).toHaveProperty('data');
       expect(result).toHaveProperty('meta');
     });
 
     it('deve filtrar por departmentId e status', async () => {
-      const result = await service.getActionPlans({ departmentId: 1, status: 'OPEN' }) as any;
+      const result = (await service.getActionPlans({ departmentId: 1, status: 'OPEN' })) as any;
       expect(result).toHaveProperty('data');
     });
   });
@@ -467,7 +493,7 @@ describe('EngagementService (progress)', () => {
     it('deve retornar índice zero quando sem inquéritos completos', async () => {
       mockPrisma.engagementSurvey.findMany.mockResolvedValue([]);
       mockPrisma.user.count.mockResolvedValue(50);
-      const result = await service.getEngagementIndex() as any;
+      const result = (await service.getEngagementIndex()) as any;
       expect(result.currentIndex).toBe(0);
       expect(result.history).toHaveLength(0);
     });
@@ -478,7 +504,7 @@ describe('EngagementService (progress)', () => {
         { ...baseSurvey, responses: [{ score: 3 }] },
       ]);
       mockPrisma.user.count.mockResolvedValue(100);
-      const result = await service.getEngagementIndex() as any;
+      const result = (await service.getEngagementIndex()) as any;
       expect(result.history).toHaveLength(2);
       expect(result.currentIndex).toBeGreaterThan(0);
     });
@@ -488,7 +514,7 @@ describe('EngagementService (progress)', () => {
         { ...baseSurvey, responses: [{ score: 5 }, { score: 5 }, { score: 5 }, { score: 5 }] },
       ]);
       mockPrisma.user.count.mockResolvedValue(4);
-      const result = await service.getEngagementIndex() as any;
+      const result = (await service.getEngagementIndex()) as any;
       expect(result.level).toBe('EXCELLENT');
     });
 
@@ -497,7 +523,7 @@ describe('EngagementService (progress)', () => {
         { ...baseSurvey, responses: [{ score: 1 }] },
       ]);
       mockPrisma.user.count.mockResolvedValue(100);
-      const result = await service.getEngagementIndex() as any;
+      const result = (await service.getEngagementIndex()) as any;
       expect(result.level).toBe('AT_RISK');
     });
   });
@@ -506,18 +532,16 @@ describe('EngagementService (progress)', () => {
 
   describe('getEngagementHeatmap', () => {
     it('deve retornar heatmap por departamento (score)', async () => {
-      mockPrisma.department.findMany.mockResolvedValue([
-        { id: 1, name: 'TI', users: [] },
-      ]);
+      mockPrisma.department.findMany.mockResolvedValue([{ id: 1, name: 'TI', users: [] }]);
       mockPrisma.engagementSurvey.findMany.mockResolvedValue([]);
-      const result = await service.getEngagementHeatmap('score') as any;
+      const result = (await service.getEngagementHeatmap('score')) as any;
       expect(Array.isArray(result)).toBe(true);
     });
 
     it('deve retornar heatmap por participação', async () => {
       mockPrisma.department.findMany.mockResolvedValue([]);
       mockPrisma.engagementSurvey.findMany.mockResolvedValue([]);
-      const result = await service.getEngagementHeatmap('participation') as any;
+      const result = (await service.getEngagementHeatmap('participation')) as any;
       expect(Array.isArray(result)).toBe(true);
     });
   });
@@ -527,7 +551,7 @@ describe('EngagementService (progress)', () => {
   describe('getManagerInsights', () => {
     it('deve retornar insights sem equipa', async () => {
       mockPrisma.user.findMany.mockResolvedValue([]);
-      const result = await service.getManagerInsights(1) as any;
+      const result = (await service.getManagerInsights(1)) as any;
       expect(result).toBeDefined();
     });
 
@@ -537,7 +561,7 @@ describe('EngagementService (progress)', () => {
         .mockResolvedValueOnce([]); // active users for participation
       mockPrisma.engagementSurvey.findMany.mockResolvedValue([]);
       mockPrisma.surveyResponse.findMany.mockResolvedValue([]);
-      const result = await service.getManagerInsights(1) as any;
+      const result = (await service.getManagerInsights(1)) as any;
       expect(result).toBeDefined();
     });
   });
@@ -547,7 +571,7 @@ describe('EngagementService (progress)', () => {
   describe('getHumanSuccessScore', () => {
     it('deve retornar score zero para utilizador sem dados', async () => {
       mockPrisma.surveyResponse.findMany.mockResolvedValue([]);
-      const result = await service.getHumanSuccessScore(1) as any;
+      const result = (await service.getHumanSuccessScore(1)) as any;
       expect(result).toBeDefined();
       expect(result.humanSuccessScore).toBeDefined();
     });
@@ -559,7 +583,7 @@ describe('EngagementService (progress)', () => {
     it('deve retornar resumo de engagement do utilizador', async () => {
       mockPrisma.surveyResponse.findMany.mockResolvedValue([]);
       mockPrisma.engagementSurvey.count.mockResolvedValue(0);
-      const result = await service.getMyEngagementSummary(1) as any;
+      const result = (await service.getMyEngagementSummary(1)) as any;
       expect(result).toBeDefined();
     });
   });

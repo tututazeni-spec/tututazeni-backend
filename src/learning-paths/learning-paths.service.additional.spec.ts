@@ -100,7 +100,10 @@ describe('LearningPathsService — additional coverage', () => {
         status: 'DRAFT',
         _count: { courses: 2, assignments: 0, enrollments: 0 },
       });
-      mockPrisma.learningPath.update.mockResolvedValue({ ...baseLearningPath, status: 'PUBLISHED' });
+      mockPrisma.learningPath.update.mockResolvedValue({
+        ...baseLearningPath,
+        status: 'PUBLISHED',
+      });
       mockPrisma.learningPathCourse.findMany.mockResolvedValue([]);
 
       const result = await service.publish(1);

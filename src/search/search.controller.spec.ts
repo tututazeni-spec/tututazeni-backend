@@ -73,13 +73,23 @@ describe('SearchController', () => {
   it('competencies → searchByType(COMPETENCY, q, userId, dto)', async () => {
     const dto = { q: 'comunicação' } as any;
     await controller.competencies(dto, mockUser as any);
-    expect(mockSvc.searchByType).toHaveBeenCalledWith(SearchEntityType.COMPETENCY, 'comunicação', 1, dto);
+    expect(mockSvc.searchByType).toHaveBeenCalledWith(
+      SearchEntityType.COMPETENCY,
+      'comunicação',
+      1,
+      dto,
+    );
   });
 
   it('scenarios → searchByType(SCENARIO, q, userId, dto)', async () => {
     const dto = { q: 'atendimento' } as any;
     await controller.scenarios(dto, mockUser as any);
-    expect(mockSvc.searchByType).toHaveBeenCalledWith(SearchEntityType.SCENARIO, 'atendimento', 1, dto);
+    expect(mockSvc.searchByType).toHaveBeenCalledWith(
+      SearchEntityType.SCENARIO,
+      'atendimento',
+      1,
+      dto,
+    );
   });
 
   it('autocomplete → autocomplete(q, userId, 5)', async () => {

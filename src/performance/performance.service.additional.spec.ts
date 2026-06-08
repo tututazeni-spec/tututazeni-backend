@@ -49,15 +49,26 @@ const mockPrisma: any = {
 };
 
 const baseCycle = {
-  id: 1, name: 'Ciclo 2026-Q1', status: 'PLANNED',
-  startDate: new Date('2026-01-01'), endDate: new Date('2026-03-31'),
-  goalsWeight: 40, competenciesWeight: 40, behaviorsWeight: 20,
+  id: 1,
+  name: 'Ciclo 2026-Q1',
+  status: 'PLANNED',
+  startDate: new Date('2026-01-01'),
+  endDate: new Date('2026-03-31'),
+  goalsWeight: 40,
+  competenciesWeight: 40,
+  behaviorsWeight: 20,
   _count: { reviews: 0 },
 };
 
 const baseReview = {
-  id: 1, userId: 2, managerId: 1, cycleId: 1, status: 'DRAFT',
-  score: null, feedback: null, createdAt: new Date(),
+  id: 1,
+  userId: 2,
+  managerId: 1,
+  cycleId: 1,
+  status: 'DRAFT',
+  score: null,
+  feedback: null,
+  createdAt: new Date(),
 };
 
 describe('PerformanceService (additional)', () => {
@@ -77,30 +88,46 @@ describe('PerformanceService (additional)', () => {
     it('deve criar ciclo com pesos que somam 100', async () => {
       mockPrisma.performanceCycle.create.mockResolvedValue(baseCycle);
       const result = await service.createCycle({
-        name: 'Ciclo 2026-Q1', type: 'ANNUAL' as any,
-        startDate: '2026-01-01', endDate: '2026-03-31',
-        goalsWeight: 40, competenciesWeight: 40, behaviorsWeight: 20,
+        name: 'Ciclo 2026-Q1',
+        type: 'ANNUAL' as any,
+        startDate: '2026-01-01',
+        endDate: '2026-03-31',
+        goalsWeight: 40,
+        competenciesWeight: 40,
+        behaviorsWeight: 20,
       });
       expect(result).toBeDefined();
     });
 
     it('deve lançar BadRequestException se soma dos pesos != 100', async () => {
-      await expect(service.createCycle({
-        name: 'Inválido', type: 'ANNUAL' as any,
-        startDate: '2026-01-01', endDate: '2026-12-31',
-        goalsWeight: 50, competenciesWeight: 30, behaviorsWeight: 30,
-      })).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createCycle({
+          name: 'Inválido',
+          type: 'ANNUAL' as any,
+          startDate: '2026-01-01',
+          endDate: '2026-12-31',
+          goalsWeight: 50,
+          competenciesWeight: 30,
+          behaviorsWeight: 30,
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('deve usar defaults 40/40/20 quando pesos não fornecidos', async () => {
       mockPrisma.performanceCycle.create.mockResolvedValue(baseCycle);
       await service.createCycle({
-        name: 'Ciclo default', type: 'ANNUAL' as any,
-        startDate: '2026-01-01', endDate: '2026-12-31',
+        name: 'Ciclo default',
+        type: 'ANNUAL' as any,
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
       });
       expect(mockPrisma.performanceCycle.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ goalsWeight: 40, competenciesWeight: 40, behaviorsWeight: 20 }),
+          data: expect.objectContaining({
+            goalsWeight: 40,
+            competenciesWeight: 40,
+            behaviorsWeight: 20,
+          }),
         }),
       );
     });
@@ -155,24 +182,33 @@ describe('PerformanceService (additional)', () => {
       mockPrisma.performanceCycle.findUnique.mockResolvedValue({ ...baseCycle, status: 'ACTIVE' });
       mockPrisma.performanceReview.findFirst.mockResolvedValue(null);
       mockPrisma.performanceReview.create.mockResolvedValue(baseReview);
-      const result = await service.createReview({ userId: 2, cycleId: 1, type: 'MANAGER' as any }, 1);
+      const result = await service.createReview(
+        { userId: 2, cycleId: 1, type: 'MANAGER' as any },
+        1,
+      );
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se ciclo não existe', async () => {
       mockPrisma.performanceCycle.findUnique.mockResolvedValue(null);
-      await expect(service.createReview({ userId: 2, cycleId: 99, type: 'MANAGER' as any }, 1)).rejects.toThrow(NotFoundException);
+      await expect(
+        service.createReview({ userId: 2, cycleId: 99, type: 'MANAGER' as any }, 1),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('deve lançar BadRequestException se ciclo não está ACTIVE', async () => {
       mockPrisma.performanceCycle.findUnique.mockResolvedValue({ ...baseCycle, status: 'PLANNED' });
-      await expect(service.createReview({ userId: 2, cycleId: 1, type: 'MANAGER' as any }, 1)).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createReview({ userId: 2, cycleId: 1, type: 'MANAGER' as any }, 1),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('deve lançar ConflictException se avaliação já existe', async () => {
       mockPrisma.performanceCycle.findUnique.mockResolvedValue({ ...baseCycle, status: 'ACTIVE' });
       mockPrisma.performanceReview.findFirst.mockResolvedValue(baseReview);
-      await expect(service.createReview({ userId: 2, cycleId: 1, type: 'MANAGER' as any }, 1)).rejects.toThrow(ConflictException);
+      await expect(
+        service.createReview({ userId: 2, cycleId: 1, type: 'MANAGER' as any }, 1),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
@@ -212,8 +248,14 @@ describe('PerformanceService (additional)', () => {
     });
 
     it('deve lançar ForbiddenException se utilizador não tem permissão', async () => {
-      mockPrisma.performanceReview.findUnique.mockResolvedValue({ ...baseReview, userId: 2, managerId: 3 });
-      await expect(service.updateReview(1, { score: 4.0 } as any, 99)).rejects.toThrow(ForbiddenException);
+      mockPrisma.performanceReview.findUnique.mockResolvedValue({
+        ...baseReview,
+        userId: 2,
+        managerId: 3,
+      });
+      await expect(service.updateReview(1, { score: 4.0 } as any, 99)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 
@@ -221,7 +263,11 @@ describe('PerformanceService (additional)', () => {
 
   describe('submitReview', () => {
     it('deve submeter avaliação', async () => {
-      mockPrisma.performanceReview.findUnique.mockResolvedValue({ ...baseReview, managerId: 1, score: 4.0 });
+      mockPrisma.performanceReview.findUnique.mockResolvedValue({
+        ...baseReview,
+        managerId: 1,
+        score: 4.0,
+      });
       mockPrisma.performanceReview.update.mockResolvedValue({ ...baseReview, status: 'SUBMITTED' });
       mockPrisma.notificationLog.create.mockResolvedValue({});
       const result = await service.submitReview(1, { score: 4.0, feedback: 'Bom desempenho' }, 1);
@@ -235,7 +281,10 @@ describe('PerformanceService (additional)', () => {
     it('deve criar objectivo de performance', async () => {
       mockPrisma.performanceCycle.findUnique.mockResolvedValue({ ...baseCycle, status: 'ACTIVE' });
       mockPrisma.performanceGoal.create.mockResolvedValue({ id: 1, userId: 2, cycleId: 1 });
-      const result = await service.createGoal({ userId: 2, cycleId: 1, title: 'Obj 1', weight: 50 } as any, 1);
+      const result = await service.createGoal(
+        { userId: 2, cycleId: 1, title: 'Obj 1', weight: 50 } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -256,7 +305,10 @@ describe('PerformanceService (additional)', () => {
   describe('createFeedback', () => {
     it('deve criar feedback de performance', async () => {
       mockPrisma.performanceFeedback.create.mockResolvedValue({ id: 1, fromId: 1, toId: 2 });
-      const result = await service.createFeedback({ toId: 2, message: 'Excelente trabalho', type: 'POSITIVE' as any }, 1);
+      const result = await service.createFeedback(
+        { toId: 2, message: 'Excelente trabalho', type: 'POSITIVE' as any },
+        1,
+      );
       expect(result).toBeDefined();
     });
   });

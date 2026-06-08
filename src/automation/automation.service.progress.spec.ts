@@ -95,10 +95,13 @@ describe('AutomationService (progress)', () => {
     it('deve clonar regra existente com nome prefixado', async () => {
       mockPrisma.automationRule.findUnique.mockResolvedValue(baseRule);
       mockPrisma.automationRule.create.mockResolvedValue({
-        ...baseRule, id: 2, name: 'Cópia de: Badge por curso', active: false,
+        ...baseRule,
+        id: 2,
+        name: 'Cópia de: Badge por curso',
+        active: false,
       });
 
-      const result = await service.cloneRule(1) as any;
+      const result = (await service.cloneRule(1)) as any;
       expect(result).toBeDefined();
       expect(mockPrisma.automationRule.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -122,7 +125,7 @@ describe('AutomationService (progress)', () => {
   describe('rerunExecution', () => {
     it('deve retornar mensagem se execução não encontrada (safeM fallback)', async () => {
       // safeM fallback: automationExecution.findUnique retorna null
-      const result = await service.rerunExecution(99) as any;
+      const result = (await service.rerunExecution(99)) as any;
       expect(result.message).toContain('não encontrada');
     });
 
@@ -131,7 +134,7 @@ describe('AutomationService (progress)', () => {
       // safeM fallback não permite override, mas podemos verificar o comportamento
       // quando a regra é null
       // Como safeM fallback retorna null para findUnique → exec = null → 'Execução não encontrada'
-      const result = await service.rerunExecution(1) as any;
+      const result = (await service.rerunExecution(1)) as any;
       expect(result.message).toBeDefined();
     });
   });
@@ -140,7 +143,7 @@ describe('AutomationService (progress)', () => {
 
   describe('getTemplates', () => {
     it('deve retornar lista de templates com ID gerado', async () => {
-      const result = await service.getTemplates() as any[];
+      const result = (await service.getTemplates()) as any[];
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBeGreaterThan(0);
       result.forEach(t => {
@@ -155,7 +158,7 @@ describe('AutomationService (progress)', () => {
 
   describe('applyTemplate', () => {
     it('deve retornar mensagem se índice de template inválido', async () => {
-      const result = await service.applyTemplate(999) as any;
+      const result = (await service.applyTemplate(999)) as any;
       expect(result.message).toContain('não encontrado');
     });
 
@@ -169,7 +172,7 @@ describe('AutomationService (progress)', () => {
 
     it('deve retornar mensagem se automação já existe', async () => {
       mockPrisma.automationRule.findFirst.mockResolvedValue(baseRule);
-      const result = await service.applyTemplate(0) as any;
+      const result = (await service.applyTemplate(0)) as any;
       expect(result.message).toContain('já existe');
       expect(result.rule).toBeDefined();
     });
@@ -181,14 +184,14 @@ describe('AutomationService (progress)', () => {
     it('deve criar regras padrão que não existem', async () => {
       mockPrisma.automationRule.findFirst.mockResolvedValue(null); // nenhuma existe
       mockPrisma.automationRule.create.mockResolvedValue(baseRule);
-      const result = await service.initDefaultRules() as any;
+      const result = (await service.initDefaultRules()) as any;
       expect(result.created).toBeGreaterThan(0);
       expect(result.message).toContain('regra');
     });
 
     it('deve ignorar regras que já existem', async () => {
       mockPrisma.automationRule.findFirst.mockResolvedValue(baseRule); // já existe
-      const result = await service.initDefaultRules() as any;
+      const result = (await service.initDefaultRules()) as any;
       expect(result.created).toBe(0);
     });
   });
@@ -212,7 +215,7 @@ describe('AutomationService (progress)', () => {
     });
 
     it('deve paginar correctamente', async () => {
-      const result = await service.getExecutions({ page: 2, limit: 10 }) as any;
+      const result = (await service.getExecutions({ page: 2, limit: 10 })) as any;
       expect(result.meta.page).toBe(2);
       expect(result.meta.limit).toBe(10);
     });
@@ -226,7 +229,7 @@ describe('AutomationService (progress)', () => {
         { ...baseRule, trigger: 'BIRTHDAY_TODAY' },
       ]);
       mockPrisma.user.findMany.mockResolvedValue([]);
-      const result = await service.runAllActiveRules() as any;
+      const result = (await service.runAllActiveRules()) as any;
       expect(result.executed).toBe(1);
     });
 
@@ -235,7 +238,7 @@ describe('AutomationService (progress)', () => {
         { ...baseRule, trigger: 'ENROLLMENT_EXPIRING' },
       ]);
       mockPrisma.enrollment.findMany.mockResolvedValue([]);
-      const result = await service.runAllActiveRules() as any;
+      const result = (await service.runAllActiveRules()) as any;
       expect(result.executed).toBe(1);
     });
 
@@ -244,7 +247,7 @@ describe('AutomationService (progress)', () => {
         { ...baseRule, trigger: 'PENDING_LEAVE_3_DAYS' },
       ]);
       mockPrisma.user.findMany.mockResolvedValue([]);
-      const result = await service.runAllActiveRules() as any;
+      const result = (await service.runAllActiveRules()) as any;
       expect(result.executed).toBe(1);
     });
 
@@ -252,7 +255,7 @@ describe('AutomationService (progress)', () => {
       mockPrisma.automationRule.findMany.mockResolvedValue([
         { ...baseRule, trigger: 'CUSTOM_TRIGGER_XYZ' },
       ]);
-      const result = await service.runAllActiveRules() as any;
+      const result = (await service.runAllActiveRules()) as any;
       expect(result.executed).toBe(1);
       expect(result.results[0].success).toBe(true);
     });
@@ -263,7 +266,7 @@ describe('AutomationService (progress)', () => {
       ]);
       // sendEnrollmentReminders usa enrollment.findMany — forçar erro
       mockPrisma.enrollment.findMany.mockRejectedValue(new Error('DB error'));
-      const result = await service.runAllActiveRules() as any;
+      const result = (await service.runAllActiveRules()) as any;
       expect(result.executed).toBe(1);
       expect(result.results[0].success).toBe(false);
       expect(result.results[0].error).toBeDefined();
@@ -277,11 +280,11 @@ describe('AutomationService (progress)', () => {
       mockPrisma.automationRule.findMany.mockResolvedValue([
         { ...baseRule, condition: '{"minScore":90}', trigger: 'COURSE_COMPLETED' },
       ]);
-      const result = await service.triggerEvent({
+      const result = (await service.triggerEvent({
         event: 'COURSE_COMPLETED' as any,
         userId: 1,
         payload: { minScore: 50 }, // minScore < 90 → condition fails
-      }) as any;
+      })) as any;
       expect(result.results[0].status).toBe('SKIPPED');
     });
 
@@ -289,11 +292,11 @@ describe('AutomationService (progress)', () => {
       mockPrisma.automationRule.findMany.mockResolvedValue([
         { ...baseRule, condition: '{"minScore":80}', trigger: 'COURSE_COMPLETED' },
       ]);
-      const result = await service.triggerEvent({
+      const result = (await service.triggerEvent({
         event: 'COURSE_COMPLETED' as any,
         userId: 1,
         payload: { minScore: 90 }, // minScore >= 80 → condition passes
-      }) as any;
+      })) as any;
       expect(result.triggered).toBeGreaterThanOrEqual(0);
       expect(result.results.length).toBeGreaterThan(0);
     });

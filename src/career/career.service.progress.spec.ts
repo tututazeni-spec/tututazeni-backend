@@ -85,7 +85,11 @@ describe('CareerService (progress)', () => {
   describe('updateCareerPlan', () => {
     it('deve actualizar plano de carreira existente', async () => {
       mockPrisma.userCareerPlan.findFirst.mockResolvedValue({ id: 1, userId: 1, status: 'ACTIVE' });
-      mockPrisma.userCareerPlan.update.mockResolvedValue({ id: 1, userId: 1, title: 'Actualizado' });
+      mockPrisma.userCareerPlan.update.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        title: 'Actualizado',
+      });
       const result = await service.updateCareerPlan(1, 1, { title: 'Actualizado' } as any);
       expect(result).toBeDefined();
     });
@@ -112,21 +116,33 @@ describe('CareerService (progress)', () => {
   describe('addGoalToPlan', () => {
     it('deve adicionar objectivo a plano existente', async () => {
       mockPrisma.userCareerPlan.findFirst.mockResolvedValue({ id: 1, userId: 1 });
-      mockPrisma.careerGoal.create.mockResolvedValue({ id: 1, careerPlanId: 1, title: 'Aprender NestJS' });
-      const result = await service.addGoalToPlan(1, 1, { title: 'Aprender NestJS', timeframe: 'SHORT' as any } as any);
+      mockPrisma.careerGoal.create.mockResolvedValue({
+        id: 1,
+        careerPlanId: 1,
+        title: 'Aprender NestJS',
+      });
+      const result = await service.addGoalToPlan(1, 1, {
+        title: 'Aprender NestJS',
+        timeframe: 'SHORT' as any,
+      } as any);
       expect(result).toBeDefined();
       expect(mockPrisma.careerGoal.create).toHaveBeenCalled();
     });
 
     it('deve lançar NotFoundException se plano não existe', async () => {
       mockPrisma.userCareerPlan.findFirst.mockResolvedValue(null);
-      await expect(service.addGoalToPlan(99, 1, { title: 'X' } as any)).rejects.toThrow(NotFoundException);
+      await expect(service.addGoalToPlan(99, 1, { title: 'X' } as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('deve criar objectivo com status PENDING e progress 0', async () => {
       mockPrisma.userCareerPlan.findFirst.mockResolvedValue({ id: 1, userId: 1 });
       mockPrisma.careerGoal.create.mockResolvedValue({ id: 1, status: 'PENDING', progress: 0 });
-      await service.addGoalToPlan(1, 1, { title: 'Aprender TypeScript', timeframe: 'LONG' as any } as any);
+      await service.addGoalToPlan(1, 1, {
+        title: 'Aprender TypeScript',
+        timeframe: 'LONG' as any,
+      } as any);
       expect(mockPrisma.careerGoal.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ status: 'PENDING', progress: 0 }),
@@ -143,7 +159,11 @@ describe('CareerService (progress)', () => {
         id: 1,
         careerPlan: { userId: 1 },
       });
-      mockPrisma.careerGoal.update.mockResolvedValue({ id: 1, progress: 50, status: 'IN_PROGRESS' });
+      mockPrisma.careerGoal.update.mockResolvedValue({
+        id: 1,
+        progress: 50,
+        status: 'IN_PROGRESS',
+      });
       const result = await service.updateGoalProgress(1, 1, 50);
       expect(result).toBeDefined();
     });
@@ -210,13 +230,14 @@ describe('CareerService (progress)', () => {
 
     it('deve enriquecer resultados com matchScore quando userId fornecido', async () => {
       const vacancy = {
-        id: 1, title: 'Dev Senior', status: 'OPEN', requiredCompetencyIds: [1, 2],
+        id: 1,
+        title: 'Dev Senior',
+        status: 'OPEN',
+        requiredCompetencyIds: [1, 2],
       };
       mockPrisma.internalVacancy.findMany.mockResolvedValue([vacancy]);
       mockPrisma.internalVacancy.count.mockResolvedValue(1);
-      mockPrisma.userCompetency.findMany.mockResolvedValue([
-        { competencyId: 1, currentLevel: 2 },
-      ]);
+      mockPrisma.userCompetency.findMany.mockResolvedValue([{ competencyId: 1, currentLevel: 2 }]);
       mockPrisma.internalApplication.findMany.mockResolvedValue([]);
 
       const result = await service.findAllVacancies({}, 1);
@@ -231,7 +252,9 @@ describe('CareerService (progress)', () => {
   describe('createVacancy', () => {
     it('deve criar vaga interna', async () => {
       mockPrisma.internalVacancy.create.mockResolvedValue({
-        id: 1, title: 'Dev Senior', status: 'DRAFT',
+        id: 1,
+        title: 'Dev Senior',
+        status: 'DRAFT',
       });
       const result = await service.createVacancy(1, {
         title: 'Dev Senior',
@@ -321,7 +344,10 @@ describe('CareerService (progress)', () => {
       });
       mockPrisma.internalApplication.update.mockResolvedValue({ id: 1, status: 'REJECTED' });
 
-      await service.updateApplicationStatus(1, { status: 'REJECTED' as any, feedback: 'Perfil não adequado' });
+      await service.updateApplicationStatus(1, {
+        status: 'REJECTED' as any,
+        feedback: 'Perfil não adequado',
+      });
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ userId: 5, type: 'APPLICATION_STATUS_UPDATED' }),
@@ -331,7 +357,9 @@ describe('CareerService (progress)', () => {
 
     it('deve lançar NotFoundException se candidatura não encontrada', async () => {
       mockPrisma.internalApplication.findUnique.mockResolvedValue(null);
-      await expect(service.updateApplicationStatus(99, { status: 'ACCEPTED' as any })).rejects.toThrow(NotFoundException);
+      await expect(
+        service.updateApplicationStatus(99, { status: 'ACCEPTED' as any }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -340,7 +368,12 @@ describe('CareerService (progress)', () => {
   describe('getMyApplications', () => {
     it('deve retornar candidaturas do utilizador', async () => {
       mockPrisma.internalApplication.findMany.mockResolvedValue([
-        { id: 1, userId: 1, status: 'PENDING', vacancy: { title: 'Dev', position: {}, department: {} } },
+        {
+          id: 1,
+          userId: 1,
+          status: 'PENDING',
+          vacancy: { title: 'Dev', position: {}, department: {} },
+        },
       ]);
       const result = await service.getMyApplications(1);
       expect(result).toHaveLength(1);
@@ -446,7 +479,7 @@ describe('CareerService (progress)', () => {
       mockPrisma.userCompetency.findMany.mockResolvedValue([]);
       mockPrisma.performanceReview.aggregate.mockResolvedValue({ _avg: { score: 4.5 } });
 
-      const result = await service.requestPromotion(1, 2, 'Quero crescer') as any;
+      const result = (await service.requestPromotion(1, 2, 'Quero crescer')) as any;
       expect(result.message).toContain('sucesso');
       expect(mockPrisma.notificationLog.create).toHaveBeenCalled();
     });
@@ -460,7 +493,7 @@ describe('CareerService (progress)', () => {
       mockPrisma.userCompetency.findMany.mockResolvedValue([]);
       mockPrisma.performanceReview.aggregate.mockResolvedValue({ _avg: { score: 4.5 } });
 
-      const result = await service.requestPromotion(1, 2, 'Motivo') as any;
+      const result = (await service.requestPromotion(1, 2, 'Motivo')) as any;
       expect(result.message).toBeDefined();
     });
   });
@@ -517,7 +550,11 @@ describe('CareerService (progress)', () => {
     it('deve lançar ConflictException se candidato já mapeado para cargo', async () => {
       mockPrisma.successionPlan.findFirst.mockResolvedValue({ id: 1 });
       await expect(
-        service.createSuccessionPlan({ positionId: 1, candidateId: 5, readiness: 'READY_NOW' } as any),
+        service.createSuccessionPlan({
+          positionId: 1,
+          candidateId: 5,
+          readiness: 'READY_NOW',
+        } as any),
       ).rejects.toThrow(ConflictException);
     });
   });
@@ -534,7 +571,9 @@ describe('CareerService (progress)', () => {
 
     it('deve lançar NotFoundException se plano não existe', async () => {
       mockPrisma.successionPlan.findUnique.mockResolvedValue(null);
-      await expect(service.updateSuccessionReadiness(99, 'READY_NOW')).rejects.toThrow(NotFoundException);
+      await expect(service.updateSuccessionReadiness(99, 'READY_NOW')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('deve manter justificação original se não fornecida', async () => {
@@ -594,42 +633,48 @@ describe('CareerService (progress)', () => {
     it('deve categorizar utilizadores em HIGH_POTENTIAL', async () => {
       mockPrisma.user.findMany.mockResolvedValue([
         {
-          id: 1, fullName: 'Ana', avatarUrl: null,
+          id: 1,
+          fullName: 'Ana',
+          avatarUrl: null,
           department: { id: 1, name: 'TI' },
           position: { id: 1, name: 'Dev', level: 3 },
           nineBoxPlacements: [{ performanceAxis: 5, potentialAxis: 5 }],
           _count: { userCompetencies: 10, certificates: 3 },
         },
       ]);
-      const result = await service.getTalentHeatmap() as any[];
+      const result = (await service.getTalentHeatmap()) as any[];
       expect(result[0].talentCategory).toBe('HIGH_POTENTIAL');
     });
 
     it('deve categorizar utilizadores em SOLID_PERFORMER', async () => {
       mockPrisma.user.findMany.mockResolvedValue([
         {
-          id: 2, fullName: 'João', avatarUrl: null,
+          id: 2,
+          fullName: 'João',
+          avatarUrl: null,
           department: { id: 1, name: 'TI' },
           position: { id: 1, name: 'Dev', level: 2 },
           nineBoxPlacements: [{ performanceAxis: 3, potentialAxis: 3 }],
           _count: { userCompetencies: 5, certificates: 1 },
         },
       ]);
-      const result = await service.getTalentHeatmap() as any[];
+      const result = (await service.getTalentHeatmap()) as any[];
       expect(result[0].talentCategory).toBe('SOLID_PERFORMER');
     });
 
     it('deve categorizar como RISK se performance e potential baixos', async () => {
       mockPrisma.user.findMany.mockResolvedValue([
         {
-          id: 3, fullName: 'Pedro', avatarUrl: null,
+          id: 3,
+          fullName: 'Pedro',
+          avatarUrl: null,
           department: { id: 2, name: 'RH' },
           position: { id: 2, name: 'Analista', level: 1 },
           nineBoxPlacements: [{ performanceAxis: 1, potentialAxis: 1 }],
           _count: { userCompetencies: 2, certificates: 0 },
         },
       ]);
-      const result = await service.getTalentHeatmap() as any[];
+      const result = (await service.getTalentHeatmap()) as any[];
       expect(result[0].talentCategory).toBe('RISK');
     });
 
@@ -637,14 +682,16 @@ describe('CareerService (progress)', () => {
       // perf=3, pot=2: não encaixa em nenhuma categoria → UNKNOWN
       mockPrisma.user.findMany.mockResolvedValue([
         {
-          id: 4, fullName: 'Maria', avatarUrl: null,
+          id: 4,
+          fullName: 'Maria',
+          avatarUrl: null,
           department: { id: 1, name: 'TI' },
           position: { id: 1, name: 'Dev', level: 2 },
           nineBoxPlacements: [{ performanceAxis: 3, potentialAxis: 2 }],
           _count: { userCompetencies: 3, certificates: 1 },
         },
       ]);
-      const result = await service.getTalentHeatmap() as any[];
+      const result = (await service.getTalentHeatmap()) as any[];
       expect(result[0].talentCategory).toBe('UNKNOWN');
     });
 
@@ -659,28 +706,32 @@ describe('CareerService (progress)', () => {
     it('deve categorizar EXPERT se alta performance mas baixo potencial', async () => {
       mockPrisma.user.findMany.mockResolvedValue([
         {
-          id: 5, fullName: 'Carlos', avatarUrl: null,
+          id: 5,
+          fullName: 'Carlos',
+          avatarUrl: null,
           department: { id: 1, name: 'TI' },
           position: { id: 1, name: 'Dev', level: 3 },
           nineBoxPlacements: [{ performanceAxis: 4, potentialAxis: 2 }],
           _count: { userCompetencies: 8, certificates: 2 },
         },
       ]);
-      const result = await service.getTalentHeatmap() as any[];
+      const result = (await service.getTalentHeatmap()) as any[];
       expect(result[0].talentCategory).toBe('EXPERT');
     });
 
     it('deve categorizar EMERGING_TALENT se alto potencial mas baixa performance', async () => {
       mockPrisma.user.findMany.mockResolvedValue([
         {
-          id: 6, fullName: 'Sara', avatarUrl: null,
+          id: 6,
+          fullName: 'Sara',
+          avatarUrl: null,
           department: { id: 1, name: 'TI' },
           position: { id: 1, name: 'Dev', level: 1 },
           nineBoxPlacements: [{ performanceAxis: 2, potentialAxis: 5 }],
           _count: { userCompetencies: 4, certificates: 0 },
         },
       ]);
-      const result = await service.getTalentHeatmap() as any[];
+      const result = (await service.getTalentHeatmap()) as any[];
       expect(result[0].talentCategory).toBe('EMERGING_TALENT');
     });
   });
@@ -697,7 +748,7 @@ describe('CareerService (progress)', () => {
       mockPrisma.internalVacancy.groupBy.mockResolvedValue([]);
       mockPrisma.user.findMany.mockResolvedValue([{ id: 1, fullName: 'Em Risco' }]);
 
-      const result = await service.getCareerAnalytics({ includeRisk: true }) as any;
+      const result = (await service.getCareerAnalytics({ includeRisk: true })) as any;
       expect(result.riskUsers).toBeDefined();
       expect(result.overview.totalUsers).toBe(100);
     });
@@ -710,7 +761,7 @@ describe('CareerService (progress)', () => {
       mockPrisma.positionCompetency.groupBy.mockResolvedValue([]);
       mockPrisma.internalVacancy.groupBy.mockResolvedValue([]);
 
-      const result = await service.getCareerAnalytics({ includeRisk: false }) as any;
+      const result = (await service.getCareerAnalytics({ includeRisk: false })) as any;
       expect(result.riskUsers).toBeUndefined();
     });
   });

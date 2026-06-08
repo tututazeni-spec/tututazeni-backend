@@ -197,7 +197,14 @@ describe('DepartmentsService — additional coverage', () => {
   describe('getComparativeDashboard', () => {
     it('deve retornar dashboard comparativo de departamentos', async () => {
       mockPrisma.department.findMany.mockResolvedValue([
-        { id: 1, name: 'TI', code: 'TI', active: true, head: { fullName: 'Gestor' }, _count: { users: 10 } },
+        {
+          id: 1,
+          name: 'TI',
+          code: 'TI',
+          active: true,
+          head: { fullName: 'Gestor' },
+          _count: { users: 10 },
+        },
       ]);
 
       const result = await service.getComparativeDashboard();

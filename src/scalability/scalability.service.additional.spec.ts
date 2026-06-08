@@ -1,9 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  NotFoundException,
-  BadRequestException,
-  ConflictException,
-} from '@nestjs/common';
+import { NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { ScalabilityService } from './scalability.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
@@ -71,13 +67,20 @@ const automationMock = {
 const userMock = {
   findFirst: jest.fn().mockResolvedValue(null),
   findMany: jest.fn().mockResolvedValue([]),
-  create: jest.fn().mockResolvedValue({ id: 'new-user', fullName: 'Test User', email: 'test@innova.com' }),
+  create: jest
+    .fn()
+    .mockResolvedValue({ id: 'new-user', fullName: 'Test User', email: 'test@innova.com' }),
   update: jest.fn().mockResolvedValue({}),
   count: jest.fn().mockResolvedValue(0),
 };
 
 const mockPrisma = new Proxy(
-  { tenantConfig: tenantMock, integrationConfig: integrationMock, automationRule: automationMock, user: userMock },
+  {
+    tenantConfig: tenantMock,
+    integrationConfig: integrationMock,
+    automationRule: automationMock,
+    user: userMock,
+  },
   {
     get(target, prop) {
       if (prop in target) return target[prop as string];
@@ -124,7 +127,11 @@ describe('ScalabilityService (additional)', () => {
     automationMock.update.mockResolvedValue(baseRule);
     automationMock.findMany.mockResolvedValue([]);
     userMock.findFirst.mockResolvedValue(null);
-    userMock.create.mockResolvedValue({ id: 'new-user', fullName: 'Test User', email: 'test@innova.com' });
+    userMock.create.mockResolvedValue({
+      id: 'new-user',
+      fullName: 'Test User',
+      email: 'test@innova.com',
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -144,7 +151,10 @@ describe('ScalabilityService (additional)', () => {
     it('deve lançar ConflictException se tenantCode já existe', async () => {
       tenantMock.findUnique.mockResolvedValueOnce(baseTenant); // tenantCode check
       await expect(
-        service.createTenant({ tenantCode: 'INNOVA', name: 'Outro', domain: 'outro.com' } as any, 'admin'),
+        service.createTenant(
+          { tenantCode: 'INNOVA', name: 'Outro', domain: 'outro.com' } as any,
+          'admin',
+        ),
       ).rejects.toThrow(ConflictException);
     });
 
@@ -156,7 +166,9 @@ describe('ScalabilityService (additional)', () => {
         'admin',
       );
       expect(result).toBeDefined();
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'CREATE', entity: 'TenantConfig' }));
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'CREATE', entity: 'TenantConfig' }),
+      );
     });
 
     it('deve converter datas de contrato se fornecidas', async () => {
@@ -184,14 +196,20 @@ describe('ScalabilityService (additional)', () => {
     it('deve actualizar integração', async () => {
       integrationMock.findUnique.mockResolvedValue(baseIntegration);
       integrationMock.update.mockResolvedValue({ ...baseIntegration, name: 'SAP Updated' });
-      const result = await service.updateIntegration('int-1', { name: 'SAP Updated' } as any, 'admin');
+      const result = await service.updateIntegration(
+        'int-1',
+        { name: 'SAP Updated' } as any,
+        'admin',
+      );
       expect(result).toBeDefined();
       expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'UPDATE' }));
     });
 
     it('deve lançar NotFoundException se integração não existe', async () => {
       integrationMock.findUnique.mockResolvedValue(null);
-      await expect(service.updateIntegration('bad-id', {} as any, 'admin')).rejects.toThrow(NotFoundException);
+      await expect(service.updateIntegration('bad-id', {} as any, 'admin')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('deve encriptar credenciais ao actualizar', async () => {
@@ -214,7 +232,10 @@ describe('ScalabilityService (additional)', () => {
       const result = await service.triggerSync('int-1', 'admin');
       expect(result).toHaveProperty('syncLogId');
       expect(result.message).toContain('Sincronização iniciada');
-      expect(mockEvents.emit).toHaveBeenCalledWith('integration.sync.requested', expect.any(Object));
+      expect(mockEvents.emit).toHaveBeenCalledWith(
+        'integration.sync.requested',
+        expect.any(Object),
+      );
     });
 
     it('deve lançar NotFoundException se integração não existe', async () => {
@@ -248,20 +269,30 @@ describe('ScalabilityService (additional)', () => {
     it('deve actualizar regra de automação', async () => {
       automationMock.findUnique.mockResolvedValue(baseRule);
       automationMock.update.mockResolvedValue({ ...baseRule, name: 'Updated Rule' });
-      const result = await service.updateAutomationRule('rule-1', { name: 'Updated Rule' } as any, 'admin');
+      const result = await service.updateAutomationRule(
+        'rule-1',
+        { name: 'Updated Rule' } as any,
+        'admin',
+      );
       expect(result).toBeDefined();
       expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'UPDATE' }));
     });
 
     it('deve lançar NotFoundException se regra não existe', async () => {
       automationMock.findUnique.mockResolvedValue(null);
-      await expect(service.updateAutomationRule('bad-id', {} as any, 'admin')).rejects.toThrow(NotFoundException);
+      await expect(service.updateAutomationRule('bad-id', {} as any, 'admin')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('deve validar JSON de triggerConfig e actions no update', async () => {
       automationMock.findUnique.mockResolvedValue(baseRule);
       await expect(
-        service.updateAutomationRule('rule-1', { triggerConfigJson: 'invalid-json' } as any, 'admin'),
+        service.updateAutomationRule(
+          'rule-1',
+          { triggerConfigJson: 'invalid-json' } as any,
+          'admin',
+        ),
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -305,39 +336,50 @@ describe('ScalabilityService (additional)', () => {
     });
 
     it('deve executar regra com condições vazias (sempre match)', async () => {
-      automationMock.findMany.mockResolvedValue([{
-        ...baseRule,
-        conditionsJson: null,
-        actionsJson: '[{"type":"SEND_NOTIFICATION","payload":{"title":"T","message":"M","type":"INFO"}}]',
-      }]);
+      automationMock.findMany.mockResolvedValue([
+        {
+          ...baseRule,
+          conditionsJson: null,
+          actionsJson:
+            '[{"type":"SEND_NOTIFICATION","payload":{"title":"T","message":"M","type":"INFO"}}]',
+        },
+      ]);
       await expect(
         service.processAutomationEvent('tenant-1', AutomationTrigger.USER_HIRED, { userId: 'u1' }),
       ).resolves.not.toThrow();
     });
 
     it('deve executar ação ENROLL_COURSE', async () => {
-      automationMock.findMany.mockResolvedValue([{
-        ...baseRule,
-        conditionsJson: null,
-        actionsJson: '[{"type":"ENROLL_COURSE","payload":{"courseId":"course-1"}}]',
-      }]);
-      await service.processAutomationEvent('tenant-1', AutomationTrigger.USER_HIRED, { userId: 'u1' });
+      automationMock.findMany.mockResolvedValue([
+        {
+          ...baseRule,
+          conditionsJson: null,
+          actionsJson: '[{"type":"ENROLL_COURSE","payload":{"courseId":"course-1"}}]',
+        },
+      ]);
+      await service.processAutomationEvent('tenant-1', AutomationTrigger.USER_HIRED, {
+        userId: 'u1',
+      });
       expect(mockAudit.log).not.toHaveBeenCalled();
     });
 
     it('deve filtrar regras por condição EQ', async () => {
-      automationMock.findMany.mockResolvedValue([{
-        ...baseRule,
-        conditionsJson: '[{"field":"role","operator":"EQ","value":"MANAGER"}]',
-        actionsJson: '[{"type":"SEND_NOTIFICATION","payload":{"title":"T","message":"M"}}]',
-      }]);
-      await service.processAutomationEvent(
-        'tenant-1',
-        AutomationTrigger.USER_HIRED,
-        { userId: 'u1', role: 'EMPLOYEE' },
-      );
+      automationMock.findMany.mockResolvedValue([
+        {
+          ...baseRule,
+          conditionsJson: '[{"field":"role","operator":"EQ","value":"MANAGER"}]',
+          actionsJson: '[{"type":"SEND_NOTIFICATION","payload":{"title":"T","message":"M"}}]',
+        },
+      ]);
+      await service.processAutomationEvent('tenant-1', AutomationTrigger.USER_HIRED, {
+        userId: 'u1',
+        role: 'EMPLOYEE',
+      });
       // condição não match — não deve executar ação
-      expect(mockEvents.emit).not.toHaveBeenCalledWith('automation.rule.execute', expect.any(Object));
+      expect(mockEvents.emit).not.toHaveBeenCalledWith(
+        'automation.rule.execute',
+        expect.any(Object),
+      );
     });
   });
 
@@ -346,7 +388,12 @@ describe('ScalabilityService (additional)', () => {
   describe('createSlaConfig', () => {
     it('deve criar configuração SLA', async () => {
       const result = await service.createSlaConfig(
-        { tenantId: 'tenant-1', name: 'SLA Premium', uptimePercent: 99.9, maxLatencyMs: 1000 } as any,
+        {
+          tenantId: 'tenant-1',
+          name: 'SLA Premium',
+          uptimePercent: 99.9,
+          maxLatencyMs: 1000,
+        } as any,
         'admin',
       );
       expect(result).toBeDefined();
@@ -366,7 +413,9 @@ describe('ScalabilityService (additional)', () => {
   describe('updateSlaConfig', () => {
     it('deve actualizar SLA config', async () => {
       (mockPrisma as any).slaConfig = {
-        findUnique: jest.fn().mockResolvedValue({ id: 'sla-1', tenantId: 'tenant-1', uptimePercent: 99.5 }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: 'sla-1', tenantId: 'tenant-1', uptimePercent: 99.5 }),
         update: jest.fn().mockResolvedValue({ id: 'sla-1', maxLatencyMs: 500 }),
         create: jest.fn().mockResolvedValue({}),
         findMany: jest.fn().mockResolvedValue([]),
@@ -384,7 +433,9 @@ describe('ScalabilityService (additional)', () => {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
       };
-      await expect(service.updateSlaConfig('bad-sla', {} as any, 'admin')).rejects.toThrow(NotFoundException);
+      await expect(service.updateSlaConfig('bad-sla', {} as any, 'admin')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -432,7 +483,9 @@ describe('ScalabilityService (additional)', () => {
         'admin',
       );
       expect(result).toBeDefined();
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ entity: 'ContentDeliveryConfig' }));
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'ContentDeliveryConfig' }),
+      );
     });
   });
 
@@ -461,7 +514,9 @@ describe('ScalabilityService (additional)', () => {
         findMany: jest.fn().mockResolvedValue([]),
         groupBy: jest.fn().mockResolvedValue([]),
       };
-      await expect(service.resolveAlert('bad-id', { resolvedBy: 'admin' })).rejects.toThrow(NotFoundException);
+      await expect(service.resolveAlert('bad-id', { resolvedBy: 'admin' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('deve lançar BadRequestException se alerta já resolvido', async () => {
@@ -473,7 +528,9 @@ describe('ScalabilityService (additional)', () => {
         findMany: jest.fn().mockResolvedValue([]),
         groupBy: jest.fn().mockResolvedValue([]),
       };
-      await expect(service.resolveAlert('alert-1', { resolvedBy: 'admin' })).rejects.toThrow(BadRequestException);
+      await expect(service.resolveAlert('alert-1', { resolvedBy: 'admin' })).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
@@ -515,7 +572,13 @@ describe('ScalabilityService (additional)', () => {
         update: jest.fn().mockResolvedValue({}),
       };
       await service.createAlert(
-        { tenantId: 'tenant-1', severity: 'WARNING', title: 'Latência', message: 'Alta', notifiedVia: ['SLACK'] } as any,
+        {
+          tenantId: 'tenant-1',
+          severity: 'WARNING',
+          title: 'Latência',
+          message: 'Alta',
+          notifiedVia: ['SLACK'],
+        } as any,
         'SYSTEM',
       );
       expect(mockEvents.emit).toHaveBeenCalledWith('alert.notify.slack', expect.any(Object));
@@ -534,7 +597,11 @@ describe('ScalabilityService (additional)', () => {
         groupBy: jest.fn().mockResolvedValue([]),
         update: jest.fn().mockResolvedValue({}),
       };
-      const result = await service.listAlerts({ tenantId: 'tenant-1', severity: 'CRITICAL', isResolved: false } as any);
+      const result = await service.listAlerts({
+        tenantId: 'tenant-1',
+        severity: 'CRITICAL',
+        isResolved: false,
+      } as any);
       expect(result).toHaveProperty('data');
       expect(result).toHaveProperty('total');
     });
@@ -552,10 +619,20 @@ describe('ScalabilityService (additional)', () => {
 
       automationMock.findMany.mockResolvedValue([]);
       userMock.findFirst.mockResolvedValue(null);
-      userMock.create.mockResolvedValue({ id: 'new-user', fullName: 'Alice Silva', email: 'alice@innova.com' });
+      userMock.create.mockResolvedValue({
+        id: 'new-user',
+        fullName: 'Alice Silva',
+        email: 'alice@innova.com',
+      });
 
       const result = await service.bulkImportUsers(
-        { tenantId: 'tenant-1', format: 'JSON', payload, upsert: false, sendWelcomeEmail: false } as any,
+        {
+          tenantId: 'tenant-1',
+          format: 'JSON',
+          payload,
+          upsert: false,
+          sendWelcomeEmail: false,
+        } as any,
         'admin',
       );
       expect(result.total).toBe(2);
@@ -569,7 +646,13 @@ describe('ScalabilityService (additional)', () => {
       userMock.findFirst.mockResolvedValue({ id: 'existing-user', fullName: 'Alice Silva' });
 
       const result = await service.bulkImportUsers(
-        { tenantId: 'tenant-1', format: 'JSON', payload, upsert: true, sendWelcomeEmail: false } as any,
+        {
+          tenantId: 'tenant-1',
+          format: 'JSON',
+          payload,
+          upsert: true,
+          sendWelcomeEmail: false,
+        } as any,
         'admin',
       );
       expect(result.updated).toBe(1);
@@ -583,7 +666,13 @@ describe('ScalabilityService (additional)', () => {
       userMock.findFirst.mockResolvedValue({ id: 'existing-user', fullName: 'Alice' });
 
       const result = await service.bulkImportUsers(
-        { tenantId: 'tenant-1', format: 'JSON', payload, upsert: false, sendWelcomeEmail: false } as any,
+        {
+          tenantId: 'tenant-1',
+          format: 'JSON',
+          payload,
+          upsert: false,
+          sendWelcomeEmail: false,
+        } as any,
         'admin',
       );
       expect(result.skipped).toBe(1);
@@ -596,7 +685,13 @@ describe('ScalabilityService (additional)', () => {
       userMock.findFirst.mockResolvedValue(null);
 
       const result = await service.bulkImportUsers(
-        { tenantId: 'tenant-1', format: 'CSV', payload, upsert: false, sendWelcomeEmail: false } as any,
+        {
+          tenantId: 'tenant-1',
+          format: 'CSV',
+          payload,
+          upsert: false,
+          sendWelcomeEmail: false,
+        } as any,
         'admin',
       );
       expect(result.total).toBe(2);
@@ -605,7 +700,12 @@ describe('ScalabilityService (additional)', () => {
     it('deve rejeitar payload base64 inválido', async () => {
       await expect(
         service.bulkImportUsers(
-          { tenantId: 'tenant-1', format: 'JSON', payload: 'not-valid-base64-json!@#', upsert: false } as any,
+          {
+            tenantId: 'tenant-1',
+            format: 'JSON',
+            payload: 'not-valid-base64-json!@#',
+            upsert: false,
+          } as any,
           'admin',
         ),
       ).rejects.toThrow(BadRequestException);
@@ -616,10 +716,20 @@ describe('ScalabilityService (additional)', () => {
       const payload = Buffer.from(JSON.stringify(users)).toString('base64');
       automationMock.findMany.mockResolvedValue([]);
       userMock.findFirst.mockResolvedValue(null);
-      userMock.create.mockResolvedValue({ id: 'nu', fullName: 'New User', email: 'new@innova.com' });
+      userMock.create.mockResolvedValue({
+        id: 'nu',
+        fullName: 'New User',
+        email: 'new@innova.com',
+      });
 
       await service.bulkImportUsers(
-        { tenantId: 'tenant-1', format: 'JSON', payload, upsert: false, sendWelcomeEmail: true } as any,
+        {
+          tenantId: 'tenant-1',
+          format: 'JSON',
+          payload,
+          upsert: false,
+          sendWelcomeEmail: true,
+        } as any,
         'admin',
       );
       expect(mockEvents.emit).toHaveBeenCalledWith('user.welcome.email', expect.any(Object));
@@ -644,7 +754,12 @@ describe('ScalabilityService (additional)', () => {
   describe('scheduleLoadTest', () => {
     it('deve agendar teste de carga e emitir evento', async () => {
       const result = await service.scheduleLoadTest(
-        { tenantId: 'tenant-1', targetUrl: 'http://localhost:4000', users: 100, duration: 300 } as any,
+        {
+          tenantId: 'tenant-1',
+          targetUrl: 'http://localhost:4000',
+          users: 100,
+          duration: 300,
+        } as any,
         'admin',
       );
       expect(result).toHaveProperty('message');

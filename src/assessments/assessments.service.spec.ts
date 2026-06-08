@@ -243,7 +243,11 @@ describe('AssessmentsService', () => {
         questions: [{ id: 1, questionText: 'Q1', seq: 1 }],
       });
       mockPrisma.assessmentAttempt.count.mockResolvedValue(0);
-      mockPrisma.assessmentAttempt.create.mockResolvedValue({ id: 1, userId: 1, status: 'IN_PROGRESS' });
+      mockPrisma.assessmentAttempt.create.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        status: 'IN_PROGRESS',
+      });
       const result = await service.startAttempt(1, { assessmentId: 1 } as any);
       expect(result).toBeDefined();
     });

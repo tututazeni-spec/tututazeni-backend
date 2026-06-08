@@ -126,7 +126,14 @@ describe('PayrollEngineService (additional)', () => {
 
   describe('loadEmployeeCompensation', () => {
     it('deve retornar compensação do colaborador', async () => {
-      const comp = { id: 1, userId: 1, baseSalary: 150000, foodAllowance: 25000, transportAllowance: 15000, components: [] };
+      const comp = {
+        id: 1,
+        userId: 1,
+        baseSalary: 150000,
+        foodAllowance: 25000,
+        transportAllowance: 15000,
+        components: [],
+      };
       mockPrisma.employeeCompensation.findFirst.mockResolvedValue(comp);
       const result = await service.loadEmployeeCompensation(1);
       expect(result).toBeDefined();
@@ -149,7 +156,12 @@ describe('PayrollEngineService (additional)', () => {
     });
 
     it('deve calcular salário líquido básico', async () => {
-      const ctx: PayrollContext = { userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+      };
       const result = await service.calculate(ctx, '2026-06');
       expect(result.userId).toBe(1);
       expect(result.grossSalary).toBeGreaterThan(0);
@@ -159,7 +171,12 @@ describe('PayrollEngineService (additional)', () => {
     });
 
     it('deve incluir linha BASE_SALARY nas linhas', async () => {
-      const ctx: PayrollContext = { userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+      };
       const result = await service.calculate(ctx, '2026-06');
       const baseLine = result.lines.find(l => l.code === 'BASE_SALARY');
       expect(baseLine).toBeDefined();
@@ -168,7 +185,13 @@ describe('PayrollEngineService (additional)', () => {
     });
 
     it('deve calcular subsídio de alimentação do ctx', async () => {
-      const ctx: PayrollContext = { userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026, foodAllowance: 30000 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+        foodAllowance: 30000,
+      };
       const result = await service.calculate(ctx, '2026-06');
       const foodLine = result.lines.find(l => l.code === 'ALLOWANCE_FOOD');
       expect(foodLine).toBeDefined();
@@ -177,7 +200,13 @@ describe('PayrollEngineService (additional)', () => {
     });
 
     it('deve calcular subsídio de transporte', async () => {
-      const ctx: PayrollContext = { userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026, transportAllowance: 20000 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+        transportAllowance: 20000,
+      };
       const result = await service.calculate(ctx, '2026-06');
       const transportLine = result.lines.find(l => l.code === 'ALLOWANCE_TRANSPORT');
       expect(transportLine).toBeDefined();
@@ -186,8 +215,12 @@ describe('PayrollEngineService (additional)', () => {
 
     it('deve calcular horas extras', async () => {
       const ctx: PayrollContext = {
-        userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026,
-        overtimeHours: 10, overtimeRateMultiplier: 1.5,
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+        overtimeHours: 10,
+        overtimeRateMultiplier: 1.5,
       };
       const result = await service.calculate(ctx, '2026-06');
       const overtimeLine = result.lines.find(l => l.code === 'OVERTIME');
@@ -196,7 +229,13 @@ describe('PayrollEngineService (additional)', () => {
     });
 
     it('deve calcular bónus', async () => {
-      const ctx: PayrollContext = { userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026, bonusAmount: 50000 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+        bonusAmount: 50000,
+      };
       const result = await service.calculate(ctx, '2026-06');
       const bonusLine = result.lines.find(l => l.code === 'BONUS');
       expect(bonusLine).toBeDefined();
@@ -204,7 +243,14 @@ describe('PayrollEngineService (additional)', () => {
     });
 
     it('deve deduzir faltas do salário base', async () => {
-      const ctx: PayrollContext = { userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026, absenceDays: 2, workingDaysInMonth: 22 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+        absenceDays: 2,
+        workingDaysInMonth: 22,
+      };
       const result = await service.calculate(ctx, '2026-06');
       const absenceLine = result.lines.find(l => l.code === 'ABSENCE_DEDUCTION');
       expect(absenceLine).toBeDefined();
@@ -212,7 +258,13 @@ describe('PayrollEngineService (additional)', () => {
     });
 
     it('deve calcular adiantamento', async () => {
-      const ctx: PayrollContext = { userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026, advanceDeduction: 10000 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+        advanceDeduction: 10000,
+      };
       const result = await service.calculate(ctx, '2026-06');
       const advanceLine = result.lines.find(l => l.code === 'ADVANCE');
       expect(advanceLine).toBeDefined();
@@ -221,7 +273,10 @@ describe('PayrollEngineService (additional)', () => {
 
     it('deve calcular componentes extra', async () => {
       const ctx: PayrollContext = {
-        userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026,
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
         extraComponents: [{ code: 'SPECIAL_BONUS', value: 20000, isTaxable: true }],
       };
       const result = await service.calculate(ctx, '2026-06');
@@ -232,16 +287,29 @@ describe('PayrollEngineService (additional)', () => {
 
     it('deve usar baseSalary da compensação BD quando disponível', async () => {
       mockPrisma.employeeCompensation.findFirst.mockResolvedValue({
-        baseSalary: 200000, foodAllowance: null, transportAllowance: null, components: [],
+        baseSalary: 200000,
+        foodAllowance: null,
+        transportAllowance: null,
+        components: [],
       });
-      const ctx: PayrollContext = { userId: 1, baseSalary: 100000, countryCode: 'AO', taxYear: 2026 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 100000,
+        countryCode: 'AO',
+        taxYear: 2026,
+      };
       const result = await service.calculate(ctx, '2026-06');
       const baseLine = result.lines.find(l => l.code === 'BASE_SALARY');
       expect(baseLine!.value).toBeCloseTo(200000, 0);
     });
 
     it('deve calcular INSS colaborador (3%)', async () => {
-      const ctx: PayrollContext = { userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+      };
       const result = await service.calculate(ctx, '2026-06');
       const inssLine = result.lines.find(l => l.code === 'INSS_EMPLOYEE');
       expect(inssLine).toBeDefined();
@@ -251,7 +319,12 @@ describe('PayrollEngineService (additional)', () => {
     });
 
     it('deve calcular IRT para salário acima do limiar', async () => {
-      const ctx: PayrollContext = { userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+      };
       const result = await service.calculate(ctx, '2026-06');
       expect(result.incomeTax).toBeGreaterThanOrEqual(0);
     });
@@ -262,7 +335,12 @@ describe('PayrollEngineService (additional)', () => {
         healthInsuranceRate: 0.02,
         irtBrackets: angolaBrackets,
       });
-      const ctx: PayrollContext = { userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+      };
       const result = await service.calculate(ctx, '2026-06');
       const healthLine = result.lines.find(l => l.code === 'HEALTH_INSURANCE');
       expect(healthLine).toBeDefined();
@@ -274,14 +352,24 @@ describe('PayrollEngineService (additional)', () => {
         unionFeeRate: 0.01,
         irtBrackets: angolaBrackets,
       });
-      const ctx: PayrollContext = { userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+      };
       const result = await service.calculate(ctx, '2026-06');
       const unionLine = result.lines.find(l => l.code === 'UNION_FEE');
       expect(unionLine).toBeDefined();
     });
 
     it('deve retornar resultado completo com todos os campos', async () => {
-      const ctx: PayrollContext = { userId: 1, baseSalary: 150000, countryCode: 'AO', taxYear: 2026 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 150000,
+        countryCode: 'AO',
+        taxYear: 2026,
+      };
       const result = await service.calculate(ctx, '2026-06');
       expect(result).toHaveProperty('totalEarnings');
       expect(result).toHaveProperty('totalTaxableBase');
@@ -300,7 +388,12 @@ describe('PayrollEngineService (additional)', () => {
         socialSecurity: { employeeRate: 0.03, employerRate: 0.08, ceiling: 100000 },
         irtBrackets: angolaBrackets,
       });
-      const ctx: PayrollContext = { userId: 1, baseSalary: 500000, countryCode: 'AO', taxYear: 2026 };
+      const ctx: PayrollContext = {
+        userId: 1,
+        baseSalary: 500000,
+        countryCode: 'AO',
+        taxYear: 2026,
+      };
       const result = await service.calculate(ctx, '2026-06');
       expect(result.employeeSocialSecurity).toBeCloseTo(100000 * 0.03, 1);
     });

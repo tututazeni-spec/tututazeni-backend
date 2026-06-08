@@ -29,7 +29,9 @@ describe('PdfController', () => {
   it('downloadDeclaration → generateDeclaration + res', async () => {
     await controller.downloadDeclaration('1', mockRes as any);
     expect(mockSvc.generateDeclaration).toHaveBeenCalled();
-    expect(mockRes.set).toHaveBeenCalledWith(expect.objectContaining({ 'Content-Type': 'application/pdf' }));
+    expect(mockRes.set).toHaveBeenCalledWith(
+      expect.objectContaining({ 'Content-Type': 'application/pdf' }),
+    );
     expect(mockRes.end).toHaveBeenCalled();
   });
 

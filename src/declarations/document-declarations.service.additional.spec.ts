@@ -43,15 +43,36 @@ const mockPrisma: any = {
   auditLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
-const basePurpose = { id: 1, name: 'Comprovativo de Trabalho', category: 'EMPREGO', active: true, requiresApproval: false };
+const basePurpose = {
+  id: 1,
+  name: 'Comprovativo de Trabalho',
+  category: 'EMPREGO',
+  active: true,
+  requiresApproval: false,
+};
 const baseTemplate = {
-  id: 1, name: 'Declaração de Trabalho', content: 'Declaro que {{employee_name}} trabalha na empresa.',
-  language: 'pt', active: true, requiresApproval: false, version: 1,
-  variables: ['employee_name'], purpose: basePurpose, purposeId: 1,
+  id: 1,
+  name: 'Declaração de Trabalho',
+  content: 'Declaro que {{employee_name}} trabalha na empresa.',
+  language: 'pt',
+  active: true,
+  requiresApproval: false,
+  version: 1,
+  variables: ['employee_name'],
+  purpose: basePurpose,
+  purposeId: 1,
 };
 const baseUser = {
-  id: 1, fullName: 'João Silva', email: 'joao@innova.com',
-  employee: { role: 'Developer', jobTitle: 'Dev Sr', department: 'TI', matricula: 'M001', joinedAt: '2023-01-01' },
+  id: 1,
+  fullName: 'João Silva',
+  email: 'joao@innova.com',
+  employee: {
+    role: 'Developer',
+    jobTitle: 'Dev Sr',
+    department: 'TI',
+    matricula: 'M001',
+    joinedAt: '2023-01-01',
+  },
 };
 
 describe('DocumentDeclarationsService (additional)', () => {
@@ -74,7 +95,10 @@ describe('DocumentDeclarationsService (additional)', () => {
   describe('createPurpose', () => {
     it('deve criar finalidade de declaração', async () => {
       mockPrisma.declarationPurpose.create.mockResolvedValue(basePurpose);
-      const result = await service.createPurpose({ name: 'Comprovativo', category: 'EMPREGO' } as any);
+      const result = await service.createPurpose({
+        name: 'Comprovativo',
+        category: 'EMPREGO',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -104,7 +128,10 @@ describe('DocumentDeclarationsService (additional)', () => {
 
   describe('updatePurpose', () => {
     it('deve actualizar finalidade', async () => {
-      mockPrisma.declarationPurpose.update.mockResolvedValue({ ...basePurpose, name: 'Actualizado' });
+      mockPrisma.declarationPurpose.update.mockResolvedValue({
+        ...basePurpose,
+        name: 'Actualizado',
+      });
       const result = await service.updatePurpose(1, { name: 'Actualizado' } as any);
       expect(result).toBeDefined();
     });
@@ -116,7 +143,11 @@ describe('DocumentDeclarationsService (additional)', () => {
     it('deve criar template e detectar variáveis automaticamente', async () => {
       mockPrisma.declarationTemplate.create.mockResolvedValue(baseTemplate);
       const result = await service.createTemplate(
-        { name: 'Declaração', content: 'Olá {{employee_name}} de {{company_name}}', language: 'pt' } as any,
+        {
+          name: 'Declaração',
+          content: 'Olá {{employee_name}} de {{company_name}}',
+          language: 'pt',
+        } as any,
         1,
       );
       expect(result).toBeDefined();
@@ -139,7 +170,9 @@ describe('DocumentDeclarationsService (additional)', () => {
       mockPrisma.declarationTemplate.findMany.mockResolvedValue([]);
       await service.getTemplates(1, 'pt');
       expect(mockPrisma.declarationTemplate.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ purposeId: 1, language: 'pt' }) }),
+        expect.objectContaining({
+          where: expect.objectContaining({ purposeId: 1, language: 'pt' }),
+        }),
       );
     });
   });
@@ -230,13 +263,21 @@ describe('DocumentDeclarationsService (additional)', () => {
 
   describe('findOne', () => {
     it('deve retornar pedido por id', async () => {
-      mockPrisma.declarationRequest.findUnique.mockResolvedValue({ id: 1, userId: 1, template: baseTemplate });
+      mockPrisma.declarationRequest.findUnique.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        template: baseTemplate,
+      });
       const result = await service.findOne(1);
       expect(result).toBeDefined();
     });
 
     it('deve registar auditoria quando requesterId fornecido', async () => {
-      mockPrisma.declarationRequest.findUnique.mockResolvedValue({ id: 1, userId: 1, template: baseTemplate });
+      mockPrisma.declarationRequest.findUnique.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        template: baseTemplate,
+      });
       await service.findOne(1, 2);
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'DECLARATION_VIEWED' }),
@@ -254,7 +295,11 @@ describe('DocumentDeclarationsService (additional)', () => {
   describe('request', () => {
     beforeEach(() => {
       mockPrisma.declarationTemplate.findUnique.mockResolvedValue(baseTemplate);
-      mockPrisma.declarationRequest.create.mockResolvedValue({ id: 1, userId: 1, status: 'APPROVED' });
+      mockPrisma.declarationRequest.create.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        status: 'APPROVED',
+      });
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
       mockPrisma.notificationLog.create.mockResolvedValue({});
     });
@@ -274,15 +319,23 @@ describe('DocumentDeclarationsService (additional)', () => {
     });
 
     it('deve criar pedido PENDING quando template requer aprovação', async () => {
-      mockPrisma.declarationTemplate.findUnique.mockResolvedValue({ ...baseTemplate, requiresApproval: true });
+      mockPrisma.declarationTemplate.findUnique.mockResolvedValue({
+        ...baseTemplate,
+        requiresApproval: true,
+      });
       mockPrisma.declarationRequest.create.mockResolvedValue({ id: 1, status: 'PENDING' });
       const result = await service.request(1, { templateId: 1 } as any);
       expect(result).toBeDefined();
     });
 
     it('deve lançar BadRequestException se template inactivo', async () => {
-      mockPrisma.declarationTemplate.findUnique.mockResolvedValue({ ...baseTemplate, active: false });
-      await expect(service.request(1, { templateId: 1 } as any)).rejects.toThrow(BadRequestException);
+      mockPrisma.declarationTemplate.findUnique.mockResolvedValue({
+        ...baseTemplate,
+        active: false,
+      });
+      await expect(service.request(1, { templateId: 1 } as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

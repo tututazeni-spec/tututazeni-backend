@@ -31,9 +31,16 @@ const mockPrisma: any = {
 };
 
 const baseEvent = {
-  id: 1, title: 'Workshop TypeScript', type: 'WORKSHOP', modalidade: 'PRESENCIAL',
-  status: 'PUBLISHED', organizerId: 1, startAt: new Date('2026-07-01'),
-  endAt: new Date('2026-07-01'), maxCapacity: 30, mandatory: false,
+  id: 1,
+  title: 'Workshop TypeScript',
+  type: 'WORKSHOP',
+  modalidade: 'PRESENCIAL',
+  status: 'PUBLISHED',
+  organizerId: 1,
+  startAt: new Date('2026-07-01'),
+  endAt: new Date('2026-07-01'),
+  maxCapacity: 30,
+  mandatory: false,
   organizer: { id: 1, fullName: 'Admin', avatarUrl: null },
   _count: { participants: 10 },
 };
@@ -64,7 +71,12 @@ describe('EventsService (additional)', () => {
     it('deve filtrar por search, type, modalidade, status, upcoming', async () => {
       mockPrisma.event.findMany.mockResolvedValue([]);
       mockPrisma.event.count.mockResolvedValue(0);
-      await service.findAll({ search: 'workshop', type: 'WORKSHOP' as any, modalidade: 'PRESENCIAL' as any, upcoming: true });
+      await service.findAll({
+        search: 'workshop',
+        type: 'WORKSHOP' as any,
+        modalidade: 'PRESENCIAL' as any,
+        upcoming: true,
+      });
       expect(mockPrisma.event.findMany).toHaveBeenCalled();
     });
   });
@@ -89,10 +101,17 @@ describe('EventsService (additional)', () => {
   describe('create', () => {
     it('deve criar evento', async () => {
       mockPrisma.event.create.mockResolvedValue(baseEvent);
-      const result = await service.create({
-        title: 'Workshop TypeScript', type: 'WORKSHOP' as any, modalidade: 'PRESENCIAL' as any,
-        startAt: '2026-07-01T09:00:00', endAt: '2026-07-01T17:00:00', maxCapacity: 30,
-      } as any, 1);
+      const result = await service.create(
+        {
+          title: 'Workshop TypeScript',
+          type: 'WORKSHOP' as any,
+          modalidade: 'PRESENCIAL' as any,
+          startAt: '2026-07-01T09:00:00',
+          endAt: '2026-07-01T17:00:00',
+          maxCapacity: 30,
+        } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -131,7 +150,11 @@ describe('EventsService (additional)', () => {
       mockPrisma.event.findUnique.mockResolvedValue(baseEvent);
       mockPrisma.event.update.mockResolvedValue({ ...baseEvent, status: 'CANCELLED' });
       mockPrisma.notificationLog.create.mockResolvedValue({});
-      const result = await service.cancelEvent(1, { reason: 'Sem participantes suficientes' } as any, 1);
+      const result = await service.cancelEvent(
+        1,
+        { reason: 'Sem participantes suficientes' } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -164,7 +187,11 @@ describe('EventsService (additional)', () => {
 
   describe('checkIn', () => {
     it('deve fazer check-in de participante', async () => {
-      mockPrisma.eventParticipant.findFirst.mockResolvedValue({ id: 1, userId: 2, status: 'REGISTERED' });
+      mockPrisma.eventParticipant.findFirst.mockResolvedValue({
+        id: 1,
+        userId: 2,
+        status: 'REGISTERED',
+      });
       mockPrisma.eventParticipant.update.mockResolvedValue({ id: 1, status: 'CHECKED_IN' });
       const result = await service.checkIn(1, { userId: 2 } as any, 1);
       expect(result).toBeDefined();
@@ -178,7 +205,11 @@ describe('EventsService (additional)', () => {
       mockPrisma.event.findUnique.mockResolvedValue(baseEvent);
       mockPrisma.eventParticipant.findFirst.mockResolvedValue({ id: 1, status: 'CHECKED_IN' });
       mockPrisma.eventFeedback.create.mockResolvedValue({ id: 1, eventId: 1, rating: 5 });
-      const result = await service.submitFeedback(1, { rating: 5, comment: 'Excelente!' } as any, 2);
+      const result = await service.submitFeedback(
+        1,
+        { rating: 5, comment: 'Excelente!' } as any,
+        2,
+      );
       expect(result).toBeDefined();
     });
   });

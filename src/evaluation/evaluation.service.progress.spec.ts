@@ -45,7 +45,13 @@ const evalsMock = [
     improvements: 'Comunicação',
     recommendations: null,
     evaluator: { id: 10, fullName: 'Ana Ferreira' },
-    evaluated: { id: 10, fullName: 'Ana Ferreira', avatarUrl: null, department: { name: 'TI' }, position: { name: 'Developer' } },
+    evaluated: {
+      id: 10,
+      fullName: 'Ana Ferreira',
+      avatarUrl: null,
+      department: { name: 'TI' },
+      position: { name: 'Developer' },
+    },
   },
   {
     id: 2,
@@ -60,7 +66,13 @@ const evalsMock = [
     improvements: null,
     recommendations: 'Aumentar responsabilidades',
     evaluator: { id: 99, fullName: 'Maria Gestora' },
-    evaluated: { id: 10, fullName: 'Ana Ferreira', avatarUrl: null, department: { name: 'TI' }, position: { name: 'Developer' } },
+    evaluated: {
+      id: 10,
+      fullName: 'Ana Ferreira',
+      avatarUrl: null,
+      department: { name: 'TI' },
+      position: { name: 'Developer' },
+    },
   },
 ];
 
@@ -134,7 +146,7 @@ describe('EvaluationService (progress)', () => {
       mockPrisma.user.findUnique.mockResolvedValue(userMock);
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue(evalsMock);
 
-      const result = await service.getResults(10) as any;
+      const result = (await service.getResults(10)) as any;
       expect(result.finalScore).toBeDefined();
       expect(typeof result.finalScore).toBe('number');
       expect(result.byType).toHaveProperty('SELF');
@@ -146,7 +158,7 @@ describe('EvaluationService (progress)', () => {
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue(evalsMock);
       mockPrisma.evaluationCycle.findUnique.mockResolvedValue(cycleMock);
 
-      const result = await service.getResults(10, 1) as any;
+      const result = (await service.getResults(10, 1)) as any;
       expect(result.finalScore).toBeDefined();
       expect(result.totalEvaluators).toBe(2);
     });
@@ -155,27 +167,31 @@ describe('EvaluationService (progress)', () => {
       mockPrisma.user.findUnique.mockResolvedValue(userMock);
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue(evalsMock);
 
-      const result = await service.getResults(10) as any;
+      const result = (await service.getResults(10)) as any;
       expect(result.concordance).toBeDefined();
       expect(result.concordance.selfScore).toBe(4.0);
       expect(result.concordance.othersScore).toBeDefined();
     });
 
     it('deve etiquetar score como Excepcional se >= 4', async () => {
-      const highEvals = [{ ...evalsMock[0], type: 'MANAGER', overallScore: 4.5, competencyScores: '{}' }];
+      const highEvals = [
+        { ...evalsMock[0], type: 'MANAGER', overallScore: 4.5, competencyScores: '{}' },
+      ];
       mockPrisma.user.findUnique.mockResolvedValue(userMock);
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue(highEvals);
 
-      const result = await service.getResults(10) as any;
+      const result = (await service.getResults(10)) as any;
       expect(result.scoreLabel).toBe('Excepcional');
     });
 
     it('deve etiquetar score como Abaixo do Esperado se < 2', async () => {
-      const lowEvals = [{ ...evalsMock[0], type: 'MANAGER', overallScore: 1.2, competencyScores: '{}' }];
+      const lowEvals = [
+        { ...evalsMock[0], type: 'MANAGER', overallScore: 1.2, competencyScores: '{}' },
+      ];
       mockPrisma.user.findUnique.mockResolvedValue(userMock);
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue(lowEvals);
 
-      const result = await service.getResults(10) as any;
+      const result = (await service.getResults(10)) as any;
       expect(result.scoreLabel).toBe('Abaixo do Esperado');
     });
 
@@ -183,7 +199,7 @@ describe('EvaluationService (progress)', () => {
       mockPrisma.user.findUnique.mockResolvedValue(userMock);
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue(evalsMock);
 
-      const result = await service.getResults(10) as any;
+      const result = (await service.getResults(10)) as any;
       expect(result.competencies).toBeDefined();
       expect(Object.keys(result.competencies).length).toBeGreaterThan(0);
     });
@@ -236,35 +252,98 @@ describe('EvaluationService (progress)', () => {
 
     it('deve agrupar avaliações por utilizador e calcular médias', async () => {
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([
-        { id: 1, evaluatedId: 10, evaluatorId: 99, type: 'MANAGER', overallScore: 4.0, evaluated: userMock },
-        { id: 2, evaluatedId: 10, evaluatorId: 100, type: 'PEER', overallScore: 3.0, evaluated: userMock },
-        { id: 3, evaluatedId: 20, evaluatorId: 99, type: 'MANAGER', overallScore: 2.5, evaluated: { ...userMock, id: 20 } },
+        {
+          id: 1,
+          evaluatedId: 10,
+          evaluatorId: 99,
+          type: 'MANAGER',
+          overallScore: 4.0,
+          evaluated: userMock,
+        },
+        {
+          id: 2,
+          evaluatedId: 10,
+          evaluatorId: 100,
+          type: 'PEER',
+          overallScore: 3.0,
+          evaluated: userMock,
+        },
+        {
+          id: 3,
+          evaluatedId: 20,
+          evaluatorId: 99,
+          type: 'MANAGER',
+          overallScore: 2.5,
+          evaluated: { ...userMock, id: 20 },
+        },
       ]);
 
-      const result = await service.getCycleForCalibration(1) as any;
+      const result = (await service.getCycleForCalibration(1)) as any;
       expect(result.participants.length).toBeGreaterThan(0);
       expect(result.globalAvg).toBeDefined();
     });
 
     it('deve detectar avaliadores com bias (desvio > 0.8)', async () => {
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([
-        { id: 1, evaluatedId: 10, evaluatorId: 99, type: 'MANAGER', overallScore: 5.0, evaluated: userMock },
-        { id: 2, evaluatedId: 20, evaluatorId: 99, type: 'MANAGER', overallScore: 5.0, evaluated: { ...userMock, id: 20 } },
-        { id: 3, evaluatedId: 30, evaluatorId: 100, type: 'PEER', overallScore: 1.0, evaluated: { ...userMock, id: 30 } },
-        { id: 4, evaluatedId: 40, evaluatorId: 100, type: 'PEER', overallScore: 1.0, evaluated: { ...userMock, id: 40 } },
+        {
+          id: 1,
+          evaluatedId: 10,
+          evaluatorId: 99,
+          type: 'MANAGER',
+          overallScore: 5.0,
+          evaluated: userMock,
+        },
+        {
+          id: 2,
+          evaluatedId: 20,
+          evaluatorId: 99,
+          type: 'MANAGER',
+          overallScore: 5.0,
+          evaluated: { ...userMock, id: 20 },
+        },
+        {
+          id: 3,
+          evaluatedId: 30,
+          evaluatorId: 100,
+          type: 'PEER',
+          overallScore: 1.0,
+          evaluated: { ...userMock, id: 30 },
+        },
+        {
+          id: 4,
+          evaluatedId: 40,
+          evaluatorId: 100,
+          type: 'PEER',
+          overallScore: 1.0,
+          evaluated: { ...userMock, id: 40 },
+        },
       ]);
 
-      const result = await service.getCycleForCalibration(1) as any;
+      const result = (await service.getCycleForCalibration(1)) as any;
       expect(result.biasedEvaluators).toBeDefined();
     });
 
     it('deve calcular percentil de cada participante', async () => {
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([
-        { id: 1, evaluatedId: 10, evaluatorId: 99, type: 'MANAGER', overallScore: 4.0, evaluated: userMock },
-        { id: 2, evaluatedId: 20, evaluatorId: 99, type: 'MANAGER', overallScore: 2.0, evaluated: { ...userMock, id: 20 } },
+        {
+          id: 1,
+          evaluatedId: 10,
+          evaluatorId: 99,
+          type: 'MANAGER',
+          overallScore: 4.0,
+          evaluated: userMock,
+        },
+        {
+          id: 2,
+          evaluatedId: 20,
+          evaluatorId: 99,
+          type: 'MANAGER',
+          overallScore: 2.0,
+          evaluated: { ...userMock, id: 20 },
+        },
       ]);
 
-      const result = await service.getCycleForCalibration(1) as any;
+      const result = (await service.getCycleForCalibration(1)) as any;
       const top = result.participants[0];
       expect(top.percentile).toBeDefined();
     });
@@ -330,14 +409,29 @@ describe('EvaluationService (progress)', () => {
 
     it('deve calcular KPIs correctamente com avaliações', async () => {
       const evalData = [
-        { id: 1, evaluatedId: 10, overallScore: 4.0, evaluated: { id: 10, fullName: 'Ana', avatarUrl: null, department: { name: 'TI' } } },
-        { id: 2, evaluatedId: 10, overallScore: 4.5, evaluated: { id: 10, fullName: 'Ana', avatarUrl: null, department: { name: 'TI' } } },
-        { id: 3, evaluatedId: 20, overallScore: 2.0, evaluated: { id: 20, fullName: 'João', avatarUrl: null, department: { name: 'RH' } } },
+        {
+          id: 1,
+          evaluatedId: 10,
+          overallScore: 4.0,
+          evaluated: { id: 10, fullName: 'Ana', avatarUrl: null, department: { name: 'TI' } },
+        },
+        {
+          id: 2,
+          evaluatedId: 10,
+          overallScore: 4.5,
+          evaluated: { id: 10, fullName: 'Ana', avatarUrl: null, department: { name: 'TI' } },
+        },
+        {
+          id: 3,
+          evaluatedId: 20,
+          overallScore: 2.0,
+          evaluated: { id: 20, fullName: 'João', avatarUrl: null, department: { name: 'RH' } },
+        },
       ];
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue(evalData);
       mockPrisma.evaluationRequest.count.mockResolvedValue(3);
 
-      const result = await service.getAnalyticsDashboard({}) as any;
+      const result = (await service.getAnalyticsDashboard({})) as any;
       expect(result.hasData).toBe(true);
       expect(result.kpis.totalEvaluations).toBe(3);
       expect(result.kpis.avgScore).toBeDefined();
@@ -349,15 +443,35 @@ describe('EvaluationService (progress)', () => {
 
     it('deve distribuir scores nos buckets correctos', async () => {
       const evalData = [
-        { id: 1, evaluatedId: 1, overallScore: 4.5, evaluated: { id: 1, fullName: 'A', avatarUrl: null, department: { name: 'TI' } } },
-        { id: 2, evaluatedId: 2, overallScore: 3.2, evaluated: { id: 2, fullName: 'B', avatarUrl: null, department: { name: 'TI' } } },
-        { id: 3, evaluatedId: 3, overallScore: 2.1, evaluated: { id: 3, fullName: 'C', avatarUrl: null, department: { name: 'TI' } } },
-        { id: 4, evaluatedId: 4, overallScore: 1.0, evaluated: { id: 4, fullName: 'D', avatarUrl: null, department: { name: 'TI' } } },
+        {
+          id: 1,
+          evaluatedId: 1,
+          overallScore: 4.5,
+          evaluated: { id: 1, fullName: 'A', avatarUrl: null, department: { name: 'TI' } },
+        },
+        {
+          id: 2,
+          evaluatedId: 2,
+          overallScore: 3.2,
+          evaluated: { id: 2, fullName: 'B', avatarUrl: null, department: { name: 'TI' } },
+        },
+        {
+          id: 3,
+          evaluatedId: 3,
+          overallScore: 2.1,
+          evaluated: { id: 3, fullName: 'C', avatarUrl: null, department: { name: 'TI' } },
+        },
+        {
+          id: 4,
+          evaluatedId: 4,
+          overallScore: 1.0,
+          evaluated: { id: 4, fullName: 'D', avatarUrl: null, department: { name: 'TI' } },
+        },
       ];
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue(evalData);
       mockPrisma.evaluationRequest.count.mockResolvedValue(4);
 
-      const result = await service.getAnalyticsDashboard({}) as any;
+      const result = (await service.getAnalyticsDashboard({})) as any;
       expect(result.distribution.exceptional).toBe(1);
       expect(result.distribution.above).toBe(1);
       expect(result.distribution.expected).toBe(1);
@@ -376,15 +490,18 @@ describe('EvaluationService (progress)', () => {
 
     it('deve calcular participationRate correctamente', async () => {
       const evalData = [
-        { id: 1, evaluatedId: 10, overallScore: 3.5, evaluated: { id: 10, fullName: 'Ana', avatarUrl: null, department: { name: 'TI' } } },
+        {
+          id: 1,
+          evaluatedId: 10,
+          overallScore: 3.5,
+          evaluated: { id: 10, fullName: 'Ana', avatarUrl: null, department: { name: 'TI' } },
+        },
       ];
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue(evalData);
       // Simula 10 pedidos, 5 completados
-      mockPrisma.evaluationRequest.count
-        .mockResolvedValueOnce(10)
-        .mockResolvedValueOnce(5);
+      mockPrisma.evaluationRequest.count.mockResolvedValueOnce(10).mockResolvedValueOnce(5);
 
-      const result = await service.getAnalyticsDashboard({}) as any;
+      const result = (await service.getAnalyticsDashboard({})) as any;
       expect(result.kpis.participationRate).toBe(50);
     });
   });
@@ -394,15 +511,27 @@ describe('EvaluationService (progress)', () => {
   describe('getTeamDashboard', () => {
     it('deve retornar mensagem se manager sem equipa', async () => {
       mockPrisma.user.findMany.mockResolvedValue([]);
-      const result = await service.getTeamDashboard(99) as any;
+      const result = (await service.getTeamDashboard(99)) as any;
       expect(result.team).toHaveLength(0);
       expect(result.message).toBeDefined();
     });
 
     it('deve retornar estatísticas da equipa', async () => {
       const teamMembers = [
-        { id: 1, fullName: 'Ana', avatarUrl: null, position: { name: 'Dev' }, department: { name: 'TI' } },
-        { id: 2, fullName: 'João', avatarUrl: null, position: { name: 'Dev' }, department: { name: 'TI' } },
+        {
+          id: 1,
+          fullName: 'Ana',
+          avatarUrl: null,
+          position: { name: 'Dev' },
+          department: { name: 'TI' },
+        },
+        {
+          id: 2,
+          fullName: 'João',
+          avatarUrl: null,
+          position: { name: 'Dev' },
+          department: { name: 'TI' },
+        },
       ];
       mockPrisma.user.findMany.mockResolvedValue(teamMembers);
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([
@@ -413,7 +542,7 @@ describe('EvaluationService (progress)', () => {
         { evaluatedId: 2, evaluatorId: 99, status: 'PENDING' },
       ]);
 
-      const result = await service.getTeamDashboard(99) as any;
+      const result = (await service.getTeamDashboard(99)) as any;
       expect(result.team).toHaveLength(2);
       expect(result.teamAvg).toBeDefined();
       const ana = result.team.find((t: any) => t.user.id === 1);
@@ -422,21 +551,33 @@ describe('EvaluationService (progress)', () => {
 
     it('deve marcar hasPendingEval quando há avaliações pendentes', async () => {
       mockPrisma.user.findMany.mockResolvedValue([
-        { id: 5, fullName: 'Pedro', avatarUrl: null, position: { name: 'Dev' }, department: { name: 'TI' } },
+        {
+          id: 5,
+          fullName: 'Pedro',
+          avatarUrl: null,
+          position: { name: 'Dev' },
+          department: { name: 'TI' },
+        },
       ]);
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([]);
       mockPrisma.evaluationRequest.findMany.mockResolvedValue([
         { evaluatedId: 5, evaluatorId: 99, status: 'PENDING' },
       ]);
 
-      const result = await service.getTeamDashboard(99, 1) as any;
+      const result = (await service.getTeamDashboard(99, 1)) as any;
       const pedro = result.team[0];
       expect(pedro.hasPendingEval).toBe(true);
     });
 
     it('deve usar cycleId no filtro quando fornecido', async () => {
       mockPrisma.user.findMany.mockResolvedValue([
-        { id: 1, fullName: 'Ana', avatarUrl: null, position: { name: 'Dev' }, department: { name: 'TI' } },
+        {
+          id: 1,
+          fullName: 'Ana',
+          avatarUrl: null,
+          position: { name: 'Dev' },
+          department: { name: 'TI' },
+        },
       ]);
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([]);
       mockPrisma.evaluationRequest.findMany.mockResolvedValue([]);
@@ -451,12 +592,18 @@ describe('EvaluationService (progress)', () => {
 
     it('deve lidar com erros do evaluationRequest graciosamente', async () => {
       mockPrisma.user.findMany.mockResolvedValue([
-        { id: 1, fullName: 'Ana', avatarUrl: null, position: { name: 'Dev' }, department: { name: 'TI' } },
+        {
+          id: 1,
+          fullName: 'Ana',
+          avatarUrl: null,
+          position: { name: 'Dev' },
+          department: { name: 'TI' },
+        },
       ]);
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([]);
       mockPrisma.evaluationRequest.findMany.mockRejectedValue(new Error('DB error'));
 
-      const result = await service.getTeamDashboard(99) as any;
+      const result = (await service.getTeamDashboard(99)) as any;
       expect(result.team).toBeDefined();
     });
   });
@@ -475,7 +622,12 @@ describe('EvaluationService (progress)', () => {
     it('deve agrupar avaliações por período', async () => {
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([
         { overallScore: 3.5, type: 'SELF', period: 'Q1-2025', createdAt: new Date('2025-03-01') },
-        { overallScore: 4.0, type: 'MANAGER', period: 'Q1-2025', createdAt: new Date('2025-03-05') },
+        {
+          overallScore: 4.0,
+          type: 'MANAGER',
+          period: 'Q1-2025',
+          createdAt: new Date('2025-03-05'),
+        },
         { overallScore: 4.5, type: 'SELF', period: 'Q1-2026', createdAt: new Date('2026-03-01') },
       ]);
 
@@ -514,7 +666,7 @@ describe('EvaluationService (progress)', () => {
       mockPrisma.user.findUnique.mockResolvedValue(userMock);
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([]);
 
-      const result = await service.triggerPDIFromResults(10) as any;
+      const result = (await service.triggerPDIFromResults(10)) as any;
       expect(result.message).toContain('competências');
     });
 
@@ -529,7 +681,7 @@ describe('EvaluationService (progress)', () => {
       // Para triggerPDIFromResults — user.findUnique chamado 2x (getResults + notif)
       mockPrisma.user.findUnique.mockResolvedValue(userMock);
 
-      const result = await service.triggerPDIFromResults(10) as any;
+      const result = (await service.triggerPDIFromResults(10)) as any;
       expect(result.suggestedGaps).toBeDefined();
       expect(result.suggestedGaps.length).toBeLessThanOrEqual(3);
       expect(result.pdiAutoGenerated).toBe(false);
@@ -544,7 +696,7 @@ describe('EvaluationService (progress)', () => {
         },
       ]);
 
-      const result = await service.triggerPDIFromResults(10) as any;
+      const result = (await service.triggerPDIFromResults(10)) as any;
       if (result.managerNotified !== undefined) {
         // Se chegou a criar notificação, verifica
         expect(mockPrisma.notificationLog.create).toHaveBeenCalled();
@@ -560,7 +712,7 @@ describe('EvaluationService (progress)', () => {
         },
       ]);
 
-      const result = await service.triggerPDIFromResults(10) as any;
+      const result = (await service.triggerPDIFromResults(10)) as any;
       if (result.recommendation) {
         expect(result.recommendation).toContain('competências');
       }

@@ -122,7 +122,10 @@ describe('CourseModulesService', () => {
       mockPrisma.course.findUnique.mockResolvedValue({ id: 1 });
       mockPrisma.courseModule.updateMany = jest.fn().mockResolvedValue({});
       const result = await service.reorderModules(1, {
-        order: [{ id: 1, seq: 2 }, { id: 2, seq: 1 }],
+        order: [
+          { id: 1, seq: 2 },
+          { id: 2, seq: 1 },
+        ],
       });
       expect(result).toBeDefined();
     });

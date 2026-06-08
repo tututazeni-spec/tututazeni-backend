@@ -72,15 +72,26 @@ function buildMockPrisma() {
 const mockAudit = { log: jest.fn().mockResolvedValue({}) };
 
 const baseRole = {
-  id: 1, name: 'Dev Senior', level: 3, department: 'TI', active: true,
+  id: 1,
+  name: 'Dev Senior',
+  level: 3,
+  department: 'TI',
+  active: true,
   skillRequirements: [], // empty by default
 };
 
 const basePlan = {
-  id: 1, userId: 5, targetRoleId: 1, status: 'ACTIVE',
-  goals: [], readiness: null,
+  id: 1,
+  userId: 5,
+  targetRoleId: 1,
+  status: 'ACTIVE',
+  goals: [],
+  readiness: null,
   user: { id: 5, fullName: 'Ana' },
-  currentRole: null, targetRole: baseRole, careerPath: null, mentor: null,
+  currentRole: null,
+  targetRole: baseRole,
+  careerPath: null,
+  mentor: null,
   _count: { goals: 0 },
 };
 
@@ -120,7 +131,7 @@ describe('CareerPlansService (progress)', () => {
       mockPrisma.careerSkill.findMany.mockResolvedValue([
         { id: 1, name: 'TypeScript', type: 'TECHNICAL' },
       ]);
-      const result = await service.getSkills() as any[];
+      const result = (await service.getSkills()) as any[];
       expect(result).toHaveLength(1);
     });
 
@@ -157,7 +168,8 @@ describe('CareerPlansService (progress)', () => {
     it('deve criar regra de progressão', async () => {
       mockPrisma.progressionRule.create.mockResolvedValue({ id: 1, fromRoleId: 1, toRoleId: 2 });
       const result = await service.createProgressionRule({
-        fromRoleId: 1, toRoleId: 2,
+        fromRoleId: 1,
+        toRoleId: 2,
       } as any);
       expect(result).toBeDefined();
       expect(mockPrisma.progressionRule.create).toHaveBeenCalled();
@@ -169,7 +181,7 @@ describe('CareerPlansService (progress)', () => {
   describe('getProgressionRules', () => {
     it('deve retornar regras de progressão', async () => {
       mockPrisma.progressionRule.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
-      const result = await service.getProgressionRules() as any[];
+      const result = (await service.getProgressionRules()) as any[];
       expect(result).toHaveLength(2);
     });
 
@@ -189,7 +201,7 @@ describe('CareerPlansService (progress)', () => {
       mockPrisma.careerRole.findUnique.mockResolvedValue({ ...baseRole, skillRequirements: [] });
       mockPrisma.legacyEmployeeSkill.findMany.mockResolvedValue([]);
 
-      const result = await service.calculateReadiness(5, 1) as any;
+      const result = (await service.calculateReadiness(5, 1)) as any;
       expect(result.score).toBe(100);
       expect(result.readinessLevel).toBe('READY');
       expect(result.skillGaps).toHaveLength(0);
@@ -200,11 +212,17 @@ describe('CareerPlansService (progress)', () => {
         ...baseRole,
         skillRequirements: [
           {
-            skillId: 10, requiredLevel: 4, weight: 1, mandatory: true,
+            skillId: 10,
+            requiredLevel: 4,
+            weight: 1,
+            mandatory: true,
             skill: { id: 10, name: 'TypeScript', type: 'TECHNICAL' },
           },
           {
-            skillId: 11, requiredLevel: 3, weight: 1, mandatory: false,
+            skillId: 11,
+            requiredLevel: 3,
+            weight: 1,
+            mandatory: false,
             skill: { id: 11, name: 'React', type: 'TECHNICAL' },
           },
         ],
@@ -214,7 +232,7 @@ describe('CareerPlansService (progress)', () => {
         { skillId: 10, currentLevel: 2, skill: { id: 10 } }, // gap=2 (mandatory)
       ]);
 
-      const result = await service.calculateReadiness(5, 1) as any;
+      const result = (await service.calculateReadiness(5, 1)) as any;
       expect(result.score).toBeLessThan(100);
       expect(result.missingSkills).toHaveLength(1); // mandatory gap
       expect(result.skillGaps).toHaveLength(1); // non-mandatory gap
@@ -224,15 +242,19 @@ describe('CareerPlansService (progress)', () => {
       const roleWithReq = {
         ...baseRole,
         skillRequirements: [
-          { skillId: 5, requiredLevel: 3, weight: 1, mandatory: false, skill: { id: 5, name: 'Go', type: 'TECHNICAL' } },
+          {
+            skillId: 5,
+            requiredLevel: 3,
+            weight: 1,
+            mandatory: false,
+            skill: { id: 5, name: 'Go', type: 'TECHNICAL' },
+          },
         ],
       };
       mockPrisma.careerRole.findUnique.mockResolvedValue(roleWithReq);
       // User has level 3 → meets requirement → score 100
-      mockPrisma.legacyEmployeeSkill.findMany.mockResolvedValue([
-        { skillId: 5, currentLevel: 3 },
-      ]);
-      const result = await service.calculateReadiness(5, 1) as any;
+      mockPrisma.legacyEmployeeSkill.findMany.mockResolvedValue([{ skillId: 5, currentLevel: 3 }]);
+      const result = (await service.calculateReadiness(5, 1)) as any;
       expect(result.readinessLevel).toBe('READY');
     });
   });
@@ -248,7 +270,7 @@ describe('CareerPlansService (progress)', () => {
 
     it('deve retornar plano activo sem targetRoleId sem calcular readiness', async () => {
       mockPrisma.userCareerPlan.findFirst.mockResolvedValue({ ...basePlan, targetRoleId: null });
-      const result = await service.getMyPlan(5) as any;
+      const result = (await service.getMyPlan(5)) as any;
       expect(result.readiness).toBeNull();
       expect(mockPrisma.careerRole.findUnique).not.toHaveBeenCalled();
     });
@@ -289,7 +311,9 @@ describe('CareerPlansService (progress)', () => {
     it('deve adicionar meta ao plano de carreira', async () => {
       mockPrisma.careerGoal.create.mockResolvedValue({ id: 1, progress: 0 });
       const result = await service.addGoal({
-        planId: 1, title: 'Completar certificação', dueDate: '2026-12-31',
+        planId: 1,
+        title: 'Completar certificação',
+        dueDate: '2026-12-31',
       } as any);
       expect(result).toBeDefined();
       expect(mockPrisma.careerGoal.create).toHaveBeenCalledWith(
@@ -305,12 +329,17 @@ describe('CareerPlansService (progress)', () => {
   describe('updateGoalProgress', () => {
     it('deve lançar NotFoundException se meta não encontrada', async () => {
       mockPrisma.careerGoal.findUnique.mockResolvedValue(null);
-      await expect(service.updateGoalProgress(99, { progress: 50 } as any, 5))
-        .rejects.toThrow(NotFoundException);
+      await expect(service.updateGoalProgress(99, { progress: 50 } as any, 5)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('deve marcar meta como COMPLETED quando progresso = 100', async () => {
-      mockPrisma.careerGoal.findUnique.mockResolvedValue({ id: 1, planId: 1, status: 'IN_PROGRESS' });
+      mockPrisma.careerGoal.findUnique.mockResolvedValue({
+        id: 1,
+        planId: 1,
+        status: 'IN_PROGRESS',
+      });
       mockPrisma.careerGoal.update.mockResolvedValue({ id: 1, progress: 100, status: 'COMPLETED' });
 
       await service.updateGoalProgress(1, { progress: 100 } as any, 5);
@@ -324,7 +353,11 @@ describe('CareerPlansService (progress)', () => {
 
     it('deve marcar meta como IN_PROGRESS quando progresso > 0 e < 100', async () => {
       mockPrisma.careerGoal.findUnique.mockResolvedValue({ id: 1, planId: 1, status: 'PENDING' });
-      mockPrisma.careerGoal.update.mockResolvedValue({ id: 1, progress: 50, status: 'IN_PROGRESS' });
+      mockPrisma.careerGoal.update.mockResolvedValue({
+        id: 1,
+        progress: 50,
+        status: 'IN_PROGRESS',
+      });
 
       await service.updateGoalProgress(1, { progress: 50 } as any, 5);
 
@@ -363,7 +396,7 @@ describe('CareerPlansService (progress)', () => {
       };
       mockPrisma.userCareerPlan.findUnique.mockResolvedValue(planWithGoals);
 
-      const result = await service.getProgress(1) as any;
+      const result = (await service.getProgress(1)) as any;
       expect(result.total).toBe(3);
       expect(result.completed).toBe(1);
       expect(result.inProgress).toBe(1);
@@ -373,7 +406,7 @@ describe('CareerPlansService (progress)', () => {
 
     it('deve retornar progresso 0 se sem metas', async () => {
       mockPrisma.userCareerPlan.findUnique.mockResolvedValue({ ...basePlan, goals: [] });
-      const result = await service.getProgress(1) as any;
+      const result = (await service.getProgress(1)) as any;
       expect(result.progress).toBe(0);
       expect(result.total).toBe(0);
     });
@@ -388,7 +421,7 @@ describe('CareerPlansService (progress)', () => {
       ]);
       mockPrisma.promotionRequest.count.mockResolvedValue(1);
 
-      const result = await service.getPromotions({ page: 1, limit: 10 } as any) as any;
+      const result = (await service.getPromotions({ page: 1, limit: 10 } as any)) as any;
       expect(result.data).toHaveLength(1);
       expect(result.meta.total).toBe(1);
     });

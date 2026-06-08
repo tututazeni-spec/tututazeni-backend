@@ -137,7 +137,11 @@ describe('AvatarTrainingService (additional)', () => {
 
   describe('uploadKnowledge', () => {
     it('deve adicionar documento à base de conhecimento', async () => {
-      const result = await service.uploadKnowledge(1, 'https://example.com/doc.pdf', 'Manual de Vendas');
+      const result = await service.uploadKnowledge(
+        1,
+        'https://example.com/doc.pdf',
+        'Manual de Vendas',
+      );
       expect(result.avatarId).toBe(1);
       expect(result.message).toContain('conhecimento');
       expect(result.title).toBe('Manual de Vendas');
@@ -150,12 +154,12 @@ describe('AvatarTrainingService (additional)', () => {
     it('deve retornar dashboard com KPIs', async () => {
       mockPrisma.avatarScenario.count.mockResolvedValue(20);
       mockPrisma.avatarSession.count
-        .mockResolvedValueOnce(5)  // activeSessions
+        .mockResolvedValueOnce(5) // activeSessions
         .mockResolvedValueOnce(50); // completedSessions
       mockPrisma.avatarSession.groupBy.mockResolvedValue([]);
       mockPrisma.avatarSession.aggregate.mockResolvedValue({ _avg: { score: 75.5 } });
 
-      const result = await service.getDashboard({}) as any;
+      const result = (await service.getDashboard({})) as any;
       expect(result.kpis).toBeDefined();
       expect(result.kpis.totalScenarios).toBe(20);
       expect(result.kpis.activeSessions).toBe(5);
@@ -168,7 +172,7 @@ describe('AvatarTrainingService (additional)', () => {
       mockPrisma.avatarSession.groupBy.mockResolvedValue([]);
       mockPrisma.avatarSession.aggregate.mockResolvedValue({ _avg: { score: null } });
 
-      const result = await service.getDashboard({ category: 'SALES' as any }) as any;
+      const result = (await service.getDashboard({ category: 'SALES' as any })) as any;
       expect(result.kpis).toBeDefined();
     });
 
@@ -181,7 +185,7 @@ describe('AvatarTrainingService (additional)', () => {
       mockPrisma.avatarScenario.findMany.mockResolvedValue([baseScenario]);
       mockPrisma.avatarSession.aggregate.mockResolvedValue({ _avg: { score: 80 } });
 
-      const result = await service.getDashboard({}) as any;
+      const result = (await service.getDashboard({})) as any;
       expect(result.topScenarios).toBeDefined();
     });
 
@@ -191,7 +195,7 @@ describe('AvatarTrainingService (additional)', () => {
       mockPrisma.avatarSession.groupBy.mockResolvedValue([]);
       mockPrisma.avatarSession.aggregate.mockResolvedValue({ _avg: { score: null } });
 
-      const result = await service.getDashboard({}) as any;
+      const result = (await service.getDashboard({})) as any;
       expect(result.kpis.avgScore).toBeNull();
     });
   });
@@ -203,7 +207,7 @@ describe('AvatarTrainingService (additional)', () => {
       mockPrisma.avatarSession.findMany.mockResolvedValue([]);
       mockPrisma.userPoints.findUnique.mockResolvedValue({ points: 0 });
 
-      const result = await service.getUserAnalytics(1) as any;
+      const result = (await service.getUserAnalytics(1)) as any;
       expect(result.userId).toBe(1);
       expect(result.totalSessions).toBe(0);
       expect(result.completed).toBe(0);
@@ -214,12 +218,18 @@ describe('AvatarTrainingService (additional)', () => {
     it('deve calcular analytics com sessões completadas', async () => {
       mockPrisma.avatarSession.findMany.mockResolvedValue([
         { ...baseSession, status: 'COMPLETED', score: 80, completedAt: new Date('2026-06-01') },
-        { ...baseSession, id: 2, status: 'COMPLETED', score: 90, completedAt: new Date('2026-06-02') },
+        {
+          ...baseSession,
+          id: 2,
+          status: 'COMPLETED',
+          score: 90,
+          completedAt: new Date('2026-06-02'),
+        },
         { ...baseSession, id: 3, status: 'IN_PROGRESS', score: null, completedAt: null },
       ]);
       mockPrisma.userPoints.findUnique.mockResolvedValue({ points: 500 });
 
-      const result = await service.getUserAnalytics(1) as any;
+      const result = (await service.getUserAnalytics(1)) as any;
       expect(result.totalSessions).toBe(3);
       expect(result.completed).toBe(2);
       expect(result.avgScore).toBe(85.0);
@@ -228,12 +238,19 @@ describe('AvatarTrainingService (additional)', () => {
 
     it('deve agrupar sessões por categoria', async () => {
       mockPrisma.avatarSession.findMany.mockResolvedValue([
-        { ...baseSession, scenario: { category: 'SALES', title: 'Entrevista', difficulty: 'MEDIUM' } },
-        { ...baseSession, id: 2, scenario: { category: 'LEADERSHIP', title: 'Feedback', difficulty: 'HARD' } },
+        {
+          ...baseSession,
+          scenario: { category: 'SALES', title: 'Entrevista', difficulty: 'MEDIUM' },
+        },
+        {
+          ...baseSession,
+          id: 2,
+          scenario: { category: 'LEADERSHIP', title: 'Feedback', difficulty: 'HARD' },
+        },
       ]);
       mockPrisma.userPoints.findUnique.mockResolvedValue(null);
 
-      const result = await service.getUserAnalytics(1) as any;
+      const result = (await service.getUserAnalytics(1)) as any;
       expect(result.byCategory).toHaveLength(2);
     });
 
@@ -246,7 +263,7 @@ describe('AvatarTrainingService (additional)', () => {
       ]);
       mockPrisma.userPoints.findUnique.mockResolvedValue(null);
 
-      const result = await service.getUserAnalytics(1) as any;
+      const result = (await service.getUserAnalytics(1)) as any;
       expect(result.streak).toBeGreaterThan(0);
     });
   });
@@ -256,7 +273,7 @@ describe('AvatarTrainingService (additional)', () => {
   describe('getTeamAnalytics', () => {
     it('deve retornar mensagem se manager sem equipa', async () => {
       mockPrisma.user.findMany.mockResolvedValue([]);
-      const result = await service.getTeamAnalytics(99) as any;
+      const result = (await service.getTeamAnalytics(99)) as any;
       expect(result.team).toHaveLength(0);
       expect(result.message).toBeDefined();
     });
@@ -271,7 +288,7 @@ describe('AvatarTrainingService (additional)', () => {
         { userId: 1, score: 90, scenarioId: 2, completedAt: new Date() },
       ]);
 
-      const result = await service.getTeamAnalytics(99) as any;
+      const result = (await service.getTeamAnalytics(99)) as any;
       expect(result.team).toHaveLength(2);
       expect(result.teamAvg).toBeDefined();
     });
@@ -284,7 +301,7 @@ describe('AvatarTrainingService (additional)', () => {
         { userId: 3, score: 30, scenarioId: 1, completedAt: new Date() },
       ]);
 
-      const result = await service.getTeamAnalytics(99) as any;
+      const result = (await service.getTeamAnalytics(99)) as any;
       const pedro = result.team[0];
       expect(pedro.alert).toBe(true);
       expect(result.alerts).toHaveLength(1);
@@ -296,7 +313,7 @@ describe('AvatarTrainingService (additional)', () => {
       ]);
       mockPrisma.avatarSession.findMany.mockResolvedValue([]); // sem sessões
 
-      const result = await service.getTeamAnalytics(99) as any;
+      const result = (await service.getTeamAnalytics(99)) as any;
       expect(result.teamAvg).toBeNull();
     });
   });
@@ -365,7 +382,7 @@ describe('AvatarTrainingService (additional)', () => {
       mockPrisma.avatarSession.groupBy.mockResolvedValue([]);
       mockPrisma.avatarSession.aggregate.mockResolvedValue({ _avg: { score: 70 } });
 
-      const result = await service.getDashboard({ departmentId: 1 }) as any;
+      const result = (await service.getDashboard({ departmentId: 1 })) as any;
       expect(result.kpis).toBeDefined();
     });
   });

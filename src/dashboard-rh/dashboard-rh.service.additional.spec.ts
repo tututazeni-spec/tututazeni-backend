@@ -19,7 +19,10 @@ const mockPrisma: any = {
   course: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
   notificationLog: { count: jest.fn().mockResolvedValue(0) },
   auditLog: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
-  performanceReview: { count: jest.fn().mockResolvedValue(0), aggregate: jest.fn().mockResolvedValue({ _avg: { score: null } }) },
+  performanceReview: {
+    count: jest.fn().mockResolvedValue(0),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { score: null } }),
+  },
   attendanceRecord: {
     count: jest.fn().mockResolvedValue(0),
     aggregate: jest.fn().mockResolvedValue({ _avg: { hoursWorked: 0 } }),
@@ -43,7 +46,9 @@ describe('DashboardRhService (additional)', () => {
   describe('getFullRhDashboard', () => {
     it('deve retornar dashboard completo de RH', async () => {
       mockPrisma.user.count.mockResolvedValue(600);
-      mockPrisma.department.findMany.mockResolvedValue([{ id: 1, name: 'TI', _count: { users: 50 } }]);
+      mockPrisma.department.findMany.mockResolvedValue([
+        { id: 1, name: 'TI', _count: { users: 50 } },
+      ]);
       mockPrisma.enrollment.count.mockResolvedValue(300);
       mockPrisma.certificate.count.mockResolvedValue(150);
       const result = await service.getFullRhDashboard();

@@ -61,7 +61,11 @@ describe('ScalabilityEventListeners', () => {
 
   describe('onCourseCompleted', () => {
     it('deve processar evento COURSE_COMPLETED', async () => {
-      await listeners.onCourseCompleted({ userId: '1', tenantId: 'tenant-1', courseId: 'course-1' });
+      await listeners.onCourseCompleted({
+        userId: '1',
+        tenantId: 'tenant-1',
+        courseId: 'course-1',
+      });
 
       expect(mockService.processAutomationEvent).toHaveBeenCalledWith(
         'tenant-1',

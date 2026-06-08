@@ -143,7 +143,11 @@ describe('ContentLibraryService (additional)', () => {
 
     it('deve retornar conteúdos recomendados para utilizador existente', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
-        id: 1, roleId: 1, departmentId: 1, positionId: 1, userCompetencies: [],
+        id: 1,
+        roleId: 1,
+        departmentId: 1,
+        positionId: 1,
+        userCompetencies: [],
       });
       mockPrisma.auditLog.findMany.mockResolvedValue([]);
       mockPrisma.contentAsset.findMany.mockResolvedValue([baseAsset]);
@@ -190,7 +194,7 @@ describe('ContentLibraryService (additional)', () => {
         { ...baseAsset, id: 2 },
       ]);
 
-      const result = await service.getTrending(5) as any[];
+      const result = (await service.getTrending(5)) as any[];
       expect(result.length).toBeGreaterThan(0);
       if (result[0].weeklyViews !== undefined) {
         expect(result[0].weeklyViews).toBeGreaterThanOrEqual(result[result.length - 1].weeklyViews);
@@ -220,7 +224,7 @@ describe('ContentLibraryService (additional)', () => {
   describe('getMandatory', () => {
     it('deve retornar conteúdos obrigatórios enriquecidos com progresso', async () => {
       mockPrisma.contentAsset.findMany.mockResolvedValue([{ ...baseAsset, mandatory: true }]);
-      const result = await service.getMandatory(1) as any[];
+      const result = (await service.getMandatory(1)) as any[];
       expect(result).toBeDefined();
       expect(result[0].progress).toBeDefined();
       expect(result[0].completed).toBeDefined();
@@ -291,12 +295,10 @@ describe('ContentLibraryService (additional)', () => {
       mockPrisma.contentAsset.count.mockResolvedValue(50);
       mockPrisma.auditLog.count.mockResolvedValue(200);
       mockPrisma.auditLog.groupBy.mockResolvedValue([]);
-      mockPrisma.contentAsset.groupBy.mockResolvedValue([
-        { type: 'VIDEO', _count: { id: 30 } },
-      ]);
+      mockPrisma.contentAsset.groupBy.mockResolvedValue([{ type: 'VIDEO', _count: { id: 30 } }]);
       mockPrisma.contentAsset.findMany.mockResolvedValue([baseAsset]);
 
-      const result = await service.getAnalyticsDashboard() as any;
+      const result = (await service.getAnalyticsDashboard()) as any;
       expect(result.kpis).toBeDefined();
       expect(result.kpis.totalContent).toBeDefined();
       expect(result.formatBreakdown).toBeDefined();
@@ -309,22 +311,20 @@ describe('ContentLibraryService (additional)', () => {
       mockPrisma.contentAsset.groupBy.mockResolvedValue([]);
       mockPrisma.contentAsset.findMany.mockResolvedValue([]);
 
-      const result = await service.getAnalyticsDashboard(1) as any;
+      const result = (await service.getAnalyticsDashboard(1)) as any;
       expect(result.kpis).toBeDefined();
     });
 
     it('deve enriquecer mostViewed com títulos dos conteúdos', async () => {
       mockPrisma.contentAsset.count.mockResolvedValue(20);
       mockPrisma.auditLog.count.mockResolvedValue(100);
-      mockPrisma.auditLog.groupBy.mockResolvedValue([
-        { entityId: 1, _count: { id: 50 } },
-      ]);
+      mockPrisma.auditLog.groupBy.mockResolvedValue([{ entityId: 1, _count: { id: 50 } }]);
       mockPrisma.contentAsset.groupBy.mockResolvedValue([]);
       mockPrisma.contentAsset.findMany
         .mockResolvedValueOnce([]) // recentlyAdded
         .mockResolvedValueOnce([baseAsset]); // enrich IDs
 
-      const result = await service.getAnalyticsDashboard() as any;
+      const result = (await service.getAnalyticsDashboard()) as any;
       expect(result.mostViewed).toBeDefined();
     });
   });
@@ -335,9 +335,9 @@ describe('ContentLibraryService (additional)', () => {
     it('deve retornar analytics do utilizador', async () => {
       mockPrisma.auditLog.count
         .mockResolvedValueOnce(10) // viewCount
-        .mockResolvedValueOnce(3);  // bookmarkCount
+        .mockResolvedValueOnce(3); // bookmarkCount
 
-      const result = await service.getUserAnalytics(1) as any;
+      const result = (await service.getUserAnalytics(1)) as any;
       expect(result.userId).toBe(1);
       expect(result.viewCount).toBeDefined();
       expect(result.completions).toBeDefined();
@@ -346,7 +346,7 @@ describe('ContentLibraryService (additional)', () => {
 
     it('deve classificar como BEGINNER se < 10 completions', async () => {
       mockPrisma.auditLog.count.mockResolvedValue(2);
-      const result = await service.getUserAnalytics(1) as any;
+      const result = (await service.getUserAnalytics(1)) as any;
       expect(result.level).toBe('BEGINNER');
     });
 
@@ -355,7 +355,7 @@ describe('ContentLibraryService (additional)', () => {
       // O count de completions vem do safeModel (retorna 0 por defeito)
       // mas se o mock tiver contentProgress... usa safeModel fallback → 0
       // Vamos testar o path com 0 completions
-      const result = await service.getUserAnalytics(1) as any;
+      const result = (await service.getUserAnalytics(1)) as any;
       expect(['BEGINNER', 'INTERMEDIATE', 'EXPERT']).toContain(result.level);
     });
   });
@@ -368,7 +368,7 @@ describe('ContentLibraryService (additional)', () => {
         { type: 'VIDEO', _count: { id: 25 } },
         { type: 'DOCUMENT', _count: { id: 15 } },
       ]);
-      const result = await service.getCategoryBreakdown() as any[];
+      const result = (await service.getCategoryBreakdown()) as any[];
       expect(result).toHaveLength(2);
       expect(result[0]).toHaveProperty('format');
       expect(result[0]).toHaveProperty('count');
@@ -386,7 +386,7 @@ describe('ContentLibraryService (additional)', () => {
   describe('getAllTags', () => {
     it('deve retornar objecto com lista de tags', async () => {
       mockPrisma.contentAsset.findMany.mockResolvedValue([baseAsset]);
-      const result = await service.getAllTags() as any;
+      const result = (await service.getAllTags()) as any;
       expect(result).toHaveProperty('tags');
       expect(Array.isArray(result.tags)).toBe(true);
     });

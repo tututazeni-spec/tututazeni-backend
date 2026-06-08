@@ -188,10 +188,12 @@ describe('InstructorService — additional coverage', () => {
 
     it('deve lidar com erro na actualização do perfil', async () => {
       mockPrisma.instructorProfile.update.mockRejectedValue(new Error('DB error'));
-      const result = await service.addReview(1, {
-        instructorId: 2,
-        rating: 3,
-      } as any).catch(() => ({}));
+      const result = await service
+        .addReview(1, {
+          instructorId: 2,
+          rating: 3,
+        } as any)
+        .catch(() => ({}));
       expect(result).toBeDefined();
     });
   });

@@ -33,8 +33,12 @@ const mockPrisma: any = {
 };
 
 const baseRole = {
-  id: 1, name: 'MANAGER', code: 'MANAGER', description: 'Manager role',
-  isSystem: false, priority: 10,
+  id: 1,
+  name: 'MANAGER',
+  code: 'MANAGER',
+  description: 'Manager role',
+  isSystem: false,
+  priority: 10,
   permissions: [{ id: 1, name: 'READ_USERS', action: 'read', subject: 'User' }],
   users: [{ id: 1, fullName: 'João Silva', email: 'joao@innova.com', avatarUrl: null }],
   _count: { users: 5 },
@@ -92,7 +96,9 @@ describe('RolesPermissionsService (additional)', () => {
 
     it('deve lançar ConflictException se code já existe', async () => {
       mockPrisma.role.findFirst.mockResolvedValue(baseRole);
-      await expect(service.create({ name: 'MANAGER', code: 'MANAGER' } as any)).rejects.toThrow(ConflictException);
+      await expect(service.create({ name: 'MANAGER', code: 'MANAGER' } as any)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -113,7 +119,9 @@ describe('RolesPermissionsService (additional)', () => {
 
     it('deve lançar BadRequestException ao tentar modificar role de sistema', async () => {
       mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, isSystem: true });
-      await expect(service.update(1, { name: 'Outro' } as any)).rejects.toThrow(BadRequestException);
+      await expect(service.update(1, { name: 'Outro' } as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
@@ -121,14 +129,22 @@ describe('RolesPermissionsService (additional)', () => {
 
   describe('remove', () => {
     it('deve eliminar role sem utilizadores', async () => {
-      mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, _count: { users: 0 }, isSystem: false });
+      mockPrisma.role.findUnique.mockResolvedValue({
+        ...baseRole,
+        _count: { users: 0 },
+        isSystem: false,
+      });
       mockPrisma.role.delete.mockResolvedValue(baseRole);
       await service.remove(1);
       expect(mockPrisma.role.delete).toHaveBeenCalled();
     });
 
     it('deve lançar BadRequestException se role tem utilizadores', async () => {
-      mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, _count: { users: 5 }, isSystem: false });
+      mockPrisma.role.findUnique.mockResolvedValue({
+        ...baseRole,
+        _count: { users: 5 },
+        isSystem: false,
+      });
       await expect(service.remove(1)).rejects.toThrow(BadRequestException);
     });
   });
@@ -159,7 +175,11 @@ describe('RolesPermissionsService (additional)', () => {
   describe('createPermission', () => {
     it('deve criar permissão', async () => {
       mockPrisma.permission.create.mockResolvedValue({ id: 1, name: 'READ_USERS' });
-      const result = await service.createPermission({ name: 'READ_USERS', action: 'read', subject: 'User' } as any);
+      const result = await service.createPermission({
+        name: 'READ_USERS',
+        action: 'read',
+        subject: 'User',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -180,7 +200,11 @@ describe('RolesPermissionsService (additional)', () => {
   describe('simulatePermission', () => {
     it('deve simular permissão para utilizador', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 1, role: baseRole });
-      const result = await service.simulatePermission({ userId: 1, action: 'read', subject: 'User' } as any);
+      const result = await service.simulatePermission({
+        userId: 1,
+        action: 'read',
+        subject: 'User',
+      } as any);
       expect(result).toBeDefined();
     });
   });

@@ -125,7 +125,11 @@ describe('AutomationService', () => {
         conditions: [],
         actions: [],
       });
-      automationRuleMock.create.mockResolvedValue({ ...baseRule, id: 3, name: '[COPY] Auto Badge' });
+      automationRuleMock.create.mockResolvedValue({
+        ...baseRule,
+        id: 3,
+        name: '[COPY] Auto Badge',
+      });
       const result = await service.cloneRule(1);
       expect(result).toBeDefined();
     });

@@ -45,13 +45,15 @@ const mockPrisma = new Proxy(
   },
   {
     get(target, prop) {
-      return (target as any)[prop] ?? {
-        create: makeFind({}),
-        findMany: makeFindMany([]),
-        count: makeCount(0),
-        findFirst: makeFind(null),
-        findUnique: makeFind(null),
-      };
+      return (
+        (target as any)[prop] ?? {
+          create: makeFind({}),
+          findMany: makeFindMany([]),
+          count: makeCount(0),
+          findFirst: makeFind(null),
+          findUnique: makeFind(null),
+        }
+      );
     },
   },
 );

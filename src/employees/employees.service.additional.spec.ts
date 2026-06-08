@@ -26,7 +26,10 @@ const mockPrisma: any = {
     update: jest.fn(),
   },
   employeeDocument: { create: jest.fn().mockResolvedValue({ id: 1 }) },
-  employeeTimeline: { create: jest.fn().mockResolvedValue({ id: 1 }), findMany: jest.fn().mockResolvedValue([]) },
+  employeeTimeline: {
+    create: jest.fn().mockResolvedValue({ id: 1 }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   selfServiceRequest: {
     create: jest.fn().mockResolvedValue({ id: 1, status: 'PENDING' }),
     findMany: jest.fn().mockResolvedValue([]),
@@ -39,9 +42,16 @@ const mockPrisma: any = {
 };
 
 const baseEmployee = {
-  id: 1, name: 'João Silva', email: 'joao@innova.com', role: 'Developer',
-  department: 'TI', status: 'ACTIVE', matricula: 'M001', joinedAt: new Date('2023-01-01'),
-  manager: null, avatarUrl: null,
+  id: 1,
+  name: 'João Silva',
+  email: 'joao@innova.com',
+  role: 'Developer',
+  department: 'TI',
+  status: 'ACTIVE',
+  matricula: 'M001',
+  joinedAt: new Date('2023-01-01'),
+  manager: null,
+  avatarUrl: null,
   _count: { contracts: 1, feedbacks: 0, careerPlans: 1, pdis: 1, documents: 2, employeeSkills: 3 },
 };
 
@@ -74,7 +84,12 @@ describe('EmployeesService (additional)', () => {
     it('deve filtrar por search, role, department, status', async () => {
       mockPrisma.employee.findMany.mockResolvedValue([]);
       mockPrisma.employee.count.mockResolvedValue(0);
-      await service.findAll({ search: 'João', role: 'Developer', department: 'TI', status: 'ACTIVE' as any });
+      await service.findAll({
+        search: 'João',
+        role: 'Developer',
+        department: 'TI',
+        status: 'ACTIVE' as any,
+      });
       expect(mockPrisma.employee.findMany).toHaveBeenCalled();
     });
 
@@ -108,14 +123,21 @@ describe('EmployeesService (additional)', () => {
     it('deve criar colaborador', async () => {
       mockPrisma.employee.findFirst.mockResolvedValue(null);
       mockPrisma.employee.create.mockResolvedValue(baseEmployee);
-      const result = await service.create({ name: 'João', email: 'joao@innova.com', role: 'Developer', department: 'TI' } as any, 1);
+      const result = await service.create(
+        { name: 'João', email: 'joao@innova.com', role: 'Developer', department: 'TI' } as any,
+        1,
+      );
       expect(result).toBeDefined();
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'EMPLOYEE_CREATED' }));
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'EMPLOYEE_CREATED' }),
+      );
     });
 
     it('deve lançar ConflictException se email já existe', async () => {
       mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
-      await expect(service.create({ email: 'joao@innova.com' } as any, 1)).rejects.toThrow(ConflictException);
+      await expect(service.create({ email: 'joao@innova.com' } as any, 1)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -127,7 +149,9 @@ describe('EmployeesService (additional)', () => {
       mockPrisma.employee.update.mockResolvedValue({ ...baseEmployee, role: 'Senior Developer' });
       const result = await service.update(1, { role: 'Senior Developer' } as any, 1);
       expect(result).toBeDefined();
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'EMPLOYEE_UPDATED' }));
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'EMPLOYEE_UPDATED' }),
+      );
     });
   });
 
@@ -137,7 +161,11 @@ describe('EmployeesService (additional)', () => {
     it('deve adicionar contrato ao colaborador', async () => {
       mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
       mockPrisma.contract.create.mockResolvedValue({ id: 1, employeeId: 1 });
-      const result = await service.createContract({ employeeId: 1, type: 'PERMANENT' as any, startDate: '2023-01-01' } as any);
+      const result = await service.createContract({
+        employeeId: 1,
+        type: 'PERMANENT' as any,
+        startDate: '2023-01-01',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -147,7 +175,13 @@ describe('EmployeesService (additional)', () => {
   describe('addFeedback360', () => {
     it('deve adicionar feedback 360 ao colaborador', async () => {
       mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
-      const result = await service.addFeedback360({ employeeId: 1, evaluatorId: 2, type: 'POSITIVE' as any, score: 8, evaluatedAt: '2026-01-01' } as any);
+      const result = await service.addFeedback360({
+        employeeId: 1,
+        evaluatorId: 2,
+        type: 'POSITIVE' as any,
+        score: 8,
+        evaluatedAt: '2026-01-01',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -157,7 +191,10 @@ describe('EmployeesService (additional)', () => {
   describe('createPdi', () => {
     it('deve criar PDI para colaborador', async () => {
       mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
-      const result = await service.createPdi({ employeeId: 1, name: 'PDI 2026', goal: 'Tornar-se Lead', status: 'ACTIVE' as any } as any, 1);
+      const result = await service.createPdi(
+        { employeeId: 1, name: 'PDI 2026', goal: 'Tornar-se Lead', status: 'ACTIVE' as any } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -167,7 +204,15 @@ describe('EmployeesService (additional)', () => {
   describe('createDocument', () => {
     it('deve adicionar documento ao colaborador', async () => {
       mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
-      const result = await service.createDocument({ employeeId: 1, title: 'Contrato', type: 'CONTRACT' as any, fileUrl: '/docs/contrato.pdf' } as any, 1);
+      const result = await service.createDocument(
+        {
+          employeeId: 1,
+          title: 'Contrato',
+          type: 'CONTRACT' as any,
+          fileUrl: '/docs/contrato.pdf',
+        } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -177,7 +222,12 @@ describe('EmployeesService (additional)', () => {
   describe('addTimelineEvent', () => {
     it('deve adicionar evento à timeline do colaborador', async () => {
       mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
-      const result = await service.addTimelineEvent({ employeeId: 1, type: 'PROMOTION' as any, title: 'Promoção a Senior', date: '2026-01-01' } as any);
+      const result = await service.addTimelineEvent({
+        employeeId: 1,
+        type: 'PROMOTION' as any,
+        title: 'Promoção a Senior',
+        date: '2026-01-01',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -188,7 +238,10 @@ describe('EmployeesService (additional)', () => {
     it('deve inscrever múltiplos colaboradores num curso', async () => {
       mockPrisma.user.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
       mockPrisma.enrollment.createMany.mockResolvedValue({ count: 2 });
-      const result = await service.bulkAssignCourses({ courseIds: [1, 2], employeeIds: [1, 2] } as any, 1);
+      const result = await service.bulkAssignCourses(
+        { courseIds: [1, 2], employeeIds: [1, 2] } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });

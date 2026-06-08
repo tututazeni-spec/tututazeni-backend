@@ -24,7 +24,13 @@ const baseUser = {
   performanceReviews: [],
   successionPlans: [],
   badgeAwards: [],
-  _count: { certificates: 0, enrollments: 0, userCompetencies: 0, userCareerPlans: 0, badgeAwards: 0 },
+  _count: {
+    certificates: 0,
+    enrollments: 0,
+    userCompetencies: 0,
+    userCareerPlans: 0,
+    badgeAwards: 0,
+  },
 };
 
 const basePosition = {
@@ -32,7 +38,11 @@ const basePosition = {
   name: 'Senior Analista',
   level: 3,
   competencies: [
-    { competencyId: 1, requiredLevel: 3, competency: { id: 1, name: 'TypeScript', category: 'TECH' } },
+    {
+      competencyId: 1,
+      requiredLevel: 3,
+      competency: { id: 1, name: 'TypeScript', category: 'TECH' },
+    },
   ],
 };
 
@@ -187,9 +197,7 @@ describe('CareerService (additional)', () => {
       mockPrisma.positionCompetency.findMany.mockResolvedValue([
         { competencyId: 1, requiredLevel: 3, competency: { id: 1, name: 'TypeScript' } },
       ]);
-      mockPrisma.userCompetency.findMany.mockResolvedValue([
-        { competencyId: 1, currentLevel: 2 },
-      ]);
+      mockPrisma.userCompetency.findMany.mockResolvedValue([{ competencyId: 1, currentLevel: 2 }]);
 
       const result = await service.getCompetencyGapsForUser(1);
       expect(result).toHaveLength(1);
@@ -202,9 +210,7 @@ describe('CareerService (additional)', () => {
       mockPrisma.positionCompetency.findMany.mockResolvedValue([
         { competencyId: 1, requiredLevel: 3, competency: { id: 1, name: 'TypeScript' } },
       ]);
-      mockPrisma.userCompetency.findMany.mockResolvedValue([
-        { competencyId: 1, currentLevel: 3 },
-      ]);
+      mockPrisma.userCompetency.findMany.mockResolvedValue([{ competencyId: 1, currentLevel: 3 }]);
 
       const result = await service.getCompetencyGapsForUser(1);
       expect(result[0].status).toBe('MET');
@@ -239,7 +245,10 @@ describe('CareerService (additional)', () => {
     });
 
     it('deve calcular readiness score para cargo alvo', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ positionId: 1, hireDate: new Date('2023-01-01') });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        positionId: 1,
+        hireDate: new Date('2023-01-01'),
+      });
       mockPrisma.position.findUnique.mockResolvedValue(basePosition);
       mockPrisma.userCompetency.findMany.mockResolvedValue([
         { competencyId: 1, currentLevel: 3, competency: { id: 1, name: 'TypeScript' } },
@@ -254,13 +263,20 @@ describe('CareerService (additional)', () => {
     });
 
     it('deve recomendar cursos para gaps não cumpridos', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ positionId: 1, hireDate: new Date('2023-01-01') });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        positionId: 1,
+        hireDate: new Date('2023-01-01'),
+      });
       mockPrisma.position.findUnique.mockResolvedValue(basePosition);
       mockPrisma.userCompetency.findMany.mockResolvedValue([]);
       mockPrisma.enrollment.findMany.mockResolvedValue([]);
       mockPrisma.performanceReview.aggregate.mockResolvedValue({ _avg: { score: 0 } });
       mockPrisma.courseCompetency.findMany.mockResolvedValue([
-        { courseId: 1, competencyId: 1, course: { id: 1, title: 'TypeScript Avançado', status: 'PUBLISHED' } },
+        {
+          courseId: 1,
+          competencyId: 1,
+          course: { id: 1, title: 'TypeScript Avançado', status: 'PUBLISHED' },
+        },
       ]);
 
       const result = await service.simulateNextRole(1, 2);
@@ -308,7 +324,10 @@ describe('CareerService (additional)', () => {
   describe('createCareerPath', () => {
     it('deve criar trilha de carreira', async () => {
       mockPrisma.careerPath.create.mockResolvedValue(baseCareerPath);
-      const result = await service.createCareerPath({ name: 'Trilha Tech', departmentId: 1 } as any);
+      const result = await service.createCareerPath({
+        name: 'Trilha Tech',
+        departmentId: 1,
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -334,7 +353,12 @@ describe('CareerService (additional)', () => {
   describe('addCareerPathStep', () => {
     it('deve adicionar passo à trilha de carreira', async () => {
       mockPrisma.careerPath.findUnique.mockResolvedValue(baseCareerPath);
-      mockPrisma.careerPathStep.create.mockResolvedValue({ id: 1, careerPathId: 1, positionId: 2, order: 1 });
+      mockPrisma.careerPathStep.create.mockResolvedValue({
+        id: 1,
+        careerPathId: 1,
+        positionId: 2,
+        order: 1,
+      });
       const result = await service.addCareerPathStep(1, { positionId: 2, order: 1 } as any);
       expect(result).toBeDefined();
     });
@@ -344,7 +368,12 @@ describe('CareerService (additional)', () => {
 
   describe('getMyCareerPlan', () => {
     it('deve retornar plano de carreira activo', async () => {
-      mockPrisma.userCareerPlan.findFirst.mockResolvedValue({ id: 1, userId: 1, status: 'ACTIVE', goals: [] });
+      mockPrisma.userCareerPlan.findFirst.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        status: 'ACTIVE',
+        goals: [],
+      });
       const result = await service.getMyCareerPlan(1);
       expect(result).toBeDefined();
     });
@@ -362,7 +391,10 @@ describe('CareerService (additional)', () => {
     it('deve criar plano de carreira', async () => {
       mockPrisma.userCareerPlan.findFirst.mockResolvedValue(null);
       mockPrisma.userCareerPlan.create.mockResolvedValue({ id: 1, userId: 1, status: 'ACTIVE' });
-      const result = await service.createCareerPlan(1, { targetPositionId: 2, targetDate: '2027-12-31' } as any);
+      const result = await service.createCareerPlan(1, {
+        targetPositionId: 2,
+        targetDate: '2027-12-31',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -372,8 +404,15 @@ describe('CareerService (additional)', () => {
   describe('addGoal', () => {
     it('deve adicionar objectivo ao plano', async () => {
       mockPrisma.userCareerPlan.findFirst.mockResolvedValue({ id: 1, userId: 1 });
-      mockPrisma.careerGoal.create.mockResolvedValue({ id: 1, planId: 1, title: 'Aprender NestJS' });
-      const result = await service.addGoal(1, { title: 'Aprender NestJS', type: 'SKILL' as any } as any);
+      mockPrisma.careerGoal.create.mockResolvedValue({
+        id: 1,
+        planId: 1,
+        title: 'Aprender NestJS',
+      });
+      const result = await service.addGoal(1, {
+        title: 'Aprender NestJS',
+        type: 'SKILL' as any,
+      } as any);
       expect(result).toBeDefined();
     });
 
@@ -398,7 +437,11 @@ describe('CareerService (additional)', () => {
 
   describe('getVacancy', () => {
     it('deve retornar vaga por id', async () => {
-      mockPrisma.internalVacancy.findUnique.mockResolvedValue({ id: 1, title: 'Dev Senior', status: 'OPEN' });
+      mockPrisma.internalVacancy.findUnique.mockResolvedValue({
+        id: 1,
+        title: 'Dev Senior',
+        status: 'OPEN',
+      });
       const result = await service.getVacancy(1);
       expect(result).toBeDefined();
     });

@@ -121,7 +121,12 @@ describe('CoursesService (additional)', () => {
     it('deve filtrar por category, level, mandatory, departmentId', async () => {
       mockPrisma.course.findMany.mockResolvedValue([]);
       mockPrisma.course.count.mockResolvedValue(0);
-      await service.findAll({ category: 'TECH', level: 'BEGINNER' as any, mandatory: true, departmentId: 2 });
+      await service.findAll({
+        category: 'TECH',
+        level: 'BEGINNER' as any,
+        mandatory: true,
+        departmentId: 2,
+      });
       expect(mockPrisma.course.findMany).toHaveBeenCalled();
     });
   });
@@ -170,7 +175,9 @@ describe('CoursesService (additional)', () => {
 
     it('deve lançar ConflictException se internalCode já existe', async () => {
       mockPrisma.course.findFirst.mockResolvedValue(baseCourse);
-      await expect(service.create({ title: 'Duplicado', internalCode: 'C001' } as any)).rejects.toThrow(ConflictException);
+      await expect(
+        service.create({ title: 'Duplicado', internalCode: 'C001' } as any),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('deve criar curso sem internalCode (sem verificação de duplicado)', async () => {
@@ -231,7 +238,11 @@ describe('CoursesService (additional)', () => {
 
   describe('remove', () => {
     it('deve eliminar curso em DRAFT', async () => {
-      const draftCourse = { ...baseCourse, status: 'DRAFT', _count: { ...baseCourse._count, enrollments: 0 } };
+      const draftCourse = {
+        ...baseCourse,
+        status: 'DRAFT',
+        _count: { ...baseCourse._count, enrollments: 0 },
+      };
       mockPrisma.course.findUnique.mockResolvedValue(draftCourse);
       mockPrisma.course.delete.mockResolvedValue(draftCourse);
       const result = await service.remove(1);
@@ -239,7 +250,11 @@ describe('CoursesService (additional)', () => {
     });
 
     it('deve lançar ForbiddenException para PUBLISHED com matrículas', async () => {
-      const publishedWithEnrollments = { ...baseCourse, status: 'PUBLISHED', _count: { ...baseCourse._count, enrollments: 5 } };
+      const publishedWithEnrollments = {
+        ...baseCourse,
+        status: 'PUBLISHED',
+        _count: { ...baseCourse._count, enrollments: 5 },
+      };
       mockPrisma.course.findUnique.mockResolvedValue(publishedWithEnrollments);
       await expect(service.remove(1)).rejects.toThrow(ForbiddenException);
     });
@@ -276,7 +291,9 @@ describe('CoursesService (additional)', () => {
 
     it('deve lançar NotFoundException se curso não existe', async () => {
       mockPrisma.course.findUnique.mockResolvedValue(null);
-      await expect(service.createModule(99, { title: 'X' } as any)).rejects.toThrow(NotFoundException);
+      await expect(service.createModule(99, { title: 'X' } as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -436,7 +453,11 @@ describe('CoursesService (additional)', () => {
       mockPrisma.enrollment.create.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
       mockPrisma.courseAnalytics.updateMany.mockResolvedValue({});
-      const result = await service.assignCourse(1, { targetType: 'USER' as any, targetId: 2, mandatory: true }, 1);
+      const result = await service.assignCourse(
+        1,
+        { targetType: 'USER' as any, targetId: 2, mandatory: true },
+        1,
+      );
       expect(result.enrolled).toBe(1);
     });
 
@@ -447,7 +468,11 @@ describe('CoursesService (additional)', () => {
       mockPrisma.enrollment.create.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
       mockPrisma.courseAnalytics.updateMany.mockResolvedValue({});
-      const result = await service.assignCourse(1, { targetType: 'DEPARTMENT' as any, targetId: 1 }, 1);
+      const result = await service.assignCourse(
+        1,
+        { targetType: 'DEPARTMENT' as any, targetId: 1 },
+        1,
+      );
       expect(result.total).toBe(2);
     });
 
@@ -460,7 +485,9 @@ describe('CoursesService (additional)', () => {
 
     it('deve lançar BadRequestException para curso não publicado no assign', async () => {
       mockPrisma.course.findUnique.mockResolvedValue({ ...baseCourse, status: 'DRAFT' });
-      await expect(service.assignCourse(1, { targetType: 'USER' as any, targetId: 2 }, 1)).rejects.toThrow(BadRequestException);
+      await expect(
+        service.assignCourse(1, { targetType: 'USER' as any, targetId: 2 }, 1),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { AssessmentsService } from './assessments.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -38,17 +43,35 @@ const mockPrisma: any = {
 };
 
 const baseAssessment = {
-  id: 1, title: 'Quiz TypeScript', type: 'QUIZ', status: 'PUBLISHED',
-  courseId: 1, passingScore: 70, maxAttempts: 3, timeLimitMinutes: 30,
+  id: 1,
+  title: 'Quiz TypeScript',
+  type: 'QUIZ',
+  status: 'PUBLISHED',
+  courseId: 1,
+  passingScore: 70,
+  maxAttempts: 3,
+  timeLimitMinutes: 30,
   questions: [
-    { id: 1, assessmentId: 1, questionText: 'O que é TypeScript?', type: 'MCQ', weight: 10, correctAnswer: 'A' },
+    {
+      id: 1,
+      assessmentId: 1,
+      questionText: 'O que é TypeScript?',
+      type: 'MCQ',
+      weight: 10,
+      correctAnswer: 'A',
+    },
   ],
   _count: { questions: 1, attempts: 5 },
 };
 
 const baseAttempt = {
-  id: 1, assessmentId: 1, userId: 2, status: 'IN_PROGRESS',
-  score: null, startedAt: new Date(), finishedAt: null,
+  id: 1,
+  assessmentId: 1,
+  userId: 2,
+  status: 'IN_PROGRESS',
+  score: null,
+  startedAt: new Date(),
+  finishedAt: null,
   answers: [],
 };
 
@@ -70,8 +93,12 @@ describe('AssessmentsService (additional)', () => {
       mockPrisma.assessment.create.mockResolvedValue(baseAssessment);
       mockPrisma.assessment.findUnique.mockResolvedValue(baseAssessment);
       const result = await service.create({
-        title: 'Quiz TS', type: 'QUIZ' as any, courseId: 1,
-        questions: [{ questionText: 'O que é TS?', type: 'MCQ' as any, correctAnswer: 'A', weight: 10 }],
+        title: 'Quiz TS',
+        type: 'QUIZ' as any,
+        courseId: 1,
+        questions: [
+          { questionText: 'O que é TS?', type: 'MCQ' as any, correctAnswer: 'A', weight: 10 },
+        ],
       } as any);
       expect(result).toBeDefined();
     });
@@ -133,7 +160,11 @@ describe('AssessmentsService (additional)', () => {
     });
 
     it('deve lançar BadRequestException se sem questões', async () => {
-      mockPrisma.assessment.findUnique.mockResolvedValue({ ...baseAssessment, questions: [], _count: { questions: 0 } });
+      mockPrisma.assessment.findUnique.mockResolvedValue({
+        ...baseAssessment,
+        questions: [],
+        _count: { questions: 0 },
+      });
       await expect(service.publish(1)).rejects.toThrow(BadRequestException);
     });
   });
@@ -152,14 +183,18 @@ describe('AssessmentsService (additional)', () => {
     it('deve lançar ForbiddenException se máximo de tentativas atingido', async () => {
       mockPrisma.assessment.findUnique.mockResolvedValue({ ...baseAssessment, maxAttempts: 2 });
       mockPrisma.assessmentAttempt.count.mockResolvedValue(2);
-      await expect(service.startAttempt({ assessmentId: 1 } as any, 2)).rejects.toThrow(ForbiddenException);
+      await expect(service.startAttempt({ assessmentId: 1 } as any, 2)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('deve lançar ConflictException se já tem tentativa em curso', async () => {
       mockPrisma.assessment.findUnique.mockResolvedValue({ ...baseAssessment, maxAttempts: 3 });
       mockPrisma.assessmentAttempt.count.mockResolvedValue(1);
       mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(baseAttempt);
-      await expect(service.startAttempt({ assessmentId: 1 } as any, 2)).rejects.toThrow(ConflictException);
+      await expect(service.startAttempt({ assessmentId: 1 } as any, 2)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -168,20 +203,31 @@ describe('AssessmentsService (additional)', () => {
   describe('submitAttempt', () => {
     it('deve submeter respostas e calcular pontuação', async () => {
       mockPrisma.assessmentAttempt.findUnique.mockResolvedValue({
-        ...baseAttempt, userId: 2,
+        ...baseAttempt,
+        userId: 2,
         assessment: { ...baseAssessment, questions: baseAssessment.questions },
       });
       mockPrisma.attemptAnswer.createMany.mockResolvedValue({ count: 1 });
-      mockPrisma.assessmentAttempt.update.mockResolvedValue({ ...baseAttempt, status: 'PASSED', score: 80 });
-      const result = await service.submitAttempt(1, {
-        answers: [{ questionId: 1, answer: 'A' }],
-      } as any, 2);
+      mockPrisma.assessmentAttempt.update.mockResolvedValue({
+        ...baseAttempt,
+        status: 'PASSED',
+        score: 80,
+      });
+      const result = await service.submitAttempt(
+        1,
+        {
+          answers: [{ questionId: 1, answer: 'A' }],
+        } as any,
+        2,
+      );
       expect(result).toBeDefined();
     });
 
     it('deve lançar ForbiddenException se utilizador não é dono da tentativa', async () => {
       mockPrisma.assessmentAttempt.findUnique.mockResolvedValue({ ...baseAttempt, userId: 999 });
-      await expect(service.submitAttempt(1, { answers: [] } as any, 2)).rejects.toThrow(ForbiddenException);
+      await expect(service.submitAttempt(1, { answers: [] } as any, 2)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 
@@ -201,7 +247,11 @@ describe('AssessmentsService (additional)', () => {
     it('deve adicionar questão a assessment existente', async () => {
       mockPrisma.assessment.findUnique.mockResolvedValue(baseAssessment);
       mockPrisma.assessmentQuestion.create.mockResolvedValue({ id: 2, assessmentId: 1 });
-      const result = await service.addQuestion(1, { questionText: 'Nova questão?', type: 'MCQ' as any, weight: 10 } as any);
+      const result = await service.addQuestion(1, {
+        questionText: 'Nova questão?',
+        type: 'MCQ' as any,
+        weight: 10,
+      } as any);
       expect(result).toBeDefined();
     });
   });

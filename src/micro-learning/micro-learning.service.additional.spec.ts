@@ -34,9 +34,15 @@ const mockPrisma: any = {
 };
 
 const baseMl = {
-  id: 1, title: '5 Dicas TypeScript', contentType: 'VIDEO', status: 'PUBLISHED',
-  durationSeconds: 180, level: 'BEGINNER', tags: ['typescript', 'coding'],
-  viewCount: 100, authorId: 1,
+  id: 1,
+  title: '5 Dicas TypeScript',
+  contentType: 'VIDEO',
+  status: 'PUBLISHED',
+  durationSeconds: 180,
+  level: 'BEGINNER',
+  tags: ['typescript', 'coding'],
+  viewCount: 100,
+  authorId: 1,
   author: { id: 1, fullName: 'Admin', position: { name: 'CTO' } },
   category: { id: 1, name: 'Programação' },
   _count: { progress: 50, likes: 20 },
@@ -67,7 +73,12 @@ describe('MicroLearningService (additional)', () => {
     it('deve filtrar por contentType, level, tag, maxDuration', async () => {
       mockPrisma.microLearning.findMany.mockResolvedValue([]);
       mockPrisma.microLearning.count.mockResolvedValue(0);
-      await service.findAll({ contentType: 'VIDEO' as any, level: 'BEGINNER' as any, tag: 'typescript', maxDuration: 300 });
+      await service.findAll({
+        contentType: 'VIDEO' as any,
+        level: 'BEGINNER' as any,
+        tag: 'typescript',
+        maxDuration: 300,
+      });
       expect(mockPrisma.microLearning.findMany).toHaveBeenCalled();
     });
 
@@ -100,7 +111,10 @@ describe('MicroLearningService (additional)', () => {
   describe('create', () => {
     it('deve criar micro-learning', async () => {
       mockPrisma.microLearning.create.mockResolvedValue(baseMl);
-      const result = await service.create({ title: '5 Dicas TS', contentType: 'VIDEO' as any, durationSeconds: 180 } as any, 1);
+      const result = await service.create(
+        { title: '5 Dicas TS', contentType: 'VIDEO' as any, durationSeconds: 180 } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -117,7 +131,9 @@ describe('MicroLearningService (additional)', () => {
 
     it('deve lançar ForbiddenException se não é o autor', async () => {
       mockPrisma.microLearning.findUnique.mockResolvedValue({ ...baseMl, authorId: 2 });
-      await expect(service.update(1, {} as any, 99, 'EMPLOYEE')).rejects.toThrow(ForbiddenException);
+      await expect(service.update(1, {} as any, 99, 'EMPLOYEE')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 
@@ -126,8 +142,16 @@ describe('MicroLearningService (additional)', () => {
   describe('updateProgress', () => {
     it('deve actualizar progresso do utilizador', async () => {
       mockPrisma.microLearning.findUnique.mockResolvedValue(baseMl);
-      mockPrisma.microLearningProgress.upsert.mockResolvedValue({ id: 1, progressPercent: 60, completed: false });
-      const result = await service.updateProgress(1, { progressPercent: 60, timeSpent: 108 } as any, 2);
+      mockPrisma.microLearningProgress.upsert.mockResolvedValue({
+        id: 1,
+        progressPercent: 60,
+        completed: false,
+      });
+      const result = await service.updateProgress(
+        1,
+        { progressPercent: 60, timeSpent: 108 } as any,
+        2,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -158,8 +182,15 @@ describe('MicroLearningService (additional)', () => {
 
   describe('createPlaylist', () => {
     it('deve criar playlist de micro-learnings', async () => {
-      mockPrisma.microLearningPlaylist.create.mockResolvedValue({ id: 1, userId: 1, title: 'Minha Playlist' });
-      const result = await service.createPlaylist({ title: 'Minha Playlist', itemIds: [1, 2] } as any, 1);
+      mockPrisma.microLearningPlaylist.create.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        title: 'Minha Playlist',
+      });
+      const result = await service.createPlaylist(
+        { title: 'Minha Playlist', itemIds: [1, 2] } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });

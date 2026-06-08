@@ -28,8 +28,14 @@ const mockPrisma: any = {
 };
 
 const baseRule = {
-  id: 1, name: 'Badge por curso', trigger: 'COURSE_COMPLETED', action: 'AWARD_BADGE',
-  category: 'GAMIFICATION', condition: '{"minScore":80}', active: true, priority: 10,
+  id: 1,
+  name: 'Badge por curso',
+  trigger: 'COURSE_COMPLETED',
+  action: 'AWARD_BADGE',
+  category: 'GAMIFICATION',
+  condition: '{"minScore":80}',
+  active: true,
+  priority: 10,
 };
 
 describe('AutomationService (additional)', () => {
@@ -86,8 +92,13 @@ describe('AutomationService (additional)', () => {
     it('deve criar regra de automação', async () => {
       mockPrisma.automationRule.create.mockResolvedValue(baseRule);
       const result = await service.createRule({
-        name: 'Badge por curso', trigger: 'COURSE_COMPLETED' as any, action: 'AWARD_BADGE' as any,
-        category: 'GAMIFICATION' as any, condition: '', active: true, priority: 10,
+        name: 'Badge por curso',
+        trigger: 'COURSE_COMPLETED' as any,
+        action: 'AWARD_BADGE' as any,
+        category: 'GAMIFICATION' as any,
+        condition: '',
+        active: true,
+        priority: 10,
       } as any);
       expect(result).toBeDefined();
     });
@@ -136,7 +147,11 @@ describe('AutomationService (additional)', () => {
     it('deve disparar evento e executar regras activas', async () => {
       mockPrisma.automationRule.findMany.mockResolvedValue([baseRule]);
       mockPrisma.automationExecution.create.mockResolvedValue({ id: 1 });
-      await service.triggerEvent({ event: 'COURSE_COMPLETED' as any, userId: 1, payload: { score: 90 } });
+      await service.triggerEvent({
+        event: 'COURSE_COMPLETED' as any,
+        userId: 1,
+        payload: { score: 90 },
+      });
       expect(mockPrisma.automationRule.findMany).toHaveBeenCalled();
     });
 

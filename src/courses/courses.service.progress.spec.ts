@@ -1,8 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -18,9 +15,7 @@ const baseCourse = {
       courseId: 1,
       title: 'Módulo 1',
       seq: 0,
-      lessons: [
-        { id: 10, title: 'Aula 1', type: 'VIDEO', seq: 0, progress: [] },
-      ],
+      lessons: [{ id: 10, title: 'Aula 1', type: 'VIDEO', seq: 0, progress: [] }],
     },
   ],
   feedbacks: [],
@@ -92,7 +87,9 @@ const mockPrisma: any = {
   courseAnalytics: {
     create: jest.fn().mockResolvedValue({}),
     updateMany: jest.fn().mockResolvedValue({}),
-    findFirst: jest.fn().mockResolvedValue({ totalEnrollments: 5, totalCompleted: 2, avgRating: 4.2 }),
+    findFirst: jest
+      .fn()
+      .mockResolvedValue({ totalEnrollments: 5, totalCompleted: 2, avgRating: 4.2 }),
   },
   quiz: {
     create: jest.fn(),
@@ -123,7 +120,10 @@ describe('CoursesService (progress & quiz & analytics)', () => {
     jest.clearAllMocks();
     mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
     mockPrisma.enrollment.findFirst.mockResolvedValue(baseEnrollment);
-    mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, status: 'IN_PROGRESS' });
+    mockPrisma.enrollment.findUnique.mockResolvedValue({
+      ...baseEnrollment,
+      status: 'IN_PROGRESS',
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [CoursesService, { provide: PrismaService, useValue: mockPrisma }],
@@ -135,7 +135,11 @@ describe('CoursesService (progress & quiz & analytics)', () => {
 
   describe('duplicate', () => {
     it('deve duplicar curso com módulos e aulas', async () => {
-      mockPrisma.course.create.mockResolvedValue({ ...baseCourse, id: 2, title: 'Curso Teste (cópia)' });
+      mockPrisma.course.create.mockResolvedValue({
+        ...baseCourse,
+        id: 2,
+        title: 'Curso Teste (cópia)',
+      });
       const result = await service.duplicate(1);
       expect(result.title).toContain('cópia');
       expect(mockPrisma.courseModule.create).toHaveBeenCalled();
@@ -160,7 +164,10 @@ describe('CoursesService (progress & quiz & analytics)', () => {
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(3);
 
-      const result = await service.markLessonComplete(10, 1, { watchedSeconds: 120, resumePosition: 0 });
+      const result = await service.markLessonComplete(10, 1, {
+        watchedSeconds: 120,
+        resumePosition: 0,
+      });
       expect(result).toHaveProperty('progress');
       expect(result).toHaveProperty('courseProgress');
       expect(result.courseProgress.pct).toBe(60);
@@ -171,11 +178,20 @@ describe('CoursesService (progress & quiz & analytics)', () => {
         id: 10,
         module: { courseId: 1, id: 1 },
       });
-      mockPrisma.enrollment.findFirst.mockResolvedValue({ ...baseEnrollment, status: 'IN_PROGRESS' });
-      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, status: 'IN_PROGRESS' });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'IN_PROGRESS',
+      });
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'IN_PROGRESS',
+      });
       mockPrisma.lesson.count.mockResolvedValue(3);
       mockPrisma.lessonProgress.count.mockResolvedValue(3);
-      mockPrisma.course.findUnique.mockResolvedValue({ ...baseCourse, certificateValidityDays: 365 });
+      mockPrisma.course.findUnique.mockResolvedValue({
+        ...baseCourse,
+        certificateValidityDays: 365,
+      });
 
       const result = await service.markLessonComplete(10, 1, { watchedSeconds: 300 });
       expect(result.courseProgress.pct).toBe(100);
@@ -186,7 +202,10 @@ describe('CoursesService (progress & quiz & analytics)', () => {
 
     it('deve actualizar status para IN_PROGRESS se estava NOT_STARTED', async () => {
       mockPrisma.lesson.findUnique.mockResolvedValue({ id: 10, module: { courseId: 1, id: 1 } });
-      mockPrisma.enrollment.findFirst.mockResolvedValue({ ...baseEnrollment, status: 'NOT_STARTED' });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'NOT_STARTED',
+      });
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(1);
 
@@ -246,7 +265,13 @@ describe('CoursesService (progress & quiz & analytics)', () => {
   describe('getMyCertificates', () => {
     it('deve retornar certificados do utilizador', async () => {
       mockPrisma.certificate.findMany.mockResolvedValue([
-        { id: 'cert-1', userId: 1, courseId: 1, validationCode: 'V123', course: { title: 'Curso A' } },
+        {
+          id: 'cert-1',
+          userId: 1,
+          courseId: 1,
+          validationCode: 'V123',
+          course: { title: 'Curso A' },
+        },
       ]);
       const result = await service.getMyCertificates(1);
       expect(result).toHaveLength(1);
@@ -300,12 +325,22 @@ describe('CoursesService (progress & quiz & analytics)', () => {
       const createdQuiz = { id: 1, lessonId: 10, passingScore: 70, questions: [] };
       mockPrisma.lesson.findUnique.mockResolvedValue({ id: 10 });
       mockPrisma.quiz.create.mockResolvedValue(createdQuiz);
-      mockPrisma.quiz.findUnique.mockResolvedValue({ ...createdQuiz, questions: [{ id: 1, question: 'O que é NestJS?' }] });
+      mockPrisma.quiz.findUnique.mockResolvedValue({
+        ...createdQuiz,
+        questions: [{ id: 1, question: 'O que é NestJS?' }],
+      });
 
       const result = await service.createQuiz(10, {
         title: 'Quiz NestJS',
         passingScore: 70,
-        questions: [{ question: 'O que é NestJS?', type: 'MULTIPLE_CHOICE', correctAnswer: 'Framework', points: 1 }],
+        questions: [
+          {
+            question: 'O que é NestJS?',
+            type: 'MULTIPLE_CHOICE',
+            correctAnswer: 'Framework',
+            points: 1,
+          },
+        ],
       } as any);
       expect(result).toBeDefined();
       expect(mockPrisma.quizQuestion.createMany).toHaveBeenCalled();
@@ -313,7 +348,9 @@ describe('CoursesService (progress & quiz & analytics)', () => {
 
     it('deve lançar NotFoundException se aula não existe', async () => {
       mockPrisma.lesson.findUnique.mockResolvedValue(null);
-      await expect(service.createQuiz(99, { title: 'Q', questions: [] } as any)).rejects.toThrow(NotFoundException);
+      await expect(service.createQuiz(99, { title: 'Q', questions: [] } as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -329,7 +366,10 @@ describe('CoursesService (progress & quiz & analytics)', () => {
           id: 11,
           type: 'MULTIPLE_CHOICE',
           points: 1,
-          options: JSON.stringify([{ text: 'Framework', isCorrect: true }, { text: 'Library', isCorrect: false }]),
+          options: JSON.stringify([
+            { text: 'Framework', isCorrect: true },
+            { text: 'Library', isCorrect: false },
+          ]),
           correctAnswer: 'Framework',
         },
       ],
@@ -356,19 +396,25 @@ describe('CoursesService (progress & quiz & analytics)', () => {
 
     it('deve lançar NotFoundException se quiz não existe', async () => {
       mockPrisma.quiz.findUnique.mockResolvedValue(null);
-      await expect(service.submitQuiz(999, 1, { answers: {} } as any)).rejects.toThrow(NotFoundException);
+      await expect(service.submitQuiz(999, 1, { answers: {} } as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('deve lançar ForbiddenException se limite de tentativas atingido', async () => {
       mockPrisma.quiz.findUnique.mockResolvedValue({ ...baseQuiz, maxAttempts: 2 });
       mockPrisma.quizAttempt.count.mockResolvedValue(2);
-      await expect(service.submitQuiz(1, 1, { answers: {} } as any)).rejects.toThrow(ForbiddenException);
+      await expect(service.submitQuiz(1, 1, { answers: {} } as any)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('deve tratar questão TRUE_FALSE', async () => {
       const tfQuiz = {
         ...baseQuiz,
-        questions: [{ id: 12, type: 'TRUE_FALSE', points: 1, options: null, correctAnswer: 'true' }],
+        questions: [
+          { id: 12, type: 'TRUE_FALSE', points: 1, options: null, correctAnswer: 'true' },
+        ],
       };
       mockPrisma.quiz.findUnique.mockResolvedValue(tfQuiz);
       mockPrisma.quizAttempt.count.mockResolvedValue(0);
@@ -398,7 +444,11 @@ describe('CoursesService (progress & quiz & analytics)', () => {
     it('deve criar feedback novo', async () => {
       mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
       mockPrisma.courseFeedback.findFirst.mockResolvedValue(null);
-      mockPrisma.courseFeedback.create.mockResolvedValue({ id: 'fb-1', rating: 5, comment: 'Excelente' });
+      mockPrisma.courseFeedback.create.mockResolvedValue({
+        id: 'fb-1',
+        rating: 5,
+        comment: 'Excelente',
+      });
       const result = await service.addFeedback(1, 1, { rating: 5, comment: 'Excelente' });
       expect(result).toBeDefined();
       expect(mockPrisma.courseFeedback.create).toHaveBeenCalled();
@@ -407,8 +457,16 @@ describe('CoursesService (progress & quiz & analytics)', () => {
 
     it('deve actualizar feedback existente', async () => {
       mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
-      mockPrisma.courseFeedback.findFirst.mockResolvedValue({ id: 'fb-1', rating: 3, comment: 'Bom' });
-      mockPrisma.courseFeedback.update.mockResolvedValue({ id: 'fb-1', rating: 5, comment: 'Melhorou muito' });
+      mockPrisma.courseFeedback.findFirst.mockResolvedValue({
+        id: 'fb-1',
+        rating: 3,
+        comment: 'Bom',
+      });
+      mockPrisma.courseFeedback.update.mockResolvedValue({
+        id: 'fb-1',
+        rating: 5,
+        comment: 'Melhorou muito',
+      });
       const result = await service.addFeedback(1, 1, { rating: 5, comment: 'Melhorou muito' });
       expect(result).toBeDefined();
       expect(mockPrisma.courseFeedback.update).toHaveBeenCalled();
@@ -416,7 +474,9 @@ describe('CoursesService (progress & quiz & analytics)', () => {
 
     it('deve lançar NotFoundException se curso não existe', async () => {
       mockPrisma.course.findUnique.mockResolvedValue(null);
-      await expect(service.addFeedback(99, 1, { rating: 4, comment: '' })).rejects.toThrow(NotFoundException);
+      await expect(service.addFeedback(99, 1, { rating: 4, comment: '' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -453,9 +513,7 @@ describe('CoursesService (progress & quiz & analytics)', () => {
 
   describe('getAdminDashboard', () => {
     it('deve retornar dashboard administrativo', async () => {
-      mockPrisma.course.count
-        .mockResolvedValueOnce(50)
-        .mockResolvedValueOnce(30);
+      mockPrisma.course.count.mockResolvedValueOnce(50).mockResolvedValueOnce(30);
       mockPrisma.enrollment.count
         .mockResolvedValueOnce(1000)
         .mockResolvedValueOnce(600)

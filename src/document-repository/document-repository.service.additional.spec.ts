@@ -39,10 +39,20 @@ const mockPrisma: any = {
 };
 
 const baseDoc = {
-  id: 1, title: 'Manual de Onboarding', category: 'CORPORATE', sensitivity: 'INTERNAL',
-  status: 'ACTIVE', createdById: 1, ownerId: 1, version: 1, department: 'TI',
-  tags: [], fileName: 'manual.pdf', fileUrl: '/docs/manual.pdf',
-  checksum: 'abc123', retentionYears: 5,
+  id: 1,
+  title: 'Manual de Onboarding',
+  category: 'CORPORATE',
+  sensitivity: 'INTERNAL',
+  status: 'ACTIVE',
+  createdById: 1,
+  ownerId: 1,
+  version: 1,
+  department: 'TI',
+  tags: [],
+  fileName: 'manual.pdf',
+  fileUrl: '/docs/manual.pdf',
+  checksum: 'abc123',
+  retentionYears: 5,
   owner: { id: 1, fullName: 'Admin', avatarUrl: null },
   createdBy: { id: 1, fullName: 'Admin' },
   _count: { versions: 0, permissions: 0 },
@@ -68,7 +78,10 @@ describe('DocumentRepositoryService (additional)', () => {
   describe('createCategory', () => {
     it('deve criar categoria de documento', async () => {
       mockPrisma.docCategoryModel.create.mockResolvedValue({ id: 1, name: 'Contratos' });
-      const result = await service.createCategory({ name: 'Contratos', description: 'Contratos laborais' } as any);
+      const result = await service.createCategory({
+        name: 'Contratos',
+        description: 'Contratos laborais',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -104,7 +117,15 @@ describe('DocumentRepositoryService (additional)', () => {
     it('deve filtrar por search, category, sensitivity, tag', async () => {
       mockPrisma.document.findMany.mockResolvedValue([]);
       mockPrisma.document.count.mockResolvedValue(0);
-      await service.findAll({ search: 'manual', category: 'CORPORATE' as any, sensitivity: 'INTERNAL' as any, tag: 'onboarding' }, 1);
+      await service.findAll(
+        {
+          search: 'manual',
+          category: 'CORPORATE' as any,
+          sensitivity: 'INTERNAL' as any,
+          tag: 'onboarding',
+        },
+        1,
+      );
       expect(mockPrisma.document.findMany).toHaveBeenCalled();
     });
   });
@@ -131,11 +152,19 @@ describe('DocumentRepositoryService (additional)', () => {
     it('deve criar documento com checksum e retenção', async () => {
       mockPrisma.document.create.mockResolvedValue(baseDoc);
       const result = await service.create(
-        { title: 'Manual', category: 'CORPORATE' as any, sensitivity: 'INTERNAL' as any, fileName: 'manual.pdf', fileUrl: '/docs/manual.pdf' } as any,
+        {
+          title: 'Manual',
+          category: 'CORPORATE' as any,
+          sensitivity: 'INTERNAL' as any,
+          fileName: 'manual.pdf',
+          fileUrl: '/docs/manual.pdf',
+        } as any,
         1,
       );
       expect(result).toBeDefined();
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'DOCUMENT_CREATED' }));
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'DOCUMENT_CREATED' }),
+      );
     });
   });
 
@@ -156,7 +185,9 @@ describe('DocumentRepositoryService (additional)', () => {
 
     it('deve lançar ForbiddenException se não é proprietário', async () => {
       mockPrisma.document.findUnique.mockResolvedValue({ ...baseDoc, ownerId: 2, createdById: 2 });
-      await expect(service.update(1, {} as any, 99, 'EMPLOYEE')).rejects.toThrow(ForbiddenException);
+      await expect(service.update(1, {} as any, 99, 'EMPLOYEE')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 
@@ -178,7 +209,15 @@ describe('DocumentRepositoryService (additional)', () => {
       mockPrisma.document.findUnique.mockResolvedValue(baseDoc);
       mockPrisma.documentVersion.create.mockResolvedValue({ id: 1, documentId: 1, version: 2 });
       mockPrisma.document.update.mockResolvedValue({ ...baseDoc, version: 2 });
-      const result = await service.addVersion(1, { fileName: 'manual_v2.pdf', fileUrl: '/docs/manual_v2.pdf', changeNotes: 'Actualizado' } as any, 1);
+      const result = await service.addVersion(
+        1,
+        {
+          fileName: 'manual_v2.pdf',
+          fileUrl: '/docs/manual_v2.pdf',
+          changeNotes: 'Actualizado',
+        } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -189,7 +228,12 @@ describe('DocumentRepositoryService (additional)', () => {
     it('deve conceder permissão de acesso ao documento', async () => {
       mockPrisma.document.findUnique.mockResolvedValue(baseDoc);
       mockPrisma.documentPermission.create.mockResolvedValue({ id: 1 });
-      const result = await service.grantPermission(1, { userId: 2, accessLevel: 'READ' as any } as any, 1, 'ADMIN');
+      const result = await service.grantPermission(
+        1,
+        { userId: 2, accessLevel: 'READ' as any } as any,
+        1,
+        'ADMIN',
+      );
       expect(result).toBeDefined();
     });
   });
@@ -199,8 +243,17 @@ describe('DocumentRepositoryService (additional)', () => {
   describe('createShareLink', () => {
     it('deve criar link de partilha com token único', async () => {
       mockPrisma.document.findUnique.mockResolvedValue(baseDoc);
-      mockPrisma.documentShareLink.create.mockResolvedValue({ id: 1, token: 'abc123', documentId: 1 });
-      const result = await service.createShareLink(1, { expiresAt: '2026-12-31', accessLevel: 'READ' as any } as any, 1, 'ADMIN');
+      mockPrisma.documentShareLink.create.mockResolvedValue({
+        id: 1,
+        token: 'abc123',
+        documentId: 1,
+      });
+      const result = await service.createShareLink(
+        1,
+        { expiresAt: '2026-12-31', accessLevel: 'READ' as any } as any,
+        1,
+        'ADMIN',
+      );
       expect(result).toBeDefined();
     });
   });

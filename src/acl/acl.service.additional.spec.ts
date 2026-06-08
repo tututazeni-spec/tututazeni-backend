@@ -35,8 +35,21 @@ const mockPrisma = {
 };
 
 const basePerm = { id: 1, name: 'dashboard:view', action: 'VIEW', subject: 'DASHBOARD' };
-const baseRole = { id: 1, name: 'COLABORADOR', code: 'COLABORADOR', permissions: [], _count: { users: 5 } };
-const baseUser = { id: 1, fullName: 'Test User', email: 'test@test.com', active: true, roleId: 1, role: { ...baseRole, permissions: [basePerm] } };
+const baseRole = {
+  id: 1,
+  name: 'COLABORADOR',
+  code: 'COLABORADOR',
+  permissions: [],
+  _count: { users: 5 },
+};
+const baseUser = {
+  id: 1,
+  fullName: 'Test User',
+  email: 'test@test.com',
+  active: true,
+  roleId: 1,
+  role: { ...baseRole, permissions: [basePerm] },
+};
 
 describe('AclService (additional)', () => {
   let service: AclService;
@@ -54,14 +67,23 @@ describe('AclService (additional)', () => {
   describe('createPermission', () => {
     it('deve criar permissão com sucesso', async () => {
       mockPrisma.permission.create.mockResolvedValue(basePerm);
-      const result = await service.createPermission({ name: 'dashboard:view', action: 'VIEW', subject: 'DASHBOARD' });
+      const result = await service.createPermission({
+        name: 'dashboard:view',
+        action: 'VIEW',
+        subject: 'DASHBOARD',
+      });
       expect(result).toBeDefined();
       expect(mockPrisma.permission.create).toHaveBeenCalled();
     });
 
     it('deve criar permissão com sensitive flag', async () => {
       mockPrisma.permission.create.mockResolvedValue({ ...basePerm, sensitive: true });
-      const result = await service.createPermission({ name: 'payroll:view', action: 'VIEW', subject: 'PAYROLL', sensitive: true });
+      const result = await service.createPermission({
+        name: 'payroll:view',
+        action: 'VIEW',
+        subject: 'PAYROLL',
+        sensitive: true,
+      });
       expect(result).toBeDefined();
     });
   });
@@ -94,7 +116,9 @@ describe('AclService (additional)', () => {
 
     it('deve lançar erro se role não encontrado', async () => {
       mockPrisma.role.findUnique.mockResolvedValue(null);
-      await expect(service.cloneRole(99, { newName: 'CLONE' })).rejects.toThrow('Role não encontrado');
+      await expect(service.cloneRole(99, { newName: 'CLONE' })).rejects.toThrow(
+        'Role não encontrado',
+      );
     });
 
     it('deve clonar role sem permissões', async () => {
@@ -186,7 +210,11 @@ describe('AclService (additional)', () => {
     });
 
     it('deve retornar wildcard para ADMIN', async () => {
-      const adminUser = { ...baseUser, id: 10, role: { ...baseRole, code: 'ADMIN', permissions: [basePerm] } };
+      const adminUser = {
+        ...baseUser,
+        id: 10,
+        role: { ...baseRole, code: 'ADMIN', permissions: [basePerm] },
+      };
       mockPrisma.user.findUnique.mockResolvedValue(adminUser);
       const result = await service.getUserPermissions(10);
       expect(result.permissions).toContain('*');
@@ -221,7 +249,11 @@ describe('AclService (additional)', () => {
     it('deve retornar allowed=true para permissão directa', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(baseUser);
       (mockPrisma as any).accessPolicy = { findMany: jest.fn().mockResolvedValue([]) };
-      const result = await service.checkPermission({ userId: 1, action: 'VIEW', subject: 'DASHBOARD' });
+      const result = await service.checkPermission({
+        userId: 1,
+        action: 'VIEW',
+        subject: 'DASHBOARD',
+      });
       expect(result.allowed).toBe(true);
     });
 
@@ -229,15 +261,27 @@ describe('AclService (additional)', () => {
       const userNoPerms = { ...baseUser, id: 40, role: { ...baseRole, permissions: [] } };
       mockPrisma.user.findUnique.mockResolvedValue(userNoPerms);
       mockPrisma.auditLog.create.mockResolvedValue({});
-      const result = await service.checkPermission({ userId: 40, action: 'EXPORT', subject: 'PAYROLL' });
+      const result = await service.checkPermission({
+        userId: 40,
+        action: 'EXPORT',
+        subject: 'PAYROLL',
+      });
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe('Permission not granted');
     });
 
     it('deve retornar allowed=true para ADMIN wildcard', async () => {
-      const adminUser = { ...baseUser, id: 50, role: { ...baseRole, code: 'ADMIN', permissions: [] } };
+      const adminUser = {
+        ...baseUser,
+        id: 50,
+        role: { ...baseRole, code: 'ADMIN', permissions: [] },
+      };
       mockPrisma.user.findUnique.mockResolvedValue(adminUser);
-      const result = await service.checkPermission({ userId: 50, action: 'DELETE', subject: 'USERS' });
+      const result = await service.checkPermission({
+        userId: 50,
+        action: 'DELETE',
+        subject: 'USERS',
+      });
       expect(result.allowed).toBe(true);
       expect(result.reason).toBe('ADMIN wildcard');
     });

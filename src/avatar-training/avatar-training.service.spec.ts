@@ -202,7 +202,11 @@ describe('AvatarTrainingService', () => {
         status: 'IN_PROGRESS',
         turns: [{ role: 'user', content: 'msg', score: 4 }],
       });
-      mockPrisma.avatarSession.update.mockResolvedValue({ ...baseSession, status: 'COMPLETED', score: 85 });
+      mockPrisma.avatarSession.update.mockResolvedValue({
+        ...baseSession,
+        status: 'COMPLETED',
+        score: 85,
+      });
       mockPrisma.badgeAward.findFirst.mockResolvedValue(null);
 
       const result = await service.completeSession(1, 1, {} as any);

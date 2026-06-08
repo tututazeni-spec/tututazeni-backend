@@ -5,7 +5,12 @@
 // getTimeline, createRequest, getRequests, reviewRequest, bulkUpdateStatus, getOrgChart
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { EmployeesService } from './employees.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
@@ -46,9 +51,16 @@ function buildMockPrisma() {
 const mockAudit = { log: jest.fn().mockResolvedValue({}) };
 
 const baseEmployee = {
-  id: 1, name: 'Ana Silva', email: 'ana@innova.com', role: 'Developer', department: 'TI',
-  status: 'ACTIVE', matricula: 'INN2601', joinedAt: new Date('2023-01-01'),
-  manager: null, avatarUrl: null,
+  id: 1,
+  name: 'Ana Silva',
+  email: 'ana@innova.com',
+  role: 'Developer',
+  department: 'TI',
+  status: 'ACTIVE',
+  matricula: 'INN2601',
+  joinedAt: new Date('2023-01-01'),
+  manager: null,
+  avatarUrl: null,
   _count: { contracts: 0, feedbacks: 0, careerPlans: 0, pdis: 0, documents: 0, employeeSkills: 0 },
 };
 
@@ -91,7 +103,9 @@ describe('EmployeesService (progress)', () => {
       mockPrisma.attendance.findFirst.mockResolvedValue(null);
       mockPrisma.attendance.create.mockResolvedValue({ id: 1, status: 'PRESENT' });
       const result = await service.logAttendance({
-        employeeId: 1, date: '2026-08-01', status: 'PRESENT',
+        employeeId: 1,
+        date: '2026-08-01',
+        status: 'PRESENT',
       } as any);
       expect(result).toBeDefined();
       expect(mockPrisma.attendance.create).toHaveBeenCalled();
@@ -113,7 +127,7 @@ describe('EmployeesService (progress)', () => {
         { status: 'PRESENT', hoursWorked: 8 },
         { status: 'ABSENT', hoursWorked: 0 },
       ]);
-      const result = await service.getAttendance(1) as any;
+      const result = (await service.getAttendance(1)) as any;
       expect(result.records).toHaveLength(2);
       expect(result.totalHours).toBe(8);
       expect(result.presentDays).toBe(1);
@@ -137,7 +151,7 @@ describe('EmployeesService (progress)', () => {
         { score: 8, cycle: '2026-S1' },
         { score: 6, cycle: '2026-S1' },
       ]);
-      const result = await service.getFeedback360(1) as any;
+      const result = (await service.getFeedback360(1)) as any;
       expect(result.feedbacks).toHaveLength(2);
       expect(result.averageScore).toBe(7);
       expect(result.total).toBe(2);
@@ -145,7 +159,7 @@ describe('EmployeesService (progress)', () => {
 
     it('deve retornar média 0 se sem feedbacks', async () => {
       mockPrisma.feedback360.findMany.mockResolvedValue([]);
-      const result = await service.getFeedback360(1) as any;
+      const result = (await service.getFeedback360(1)) as any;
       expect(result.averageScore).toBe(0);
     });
   });
@@ -157,8 +171,11 @@ describe('EmployeesService (progress)', () => {
       mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
       mockPrisma.careerPlan.create.mockResolvedValue({ id: 1 });
       const result = await service.createCareerPlan({
-        employeeId: 1, startDate: '2026-01-01', endDate: '2026-12-31',
-        currentRole: 'Developer', targetRole: 'Tech Lead',
+        employeeId: 1,
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+        currentRole: 'Developer',
+        targetRole: 'Tech Lead',
       } as any);
       expect(result).toBeDefined();
       expect(mockPrisma.careerPlan.create).toHaveBeenCalled();
@@ -178,7 +195,11 @@ describe('EmployeesService (progress)', () => {
     });
 
     it('deve marcar PDI como COMPLETED quando progresso é 100%', async () => {
-      mockPrisma.legacyPdi.update.mockResolvedValue({ id: 1, progressPercent: 100, status: 'COMPLETED' });
+      mockPrisma.legacyPdi.update.mockResolvedValue({
+        id: 1,
+        progressPercent: 100,
+        status: 'COMPLETED',
+      });
       await service.updatePdiProgress(1, { progressPercent: 100 } as any);
       expect(mockPrisma.legacyPdi.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -194,7 +215,7 @@ describe('EmployeesService (progress)', () => {
     it('deve retornar PDIs do colaborador', async () => {
       mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
       mockPrisma.legacyPdi.findMany.mockResolvedValue([{ id: 1, actions: [] }]);
-      const result = await service.getPdis(1) as any[];
+      const result = (await service.getPdis(1)) as any[];
       expect(result).toHaveLength(1);
     });
   });
@@ -205,10 +226,15 @@ describe('EmployeesService (progress)', () => {
     it('deve retornar competências com análise de gap', async () => {
       mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
       mockPrisma.employeeSkill.findMany.mockResolvedValue([
-        { id: 1, currentLevel: 3, desiredLevel: 5, skill: { type: 'TECHNICAL', name: 'TypeScript' } },
+        {
+          id: 1,
+          currentLevel: 3,
+          desiredLevel: 5,
+          skill: { type: 'TECHNICAL', name: 'TypeScript' },
+        },
         { id: 2, currentLevel: 4, desiredLevel: 4, skill: { type: 'SOFT', name: 'Comunicação' } },
       ]);
-      const result = await service.getEmployeeSkills(1) as any;
+      const result = (await service.getEmployeeSkills(1)) as any;
       expect(result.total).toBe(2);
       expect(result.byType.TECHNICAL).toHaveLength(1);
       expect(result.byType.SOFT).toHaveLength(1);
@@ -220,7 +246,7 @@ describe('EmployeesService (progress)', () => {
       mockPrisma.employeeSkill.findMany.mockResolvedValue([
         { id: 1, currentLevel: 4, desiredLevel: 4, skill: { type: 'TECHNICAL', name: 'Go' } },
       ]);
-      const result = await service.getEmployeeSkills(1) as any;
+      const result = (await service.getEmployeeSkills(1)) as any;
       expect(result.skills[0].gapLabel).toBe('ACHIEVED');
     });
   });
@@ -281,7 +307,7 @@ describe('EmployeesService (progress)', () => {
         { id: 2, title: 'Passaporte', expiresAt: expired, status: 'ACTIVE' },
         { id: 3, title: 'CV', expiresAt: null, status: 'ACTIVE' },
       ]);
-      const result = await service.getDocuments(1) as any;
+      const result = (await service.getDocuments(1)) as any;
       expect(result.documents).toHaveLength(3);
       expect(result.expiringSoon).toHaveLength(1);
       expect(result.expired).toHaveLength(1);
@@ -294,10 +320,13 @@ describe('EmployeesService (progress)', () => {
     it('deve marcar documento como eliminado', async () => {
       mockPrisma.employeeDocument.findUnique.mockResolvedValue({ id: 1, title: 'Contrato' });
       mockPrisma.employeeDocument.update.mockResolvedValue({ id: 1, status: 'DELETED' });
-      const result = await service.deleteDocument(1, 9) as any;
+      const result = (await service.deleteDocument(1, 9)) as any;
       expect(result.message).toBeDefined();
       expect(mockPrisma.employeeDocument.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 1 }, data: expect.objectContaining({ status: 'DELETED' }) }),
+        expect.objectContaining({
+          where: { id: 1 },
+          data: expect.objectContaining({ status: 'DELETED' }),
+        }),
       );
     });
 
@@ -316,7 +345,7 @@ describe('EmployeesService (progress)', () => {
         { id: 1, type: 'HIRED', title: 'Admissão', occurredAt: new Date() },
         { id: 2, type: 'PROMOTION', title: 'Promoção', occurredAt: new Date() },
       ]);
-      const result = await service.getTimeline(1) as any[];
+      const result = (await service.getTimeline(1)) as any[];
       expect(result).toHaveLength(2);
     });
   });
@@ -328,7 +357,9 @@ describe('EmployeesService (progress)', () => {
       mockPrisma.employee.findUnique.mockResolvedValue(baseEmployee);
       mockPrisma.selfServiceRequest.create.mockResolvedValue({ id: 1, status: 'PENDING' });
       const result = await service.createRequest({
-        employeeId: 1, type: 'DATA_CHANGE', subject: 'Actualização de morada',
+        employeeId: 1,
+        type: 'DATA_CHANGE',
+        subject: 'Actualização de morada',
       } as any);
       expect(result).toBeDefined();
       expect(mockPrisma.selfServiceRequest.create).toHaveBeenCalled();
@@ -340,9 +371,10 @@ describe('EmployeesService (progress)', () => {
   describe('getRequests', () => {
     it('deve retornar pedidos de self-service', async () => {
       mockPrisma.selfServiceRequest.findMany.mockResolvedValue([
-        { id: 1, status: 'PENDING' }, { id: 2, status: 'APPROVED' },
+        { id: 1, status: 'PENDING' },
+        { id: 2, status: 'APPROVED' },
       ]);
-      const result = await service.getRequests(1) as any[];
+      const result = (await service.getRequests(1)) as any[];
       expect(result).toHaveLength(2);
     });
 
@@ -359,20 +391,28 @@ describe('EmployeesService (progress)', () => {
 
   describe('reviewRequest', () => {
     const pendingReq = {
-      id: 1, employeeId: 5, status: 'PENDING', type: 'DATA_CHANGE',
+      id: 1,
+      employeeId: 5,
+      status: 'PENDING',
+      type: 'DATA_CHANGE',
       payload: { role: 'Senior Developer' },
     };
 
     it('deve lançar NotFoundException se pedido não encontrado', async () => {
       mockPrisma.selfServiceRequest.findUnique.mockResolvedValue(null);
-      await expect(service.reviewRequest(99, { status: 'APPROVED', reviewerId: 1 } as any))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        service.reviewRequest(99, { status: 'APPROVED', reviewerId: 1 } as any),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('deve lançar BadRequestException se pedido já processado', async () => {
-      mockPrisma.selfServiceRequest.findUnique.mockResolvedValue({ ...pendingReq, status: 'APPROVED' });
-      await expect(service.reviewRequest(1, { status: 'APPROVED', reviewerId: 1 } as any))
-        .rejects.toThrow(BadRequestException);
+      mockPrisma.selfServiceRequest.findUnique.mockResolvedValue({
+        ...pendingReq,
+        status: 'APPROVED',
+      });
+      await expect(
+        service.reviewRequest(1, { status: 'APPROVED', reviewerId: 1 } as any),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('deve aprovar DATA_CHANGE e aplicar actualização ao colaborador', async () => {
@@ -402,10 +442,10 @@ describe('EmployeesService (progress)', () => {
   describe('bulkUpdateStatus', () => {
     it('deve actualizar status de múltiplos colaboradores', async () => {
       mockPrisma.employee.updateMany.mockResolvedValue({ count: 3 });
-      const result = await service.bulkUpdateStatus(
+      const result = (await service.bulkUpdateStatus(
         { employeeIds: [1, 2, 3], status: 'INACTIVE' } as any,
         9,
-      ) as any;
+      )) as any;
       expect(result).toBeDefined();
       expect(mockPrisma.employee.updateMany).toHaveBeenCalled();
       expect(mockAudit.log).toHaveBeenCalledWith(
@@ -423,7 +463,7 @@ describe('EmployeesService (progress)', () => {
           { id: 1, name: 'CEO', role: 'CEO', managerId: null, _count: { subordinates: 0 } },
         ])
         .mockResolvedValue([]); // children → empty
-      const result = await service.getOrgChart() as any[];
+      const result = (await service.getOrgChart()) as any[];
       expect(result).toHaveLength(1);
       expect(result[0].children).toHaveLength(0);
     });

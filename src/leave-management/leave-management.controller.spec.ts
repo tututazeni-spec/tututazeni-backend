@@ -93,7 +93,11 @@ describe('LeaveManagementController', () => {
 
   it('getAbsenteeism → getAbsenteeismReport', async () => {
     await controller.getAbsenteeism('2024-01-01', '2024-12-31');
-    expect(mockSvc.getAbsenteeismReport).toHaveBeenCalledWith('2024-01-01', '2024-12-31', undefined);
+    expect(mockSvc.getAbsenteeismReport).toHaveBeenCalledWith(
+      '2024-01-01',
+      '2024-12-31',
+      undefined,
+    );
   });
 
   it('getCalendar → getCalendar(filters)', async () => {

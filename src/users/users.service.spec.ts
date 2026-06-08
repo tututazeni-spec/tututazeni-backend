@@ -40,13 +40,15 @@ const mockPrismaBase = {
 
 const mockPrisma = new Proxy(mockPrismaBase, {
   get(target, prop) {
-    return (target as any)[prop] ?? {
-      findMany: jest.fn().mockResolvedValue([]),
-      findUnique: jest.fn().mockResolvedValue(null),
-      count: jest.fn().mockResolvedValue(0),
-      create: jest.fn().mockResolvedValue({}),
-      update: jest.fn().mockResolvedValue({}),
-    };
+    return (
+      (target as any)[prop] ?? {
+        findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn().mockResolvedValue(null),
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn().mockResolvedValue({}),
+        update: jest.fn().mockResolvedValue({}),
+      }
+    );
   },
 });
 

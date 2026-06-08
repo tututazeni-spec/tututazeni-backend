@@ -82,7 +82,7 @@ describe('DashboardRhService (progress)', () => {
         .mockResolvedValueOnce([{ createdAt: new Date('2022-01-01') }]) // byTenure
         .mockResolvedValueOnce([{ createdAt: new Date('2022-01-01') }]); // avgTenure
 
-      const result = await service.getHeadcountPanel() as any;
+      const result = (await service.getHeadcountPanel()) as any;
       expect(result.total).toBe(100);
       expect(result.active).toBe(90);
       expect(result.byDepartment).toHaveLength(1);
@@ -102,7 +102,7 @@ describe('DashboardRhService (progress)', () => {
 
     it('deve calcular categorias de tenure correctamente', async () => {
       const tenureData = [
-        { createdAt: new Date(Date.now() - 6 * 30 * 86400000) },  // <1yr
+        { createdAt: new Date(Date.now() - 6 * 30 * 86400000) }, // <1yr
         { createdAt: new Date(Date.now() - 18 * 30 * 86400000) }, // 1-2yr
         { createdAt: new Date(Date.now() - 36 * 30 * 86400000) }, // 2-5yr
         { createdAt: new Date(Date.now() - 72 * 30 * 86400000) }, // 5+yr
@@ -110,10 +110,8 @@ describe('DashboardRhService (progress)', () => {
       mockPrisma.user.count.mockResolvedValue(4);
       mockPrisma.department.findMany.mockResolvedValue([]);
       mockPrisma.position.findMany.mockResolvedValue([]);
-      mockPrisma.user.findMany
-        .mockResolvedValueOnce(tenureData)
-        .mockResolvedValueOnce(tenureData);
-      const result = await service.getHeadcountPanel() as any;
+      mockPrisma.user.findMany.mockResolvedValueOnce(tenureData).mockResolvedValueOnce(tenureData);
+      const result = (await service.getHeadcountPanel()) as any;
       expect(result.byTenure['<1yr']).toBe(1);
       expect(result.byTenure['1-2yr']).toBe(1);
       expect(result.byTenure['2-5yr']).toBe(1);
@@ -126,7 +124,7 @@ describe('DashboardRhService (progress)', () => {
   describe('getHeadcountTrend', () => {
     it('deve retornar trend de headcount para N meses', async () => {
       mockPrisma.user.count.mockResolvedValue(100);
-      const result = await service.getHeadcountTrend(3) as any[];
+      const result = (await service.getHeadcountTrend(3)) as any[];
       expect(result).toHaveLength(3);
       result.forEach(m => {
         expect(m.month).toMatch(/^\d{4}-\d{2}$/);
@@ -137,7 +135,7 @@ describe('DashboardRhService (progress)', () => {
 
     it('deve usar 6 meses como padrão', async () => {
       mockPrisma.user.count.mockResolvedValue(0);
-      const result = await service.getHeadcountTrend() as any[];
+      const result = (await service.getHeadcountTrend()) as any[];
       expect(result).toHaveLength(6);
     });
   });
@@ -148,7 +146,7 @@ describe('DashboardRhService (progress)', () => {
     it('deve retornar turnover panel com zero saídas', async () => {
       mockPrisma.user.count.mockResolvedValue(100);
       mockPrisma.auditLog.findMany.mockResolvedValue([]);
-      const result = await service.getTurnoverPanel(12) as any;
+      const result = (await service.getTurnoverPanel(12)) as any;
       expect(result).toBeDefined();
       expect(result.turnoverRate).toBeDefined();
     });
@@ -156,7 +154,7 @@ describe('DashboardRhService (progress)', () => {
     it('deve usar 12 meses como padrão', async () => {
       mockPrisma.user.count.mockResolvedValue(100);
       mockPrisma.auditLog.findMany.mockResolvedValue([]);
-      const result = await service.getTurnoverPanel() as any;
+      const result = (await service.getTurnoverPanel()) as any;
       expect(result).toBeDefined();
     });
   });
@@ -168,7 +166,7 @@ describe('DashboardRhService (progress)', () => {
       mockPrisma.surveyResponse.count.mockResolvedValue(0);
       mockPrisma.surveyResponse.aggregate.mockResolvedValue({ _avg: { score: null } });
       mockPrisma.user.count.mockResolvedValue(50);
-      const result = await service.getEngagementPanel() as any;
+      const result = (await service.getEngagementPanel()) as any;
       expect(result).toBeDefined();
       expect(result.participationRate).toBeDefined();
     });
@@ -181,7 +179,7 @@ describe('DashboardRhService (progress)', () => {
       mockPrisma.performanceReview.aggregate.mockResolvedValue({ _avg: { score: null } });
       mockPrisma.performanceReview.count.mockResolvedValue(0);
       mockPrisma.user.count.mockResolvedValue(50);
-      const result = await service.getPerformancePanel() as any;
+      const result = (await service.getPerformancePanel()) as any;
       expect(result).toBeDefined();
     });
 
@@ -189,7 +187,7 @@ describe('DashboardRhService (progress)', () => {
       mockPrisma.performanceReview.aggregate.mockResolvedValue({ _avg: { score: 3.8 } });
       mockPrisma.performanceReview.count.mockResolvedValue(5);
       mockPrisma.user.count.mockResolvedValue(50);
-      const result = await service.getPerformancePanel() as any;
+      const result = (await service.getPerformancePanel()) as any;
       expect(result).toBeDefined();
     });
   });
@@ -201,7 +199,7 @@ describe('DashboardRhService (progress)', () => {
       mockPrisma.userCompetency.groupBy.mockResolvedValue([]);
       mockPrisma.competency.findMany.mockResolvedValue([]);
       mockPrisma.user.count.mockResolvedValue(50);
-      const result = await service.getSkillsPanel() as any;
+      const result = (await service.getSkillsPanel()) as any;
       expect(result).toBeDefined();
     });
   });
@@ -214,7 +212,7 @@ describe('DashboardRhService (progress)', () => {
       mockPrisma.course.count.mockResolvedValue(0);
       mockPrisma.course.findMany.mockResolvedValue([]);
       mockPrisma.enrollment.groupBy.mockResolvedValue([]);
-      const result = await service.getTrainingPanel() as any;
+      const result = (await service.getTrainingPanel()) as any;
       expect(result).toBeDefined();
     });
   });
@@ -225,7 +223,7 @@ describe('DashboardRhService (progress)', () => {
     it('deve retornar painel de compliance', async () => {
       mockPrisma.enrollment.count.mockResolvedValue(0);
       mockPrisma.user.count.mockResolvedValue(50);
-      const result = await service.getCompliancePanel() as any;
+      const result = (await service.getCompliancePanel()) as any;
       expect(result).toBeDefined();
     });
   });
@@ -234,7 +232,7 @@ describe('DashboardRhService (progress)', () => {
 
   describe('getBirthdaysThisMonth', () => {
     it('deve retornar lista vazia (campo dateOfBirth não existe no schema)', async () => {
-      const result = await service.getBirthdaysThisMonth() as any[];
+      const result = (await service.getBirthdaysThisMonth()) as any[];
       expect(Array.isArray(result)).toBe(true);
       expect(result).toHaveLength(0);
     });
@@ -245,7 +243,7 @@ describe('DashboardRhService (progress)', () => {
   describe('getAnniversariesThisMonth', () => {
     it('deve retornar lista vazia quando sem utilizadores este mês', async () => {
       mockPrisma.user.findMany.mockResolvedValue([]);
-      const result = await service.getAnniversariesThisMonth() as any[];
+      const result = (await service.getAnniversariesThisMonth()) as any[];
       expect(Array.isArray(result)).toBe(true);
     });
 
@@ -254,11 +252,15 @@ describe('DashboardRhService (progress)', () => {
       const hireDate = new Date(now.getFullYear() - 3, now.getMonth(), 15);
       mockPrisma.user.findMany.mockResolvedValue([
         {
-          id: 1, fullName: 'Ana', avatarUrl: null, createdAt: hireDate,
-          department: { name: 'TI' }, position: { name: 'Dev' },
+          id: 1,
+          fullName: 'Ana',
+          avatarUrl: null,
+          createdAt: hireDate,
+          department: { name: 'TI' },
+          position: { name: 'Dev' },
         },
       ]);
-      const result = await service.getAnniversariesThisMonth() as any[];
+      const result = (await service.getAnniversariesThisMonth()) as any[];
       expect(result).toHaveLength(1);
       expect(result[0].years).toBe(3);
     });
@@ -269,7 +271,7 @@ describe('DashboardRhService (progress)', () => {
   describe('getAttendancePanel', () => {
     it('deve retornar painel de presenças vazio', async () => {
       mockPrisma.attendance.findMany.mockResolvedValue([]);
-      const result = await service.getAttendancePanel() as any;
+      const result = (await service.getAttendancePanel()) as any;
       expect(result.total).toBe(0);
       expect(result.presenceRate).toBe(0);
     });
@@ -280,7 +282,7 @@ describe('DashboardRhService (progress)', () => {
         { status: 'absent', employee: { id: 2, name: 'João' } },
         { status: 'late', employee: { id: 3, name: 'Maria' } },
       ]);
-      const result = await service.getAttendancePanel('2026-01-01', '2026-01-31') as any;
+      const result = (await service.getAttendancePanel('2026-01-01', '2026-01-31')) as any;
       expect(result.total).toBe(3);
       expect(result.present).toBe(1);
       expect(result.absent).toBe(1);
@@ -296,7 +298,7 @@ describe('DashboardRhService (progress)', () => {
       mockPrisma.successionPlan.findMany.mockResolvedValue([]);
       mockPrisma.userCompetency.groupBy.mockResolvedValue([]);
       mockPrisma.user.findMany.mockResolvedValue([]);
-      const result = await service.getTalentPipeline() as any;
+      const result = (await service.getTalentPipeline()) as any;
       expect(result).toBeDefined();
     });
   });
@@ -310,18 +312,18 @@ describe('DashboardRhService (progress)', () => {
       mockPrisma.performanceReview.count.mockResolvedValue(0);
       mockPrisma.surveyResponse.count.mockResolvedValue(100); // alta participação
       mockPrisma.user.count.mockResolvedValue(100);
-      const result = await service.getAlerts() as any[];
+      const result = (await service.getAlerts()) as any[];
       expect(Array.isArray(result)).toBe(true);
       expect(result).toHaveLength(0);
     });
 
     it('deve adicionar alertas HIGH quando existem problemas', async () => {
-      mockPrisma.developmentPlanAction.count.mockResolvedValue(5);  // PDI em atraso
-      mockPrisma.enrollment.count.mockResolvedValue(10);             // formações obrigatórias
-      mockPrisma.performanceReview.count.mockResolvedValue(3);       // performance crítica
+      mockPrisma.developmentPlanAction.count.mockResolvedValue(5); // PDI em atraso
+      mockPrisma.enrollment.count.mockResolvedValue(10); // formações obrigatórias
+      mockPrisma.performanceReview.count.mockResolvedValue(3); // performance crítica
       mockPrisma.surveyResponse.count.mockResolvedValue(5);
       mockPrisma.user.count.mockResolvedValue(100); // 5% participação < 30%
-      const result = await service.getAlerts() as any[];
+      const result = (await service.getAlerts()) as any[];
       expect(result.length).toBeGreaterThan(0);
       const severities = result.map((a: any) => a.severity);
       expect(severities).toContain('HIGH');
@@ -335,7 +337,7 @@ describe('DashboardRhService (progress)', () => {
       mockPrisma.performanceReview.findMany.mockResolvedValue([]);
       mockPrisma.performanceReview.count.mockResolvedValue(0);
       mockPrisma.surveyResponse.count.mockResolvedValue(50);
-      const result = await service.getPredictions() as any;
+      const result = (await service.getPredictions()) as any;
       expect(result.summary).toBeDefined();
       expect(result.turnoverRisk).toHaveLength(0);
       expect(result.generatedAt).toBeDefined();
@@ -344,12 +346,32 @@ describe('DashboardRhService (progress)', () => {
     it('deve classificar risk levels para colaboradores com baixa performance', async () => {
       const hireDate = new Date('2020-01-01');
       mockPrisma.performanceReview.findMany.mockResolvedValue([
-        { score: 1.5, status: 'COMPLETED', user: { id: 1, fullName: 'Ana', avatarUrl: null, department: { name: 'TI' }, createdAt: hireDate } },
-        { score: 2.2, status: 'COMPLETED', user: { id: 2, fullName: 'João', avatarUrl: null, department: { name: 'RH' }, createdAt: hireDate } },
+        {
+          score: 1.5,
+          status: 'COMPLETED',
+          user: {
+            id: 1,
+            fullName: 'Ana',
+            avatarUrl: null,
+            department: { name: 'TI' },
+            createdAt: hireDate,
+          },
+        },
+        {
+          score: 2.2,
+          status: 'COMPLETED',
+          user: {
+            id: 2,
+            fullName: 'João',
+            avatarUrl: null,
+            department: { name: 'RH' },
+            createdAt: hireDate,
+          },
+        },
       ]);
       mockPrisma.performanceReview.count.mockResolvedValue(2);
       mockPrisma.surveyResponse.count.mockResolvedValue(50);
-      const result = await service.getPredictions() as any;
+      const result = (await service.getPredictions()) as any;
       expect(result.turnoverRisk).toHaveLength(2);
       const highRisk = result.turnoverRisk.find((u: any) => u.riskLevel === 'HIGH');
       expect(highRisk).toBeDefined();
@@ -364,7 +386,7 @@ describe('DashboardRhService (progress)', () => {
       mockPrisma.performanceReview.findMany.mockResolvedValue([]);
       mockPrisma.enrollment.findMany.mockResolvedValue([]);
       mockPrisma.surveyResponse.findMany.mockResolvedValue([]);
-      const result = await service.getCorrelations() as any;
+      const result = (await service.getCorrelations()) as any;
       expect(result).toBeDefined();
     });
   });
@@ -374,7 +396,7 @@ describe('DashboardRhService (progress)', () => {
   describe('getPayrollPanel', () => {
     it('deve retornar painel de folha salarial vazio', async () => {
       mockPrisma.historyRecord.findMany.mockResolvedValue([]);
-      const result = await service.getPayrollPanel('2026-06') as any;
+      const result = (await service.getPayrollPanel('2026-06')) as any;
       expect(result.period).toBe('2026-06');
       expect(result.headcount).toBe(0);
       expect(result.totalGross).toBe(0);
@@ -384,16 +406,26 @@ describe('DashboardRhService (progress)', () => {
       mockPrisma.historyRecord.findMany.mockResolvedValue([
         {
           action: 'PAYSLIP',
-          description: JSON.stringify({ period: '2026-06', grossSalary: 2000, netSalary: 1600, totalDeductions: 400 }),
+          description: JSON.stringify({
+            period: '2026-06',
+            grossSalary: 2000,
+            netSalary: 1600,
+            totalDeductions: 400,
+          }),
           user: { id: 1, fullName: 'Ana', department: { name: 'TI' } },
         },
         {
           action: 'PAYSLIP',
-          description: JSON.stringify({ period: '2026-06', grossSalary: 3000, netSalary: 2400, totalDeductions: 600 }),
+          description: JSON.stringify({
+            period: '2026-06',
+            grossSalary: 3000,
+            netSalary: 2400,
+            totalDeductions: 600,
+          }),
           user: { id: 2, fullName: 'João', department: { name: 'RH' } },
         },
       ]);
-      const result = await service.getPayrollPanel('2026-06') as any;
+      const result = (await service.getPayrollPanel('2026-06')) as any;
       expect(result.headcount).toBe(2);
       expect(result.totalGross).toBe(5000);
       expect(result.totalNet).toBe(4000);

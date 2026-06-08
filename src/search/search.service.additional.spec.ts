@@ -6,13 +6,34 @@ const mockPrisma: any = {
   user: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
   course: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
   document: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
-  knowledgeArticle: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
-  searchHistory: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
+  knowledgeArticle: {
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  searchHistory: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   searchSuggestion: { findMany: jest.fn().mockResolvedValue([]) },
 };
 
-const baseUser = { id: 1, fullName: 'João Silva', email: 'joao@innova.com', avatarUrl: null, department: { name: 'TI' }, position: { name: 'Dev' } };
-const baseCourse = { id: 1, title: 'TypeScript Avançado', description: 'Curso TS', category: 'TECH', status: 'PUBLISHED', thumbnailUrl: null, workloadHours: 20 };
+const baseUser = {
+  id: 1,
+  fullName: 'João Silva',
+  email: 'joao@innova.com',
+  avatarUrl: null,
+  department: { name: 'TI' },
+  position: { name: 'Dev' },
+};
+const baseCourse = {
+  id: 1,
+  title: 'TypeScript Avançado',
+  description: 'Curso TS',
+  category: 'TECH',
+  status: 'PUBLISHED',
+  thumbnailUrl: null,
+  workloadHours: 20,
+};
 
 describe('SearchService (additional)', () => {
   let service: SearchService;
@@ -62,14 +83,20 @@ describe('SearchService (additional)', () => {
     it('deve pesquisar cursos especificamente', async () => {
       mockPrisma.course.findMany.mockResolvedValue([baseCourse]);
       mockPrisma.course.count.mockResolvedValue(1);
-      const result = await service.typedSearch('course' as any, 'TypeScript', 1, { page: 1, limit: 10 });
+      const result = await service.typedSearch('course' as any, 'TypeScript', 1, {
+        page: 1,
+        limit: 10,
+      });
       expect(result).toBeDefined();
     });
 
     it('deve pesquisar documentos', async () => {
       mockPrisma.document.findMany.mockResolvedValue([]);
       mockPrisma.document.count.mockResolvedValue(0);
-      const result = await service.typedSearch('document' as any, 'contrato', 1, { page: 1, limit: 10 });
+      const result = await service.typedSearch('document' as any, 'contrato', 1, {
+        page: 1,
+        limit: 10,
+      });
       expect(result).toBeDefined();
     });
   });
@@ -94,7 +121,9 @@ describe('SearchService (additional)', () => {
 
   describe('getSearchHistory', () => {
     it('deve retornar histórico de pesquisa do utilizador', async () => {
-      mockPrisma.searchHistory.findMany.mockResolvedValue([{ id: 1, query: 'TypeScript', userId: 1 }]);
+      mockPrisma.searchHistory.findMany.mockResolvedValue([
+        { id: 1, query: 'TypeScript', userId: 1 },
+      ]);
       const result = await service.getSearchHistory(1);
       expect(result).toBeDefined();
     });

@@ -78,7 +78,12 @@ describe('WorkDeclarationController', () => {
 
   it('remove → changeStatus (REVOKED)', async () => {
     await controller.remove('uuid-1', mockUser as any);
-    expect(mockSvc.changeStatus).toHaveBeenCalledWith('tenant-1', '1', 'uuid-1', expect.objectContaining({ status: 'REVOKED' }));
+    expect(mockSvc.changeStatus).toHaveBeenCalledWith(
+      'tenant-1',
+      '1',
+      'uuid-1',
+      expect.objectContaining({ status: 'REVOKED' }),
+    );
   });
 
   it('requestDeclaration → requestDeclaration(tenantId, userId, dto)', async () => {
@@ -89,12 +94,22 @@ describe('WorkDeclarationController', () => {
 
   it('getMyDeclarations → listDeclarations(tenantId, userId, EMPLOYEE)', async () => {
     await controller.getMyDeclarations(mockUser as any);
-    expect(mockSvc.listDeclarations).toHaveBeenCalledWith('tenant-1', '1', 'EMPLOYEE', expect.anything());
+    expect(mockSvc.listDeclarations).toHaveBeenCalledWith(
+      'tenant-1',
+      '1',
+      'EMPLOYEE',
+      expect.anything(),
+    );
   });
 
   it('issueDeclaration → changeStatus(ISSUED)', async () => {
     await controller.issueDeclaration('uuid-1', mockUser as any);
-    expect(mockSvc.changeStatus).toHaveBeenCalledWith('tenant-1', '1', 'uuid-1', expect.objectContaining({ status: 'ISSUED' }));
+    expect(mockSvc.changeStatus).toHaveBeenCalledWith(
+      'tenant-1',
+      '1',
+      'uuid-1',
+      expect.objectContaining({ status: 'ISSUED' }),
+    );
   });
 
   it('verifyDeclaration → verifyDeclaration(code)', async () => {

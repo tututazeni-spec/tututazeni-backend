@@ -156,10 +156,7 @@ describe('EvaluationService', () => {
 
   describe('createForm', () => {
     it('deve criar formulário de avaliação', async () => {
-      const result = await service.createForm(
-        { name: 'Formulário 2024', sections: [] } as any,
-        1,
-      );
+      const result = await service.createForm({ name: 'Formulário 2024', sections: [] } as any, 1);
       expect(result).toBeDefined();
     });
   });
@@ -222,7 +219,9 @@ describe('EvaluationService', () => {
         evaluatedId: 2,
         status: 'PENDING',
         cycle: {
-          weights: JSON.stringify([{ type: EvalType.MANAGER, weight: 100, selfEvalIncluded: true }]),
+          weights: JSON.stringify([
+            { type: EvalType.MANAGER, weight: 100, selfEvalIncluded: true },
+          ]),
           model: EvalModel.DEG_360,
           id: 1,
         },

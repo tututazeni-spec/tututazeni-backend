@@ -26,8 +26,14 @@ const mockPrisma: any = {
     findMany: jest.fn().mockResolvedValue([]),
     aggregate: jest.fn().mockResolvedValue({ _avg: { hoursWorked: 8 } }),
   },
-  savedReport: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
-  reportSchedule: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
+  savedReport: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  reportSchedule: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
 };
 
 const baseFilter = { from: '2026-01-01', to: '2026-12-31' };
@@ -48,7 +54,9 @@ describe('ReportsService (additional)', () => {
   describe('headcountReport', () => {
     it('deve gerar relatório de headcount', async () => {
       mockPrisma.user.count.mockResolvedValue(600);
-      mockPrisma.department.findMany.mockResolvedValue([{ id: 1, name: 'TI', _count: { users: 50 } }]);
+      mockPrisma.department.findMany.mockResolvedValue([
+        { id: 1, name: 'TI', _count: { users: 50 } },
+      ]);
       const result = await service.headcountReport(baseFilter);
       expect(result).toBeDefined();
       expect(result).toHaveProperty('total');
@@ -112,7 +120,10 @@ describe('ReportsService (additional)', () => {
   describe('saveReport', () => {
     it('deve guardar relatório', async () => {
       mockPrisma.savedReport.create.mockResolvedValue({ id: 1, name: 'Headcount Q1' });
-      const result = await service.saveReport({ name: 'Headcount Q1', category: 'HR' as any, data: {} } as any, 1);
+      const result = await service.saveReport(
+        { name: 'Headcount Q1', category: 'HR' as any, data: {} } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -132,7 +143,14 @@ describe('ReportsService (additional)', () => {
   describe('createSchedule', () => {
     it('deve criar agendamento de relatório', async () => {
       mockPrisma.reportSchedule.create.mockResolvedValue({ id: 1, reportType: 'HEADCOUNT' });
-      const result = await service.createSchedule({ reportType: 'HEADCOUNT' as any, frequency: 'MONTHLY' as any, recipients: ['rh@innova.com'] } as any, 1);
+      const result = await service.createSchedule(
+        {
+          reportType: 'HEADCOUNT' as any,
+          frequency: 'MONTHLY' as any,
+          recipients: ['rh@innova.com'],
+        } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
