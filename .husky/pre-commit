@@ -1,4 +1,3 @@
-#!/bin/sh
-echo "Verificar qualidade antes do commit..."
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
 npx lint-staged
-echo "Qualidade verificada"
