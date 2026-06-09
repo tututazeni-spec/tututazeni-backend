@@ -80,7 +80,7 @@
   },
   "lint-staged": {
     "src/**/*.ts": [
-      "eslint --fix --max-warnings=9999 --cache --cache-location .eslintcache",
+      "eslint --fix --max-warnings=9999 --cache --cache-location .eslintcache-staged --config eslint.config.staged.mjs",
       "prettier --write"
     ]
   },
