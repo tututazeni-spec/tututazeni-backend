@@ -66,5 +66,28 @@ describe('JwtStrategy', () => {
         UnauthorizedException,
       );
     });
+
+    it('deve usar a cache na segunda validação dentro do TTL (sem nova query)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+
+      const first = await strategy.validate({ sub: 1, email: 'user@innova.com' });
+      const second = await strategy.validate({ sub: 1, email: 'user@innova.com' });
+
+      expect(first).toBe(second);
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(1);
+    });
+
+    it('não deve cachear validações falhadas', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await expect(strategy.validate({ sub: 1, email: 'user@innova.com' })).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+      const result = await strategy.validate({ sub: 1, email: 'user@innova.com' });
+
+      expect(result).toBeDefined();
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledTimes(2);
+    });
   });
 });
