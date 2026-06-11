@@ -23,13 +23,13 @@ export class AuthService {
   ) {}
 
   async login(dto: LoginDto) {
+    // Apenas role+permissions — unit/department/position não são necessários
+    // para autenticar e custavam 3 queries extra por login. O perfil completo
+    // vem de GET /auth/me ou do JwtStrategy nos pedidos seguintes.
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: {
         role: { include: { permissions: true } },
-        unit: true,
-        department: true,
-        position: true,
       },
     });
 

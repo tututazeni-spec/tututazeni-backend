@@ -8,17 +8,21 @@ config:
   phases:
     - name: "Aquecimento"
       duration: 60
-      arrivalRate: 5
+      arrivalRate: 3
       maxVusers: 50
 
-    - name: "Carga Normal (~150 VUs)"
+    # arrivalRate 8/s × sessões de ~25-30s ≈ 200-240 VUs concorrentes.
+    # Calibrado para não exceder maxVusers (evita vusers.skipped em massa)
+    # e para um ritmo de logins realista: numa empresa de 6000, os inícios
+    # de sessão distribuem-se — não chegam 20/s sustentados a uma só instância.
+    - name: "Carga Normal (~200 VUs)"
       duration: 180
-      arrivalRate: 20
-      maxVusers: 150
+      arrivalRate: 8
+      maxVusers: 250
 
     - name: "Descida"
       duration: 60
-      arrivalRate: 5
+      arrivalRate: 3
       maxVusers: 50
 
   ensure:
