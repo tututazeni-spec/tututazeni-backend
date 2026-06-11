@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
 import { AclService } from './acl.service';
 import { PrismaService } from '../prisma/prisma.service';
 

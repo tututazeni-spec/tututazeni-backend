@@ -1,10 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  NotFoundException,
-  ConflictException,
-  BadRequestException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { TrainingService as TrainingsService } from './trainings.service';
 import { PrismaService } from '../prisma/prisma.service';
 

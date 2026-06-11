@@ -3,12 +3,7 @@
 // generateCertificate, getUserEnrollments, bulkEnroll
 
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  NotFoundException,
-  BadRequestException,
-  ForbiddenException,
-  ConflictException,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EnrollmentsService } from './enrollments.service';
 import { PrismaService } from '../prisma/prisma.service';
 

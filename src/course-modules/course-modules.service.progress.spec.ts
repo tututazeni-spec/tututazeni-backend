@@ -4,7 +4,7 @@
 // getLessonProgress, getModuleAnalytics, deleteModule com progresso
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CourseModulesService } from './course-modules.service';
 import { PrismaService } from '../prisma/prisma.service';
 
