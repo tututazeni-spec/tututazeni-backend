@@ -161,11 +161,15 @@ describe('CourseModulesService (additional)', () => {
   describe('reorderModules', () => {
     it('deve reordenar módulos do curso', async () => {
       mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
+      mockPrisma.courseModule.findMany.mockResolvedValueOnce([
+        { id: 1, courseId: 1, seq: 1 },
+        { id: 2, courseId: 1, seq: 2 },
+      ]);
       mockPrisma.courseModule.update.mockResolvedValue(baseModule);
       const result = await service.reorderModules(1, {
-        modules: [
-          { id: 1, seq: 2 },
-          { id: 2, seq: 1 },
+        order: [
+          { id: 1, position: 2 },
+          { id: 2, position: 1 },
         ],
       } as any);
       expect(result).toBeDefined();

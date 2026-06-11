@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { LiveClassesService } from './live-classes.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -77,7 +77,7 @@ describe('LiveClassesService (additional)', () => {
       mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
       const result = await service.findOne(1);
       expect(result).toBeDefined();
-      expect(result.title).toBe('Aula ao Vivo TypeScript');
+      expect((result as any).title).toBe('Aula ao Vivo TypeScript');
     });
 
     it('deve lançar NotFoundException se aula não existe', async () => {
@@ -156,43 +156,49 @@ describe('LiveClassesService (additional)', () => {
 
   describe('sendMessage', () => {
     it('deve enviar mensagem de chat na aula', async () => {
-      mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
-      mockPrisma.liveMessage.create.mockResolvedValue({
-        id: 1,
-        liveClassId: 1,
-        content: 'Olá!',
-        userId: 2,
-      });
-      const result = await service.sendMessage(
-        1,
-        { content: 'Olá!', type: 'TEXT' as any } as any,
-        2,
-      );
+      mockPrisma.liveChatMessage = {
+        create: jest.fn().mockResolvedValue({
+          id: 1,
+          liveClassId: 1,
+          message: 'Olá!',
+          userId: 2,
+          user: { id: 2, fullName: 'Utilizador' },
+        }),
+      };
+      // Real signature: sendMessage(liveClassId, userId, dto) — correct order
+      const result = await service.sendMessage(1, 2, { message: 'Olá!' } as any);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── addPostEvaluation ────────────────────────────────────────
+  // ─── createPostEvaluation (replaces addPostEvaluation) ────────
 
-  describe('addPostEvaluation', () => {
+  describe('createPostEvaluation', () => {
     it('deve criar avaliação pós-aula', async () => {
-      mockPrisma.liveClass.findUnique.mockResolvedValue(baseLiveClass);
+      mockPrisma.postClassEvaluation.findUnique = jest.fn().mockResolvedValue(null);
       mockPrisma.postClassEvaluation.create.mockResolvedValue({ id: 1, liveClassId: 1 });
-      const result = await service.addPostEvaluation(1, { questions: [] } as any, 1);
+      // Real method: createPostEvaluation(liveClassId) — 1 arg
+      const result = await service.createPostEvaluation(1);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── respondPostEvaluation ────────────────────────────────────
+  // ─── submitPostResponse (replaces respondPostEvaluation) ──────
 
-  describe('respondPostEvaluation', () => {
+  describe('submitPostResponse', () => {
     it('deve submeter respostas à avaliação pós-aula', async () => {
-      mockPrisma.liveClass.findUnique.mockResolvedValue({
-        ...baseLiveClass,
-        postEvaluation: { id: 1, questions: [] },
-      });
-      mockPrisma.postClassResponse.createMany.mockResolvedValue({ count: 3 });
-      const result = await service.respondPostEvaluation(1, { responses: [] } as any, 2);
+      mockPrisma.postClassEvaluation.findUnique = jest.fn().mockResolvedValue({ id: 1 });
+      mockPrisma.postClassResponse = {
+        upsert: jest.fn().mockResolvedValue({ id: 1, rating: 4 }),
+        aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4 } }),
+      };
+      mockPrisma.postClassEvaluation.update = jest.fn().mockResolvedValue({ id: 1 });
+      // Real method: submitPostResponse(userId, dto)
+      const result = await service.submitPostResponse(2, {
+        evaluationId: 1,
+        rating: 4,
+        feedback: 'Boa aula',
+      } as any);
       expect(result).toBeDefined();
     });
   });

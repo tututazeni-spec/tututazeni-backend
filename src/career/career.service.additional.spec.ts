@@ -61,6 +61,8 @@ const mockPrisma: any = {
     findUnique: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
     update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   careerPath: {
     findMany: jest.fn().mockResolvedValue([]),
@@ -74,6 +76,7 @@ const mockPrisma: any = {
     update: jest.fn(),
     delete: jest.fn(),
     deleteMany: jest.fn(),
+    findFirst: jest.fn().mockResolvedValue(null),
   },
   userCareerPlan: {
     findMany: jest.fn().mockResolvedValue([]),
@@ -81,6 +84,7 @@ const mockPrisma: any = {
     findUnique: jest.fn().mockResolvedValue(null),
     create: jest.fn(),
     update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   },
   careerGoal: {
     create: jest.fn(),
@@ -93,6 +97,12 @@ const mockPrisma: any = {
     findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn(),
     update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
+  },
+  userPoints: {
+    upsert: jest.fn().mockResolvedValue({}),
+    findUnique: jest.fn().mockResolvedValue(null),
   },
   vacancyApplication: {
     findFirst: jest.fn().mockResolvedValue(null),
@@ -100,6 +110,14 @@ const mockPrisma: any = {
     create: jest.fn(),
     update: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  internalApplication: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    findFirst: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({ id: 1 }),
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
   },
   successionPlan: {
     findMany: jest.fn().mockResolvedValue([]),
@@ -109,9 +127,11 @@ const mockPrisma: any = {
   },
   positionCompetency: {
     findMany: jest.fn().mockResolvedValue([]),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   userCompetency: {
     findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
   },
   position: {
     findUnique: jest.fn().mockResolvedValue(null),
@@ -399,9 +419,9 @@ describe('CareerService (additional)', () => {
     });
   });
 
-  // ─── addGoal ──────────────────────────────────────────────────
+  // ─── addGoalToPlan ────────────────────────────────────────────
 
-  describe('addGoal', () => {
+  describe('addGoalToPlan', () => {
     it('deve adicionar objectivo ao plano', async () => {
       mockPrisma.userCareerPlan.findFirst.mockResolvedValue({ id: 1, userId: 1 });
       mockPrisma.careerGoal.create.mockResolvedValue({
@@ -409,46 +429,52 @@ describe('CareerService (additional)', () => {
         planId: 1,
         title: 'Aprender NestJS',
       });
-      const result = await service.addGoal(1, {
+      const result = await service.addGoalToPlan(1, 1, {
         title: 'Aprender NestJS',
         type: 'SKILL' as any,
       } as any);
       expect(result).toBeDefined();
     });
 
-    it('deve lançar NotFoundException se sem plano activo', async () => {
+    it('deve lançar NotFoundException se plano não existe', async () => {
       mockPrisma.userCareerPlan.findFirst.mockResolvedValue(null);
-      await expect(service.addGoal(99, { title: 'X' } as any)).rejects.toThrow(NotFoundException);
+      await expect(service.addGoalToPlan(99, 1, { title: 'X' } as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
-  // ─── getVacancies ─────────────────────────────────────────────
+  // ─── findAllVacancies ─────────────────────────────────────────
 
-  describe('getVacancies', () => {
+  describe('findAllVacancies', () => {
     it('deve retornar vagas internas disponíveis', async () => {
       mockPrisma.internalVacancy.findMany.mockResolvedValue([]);
       mockPrisma.internalVacancy.count = jest.fn().mockResolvedValue(0);
-      const result = await service.getVacancies({});
+      const result = await service.findAllVacancies({});
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getVacancy ───────────────────────────────────────────────
+  // ─── publishVacancy ───────────────────────────────────────────
 
-  describe('getVacancy', () => {
-    it('deve retornar vaga por id', async () => {
+  describe('publishVacancy', () => {
+    it('deve publicar vaga por id', async () => {
       mockPrisma.internalVacancy.findUnique.mockResolvedValue({
         id: 1,
         title: 'Dev Senior',
+        status: 'DRAFT',
+      });
+      mockPrisma.internalVacancy.update = jest.fn().mockResolvedValue({
+        id: 1,
         status: 'OPEN',
       });
-      const result = await service.getVacancy(1);
+      const result = await service.publishVacancy(1);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se vaga não existe', async () => {
       mockPrisma.internalVacancy.findUnique.mockResolvedValue(null);
-      await expect(service.getVacancy(99)).rejects.toThrow(NotFoundException);
+      await expect(service.publishVacancy(99)).rejects.toThrow(NotFoundException);
     });
   });
 

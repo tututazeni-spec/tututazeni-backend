@@ -41,7 +41,9 @@ const mockPrisma = new Proxy(
       return (
         (target as any)[prop] ?? {
           findMany: makeFindMany([]),
+          findFirst: makeFind(null),
           create: makeFind({}),
+          update: makeFind({}),
           count: makeCount(0),
           findUnique: makeFind(null),
         }

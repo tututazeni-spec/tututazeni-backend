@@ -83,6 +83,7 @@ describe('EvaluationService (additional)', () => {
   describe('createCycle', () => {
     it('deve criar ciclo com pesos válidos (soma 100)', async () => {
       mockPrisma.evaluationCycle.create.mockResolvedValue(mockEvalCycle);
+      // EvaluatorWeightDto has no 'selfEvalIncluded' — use correct fields only
       const result = await service.createCycle(
         {
           name: 'Ciclo Q1',
@@ -90,8 +91,8 @@ describe('EvaluationService (additional)', () => {
           startDate: '2026-01-01',
           endDate: '2026-03-31',
           weights: [
-            { type: 'SELF' as any, weight: 30, selfEvalIncluded: true },
-            { type: 'MANAGER' as any, weight: 70, selfEvalIncluded: false },
+            { type: 'SELF' as any, weight: 30 },
+            { type: 'MANAGER' as any, weight: 70 },
           ],
         },
         1,
@@ -108,7 +109,7 @@ describe('EvaluationService (additional)', () => {
             model: '360' as any,
             startDate: '2026-01-01',
             endDate: '2026-03-31',
-            weights: [{ type: 'SELF' as any, weight: 50, selfEvalIncluded: true }],
+            weights: [{ type: 'SELF' as any, weight: 50 }],
           },
           1,
         ),
@@ -124,8 +125,8 @@ describe('EvaluationService (additional)', () => {
           startDate: '2026-01-01',
           endDate: '2026-06-30',
           weights: [
-            { type: 'SELF' as any, weight: 50.2, selfEvalIncluded: true },
-            { type: 'MANAGER' as any, weight: 49.9, selfEvalIncluded: false },
+            { type: 'SELF' as any, weight: 50.2 },
+            { type: 'MANAGER' as any, weight: 49.9 },
           ],
         },
         1,
@@ -256,9 +257,10 @@ describe('EvaluationService (additional)', () => {
 
   describe('createForm', () => {
     it('deve criar formulário de avaliação', async () => {
-      mockPrisma.evaluationForm.create.mockResolvedValue({ id: 1, name: 'Formulário Base' });
+      mockPrisma.evaluationForm.create.mockResolvedValue({ id: 1, title: 'Formulário Base' });
+      // CreateFormDto uses 'title' not 'name'; 'questions' is required
       const result = await service.createForm(
-        { name: 'Formulário Base', type: 'PERFORMANCE' as any, sections: [] },
+        { title: 'Formulário Base', questions: [] } as any,
         1,
       );
       expect(result).toBeDefined();
@@ -275,30 +277,29 @@ describe('EvaluationService (additional)', () => {
     });
   });
 
-  // ─── createEvaluation ─────────────────────────────────────────
+  // ─── create (legacy evaluation) ──────────────────────────────
 
-  describe('createEvaluation', () => {
+  describe('create (legacy)', () => {
     it('deve criar avaliação', async () => {
       mockPrisma.performanceEvaluation.create.mockResolvedValue({ id: 1 });
-      const result = await service.createEvaluation(
-        {
-          type: 'SELF' as any,
-          evaluatedId: 2,
-          cycleId: 1,
-          formId: 1,
-        },
-        1,
-      );
+      // Real method: create(evaluatorId, dto) — using CreateEvaluationDto
+      const result = await service.create(1, {
+        type: 'SELF' as any,
+        evaluatedId: 2,
+        period: '2026-Q1',
+        criteria: [{ name: 'Comunicação', score: 4 }],
+      });
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getMyEvaluations ─────────────────────────────────────────
+  // ─── findByUser (replaces getMyEvaluations) ───────────────────
 
-  describe('getMyEvaluations', () => {
+  describe('findByUser', () => {
     it('deve retornar avaliações do utilizador', async () => {
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([]);
-      const result = await service.getMyEvaluations(1);
+      // Real method: findByUser(userId, period?)
+      const result = await service.findByUser(1);
       expect(result).toBeDefined();
     });
   });
@@ -317,30 +318,42 @@ describe('EvaluationService (additional)', () => {
 
   describe('submitEvaluation', () => {
     it('deve submeter avaliação', async () => {
-      mockPrisma.performanceEvaluation.findFirst.mockResolvedValue({
+      mockPrisma.evaluationRequest.findUnique.mockResolvedValue({
         id: 1,
         evaluatorId: 1,
-        status: 'DRAFT',
+        evaluatedId: 2,
+        type: 'SELF',
+        cycleId: null,
+        cycle: null,
+        status: 'PENDING',
       });
-      mockPrisma.performanceEvaluation.update.mockResolvedValue({ id: 1, status: 'SUBMITTED' });
-      mockPrisma.evaluationRequest.updateMany.mockResolvedValue({ count: 1 });
-      const result = await service.submitEvaluation(1, 1, { scores: [] } as any);
+      mockPrisma.performanceEvaluation.upsert.mockResolvedValue({ id: 1, overallScore: 4 });
+      mockPrisma.evaluationRequest.update.mockResolvedValue({ id: 1, status: 'COMPLETED' });
+      mockPrisma.userPoints = { upsert: jest.fn().mockResolvedValue({}) };
+      mockPrisma.notificationLog.create.mockResolvedValue({});
+      // Real signature: submitEvaluation(evaluatorId, dto) — 2 args
+      const result = await service.submitEvaluation(1, {
+        requestId: 1,
+        answers: [{ questionId: 1, score: 4 }],
+      } as any);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se avaliação não encontrada', async () => {
-      mockPrisma.performanceEvaluation.findFirst.mockResolvedValue(null);
-      await expect(service.submitEvaluation(99, 1, { scores: [] } as any)).rejects.toThrow(
-        NotFoundException,
-      );
+      mockPrisma.evaluationRequest.findUnique.mockResolvedValue(null);
+      // Real signature: submitEvaluation(evaluatorId, dto) — 2 args
+      await expect(
+        service.submitEvaluation(1, { requestId: 99, answers: [] } as any),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
-  // ─── getAnalytics ─────────────────────────────────────────────
+  // ─── getAnalyticsDashboard (replaces getAnalytics) ───────────
 
-  describe('getAnalytics', () => {
+  describe('getAnalyticsDashboard', () => {
     it('deve retornar analytics de avaliação', async () => {
-      const result = await service.getAnalytics({ cycleId: 1 });
+      // Real method: getAnalyticsDashboard(filters?)
+      const result = await service.getAnalyticsDashboard({ cycleId: 1 });
       expect(result).toBeDefined();
     });
   });
@@ -377,34 +390,49 @@ describe('EvaluationService (additional)', () => {
 
   describe('calibrateScore', () => {
     it('deve calibrar score de avaliação', async () => {
-      mockPrisma.performanceEvaluation.update.mockResolvedValue({ id: 1, calibratedScore: 4.5 });
+      mockPrisma.performanceEvaluation.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+      mockPrisma.auditLog.create.mockResolvedValue({});
+      mockPrisma.notificationLog.create.mockResolvedValue({});
+      // CalibrateScoreDto has 'calibrationNote' not 'justification'
       const result = await service.calibrateScore(
         1,
-        { calibratedScore: 4.5, justification: 'OK' },
+        { evaluatedId: 2, calibratedScore: 4.5, calibrationNote: 'OK' },
         2,
       );
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getTeamEvaluations ───────────────────────────────────────
+  // ─── getTeamDashboard (replaces getTeamEvaluations) ──────────
 
-  describe('getTeamEvaluations', () => {
+  describe('getTeamDashboard', () => {
     it('deve retornar avaliações da equipa', async () => {
-      mockPrisma.user.findMany.mockResolvedValue([{ id: 2 }, { id: 3 }]);
+      mockPrisma.user.findMany.mockResolvedValue([
+        { id: 2, fullName: 'Ana', avatarUrl: null, position: null, department: null },
+      ]);
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([]);
-      const result = await service.getTeamEvaluations(1, 1);
+      mockPrisma.evaluationRequest.findMany.mockResolvedValue([]);
+      // Real method: getTeamDashboard(managerId, cycleId?)
+      const result = await service.getTeamDashboard(1, 1);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getScore ─────────────────────────────────────────────────
+  // ─── getResults (replaces getScore) ──────────────────────────
 
-  describe('getScore', () => {
-    it('deve retornar score calculado de utilizador num ciclo', async () => {
-      mockPrisma.evaluationCycle.findUnique.mockResolvedValue(mockEvalCycle);
+  describe('getResults', () => {
+    it('deve retornar resultados calculados de utilizador num ciclo', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        fullName: 'Test',
+        avatarUrl: null,
+        position: null,
+        department: null,
+      });
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([]);
-      const result = await service.getScore(1, 1);
+      mockPrisma.evaluationCycle.findUnique.mockResolvedValue(null);
+      // Real method: getResults(evaluatedId, cycleId?)
+      const result = await service.getResults(1, 1);
       expect(result).toBeDefined();
     });
   });

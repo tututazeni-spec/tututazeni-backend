@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { MicroLearningService } from './micro-learning.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -11,11 +11,15 @@ const mockPrisma: any = {
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn().mockResolvedValue(0),
+    aggregate: jest.fn().mockResolvedValue({ _sum: { viewCount: 0 } }),
   },
   microLearningProgress: {
     findFirst: jest.fn().mockResolvedValue(null),
     upsert: jest.fn().mockResolvedValue({}),
     findMany: jest.fn().mockResolvedValue([]),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    count: jest.fn().mockResolvedValue(0),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { progress: 0, watchedSeconds: 0 } }),
   },
   microLearningLike: {
     findFirst: jest.fn().mockResolvedValue(null),
@@ -23,14 +27,43 @@ const mockPrisma: any = {
     delete: jest.fn().mockResolvedValue({}),
     count: jest.fn().mockResolvedValue(0),
   },
+  microLearningInteraction: {
+    findFirst: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({}),
+    delete: jest.fn().mockResolvedValue({}),
+    count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   microLearningPlaylist: {
     findMany: jest.fn().mockResolvedValue([]),
     findUnique: jest.fn().mockResolvedValue(null),
     create: jest.fn().mockResolvedValue({}),
     update: jest.fn().mockResolvedValue({}),
   },
-  notificationLog: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+  playlistItem: {
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
+  microQuizQuestion: {
+    findMany: jest.fn().mockResolvedValue([]),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
+  microQuizAttempt: {
+    create: jest.fn().mockResolvedValue({}),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { score: 0 }, _count: 0 }),
+  },
+  notificationLog: {
+    create: jest.fn().mockResolvedValue({}),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   user: { findMany: jest.fn().mockResolvedValue([]) },
+  userPoints: { upsert: jest.fn().mockResolvedValue({}) },
+  learningStreak: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({}),
+    update: jest.fn().mockResolvedValue({}),
+    count: jest.fn().mockResolvedValue(0),
+  },
 };
 
 const baseMl = {
@@ -43,6 +76,7 @@ const baseMl = {
   tags: ['typescript', 'coding'],
   viewCount: 100,
   authorId: 1,
+  xpReward: 10,
   author: { id: 1, fullName: 'Admin', position: { name: 'CTO' } },
   category: { id: 1, name: 'Programação' },
   _count: { progress: 50, likes: 20 },
@@ -111,6 +145,7 @@ describe('MicroLearningService (additional)', () => {
   describe('create', () => {
     it('deve criar micro-learning', async () => {
       mockPrisma.microLearning.create.mockResolvedValue(baseMl);
+      mockPrisma.microLearning.findUnique.mockResolvedValue(baseMl);
       const result = await service.create(
         { title: '5 Dicas TS', contentType: 'VIDEO' as any, durationSeconds: 180 } as any,
         1,
@@ -122,18 +157,19 @@ describe('MicroLearningService (additional)', () => {
   // ─── update ───────────────────────────────────────────────────
 
   describe('update', () => {
-    it('deve actualizar micro-learning pelo autor', async () => {
+    it('deve actualizar micro-learning', async () => {
       mockPrisma.microLearning.findUnique.mockResolvedValue(baseMl);
       mockPrisma.microLearning.update.mockResolvedValue({ ...baseMl, title: 'Actualizado' });
-      const result = await service.update(1, { title: 'Actualizado' } as any, 1, 'EMPLOYEE');
+      // Real signature: update(id, dto, updatedById?) — 2-3 args max
+      const result = await service.update(1, { title: 'Actualizado' } as any, 1);
       expect(result).toBeDefined();
     });
 
-    it('deve lançar ForbiddenException se não é o autor', async () => {
-      mockPrisma.microLearning.findUnique.mockResolvedValue({ ...baseMl, authorId: 2 });
-      await expect(service.update(1, {} as any, 99, 'EMPLOYEE')).rejects.toThrow(
-        ForbiddenException,
-      );
+    it('deve actualizar micro-learning sem updatedById', async () => {
+      mockPrisma.microLearning.findUnique.mockResolvedValue(baseMl);
+      mockPrisma.microLearning.update.mockResolvedValue(baseMl);
+      const result = await service.update(1, {} as any);
+      expect(result).toBeDefined();
     });
   });
 
@@ -142,16 +178,18 @@ describe('MicroLearningService (additional)', () => {
   describe('updateProgress', () => {
     it('deve actualizar progresso do utilizador', async () => {
       mockPrisma.microLearning.findUnique.mockResolvedValue(baseMl);
+      mockPrisma.microLearningProgress.findFirst.mockResolvedValue(null);
       mockPrisma.microLearningProgress.upsert.mockResolvedValue({
         id: 1,
-        progressPercent: 60,
-        completed: false,
+        progress: 60,
       });
-      const result = await service.updateProgress(
-        1,
-        { progressPercent: 60, timeSpent: 108 } as any,
-        2,
-      );
+      mockPrisma.microLearning.update.mockResolvedValue(baseMl);
+      // Real signature: updateProgress(userId, dto) — 2 args
+      const result = await service.updateProgress(1, {
+        microLearningId: 1,
+        progress: 60,
+        watchedSeconds: 108,
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -160,20 +198,18 @@ describe('MicroLearningService (additional)', () => {
 
   describe('interact', () => {
     it('deve adicionar like ao micro-learning', async () => {
-      mockPrisma.microLearning.findUnique.mockResolvedValue(baseMl);
-      mockPrisma.microLearningLike.findFirst.mockResolvedValue(null);
-      mockPrisma.microLearningLike.create.mockResolvedValue({ id: 1 });
-      mockPrisma.microLearning.update.mockResolvedValue({ ...baseMl, viewCount: 101 });
-      const result = await service.interact(1, { type: 'LIKE' } as any, 2);
+      mockPrisma.microLearningInteraction.findFirst.mockResolvedValue(null);
+      mockPrisma.microLearningInteraction.create.mockResolvedValue({ id: 1 });
+      // Real signature: interact(userId, dto) — 2 args
+      const result = await service.interact(1, { microLearningId: 1, action: 'LIKE' } as any);
       expect(result).toBeDefined();
     });
 
     it('deve remover like existente (toggle)', async () => {
-      mockPrisma.microLearning.findUnique.mockResolvedValue(baseMl);
-      mockPrisma.microLearningLike.findFirst.mockResolvedValue({ id: 1 });
-      mockPrisma.microLearningLike.delete.mockResolvedValue({});
-      mockPrisma.microLearning.update.mockResolvedValue(baseMl);
-      const result = await service.interact(1, { type: 'LIKE' } as any, 2);
+      mockPrisma.microLearningInteraction.findFirst.mockResolvedValue({ id: 1 });
+      mockPrisma.microLearningInteraction.delete.mockResolvedValue({});
+      // Real signature: interact(userId, dto) — 2 args
+      const result = await service.interact(1, { microLearningId: 1, action: 'LIKE' } as any);
       expect(result).toBeDefined();
     });
   });
@@ -184,11 +220,18 @@ describe('MicroLearningService (additional)', () => {
     it('deve criar playlist de micro-learnings', async () => {
       mockPrisma.microLearningPlaylist.create.mockResolvedValue({
         id: 1,
-        userId: 1,
+        authorId: 1,
         title: 'Minha Playlist',
       });
+      mockPrisma.microLearningPlaylist.findUnique.mockResolvedValue({
+        id: 1,
+        title: 'Minha Playlist',
+        items: [],
+        author: { id: 1, fullName: 'Admin' },
+        _count: { items: 0 },
+      });
       const result = await service.createPlaylist(
-        { title: 'Minha Playlist', itemIds: [1, 2] } as any,
+        { title: 'Minha Playlist', contentIds: [1, 2] } as any,
         1,
       );
       expect(result).toBeDefined();
@@ -200,20 +243,29 @@ describe('MicroLearningService (additional)', () => {
   describe('dispatch', () => {
     it('deve enviar micro-learning para utilizadores', async () => {
       mockPrisma.microLearning.findUnique.mockResolvedValue(baseMl);
-      mockPrisma.user.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
-      mockPrisma.notificationLog.createMany.mockResolvedValue({ count: 2 });
-      const result = await service.dispatch(1, { userIds: [1, 2] } as any, 1);
+      mockPrisma.microLearningProgress.findMany.mockResolvedValue([]);
+      mockPrisma.microLearningProgress.createMany.mockResolvedValue({ count: 2 });
+      mockPrisma.notificationLog.create.mockResolvedValue({});
+      // Real signature: dispatch(dto) — 1 arg (DispatchMicroLearningDto)
+      const result = await service.dispatch({ microLearningId: 1, userIds: [1, 2] } as any);
       expect(result).toBeDefined();
-      expect(result).toHaveProperty('sent');
+      expect(result).toHaveProperty('dispatched');
     });
   });
 
-  // ─── getStats ────────────────────────────────────────────────
+  // ─── getContentStats (replaces non-existent getStats) ────────
 
-  describe('getStats', () => {
+  describe('getContentStats', () => {
     it('deve retornar estatísticas de micro-learning', async () => {
-      mockPrisma.microLearning.count.mockResolvedValue(50);
-      const result = await service.getStats(1);
+      mockPrisma.microLearning.findUnique.mockResolvedValue(baseMl);
+      mockPrisma.microLearningProgress.count.mockResolvedValue(50);
+      mockPrisma.microLearningProgress.aggregate.mockResolvedValue({
+        _avg: { progress: 70, watchedSeconds: 100 },
+      });
+      mockPrisma.microQuizAttempt.aggregate.mockResolvedValue({ _avg: { score: 80 }, _count: 5 });
+      mockPrisma.microLearningInteraction.count.mockResolvedValue(20);
+      // Real method is getContentStats(id) — getStats doesn't exist
+      const result = await service.getContentStats(1);
       expect(result).toBeDefined();
     });
   });

@@ -18,6 +18,7 @@ const mockPrisma: any = {
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     count: jest.fn().mockResolvedValue(0),
     upsert: jest.fn(),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   course: {
     findUnique: jest.fn().mockResolvedValue(null),
@@ -28,10 +29,20 @@ const mockPrisma: any = {
     findMany: jest.fn().mockResolvedValue([]),
   },
   lesson: { count: jest.fn().mockResolvedValue(0) },
-  lessonProgress: { count: jest.fn().mockResolvedValue(0) },
-  certificate: { create: jest.fn().mockResolvedValue({ id: 1, validationCode: 'CERT-001' }) },
+  lessonProgress: {
+    count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
+  },
+  courseModule: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  certificate: {
+    create: jest.fn().mockResolvedValue({ id: 1, validationCode: 'CERT-001' }),
+    findFirst: jest.fn().mockResolvedValue(null),
+  },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
+  courseAnalytics: { updateMany: jest.fn().mockResolvedValue({}) },
 };
 
 const baseCourse = {
@@ -115,13 +126,15 @@ describe('EnrollmentsService (additional)', () => {
       mockPrisma.enrollment.findUnique.mockResolvedValue(baseEnrollment);
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(2);
-      const result = await service.findOne(1, 2);
+      // Real signature: findOne(id) — 1 arg only
+      const result = await service.findOne(1);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se inscrição não existe', async () => {
       mockPrisma.enrollment.findUnique.mockResolvedValue(null);
-      await expect(service.findOne(99, 1)).rejects.toThrow(NotFoundException);
+      // Real signature: findOne(id) — 1 arg only
+      await expect(service.findOne(99)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -132,41 +145,48 @@ describe('EnrollmentsService (additional)', () => {
       mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
       mockPrisma.enrollment.findFirst.mockResolvedValue(null);
       mockPrisma.enrollment.create.mockResolvedValue(baseEnrollment);
-      const result = await service.enroll({ userId: 2, courseId: 1 } as any, 1);
+      mockPrisma.courseAnalytics = { updateMany: jest.fn().mockResolvedValue({}) };
+      // Real signature: enroll(dto) — 1 arg only
+      const result = await service.enroll({ userId: 2, courseId: 1 } as any);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se curso não existe', async () => {
       mockPrisma.course.findUnique.mockResolvedValue(null);
-      await expect(service.enroll({ userId: 2, courseId: 99 } as any, 1)).rejects.toThrow(
+      mockPrisma.enrollment.findFirst.mockResolvedValue(null);
+      // Real signature: enroll(dto) — 1 arg only
+      await expect(service.enroll({ userId: 2, courseId: 99 } as any)).rejects.toThrow(
         NotFoundException,
       );
     });
 
     it('deve lançar BadRequestException se curso não está publicado', async () => {
       mockPrisma.course.findUnique.mockResolvedValue({ ...baseCourse, status: 'DRAFT' });
-      await expect(service.enroll({ userId: 2, courseId: 1 } as any, 1)).rejects.toThrow(
+      mockPrisma.enrollment.findFirst.mockResolvedValue(null);
+      // Real signature: enroll(dto) — 1 arg only
+      await expect(service.enroll({ userId: 2, courseId: 1 } as any)).rejects.toThrow(
         BadRequestException,
       );
     });
 
     it('deve lançar ConflictException se já inscrito', async () => {
-      mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
       mockPrisma.enrollment.findFirst.mockResolvedValue(baseEnrollment);
-      await expect(service.enroll({ userId: 2, courseId: 1 } as any, 1)).rejects.toThrow(
+      // Real signature: enroll(dto) — 1 arg only
+      await expect(service.enroll({ userId: 2, courseId: 1 } as any)).rejects.toThrow(
         ConflictException,
       );
     });
   });
 
-  // ─── getMyEnrollments ─────────────────────────────────────────
+  // ─── getUserEnrollments (replaces getMyEnrollments) ──────────
 
-  describe('getMyEnrollments', () => {
+  describe('getUserEnrollments', () => {
     it('deve retornar inscrições do utilizador com progresso', async () => {
-      mockPrisma.enrollment.findMany.mockResolvedValue([baseEnrollment]);
+      mockPrisma.enrollment.findMany.mockResolvedValue([]);
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(3);
-      const result = await service.getMyEnrollments(2, {});
+      // Real method: getUserEnrollments(userId, filters?)
+      const result = await service.getUserEnrollments(2, {});
       expect(result).toBeDefined();
     });
   });
@@ -176,18 +196,18 @@ describe('EnrollmentsService (additional)', () => {
   describe('updateStatus', () => {
     it('deve actualizar status da inscrição', async () => {
       mockPrisma.enrollment.findUnique.mockResolvedValue(baseEnrollment);
-      mockPrisma.enrollment.update.mockResolvedValue({ ...baseEnrollment, status: 'PAUSED' });
-      const result = await service.updateStatus(
-        1,
-        { status: 'PAUSED' as any, reason: 'Sem tempo' },
-        1,
-      );
+      mockPrisma.lesson.count.mockResolvedValue(0);
+      mockPrisma.lessonProgress.count.mockResolvedValue(0);
+      mockPrisma.enrollment.update.mockResolvedValue({ ...baseEnrollment, status: 'IN_PROGRESS' });
+      // Real signature: updateStatus(id, dto) — 2 args only
+      const result = await service.updateStatus(1, { status: 'IN_PROGRESS' as any });
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se inscrição não existe', async () => {
       mockPrisma.enrollment.findUnique.mockResolvedValue(null);
-      await expect(service.updateStatus(99, { status: 'PAUSED' as any }, 1)).rejects.toThrow(
+      // Real signature: updateStatus(id, dto) — 2 args only
+      await expect(service.updateStatus(99, { status: 'IN_PROGRESS' as any })).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -197,17 +217,34 @@ describe('EnrollmentsService (additional)', () => {
 
   describe('cancel', () => {
     it('deve cancelar inscrição', async () => {
-      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, userId: 2 });
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        userId: 2,
+        status: 'NOT_STARTED',
+        mandatory: false,
+        courseId: 1,
+      });
+      mockPrisma.lesson.count.mockResolvedValue(0);
+      mockPrisma.lessonProgress.count.mockResolvedValue(0);
       mockPrisma.enrollment.update.mockResolvedValue({ ...baseEnrollment, status: 'CANCELLED' });
-      const result = await service.cancel(1, { reason: 'Não aplicável' } as any, 2, 'EMPLOYEE');
+      mockPrisma.courseAnalytics = { updateMany: jest.fn().mockResolvedValue({}) };
+      // Real signature: cancel(id, dto, requestingUserId) — 3 args
+      const result = await service.cancel(1, { reason: 'Não aplicável' } as any, 2);
       expect(result).toBeDefined();
     });
 
-    it('deve lançar ForbiddenException se não é o utilizador nem admin', async () => {
-      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, userId: 2 });
-      await expect(service.cancel(1, {} as any, 99, 'EMPLOYEE')).rejects.toThrow(
-        ForbiddenException,
-      );
+    it('deve lançar ForbiddenException se matrícula obrigatória', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        userId: 2,
+        status: 'NOT_STARTED',
+        mandatory: true,
+        courseId: 1,
+      });
+      mockPrisma.lesson.count.mockResolvedValue(0);
+      mockPrisma.lessonProgress.count.mockResolvedValue(0);
+      // Real signature: cancel(id, dto, requestingUserId) — 3 args
+      await expect(service.cancel(1, {} as any, 2)).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -218,33 +255,35 @@ describe('EnrollmentsService (additional)', () => {
       mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
       mockPrisma.enrollment.findFirst.mockResolvedValue(null);
       mockPrisma.enrollment.create.mockResolvedValue(baseEnrollment);
-      const result = await service.bulkEnroll(
-        {
-          courseId: 1,
-          userIds: [1, 2, 3],
-          mandatory: true,
-        } as any,
-        1,
-      );
+      mockPrisma.courseAnalytics = { updateMany: jest.fn().mockResolvedValue({}) };
+      // Real signature: bulkEnroll(dto) — 1 arg; returns { success, skipped, errors, total }
+      const result = await service.bulkEnroll({
+        courseId: 1,
+        userIds: [1, 2, 3],
+        mandatory: true,
+      } as any);
       expect(result).toBeDefined();
-      expect(result.created).toBe(3);
+      expect(result.success).toBe(3); // 'success' not 'created'
     });
   });
 
-  // ─── complete ─────────────────────────────────────────────────
+  // ─── complete — method doesn't exist, use generateCertificate ─
 
-  describe('complete', () => {
-    it('deve completar inscrição e emitir certificado', async () => {
-      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment, status: 'ACTIVE' });
-      mockPrisma.lesson.count.mockResolvedValue(5);
-      mockPrisma.lessonProgress.count.mockResolvedValue(5);
-      mockPrisma.enrollment.update.mockResolvedValue({
+  describe('generateCertificate', () => {
+    it('deve gerar certificado para inscrição completa', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
         ...baseEnrollment,
         status: 'COMPLETED',
-        progressPercent: 100,
+        userId: 2,
+        courseId: 1,
       });
+      mockPrisma.lesson.count.mockResolvedValue(5);
+      mockPrisma.lessonProgress.count.mockResolvedValue(5);
+      mockPrisma.certificate.findFirst = jest.fn().mockResolvedValue(null);
+      mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
       mockPrisma.certificate.create.mockResolvedValue({ id: 1, validationCode: 'CERT-001' });
-      const result = await service.complete(1, 2);
+      // Real method: generateCertificate(enrollmentId) — 1 arg, no 'complete' method
+      const result = await service.generateCertificate(1);
       expect(result).toBeDefined();
     });
   });
@@ -254,25 +293,27 @@ describe('EnrollmentsService (additional)', () => {
   describe('updateDeadline', () => {
     it('deve actualizar prazo da inscrição', async () => {
       mockPrisma.enrollment.findUnique.mockResolvedValue(baseEnrollment);
+      mockPrisma.lesson.count.mockResolvedValue(0);
+      mockPrisma.lessonProgress.count.mockResolvedValue(0);
       mockPrisma.enrollment.update.mockResolvedValue({
         ...baseEnrollment,
         deadline: new Date('2026-12-31'),
       });
-      const result = await service.updateDeadline(
-        1,
-        { newDeadline: '2026-12-31', reason: 'Extensão' } as any,
-        1,
-      );
+      // Real signature: updateDeadline(id, dto) — 2 args only
+      const result = await service.updateDeadline(1, { deadline: '2026-12-31' } as any);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getStats ────────────────────────────────────────────────
+  // ─── getAdminDashboard (replaces getStats) ────────────────────
 
-  describe('getStats', () => {
+  describe('getAdminDashboard', () => {
     it('deve retornar estatísticas de inscrições', async () => {
       mockPrisma.enrollment.count.mockResolvedValue(100);
-      const result = await service.getStats({});
+      mockPrisma.enrollment.groupBy = jest.fn().mockResolvedValue([]);
+      mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
+      // Real method: getAdminDashboard() — no args, getStats doesn't exist
+      const result = await service.getAdminDashboard();
       expect(result).toBeDefined();
     });
   });

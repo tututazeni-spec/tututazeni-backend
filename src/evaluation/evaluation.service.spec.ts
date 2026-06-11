@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EvaluationService } from './evaluation.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { CycleStatus, EvalType, EvalModel } from './evaluation.dto';
+import { EvalType, EvalModel } from './evaluation.dto';
 
 const mockPrisma = {
   user: { findUnique: jest.fn(), findMany: jest.fn() },
@@ -14,14 +14,30 @@ const mockPrisma = {
     update: jest.fn(),
     count: jest.fn(),
     updateMany: jest.fn(),
+    upsert: jest.fn().mockResolvedValue({ id: 1, overallScore: 4.0, status: 'COMPLETED' }),
   },
   evaluationRequest: {
     findFirst: jest.fn(),
-    create: jest.fn(),
+    findUnique: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({}),
     findMany: jest.fn().mockResolvedValue([]),
     count: jest.fn().mockResolvedValue(0),
-    update: jest.fn(),
-    updateMany: jest.fn(),
+    update: jest.fn().mockResolvedValue({}),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
+  evaluationForm: {
+    findUnique: jest
+      .fn()
+      .mockResolvedValue({ id: 1, name: 'Formulário 2024', sections: [], questions: [] }),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn().mockResolvedValue({ id: 1, name: 'Formulário 2024' }),
+  },
+  evaluationCycle: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn().mockResolvedValue({ id: 1, name: 'Ciclo 2024' }),
+    update: jest.fn().mockResolvedValue({}),
+    count: jest.fn().mockResolvedValue(0),
   },
   notificationLog: {
     create: jest.fn().mockResolvedValue({}),
@@ -147,6 +163,17 @@ describe('EvaluationService', () => {
 
   describe('activateCycle', () => {
     it('deve activar ciclo', async () => {
+      const fakeCycle = {
+        id: 1,
+        name: 'Ciclo 2024',
+        status: 'PUBLISHED',
+        endDate: new Date(),
+        model: '360',
+        targetDeptIds: [],
+        weights: JSON.stringify([]),
+      };
+      mockPrisma.evaluationCycle.findUnique.mockResolvedValue(fakeCycle);
+      mockPrisma.evaluationCycle.update.mockResolvedValue({ ...fakeCycle, status: 'ACTIVE' });
       const result = await service.activateCycle(1);
       expect(result).toBeDefined();
     });
@@ -156,7 +183,15 @@ describe('EvaluationService', () => {
 
   describe('createForm', () => {
     it('deve criar formulário de avaliação', async () => {
-      const result = await service.createForm({ name: 'Formulário 2024', sections: [] } as any, 1);
+      mockPrisma.evaluationForm.create.mockResolvedValue({
+        id: 1,
+        title: 'Formulário 2024',
+        questions: [],
+      });
+      const result = await service.createForm(
+        { title: 'Formulário 2024', questions: [] } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -179,6 +214,7 @@ describe('EvaluationService', () => {
     });
 
     it('deve lançar NotFoundException se não encontrado', async () => {
+      mockPrisma.evaluationForm.findUnique.mockResolvedValueOnce(null);
       await expect(service.getForm(999)).rejects.toThrow(NotFoundException);
     });
   });
@@ -187,6 +223,13 @@ describe('EvaluationService', () => {
 
   describe('assignEvaluator', () => {
     it('deve atribuir avaliador', async () => {
+      mockPrisma.evaluationRequest.findFirst.mockResolvedValue(null);
+      mockPrisma.evaluationRequest.create.mockResolvedValue({
+        id: 1,
+        evaluatorId: 2,
+        evaluatedId: 1,
+        type: EvalType.MANAGER,
+      });
       const result = await service.assignEvaluator({
         evaluatorId: 2,
         evaluatedId: 1,
@@ -213,7 +256,7 @@ describe('EvaluationService', () => {
 
   describe('submitEvaluation', () => {
     it('deve submeter avaliação', async () => {
-      mockPrisma.evaluationRequest.findFirst.mockResolvedValue({
+      mockPrisma.evaluationRequest.findUnique.mockResolvedValue({
         id: 1,
         evaluatorId: 1,
         evaluatedId: 2,
@@ -226,6 +269,7 @@ describe('EvaluationService', () => {
           id: 1,
         },
       });
+      mockPrisma.evaluationRequest.findFirst.mockResolvedValue(null);
       mockPrisma.performanceEvaluation.findFirst.mockResolvedValue(null);
       mockPrisma.performanceEvaluation.create.mockResolvedValue({ id: 1, score: 4.0 });
       mockPrisma.evaluationRequest.update.mockResolvedValue({});

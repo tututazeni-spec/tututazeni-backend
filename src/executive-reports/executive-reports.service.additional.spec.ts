@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { ExecutiveReportsService } from './executive-reports.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -119,10 +119,14 @@ describe('ExecutiveReportsService (additional)', () => {
   describe('create', () => {
     it('deve criar relatório executivo', async () => {
       mockPrisma.executiveReport.create.mockResolvedValue(baseReport);
-      const result = await service.create(
-        { title: 'Relatório Q1', type: 'LMS_OVERVIEW' as any, period: '2026-Q1' } as any,
-        1,
-      );
+      mockPrisma.reportLog = { create: jest.fn().mockResolvedValue({}) };
+      // Real signature: create(generatedById, dto) — userId first, dto second
+      const result = await service.create(1, {
+        title: 'Relatório Q1',
+        type: 'LMS_OVERVIEW' as any,
+        period: '2026-Q1',
+        metrics: [],
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -133,111 +137,112 @@ describe('ExecutiveReportsService (additional)', () => {
     it('deve actualizar relatório em DRAFT', async () => {
       mockPrisma.executiveReport.findUnique.mockResolvedValue({ ...baseReport, generatedById: 1 });
       mockPrisma.executiveReport.update.mockResolvedValue({ ...baseReport, title: 'Actualizado' });
-      const result = await service.update(1, { title: 'Actualizado' } as any, 1);
+      mockPrisma.executiveMetric = {
+        deleteMany: jest.fn().mockResolvedValue({}),
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
+      };
+      // Real signature: update(id, dto) — 2 args only
+      const result = await service.update(1, { title: 'Actualizado' } as any);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se relatório não existe', async () => {
       mockPrisma.executiveReport.findUnique.mockResolvedValue(null);
-      await expect(service.update(99, {} as any, 1)).rejects.toThrow(NotFoundException);
+      await expect(service.update(99, {} as any)).rejects.toThrow(NotFoundException);
     });
   });
 
-  // ─── publish ──────────────────────────────────────────────────
+  // ─── publishReport (real method name) ─────────────────────────
 
-  describe('publish', () => {
-    it('deve publicar relatório DRAFT', async () => {
+  describe('publishReport', () => {
+    it('deve publicar relatório aprovado', async () => {
+      mockPrisma.executiveReport.findUnique.mockResolvedValue({
+        ...baseReport,
+        generatedById: 1,
+        status: 'APPROVED',
+      });
+      mockPrisma.executiveReport.update.mockResolvedValue({ ...baseReport, status: 'PUBLISHED' });
+      // Real method: publishReport(id) — 1 arg
+      const result = await service.publishReport(1);
+      expect(result).toBeDefined();
+    });
+
+    it('deve lançar BadRequestException se não aprovado', async () => {
       mockPrisma.executiveReport.findUnique.mockResolvedValue({
         ...baseReport,
         generatedById: 1,
         status: 'DRAFT',
       });
-      mockPrisma.executiveReport.update.mockResolvedValue({ ...baseReport, status: 'PUBLISHED' });
-      const result = await service.publish(1, 1);
-      expect(result).toBeDefined();
-    });
-
-    it('deve lançar BadRequestException se já publicado', async () => {
-      mockPrisma.executiveReport.findUnique.mockResolvedValue({
-        ...baseReport,
-        generatedById: 1,
-        status: 'PUBLISHED',
-      });
-      await expect(service.publish(1, 1)).rejects.toThrow(BadRequestException);
+      await expect(service.publishReport(1)).rejects.toThrow(BadRequestException);
     });
   });
 
-  // ─── archive ──────────────────────────────────────────────────
+  // ─── archiveReport (real method name) ─────────────────────────
 
-  describe('archive', () => {
+  describe('archiveReport', () => {
     it('deve arquivar relatório', async () => {
       mockPrisma.executiveReport.findUnique.mockResolvedValue({ ...baseReport, generatedById: 1 });
       mockPrisma.executiveReport.update.mockResolvedValue({ ...baseReport, status: 'ARCHIVED' });
-      const result = await service.archive(1, 1);
+      // Real method: archiveReport(id) — 1 arg
+      const result = await service.archiveReport(1);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── addMetric ────────────────────────────────────────────────
+  // ─── addMetric — method doesn't exist, skip ───────────────────
 
   describe('addMetric', () => {
-    it('deve adicionar métrica ao relatório', async () => {
-      mockPrisma.executiveReport.findUnique.mockResolvedValue(baseReport);
-      mockPrisma.reportMetric.create.mockResolvedValue({
-        id: 1,
-        reportId: 1,
-        name: 'Total Utilizadores',
-      });
-      const result = await service.addMetric(
-        1,
-        { name: 'Total Utilizadores', value: 100, unit: 'users' } as any,
-        1,
-      );
-      expect(result).toBeDefined();
+    it.skip('deve adicionar métrica ao relatório (método não existe na service)', async () => {
+      // addMetric is not a public method on ExecutiveReportsService
+      // metrics are created inline during create/update
     });
   });
 
-  // ─── updateMetric ─────────────────────────────────────────────
+  // ─── updateMetric — method doesn't exist, skip ────────────────
 
   describe('updateMetric', () => {
-    it('deve actualizar métrica', async () => {
-      mockPrisma.reportMetric.update.mockResolvedValue({ id: 1, value: 200 });
-      const result = await service.updateMetric(1, { value: 200 } as any);
-      expect(result).toBeDefined();
+    it.skip('deve actualizar métrica (método não existe na service)', async () => {
+      // No standalone updateMetric method exists
     });
   });
 
-  // ─── removeMetric ─────────────────────────────────────────────
+  // ─── removeMetric — method doesn't exist, skip ────────────────
 
   describe('removeMetric', () => {
-    it('deve remover métrica', async () => {
-      mockPrisma.reportMetric.delete = jest.fn().mockResolvedValue({});
-      await service.removeMetric(1);
-      expect(mockPrisma.reportMetric.delete).toHaveBeenCalled();
+    it.skip('deve remover métrica (método não existe na service)', async () => {
+      // No standalone removeMetric method exists
     });
   });
 
-  // ─── generateFromData ─────────────────────────────────────────
+  // ─── generateAutoReport (replaces generateFromData) ───────────
 
-  describe('generateFromData', () => {
-    it('deve gerar relatório com métricas automáticas', async () => {
+  describe('generateAutoReport', () => {
+    it('deve gerar relatório automático com métricas', async () => {
       mockPrisma.executiveReport.create.mockResolvedValue(baseReport);
-      mockPrisma.reportMetric.createMany.mockResolvedValue({ count: 5 });
       mockPrisma.enrollment.count.mockResolvedValue(150);
-      mockPrisma.course.count.mockResolvedValue(50);
       mockPrisma.certificate.count.mockResolvedValue(30);
-      const result = await service.generateFromData(
-        { type: 'LMS_OVERVIEW' as any, period: '2026-Q1' } as any,
-        1,
-      );
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      mockPrisma.user.count = jest.fn().mockResolvedValue(100);
+      mockPrisma.developmentPlan = {
+        count: jest.fn().mockResolvedValue(10),
+      };
+      mockPrisma.developmentPlanAction = {
+        count: jest.fn().mockResolvedValue(2),
+      };
+      mockPrisma.userPoints = {
+        aggregate: jest.fn().mockResolvedValue({ _sum: { points: 5000 } }),
+      };
+      mockPrisma.reportLog = { create: jest.fn().mockResolvedValue({}) };
+      // Real method: generateAutoReport(generatedById, type?, departmentId?)
+      const result = await service.generateAutoReport(1);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── requestApproval ─────────────────────────────────────────
+  // ─── submitForReview (replaces requestApproval) ───────────────
 
-  describe('requestApproval', () => {
-    it('deve solicitar aprovação do relatório', async () => {
+  describe('submitForReview', () => {
+    it('deve submeter relatório para revisão', async () => {
       mockPrisma.executiveReport.findUnique.mockResolvedValue({
         ...baseReport,
         generatedById: 1,
@@ -245,26 +250,29 @@ describe('ExecutiveReportsService (additional)', () => {
       });
       mockPrisma.executiveReport.update.mockResolvedValue({
         ...baseReport,
-        status: 'PENDING_APPROVAL',
+        status: 'IN_REVIEW',
       });
-      mockPrisma.notificationLog.create.mockResolvedValue({});
-      const result = await service.requestApproval(1, 2, 1);
+      // Real method: submitForReview(id) — 1 arg
+      const result = await service.submitForReview(1);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── approve ──────────────────────────────────────────────────
+  // ─── approveReport (replaces approve) ────────────────────────
 
-  describe('approve', () => {
+  describe('approveReport', () => {
     it('deve aprovar relatório', async () => {
       mockPrisma.executiveReport.findUnique.mockResolvedValue({
         ...baseReport,
-        status: 'PENDING_APPROVAL',
+        status: 'IN_REVIEW',
       });
       mockPrisma.reportApproval.create.mockResolvedValue({ id: 1 });
-      mockPrisma.executiveReport.update.mockResolvedValue({ ...baseReport, status: 'PUBLISHED' });
-      mockPrisma.notificationLog.create.mockResolvedValue({});
-      const result = await service.approve(1, { approved: true, comments: 'OK' }, 2);
+      mockPrisma.executiveReport.update.mockResolvedValue({ ...baseReport, status: 'APPROVED' });
+      // Real method: approveReport(dto, approverId)
+      const result = await service.approveReport(
+        { reportId: 1, decision: 'approve', comment: 'OK' } as any,
+        2,
+      );
       expect(result).toBeDefined();
     });
   });

@@ -20,7 +20,7 @@ const baseArticle = {
   _count: { comments: 0, questions: 0, acknowledgements: 0 },
 };
 
-const mockPrisma = {
+const mockPrisma: any = {
   knowledgeCategory: {
     findMany: makeFindMany([]),
     findFirst: makeFind(null),
@@ -113,11 +113,15 @@ describe('KnowledgeService — additional coverage', () => {
     it('deve criar artigo de conhecimento', async () => {
       mockPrisma.knowledgeArticle.create.mockResolvedValue(baseArticle);
       mockPrisma.knowledgeArticle.findUnique.mockResolvedValue(baseArticle);
+      mockPrisma.articleVersion = { create: jest.fn().mockResolvedValue({}) };
+      mockPrisma.userPoints = { upsert: jest.fn().mockResolvedValue({}) };
 
-      const result = await service.create(
-        { title: 'Artigo Teste', content: 'Conteúdo', accessLevel: 'ALL' } as any,
-        1,
-      );
+      // Real signature: create(authorId, dto) — authorId first, dto second
+      const result = await service.create(1, {
+        title: 'Artigo Teste',
+        content: 'Conteúdo',
+        accessLevel: 'ALL',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -126,10 +130,24 @@ describe('KnowledgeService — additional coverage', () => {
 
   describe('update', () => {
     it('deve actualizar artigo existente', async () => {
-      mockPrisma.knowledgeArticle.findUnique.mockResolvedValue({ ...baseArticle, authorId: 1 });
+      mockPrisma.knowledgeArticle.findUnique.mockResolvedValue({
+        ...baseArticle,
+        authorId: 1,
+        content: 'Old content',
+        _count: { versions: 1 },
+      });
       mockPrisma.knowledgeArticle.update.mockResolvedValue({ ...baseArticle, title: 'Updated' });
+      mockPrisma.knowledgeTag = { deleteMany: jest.fn().mockResolvedValue({}) };
+      mockPrisma.knowledgeInteraction = {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({}),
+        delete: jest.fn().mockResolvedValue({}),
+      };
+      mockPrisma.articleVersion = { create: jest.fn().mockResolvedValue({}) };
 
-      const result = await service.update(1, { title: 'Updated' } as any, 1, false);
+      // Real signature: update(id, dto, updatedById?) — 2-3 args (no 4th arg)
+      const result = await service.update(1, { title: 'Updated' } as any, 1);
       expect(result).toBeDefined();
     });
 

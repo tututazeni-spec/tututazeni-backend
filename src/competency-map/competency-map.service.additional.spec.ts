@@ -260,13 +260,15 @@ describe('CompetencyMapService (additional)', () => {
     });
   });
 
-  // ─── getGapAnalysis ───────────────────────────────────────────
+  // ─── getUserGapAnalysis ───────────────────────────────────────
 
-  describe('getGapAnalysis', () => {
+  describe('getUserGapAnalysis', () => {
     it('deve retornar análise de gaps para colaborador com role definido', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 1, fullName: 'Test' });
       mockPrisma.legacyEmployeeSkill.findMany.mockResolvedValue([{ skillId: 1, currentLevel: 3 }]);
       mockPrisma.roleSkillMatrix.findUnique.mockResolvedValue(baseMatrix);
-      const result = await service.getGapAnalysis('SENIOR_DEV', 1);
+      mockPrisma.skill.findMany.mockResolvedValue([]);
+      const result = await service.getUserGapAnalysis(1, 'SENIOR_DEV');
       expect(result).toBeDefined();
       expect(result).toHaveProperty('gaps');
       expect(result).toHaveProperty('readinessScore');

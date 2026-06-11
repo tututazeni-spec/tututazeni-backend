@@ -3,7 +3,11 @@ import { SearchService } from './search.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma: any = {
-  user: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
+  user: {
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+    findUnique: jest.fn().mockResolvedValue(null),
+  },
   course: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
   document: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
   knowledgeArticle: {
@@ -13,8 +17,14 @@ const mockPrisma: any = {
   searchHistory: {
     create: jest.fn().mockResolvedValue({}),
     findMany: jest.fn().mockResolvedValue([]),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   searchSuggestion: { findMany: jest.fn().mockResolvedValue([]) },
+  contentAsset: { findMany: jest.fn().mockResolvedValue([]) },
+  developmentPlan: { findMany: jest.fn().mockResolvedValue([]) },
+  competency: { findMany: jest.fn().mockResolvedValue([]) },
+  avatarScenario: { findMany: jest.fn().mockResolvedValue([]) },
+  enrollment: { findMany: jest.fn().mockResolvedValue([]) },
 };
 
 const baseUser = {
@@ -72,31 +82,34 @@ describe('SearchService (additional)', () => {
 
   // ─── typedSearch ─────────────────────────────────────────────
 
-  describe('typedSearch', () => {
+  describe('searchByType', () => {
     it('deve pesquisar utilizadores especificamente', async () => {
       mockPrisma.user.findMany.mockResolvedValue([baseUser]);
       mockPrisma.user.count.mockResolvedValue(1);
-      const result = await service.typedSearch('user' as any, 'João', 1, { page: 1, limit: 10 });
+      const result = await service.searchByType('user' as any, 'João', 1, {
+        page: 1,
+        limit: 10,
+      } as any);
       expect(result).toBeDefined();
     });
 
     it('deve pesquisar cursos especificamente', async () => {
       mockPrisma.course.findMany.mockResolvedValue([baseCourse]);
       mockPrisma.course.count.mockResolvedValue(1);
-      const result = await service.typedSearch('course' as any, 'TypeScript', 1, {
+      const result = await service.searchByType('course' as any, 'TypeScript', 1, {
         page: 1,
         limit: 10,
-      });
+      } as any);
       expect(result).toBeDefined();
     });
 
     it('deve pesquisar documentos', async () => {
       mockPrisma.document.findMany.mockResolvedValue([]);
       mockPrisma.document.count.mockResolvedValue(0);
-      const result = await service.typedSearch('document' as any, 'contrato', 1, {
+      const result = await service.searchByType('document' as any, 'contrato', 1, {
         page: 1,
         limit: 10,
-      });
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -107,24 +120,24 @@ describe('SearchService (additional)', () => {
     it('deve retornar sugestões de pesquisa', async () => {
       mockPrisma.searchSuggestion.findMany.mockResolvedValue([]);
       mockPrisma.course.findMany.mockResolvedValue([baseCourse]);
-      const result = await service.getSuggestions('Type', 1);
+      const result = await service.getSuggestions(1);
       expect(result).toBeDefined();
     });
 
-    it('deve retornar vazio para query muito curta', async () => {
-      const result = await service.getSuggestions('T', 1);
+    it('deve retornar sugestões para outro utilizador', async () => {
+      const result = await service.getSuggestions(2);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getSearchHistory ─────────────────────────────────────────
+  // ─── getHistory ───────────────────────────────────────────────
 
-  describe('getSearchHistory', () => {
+  describe('getHistory', () => {
     it('deve retornar histórico de pesquisa do utilizador', async () => {
       mockPrisma.searchHistory.findMany.mockResolvedValue([
         { id: 1, query: 'TypeScript', userId: 1 },
       ]);
-      const result = await service.getSearchHistory(1);
+      const result = await service.getHistory(1);
       expect(result).toBeDefined();
     });
   });

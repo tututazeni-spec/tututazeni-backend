@@ -46,7 +46,22 @@ const mockPrismaProxy = new Proxy(mockPrisma, {
       return { count: makeCount(), findMany: makeFind(), aggregate: makeAgg() };
     if (prop === 'leaveRequest')
       return { count: makeCount(), findMany: makeFind(), groupBy: makeGroupBy() };
-    if (prop === 'surveyResponse') return { count: makeCount() };
+    if (prop === 'surveyResponse')
+      return {
+        count: makeCount(),
+        aggregate: makeAgg(),
+        findMany: makeFind(),
+        groupBy: makeGroupBy(),
+      };
+    if (prop === 'userCompetency')
+      return {
+        count: makeCount(),
+        findMany: makeFind(),
+        groupBy: makeGroupBy(),
+        aggregate: makeAgg(),
+      };
+    if (prop === 'successionPlan') return { findMany: makeFind(), count: makeCount() };
+    if (prop === 'nineBoxPlacement') return { findMany: makeFind(), count: makeCount() };
     return (target as any)[prop];
   },
 });

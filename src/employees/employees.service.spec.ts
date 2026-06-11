@@ -4,19 +4,33 @@ import { EmployeesService } from './employees.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 
-const mockPrisma = {
+const mockPrisma: any = {
   employee: {
     findUnique: jest.fn(),
     findFirst: jest.fn(),
     findMany: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
-    count: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
     delete: jest.fn(),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
-  contract: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn() },
-  employeeSkill: { upsert: jest.fn(), findMany: jest.fn() },
-  feedback360: { create: jest.fn(), findMany: jest.fn() },
+  contract: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  employeeSkill: {
+    upsert: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  feedback360: {
+    create: jest.fn(),
+    findMany: jest.fn(),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { score: null }, _count: 0 }),
+  },
   employeeCareerPlan: { create: jest.fn(), findMany: jest.fn() },
   employeePdi: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn() },
   pdiAction: { updateMany: jest.fn() },
@@ -30,6 +44,15 @@ const mockPrisma = {
   },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
+  careerPlan: { count: jest.fn().mockResolvedValue(0) },
+  attendance: {
+    aggregate: jest
+      .fn()
+      .mockResolvedValue({ _sum: { hoursWorked: 0 }, _avg: { hoursWorked: 0 }, _count: 0 }),
+  },
+  legacyPdi: { findFirst: jest.fn().mockResolvedValue(null) },
+  enrollment: { count: jest.fn().mockResolvedValue(0) },
+  badgeAward: { count: jest.fn().mockResolvedValue(0) },
 };
 
 const mockAudit = { log: jest.fn().mockResolvedValue({}) };

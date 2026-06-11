@@ -20,11 +20,20 @@ const mockPrisma: any = {
     update: jest.fn(),
     delete: jest.fn(),
     upsert: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   automationExecution: makeExec(),
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   user: { findMany: jest.fn().mockResolvedValue([]) },
   enrollment: { findMany: jest.fn().mockResolvedValue([]) },
+  historyRecord: { count: jest.fn().mockResolvedValue(0) },
+  payslip: { count: jest.fn().mockResolvedValue(0) },
+  auditLog: { create: jest.fn().mockResolvedValue({}) },
+  badge: { findFirst: jest.fn().mockResolvedValue(null) },
+  badgeAward: { create: jest.fn().mockResolvedValue({}) },
+  developmentPlan: { create: jest.fn().mockResolvedValue({}) },
+  userPoints: { upsert: jest.fn().mockResolvedValue({}) },
 };
 
 const baseRule = {

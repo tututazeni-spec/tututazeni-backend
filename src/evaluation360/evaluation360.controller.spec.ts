@@ -70,8 +70,8 @@ describe('Evaluation360Controller', () => {
   });
 
   it('listCompetencies → listCompetencies(tenantId, query)', async () => {
-    await controller.listCompetencies('t1');
-    expect(mockSvc.listCompetencies).toHaveBeenCalledWith('t1', expect.anything());
+    await controller.listCompetencies('t1', undefined);
+    expect(mockSvc.listCompetencies).toHaveBeenCalledWith('t1', undefined);
   });
 
   it('createCycle → createCycle(dto, userId)', async () => {
@@ -178,7 +178,7 @@ describe('Evaluation360Controller', () => {
 
   it('getResult → getParticipantResult(cycleId, participantId, userId, roleCode)', async () => {
     await controller.getResult('cycle-1', 'p1', mockReq as any);
-    expect(mockSvc.getParticipantResult).toHaveBeenCalledWith('cycle-1', 'p1', 1, undefined);
+    expect(mockSvc.getParticipantResult).toHaveBeenCalledWith('cycle-1', 'p1', 1, 'ADMIN');
   });
 
   it('getTeamAnalytics → getTeamAnalytics(cycleId, userId)', async () => {

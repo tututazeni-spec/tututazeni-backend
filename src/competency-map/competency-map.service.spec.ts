@@ -20,17 +20,32 @@ const mockPrisma = {
     count: jest.fn().mockResolvedValue(0),
     delete: jest.fn(),
   },
-  legacyEmployeeSkill: { upsert: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+  legacyEmployeeSkill: {
+    upsert: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+  },
   skillAssessmentHistory: {
     create: jest.fn().mockResolvedValue({}),
     findMany: jest.fn().mockResolvedValue([]),
   },
-  skillProficiencyLevel: { findMany: jest.fn().mockResolvedValue([]) },
+  skillProficiencyLevel: {
+    findMany: jest.fn().mockResolvedValue([]),
+    upsert: jest.fn().mockResolvedValue({ id: 1 }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   roleSkillRequirement: {
     deleteMany: jest.fn().mockResolvedValue({}),
     createMany: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
   },
-  roleSkillMatrix: { upsert: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+  roleSkillMatrix: {
+    upsert: jest.fn().mockResolvedValue({ id: 1, roleCode: 'DEV' }),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue({ id: 1, roleCode: 'DEV', requirements: [] }),
+    create: jest.fn().mockResolvedValue({}),
+  },
   course: { findMany: jest.fn().mockResolvedValue([]) },
   user: { findUnique: jest.fn(), count: jest.fn().mockResolvedValue(0) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
@@ -118,10 +133,12 @@ describe('CompetencyMapService', () => {
 
   describe('setProficiencyLevels', () => {
     it('deve definir níveis de proficiência', async () => {
-      mockPrisma.skill.findUnique.mockResolvedValue(baseSkill);
+      mockPrisma.skillProficiencyLevel.upsert.mockResolvedValue({ id: 1, skillId: 1, level: 1 });
       const result = await service.setProficiencyLevels({
         skillId: 1,
-        levels: [{ level: 1, name: 'Básico', description: 'Conhecimento básico' }],
+        level: 1,
+        name: 'Básico',
+        description: 'Conhecimento básico',
       } as any);
       expect(result).toBeDefined();
     });
@@ -140,9 +157,15 @@ describe('CompetencyMapService', () => {
 
   describe('setRoleSkillMatrix', () => {
     it('deve definir matriz de competências por role', async () => {
+      mockPrisma.roleSkillMatrix.upsert.mockResolvedValue({ id: 1, roleCode: 'DEV' });
+      mockPrisma.roleSkillMatrix.findUnique.mockResolvedValue({
+        id: 1,
+        roleCode: 'DEV',
+        requirements: [],
+      });
       const result = await service.setRoleSkillMatrix({
         roleCode: 'DEV',
-        skills: [{ skillId: 1, requiredLevel: 3 }],
+        skills: [{ skillId: 1, requiredLevel: 3, weight: 100, mandatory: true }],
       } as any);
       expect(result).toBeDefined();
     });
@@ -152,6 +175,11 @@ describe('CompetencyMapService', () => {
 
   describe('getRoleSkillMatrix', () => {
     it('deve retornar matriz de um role', async () => {
+      mockPrisma.roleSkillMatrix.findUnique.mockResolvedValue({
+        id: 1,
+        roleCode: 'DEV',
+        requirements: [],
+      });
       const result = await service.getRoleSkillMatrix('DEV');
       expect(result).toBeDefined();
     });
@@ -171,8 +199,15 @@ describe('CompetencyMapService', () => {
   describe('upsertEmployeeSkill', () => {
     it('deve actualizar competência do colaborador', async () => {
       mockPrisma.skill.findUnique.mockResolvedValue(baseSkill);
+      mockPrisma.legacyEmployeeSkill.findUnique.mockResolvedValue(null);
+      mockPrisma.legacyEmployeeSkill.upsert.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        skillId: 1,
+        currentLevel: 3,
+      });
       const result = await service.upsertEmployeeSkill(
-        { userId: 1, skillId: 1, currentLevel: 3 } as any,
+        { userId: 1, skillId: 1, currentLevel: 3, source: 'MANAGER' as any } as any,
         1,
       );
       expect(result).toBeDefined();

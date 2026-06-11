@@ -19,7 +19,7 @@ const mockPrisma = {
   surveyResponse: { findMany: makeFind(), count: makeCount() },
   historyRecord: { findMany: makeFind(), count: makeCount() },
   badgeAward: { findMany: makeFind(), count: makeCount() },
-  auditLog: { findMany: makeFind() },
+  auditLog: { findMany: makeFind(), create: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
@@ -84,6 +84,7 @@ describe('LeaderService', () => {
         id: 2,
         fullName: 'Team Member',
         managerId: 1,
+        createdAt: new Date('2021-01-01'),
         enrollments: [],
         certificates: [],
         badgeAwards: [],

@@ -5,27 +5,37 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const automationRuleMock = {
   findMany: jest.fn().mockResolvedValue([]),
+  findFirst: jest.fn().mockResolvedValue(null),
   findUnique: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
   count: jest.fn().mockResolvedValue(0),
+  groupBy: jest.fn().mockResolvedValue([]),
   delete: jest.fn(),
 };
 
 const mockPrisma = {
   automationRule: automationRuleMock,
   user: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
-  badge: { findMany: jest.fn().mockResolvedValue([]) },
+  badge: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn().mockResolvedValue(null),
+  },
   badgeAward: { create: jest.fn().mockResolvedValue({}), findFirst: jest.fn() },
-  enrollment: { create: jest.fn(), findFirst: jest.fn() },
+  enrollment: {
+    create: jest.fn(),
+    findFirst: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   developmentPlan: { create: jest.fn() },
   notificationLog: {
     create: jest.fn().mockResolvedValue({}),
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
-  historyRecord: { create: jest.fn().mockResolvedValue({}) },
-  payslip: { create: jest.fn() },
+  historyRecord: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
+  payslip: { create: jest.fn(), count: jest.fn().mockResolvedValue(0) },
+  userPoints: { upsert: jest.fn().mockResolvedValue({}) },
 };
 
 const baseRule = {
@@ -141,10 +151,10 @@ describe('AutomationService', () => {
     it('deve processar evento de automação', async () => {
       automationRuleMock.findMany.mockResolvedValue([]);
       const result = await service.triggerEvent({
-        trigger: 'COURSE_COMPLETED',
+        event: 'COURSE_COMPLETED' as any,
         userId: 1,
-        data: { courseId: 1 },
-      } as any);
+        payload: { courseId: 1 },
+      });
       expect(result).toBeDefined();
     });
   });

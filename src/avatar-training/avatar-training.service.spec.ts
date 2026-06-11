@@ -10,6 +10,7 @@ const mockPrisma = {
   avatarScenario: {
     findMany: makeFind(),
     findUnique: jest.fn(),
+    findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn(),
     update: jest.fn(),
     count: makeCount(),
@@ -18,14 +19,16 @@ const mockPrisma = {
   avatarSession: {
     findMany: makeFind(),
     findUnique: jest.fn(),
+    findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     count: makeCount(),
     groupBy: jest.fn().mockResolvedValue([]),
   },
   badge: { findMany: makeFind() },
   badgeAward: { create: jest.fn().mockResolvedValue({}), findFirst: jest.fn() },
-  user: { findUnique: jest.fn() },
+  user: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
   userPoints: { update: jest.fn().mockResolvedValue({}), upsert: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };

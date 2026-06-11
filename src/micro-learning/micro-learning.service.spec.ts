@@ -16,6 +16,7 @@ const mockPrisma = {
   microLearningInteraction: {
     create: jest.fn().mockResolvedValue({}),
     count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
   },
   microLearningProgress: {
     upsert: jest.fn().mockResolvedValue({}),
@@ -45,7 +46,7 @@ const baseMicro = {
   id: 1,
   title: 'Quick NestJS Tip',
   type: 'ARTICLE',
-  status: 'PUBLISHED',
+  status: 'DRAFT',
   durationSeconds: 60,
 };
 
@@ -108,7 +109,9 @@ describe('MicroLearningService', () => {
   describe('publish', () => {
     it('deve publicar micro-learning', async () => {
       mockPrisma.microLearning.findUnique.mockResolvedValue(baseMicro);
-      mockPrisma.microLearning.update.mockResolvedValue({ ...baseMicro, status: 'PUBLISHED' });
+      mockPrisma.microLearning.update
+        .mockResolvedValueOnce({ ...baseMicro, viewCount: 1 })
+        .mockResolvedValueOnce({ ...baseMicro, status: 'PUBLISHED' });
       const result = await service.publish(1);
       expect(result).toBeDefined();
     });

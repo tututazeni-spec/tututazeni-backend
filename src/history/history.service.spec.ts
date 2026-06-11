@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HistoryService } from './history.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-const mockPrisma = {
+const mockPrisma: any = {
   auditLog: {
     findMany: jest.fn().mockResolvedValue([]),
     create: jest.fn().mockResolvedValue({ id: 1 }),
@@ -20,7 +20,11 @@ const mockPrisma = {
   developmentPlan: { findMany: jest.fn().mockResolvedValue([]) },
   badgeAward: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
   userPoints: { findUnique: jest.fn().mockResolvedValue({ points: 100 }) },
-  user: { findUnique: jest.fn().mockResolvedValue({ id: 1, fullName: 'Test' }) },
+  user: {
+    findUnique: jest.fn().mockResolvedValue({ id: 1, fullName: 'Test' }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  avatarSession: { findMany: jest.fn().mockResolvedValue([]) },
 };
 
 describe('HistoryService', () => {

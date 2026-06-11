@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -30,7 +29,12 @@ const mockPrisma = {
     aggregate: makeAgg(),
     groupBy: makeGroupBy(),
   },
-  developmentPlan: { count: makeCount(), findMany: makeFind() },
+  developmentPlan: {
+    count: makeCount(),
+    findMany: makeFind(),
+    groupBy: makeGroupBy(),
+    aggregate: makeAgg(),
+  },
   department: { findMany: makeFind() },
   courseAnalytics: { findMany: makeFind() },
   courseFeedback: { aggregate: makeAgg(), count: makeCount() },
@@ -51,7 +55,7 @@ const mockPrisma = {
     count: makeCount(),
   },
   competency: { count: makeCount() },
-  developmentPlanAction: { count: makeCount(), findMany: makeFind() },
+  developmentPlanAction: { count: makeCount(), findMany: makeFind(), groupBy: makeGroupBy() },
   engagementSurvey: { findMany: makeFind() },
   surveyResponse: { count: makeCount() },
   leaveRequest: { count: makeCount(), groupBy: makeGroupBy() },

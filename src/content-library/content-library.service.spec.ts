@@ -24,6 +24,8 @@ const mockPrisma = {
     count: jest.fn().mockResolvedValue(0),
     groupBy: jest.fn().mockResolvedValue([]),
     findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn().mockResolvedValue(null),
+    findUnique: jest.fn().mockResolvedValue(null),
   },
   userPoints: { update: jest.fn().mockResolvedValue({}) },
 };

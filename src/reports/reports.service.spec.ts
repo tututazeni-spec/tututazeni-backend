@@ -29,7 +29,7 @@ const mockPrisma = {
   },
   certificate: {
     count: jest.fn(),
-    findMany: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
   },
   leaveRequest: {
     count: jest.fn(),
@@ -40,8 +40,9 @@ const mockPrisma = {
   competency: { count: jest.fn(), findMany: jest.fn() },
   userCompetency: {
     findMany: jest.fn().mockResolvedValue([]),
-    count: jest.fn(),
-    aggregate: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    aggregate: jest.fn().mockResolvedValue({ _avg: {} }),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   performanceReview: {
     aggregate: jest.fn().mockResolvedValue({ _avg: { score: null } }),
@@ -50,16 +51,42 @@ const mockPrisma = {
     groupBy: jest.fn().mockResolvedValue([]),
   },
   badgeAward: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
-  engagementSurvey: { findMany: jest.fn().mockResolvedValue([]) },
-  savedReport: { create: jest.fn().mockResolvedValue({ id: 1 }), findMany: jest.fn() },
-  reportSchedule: { create: jest.fn().mockResolvedValue({ id: 1 }), findMany: jest.fn() },
+  engagementSurvey: {
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
+    aggregate: jest.fn().mockResolvedValue({ _avg: {} }),
+  },
+  savedReport: {
+    create: jest.fn().mockResolvedValue({ id: 1 }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  reportSchedule: {
+    create: jest.fn().mockResolvedValue({ id: 1 }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
 };
+
+const fallbackModel = () => ({
+  findMany: jest.fn().mockResolvedValue([]),
+  findUnique: jest.fn().mockResolvedValue(null),
+  findFirst: jest.fn().mockResolvedValue(null),
+  create: jest.fn().mockResolvedValue({}),
+  update: jest.fn().mockResolvedValue({}),
+  delete: jest.fn().mockResolvedValue({}),
+  count: jest.fn().mockResolvedValue(0),
+  groupBy: jest.fn().mockResolvedValue([]),
+  aggregate: jest.fn().mockResolvedValue({ _avg: {}, _sum: {}, _count: {} }),
+  upsert: jest.fn().mockResolvedValue({}),
+});
 
 const mockPrismaProxy = new Proxy(mockPrisma, {
   get(target, prop) {
     if (prop === 'position') return positionMock;
-    if (prop === 'attendanceRecord') return { findMany: jest.fn().mockResolvedValue([]) };
-    return (target as any)[prop];
+    if (prop === 'attendanceRecord')
+      return { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) };
+    const val = (target as any)[prop];
+    return val !== undefined ? val : fallbackModel();
   },
 });
 

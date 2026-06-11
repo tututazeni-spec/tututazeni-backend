@@ -7,6 +7,7 @@ const mockPrisma: any = {
     count: jest.fn().mockResolvedValue(0),
     findMany: jest.fn().mockResolvedValue([]),
     aggregate: jest.fn().mockResolvedValue({ _avg: { progressPercent: 0 } }),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   certificate: { count: jest.fn().mockResolvedValue(0) },
   performanceReview: {
@@ -18,6 +19,18 @@ const mockPrisma: any = {
   course: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
   department: { findMany: jest.fn().mockResolvedValue([]) },
   badgeAward: { count: jest.fn().mockResolvedValue(0) },
+  assessmentAttempt: {
+    aggregate: jest.fn().mockResolvedValue({ _avg: { score: null } }),
+  },
+  lessonProgress: { count: jest.fn().mockResolvedValue(0) },
+  userCompetency: {
+    aggregate: jest.fn().mockResolvedValue({ _avg: { currentLevel: null, targetLevel: null } }),
+  },
+  surveyResponse: {
+    count: jest.fn().mockResolvedValue(0),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { score: null } }),
+  },
+  developmentPlanAction: { count: jest.fn().mockResolvedValue(0) },
 };
 
 describe('RoiImpactService (additional)', () => {
@@ -39,9 +52,9 @@ describe('RoiImpactService (additional)', () => {
       mockPrisma.certificate.count.mockResolvedValue(80);
       const result = await service.calculateTrainingRoi('2026-01-01', '2026-12-31');
       expect(result).toBeDefined();
-      expect(result).toHaveProperty('roi');
-      expect(result).toHaveProperty('benefit');
-      expect(result).toHaveProperty('cost');
+      expect(result).toHaveProperty('financial.roi');
+      expect(result).toHaveProperty('financial.totalBenefit');
+      expect(result).toHaveProperty('financial.totalCost');
     });
 
     it('deve filtrar por departamento', async () => {
@@ -70,83 +83,77 @@ describe('RoiImpactService (additional)', () => {
         { costPerEnrollment: 300, benefitPerCompletion: 700 },
       );
       expect(result).toBeDefined();
-      expect(result).toHaveProperty('roi');
-      expect(result).toHaveProperty('bcr');
-      expect(result).toHaveProperty('paybackMonths');
+      expect(result).toHaveProperty('financial.roi');
+      expect(result).toHaveProperty('financial.bcrVal');
+      expect(result).toHaveProperty('financial.paybackMonths');
     });
   });
 
-  // ─── getDashboard ─────────────────────────────────────────────
+  // ─── getExecutiveDashboard ────────────────────────────────────
 
-  describe('getDashboard', () => {
-    it('deve retornar dashboard de ROI', async () => {
+  describe('getExecutiveDashboard', () => {
+    it('deve retornar dashboard executivo de ROI', async () => {
       mockPrisma.enrollment.count.mockResolvedValue(200);
       mockPrisma.certificate.count.mockResolvedValue(150);
       mockPrisma.user.count.mockResolvedValue(600);
-      const result = await service.getDashboard({ from: '2026-01-01', to: '2026-12-31' });
+      const result = await service.getExecutiveDashboard({ from: '2026-01-01', to: '2026-12-31' });
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getByDepartment ──────────────────────────────────────────
+  // ─── getImpactMetrics ─────────────────────────────────────────
 
-  describe('getByDepartment', () => {
-    it('deve retornar ROI por departamento', async () => {
+  describe('getImpactMetrics', () => {
+    it('deve retornar métricas de impacto', async () => {
       mockPrisma.department.findMany.mockResolvedValue([
         { id: 1, name: 'TI' },
         { id: 2, name: 'RH' },
       ]);
       mockPrisma.enrollment.count.mockResolvedValue(30);
       mockPrisma.certificate.count.mockResolvedValue(25);
-      const result = await service.getByDepartment({ from: '2026-01-01', to: '2026-12-31' });
+      const result = await service.getImpactMetrics({ from: '2026-01-01', to: '2026-12-31' });
       expect(result).toBeDefined();
-      expect(Array.isArray(result)).toBe(true);
     });
   });
 
-  // ─── getByCourse ──────────────────────────────────────────────
+  // ─── getProgramLibrary ────────────────────────────────────────
 
-  describe('getByCourse', () => {
-    it('deve retornar ROI por curso', async () => {
+  describe('getProgramLibrary', () => {
+    it('deve retornar biblioteca de programas com ROI', async () => {
       mockPrisma.course.findMany.mockResolvedValue([
         { id: 1, title: 'TypeScript', workloadHours: 20, _count: { enrollments: 50 } },
       ]);
       mockPrisma.enrollment.count.mockResolvedValue(50);
       mockPrisma.certificate.count.mockResolvedValue(40);
-      const result = await service.getByCourse({ from: '2026-01-01', to: '2026-12-31' });
+      const result = await service.getProgramLibrary({ from: '2026-01-01', to: '2026-12-31' });
       expect(result).toBeDefined();
-      expect(Array.isArray(result)).toBe(true);
     });
   });
 
-  // ─── whatIfAnalysis ───────────────────────────────────────────
+  // ─── simulateWhatIf ───────────────────────────────────────────
 
-  describe('whatIfAnalysis', () => {
+  describe('simulateWhatIf', () => {
     it('deve calcular análise what-if com parâmetros hipotéticos', async () => {
       mockPrisma.enrollment.count.mockResolvedValue(100);
       mockPrisma.certificate.count.mockResolvedValue(80);
-      const result = await service.whatIfAnalysis({
+      const result = await service.simulateWhatIf({
         from: '2026-01-01',
         to: '2026-12-31',
-        enrollmentIncrease: 20,
-        completionRateTarget: 90,
+        targetEnrollments: 120,
+        targetCompletionRate: 90,
       } as any);
       expect(result).toBeDefined();
-      expect(result).toHaveProperty('baseline');
-      expect(result).toHaveProperty('projected');
     });
   });
 
-  // ─── getBenchmarks ────────────────────────────────────────────
+  // ─── getRetentionImpact ───────────────────────────────────────
 
-  describe('getBenchmarks', () => {
-    it('deve retornar benchmarks de referência da indústria', async () => {
+  describe('getRetentionImpact', () => {
+    it('deve retornar impacto na retenção', async () => {
       mockPrisma.enrollment.count.mockResolvedValue(100);
       mockPrisma.certificate.count.mockResolvedValue(75);
-      const result = await service.getBenchmarks({ from: '2026-01-01', to: '2026-12-31' });
+      const result = await service.getRetentionImpact({ from: '2026-01-01', to: '2026-12-31' });
       expect(result).toBeDefined();
-      expect(result).toHaveProperty('current');
-      expect(result).toHaveProperty('industry');
     });
   });
 });

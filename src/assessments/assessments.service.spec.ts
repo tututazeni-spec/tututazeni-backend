@@ -16,7 +16,7 @@ const mockPrisma = {
   assessmentQuestion: {
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
     deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
-    findMany: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
     create: jest.fn(),
   },
   assessmentAttempt: {
@@ -25,7 +25,8 @@ const mockPrisma = {
     findUnique: jest.fn(),
     update: jest.fn(),
     findMany: jest.fn(),
-    count: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { score: 75, timeSpentMinutes: 20 } }),
   },
   attemptAnswer: {
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -33,8 +34,16 @@ const mockPrisma = {
     update: jest.fn(),
     upsert: jest.fn(),
   },
+  assessmentAttemptAnswer: {
+    create: jest.fn().mockResolvedValue({}),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+    update: jest.fn().mockResolvedValue({}),
+    count: jest.fn().mockResolvedValue(0),
+  },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
-  userPoints: { update: jest.fn().mockResolvedValue({}) },
+  userPoints: { update: jest.fn().mockResolvedValue({}), upsert: jest.fn().mockResolvedValue({}) },
 };
 
 const baseAssessment = {
@@ -46,7 +55,7 @@ const baseAssessment = {
   passingScore: 70,
   feedbackMode: 'ON_SUBMIT',
   questions: [],
-  _count: { attempts: 0, questions: 0 },
+  _count: { attempts: 0, questions: 3 },
 };
 
 describe('AssessmentsService', () => {
@@ -241,8 +250,11 @@ describe('AssessmentsService', () => {
         status: 'PUBLISHED',
         maxAttempts: 3,
         questions: [{ id: 1, questionText: 'Q1', seq: 1 }],
+        feedbackMode: 'ON_SUBMIT',
+        _count: { attempts: 0 },
       });
       mockPrisma.assessmentAttempt.count.mockResolvedValue(0);
+      mockPrisma.assessmentAttempt.findFirst.mockResolvedValue(null);
       mockPrisma.assessmentAttempt.create.mockResolvedValue({
         id: 1,
         userId: 1,

@@ -5,14 +5,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AiProvidersService } from './ai-providers.service';
 
 const mockAiProviders = {
-  chat: jest
-    .fn()
-    .mockResolvedValue({
-      text: 'Resposta do tutor IA',
-      tokensUsed: 150,
-      provider: 'groq',
-      model: 'llama3',
-    }),
+  chat: jest.fn().mockResolvedValue({
+    text: 'Resposta do tutor IA',
+    tokensUsed: 150,
+    provider: 'groq',
+    model: 'llama3',
+  }),
   getProviderInfo: jest
     .fn()
     .mockReturnValue({ provider: 'Groq', model: 'llama3', free: true, docs: '' }),
@@ -20,16 +18,14 @@ const mockAiProviders = {
 
 const mockPrisma: any = {
   user: {
-    findUnique: jest
-      .fn()
-      .mockResolvedValue({
-        id: 1,
-        fullName: 'João Silva',
-        position: null,
-        department: null,
-        userCompetencies: [],
-        points: null,
-      }),
+    findUnique: jest.fn().mockResolvedValue({
+      id: 1,
+      fullName: 'João Silva',
+      position: null,
+      department: null,
+      userCompetencies: [],
+      points: null,
+    }),
   },
   course: { findUnique: jest.fn().mockResolvedValue(null) },
   developmentPlan: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -44,12 +40,17 @@ const mockPrisma: any = {
     findUnique: jest.fn().mockResolvedValue(null),
     create: jest.fn(),
     update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   aiMessage: {
     create: jest.fn().mockResolvedValue({ id: 1, role: 'ASSISTANT', content: 'Olá!' }),
     findMany: jest.fn().mockResolvedValue([]),
-    update: jest.fn().mockResolvedValue({}),
+    findFirst: jest.fn().mockResolvedValue({ id: 1, role: 'ASSISTANT', rating: null }),
     count: jest.fn().mockResolvedValue(0),
+    aggregate: jest.fn().mockResolvedValue({ _sum: { tokensUsed: 0 }, _avg: { rating: null } }),
+    update: jest.fn().mockResolvedValue({}),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   userPoints: { upsert: jest.fn().mockResolvedValue({}) },
 };
@@ -161,17 +162,17 @@ describe('AiTutorService (additional)', () => {
     it('deve encerrar sessão activa', async () => {
       mockPrisma.aiTutorSession.findFirst.mockResolvedValue(baseSession);
       mockPrisma.aiTutorSession.update.mockResolvedValue({ ...baseSession, endedAt: new Date() });
-      const result = await service.endSession('session-1', 1);
+      const result = await service.endSession(1, 1);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getSessions ──────────────────────────────────────────────
+  // ─── getMySessions ────────────────────────────────────────────
 
-  describe('getSessions', () => {
+  describe('getMySessions', () => {
     it('deve retornar sessões do utilizador', async () => {
       mockPrisma.aiTutorSession.findMany.mockResolvedValue([baseSession]);
-      const result = await service.getSessions(1, {});
+      const result = await service.getMySessions(1, {});
       expect(result).toBeDefined();
     });
   });
@@ -184,13 +185,13 @@ describe('AiTutorService (additional)', () => {
         ...baseSession,
         messages: [{ id: 1, role: 'USER', content: 'Olá' }],
       });
-      const result = await service.getSession('session-1', 1);
+      const result = await service.getSession(1, 1);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se sessão não existe', async () => {
       mockPrisma.aiTutorSession.findFirst.mockResolvedValue(null);
-      await expect(service.getSession('invalid', 1)).rejects.toThrow(NotFoundException);
+      await expect(service.getSession(1, 99)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -199,23 +200,22 @@ describe('AiTutorService (additional)', () => {
   describe('rateMessage', () => {
     it('deve registar avaliação de mensagem', async () => {
       mockPrisma.aiMessage.update.mockResolvedValue({ id: 1, rating: 5 });
-      const result = await service.rateMessage(
-        'session-1',
-        1,
-        { rating: 5, feedback: 'Óptimo!' } as any,
-        1,
-      );
+      const result = await service.rateMessage(1, {
+        messageId: 1,
+        rating: 5,
+        feedback: 'Óptimo!',
+      } as any);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getStats ─────────────────────────────────────────────────
+  // ─── getUsageStats ────────────────────────────────────────────
 
-  describe('getStats', () => {
+  describe('getUsageStats', () => {
     it('deve retornar estatísticas de uso do tutor IA', async () => {
       mockPrisma.aiTutorSession.findMany.mockResolvedValue([]);
       mockPrisma.aiMessage.count.mockResolvedValue(0);
-      const result = await service.getStats(1);
+      const result = await service.getUsageStats();
       expect(result).toBeDefined();
     });
   });

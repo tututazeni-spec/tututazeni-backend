@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { DevelopmentPlansService } from './development-plans.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -20,6 +20,8 @@ const mockPrisma: any = {
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    groupBy: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
   },
   planGoal: {
     findMany: jest.fn().mockResolvedValue([]),
@@ -34,6 +36,19 @@ const mockPrisma: any = {
     update: jest.fn(),
   },
   actionEvidence: { create: jest.fn() },
+  pdiApproval: { create: jest.fn().mockResolvedValue({}) },
+  pdiEvidence: { create: jest.fn().mockResolvedValue({}) },
+  pdiGoal: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn().mockResolvedValue({}),
+    update: jest.fn().mockResolvedValue({}),
+  },
+  userPoints: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    upsert: jest.fn().mockResolvedValue({}),
+  },
+  pdiCheckpoint: { create: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   user: { findUnique: jest.fn().mockResolvedValue(null) },
@@ -149,7 +164,7 @@ describe('DevelopmentPlansService (additional)', () => {
   describe('create', () => {
     it('deve criar plano de desenvolvimento', async () => {
       mockPrisma.developmentPlan.create.mockResolvedValue(basePlan);
-      const result = await service.create({ title: 'Plano 2026', userId: 2 } as any, 1);
+      const result = await service.create({ title: 'Plano 2026', userId: 2 } as any);
       expect(result).toBeDefined();
     });
   });
@@ -160,19 +175,19 @@ describe('DevelopmentPlansService (additional)', () => {
     it('deve actualizar plano em DRAFT', async () => {
       mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, managerId: 1 });
       mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, title: 'Actualizado' });
-      const result = await service.update(1, { title: 'Actualizado' } as any, 1);
+      const result = await service.update(1, { title: 'Actualizado' } as any);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se plano não existe', async () => {
       mockPrisma.developmentPlan.findUnique.mockResolvedValue(null);
-      await expect(service.update(99, {} as any, 1)).rejects.toThrow(NotFoundException);
+      await expect(service.update(99, {} as any)).rejects.toThrow(NotFoundException);
     });
   });
 
-  // ─── approve ──────────────────────────────────────────────────
+  // ─── approvePlan ──────────────────────────────────────────────
 
-  describe('approve', () => {
+  describe('approvePlan', () => {
     it('deve aprovar plano pendente', async () => {
       mockPrisma.developmentPlan.findUnique.mockResolvedValue({
         ...basePlan,
@@ -181,7 +196,10 @@ describe('DevelopmentPlansService (additional)', () => {
       });
       mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'ACTIVE' });
       mockPrisma.notificationLog.create.mockResolvedValue({});
-      const result = await service.approve(1, { approved: true, feedback: 'Aprovado' }, 1);
+      const result = await service.approvePlan(
+        { planId: 1, decision: 'approve', feedback: 'Aprovado' } as any,
+        1,
+      );
       expect(result).toBeDefined();
     });
 
@@ -193,9 +211,8 @@ describe('DevelopmentPlansService (additional)', () => {
       });
       mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'REJECTED' });
       mockPrisma.notificationLog.create.mockResolvedValue({});
-      const result = await service.approve(
-        1,
-        { approved: false, feedback: 'Precisa de revisão' },
+      const result = await service.approvePlan(
+        { planId: 1, decision: 'reject', feedback: 'Precisa de revisão' } as any,
         1,
       );
       expect(result).toBeDefined();
@@ -212,11 +229,11 @@ describe('DevelopmentPlansService (additional)', () => {
         planId: 1,
         title: 'Acção 1',
       });
-      const result = await service.addAction(
-        1,
-        { title: 'Acção 1', type: 'COURSE' as any } as any,
-        1,
-      );
+      const result = await service.addAction({
+        planId: 1,
+        title: 'Acção 1',
+        type: 'COURSE' as any,
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -246,12 +263,12 @@ describe('DevelopmentPlansService (additional)', () => {
   describe('addEvidence', () => {
     it('deve adicionar evidência a uma acção', async () => {
       mockPrisma.developmentPlanAction.findUnique.mockResolvedValue({ id: 1 });
-      mockPrisma.actionEvidence.create.mockResolvedValue({ id: 1, actionId: 1 });
-      const result = await service.addEvidence(
-        1,
-        { description: 'Certificado concluído', type: 'CERTIFICATE' as any } as any,
-        1,
-      );
+      mockPrisma.pdiEvidence.create.mockResolvedValue({ id: 1, actionId: 1 });
+      const result = await service.addEvidence(1, {
+        actionId: 1,
+        description: 'Certificado concluído',
+        type: 'CERTIFICATE' as any,
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -261,8 +278,11 @@ describe('DevelopmentPlansService (additional)', () => {
   describe('addGoal', () => {
     it('deve adicionar objectivo ao plano', async () => {
       mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
-      mockPrisma.planGoal.create.mockResolvedValue({ id: 1, planId: 1, title: 'Objectivo 1' });
-      const result = await service.addGoal(1, { title: 'Objectivo 1' } as any, 1);
+      mockPrisma.pdiGoal.create.mockResolvedValue({ id: 1, planId: 1, title: 'Objectivo 1' });
+      const result = await service.addGoal({
+        planId: 1,
+        title: 'Objectivo 1',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -271,9 +291,13 @@ describe('DevelopmentPlansService (additional)', () => {
 
   describe('updateGoalProgress', () => {
     it('deve actualizar progresso do objectivo', async () => {
-      mockPrisma.planGoal.findUnique.mockResolvedValue({ id: 1, planId: 1 });
-      mockPrisma.planGoal.update.mockResolvedValue({ id: 1, progress: 80 });
-      const result = await service.updateGoalProgress(1, { progress: 80, notes: 'A progredir' }, 1);
+      mockPrisma.pdiGoal.findUnique.mockResolvedValue({ id: 1, planId: 1 });
+      mockPrisma.pdiGoal.update.mockResolvedValue({ id: 1, progress: 80 });
+      const result = await service.updateGoalProgress(1, {
+        goalId: 1,
+        progress: 80,
+        notes: 'A progredir',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -283,12 +307,12 @@ describe('DevelopmentPlansService (additional)', () => {
   describe('addCheckpoint', () => {
     it('deve adicionar checkpoint ao plano', async () => {
       mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
-      mockPrisma.planCheckpoint.create.mockResolvedValue({ id: 1, planId: 1 });
-      const result = await service.addCheckpoint(
-        1,
-        { title: 'Checkpoint 1', scheduledDate: '2026-06-01' } as any,
-        1,
-      );
+      mockPrisma.pdiCheckpoint.create.mockResolvedValue({ id: 1, planId: 1 });
+      const result = await service.addCheckpoint({
+        planId: 1,
+        title: 'Checkpoint 1',
+        scheduledDate: '2026-06-01',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -309,7 +333,7 @@ describe('DevelopmentPlansService (additional)', () => {
     it('deve retornar estatísticas dos planos', async () => {
       mockPrisma.developmentPlan.findMany.mockResolvedValue([]);
       mockPrisma.developmentPlan.count.mockResolvedValue(0);
-      const result = await service.getStats({});
+      const result = await service.getStats(1);
       expect(result).toBeDefined();
     });
   });

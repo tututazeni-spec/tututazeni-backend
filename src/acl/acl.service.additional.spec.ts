@@ -69,8 +69,8 @@ describe('AclService (additional)', () => {
       mockPrisma.permission.create.mockResolvedValue(basePerm);
       const result = await service.createPermission({
         name: 'dashboard:view',
-        action: 'VIEW',
-        subject: 'DASHBOARD',
+        action: 'VIEW' as any,
+        subject: 'DASHBOARD' as any,
       });
       expect(result).toBeDefined();
       expect(mockPrisma.permission.create).toHaveBeenCalled();
@@ -80,8 +80,8 @@ describe('AclService (additional)', () => {
       mockPrisma.permission.create.mockResolvedValue({ ...basePerm, sensitive: true });
       const result = await service.createPermission({
         name: 'payroll:view',
-        action: 'VIEW',
-        subject: 'PAYROLL',
+        action: 'VIEW' as any,
+        subject: 'PAYROLL' as any,
         sensitive: true,
       });
       expect(result).toBeDefined();
@@ -251,8 +251,8 @@ describe('AclService (additional)', () => {
       (mockPrisma as any).accessPolicy = { findMany: jest.fn().mockResolvedValue([]) };
       const result = await service.checkPermission({
         userId: 1,
-        action: 'VIEW',
-        subject: 'DASHBOARD',
+        action: 'VIEW' as any,
+        subject: 'DASHBOARD' as any,
       });
       expect(result.allowed).toBe(true);
     });
@@ -263,8 +263,8 @@ describe('AclService (additional)', () => {
       mockPrisma.auditLog.create.mockResolvedValue({});
       const result = await service.checkPermission({
         userId: 40,
-        action: 'EXPORT',
-        subject: 'PAYROLL',
+        action: 'EXPORT' as any,
+        subject: 'PAYROLL' as any,
       });
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe('Permission not granted');
@@ -279,8 +279,8 @@ describe('AclService (additional)', () => {
       mockPrisma.user.findUnique.mockResolvedValue(adminUser);
       const result = await service.checkPermission({
         userId: 50,
-        action: 'DELETE',
-        subject: 'USERS',
+        action: 'DELETE' as any,
+        subject: 'USERS' as any,
       });
       expect(result.allowed).toBe(true);
       expect(result.reason).toBe('ADMIN wildcard');
@@ -405,11 +405,13 @@ describe('AclService (additional)', () => {
   describe('getStats', () => {
     it('deve retornar estatísticas do ACL', async () => {
       mockPrisma.user.count.mockResolvedValue(100);
-      mockPrisma.role.count = jest.fn().mockResolvedValue(5);
-      mockPrisma.permission.count = jest.fn().mockResolvedValue(30);
+      (mockPrisma.role as any).count = jest.fn().mockResolvedValue(5);
+      (mockPrisma.permission as any).count = jest.fn().mockResolvedValue(30);
       mockPrisma.auditLog.count.mockResolvedValue(10);
       mockPrisma.auditLog.findMany.mockResolvedValue([]);
-      mockPrisma.user.groupBy = jest.fn().mockResolvedValue([{ roleId: 1, _count: { id: 50 } }]);
+      (mockPrisma.user as any).groupBy = jest
+        .fn()
+        .mockResolvedValue([{ roleId: 1, _count: { id: 50 } }]);
       mockPrisma.role.findMany.mockResolvedValue([baseRole]);
 
       const result = await service.getStats();

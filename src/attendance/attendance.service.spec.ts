@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, ConflictException } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
@@ -9,37 +9,54 @@ const mockAttendanceRecord = {
   findMany: jest.fn(),
   findUnique: jest.fn(),
   findFirst: jest.fn(),
-  create: jest.fn(),
-  update: jest.fn(),
-  count: jest.fn(),
-  updateMany: jest.fn(),
+  create: jest.fn().mockResolvedValue({}),
+  update: jest.fn().mockResolvedValue({}),
+  delete: jest.fn().mockResolvedValue({}),
+  count: jest.fn().mockResolvedValue(0),
+  updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+  createMany: jest.fn().mockResolvedValue({ count: 0 }),
 };
 
 const mockPrisma = {
   attendanceRecord: mockAttendanceRecord,
   user: { findUnique: jest.fn(), findMany: jest.fn() },
-  workSchedule: { findFirst: jest.fn() },
-  attendanceJustification: { create: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
-  attendanceAdjustment: { create: jest.fn() },
+  workSchedule: {
+    findFirst: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({ id: 1, name: 'Horário Normal' }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  attendanceJustification: {
+    create: jest.fn().mockResolvedValue({}),
+    update: jest.fn().mockResolvedValue({}),
+    findUnique: jest.fn().mockResolvedValue(null),
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  attendanceAdjustment: { create: jest.fn().mockResolvedValue({}) },
   leaveRequest: {
-    findFirst: jest.fn(),
-    create: jest.fn(),
-    findUnique: jest.fn(),
-    update: jest.fn(),
-    findMany: jest.fn(),
-    count: jest.fn(),
+    findFirst: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({}),
+    findUnique: jest.fn().mockResolvedValue(null),
+    update: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
   },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
-  userSchedule: { findFirst: jest.fn(), findUnique: jest.fn(), upsert: jest.fn() },
-  overtimeRequest: {
-    findFirst: jest.fn(),
-    create: jest.fn(),
-    findUnique: jest.fn(),
-    update: jest.fn(),
-    findMany: jest.fn(),
-    count: jest.fn(),
+  userSchedule: {
+    findFirst: jest.fn().mockResolvedValue(null),
+    findUnique: jest.fn().mockResolvedValue(null),
+    upsert: jest.fn().mockResolvedValue({}),
   },
+  overtimeRecord: {
+    findFirst: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({}),
+    findUnique: jest.fn().mockResolvedValue(null),
+    update: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  allowedLocation: { findMany: jest.fn().mockResolvedValue([]) },
 };
 
 // attendanceRecord é acedido como (this.prisma as any).attendanceRecord
@@ -172,7 +189,6 @@ describe('AttendanceService', () => {
   describe('clockIn', () => {
     it('deve registar clock-in com sucesso', async () => {
       mockAttendanceRecord.findFirst.mockResolvedValue(null);
-      mockPrisma.workSchedule.findFirst.mockResolvedValue(null);
       mockPrisma.userSchedule.findUnique.mockResolvedValue(null);
       mockAttendanceRecord.create.mockResolvedValue({ ...baseRecord, clockIn: '08:05' });
 
@@ -210,10 +226,10 @@ describe('AttendanceService', () => {
       expect((result as any).clockOut).toBe('17:00');
     });
 
-    it('deve lançar BadRequestException se sem clock-in hoje', async () => {
+    it('deve lançar NotFoundException se sem clock-in hoje', async () => {
       mockAttendanceRecord.findFirst.mockResolvedValue(null);
 
-      await expect(service.clockOut(1, {})).rejects.toThrow(BadRequestException);
+      await expect(service.clockOut(1, {})).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -257,7 +273,7 @@ describe('AttendanceService', () => {
   describe('remove', () => {
     it('deve remover registo', async () => {
       mockAttendanceRecord.findUnique.mockResolvedValue(baseRecord);
-      mockAttendanceRecord.update.mockResolvedValue({});
+      mockAttendanceRecord.delete = jest.fn().mockResolvedValue({});
 
       const result = await service.remove(1);
       expect(result).toBeDefined();
@@ -306,6 +322,7 @@ describe('AttendanceService', () => {
 
   describe('getLeaveBalance', () => {
     it('deve retornar saldo de licenças', async () => {
+      mockPrisma.leaveRequest.findMany.mockResolvedValue([]);
       const result = await service.getLeaveBalance(1);
       expect(result).toBeDefined();
     });
@@ -315,7 +332,7 @@ describe('AttendanceService', () => {
 
   describe('createWorkSchedule', () => {
     it('deve criar horário de trabalho', async () => {
-      mockPrisma.workSchedule.findFirst.mockResolvedValue(null);
+      mockPrisma.workSchedule.create.mockResolvedValue({ id: 1, name: 'Horário Normal' });
       const result = await service.createWorkSchedule({
         name: 'Horário Normal',
         startTime: '09:00',
@@ -339,8 +356,10 @@ describe('AttendanceService', () => {
 
   describe('getDashboard', () => {
     it('deve retornar dashboard de presenças', async () => {
-      mockAttendanceRecord.count.mockResolvedValue(50);
       mockAttendanceRecord.findMany.mockResolvedValue([]);
+      mockPrisma.leaveRequest.count.mockResolvedValue(0);
+      mockPrisma.attendanceJustification.count.mockResolvedValue(0);
+      mockPrisma.overtimeRecord.count.mockResolvedValue(0);
       const result = await service.getDashboard();
       expect(result).toBeDefined();
     });

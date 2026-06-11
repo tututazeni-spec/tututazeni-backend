@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { PerformanceService } from './performance.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -11,6 +10,7 @@ const mockPrisma = {
     create: jest.fn(),
     update: jest.fn(),
     count: jest.fn().mockResolvedValue(0),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
   performanceReview: {
     findMany: jest.fn().mockResolvedValue([]),
@@ -36,7 +36,15 @@ const mockPrisma = {
   },
   calibrationLog: { create: jest.fn().mockResolvedValue({}) },
   nineBoxPlacement: { upsert: jest.fn().mockResolvedValue({}) },
-  performanceDispute: { create: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+  performanceDispute: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  continuousFeedback: {
+    create: jest.fn().mockResolvedValue({ id: 1 }),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+  },
   user: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
   notificationLog: {
     create: jest.fn().mockResolvedValue({}),
@@ -116,7 +124,8 @@ describe('PerformanceService', () => {
 
   describe('activateCycle', () => {
     it('deve activar ciclo e criar avaliações', async () => {
-      mockPrisma.performanceCycle.findUnique.mockResolvedValue(baseCycle);
+      mockPrisma.performanceCycle.findUnique.mockResolvedValue({ ...baseCycle, status: 'PLANNED' });
+      mockPrisma.performanceCycle.updateMany.mockResolvedValue({ count: 0 });
       mockPrisma.performanceCycle.update.mockResolvedValue({ ...baseCycle, status: 'ACTIVE' });
       mockPrisma.user.findMany.mockResolvedValue([]);
       const result = await service.activateCycle(1);
@@ -163,10 +172,17 @@ describe('PerformanceService', () => {
 
   describe('createGoal', () => {
     it('deve criar meta de performance', async () => {
-      const result = await service.createGoal({
+      mockPrisma.performanceCycle.findUnique.mockResolvedValue(baseCycle);
+      mockPrisma.performanceGoal.create.mockResolvedValue({
+        id: 1,
         userId: 1,
         title: 'Aumentar vendas',
-        target: 100,
+      });
+      const result = await service.createGoal({
+        userId: 1,
+        cycleId: 1,
+        title: 'Aumentar vendas',
+        targetValue: 100,
       } as any);
       expect(result).toBeDefined();
     });

@@ -25,6 +25,7 @@ const automationMock = {
   findMany: jest.fn().mockResolvedValue([]),
   create: jest.fn(),
   update: jest.fn(),
+  count: jest.fn().mockResolvedValue(0),
 };
 
 const mockPrisma = new Proxy(
@@ -38,7 +39,10 @@ const mockPrisma = new Proxy(
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue({}),
         count: jest.fn().mockResolvedValue(0),
-        findUnique: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue({}),
+        upsert: jest.fn().mockResolvedValue({}),
       };
     },
   },
@@ -154,9 +158,10 @@ describe('ScalabilityService', () => {
         {
           tenantId: 'tenant-1',
           name: 'Welcome Email',
-          trigger: 'USER_CREATED',
-          action: 'SEND_EMAIL',
-          condition: '{}',
+          triggerType: 'USER_CREATED',
+          triggerConfigJson: '{}',
+          actionsJson: '[]',
+          conditionsJson: '{}',
         } as any,
         'admin',
       );

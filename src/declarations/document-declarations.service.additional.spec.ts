@@ -305,6 +305,17 @@ describe('DocumentDeclarationsService (additional)', () => {
     });
 
     it('deve criar pedido de declaração que não requer aprovação', async () => {
+      const createdRequest = {
+        id: 1,
+        userId: 1,
+        status: 'APPROVED',
+        templateId: 1,
+        template: baseTemplate,
+        user: baseUser,
+        approvals: [],
+      };
+      mockPrisma.declarationRequest.create.mockResolvedValue(createdRequest);
+      mockPrisma.declarationRequest.findUnique.mockResolvedValue(createdRequest);
       const result = await service.request(1, { templateId: 1 } as any);
       expect(result).toBeDefined();
       expect(mockAudit.log).toHaveBeenCalledWith(
@@ -313,7 +324,17 @@ describe('DocumentDeclarationsService (additional)', () => {
     });
 
     it('deve criar pedido como DRAFT quando saveAsDraft=true', async () => {
-      mockPrisma.declarationRequest.create.mockResolvedValue({ id: 1, status: 'DRAFT' });
+      const draftRequest = {
+        id: 1,
+        userId: 1,
+        status: 'DRAFT',
+        templateId: 1,
+        template: baseTemplate,
+        user: baseUser,
+        approvals: [],
+      };
+      mockPrisma.declarationRequest.create.mockResolvedValue(draftRequest);
+      mockPrisma.declarationRequest.findUnique.mockResolvedValue(draftRequest);
       const result = await service.request(1, { templateId: 1, saveAsDraft: true } as any);
       expect(result).toBeDefined();
     });
@@ -323,7 +344,17 @@ describe('DocumentDeclarationsService (additional)', () => {
         ...baseTemplate,
         requiresApproval: true,
       });
-      mockPrisma.declarationRequest.create.mockResolvedValue({ id: 1, status: 'PENDING' });
+      const pendingRequest = {
+        id: 1,
+        userId: 1,
+        status: 'PENDING',
+        templateId: 1,
+        template: { ...baseTemplate, requiresApproval: true },
+        user: baseUser,
+        approvals: [],
+      };
+      mockPrisma.declarationRequest.create.mockResolvedValue(pendingRequest);
+      mockPrisma.declarationRequest.findUnique.mockResolvedValue(pendingRequest);
       const result = await service.request(1, { templateId: 1 } as any);
       expect(result).toBeDefined();
     });

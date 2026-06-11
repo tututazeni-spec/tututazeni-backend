@@ -27,6 +27,9 @@ const mockPrisma = {
     findFirst: jest.fn(),
     upsert: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { watchedSeconds: 0 } }),
   },
   moduleMaterial: {
     create: jest.fn(),
@@ -119,8 +122,13 @@ describe('CourseModulesService', () => {
 
   describe('reorderModules', () => {
     it('deve reordenar módulos', async () => {
-      mockPrisma.course.findUnique.mockResolvedValue({ id: 1 });
-      mockPrisma.courseModule.updateMany = jest.fn().mockResolvedValue({});
+      mockPrisma.courseModule.findMany
+        .mockResolvedValueOnce([
+          { id: 1, courseId: 1, seq: 1 },
+          { id: 2, courseId: 1, seq: 2 },
+        ])
+        .mockResolvedValueOnce([]);
+      mockPrisma.courseModule.update.mockResolvedValue({});
       const result = await service.reorderModules(1, {
         order: [
           { id: 1, seq: 2 },
@@ -155,13 +163,31 @@ describe('CourseModulesService', () => {
 
   describe('markLessonComplete', () => {
     it('deve marcar lição como completa', async () => {
-      mockPrisma.lesson.findUnique.mockResolvedValue({
+      const mockLesson = {
         id: 1,
         moduleId: 1,
+        module: {
+          id: 1,
+          courseId: 1,
+          seq: 1,
+          status: 'PUBLISHED',
+          dripDays: null,
+          availableFrom: null,
+          progressionType: 'FREE',
+          course: { id: 1 },
+        },
+      };
+      mockPrisma.lesson.findUnique.mockResolvedValue(mockLesson);
+      mockPrisma.enrollment.findFirst.mockResolvedValue({
+        id: 1,
+        userId: 1,
         courseId: 1,
-        module: { courseId: 1 },
+        status: 'IN_PROGRESS',
+        enrolledAt: new Date('2026-01-01'),
       });
-      const result = await service.markLessonComplete(1, { lessonId: 1, courseId: 1 } as any);
+      mockPrisma.lessonProgress.upsert.mockResolvedValue({ id: 1, completed: true });
+      mockPrisma.enrollment.update.mockResolvedValue({});
+      const result = await service.markLessonComplete(1, { lessonId: 1 } as any);
       expect(result).toBeDefined();
     });
   });

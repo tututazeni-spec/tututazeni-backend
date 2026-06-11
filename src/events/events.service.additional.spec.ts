@@ -42,7 +42,9 @@ const baseEvent = {
   maxCapacity: 30,
   mandatory: false,
   organizer: { id: 1, fullName: 'Admin', avatarUrl: null },
-  _count: { participants: 10 },
+  feedbacks: [],
+  participants: [],
+  _count: { participants: 10, feedbacks: 0 },
 };
 
 describe('EventsService (additional)', () => {
@@ -101,17 +103,15 @@ describe('EventsService (additional)', () => {
   describe('create', () => {
     it('deve criar evento', async () => {
       mockPrisma.event.create.mockResolvedValue(baseEvent);
-      const result = await service.create(
-        {
-          title: 'Workshop TypeScript',
-          type: 'WORKSHOP' as any,
-          modalidade: 'PRESENCIAL' as any,
-          startAt: '2026-07-01T09:00:00',
-          endAt: '2026-07-01T17:00:00',
-          maxCapacity: 30,
-        } as any,
-        1,
-      );
+      // Real signature: create(organizerId, dto) — organizerId first, dto second
+      const result = await service.create(1, {
+        title: 'Workshop TypeScript',
+        type: 'WORKSHOP' as any,
+        modalidade: 'PRESENCIAL' as any,
+        startAt: '2026-07-01T09:00:00',
+        endAt: '2026-07-01T17:00:00',
+        maxCapacity: 30,
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -122,64 +122,105 @@ describe('EventsService (additional)', () => {
     it('deve actualizar evento', async () => {
       mockPrisma.event.findUnique.mockResolvedValue(baseEvent);
       mockPrisma.event.update.mockResolvedValue({ ...baseEvent, title: 'Workshop TS Avançado' });
-      const result = await service.update(1, { title: 'Workshop TS Avançado' } as any, 1, 'ADMIN');
+      // Real signature: update(id, dto) — 2 args only
+      const result = await service.update(1, { title: 'Workshop TS Avançado' } as any);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se evento não existe', async () => {
       mockPrisma.event.findUnique.mockResolvedValue(null);
-      await expect(service.update(99, {} as any, 1, 'ADMIN')).rejects.toThrow(NotFoundException);
+      await expect(service.update(99, {} as any)).rejects.toThrow(NotFoundException);
     });
   });
 
-  // ─── publishEvent ─────────────────────────────────────────────
+  // ─── publish (real method name) ───────────────────────────────
 
-  describe('publishEvent', () => {
+  describe('publish', () => {
     it('deve publicar evento DRAFT', async () => {
-      mockPrisma.event.findUnique.mockResolvedValue({ ...baseEvent, status: 'DRAFT' });
+      mockPrisma.event.findUnique.mockResolvedValue({
+        ...baseEvent,
+        status: 'DRAFT',
+        feedbacks: [],
+        participants: [],
+        _count: { participants: 0, feedbacks: 0 },
+      });
       mockPrisma.event.update.mockResolvedValue({ ...baseEvent, status: 'PUBLISHED' });
-      const result = await service.publishEvent(1, 1);
+      // Real method: publish(id) — 1 arg
+      const result = await service.publish(1);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── cancelEvent ──────────────────────────────────────────────
+  // ─── cancel (real method name) ────────────────────────────────
 
-  describe('cancelEvent', () => {
+  describe('cancel', () => {
     it('deve cancelar evento', async () => {
-      mockPrisma.event.findUnique.mockResolvedValue(baseEvent);
+      mockPrisma.event.findUnique.mockResolvedValue({
+        ...baseEvent,
+        feedbacks: [],
+        participants: [],
+        _count: { participants: 0, feedbacks: 0 },
+      });
       mockPrisma.event.update.mockResolvedValue({ ...baseEvent, status: 'CANCELLED' });
-      mockPrisma.notificationLog.create.mockResolvedValue({});
-      const result = await service.cancelEvent(
-        1,
-        { reason: 'Sem participantes suficientes' } as any,
-        1,
-      );
+      mockPrisma.eventParticipant.findMany.mockResolvedValue([]);
+      mockPrisma.notificationLog.createMany = jest.fn().mockResolvedValue({ count: 0 });
+      // Real method: cancel(id) — 1 arg
+      const result = await service.cancel(1);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── registerParticipant ──────────────────────────────────────
+  // ─── join (replaces registerParticipant) ─────────────────────
 
-  describe('registerParticipant', () => {
+  describe('join', () => {
     it('deve registar participante em evento com vagas', async () => {
-      mockPrisma.event.findUnique.mockResolvedValue({ ...baseEvent, _count: { participants: 5 } });
-      mockPrisma.eventParticipant.findFirst.mockResolvedValue(null);
-      mockPrisma.eventParticipant.create.mockResolvedValue({ id: 1, eventId: 1, userId: 2 });
-      const result = await service.registerParticipant(1, 2);
+      mockPrisma.event.findUnique.mockResolvedValue({
+        ...baseEvent,
+        feedbacks: [],
+        participants: [],
+        _count: { participants: 5 },
+        status: 'PUBLISHED',
+        waitlistEnabled: false,
+      });
+      mockPrisma.eventParticipant.findUnique = jest.fn().mockResolvedValue(null);
+      mockPrisma.eventParticipant.count.mockResolvedValue(5);
+      mockPrisma.eventParticipant.upsert = jest
+        .fn()
+        .mockResolvedValue({ id: 1, eventId: 1, userId: 2 });
+      mockPrisma.notificationLog.create.mockResolvedValue({});
+      mockPrisma.userPoints = { upsert: jest.fn().mockResolvedValue({}) };
+      // Real method: join(eventId, userId)
+      const result = await service.join(1, 2);
       expect(result).toBeDefined();
     });
 
     it('deve lançar ConflictException se já registado', async () => {
-      mockPrisma.event.findUnique.mockResolvedValue(baseEvent);
-      mockPrisma.eventParticipant.findFirst.mockResolvedValue({ id: 1 });
-      await expect(service.registerParticipant(1, 2)).rejects.toThrow(ConflictException);
+      mockPrisma.event.findUnique.mockResolvedValue({
+        ...baseEvent,
+        feedbacks: [],
+        participants: [],
+        _count: { participants: 5 },
+        status: 'PUBLISHED',
+      });
+      mockPrisma.eventParticipant.findUnique = jest
+        .fn()
+        .mockResolvedValue({ id: 1, status: 'CONFIRMED' });
+      await expect(service.join(1, 2)).rejects.toThrow(ConflictException);
     });
 
-    it('deve lançar BadRequestException se evento cheio', async () => {
-      mockPrisma.event.findUnique.mockResolvedValue({ ...baseEvent, _count: { participants: 30 } });
-      mockPrisma.eventParticipant.findFirst.mockResolvedValue(null);
-      await expect(service.registerParticipant(1, 2)).rejects.toThrow(BadRequestException);
+    it('deve lançar BadRequestException se evento cheio e sem waitlist', async () => {
+      mockPrisma.event.findUnique.mockResolvedValue({
+        ...baseEvent,
+        feedbacks: [],
+        participants: [],
+        _count: { participants: 30 },
+        maxCapacity: 30,
+        status: 'PUBLISHED',
+        waitlistEnabled: false,
+      });
+      mockPrisma.eventParticipant.findUnique = jest.fn().mockResolvedValue(null);
+      mockPrisma.eventParticipant.count.mockResolvedValue(30);
+      await expect(service.join(1, 2)).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -187,13 +228,17 @@ describe('EventsService (additional)', () => {
 
   describe('checkIn', () => {
     it('deve fazer check-in de participante', async () => {
-      mockPrisma.eventParticipant.findFirst.mockResolvedValue({
+      mockPrisma.event.findUnique.mockResolvedValue(baseEvent);
+      mockPrisma.eventParticipant.findUnique = jest.fn().mockResolvedValue({
         id: 1,
+        eventId: 1,
         userId: 2,
-        status: 'REGISTERED',
+        status: 'CONFIRMED',
       });
-      mockPrisma.eventParticipant.update.mockResolvedValue({ id: 1, status: 'CHECKED_IN' });
-      const result = await service.checkIn(1, { userId: 2 } as any, 1);
+      mockPrisma.eventParticipant.update.mockResolvedValue({ id: 1, status: 'PRESENT' });
+      mockPrisma.userPoints = { upsert: jest.fn().mockResolvedValue({}) };
+      // Real signature: checkIn(userId, dto) — userId first, dto with eventId
+      const result = await service.checkIn(2, { eventId: 1 } as any);
       expect(result).toBeDefined();
     });
   });
@@ -202,26 +247,31 @@ describe('EventsService (additional)', () => {
 
   describe('submitFeedback', () => {
     it('deve submeter feedback do evento', async () => {
+      mockPrisma.eventParticipant.findUnique = jest.fn().mockResolvedValue({
+        id: 1,
+        status: 'PRESENT',
+      });
+      mockPrisma.eventFeedback = {
+        upsert: jest.fn().mockResolvedValue({ id: 1, eventId: 1, nps: 9, rating: 5 }),
+      };
+      mockPrisma.userPoints = { upsert: jest.fn().mockResolvedValue({}) };
       mockPrisma.event.findUnique.mockResolvedValue(baseEvent);
-      mockPrisma.eventParticipant.findFirst.mockResolvedValue({ id: 1, status: 'CHECKED_IN' });
-      mockPrisma.eventFeedback.create.mockResolvedValue({ id: 1, eventId: 1, rating: 5 });
-      const result = await service.submitFeedback(
-        1,
-        { rating: 5, comment: 'Excelente!' } as any,
-        2,
-      );
+      mockPrisma.certificate = { findFirst: jest.fn().mockResolvedValue(null) };
+      // Real signature: submitFeedback(eventId, userId, dto)
+      const result = await service.submitFeedback(1, 2, { nps: 9, rating: 5 } as any);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getEventStats ────────────────────────────────────────────
+  // ─── getStats (replaces getEventStats) ────────────────────────
 
-  describe('getEventStats', () => {
-    it('deve retornar estatísticas do evento', async () => {
-      mockPrisma.event.findUnique.mockResolvedValue(baseEvent);
-      mockPrisma.eventParticipant.count.mockResolvedValue(10);
-      mockPrisma.eventFeedback.aggregate.mockResolvedValue({ _avg: { rating: 4.5 } });
-      const result = await service.getEventStats(1);
+  describe('getStats', () => {
+    it('deve retornar estatísticas gerais de eventos', async () => {
+      mockPrisma.event.groupBy = jest.fn().mockResolvedValue([]);
+      mockPrisma.event.count.mockResolvedValue(10);
+      mockPrisma.eventParticipant.count.mockResolvedValue(100);
+      // Real method: getStats() — no args, returns global stats
+      const result = await service.getStats();
       expect(result).toBeDefined();
     });
   });

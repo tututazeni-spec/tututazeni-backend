@@ -39,13 +39,22 @@ const mockPrisma: any = {
     create: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
   },
-  notificationLog: { create: jest.fn().mockResolvedValue({}) },
+  notificationLog: {
+    create: jest.fn().mockResolvedValue({}),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   user: {
     findUnique: jest.fn().mockResolvedValue(null),
     findMany: jest.fn().mockResolvedValue([]),
   },
   position: { findMany: jest.fn().mockResolvedValue([]) },
+  competencyEvolutionLog: { create: jest.fn().mockResolvedValue({}) },
+  proficiencyLevel: {
+    findFirst: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({ id: 1, competencyId: 1, value: 3 }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
 };
 
 const baseCompetency = {
@@ -95,7 +104,7 @@ describe('CompetenciesService (additional)', () => {
     it('deve filtrar por category e status', async () => {
       mockPrisma.competency.findMany.mockResolvedValue([]);
       mockPrisma.competency.count.mockResolvedValue(0);
-      await service.findAll({ category: 'TECH', status: 'ACTIVE' as any });
+      await service.findAll({ category: 'TECH' as any, status: 'ACTIVE' as any });
       expect(mockPrisma.competency.findMany).toHaveBeenCalled();
     });
 
@@ -150,6 +159,7 @@ describe('CompetenciesService (additional)', () => {
   describe('update', () => {
     it('deve actualizar competência', async () => {
       mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
+      mockPrisma.competency.findFirst.mockResolvedValue(null); // no name conflict
       mockPrisma.competency.update.mockResolvedValue({
         ...baseCompetency,
         name: 'TypeScript Advanced',
@@ -189,37 +199,39 @@ describe('CompetenciesService (additional)', () => {
         competencyId: 1,
         currentLevel: 3,
       });
-      const result = await service.upsertUserCompetency(1, {
+      const result = await service.upsertUserCompetency({
+        userId: 1,
         competencyId: 1,
         currentLevel: 3,
         source: 'SELF' as any,
-      });
+      } as any);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── selfAssessment ───────────────────────────────────────────
+  // ─── selfAssess ───────────────────────────────────────────────
 
-  describe('selfAssessment', () => {
+  describe('selfAssess', () => {
     it('deve registar auto-avaliação de competências', async () => {
       mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
       mockPrisma.userCompetency.upsert.mockResolvedValue({ id: 1 });
-      const result = await service.selfAssessment(1, {
+      const result = await service.selfAssess(1, {
         assessments: [{ competencyId: 1, level: 3, evidence: 'Projecto X' }],
-      });
+      } as any);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── managerAssessment ────────────────────────────────────────
+  // ─── managerAssess ────────────────────────────────────────────
 
-  describe('managerAssessment', () => {
+  describe('managerAssess', () => {
     it('deve registar avaliação do gestor', async () => {
       mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
       mockPrisma.userCompetency.upsert.mockResolvedValue({ id: 1 });
-      const result = await service.managerAssessment(1, 2, {
+      const result = await service.managerAssess(1, {
+        userId: 2,
         assessments: [{ competencyId: 1, level: 4, feedback: 'Boa evolução' }],
-      });
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -230,7 +242,11 @@ describe('CompetenciesService (additional)', () => {
     it('deve mapear competência a posição', async () => {
       mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
       mockPrisma.positionCompetency.upsert.mockResolvedValue({ competencyId: 1, positionId: 1 });
-      const result = await service.mapToPosition(1, { positionId: 1, requiredLevel: 3 } as any);
+      const result = await service.mapToPosition({
+        competencyId: 1,
+        positionId: 1,
+        requiredLevel: 3,
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -241,18 +257,22 @@ describe('CompetenciesService (additional)', () => {
     it('deve mapear competência a curso', async () => {
       mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
       mockPrisma.courseCompetency.upsert.mockResolvedValue({ competencyId: 1, courseId: 1 });
-      const result = await service.mapToCourse(1, { courseId: 1 } as any);
+      const result = await service.mapToCourse({
+        competencyId: 1,
+        courseId: 1,
+      } as any);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── createEndorsement ────────────────────────────────────────
+  // ─── addEndorsement ───────────────────────────────────────────
 
-  describe('createEndorsement', () => {
+  describe('addEndorsement', () => {
     it('deve criar endorsement de competência', async () => {
       mockPrisma.competencyEndorsement.findFirst.mockResolvedValue(null);
       mockPrisma.competencyEndorsement.create.mockResolvedValue({ id: 1 });
-      const result = await service.createEndorsement(1, 2, {
+      const result = await service.addEndorsement(1, {
+        userId: 2,
         competencyId: 1,
         message: 'Excelente',
       } as any);
@@ -261,23 +281,25 @@ describe('CompetenciesService (additional)', () => {
 
     it('deve lançar ConflictException se endorsement já existe', async () => {
       mockPrisma.competencyEndorsement.findFirst.mockResolvedValue({ id: 1 });
-      await expect(service.createEndorsement(1, 2, { competencyId: 1 } as any)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.addEndorsement(1, { userId: 2, competencyId: 1 } as any),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
-  // ─── addProficiencyLevel ──────────────────────────────────────
+  // ─── createProficiencyLevel ───────────────────────────────────
 
-  describe('addProficiencyLevel', () => {
+  describe('createProficiencyLevel', () => {
     it('deve adicionar nível de proficiência à competência', async () => {
       mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
-      mockPrisma.competencyProficiencyLevel.create.mockResolvedValue({
+      mockPrisma.proficiencyLevel.findFirst.mockResolvedValue(null); // no conflict
+      mockPrisma.proficiencyLevel.create.mockResolvedValue({
         id: 1,
         competencyId: 1,
         value: 3,
       });
-      const result = await service.addProficiencyLevel(1, {
+      const result = await service.createProficiencyLevel({
+        competencyId: 1,
         value: 3,
         name: 'Avançado',
         description: 'Domínio avançado',
@@ -286,14 +308,14 @@ describe('CompetenciesService (additional)', () => {
     });
   });
 
-  // ─── getGapAnalysis ───────────────────────────────────────────
+  // ─── getOrgGapDashboard ───────────────────────────────────────
 
-  describe('getGapAnalysis', () => {
+  describe('getOrgGapDashboard', () => {
     it('deve retornar análise de gaps de competências', async () => {
       mockPrisma.user.findMany.mockResolvedValue([{ id: 1, positionId: 1 }]);
       mockPrisma.positionCompetency.findMany.mockResolvedValue([]);
       mockPrisma.userCompetency.findMany.mockResolvedValue([]);
-      const result = await service.getGapAnalysis({});
+      const result = await service.getOrgGapDashboard();
       expect(result).toBeDefined();
     });
   });

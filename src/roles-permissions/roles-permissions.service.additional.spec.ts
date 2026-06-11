@@ -22,14 +22,21 @@ const mockPrisma: any = {
     delete: jest.fn(),
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
     upsert: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  roleTemplate: {
+    findFirst: jest.fn().mockResolvedValue(null),
+    findMany: jest.fn().mockResolvedValue([]),
   },
   user: {
     findMany: jest.fn().mockResolvedValue([]),
     findUnique: jest.fn().mockResolvedValue(null),
     update: jest.fn(),
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+    count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
-  auditLog: { create: jest.fn().mockResolvedValue({}) },
+  auditLog: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
 };
 
 const baseRole = {
@@ -139,47 +146,44 @@ describe('RolesPermissionsService (additional)', () => {
       expect(mockPrisma.role.delete).toHaveBeenCalled();
     });
 
-    it('deve lançar BadRequestException se role tem utilizadores', async () => {
+    it('deve lançar ConflictException se role tem utilizadores', async () => {
       mockPrisma.role.findUnique.mockResolvedValue({
         ...baseRole,
         _count: { users: 5 },
         isSystem: false,
       });
-      await expect(service.remove(1)).rejects.toThrow(BadRequestException);
+      await expect(service.remove(1)).rejects.toThrow(ConflictException);
     });
   });
 
   // ─── setPermissions ───────────────────────────────────────────
 
-  describe('setPermissions', () => {
+  describe('setRolePermissions', () => {
     it('deve definir permissões do role', async () => {
       mockPrisma.role.findUnique.mockResolvedValue(baseRole);
       mockPrisma.role.update.mockResolvedValue(baseRole);
-      const result = await service.setPermissions(1, { permissionIds: [1, 2] } as any);
+      const result = await service.setRolePermissions(1, [1, 2]);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getPermissions ───────────────────────────────────────────
+  // ─── getPermissionMatrix ──────────────────────────────────────
 
-  describe('getPermissions', () => {
-    it('deve retornar lista de permissões', async () => {
+  describe('getPermissionMatrix', () => {
+    it('deve retornar matrix de permissões', async () => {
       mockPrisma.permission.findMany.mockResolvedValue([{ id: 1, name: 'READ_USERS' }]);
-      const result = await service.getPermissions({});
+      const result = await service.getPermissionMatrix();
       expect(result).toBeDefined();
     });
   });
 
-  // ─── createPermission ─────────────────────────────────────────
+  // ─── addPermissionsToRole ─────────────────────────────────────
 
-  describe('createPermission', () => {
-    it('deve criar permissão', async () => {
-      mockPrisma.permission.create.mockResolvedValue({ id: 1, name: 'READ_USERS' });
-      const result = await service.createPermission({
-        name: 'READ_USERS',
-        action: 'read',
-        subject: 'User',
-      } as any);
+  describe('addPermissionsToRole', () => {
+    it('deve adicionar permissões ao role', async () => {
+      mockPrisma.role.findUnique.mockResolvedValue(baseRole);
+      mockPrisma.role.update.mockResolvedValue(baseRole);
+      const result = await service.addPermissionsToRole(1, [1, 2]);
       expect(result).toBeDefined();
     });
   });
@@ -203,7 +207,7 @@ describe('RolesPermissionsService (additional)', () => {
       const result = await service.simulatePermission({
         userId: 1,
         action: 'read',
-        subject: 'User',
+        resource: 'User',
       } as any);
       expect(result).toBeDefined();
     });
@@ -213,42 +217,40 @@ describe('RolesPermissionsService (additional)', () => {
 
   describe('cloneRole', () => {
     it('deve clonar role existente', async () => {
+      mockPrisma.role.findFirst.mockResolvedValue(null);
       mockPrisma.role.findUnique.mockResolvedValue(baseRole);
       mockPrisma.role.create.mockResolvedValue({ ...baseRole, id: 2, name: 'MANAGER_COPY' });
-      const result = await service.cloneRole(1, { name: 'MANAGER_COPY' } as any);
+      const result = await service.cloneRole(1, 'MANAGER_COPY');
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getAuditLog ──────────────────────────────────────────────
+  // ─── getGovernanceStats ───────────────────────────────────────
 
-  describe('getAuditLog', () => {
-    it('deve retornar auditoria de permissões', async () => {
-      mockPrisma.auditLog.create = jest.fn();
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [RolesPermissionsService, { provide: PrismaService, useValue: mockPrisma }],
-      }).compile();
-      const svc = module.get<RolesPermissionsService>(RolesPermissionsService);
-      const result = await svc.getAuditLog({});
+  describe('getGovernanceStats', () => {
+    it('deve retornar estatísticas de governance', async () => {
+      mockPrisma.role.findMany.mockResolvedValue([baseRole]);
+      mockPrisma.role.count.mockResolvedValue(1);
+      const result = await service.getGovernanceStats();
       expect(result).toBeDefined();
     });
   });
 
-  // ─── getTemplates / applyTemplate ─────────────────────────────
+  // ─── getPositionTemplates / applyPositionTemplate ─────────────
 
-  describe('getTemplates', () => {
-    it('deve retornar templates de roles', async () => {
-      const result = await service.getTemplates();
+  describe('getPositionTemplates', () => {
+    it('deve retornar templates de posições', async () => {
+      const result = await service.getPositionTemplates();
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
     });
   });
 
-  describe('applyTemplate', () => {
-    it('deve aplicar template a role existente', async () => {
+  describe('applyPositionTemplate', () => {
+    it('deve aplicar template a posição existente', async () => {
       mockPrisma.role.findUnique.mockResolvedValue(baseRole);
       mockPrisma.role.update.mockResolvedValue(baseRole);
-      const result = await service.applyTemplate(1, { templateKey: 'MANAGER' } as any);
+      const result = await service.applyPositionTemplate(1);
       expect(result).toBeDefined();
     });
   });

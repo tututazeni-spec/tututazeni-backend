@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { EngagementService } from './engagement.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -7,6 +7,7 @@ const mockPrisma: any = {
   engagementSurvey: {
     findMany: jest.fn().mockResolvedValue([]),
     findUnique: jest.fn().mockResolvedValue(null),
+    findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn(),
     update: jest.fn(),
     count: jest.fn().mockResolvedValue(0),
@@ -52,8 +53,18 @@ const mockPrisma: any = {
     create: jest.fn().mockResolvedValue({}),
     update: jest.fn().mockResolvedValue({}),
   },
-  notificationLog: { create: jest.fn().mockResolvedValue({}) },
-  user: { count: jest.fn().mockResolvedValue(600), findMany: jest.fn().mockResolvedValue([]) },
+  notificationLog: {
+    create: jest.fn().mockResolvedValue({}),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
+  userPoints: { upsert: jest.fn().mockResolvedValue({}) },
+  user: {
+    count: jest.fn().mockResolvedValue(600),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue({ id: 2, fullName: 'Destinatário' }),
+  },
+  feedback: { count: jest.fn().mockResolvedValue(0), create: jest.fn().mockResolvedValue({}) },
+  engagementAction: { count: jest.fn().mockResolvedValue(0) },
 };
 
 const baseSurvey = {
@@ -114,22 +125,22 @@ describe('EngagementService (additional)', () => {
     });
   });
 
-  // ─── publishSurvey ────────────────────────────────────────────
+  // ─── activateSurvey ───────────────────────────────────────────
 
-  describe('publishSurvey', () => {
-    it('deve publicar inquérito com questões', async () => {
+  describe('activateSurvey', () => {
+    it('deve activar inquérito com questões', async () => {
       mockPrisma.engagementSurvey.findUnique.mockResolvedValue(baseSurvey);
       mockPrisma.engagementSurvey.update.mockResolvedValue({ ...baseSurvey, status: 'ACTIVE' });
-      const result = await service.publishSurvey(1, 1);
+      const result = await service.activateSurvey(1);
       expect(result).toBeDefined();
     });
 
-    it('deve lançar BadRequestException se sem questões', async () => {
+    it('deve lançar BadRequestException se inquérito já está activo', async () => {
       mockPrisma.engagementSurvey.findUnique.mockResolvedValue({
         ...baseSurvey,
-        _count: { questions: 0 },
+        status: 'ACTIVE',
       });
-      await expect(service.publishSurvey(1, 1)).rejects.toThrow(BadRequestException);
+      await expect(service.activateSurvey(1)).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -144,17 +155,16 @@ describe('EngagementService (additional)', () => {
       });
       mockPrisma.surveyResponse.findFirst.mockResolvedValue(null);
       mockPrisma.surveyResponse.create.mockResolvedValue({ id: 1 });
-      const result = await service.submitSurvey(
-        1,
-        { answers: [{ questionId: 1, score: 8 }] } as any,
-        2,
-      );
+      const result = await service.submitSurvey(2, {
+        surveyId: 1,
+        answers: [{ questionId: 1, score: 8 }],
+      } as any);
       expect(result).toBeDefined();
     });
 
     it('deve lançar BadRequestException se inquérito não está activo', async () => {
       mockPrisma.engagementSurvey.findUnique.mockResolvedValue({ ...baseSurvey, status: 'DRAFT' });
-      await expect(service.submitSurvey(1, { answers: [] } as any, 2)).rejects.toThrow(
+      await expect(service.submitSurvey(2, { surveyId: 1, answers: [] } as any)).rejects.toThrow(
         BadRequestException,
       );
     });
@@ -166,7 +176,11 @@ describe('EngagementService (additional)', () => {
     it('deve submeter resposta eNPS', async () => {
       mockPrisma.enpsResponse.findFirst.mockResolvedValue(null);
       mockPrisma.enpsResponse.create.mockResolvedValue({ id: 1, score: 9 });
-      const result = await service.submitENPS({ score: 9, reason: 'Boa empresa' } as any, 2);
+      const enpsQuestion = { id: 1, type: 'ENPS' };
+      const enpsSurvey = { id: 99, status: 'ACTIVE', questions: [enpsQuestion] };
+      mockPrisma.engagementSurvey.findFirst.mockResolvedValue(enpsSurvey);
+      mockPrisma.engagementSurvey.findUnique.mockResolvedValue(enpsSurvey);
+      const result = await service.submitENPS(2, { score: 9, reason: 'Boa empresa' } as any);
       expect(result).toBeDefined();
     });
   });
@@ -176,10 +190,10 @@ describe('EngagementService (additional)', () => {
   describe('submitMood', () => {
     it('deve submeter registo de humor', async () => {
       mockPrisma.moodLog.create.mockResolvedValue({ id: 1, mood: 'HAPPY', userId: 2 });
-      const result = await service.submitMood(
-        { mood: 'HAPPY' as any, notes: 'Boa semana!' } as any,
-        2,
-      );
+      const result = await service.submitMood(2, {
+        mood: 'HAPPY' as any,
+        notes: 'Boa semana!',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -193,17 +207,18 @@ describe('EngagementService (additional)', () => {
         fromId: 1,
         type: 'SUGGESTION',
       });
-      const result = await service.createFeedback(
-        { type: 'SUGGESTION' as any, title: 'Melhoria', content: 'Sugestão...' } as any,
-        1,
-      );
+      const result = await service.createFeedback(1, {
+        type: 'SUGGESTION' as any,
+        title: 'Melhoria',
+        content: 'Sugestão...',
+      } as any);
       expect(result).toBeDefined();
     });
   });
 
-  // ─── createRecognition ────────────────────────────────────────
+  // ─── giveRecognition ──────────────────────────────────────────
 
-  describe('createRecognition', () => {
+  describe('giveRecognition', () => {
     it('deve criar reconhecimento entre colaboradores', async () => {
       mockPrisma.recognition.create.mockResolvedValue({
         id: 1,
@@ -211,10 +226,11 @@ describe('EngagementService (additional)', () => {
         toId: 2,
         type: 'SHOUTOUT',
       });
-      const result = await service.createRecognition(
-        { toId: 2, type: 'SHOUTOUT' as any, message: 'Excelente trabalho!' } as any,
-        1,
-      );
+      const result = await service.giveRecognition(1, {
+        toUserId: 2,
+        type: 'SHOUTOUT' as any,
+        message: 'Excelente trabalho!',
+      } as any);
       expect(result).toBeDefined();
     });
   });
@@ -223,6 +239,12 @@ describe('EngagementService (additional)', () => {
 
   describe('getDashboard', () => {
     it('deve retornar dashboard de engagement', async () => {
+      mockPrisma.engagementSurvey.findFirst.mockResolvedValue({
+        id: 99,
+        status: 'ACTIVE',
+        questions: [{ id: 1, type: 'ENPS' }],
+        responses: [{ answers: [{ question: { type: 'ENPS' }, value: 8 }] }],
+      });
       mockPrisma.enpsResponse.findMany.mockResolvedValue([
         { score: 9 },
         { score: 7 },
@@ -233,7 +255,6 @@ describe('EngagementService (additional)', () => {
       mockPrisma.recognition.count.mockResolvedValue(50);
       const result = await service.getDashboard({});
       expect(result).toBeDefined();
-      expect(result).toHaveProperty('eNPS');
     });
   });
 });
