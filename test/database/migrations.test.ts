@@ -1,6 +1,7 @@
 // test/database/migrations.test.ts
 // Testes de migrations — BD innova_test (nunca innova)
-import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { createTestDb, closeTestDb, TestDb } from './prisma-test-client';
 
 describe('Database Migrations', () => {
@@ -15,21 +16,38 @@ describe('Database Migrations', () => {
     await closeTestDb(db);
   });
 
-  it(
-    'todas as migrations estão aplicadas',
-    () => {
-      // NODE_ENV=test garante que o prisma.config.ts carrega o .env.test (innova_test)
-      const result = execSync('npx prisma migrate status', {
-        env: { ...process.env, NODE_ENV: 'test' },
-        encoding: 'utf8',
-      });
-      expect(result).toContain('innova_test');
-      expect(result).not.toContain('have not yet been applied');
-      expect(result).not.toContain('failed');
-      expect(result).toContain('Database schema is up to date');
-    },
-    120000,
-  );
+  it('todas as migrations estão aplicadas', async () => {
+    // Compara prisma/migrations com a tabela _prisma_migrations da BD
+    // (equivalente ao `prisma migrate status`, sem spawn do CLI)
+    const migrationsDir = path.join(process.cwd(), 'prisma', 'migrations');
+    const localMigrations = fs
+      .readdirSync(migrationsDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+    expect(localMigrations.length).toBeGreaterThan(0);
+
+    const applied = (await db.prisma.$queryRaw`
+      SELECT migration_name, finished_at, rolled_back_at
+      FROM "_prisma_migrations"
+    `) as any[];
+
+    // Nenhuma migration em estado falhado (iniciada mas nunca terminada)
+    const failed = applied.filter(
+      (m: any) => !m.finished_at && !m.rolled_back_at,
+    );
+    expect(failed).toHaveLength(0);
+
+    // Todas as migrations locais estão aplicadas na BD
+    const appliedNames = applied
+      .filter((m: any) => m.finished_at)
+      .map((m: any) => m.migration_name);
+    for (const local of localMigrations) {
+      if (!appliedNames.includes(local)) {
+        console.error(`❌ Migration não aplicada: ${local}`);
+      }
+      expect(appliedNames).toContain(local);
+    }
+  });
 
   it('tabelas críticas existem na BD', async () => {
     const tables = (await db.prisma.$queryRaw`
