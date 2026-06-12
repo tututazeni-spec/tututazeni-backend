@@ -3279,6 +3279,9 @@ model BadgeAward {
   user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   badge        Badge       @relation(fields: [badgeId], references: [id], onDelete: Cascade)
   userPoints   UserPoints? @relation(fields: [userPointsId], references: [id])
+
+  @@index([userId])
+  @@index([awardedAt])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -3729,6 +3732,7 @@ model AuditLog {
   reason       String?
   @@index([entity, entityId])
   @@index([userId])
+  @@index([createdAt])
 }
 
 model AutomationRule {
@@ -4771,6 +4775,9 @@ model LegacyPdi {
   actions         LegacyPdiAction[]
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
 }
 
 model LegacyPdiAction {
