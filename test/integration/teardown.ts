@@ -31,12 +31,37 @@ export default async function globalTeardown() {
   });
   const ids = users.map((u) => u.id);
 
-  await prisma.enrollment.deleteMany({ where: { userId: { in: ids } } });
-  await prisma.notificationLog.deleteMany({ where: { userId: { in: ids } } });
-  await prisma.badgeAward.deleteMany({ where: { userId: { in: ids } } });
-  await prisma.attendanceRecord.deleteMany({ where: { userId: { in: ids } } });
-  await prisma.user.deleteMany({ where: { email: { in: testEmails } } });
-  await prisma.course.deleteMany({ where: { internalCode: 'INT-TEST-001' } });
+  // Ordem respeita FKs RESTRICT (filhos antes de User). Cada passo é
+  // best-effort: o teardown nunca deve mascarar testes verdes com exit 1 —
+  // o setup usa upserts, por isso restos de dados não partem a próxima run.
+  const steps: Array<[string, () => Promise<unknown>]> = [
+    ['developmentPlan', () => prisma.developmentPlan.deleteMany({ where: { userId: { in: ids } } })],
+    [
+      'leaveRequest',
+      () => (prisma as any).leaveRequest.deleteMany({ where: { userId: { in: ids } } }),
+    ],
+    [
+      'notificationPreference',
+      () => prisma.notificationPreference.deleteMany({ where: { userId: { in: ids } } }),
+    ],
+    ['notificationLog', () => prisma.notificationLog.deleteMany({ where: { userId: { in: ids } } })],
+    ['enrollment', () => prisma.enrollment.deleteMany({ where: { userId: { in: ids } } })],
+    ['badgeAward', () => prisma.badgeAward.deleteMany({ where: { userId: { in: ids } } })],
+    [
+      'attendanceRecord',
+      () => prisma.attendanceRecord.deleteMany({ where: { userId: { in: ids } } }),
+    ],
+    ['user', () => prisma.user.deleteMany({ where: { email: { in: testEmails } } })],
+    ['course', () => prisma.course.deleteMany({ where: { internalCode: 'INT-TEST-001' } })],
+  ];
+
+  for (const [name, run] of steps) {
+    try {
+      await run();
+    } catch (e: any) {
+      console.warn(`⚠️  Teardown: falha ao limpar ${name}: ${String(e.message).split('\n')[0]}`);
+    }
+  }
 
   await prisma.$disconnect();
   console.log('✅ BD de teste limpa\n');

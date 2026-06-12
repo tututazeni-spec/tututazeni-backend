@@ -9,13 +9,15 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
 
     services:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_PASSWORD: postgres
+          # Tem de coincidir com o DATABASE_URL do .env.test, que os testes
+          # de integração carregam com override
+          POSTGRES_PASSWORD: 'Placido*7'
           POSTGRES_DB: innova_test
         ports:
           - 5432:5432
@@ -55,12 +57,17 @@ jobs:
       - name: Aplicar migrations
         run: npx prisma migrate deploy
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/innova_test
+          DATABASE_URL: 'postgresql://postgres:Placido*7@localhost:5432/innova_test'
 
       - name: Cobertura de código
         run: npm run test:coverage
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/innova_test
+          DATABASE_URL: 'postgresql://postgres:Placido*7@localhost:5432/innova_test'
+
+      - name: Testes de integração
+        run: npm run test:integration
+        env:
+          DATABASE_URL: 'postgresql://postgres:Placido*7@localhost:5432/innova_test'
 
       - name: Análise SonarCloud
         uses: SonarSource/sonarqube-scan-action@v5
