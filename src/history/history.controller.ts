@@ -34,13 +34,6 @@ export class HistoryController {
     return this.svc.getUserActivity(id, limit ? +limit : 50);
   }
 
-  @Get(':entity/:entityId')
-  @Roles(...ADMIN_ROLES)
-  @ApiOperation({ summary: 'Histórico de uma entidade específica' })
-  entityHistory(@Param('entity') entity: string, @Param('entityId', ParseIntPipe) id: number) {
-    return this.svc.getEntityHistory(entity, id);
-  }
-
   @Post('events')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Registar evento manual (promoção, marco de carreira, etc.)' })
@@ -121,5 +114,16 @@ export class HistoryController {
   @ApiOperation({ summary: 'Estatísticas do audit log — top acções, utilizadores, alertas' })
   auditStats(@Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.getAuditStats(from, to);
+  }
+
+  // ─── Histórico por Entidade ───────────────────────────────────
+  // NOTA: rota paramétrica genérica — tem de ser a última GET declarada,
+  // senão captura rotas estáticas como timeline/me, stats/me, milestones/me
+
+  @Get(':entity/:entityId')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Histórico de uma entidade específica' })
+  entityHistory(@Param('entity') entity: string, @Param('entityId', ParseIntPipe) id: number) {
+    return this.svc.getEntityHistory(entity, id);
   }
 }

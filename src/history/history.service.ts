@@ -312,7 +312,8 @@ export class HistoryService {
         status: 'COMPLETED',
         ...(filters.from && { completedAt: { gte: new Date(filters.from) } }),
       },
-      include: { scenario: { select: { title: true, category: true } } },
+      // AvatarScenario não tem campo category — só title é usado no merge
+      include: { scenario: { select: { title: true } } },
       orderBy: { completedAt: 'desc' },
       take: 20,
     });

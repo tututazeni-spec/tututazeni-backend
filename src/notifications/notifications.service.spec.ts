@@ -29,6 +29,7 @@ const mockPrisma = {
   },
   user: {
     findMany: jest.fn(),
+    findUnique: jest.fn(),
   },
 };
 
@@ -59,6 +60,18 @@ describe('NotificationsService', () => {
 
   describe('send', () => {
     const dto = { userId: 1, type: 'INFO', message: 'Test', title: 'Title' };
+
+    beforeEach(() => {
+      // send() valida o destinatário antes de criar a notificação
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 1 });
+    });
+
+    it('deve lançar NotFoundException se o destinatário não existir', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.send(dto)).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.notificationLog.create).not.toHaveBeenCalled();
+    });
 
     it('deve criar notificação com sucesso', async () => {
       mockPrisma.notificationPreference.findUnique.mockResolvedValue(null);

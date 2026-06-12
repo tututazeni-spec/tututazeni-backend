@@ -70,13 +70,22 @@ describe('PDI (Development Plans) Integration', () => {
   });
 
   describe('POST /development-plans', () => {
-    it('deve criar plano de desenvolvimento → 201', async () => {
+    it('admin pode criar plano de desenvolvimento → 201', async () => {
+      // Endpoint é @Roles('ADMIN','RH','GESTOR') e o DTO exige name, goal e
+      // userId (não title/description) — plano criado para o employee
+      const employeeId = Number(
+        JSON.parse(
+          Buffer.from(employeeToken.split('.')[1], 'base64').toString(),
+        ).sub,
+      );
+
       const res = await request(app.getHttpServer())
         .post('/development-plans')
-        .set('Authorization', `Bearer ${employeeToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({
-          title: 'Plano Teste Integração',
-          description: 'Plano para testes de integração',
+          name: 'Plano Teste Integração',
+          goal: 'Plano para testes de integração',
+          userId: employeeId,
           startDate: new Date().toISOString(),
           endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
         })
@@ -84,6 +93,14 @@ describe('PDI (Development Plans) Integration', () => {
 
       expect(res.body).toHaveProperty('id');
       planId = res.body.id;
+    });
+
+    it('employee sem permissão → 403', async () => {
+      await request(app.getHttpServer())
+        .post('/development-plans')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ name: 'Plano Teste', goal: 'Objectivo', userId: 1 })
+        .expect(403);
     });
 
     it('sem token → 401', async () => {

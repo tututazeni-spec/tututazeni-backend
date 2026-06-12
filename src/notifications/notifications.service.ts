@@ -20,6 +20,15 @@ export class NotificationsService {
   // ─── ENVIO ────────────────────────────────────────────────────────────────
 
   async send(dto: CreateNotificationDto) {
+    // Validar destinatário — evita 500 por violação de FK no create
+    const target = await this.prisma.user.findUnique({
+      where: { id: dto.userId },
+      select: { id: true },
+    });
+    if (!target) {
+      throw new NotFoundException(`Utilizador ${dto.userId} não encontrado`);
+    }
+
     // Verificar preferências do utilizador
     const prefs = await this.prisma.notificationPreference.findUnique({
       where: { userId: dto.userId },
