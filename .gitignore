@@ -72,3 +72,8 @@ Thumbs.db
 .claude/
 .eslintcache
 .eslintcache-staged
+
+# Playwright auth states
+test/e2e/.auth/
+test-results/
+playwright-report/

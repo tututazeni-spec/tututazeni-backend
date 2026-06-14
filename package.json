@@ -38,7 +38,7 @@
     "test:cov": "jest --coverage --forceExit",
     "test:coverage": "jest --coverage --forceExit --passWithNoTests",
     "test:coverage:watch": "jest --coverage --watch",
-    "test:e2e": "jest --config ./test/jest-e2e.json --forceExit",
+    "test:e2e": "playwright test",
     "test:unit": "jest --testPathPattern=spec --forceExit",
     "test:db": "cross-env NODE_ENV=test jest --config test/jest-database.json --forceExit --runInBand",
     "test:db:performance": "cross-env NODE_ENV=test jest --config test/jest-database.json --testPathPatterns=query-performance --forceExit --runInBand",
@@ -81,7 +81,10 @@
     "prepare": "husky",
     "build:loadtest": "nest build",
     "start:loadtest": "cross-env UV_THREADPOOL_SIZE=16 NODE_ENV=test node dist/main.js",
-    "test:wait-server": "node -e \"const h=require(\"http\");let t=0;const f=()=>{const r=h.get(\"http://127.0.0.1:4000/health\",res=>{if(res.statusCode<500){console.log(\"✅ Servidor pronto!\");process.exit(0);}else retry();}).on(\"error\",retry);function retry(){if(++t>60){console.error(\"❌ Timeout: servidor não iniciou em 60s\");process.exit(1);}setTimeout(f,1000);}};f();\""
+    "test:wait-server": "node -e \"const h=require(\"http\");let t=0;const f=()=>{const r=h.get(\"http://127.0.0.1:4000/health\",res=>{if(res.statusCode<500){console.log(\"✅ Servidor pronto!\");process.exit(0);}else retry();}).on(\"error\",retry);function retry(){if(++t>60){console.error(\"❌ Timeout: servidor não iniciou em 60s\");process.exit(1);}setTimeout(f,1000);}};f();\"",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report test/e2e/reports"
   },
   "lint-staged": {
     "src/**/*.ts": [
@@ -135,6 +138,7 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
+    "@playwright/test": "^1.60.0",
     "@types/bcrypt": "^6.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.7.5",
