@@ -1,98 +1,119 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# INNOVA — Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Plataforma corporativa de **Academia Corporativa + Recursos Humanos** para ~6000 funcionários.
+API construída em **NestJS + Prisma + PostgreSQL**.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+> Frontend correspondente: [tututazeni-frontend](https://github.com/tututazeni-spec/tututazeni-frontend)
 
-## Description
+---
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## 🧩 Áreas funcionais
 
-## Project setup
+- **Academia Corporativa** — cursos, lições, inscrições (enrollments), certificados, badges, percursos de aprendizagem
+- **Recursos Humanos** — PDI (planos de desenvolvimento individual), presenças, notificações, audit logs, gestão de utilizadores, departamentos e cargos
 
-```bash
-$ npm install
-```
+## 🛠️ Stack
 
-## Compile and run the project
+| Camada | Tecnologia |
+|---|---|
+| Framework | NestJS 11 |
+| Linguagem | TypeScript |
+| ORM | Prisma 7 (`@prisma/adapter-pg`) |
+| Base de dados | PostgreSQL |
+| Autenticação | JWT (Passport, `passport-jwt`) |
+| Documentação API | Swagger (`@nestjs/swagger`) |
+| Testes | Jest, Playwright (E2E), Artillery (carga), Bruno (API) |
 
-```bash
-# development
-$ npm run start
+A aplicação corre na **porta `4000`**, sem prefixo global de rotas (`/auth/login`, `/courses`, ...).
 
-# watch mode
-$ npm run start:dev
+---
 
-# production mode
-$ npm run start:prod
-```
+## 🚀 Arranque
 
-## Run tests
+### Pré-requisitos
+- Node.js `20.x`
+- PostgreSQL em execução
+
+### Instalação
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm install            # instala dependências e gera o Prisma Client (postinstall)
 ```
 
-## Deployment
+### Configuração
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Cria um ficheiro `.env` com, no mínimo, a ligação à base de dados:
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+```env
+DATABASE_URL="postgresql://USER:PASSWORD@127.0.0.1:5432/innova_dev?schema=public"
+JWT_SECRET="..."
+```
+
+### Base de dados
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm run db:deploy      # aplica as migrações
+npm run db:seed        # popula dados iniciais
+npm run db:studio      # abre o Prisma Studio (opcional)
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### Executar
 
-## Resources
+```bash
+npm run start:dev      # modo watch (desenvolvimento)
+npm run start          # build + arranque
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+---
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## 🧪 Testes
 
-## Support
+```bash
+npm run test                 # testes unitários (Jest)
+npm run test:cov             # cobertura
+npm run test:integration     # testes de integração (BD innova_test)
+npm run test:db              # testes de base de dados (performance, integridade, migrações)
+npm run test:e2e             # testes end-to-end (Playwright) — requer frontend a correr
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+### Testes de carga (Artillery)
 
-## Stay in touch
+```bash
+npm run seed:loadtest        # gera dados e CSVs de teste de carga
+npm run test:smoke           # smoke (sanidade)
+npm run test:load            # carga normal (~600 utilizadores)
+npm run test:stress          # stress (~3000 utilizadores)
+npm run test:spike           # pico repentino
+npm run test:report          # relatório HTML
+```
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+### Testes de API (Bruno)
 
-## License
+```bash
+npm run test:api             # corre toda a coleção Bruno no ambiente local
+```
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+---
+
+## 📁 Estrutura
+
+```
+src/                 # código-fonte NestJS (módulos: auth, courses, users, pdi, ...)
+prisma/              # schema.prisma, migrações e seeds
+test/                # testes (e2e, integration, database)
+load-tests/          # cenários e fases Artillery
+bruno/               # coleção de testes de API
+```
+
+---
+
+## 📝 Convenções do projeto
+
+- Modelo `User`: usar `fullName` (nunca `name`) e `roleCode` para filtrar cargos
+- `Lesson`: campo `textContent` (nunca `content`)
+- `AuditLog`: campo `entity` (nunca `entityType`)
+- `Enrollment`: chave composta `@@unique([courseId, userId])`
+
+---
+
+*Projeto privado — INNOVA.*
