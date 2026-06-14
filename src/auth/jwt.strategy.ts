@@ -1,8 +1,16 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
+import { ExtractJwt, Strategy, JwtFromRequestFunction } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
+import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+
+// Extrai o JWT do cookie httpOnly 'token' (definido pelo backend no login).
+// Mantém-se o fallback para o header Authorization: Bearer (compatibilidade).
+const cookieExtractor: JwtFromRequestFunction = (req: Request) => {
+  const cookies = (req?.cookies ?? {}) as Record<string, string | undefined>;
+  return cookies.token ?? null;
+};
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -16,7 +24,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private config: ConfigService,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      // Cookie httpOnly tem prioridade; header Bearer mantém-se como fallback
+      // (compatibilidade com Swagger e clientes que ainda enviam o header).
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        cookieExtractor,
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
       ignoreExpiration: false,
       secretOrKey: config.get<string>('JWT_SECRET'),
     });

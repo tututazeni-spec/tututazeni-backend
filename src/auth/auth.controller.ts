@@ -1,4 +1,14 @@
-import { Controller, Post, Get, Body, Patch, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Patch,
+  UseGuards,
+  Req,
+  Res,
+  HttpCode,
+} from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
 import { AuthService } from './auth.service';
 import {
@@ -9,11 +19,25 @@ import {
   ResetPasswordDto,
 } from './auth.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { Request } from 'express';
+import { Request, Response, CookieOptions } from 'express';
 
 interface AuthenticatedRequest extends Request {
   user: { sub: number; email: string };
 }
+
+const isProd = process.env.NODE_ENV === 'production';
+
+// Cookie httpOnly que transporta o access token. JS no browser nunca lê este
+// valor (mitiga XSS). Em produção exige cross-site seguro (none+secure); em dev
+// (localhost:3000 -> localhost:4000, mesmo site) basta 'lax'.
+const TOKEN_COOKIE = 'token';
+const tokenCookieOptions: CookieOptions = {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: isProd ? 'none' : 'lax',
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias (sessão); o JWT em si expira antes
+};
 
 @Controller('auth')
 export class AuthController {
@@ -21,19 +45,45 @@ export class AuthController {
 
   @Public()
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.login(dto);
+    res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
+    return result;
   }
 
   @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  async register(
+    @Body() dto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.register(dto);
+    res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
+    return result;
   }
 
   @Post('refresh')
   @UseGuards(JwtAuthGuard)
-  refresh(@Req() req: AuthenticatedRequest) {
-    return this.authService.refreshToken(req.user.sub, req.user.email);
+  async refresh(
+    @Req() req: AuthenticatedRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.refreshToken(
+      req.user.sub,
+      req.user.email,
+    );
+    res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
+    return result;
+  }
+
+  @Public()
+  @Post('logout')
+  @HttpCode(200)
+  logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie(TOKEN_COOKIE, { ...tokenCookieOptions, maxAge: undefined });
+    return { message: 'Sessão terminada' };
   }
 
   @Patch('change-password')
