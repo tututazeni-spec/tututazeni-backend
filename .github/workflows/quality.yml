@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
     services:
       postgres:
         image: postgres:16
@@ -70,6 +73,9 @@ jobs:
           DATABASE_URL: 'postgresql://postgres:Placido*7@localhost:5432/innova_test'
 
       - name: Análise SonarCloud
+        # Só corre se o segredo SONAR_TOKEN estiver configurado no repositório.
+        # Sem isto, o passo falharia em repositórios sem SonarCloud ligado.
+        if: ${{ env.SONAR_TOKEN != '' }}
         uses: SonarSource/sonarqube-scan-action@v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
