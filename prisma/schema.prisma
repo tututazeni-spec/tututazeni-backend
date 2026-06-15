@@ -768,6 +768,12 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   legacySkills         LegacyEmployeeSkill[]
   assessedLegacySkills LegacyEmployeeSkill[] @relation("SkillAssessor")
   workDeclAnswers      WorkDeclAnswer[]
+
+  // ─── CRM Beneficiários ────────────────────────────────────────
+  createdBeneficiaries         Beneficiary[]            @relation("BeneficiaryCreator")
+  assignedBeneficiaries        Beneficiary[]            @relation("BeneficiaryOwner")
+  beneficiaryInteractions      BeneficiaryInteraction[] @relation("InteractionUser")
+  uploadedBeneficiaryDocuments BeneficiaryDocument[]    @relation("DocumentUploader")
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -5369,6 +5375,188 @@ model WorkDeclReview {
   correctionFields String[]
   reviewedAt       DateTime
   createdAt        DateTime           @default(now())
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MÓDULO 1 — CRM BENEFICIÁRIOS
+// ══════════════════════════════════════════════════════════════════
+
+model Beneficiary {
+  id              String            @id @default(cuid())
+  code            String            @unique
+  fullName        String
+  type            BeneficiaryType
+  category        String?
+  gender          Gender?
+  birthDate       DateTime?
+  nationality     String?
+  nif             String?
+  email           String?
+  phone           String?
+  mobile          String?
+  address         String?
+  city            String?
+  province        AngolaProvince?
+  country         String            @default("Angola")
+  status          BeneficiaryStatus @default(ACTIVE)
+  source          String?
+  tags            String[]
+  segment         String?
+  assignedToId    Int?
+  totalBenefits   Float             @default(0)
+  currency        String            @default("AOA")
+  notes           String?
+  lastContactAt   DateTime?
+  nextFollowUpAt  DateTime?
+  satisfactionAvg Float             @default(0)
+  createdById     Int
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+
+  createdBy    User                     @relation("BeneficiaryCreator", fields: [createdById], references: [id])
+  assignedTo   User?                    @relation("BeneficiaryOwner", fields: [assignedToId], references: [id])
+  interactions BeneficiaryInteraction[]
+  documents    BeneficiaryDocument[]
+  needs        BeneficiaryNeed[]
+
+  @@index([type])
+  @@index([status])
+  @@index([province])
+  @@index([assignedToId])
+  @@index([nextFollowUpAt])
+  @@index([createdById])
+  @@index([deletedAt])
+}
+
+model BeneficiaryInteraction {
+  id             String          @id @default(cuid())
+  beneficiaryId  String
+  userId         Int
+  type           InteractionType
+  channel        String?
+  subject        String
+  description    String
+  date           DateTime        @default(now())
+  durationMin    Int?
+  outcome        String?
+  nextAction     String?
+  nextActionDate DateTime?
+  satisfaction   Int?
+  attachments    String[]
+  isPrivate      Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  deletedAt      DateTime?
+
+  beneficiary Beneficiary @relation(fields: [beneficiaryId], references: [id])
+  user        User        @relation("InteractionUser", fields: [userId], references: [id])
+
+  @@index([beneficiaryId])
+  @@index([type])
+  @@index([date])
+  @@index([deletedAt])
+}
+
+model BeneficiaryDocument {
+  id            String    @id @default(cuid())
+  beneficiaryId String
+  name          String
+  type          String
+  fileUrl       String
+  fileSize      Int?
+  expiresAt     DateTime?
+  isVerified    Boolean   @default(false)
+  uploadedById  Int
+  createdAt     DateTime  @default(now())
+  deletedAt     DateTime?
+
+  beneficiary Beneficiary @relation(fields: [beneficiaryId], references: [id])
+  uploadedBy  User        @relation("DocumentUploader", fields: [uploadedById], references: [id])
+
+  @@index([beneficiaryId])
+  @@index([expiresAt])
+  @@index([deletedAt])
+}
+
+model BeneficiaryNeed {
+  id            String       @id @default(cuid())
+  beneficiaryId String
+  category      String
+  description   String
+  priority      NeedPriority @default(MEDIUM)
+  status        NeedStatus   @default(OPEN)
+  resolvedAt    DateTime?
+  resolvedById  Int?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  beneficiary Beneficiary @relation(fields: [beneficiaryId], references: [id])
+
+  @@index([beneficiaryId])
+  @@index([status])
+  @@index([priority])
+}
+
+enum BeneficiaryType {
+  INDIVIDUAL
+  FAMILY
+  INSTITUTION
+  COMMUNITY
+  GROUP
+}
+
+enum BeneficiaryStatus {
+  ACTIVE
+  INACTIVE
+  PROSPECT
+  FORMER
+  BLOCKED
+}
+
+enum AngolaProvince {
+  BENGO
+  BENGUELA
+  BIE
+  CABINDA
+  CUANDO_CUBANGO
+  CUANZA_NORTE
+  CUANZA_SUL
+  CUNENE
+  HUAMBO
+  HUILA
+  LUANDA
+  LUNDA_NORTE
+  LUNDA_SUL
+  MALANJE
+  MOXICO
+  NAMIBE
+  UIGE
+  ZAIRE
+}
+
+enum InteractionType {
+  EMAIL
+  CALL
+  MEETING
+  VISIT
+  EVENT
+  NOTE
+  TASK
+}
+
+enum NeedPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NeedStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
 }
 
 

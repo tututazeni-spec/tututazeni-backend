@@ -68,6 +68,7 @@ import { ApiIntegrationModule } from './api-integration/api-integration.module';
 import { AutomationModule } from './automation/automation.module';
 import { SearchModule } from './search/search.module';
 import { PdfModule } from './pdf/pdf.module';
+import { CrmBeneficiariesModule } from './crm-beneficiaries/crm-beneficiaries.module';
 
 // INFRA
 import { LearningPathsController } from './learning-paths/learning-paths.controller';
@@ -135,6 +136,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     ApiIntegrationModule,
     AutomationModule,
     SearchModule,
+    CrmBeneficiariesModule,
   ],
   controllers: [LearningPathsController],
   providers: [
