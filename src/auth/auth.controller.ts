@@ -21,8 +21,9 @@ import {
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { Request, Response, CookieOptions } from 'express';
 
+// JwtStrategy.validate() devolve a entidade User (tem `id`, não `sub`).
 interface AuthenticatedRequest extends Request {
-  user: { sub: number; email: string };
+  user: { id: number; email: string };
 }
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -71,7 +72,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.refreshToken(
-      req.user.sub,
+      req.user.id,
       req.user.email,
     );
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
@@ -89,7 +90,7 @@ export class AuthController {
   @Patch('change-password')
   @UseGuards(JwtAuthGuard)
   changePassword(@Req() req: AuthenticatedRequest, @Body() dto: ChangePasswordDto) {
-    return this.authService.changePassword(req.user.sub, dto);
+    return this.authService.changePassword(req.user.id, dto);
   }
 
   @Post('forgot-password')
@@ -105,6 +106,6 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   me(@Req() req: AuthenticatedRequest) {
-    return this.authService.me(req.user.sub);
+    return this.authService.me(req.user.id);
   }
 }
