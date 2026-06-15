@@ -110,7 +110,8 @@ export class DashboardService {
       }),
       (this.prisma as any).engagementSurvey.findMany({
         where: { status: 'ACTIVE', responses: { none: { userId } } },
-        select: { id: true, title: true, type: true },
+        // `type` não existe no modelo EngagementSurvey (causava 500 em /dashboard/my)
+        select: { id: true, title: true },
         take: 3,
       }),
       this.prisma.evaluationRequest
@@ -393,12 +394,14 @@ export class DashboardService {
       this.prisma.user.count({ where: { active: true, ...deptFilter } }),
       this.prisma.user.count({ where: { createdAt: { gte: since }, ...deptFilter } }),
       this.prisma.user.count({ where: { createdAt: { gte: prev, lt: since }, ...deptFilter } }),
-      (this.prisma as any).course.count({ where: { active: true } }),
+      // Course não tem campo `active` — usa `status` (causava 500 em /dashboard/organization)
+      (this.prisma as any).course.count({ where: { status: 'PUBLISHED' } }),
       (this.prisma as any).enrollment.count({
-        where: { createdAt: { gte: since }, user: deptFilter },
+        // Enrollment usa `enrolledAt`, não `createdAt` (causava 500 em /dashboard/organization)
+        where: { enrolledAt: { gte: since }, user: deptFilter },
       }),
       (this.prisma as any).enrollment.count({
-        where: { createdAt: { gte: prev, lt: since }, user: deptFilter },
+        where: { enrolledAt: { gte: prev, lt: since }, user: deptFilter },
       }),
       this.prisma.enrollment.count({
         where: { status: 'CONCLUIDO', enrolledAt: { gte: since }, user: deptFilter },
