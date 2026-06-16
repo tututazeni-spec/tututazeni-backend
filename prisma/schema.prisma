@@ -774,6 +774,12 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   assignedBeneficiaries        Beneficiary[]            @relation("BeneficiaryOwner")
   beneficiaryInteractions      BeneficiaryInteraction[] @relation("InteractionUser")
   uploadedBeneficiaryDocuments BeneficiaryDocument[]    @relation("DocumentUploader")
+
+  // ─── CRM Parceiros ────────────────────────────────────────────
+  createdPartners          Partner[]            @relation("PartnerCreator")
+  assignedPartners         Partner[]            @relation("PartnerOwner")
+  partnerInteractions      PartnerInteraction[] @relation("PartnerInteractionUser")
+  createdPartnerMilestones PartnerMilestone[]   @relation("MilestoneCreator")
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -5557,6 +5563,164 @@ enum NeedStatus {
   IN_PROGRESS
   RESOLVED
   CLOSED
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MÓDULO 2 — CRM PARCEIROS
+// ══════════════════════════════════════════════════════════════════
+
+model Partner {
+  id              String        @id @default(cuid())
+  code            String        @unique
+  name            String
+  legalName       String?
+  type            PartnerType
+  tier            PartnerTier   @default(STANDARD)
+  contactName     String?
+  contactTitle    String?
+  email           String?
+  phone           String?
+  mobile          String?
+  website         String?
+  linkedin        String?
+  nif             String?
+  address         String?
+  city            String?
+  province        String?
+  country         String        @default("Angola")
+  status          PartnerStatus @default(ACTIVE)
+  contractStart   DateTime?
+  contractEnd     DateTime?
+  contractUrl     String?
+  annualValue     Float?
+  currency        String        @default("AOA")
+  revenueSharing  Float?
+  services        String[]
+  tags            String[]
+  kpis            String?
+  rating          Float?
+  assignedToId    Int?
+  notes           String?
+  lastContactAt   DateTime?
+  nextReviewAt    DateTime?
+  satisfactionAvg Float         @default(0)
+  createdById     Int
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  createdBy    User                 @relation("PartnerCreator", fields: [createdById], references: [id])
+  assignedTo   User?                @relation("PartnerOwner", fields: [assignedToId], references: [id])
+  interactions PartnerInteraction[]
+  milestones   PartnerMilestone[]
+
+  @@index([type])
+  @@index([tier])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([contractEnd])
+  @@index([nextReviewAt])
+  @@index([deletedAt])
+}
+
+model PartnerInteraction {
+  id           String                 @id @default(cuid())
+  partnerId    String
+  userId       Int
+  type         PartnerInteractionType
+  channel      String?
+  subject      String
+  description  String
+  date         DateTime               @default(now())
+  durationMin  Int?
+  outcome      String?
+  nextAction   String?
+  nextDate     DateTime?
+  satisfaction Int?
+  attachments  String[]
+  isPrivate    Boolean                @default(false)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  deletedAt    DateTime?
+
+  partner Partner @relation(fields: [partnerId], references: [id])
+  user    User    @relation("PartnerInteractionUser", fields: [userId], references: [id])
+
+  @@index([partnerId])
+  @@index([type])
+  @@index([date])
+  @@index([deletedAt])
+}
+
+model PartnerMilestone {
+  id          String          @id @default(cuid())
+  partnerId   String
+  title       String
+  description String?
+  dueDate     DateTime
+  completedAt DateTime?
+  status      MilestoneStatus @default(PENDING)
+  value       Float?
+  currency    String          @default("AOA")
+  priority    String          @default("MEDIUM")
+  notes       String?
+  createdById Int
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  deletedAt   DateTime?
+
+  partner   Partner @relation(fields: [partnerId], references: [id])
+  createdBy User    @relation("MilestoneCreator", fields: [createdById], references: [id])
+
+  @@index([partnerId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([deletedAt])
+}
+
+enum PartnerType {
+  TECHNOLOGY
+  CONTENT
+  TRAINING
+  FUNDING
+  INSTITUTIONAL
+  COMMERCIAL
+  MEDIA
+  GOVERNMENT
+  OTHER
+}
+
+enum PartnerTier {
+  PLATINUM
+  GOLD
+  SILVER
+  STANDARD
+}
+
+enum PartnerStatus {
+  ACTIVE
+  INACTIVE
+  NEGOTIATION
+  SUSPENDED
+  FORMER
+}
+
+enum PartnerInteractionType {
+  EMAIL
+  CALL
+  MEETING
+  VISIT
+  EVENT
+  NOTE
+  REVIEW
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  OVERDUE
 }
 
 
