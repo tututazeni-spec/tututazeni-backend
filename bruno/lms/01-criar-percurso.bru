@@ -1,0 +1,40 @@
+meta {
+  name: Criar Percurso
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/lms/paths
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "code": "PATH-{{runId}}",
+    "name": "Percurso Bruno de Teste",
+    "courseIds": ["curso-1", "curso-2"],
+    "level": "BASIC",
+    "estimatedHours": 20
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Código correcto", function() {
+    expect(res.body.code).to.match(/^PATH-/);
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("pathId", res.body.id);
+  }
+}

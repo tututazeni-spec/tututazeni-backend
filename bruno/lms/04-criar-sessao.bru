@@ -1,0 +1,39 @@
+meta {
+  name: Criar Sessão ao Vivo
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/lms/sessions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "title": "Webinar Bruno de Teste",
+    "scheduledAt": "2026-12-01T10:00:00Z",
+    "duration": 90,
+    "platform": "MEET"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Código SES-", function() {
+    expect(res.body.code).to.match(/^SES-\d{5}$/);
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("sessionId", res.body.id);
+  }
+}

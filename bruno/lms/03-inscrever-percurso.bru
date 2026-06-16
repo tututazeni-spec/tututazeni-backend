@@ -1,0 +1,23 @@
+meta {
+  name: Inscrever no Percurso
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/lms/paths/{{pathId}}/enroll
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Tem pathId", function() {
+    expect(res.body.pathId).to.equal(bru.getEnvVar("pathId"));
+  });
+}

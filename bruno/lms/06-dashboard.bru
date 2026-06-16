@@ -1,0 +1,24 @@
+meta {
+  name: Dashboard LMS
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/lms/dashboard
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem totais", function() {
+    expect(res.body).to.have.property("totals");
+    expect(res.body.totals).to.have.property("pathCompletionRate");
+  });
+}
