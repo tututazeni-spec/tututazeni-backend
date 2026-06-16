@@ -1,0 +1,26 @@
+meta {
+  name: Resumo Executivo
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/dashboard-institutional/summary
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem secções principais", function() {
+    expect(res.body).to.have.property("people");
+    expect(res.body).to.have.property("learning");
+    expect(res.body).to.have.property("crm");
+    expect(res.body).to.have.property("knowledge");
+  });
+}

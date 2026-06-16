@@ -1,0 +1,23 @@
+meta {
+  name: Distribuição Geográfica
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/dashboard-institutional/geographic
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem distribuição", function() {
+    expect(res.body).to.have.property("beneficiariesByProvince");
+  });
+}

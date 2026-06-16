@@ -1,0 +1,25 @@
+meta {
+  name: Alertas
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/dashboard-institutional/alerts
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem critical, warnings, reminders", function() {
+    expect(res.body).to.have.property("critical");
+    expect(res.body).to.have.property("warnings");
+    expect(res.body).to.have.property("reminders");
+  });
+}

@@ -1,0 +1,32 @@
+meta {
+  name: Criar Snapshot
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/dashboard-institutional/snapshots
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "period": "2026-06-BRUNO",
+    "type": "MONTHLY",
+    "notes": "Snapshot de teste Bruno"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Tem período", function() {
+    expect(res.body.period).to.equal("2026-06-BRUNO");
+  });
+}

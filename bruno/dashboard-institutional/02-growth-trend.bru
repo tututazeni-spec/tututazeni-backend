@@ -1,0 +1,23 @@
+meta {
+  name: Tendência de Crescimento
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/dashboard-institutional/growth-trend?months=6
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("É um array", function() {
+    expect(res.body).to.be.an("array");
+  });
+}
