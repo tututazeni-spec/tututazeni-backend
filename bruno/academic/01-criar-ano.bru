@@ -1,0 +1,36 @@
+meta {
+  name: Criar Ano Lectivo
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/academic/years
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "name": "Ano-{{runId}}",
+    "startDate": "2025-09-01",
+    "endDate": "2026-07-31",
+    "isCurrent": false
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("yearId", res.body.id);
+  }
+}

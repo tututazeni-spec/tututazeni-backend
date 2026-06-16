@@ -1,0 +1,23 @@
+meta {
+  name: Aprovar Matrícula
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/academic/enrollments/{{enrollmentId}}/approve
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Aprovada", function() {
+    expect(res.body.status).to.equal("APPROVED");
+  });
+}

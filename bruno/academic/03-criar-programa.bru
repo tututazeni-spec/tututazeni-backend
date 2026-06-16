@@ -1,0 +1,40 @@
+meta {
+  name: Criar Programa
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/academic/programs
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "code": "PRG-{{runId}}",
+    "name": "Programa Bruno de Teste",
+    "durationHours": 40,
+    "passingScore": 60,
+    "level": "BASIC"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Código correcto", function() {
+    expect(res.body.code).to.match(/^PRG-/);
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("programId", res.body.id);
+  }
+}

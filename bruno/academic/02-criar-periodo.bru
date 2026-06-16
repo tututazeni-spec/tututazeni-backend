@@ -1,0 +1,37 @@
+meta {
+  name: Criar Período
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/academic/periods
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "yearId": "{{yearId}}",
+    "name": "1º Semestre {{runId}}",
+    "startDate": "2025-09-01",
+    "endDate": "2026-01-31",
+    "type": "SEMESTER"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("periodId", res.body.id);
+  }
+}

@@ -1,0 +1,35 @@
+meta {
+  name: Lançar Nota
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/academic/grades
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "enrollmentId": "{{enrollmentId}}",
+    "courseId": "curso-1",
+    "courseName": "Módulo 1",
+    "score": 85,
+    "maxScore": 100,
+    "weight": 1
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Nota correcta", function() {
+    expect(res.body.score).to.equal(85);
+  });
+}

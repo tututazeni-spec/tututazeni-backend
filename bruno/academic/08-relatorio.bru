@@ -1,0 +1,23 @@
+meta {
+  name: Relatório Académico
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/academic/report
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem completionRate", function() {
+    expect(res.body).to.have.property("completionRate");
+  });
+}
