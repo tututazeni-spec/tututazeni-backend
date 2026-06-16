@@ -795,6 +795,14 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   libraryAccesses           LibraryAccess[]     @relation("LibraryAccessUser")
   libraryRatings            LibraryRating[]     @relation("LibraryRatingUser")
   libraryComments           LibraryComment[]    @relation("LibraryCommentUser")
+
+  // ─── Certificação Digital ─────────────────────────────────────
+  createdCertificateTemplates CertificateTemplate[] @relation("TemplateCreator")
+  certificatesReceived        IssuedCertificate[]   @relation("CertRecipient")
+  certificatesIssued          IssuedCertificate[]   @relation("CertIssuer")
+  createdDigitalBadges        DigitalBadge[]        @relation("BadgeCreator")
+  badgeIssuancesReceived      BadgeIssuance[]       @relation("BadgeRecipient")
+  badgeIssuancesIssued        BadgeIssuance[]       @relation("BadgeIssuer")
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -6098,6 +6106,151 @@ enum LibraryAction {
   DOWNLOAD
   SHARE
   PRINT
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MÓDULO 5 — CERTIFICAÇÃO DIGITAL
+// ══════════════════════════════════════════════════════════════════
+
+model CertificateTemplate {
+  id             String                  @id @default(cuid())
+  name           String
+  description    String?
+  type           CertificateTemplateType @default(COURSE)
+  html           String
+  cssStyle       String?
+  logoUrl        String?
+  signatureUrl   String?
+  signatoryName  String?
+  signatoryTitle String?
+  isDefault      Boolean                 @default(false)
+  isActive       Boolean                 @default(true)
+  validityDays   Int?
+  createdById    Int
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  deletedAt      DateTime?
+
+  createdBy    User                @relation("TemplateCreator", fields: [createdById], references: [id])
+  certificates IssuedCertificate[]
+
+  @@index([type])
+  @@index([isDefault])
+  @@index([isActive])
+  @@index([deletedAt])
+}
+
+model IssuedCertificate {
+  id               String                  @id @default(cuid())
+  code             String                  @unique
+  verificationCode String                  @unique
+  hashCode         String
+  userId           Int
+  templateId       String?
+  courseId         String?
+  programId        String?
+  title            String
+  recipientName    String
+  issuerName       String                  @default("INNOVA")
+  type             CertificateTemplateType @default(COURSE)
+  score            Float?
+  pdfUrl           String?
+  publicUrl        String?
+  linkedInUrl      String?
+  isRevoked        Boolean                 @default(false)
+  revokedAt        DateTime?
+  revokeReason     String?
+  revokedById      Int?
+  issuedAt         DateTime                @default(now())
+  expiresAt        DateTime?
+  downloadCount    Int                     @default(0)
+  verifyCount      Int                     @default(0)
+  metadata         String?
+  issuedById       Int
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  deletedAt        DateTime?
+
+  user     User                 @relation("CertRecipient", fields: [userId], references: [id])
+  template CertificateTemplate? @relation(fields: [templateId], references: [id])
+  issuedBy User                 @relation("CertIssuer", fields: [issuedById], references: [id])
+
+  @@index([userId])
+  @@index([courseId])
+  @@index([type])
+  @@index([isRevoked])
+  @@index([issuedAt])
+  @@index([deletedAt])
+}
+
+model DigitalBadge {
+  id          String     @id @default(cuid())
+  code        String     @unique
+  name        String
+  description String
+  imageUrl    String
+  criteria    String
+  skills      String[]
+  level       BadgeLevel @default(BASIC)
+  issuerName  String     @default("INNOVA")
+  courseId    String?
+  programId   String?
+  isActive    Boolean    @default(true)
+  createdById Int
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  deletedAt   DateTime?
+
+  createdBy User            @relation("BadgeCreator", fields: [createdById], references: [id])
+  issuances BadgeIssuance[]
+
+  @@index([level])
+  @@index([isActive])
+  @@index([deletedAt])
+}
+
+model BadgeIssuance {
+  id           String    @id @default(cuid())
+  badgeId      String
+  userId       Int
+  assertionId  String    @unique @default(cuid())
+  verifyCode   String    @unique
+  evidenceUrl  String?
+  shareUrl     String?
+  isRevoked    Boolean   @default(false)
+  revokedAt    DateTime?
+  revokeReason String?
+  issuedAt     DateTime  @default(now())
+  expiresAt    DateTime?
+  issuedById   Int
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+
+  badge    DigitalBadge @relation(fields: [badgeId], references: [id])
+  user     User         @relation("BadgeRecipient", fields: [userId], references: [id])
+  issuedBy User         @relation("BadgeIssuer", fields: [issuedById], references: [id])
+
+  @@unique([badgeId, userId])
+  @@index([userId])
+  @@index([issuedAt])
+  @@index([deletedAt])
+}
+
+enum CertificateTemplateType {
+  COURSE
+  PROGRAM
+  COMPETENCY
+  ATTENDANCE
+  PARTICIPATION
+  ACHIEVEMENT
+}
+
+enum BadgeLevel {
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+  MASTER
 }
 
 
