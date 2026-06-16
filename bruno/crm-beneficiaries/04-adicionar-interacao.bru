@@ -1,0 +1,35 @@
+meta {
+  name: Adicionar Interacção
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/crm/beneficiaries/{{beneficiaryId}}/interactions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "type": "CALL",
+    "subject": "Primeiro contacto",
+    "description": "Contacto inicial para avaliar necessidades",
+    "durationMin": 15,
+    "outcome": "Interessado em formação",
+    "satisfaction": 4
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Tipo correcto", function() {
+    expect(res.body.type).to.equal("CALL");
+  });
+}

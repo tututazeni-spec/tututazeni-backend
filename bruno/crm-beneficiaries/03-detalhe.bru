@@ -1,0 +1,24 @@
+meta {
+  name: Detalhe Beneficiário
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/crm/beneficiaries/{{beneficiaryId}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem interacções e necessidades", function() {
+    expect(res.body).to.have.property("interactions");
+    expect(res.body).to.have.property("needs");
+  });
+}

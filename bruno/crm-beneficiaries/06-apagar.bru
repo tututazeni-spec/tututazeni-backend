@@ -1,0 +1,23 @@
+meta {
+  name: Apagar Beneficiário (soft delete)
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/crm/beneficiaries/{{beneficiaryId}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Mensagem de sucesso", function() {
+    expect(res.body.message).to.contain("sucesso");
+  });
+}

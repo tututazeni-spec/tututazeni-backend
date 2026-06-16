@@ -1,0 +1,45 @@
+meta {
+  name: Criar Beneficiário
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/crm/beneficiaries
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "type": "INDIVIDUAL",
+    "fullName": "Bruno Teste Beneficiário",
+    "email": "bruno.teste@innova-test.com",
+    "phone": "+244 923 000 001",
+    "province": "BENGUELA",
+    "category": "Estudante",
+    "source": "Web"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Tem código BEN-", function() {
+    expect(res.body.code).to.match(/^BEN-\d{5}$/);
+  });
+  test("fullName correcto", function() {
+    expect(res.body.fullName).to.equal("Bruno Teste Beneficiário");
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("beneficiaryId", res.body.id);
+  }
+}
