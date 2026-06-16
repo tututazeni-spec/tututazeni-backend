@@ -1,0 +1,23 @@
+meta {
+  name: Listar Certificados
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/certification/certificates?page=1&limit=20
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Paginação", function() {
+    expect(res.body).to.have.property("totalPages");
+  });
+}

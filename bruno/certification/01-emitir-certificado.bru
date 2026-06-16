@@ -1,0 +1,43 @@
+meta {
+  name: Emitir Certificado
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/certification/certificates
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "userId": {{testUserId}},
+    "title": "Curso Bruno de Teste",
+    "type": "COURSE",
+    "score": 85
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Código CERT-", function() {
+    expect(res.body.code).to.match(/^CERT-\d{5}$/);
+  });
+  test("Tem verificationCode", function() {
+    expect(res.body.verificationCode).to.contain("INNOVA-");
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("certId", res.body.id);
+    bru.setEnvVar("verifyCode", res.body.verificationCode);
+  }
+}

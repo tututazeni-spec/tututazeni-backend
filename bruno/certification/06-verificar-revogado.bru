@@ -1,0 +1,22 @@
+meta {
+  name: Verificar Revogado
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/certification/verify/{{verifyCode}}
+  auth: none
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Inválido após revogação", function() {
+    expect(res.body.valid).to.equal(false);
+  });
+  test("Razão revogado", function() {
+    expect(res.body.reason).to.contain("revogado");
+  });
+}

@@ -1,0 +1,22 @@
+meta {
+  name: Verificar Certificado (Público)
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/certification/verify/{{verifyCode}}
+  auth: none
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Certificado válido", function() {
+    expect(res.body.valid).to.equal(true);
+  });
+  test("Tem dados do titular", function() {
+    expect(res.body.certificate).to.have.property("holder");
+  });
+}

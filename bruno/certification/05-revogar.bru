@@ -1,0 +1,30 @@
+meta {
+  name: Revogar Certificado
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/certification/certificates/{{certId}}/revoke
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "reason": "Certificado emitido por engano no teste Bruno"
+  }
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Revogado", function() {
+    expect(res.body.isRevoked).to.equal(true);
+  });
+}

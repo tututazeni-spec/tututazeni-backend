@@ -1,0 +1,24 @@
+meta {
+  name: Dashboard Certificação
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/certification/dashboard
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem totais", function() {
+    expect(res.body).to.have.property("totals");
+    expect(res.body.totals).to.have.property("valid");
+  });
+}
