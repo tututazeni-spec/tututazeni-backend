@@ -71,6 +71,7 @@ import { PdfModule } from './pdf/pdf.module';
 import { CrmBeneficiariesModule } from './crm-beneficiaries/crm-beneficiaries.module';
 import { CrmPartnersModule } from './crm-partners/crm-partners.module';
 import { CrmFundersModule } from './crm-funders/crm-funders.module';
+import { LibraryModule } from './library/library.module';
 
 // INFRA
 import { LearningPathsController } from './learning-paths/learning-paths.controller';
@@ -141,6 +142,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     CrmBeneficiariesModule,
     CrmPartnersModule,
     CrmFundersModule,
+    LibraryModule,
   ],
   controllers: [LearningPathsController],
   providers: [

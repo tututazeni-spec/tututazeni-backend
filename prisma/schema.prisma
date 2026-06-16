@@ -787,6 +787,14 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   createdGrantDisbursements GrantDisbursement[] @relation("DisbursementCreator")
   funderInteractions      FunderInteraction[] @relation("FunderInteractionUser")
   createdFunderReports    FunderReport[]      @relation("ReportCreator")
+
+  // ─── Biblioteca Digital ───────────────────────────────────────
+  createdLibraryCollections LibraryCollection[] @relation("CollectionCreator")
+  uploadedLibraryItems      LibraryItem[]       @relation("LibraryUploader")
+  reviewedLibraryItems      LibraryItem[]       @relation("LibraryReviewer")
+  libraryAccesses           LibraryAccess[]     @relation("LibraryAccessUser")
+  libraryRatings            LibraryRating[]     @relation("LibraryRatingUser")
+  libraryComments           LibraryComment[]    @relation("LibraryCommentUser")
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -5936,6 +5944,160 @@ enum ReportStatus {
   APPROVED
   REJECTED
   OVERDUE
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MÓDULO 4 — BIBLIOTECA DIGITAL
+// ══════════════════════════════════════════════════════════════════
+
+model LibraryCollection {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  icon        String?
+  color       String?
+  isPublic    Boolean   @default(true)
+  order       Int       @default(0)
+  createdById Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  createdBy User          @relation("CollectionCreator", fields: [createdById], references: [id])
+  items     LibraryItem[]
+
+  @@index([isPublic])
+  @@index([deletedAt])
+}
+
+model LibraryItem {
+  id           String          @id @default(cuid())
+  code         String          @unique
+  collectionId String?
+  title        String
+  subtitle     String?
+  description  String?
+  type         LibraryItemType
+  fileUrl      String
+  fileSize     Int?
+  mimeType     String?
+  thumbnailUrl String?
+  author       String?
+  publisher    String?
+  isbn         String?
+  issn         String?
+  doi          String?
+  year         Int?
+  edition      String?
+  language     String          @default("pt")
+  pages        Int?
+  tags         String[]
+  categories   String[]
+  keywords     String[]
+  targetRoles  String[]
+  isPublic     Boolean         @default(false)
+  requiresAuth Boolean         @default(true)
+  downloads    Int             @default(0)
+  views        Int             @default(0)
+  rating       Float           @default(0)
+  ratingCount  Int             @default(0)
+  version      String          @default("1.0")
+  parentId     String?
+  uploadedById Int
+  reviewedById Int?
+  isApproved   Boolean         @default(false)
+  approvedAt   DateTime?
+  expiresAt    DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  deletedAt    DateTime?
+
+  collection LibraryCollection? @relation(fields: [collectionId], references: [id])
+  uploadedBy User               @relation("LibraryUploader", fields: [uploadedById], references: [id])
+  reviewedBy User?              @relation("LibraryReviewer", fields: [reviewedById], references: [id])
+  accesses   LibraryAccess[]
+  ratings    LibraryRating[]
+  comments   LibraryComment[]
+
+  @@index([type])
+  @@index([collectionId])
+  @@index([isPublic])
+  @@index([isApproved])
+  @@index([uploadedById])
+  @@index([deletedAt])
+}
+
+model LibraryAccess {
+  id        String        @id @default(cuid())
+  itemId    String
+  userId    Int
+  action    LibraryAction
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime      @default(now())
+
+  item LibraryItem @relation(fields: [itemId], references: [id])
+  user User        @relation("LibraryAccessUser", fields: [userId], references: [id])
+
+  @@index([itemId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model LibraryRating {
+  id        String   @id @default(cuid())
+  itemId    String
+  userId    Int
+  score     Int
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  item LibraryItem @relation(fields: [itemId], references: [id])
+  user User        @relation("LibraryRatingUser", fields: [userId], references: [id])
+
+  @@unique([itemId, userId])
+  @@index([itemId])
+}
+
+model LibraryComment {
+  id        String    @id @default(cuid())
+  itemId    String
+  userId    Int
+  content   String
+  parentId  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  item LibraryItem @relation(fields: [itemId], references: [id])
+  user User        @relation("LibraryCommentUser", fields: [userId], references: [id])
+
+  @@index([itemId])
+  @@index([userId])
+  @@index([deletedAt])
+}
+
+enum LibraryItemType {
+  PDF
+  EBOOK
+  VIDEO
+  AUDIO
+  PRESENTATION
+  SPREADSHEET
+  DOCUMENT
+  IMAGE
+  LINK
+  SCORM
+  OTHER
+}
+
+enum LibraryAction {
+  VIEW
+  DOWNLOAD
+  SHARE
+  PRINT
 }
 
 
