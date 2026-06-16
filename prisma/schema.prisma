@@ -780,6 +780,13 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   assignedPartners         Partner[]            @relation("PartnerOwner")
   partnerInteractions      PartnerInteraction[] @relation("PartnerInteractionUser")
   createdPartnerMilestones PartnerMilestone[]   @relation("MilestoneCreator")
+
+  // ─── CRM Financiadores ────────────────────────────────────────
+  createdFunders          Funder[]            @relation("FunderCreator")
+  assignedFunders         Funder[]            @relation("FunderOwner")
+  createdGrantDisbursements GrantDisbursement[] @relation("DisbursementCreator")
+  funderInteractions      FunderInteraction[] @relation("FunderInteractionUser")
+  createdFunderReports    FunderReport[]      @relation("ReportCreator")
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -5720,6 +5727,214 @@ enum MilestoneStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  OVERDUE
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MÓDULO 3 — CRM FINANCIADORES
+// ══════════════════════════════════════════════════════════════════
+
+model Funder {
+  id                String       @id @default(cuid())
+  code              String       @unique
+  name              String
+  legalName         String?
+  type              FunderType
+  category          String?
+  contactName       String?
+  contactTitle      String?
+  email             String?
+  phone             String?
+  mobile            String?
+  website           String?
+  country           String?
+  region            String?
+  nif               String?
+  status            FunderStatus @default(ACTIVE)
+  relationshipStart DateTime?
+  totalCommitted    Float        @default(0)
+  totalReceived     Float        @default(0)
+  totalPending      Float        @default(0)
+  currency          String       @default("AOA")
+  focusAreas        String[]
+  tags              String[]
+  reportingReqs     String?
+  assignedToId      Int?
+  notes             String?
+  lastContactAt     DateTime?
+  nextReportDue     DateTime?
+  satisfactionAvg   Float        @default(0)
+  createdById       Int
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  deletedAt         DateTime?
+
+  createdBy    User                @relation("FunderCreator", fields: [createdById], references: [id])
+  assignedTo   User?               @relation("FunderOwner", fields: [assignedToId], references: [id])
+  grants       FundingGrant[]
+  interactions FunderInteraction[]
+  reports      FunderReport[]
+
+  @@index([type])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([nextReportDue])
+  @@index([deletedAt])
+}
+
+model FundingGrant {
+  id             String      @id @default(cuid())
+  funderId       String
+  code           String      @unique
+  title          String
+  description    String?
+  amount         Float
+  disbursed      Float       @default(0)
+  currency       String      @default("AOA")
+  exchangeRate   Float?
+  startDate      DateTime
+  endDate        DateTime?
+  status         GrantStatus @default(ACTIVE)
+  objectives     String[]
+  conditions     String?
+  reportingCycle String      @default("quarterly")
+  nextReportDue  DateTime?
+  programIds     String[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  deletedAt      DateTime?
+
+  funder        Funder              @relation(fields: [funderId], references: [id])
+  disbursements GrantDisbursement[]
+  reports       FunderReport[]
+  interactions  FunderInteraction[]
+
+  @@index([funderId])
+  @@index([status])
+  @@index([nextReportDue])
+  @@index([deletedAt])
+}
+
+model GrantDisbursement {
+  id          String    @id @default(cuid())
+  grantId     String
+  amount      Float
+  currency    String    @default("AOA")
+  receivedAt  DateTime
+  reference   String?
+  bankRef     String?
+  notes       String?
+  createdById Int
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  grant     FundingGrant @relation(fields: [grantId], references: [id])
+  createdBy User         @relation("DisbursementCreator", fields: [createdById], references: [id])
+
+  @@index([grantId])
+  @@index([receivedAt])
+  @@index([deletedAt])
+}
+
+model FunderInteraction {
+  id           String                @id @default(cuid())
+  funderId     String
+  userId       Int
+  grantId      String?
+  type         FunderInteractionType
+  subject      String
+  description  String
+  date         DateTime              @default(now())
+  durationMin  Int?
+  outcome      String?
+  nextAction   String?
+  nextDate     DateTime?
+  satisfaction Int?
+  attachments  String[]
+  isPrivate    Boolean               @default(false)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  deletedAt    DateTime?
+
+  funder Funder        @relation(fields: [funderId], references: [id])
+  user   User          @relation("FunderInteractionUser", fields: [userId], references: [id])
+  grant  FundingGrant? @relation(fields: [grantId], references: [id])
+
+  @@index([funderId])
+  @@index([grantId])
+  @@index([date])
+  @@index([deletedAt])
+}
+
+model FunderReport {
+  id          String       @id @default(cuid())
+  funderId    String
+  grantId     String?
+  title       String
+  period      String
+  dueDate     DateTime
+  submittedAt DateTime?
+  status      ReportStatus @default(PENDING)
+  fileUrl     String?
+  feedback    String?
+  notes       String?
+  createdById Int
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  funder    Funder        @relation(fields: [funderId], references: [id])
+  grant     FundingGrant? @relation(fields: [grantId], references: [id])
+  createdBy User          @relation("ReportCreator", fields: [createdById], references: [id])
+
+  @@index([funderId])
+  @@index([grantId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([deletedAt])
+}
+
+enum FunderType {
+  GOVERNMENT
+  BILATERAL
+  MULTILATERAL
+  NGO
+  PRIVATE_FOUNDATION
+  CORPORATE
+  OTHER
+}
+
+enum FunderStatus {
+  ACTIVE
+  INACTIVE
+  PROSPECT
+  FORMER
+  SUSPENDED
+}
+
+enum GrantStatus {
+  ACTIVE
+  COMPLETED
+  SUSPENDED
+  CANCELLED
+  CLOSED
+}
+
+enum FunderInteractionType {
+  EMAIL
+  CALL
+  MEETING
+  VISIT
+  EVENT
+  NOTE
+  REVIEW
+}
+
+enum ReportStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  REJECTED
   OVERDUE
 }
 

@@ -70,6 +70,7 @@ import { SearchModule } from './search/search.module';
 import { PdfModule } from './pdf/pdf.module';
 import { CrmBeneficiariesModule } from './crm-beneficiaries/crm-beneficiaries.module';
 import { CrmPartnersModule } from './crm-partners/crm-partners.module';
+import { CrmFundersModule } from './crm-funders/crm-funders.module';
 
 // INFRA
 import { LearningPathsController } from './learning-paths/learning-paths.controller';
@@ -139,6 +140,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     SearchModule,
     CrmBeneficiariesModule,
     CrmPartnersModule,
+    CrmFundersModule,
   ],
   controllers: [LearningPathsController],
   providers: [
