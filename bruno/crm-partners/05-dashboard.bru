@@ -1,0 +1,25 @@
+meta {
+  name: Dashboard Parceiros
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/crm/partners/dashboard
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem totais e distribuições", function() {
+    expect(res.body).to.have.property("totals");
+    expect(res.body).to.have.property("distributions");
+    expect(res.body.totals).to.have.property("totalValueAOA");
+  });
+}

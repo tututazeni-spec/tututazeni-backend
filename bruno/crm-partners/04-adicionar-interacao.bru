@@ -1,0 +1,35 @@
+meta {
+  name: Adicionar Interacção Parceiro
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/crm/partners/{{partnerId}}/interactions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "type": "MEETING",
+    "subject": "Revisão anual do contrato",
+    "description": "Reunião para rever os termos do contrato",
+    "durationMin": 60,
+    "outcome": "Renovação aprovada",
+    "satisfaction": 5
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Tipo MEETING", function() {
+    expect(res.body.type).to.equal("MEETING");
+  });
+}

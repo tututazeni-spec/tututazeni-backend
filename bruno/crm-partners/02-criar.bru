@@ -1,0 +1,47 @@
+meta {
+  name: Criar Parceiro
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/crm/partners
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "type": "TECHNOLOGY",
+    "name": "Bruno Parceiro Teste",
+    "tier": "GOLD",
+    "email": "parceiro@teste.com",
+    "contactName": "Ana Silva",
+    "contactTitle": "Directora",
+    "annualValue": 1200000,
+    "currency": "AOA",
+    "services": ["Consultoria", "Formação"]
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Código PAR-", function() {
+    expect(res.body.code).to.match(/^PAR-\d{5}$/);
+  });
+  test("Nome correcto", function() {
+    expect(res.body.name).to.equal("Bruno Parceiro Teste");
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("partnerId", res.body.id);
+  }
+}

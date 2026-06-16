@@ -1,0 +1,30 @@
+meta {
+  name: Setup Login (crm-partners)
+  type: http
+  seq: 0
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "admin@innova.com",
+    "password": "Admin@1234"
+  }
+}
+
+tests {
+  test("Setup login deve ser 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}
+
+script:post-response {
+  if (res.status === 201 && res.body.accessToken) {
+    bru.setEnvVar("accessToken", res.body.accessToken);
+  }
+}
