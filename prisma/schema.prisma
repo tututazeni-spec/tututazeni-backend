@@ -803,6 +803,10 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   createdDigitalBadges        DigitalBadge[]        @relation("BadgeCreator")
   badgeIssuancesReceived      BadgeIssuance[]       @relation("BadgeRecipient")
   badgeIssuancesIssued        BadgeIssuance[]       @relation("BadgeIssuer")
+
+  // ─── Dashboard Institucional ──────────────────────────────────
+  createdInstitutionalSnapshots InstitutionalSnapshot[] @relation("SnapshotCreator")
+  dashboardWidgets              DashboardWidget[]       @relation("WidgetOwner")
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -6251,6 +6255,75 @@ enum BadgeLevel {
   ADVANCED
   EXPERT
   MASTER
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MÓDULO 6 — DASHBOARD INSTITUCIONAL
+// (DashboardSnapshot já existe para nível departamental; este é o
+//  snapshot institucional global — modelo InstitutionalSnapshot)
+// ══════════════════════════════════════════════════════════════════
+
+model InstitutionalSnapshot {
+  id                 String       @id @default(cuid())
+  period             String
+  type               SnapshotType @default(MONTHLY)
+  metrics            String
+  totalUsers         Int          @default(0)
+  totalEnrollments   Int          @default(0)
+  totalBeneficiaries Int          @default(0)
+  totalFunding       Float        @default(0)
+  totalCertificates  Int          @default(0)
+  completionRate     Float        @default(0)
+  notes              String?
+  createdById        Int
+  createdAt          DateTime     @default(now())
+  deletedAt          DateTime?
+
+  createdBy User @relation("SnapshotCreator", fields: [createdById], references: [id])
+
+  @@unique([period, type])
+  @@index([type])
+  @@index([createdAt])
+  @@index([deletedAt])
+}
+
+model DashboardWidget {
+  id        String     @id @default(cuid())
+  userId    Int
+  type      WidgetType
+  title     String
+  config    String
+  position  Int        @default(0)
+  size      String     @default("medium")
+  isVisible Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  deletedAt DateTime?
+
+  user User @relation("WidgetOwner", fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([type])
+  @@index([deletedAt])
+}
+
+enum SnapshotType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+enum WidgetType {
+  KPI_CARD
+  LINE_CHART
+  BAR_CHART
+  PIE_CHART
+  TABLE
+  ALERT_LIST
+  RANKING
+  MAP
 }
 
 

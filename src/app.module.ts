@@ -73,6 +73,7 @@ import { CrmPartnersModule } from './crm-partners/crm-partners.module';
 import { CrmFundersModule } from './crm-funders/crm-funders.module';
 import { LibraryModule } from './library/library.module';
 import { CertificationModule } from './certification/certification.module';
+import { DashboardInstitutionalModule } from './dashboard-institutional/dashboard-institutional.module';
 
 // INFRA
 import { LearningPathsController } from './learning-paths/learning-paths.controller';
@@ -145,6 +146,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     CrmFundersModule,
     LibraryModule,
     CertificationModule,
+    DashboardInstitutionalModule,
   ],
   controllers: [LearningPathsController],
   providers: [
