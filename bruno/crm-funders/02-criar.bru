@@ -1,0 +1,47 @@
+meta {
+  name: Criar Financiador
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/crm/funders
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "type": "BILATERAL",
+    "name": "Bruno Financiador Teste",
+    "country": "Portugal",
+    "region": "Europa",
+    "contactName": "Dr. António Costa",
+    "contactTitle": "Director de Cooperação",
+    "email": "fin@teste.com",
+    "focusAreas": ["Educação", "Formação Profissional"],
+    "reportingReqs": "Relatório trimestral"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Código FIN-", function() {
+    expect(res.body.code).to.match(/^FIN-\d{5}$/);
+  });
+  test("Nome correcto", function() {
+    expect(res.body.name).to.equal("Bruno Financiador Teste");
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("funderId", res.body.id);
+  }
+}

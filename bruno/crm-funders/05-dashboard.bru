@@ -1,0 +1,26 @@
+meta {
+  name: Dashboard Financiadores
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/crm/funders/dashboard
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem totais financeiros", function() {
+    expect(res.body).to.have.property("totals");
+    expect(res.body.totals).to.have.property("totalCommitted");
+    expect(res.body.totals).to.have.property("totalReceived");
+    expect(res.body.totals).to.have.property("executionRate");
+  });
+}

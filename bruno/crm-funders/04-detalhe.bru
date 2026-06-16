@@ -1,0 +1,25 @@
+meta {
+  name: Detalhe Financiador
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/crm/funders/{{funderId}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem grants, interacções e relatórios", function() {
+    expect(res.body).to.have.property("grants");
+    expect(res.body).to.have.property("interactions");
+    expect(res.body).to.have.property("reports");
+  });
+}

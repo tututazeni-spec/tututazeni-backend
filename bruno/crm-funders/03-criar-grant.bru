@@ -1,0 +1,45 @@
+meta {
+  name: Criar Grant
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/crm/funders/{{funderId}}/grants
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "title": "Programa Educação Angola 2026",
+    "amount": 5000000,
+    "currency": "AOA",
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31",
+    "objectives": ["Formar 500 jovens", "Certificar 200 profissionais"],
+    "reportingCycle": "quarterly"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Código GRT-", function() {
+    expect(res.body.code).to.match(/^GRT-\d{5}$/);
+  });
+  test("Valor correcto", function() {
+    expect(res.body.amount).to.equal(5000000);
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("grantId", res.body.id);
+  }
+}
