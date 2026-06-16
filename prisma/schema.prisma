@@ -816,6 +816,14 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   academicApprovals       AcademicEnrollment[] @relation("AcademicApprover")
   academicGradesGiven     AcademicGrade[]      @relation("AcademicGrader")
   academicTranscript      AcademicTranscript?  @relation("AcademicTranscriptUser")
+
+  // ─── LMS Completo ─────────────────────────────────────────────
+  lmsCreatedPaths       LmsLearningPath[]      @relation("LmsPathCreator")
+  lmsPathEnrollments    LmsPathEnrollment[]    @relation("LmsPathStudent")
+  lmsSessionsInstructed LmsLiveSession[]       @relation("LmsSessionInstructor")
+  lmsSessionsCreated    LmsLiveSession[]       @relation("LmsSessionCreator")
+  lmsLiveAttendances    LmsLiveAttendance[]    @relation("LmsAttendanceUser")
+  lmsLearningAnalytics  LmsLearningAnalytics?  @relation("LmsAnalyticsUser")
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -6555,6 +6563,166 @@ enum AcademicEnrollmentStatus {
   FAILED
   DROPPED
   SUSPENDED
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MÓDULO 8 — LMS COMPLETO
+// (LearningPath / LearningPathEnrollment / LiveAttendance já existem
+//  no núcleo; estes modelos novos são prefixados com Lms)
+// ══════════════════════════════════════════════════════════════════
+
+model LmsLearningPath {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  name           String
+  description    String?
+  thumbnail      String?
+  targetRoles    String[]
+  targetDeptIds  String[]
+  skills         String[]
+  courseIds      String[]
+  courseOrder    String[]
+  estimatedHours Int?
+  level          PathLevel @default(BASIC)
+  isActive       Boolean   @default(true)
+  isFeatured     Boolean   @default(false)
+  isMandatory    Boolean   @default(false)
+  enrolledCount  Int       @default(0)
+  completedCount Int       @default(0)
+  createdById    Int
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  createdBy   User                @relation("LmsPathCreator", fields: [createdById], references: [id])
+  enrollments LmsPathEnrollment[]
+
+  @@index([isActive])
+  @@index([isFeatured])
+  @@index([level])
+  @@index([deletedAt])
+}
+
+model LmsPathEnrollment {
+  id                 String               @id @default(cuid())
+  pathId             String
+  userId             Int
+  progress           Float                @default(0)
+  status             PathEnrollmentStatus @default(IN_PROGRESS)
+  currentCourseId    String?
+  completedCourseIds String[]
+  startedAt          DateTime             @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  deletedAt          DateTime?
+
+  path LmsLearningPath @relation(fields: [pathId], references: [id])
+  user User            @relation("LmsPathStudent", fields: [userId], references: [id])
+
+  @@unique([pathId, userId])
+  @@index([userId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model LmsLiveSession {
+  id           String          @id @default(cuid())
+  code         String          @unique
+  courseId     String?
+  title        String
+  description  String?
+  instructorId Int?
+  scheduledAt  DateTime
+  duration     Int
+  timezone     String          @default("Africa/Luanda")
+  meetingUrl   String?
+  meetingId    String?
+  platform     SessionPlatform @default(MEET)
+  maxAttendees Int?
+  recordingUrl String?
+  materials    String[]
+  status       SessionStatus   @default(SCHEDULED)
+  isRecorded   Boolean         @default(true)
+  createdById  Int
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  deletedAt    DateTime?
+
+  instructor  User?               @relation("LmsSessionInstructor", fields: [instructorId], references: [id])
+  createdBy   User                @relation("LmsSessionCreator", fields: [createdById], references: [id])
+  attendances LmsLiveAttendance[]
+
+  @@index([courseId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model LmsLiveAttendance {
+  id        String    @id @default(cuid())
+  sessionId String
+  userId    Int
+  joinedAt  DateTime?
+  leftAt    DateTime?
+  duration  Int?
+  attended  Boolean   @default(false)
+  feedback  String?
+  rating    Int?
+  createdAt DateTime  @default(now())
+
+  session LmsLiveSession @relation(fields: [sessionId], references: [id])
+  user    User           @relation("LmsAttendanceUser", fields: [userId], references: [id])
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId])
+}
+
+model LmsLearningAnalytics {
+  id               String    @id @default(cuid())
+  userId           Int       @unique
+  totalHours       Float     @default(0)
+  coursesStarted   Int       @default(0)
+  coursesCompleted Int       @default(0)
+  pathsCompleted   Int       @default(0)
+  sessionsAttended Int       @default(0)
+  avgQuizScore     Float     @default(0)
+  streakDays       Int       @default(0)
+  lastActivityAt   DateTime?
+  updatedAt        DateTime  @updatedAt
+
+  user User @relation("LmsAnalyticsUser", fields: [userId], references: [id])
+}
+
+enum PathLevel {
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum PathEnrollmentStatus {
+  IN_PROGRESS
+  COMPLETED
+  PAUSED
+  DROPPED
+}
+
+enum SessionPlatform {
+  ZOOM
+  TEAMS
+  MEET
+  WEBEX
+  OTHER
+}
+
+enum SessionStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+  POSTPONED
 }
 
 

@@ -75,6 +75,7 @@ import { LibraryModule } from './library/library.module';
 import { CertificationModule } from './certification/certification.module';
 import { DashboardInstitutionalModule } from './dashboard-institutional/dashboard-institutional.module';
 import { AcademicModule } from './academic/academic.module';
+import { LmsModule } from './lms/lms.module';
 
 // INFRA
 import { LearningPathsController } from './learning-paths/learning-paths.controller';
@@ -149,6 +150,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     CertificationModule,
     DashboardInstitutionalModule,
     AcademicModule,
+    LmsModule,
   ],
   controllers: [LearningPathsController],
   providers: [
