@@ -1,0 +1,24 @@
+meta {
+  name: Detalhe Item
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/library/items/{{itemId}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem comentários e avaliações", function() {
+    expect(res.body).to.have.property("comments");
+    expect(res.body).to.have.property("ratings");
+  });
+}

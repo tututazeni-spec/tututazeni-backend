@@ -1,0 +1,24 @@
+meta {
+  name: Dashboard Biblioteca
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/library/dashboard
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem totais e rankings", function() {
+    expect(res.body).to.have.property("totals");
+    expect(res.body).to.have.property("rankings");
+  });
+}

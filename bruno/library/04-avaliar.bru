@@ -1,0 +1,31 @@
+meta {
+  name: Avaliar Item
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/library/items/{{itemId}}/rate
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "score": 5,
+    "comment": "Excelente material"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Score correcto", function() {
+    expect(res.body.score).to.equal(5);
+  });
+}

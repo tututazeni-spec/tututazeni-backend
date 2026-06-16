@@ -1,0 +1,42 @@
+meta {
+  name: Criar Item
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/library/items
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "type": "PDF",
+    "title": "Bruno Manual de Teste",
+    "fileUrl": "https://storage.innova.ao/docs/bruno-teste.pdf",
+    "author": "Equipa INNOVA",
+    "categories": ["Formação", "Segurança"],
+    "keywords": ["manual", "teste"],
+    "language": "pt"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Código LIB-", function() {
+    expect(res.body.code).to.match(/^LIB-\d{5}$/);
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("itemId", res.body.id);
+  }
+}
