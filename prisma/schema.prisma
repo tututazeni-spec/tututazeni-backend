@@ -807,6 +807,15 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   // ─── Dashboard Institucional ──────────────────────────────────
   createdInstitutionalSnapshots InstitutionalSnapshot[] @relation("SnapshotCreator")
   dashboardWidgets              DashboardWidget[]       @relation("WidgetOwner")
+
+  // ─── Gestão Académica ─────────────────────────────────────────
+  createdAcademicYears    AcademicYear[]       @relation("AcademicYearCreator")
+  createdAcademicPrograms AcademicProgram[]    @relation("AcademicProgramCreator")
+  academicClassesTaught   AcademicClass[]      @relation("AcademicInstructor")
+  academicEnrollments     AcademicEnrollment[] @relation("AcademicStudent")
+  academicApprovals       AcademicEnrollment[] @relation("AcademicApprover")
+  academicGradesGiven     AcademicGrade[]      @relation("AcademicGrader")
+  academicTranscript      AcademicTranscript?  @relation("AcademicTranscriptUser")
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -6324,6 +6333,228 @@ enum WidgetType {
   ALERT_LIST
   RANKING
   MAP
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MÓDULO 7 — SISTEMA DE GESTÃO ACADÉMICA
+// ══════════════════════════════════════════════════════════════════
+
+model AcademicYear {
+  id          String             @id @default(cuid())
+  name        String             @unique
+  startDate   DateTime
+  endDate     DateTime
+  isCurrent   Boolean            @default(false)
+  status      AcademicYearStatus @default(PLANNING)
+  description String?
+  createdById Int
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  deletedAt   DateTime?
+
+  createdBy User              @relation("AcademicYearCreator", fields: [createdById], references: [id])
+  periods   AcademicPeriod[]
+  programs  AcademicProgram[]
+
+  @@index([isCurrent])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model AcademicPeriod {
+  id              String     @id @default(cuid())
+  yearId          String
+  name            String
+  startDate       DateTime
+  endDate         DateTime
+  enrollmentStart DateTime?
+  enrollmentEnd   DateTime?
+  type            PeriodType @default(SEMESTER)
+  isActive        Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  deletedAt       DateTime?
+
+  year        AcademicYear         @relation(fields: [yearId], references: [id])
+  enrollments AcademicEnrollment[]
+
+  @@index([yearId])
+  @@index([type])
+  @@index([deletedAt])
+}
+
+model AcademicProgram {
+  id              String       @id @default(cuid())
+  code            String       @unique
+  name            String
+  description     String?
+  category        String?
+  level           ProgramLevel @default(BASIC)
+  durationHours   Int
+  maxStudents     Int?
+  minStudents     Int?
+  passingScore    Float        @default(60)
+  certificateType String?
+  yearId          String?
+  prerequisites   String[]
+  courseIds       String[]
+  isActive        Boolean      @default(true)
+  isMandatory     Boolean      @default(false)
+  targetRoles     String[]
+  createdById     Int
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  deletedAt       DateTime?
+
+  year        AcademicYear?        @relation(fields: [yearId], references: [id])
+  createdBy   User                 @relation("AcademicProgramCreator", fields: [createdById], references: [id])
+  classes     AcademicClass[]
+  enrollments AcademicEnrollment[]
+
+  @@index([code])
+  @@index([level])
+  @@index([isActive])
+  @@index([isMandatory])
+  @@index([deletedAt])
+}
+
+model AcademicClass {
+  id           String        @id @default(cuid())
+  programId    String
+  name         String
+  instructorId Int?
+  maxStudents  Int?
+  startDate    DateTime
+  endDate      DateTime
+  modality     ClassModality @default(ONLINE)
+  location     String?
+  schedule     String?
+  status       ClassStatus   @default(SCHEDULED)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+
+  program     AcademicProgram      @relation(fields: [programId], references: [id])
+  instructor  User?                @relation("AcademicInstructor", fields: [instructorId], references: [id])
+  enrollments AcademicEnrollment[]
+
+  @@index([programId])
+  @@index([status])
+  @@index([modality])
+  @@index([deletedAt])
+}
+
+model AcademicEnrollment {
+  id           String                   @id @default(cuid())
+  code         String                   @unique
+  userId       Int
+  programId    String
+  classId      String?
+  periodId     String?
+  status       AcademicEnrollmentStatus @default(PENDING)
+  progress     Float                    @default(0)
+  finalScore   Float?
+  approvedById Int?
+  approvedAt   DateTime?
+  startDate    DateTime?
+  completedAt  DateTime?
+  droppedAt    DateTime?
+  dropReason   String?
+  notes        String?
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  deletedAt    DateTime?
+
+  user       User            @relation("AcademicStudent", fields: [userId], references: [id])
+  program    AcademicProgram @relation(fields: [programId], references: [id])
+  class      AcademicClass?  @relation(fields: [classId], references: [id])
+  period     AcademicPeriod? @relation(fields: [periodId], references: [id])
+  approvedBy User?           @relation("AcademicApprover", fields: [approvedById], references: [id])
+  grades     AcademicGrade[]
+
+  @@unique([userId, programId, periodId])
+  @@index([userId])
+  @@index([programId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model AcademicGrade {
+  id           String   @id @default(cuid())
+  enrollmentId String
+  courseId     String
+  courseName   String?
+  score        Float
+  maxScore     Float    @default(100)
+  weight       Float    @default(1)
+  gradedById   Int
+  gradedAt     DateTime @default(now())
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  enrollment AcademicEnrollment @relation(fields: [enrollmentId], references: [id])
+  gradedBy   User               @relation("AcademicGrader", fields: [gradedById], references: [id])
+
+  @@index([enrollmentId])
+  @@index([courseId])
+}
+
+model AcademicTranscript {
+  id                 String   @id @default(cuid())
+  userId             Int      @unique
+  gpa                Float    @default(0)
+  totalHours         Int      @default(0)
+  completedPrograms  Int      @default(0)
+  inProgressPrograms Int      @default(0)
+  generatedAt        DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation("AcademicTranscriptUser", fields: [userId], references: [id])
+}
+
+enum AcademicYearStatus {
+  PLANNING
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum PeriodType {
+  SEMESTER
+  QUARTER
+  MODULE
+  ANNUAL
+}
+
+enum ProgramLevel {
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum ClassModality {
+  ONLINE
+  PRESENTIAL
+  HYBRID
+}
+
+enum ClassStatus {
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum AcademicEnrollmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  DROPPED
+  SUSPENDED
 }
 
 
