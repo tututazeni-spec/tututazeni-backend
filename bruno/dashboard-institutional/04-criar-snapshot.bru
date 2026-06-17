@@ -16,7 +16,7 @@ auth:bearer {
 
 body:json {
   {
-    "period": "2026-06-BRUNO",
+    "period": "2026-06-{{runId}}",
     "type": "MONTHLY",
     "notes": "Snapshot de teste Bruno"
   }
@@ -27,6 +27,6 @@ tests {
     expect(res.status).to.equal(201);
   });
   test("Tem período", function() {
-    expect(res.body.period).to.equal("2026-06-BRUNO");
+    expect(res.body.period).to.match(/^2026-06-/);
   });
 }
