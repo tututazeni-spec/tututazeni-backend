@@ -1,0 +1,32 @@
+meta {
+  name: Registar Valor Indicador
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/monitoring/indicators/{{indicatorId}}/records
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "value": 85,
+    "period": "2026-06",
+    "notes": "Acima da meta"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("Variância positiva", function() {
+    expect(res.body.variance).to.equal(5);
+  });
+}

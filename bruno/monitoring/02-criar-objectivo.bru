@@ -1,0 +1,36 @@
+meta {
+  name: Criar Objectivo
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/monitoring/okr/objectives
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "cycleId": "{{cycleId}}",
+    "ownerId": {{testUserId}},
+    "title": "Objectivo Bruno de Teste",
+    "type": "INDIVIDUAL"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("objectiveId", res.body.id);
+  }
+}

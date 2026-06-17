@@ -1,0 +1,30 @@
+meta {
+  name: Criar Ciclo Avaliação
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/monitoring/evaluation/cycles
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "name": "Avaliação Anual 2026 Bruno {{runId}}",
+    "type": "ANNUAL",
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}

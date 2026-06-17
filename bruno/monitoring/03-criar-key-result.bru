@@ -1,0 +1,37 @@
+meta {
+  name: Criar Key Result
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/monitoring/okr/key-results
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "objectiveId": "{{objectiveId}}",
+    "title": "Atingir 80%",
+    "startValue": 0,
+    "targetValue": 80,
+    "unit": "%"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("krId", res.body.id);
+  }
+}

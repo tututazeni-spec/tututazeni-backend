@@ -1,0 +1,36 @@
+meta {
+  name: Criar Ciclo OKR
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/monitoring/okr/cycles
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "name": "Q2 2026 Bruno {{runId}}",
+    "type": "QUARTERLY",
+    "startDate": "2026-04-01",
+    "endDate": "2026-06-30"
+  }
+}
+
+tests {
+  test("Status 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setEnvVar("cycleId", res.body.id);
+  }
+}

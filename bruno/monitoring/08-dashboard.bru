@@ -1,0 +1,25 @@
+meta {
+  name: Dashboard M&E
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/monitoring/dashboard
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Tem 3 pilares", function() {
+    expect(res.body).to.have.property("okrs");
+    expect(res.body).to.have.property("monitoring");
+    expect(res.body).to.have.property("evaluation");
+  });
+}

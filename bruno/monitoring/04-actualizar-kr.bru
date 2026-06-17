@@ -1,0 +1,31 @@
+meta {
+  name: Actualizar Key Result
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/monitoring/okr/key-results/{{krId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "newValue": 80,
+    "notes": "Meta atingida"
+  }
+}
+
+tests {
+  test("Status 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("Progresso 100", function() {
+    expect(res.body.progress).to.equal(100);
+  });
+}
