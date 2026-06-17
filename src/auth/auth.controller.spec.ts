@@ -28,27 +28,31 @@ describe('AuthController', () => {
     controller = module.get<AuthController>(AuthController);
   });
 
+  // O backend passou a emitir o JWT por cookie httpOnly, por isso os
+  // endpoints recebem agora @Res({ passthrough: true }) res.
+  const mockRes = { cookie: jest.fn(), clearCookie: jest.fn() };
+
   it('login → chama authService.login', async () => {
     const dto = { email: 'a@b.com', password: '123' };
-    const result = await controller.login(dto as any);
+    const result = await controller.login(dto as any, mockRes as any);
     expect(mockSvc.login).toHaveBeenCalledWith(dto);
     expect(result).toHaveProperty('accessToken');
   });
 
   it('register → chama authService.register', async () => {
     const dto = { email: 'a@b.com', password: '123', fullName: 'Test' };
-    await controller.register(dto as any);
+    await controller.register(dto as any, mockRes as any);
     expect(mockSvc.register).toHaveBeenCalledWith(dto);
   });
 
   it('refresh → chama authService.refreshToken', async () => {
-    const req = { user: { sub: 1, email: 'a@b.com' } };
-    await controller.refresh(req as any);
+    const req = { user: { id: 1, email: 'a@b.com' } };
+    await controller.refresh(req as any, mockRes as any);
     expect(mockSvc.refreshToken).toHaveBeenCalledWith(1, 'a@b.com');
   });
 
   it('changePassword → chama authService.changePassword', async () => {
-    const req = { user: { sub: 1, email: 'a@b.com' } };
+    const req = { user: { id: 1, email: 'a@b.com' } };
     const dto = { oldPassword: 'old', newPassword: 'new' };
     await controller.changePassword(req as any, dto as any);
     expect(mockSvc.changePassword).toHaveBeenCalledWith(1, dto);
@@ -67,7 +71,7 @@ describe('AuthController', () => {
   });
 
   it('me → chama authService.me', async () => {
-    const req = { user: { sub: 1, email: 'a@b.com' } };
+    const req = { user: { id: 1, email: 'a@b.com' } };
     const result = await controller.me(req as any);
     expect(mockSvc.me).toHaveBeenCalledWith(1);
     expect(result).toHaveProperty('id', 1);
