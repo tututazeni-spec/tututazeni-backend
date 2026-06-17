@@ -824,6 +824,16 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   lmsSessionsCreated    LmsLiveSession[]       @relation("LmsSessionCreator")
   lmsLiveAttendances    LmsLiveAttendance[]    @relation("LmsAttendanceUser")
   lmsLearningAnalytics  LmsLearningAnalytics?  @relation("LmsAnalyticsUser")
+
+  // ─── Monitoria e Avaliação ────────────────────────────────────
+  createdOkrCycles         OkrCycle[]            @relation("OkrCycleCreator")
+  ownedObjectives          Objective[]           @relation("ObjectiveOwner")
+  keyResultUpdates         KeyResultUpdate[]     @relation("KrUpdater")
+  createdMonIndicators     MonitoringIndicator[] @relation("IndicatorCreator")
+  recordedMonRecords       MonitoringRecord[]    @relation("RecordCreator")
+  createdEvalCycles        EvaluationCycle[]     @relation("EvalCycleCreator")
+  evaluationsAsUser        UserEvaluation[]      @relation("EvalUser")
+  evaluationsAsEvaluator   UserEvaluation[]      @relation("EvalEvaluator")
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -6723,6 +6733,245 @@ enum SessionStatus {
   COMPLETED
   CANCELLED
   POSTPONED
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MÓDULO 9 — MONITORIA E AVALIAÇÃO (OKRs + Indicadores + Avaliações)
+// ══════════════════════════════════════════════════════════════════
+
+model OkrCycle {
+  id          String    @id @default(cuid())
+  name        String
+  type        OkrType   @default(QUARTERLY)
+  startDate   DateTime
+  endDate     DateTime
+  status      OkrStatus @default(DRAFT)
+  description String?
+  createdById Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  createdBy  User        @relation("OkrCycleCreator", fields: [createdById], references: [id])
+  objectives Objective[]
+
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model Objective {
+  id           String        @id @default(cuid())
+  cycleId      String
+  ownerId      Int
+  departmentId String?
+  title        String
+  description  String?
+  type         ObjectiveType @default(INDIVIDUAL)
+  status       String        @default("DRAFT")
+  progress     Float         @default(0)
+  weight       Float         @default(1)
+  parentId     String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+
+  cycle      OkrCycle    @relation(fields: [cycleId], references: [id])
+  owner      User        @relation("ObjectiveOwner", fields: [ownerId], references: [id])
+  keyResults KeyResult[]
+
+  @@index([cycleId])
+  @@index([ownerId])
+  @@index([type])
+  @@index([deletedAt])
+}
+
+model KeyResult {
+  id           String    @id @default(cuid())
+  objectiveId  String
+  title        String
+  description  String?
+  metric       String?
+  startValue   Float     @default(0)
+  targetValue  Float
+  currentValue Float     @default(0)
+  unit         String?
+  progress     Float     @default(0)
+  status       String    @default("ON_TRACK")
+  dueDate      DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  objective Objective         @relation(fields: [objectiveId], references: [id])
+  updates   KeyResultUpdate[]
+
+  @@index([objectiveId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model KeyResultUpdate {
+  id            String   @id @default(cuid())
+  keyResultId   String
+  previousValue Float
+  newValue      Float
+  progress      Float
+  notes         String?
+  updatedById   Int
+  createdAt     DateTime @default(now())
+
+  keyResult KeyResult @relation(fields: [keyResultId], references: [id])
+  updatedBy User      @relation("KrUpdater", fields: [updatedById], references: [id])
+
+  @@index([keyResultId])
+  @@index([createdAt])
+}
+
+model MonitoringIndicator {
+  id          String             @id @default(cuid())
+  code        String             @unique
+  name        String
+  description String?
+  unit        String?
+  formula     String?
+  baseline    Float?
+  target      Float?
+  frequency   IndicatorFrequency @default(MONTHLY)
+  category    String?
+  responsible String?
+  isActive    Boolean            @default(true)
+  tags        String[]
+  createdById Int
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  deletedAt   DateTime?
+
+  createdBy User               @relation("IndicatorCreator", fields: [createdById], references: [id])
+  records   MonitoringRecord[]
+
+  @@index([category])
+  @@index([isActive])
+  @@index([deletedAt])
+}
+
+model MonitoringRecord {
+  id           String    @id @default(cuid())
+  indicatorId  String
+  value        Float
+  target       Float?
+  variance     Float?
+  variancePct  Float?
+  period       String
+  date         DateTime  @default(now())
+  notes        String?
+  recordedById Int
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+
+  indicator  MonitoringIndicator @relation(fields: [indicatorId], references: [id])
+  recordedBy User                @relation("RecordCreator", fields: [recordedById], references: [id])
+
+  @@index([indicatorId])
+  @@index([period])
+  @@index([date])
+  @@index([deletedAt])
+}
+
+model EvaluationCycle {
+  id           String           @id @default(cuid())
+  name         String
+  type         EvalCycleType    @default(ANNUAL)
+  startDate    DateTime
+  endDate      DateTime
+  status       EvaluationStatus @default(DRAFT)
+  description  String?
+  passingScore Float            @default(60)
+  createdById  Int
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  deletedAt    DateTime?
+
+  createdBy   User             @relation("EvalCycleCreator", fields: [createdById], references: [id])
+  evaluations UserEvaluation[]
+
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model UserEvaluation {
+  id              String    @id @default(cuid())
+  cycleId         String
+  userId          Int
+  evaluatorId     Int
+  type            String    @default("MANAGER")
+  status          String    @default("PENDING")
+  selfScore       Float?
+  managerScore    Float?
+  finalScore      Float?
+  calibratedScore Float?
+  selfFeedback    String?
+  managerFeedback String?
+  strengths       String?
+  improvements    String?
+  developmentPlan String?
+  submittedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  cycle     EvaluationCycle @relation(fields: [cycleId], references: [id])
+  user      User            @relation("EvalUser", fields: [userId], references: [id])
+  evaluator User            @relation("EvalEvaluator", fields: [evaluatorId], references: [id])
+
+  @@unique([cycleId, userId, evaluatorId, type])
+  @@index([cycleId])
+  @@index([userId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+enum OkrType {
+  ANNUAL
+  QUARTERLY
+  MONTHLY
+}
+
+enum OkrStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum ObjectiveType {
+  COMPANY
+  TEAM
+  INDIVIDUAL
+}
+
+enum IndicatorFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+enum EvalCycleType {
+  ANNUAL
+  SEMI_ANNUAL
+  QUARTERLY
+  PROBATION
+}
+
+enum EvaluationStatus {
+  DRAFT
+  OPEN
+  SELF_EVAL
+  MANAGER_EVAL
+  CALIBRATION
+  CLOSED
+  ARCHIVED
 }
 
 
