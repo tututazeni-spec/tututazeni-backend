@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateOkrCycleDto,
@@ -92,9 +88,7 @@ export class MonitoringService {
     const range = kr.targetValue - kr.startValue;
     const achieved = dto.newValue - kr.startValue;
     const progress =
-      range !== 0
-        ? Math.max(0, Math.min(100, Math.round((achieved / range) * 100)))
-        : 0;
+      range !== 0 ? Math.max(0, Math.min(100, Math.round((achieved / range) * 100))) : 0;
 
     const status =
       progress >= 100
@@ -136,9 +130,7 @@ export class MonitoringService {
       select: { progress: true },
     });
     const avg =
-      krs.length > 0
-        ? Math.round(krs.reduce((s, k) => s + k.progress, 0) / krs.length)
-        : 0;
+      krs.length > 0 ? Math.round(krs.reduce((s, k) => s + k.progress, 0) / krs.length) : 0;
     await this.prisma.objective.update({
       where: { id: objectiveId },
       data: {
@@ -162,13 +154,7 @@ export class MonitoringService {
     const indicator = await this.prisma.monitoringIndicator.create({
       data: { ...dto, createdById: userId },
     });
-    await this.audit(
-      userId,
-      'CREATE',
-      'MonitoringIndicator',
-      indicator.id,
-      { code: dto.code },
-    );
+    await this.audit(userId, 'CREATE', 'MonitoringIndicator', indicator.id, { code: dto.code });
     return indicator;
   }
 
@@ -298,11 +284,7 @@ export class MonitoringService {
     return evaluation;
   }
 
-  async submitEvaluation(
-    id: string,
-    dto: SubmitEvaluationDto,
-    evaluatorId: number,
-  ) {
+  async submitEvaluation(id: string, dto: SubmitEvaluationDto, evaluatorId: number) {
     const evaluation = await this.prisma.userEvaluation.findUnique({
       where: { id },
     });
@@ -370,11 +352,7 @@ export class MonitoringService {
   // ════════════════════════════════════════════════════
 
   async getDashboard() {
-    const startOfMonth = new Date(
-      new Date().getFullYear(),
-      new Date().getMonth(),
-      1,
-    );
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const [
       activeCycles,
       totalObjectives,
@@ -417,9 +395,7 @@ export class MonitoringService {
         totalObjectives,
         completedObjectives,
         objectiveCompletionRate:
-          totalObjectives > 0
-            ? Math.round((completedObjectives / totalObjectives) * 100)
-            : 0,
+          totalObjectives > 0 ? Math.round((completedObjectives / totalObjectives) * 100) : 0,
       },
       monitoring: { activeIndicators, recordsThisMonth },
       evaluation: {
@@ -428,11 +404,7 @@ export class MonitoringService {
         completedEvaluations,
         evaluationCompletionRate:
           pendingEvaluations + completedEvaluations > 0
-            ? Math.round(
-                (completedEvaluations /
-                  (pendingEvaluations + completedEvaluations)) *
-                  100,
-              )
+            ? Math.round((completedEvaluations / (pendingEvaluations + completedEvaluations)) * 100)
             : 0,
       },
     };
@@ -440,13 +412,7 @@ export class MonitoringService {
 
   // ─── HELPER ──────────────────────────────────────────
 
-  private async audit(
-    userId: number,
-    action: string,
-    entity: string,
-    entityId: string,
-    meta: any,
-  ) {
+  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
     // AuditLog.entityId é Int? no schema; os IDs deste módulo são cuid (String),
     // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
     await this.prisma.auditLog.create({

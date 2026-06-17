@@ -69,15 +69,7 @@ export class LibraryService {
   }
 
   async findAllItems(filters: FilterItemDto) {
-    const {
-      type,
-      collectionId,
-      category,
-      search,
-      isApproved,
-      page = 1,
-      limit = 20,
-    } = filters;
+    const { type, collectionId, category, search, isApproved, page = 1, limit = 20 } = filters;
     const where: any = {
       deletedAt: null,
       ...(type && { type }),
@@ -130,8 +122,7 @@ export class LibraryService {
         _count: { select: { comments: true, ratings: true } },
       },
     });
-    if (!item || item.deletedAt)
-      throw new NotFoundException('Item não encontrado');
+    if (!item || item.deletedAt) throw new NotFoundException('Item não encontrado');
     return item;
   }
 
@@ -334,13 +325,7 @@ export class LibraryService {
 
   // ─── HELPER ──────────────────────────────────────────
 
-  private async audit(
-    userId: number,
-    action: string,
-    entity: string,
-    entityId: string,
-    meta: any,
-  ) {
+  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
     // AuditLog.entityId é Int? no schema; os IDs da biblioteca são cuid (String),
     // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
     await this.prisma.auditLog.create({

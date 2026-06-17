@@ -1,14 +1,4 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Body,
-  Patch,
-  UseGuards,
-  Req,
-  Res,
-  HttpCode,
-} from '@nestjs/common';
+import { Controller, Post, Get, Body, Patch, UseGuards, Req, Res, HttpCode } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
 import { AuthService } from './auth.service';
 import {
@@ -46,20 +36,14 @@ export class AuthController {
 
   @Public()
   @Post('login')
-  async login(
-    @Body() dto: LoginDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(dto);
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
     return result;
   }
 
   @Post('register')
-  async register(
-    @Body() dto: RegisterDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.register(dto);
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
     return result;
@@ -67,14 +51,8 @@ export class AuthController {
 
   @Post('refresh')
   @UseGuards(JwtAuthGuard)
-  async refresh(
-    @Req() req: AuthenticatedRequest,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const result = await this.authService.refreshToken(
-      req.user.id,
-      req.user.email,
-    );
+  async refresh(@Req() req: AuthenticatedRequest, @Res({ passthrough: true }) res: Response) {
+    const result = await this.authService.refreshToken(req.user.id, req.user.email);
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
     return result;
   }

@@ -64,10 +64,7 @@ describe('CertificationService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        CertificationService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [CertificationService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<CertificationService>(CertificationService);
     jest.clearAllMocks();
@@ -81,10 +78,7 @@ describe('CertificationService', () => {
       mockPrisma.auditLog.create.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
-      const result = await service.issueCertificate(
-        { userId: 1, title: 'Curso Teste' },
-        1,
-      );
+      const result = await service.issueCertificate({ userId: 1, title: 'Curso Teste' }, 1);
       expect(result.code).toBe('CERT-00001');
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -95,9 +89,9 @@ describe('CertificationService', () => {
 
     it('deve lançar NotFoundException se utilizador não existir', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
-      await expect(
-        service.issueCertificate({ userId: 999, title: 'X' }, 1),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.issueCertificate({ userId: 999, title: 'X' }, 1)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -149,11 +143,7 @@ describe('CertificationService', () => {
       mockPrisma.auditLog.create.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
-      const result = await service.revokeCertificate(
-        'cert-1',
-        { reason: 'Erro de emissão' },
-        1,
-      );
+      const result = await service.revokeCertificate('cert-1', { reason: 'Erro de emissão' }, 1);
       expect(result.isRevoked).toBe(true);
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -167,9 +157,9 @@ describe('CertificationService', () => {
         ...mockCert,
         isRevoked: true,
       });
-      await expect(
-        service.revokeCertificate('cert-1', { reason: 'XXXXX' }, 1),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.revokeCertificate('cert-1', { reason: 'XXXXX' }, 1)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -236,10 +226,7 @@ describe('CertificationService', () => {
       mockPrisma.auditLog.create.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
-      const result = await service.issueBadge(
-        { badgeId: 'badge-1', userId: 1 },
-        1,
-      );
+      const result = await service.issueBadge({ badgeId: 'badge-1', userId: 1 }, 1);
       expect(result.id).toBe('iss-1');
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -257,16 +244,16 @@ describe('CertificationService', () => {
         id: 'iss-1',
         deletedAt: null,
       });
-      await expect(
-        service.issueBadge({ badgeId: 'badge-1', userId: 1 }, 1),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.issueBadge({ badgeId: 'badge-1', userId: 1 }, 1)).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('deve lançar NotFoundException se badge não existir', async () => {
       mockPrisma.$transaction.mockResolvedValue([null, { fullName: 'João' }]);
-      await expect(
-        service.issueBadge({ badgeId: 'nao-existe', userId: 1 }, 1),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.issueBadge({ badgeId: 'nao-existe', userId: 1 }, 1)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

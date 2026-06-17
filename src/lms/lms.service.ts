@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateLearningPathDto,
@@ -87,8 +83,7 @@ export class LmsService {
         _count: { select: { enrollments: true } },
       },
     });
-    if (!path || path.deletedAt)
-      throw new NotFoundException('Percurso não encontrado');
+    if (!path || path.deletedAt) throw new NotFoundException('Percurso não encontrado');
     return path;
   }
 
@@ -150,31 +145,20 @@ export class LmsService {
     return enrollment;
   }
 
-  async updatePathProgress(
-    pathId: string,
-    completedCourseId: string,
-    userId: number,
-  ) {
+  async updatePathProgress(pathId: string, completedCourseId: string, userId: number) {
     const enrollment = await this.prisma.lmsPathEnrollment.findUnique({
       where: { pathId_userId: { pathId, userId } },
       include: { path: true },
     });
     if (!enrollment) throw new NotFoundException('Inscrição não encontrada');
 
-    const completed = [
-      ...new Set([...enrollment.completedCourseIds, completedCourseId]),
-    ];
+    const completed = [...new Set([...enrollment.completedCourseIds, completedCourseId])];
     const totalCourses = enrollment.path.courseIds.length;
-    const progress =
-      totalCourses > 0
-        ? Math.round((completed.length / totalCourses) * 100)
-        : 0;
+    const progress = totalCourses > 0 ? Math.round((completed.length / totalCourses) * 100) : 0;
     const isComplete = progress >= 100;
 
     // Próximo curso da ordem
-    const nextCourse = enrollment.path.courseOrder.find(
-      (c) => !completed.includes(c),
-    );
+    const nextCourse = enrollment.path.courseOrder.find(c => !completed.includes(c));
 
     const updated = await this.prisma.lmsPathEnrollment.update({
       where: { id: enrollment.id },
@@ -263,10 +247,7 @@ export class LmsService {
       include: { _count: { select: { attendances: true } } },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
-    if (
-      session.maxAttendees &&
-      session._count.attendances >= session.maxAttendees
-    ) {
+    if (session.maxAttendees && session._count.attendances >= session.maxAttendees) {
       throw new ConflictException('Sessão lotada');
     }
     const existing = await this.prisma.lmsLiveAttendance.findUnique({
@@ -283,8 +264,7 @@ export class LmsService {
     const attendance = await this.prisma.lmsLiveAttendance.findUnique({
       where: { sessionId_userId: { sessionId, userId } },
     });
-    if (!attendance)
-      throw new NotFoundException('Inscrição na sessão não encontrada');
+    if (!attendance) throw new NotFoundException('Inscrição na sessão não encontrada');
 
     const updated = await this.prisma.lmsLiveAttendance.update({
       where: { id: attendance.id },
@@ -294,11 +274,7 @@ export class LmsService {
     return updated;
   }
 
-  async submitSessionFeedback(
-    sessionId: string,
-    dto: AttendanceFeedbackDto,
-    userId: number,
-  ) {
+  async submitSessionFeedback(sessionId: string, dto: AttendanceFeedbackDto, userId: number) {
     const attendance = await this.prisma.lmsLiveAttendance.findUnique({
       where: { sessionId_userId: { sessionId, userId } },
     });
@@ -322,7 +298,7 @@ export class LmsService {
       where: { userId, deletedAt: null },
       select: { pathId: true },
     });
-    const enrolledIds = enrolled.map((e) => e.pathId);
+    const enrolledIds = enrolled.map(e => e.pathId);
 
     const recommended = await this.prisma.lmsLearningPath.findMany({
       where: {
@@ -343,7 +319,7 @@ export class LmsService {
       },
     });
 
-    return recommended.map((p) => ({
+    return recommended.map(p => ({
       ...p,
       reason: 'Recomendado com base na tua actividade',
     }));
@@ -401,8 +377,7 @@ export class LmsService {
         completedPaths,
         upcomingSessions,
         totalSessions,
-        pathCompletionRate:
-          totalEnrollments > 0 ? (completedPaths / totalEnrollments) * 100 : 0,
+        pathCompletionRate: totalEnrollments > 0 ? (completedPaths / totalEnrollments) * 100 : 0,
       },
       byLevel,
     };
@@ -430,13 +405,7 @@ export class LmsService {
     });
   }
 
-  private async audit(
-    userId: number,
-    action: string,
-    entity: string,
-    entityId: string,
-    meta: any,
-  ) {
+  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
     // AuditLog.entityId é Int? no schema; os IDs deste módulo são cuid (String),
     // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
     await this.prisma.auditLog.create({

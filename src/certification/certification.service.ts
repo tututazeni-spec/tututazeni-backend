@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
 import {
@@ -30,10 +26,7 @@ export class CertificationService {
   }
 
   private generateVerificationCode(): string {
-    return `INNOVA-${Date.now()}-${crypto
-      .randomBytes(4)
-      .toString('hex')
-      .toUpperCase()}`;
+    return `INNOVA-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
   }
 
   private generateHash(data: string): string {
@@ -77,9 +70,7 @@ export class CertificationService {
 
     const code = await this.generateCertCode();
     const verificationCode = this.generateVerificationCode();
-    const hashCode = this.generateHash(
-      `${dto.userId}-${code}-${verificationCode}`,
-    );
+    const hashCode = this.generateHash(`${dto.userId}-${code}-${verificationCode}`);
 
     let expiresAt: Date | undefined;
     if (dto.templateId) {
@@ -176,8 +167,7 @@ export class CertificationService {
         issuedBy: { select: { fullName: true } },
       },
     });
-    if (!cert || cert.deletedAt)
-      throw new NotFoundException('Certificado não encontrado');
+    if (!cert || cert.deletedAt) throw new NotFoundException('Certificado não encontrado');
     return cert;
   }
 
@@ -324,10 +314,7 @@ export class CertificationService {
       throw new ConflictException('Utilizador já possui este badge');
     }
 
-    const verifyCode = `BADGE-${Date.now()}-${crypto
-      .randomBytes(3)
-      .toString('hex')
-      .toUpperCase()}`;
+    const verifyCode = `BADGE-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const issuance = await this.prisma.badgeIssuance.create({
       data: {
         badgeId: dto.badgeId,
@@ -449,13 +436,7 @@ export class CertificationService {
 
   // ─── HELPER ──────────────────────────────────────────
 
-  private async audit(
-    userId: number,
-    action: string,
-    entity: string,
-    entityId: string,
-    meta: any,
-  ) {
+  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
     // AuditLog.entityId é Int? no schema; os IDs deste módulo são cuid (String),
     // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
     await this.prisma.auditLog.create({

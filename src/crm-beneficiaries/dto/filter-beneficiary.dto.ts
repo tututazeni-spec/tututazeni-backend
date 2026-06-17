@@ -1,11 +1,7 @@
 import { IsOptional, IsEnum, IsString, IsInt, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  BeneficiaryType,
-  BeneficiaryStatus,
-  AngolaProvince,
-} from '@prisma/client';
+import { BeneficiaryType, BeneficiaryStatus, AngolaProvince } from '@prisma/client';
 
 export class FilterBeneficiaryDto {
   @ApiPropertyOptional({ enum: BeneficiaryType })

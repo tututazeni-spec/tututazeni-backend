@@ -50,15 +50,7 @@ export class CrmPartnersService {
   }
 
   async findAll(filters: FilterPartnerDto) {
-    const {
-      type,
-      tier,
-      status,
-      search,
-      assignedToId,
-      page = 1,
-      limit = 20,
-    } = filters;
+    const { type, tier, status, search, assignedToId, page = 1, limit = 20 } = filters;
     const where: any = {
       deletedAt: null,
       ...(type && { type }),
@@ -144,11 +136,7 @@ export class CrmPartnersService {
 
   // ─── INTERACÇÕES ─────────────────────────────────────
 
-  async addInteraction(
-    partnerId: string,
-    dto: CreatePartnerInteractionDto,
-    userId: number,
-  ) {
+  async addInteraction(partnerId: string, dto: CreatePartnerInteractionDto, userId: number) {
     await this.findOne(partnerId);
     const { date, nextDate, ...rest } = dto;
     const interaction = await this.prisma.partnerInteraction.create({
@@ -168,8 +156,7 @@ export class CrmPartnersService {
     });
     const avg =
       allRatings.length > 0
-        ? allRatings.reduce((s, i) => s + (i.satisfaction || 0), 0) /
-          allRatings.length
+        ? allRatings.reduce((s, i) => s + (i.satisfaction || 0), 0) / allRatings.length
         : 0;
 
     await this.prisma.partner.update({
@@ -205,11 +192,7 @@ export class CrmPartnersService {
 
   // ─── MILESTONES ──────────────────────────────────────
 
-  async addMilestone(
-    partnerId: string,
-    dto: CreateMilestoneDto,
-    userId: number,
-  ) {
+  async addMilestone(partnerId: string, dto: CreateMilestoneDto, userId: number) {
     await this.findOne(partnerId);
     const { dueDate, ...rest } = dto;
     const milestone = await this.prisma.partnerMilestone.create({
@@ -413,13 +396,7 @@ export class CrmPartnersService {
 
   // ─── HELPER ──────────────────────────────────────────
 
-  private async audit(
-    userId: number,
-    action: string,
-    entity: string,
-    entityId: string,
-    meta: any,
-  ) {
+  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
     // AuditLog.entityId é Int? no schema; os IDs do CRM são cuid (String),
     // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
     await this.prisma.auditLog.create({

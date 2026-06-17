@@ -49,10 +49,7 @@ describe('MonitoringService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        MonitoringService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [MonitoringService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<MonitoringService>(MonitoringService);
     jest.clearAllMocks();
@@ -162,9 +159,9 @@ describe('MonitoringService', () => {
 
     it('deve lançar NotFoundException se KR não existe', async () => {
       mockPrisma.keyResult.findUnique.mockResolvedValue(null);
-      await expect(
-        service.updateKeyResult('x', { newValue: 10 }, 1),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.updateKeyResult('x', { newValue: 10 }, 1)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -178,10 +175,7 @@ describe('MonitoringService', () => {
         code: 'IND-001',
       });
       mockPrisma.auditLog.create.mockResolvedValue({});
-      const result = await service.createIndicator(
-        { code: 'IND-001', name: 'Taxa Conclusão' },
-        1,
-      );
+      const result = await service.createIndicator({ code: 'IND-001', name: 'Taxa Conclusão' }, 1);
       expect(result.code).toBe('IND-001');
     });
 
@@ -190,9 +184,9 @@ describe('MonitoringService', () => {
         id: 'ind-1',
         deletedAt: null,
       });
-      await expect(
-        service.createIndicator({ code: 'IND-001', name: 'X' }, 1),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.createIndicator({ code: 'IND-001', name: 'X' }, 1)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -209,11 +203,7 @@ describe('MonitoringService', () => {
         variancePct: 12.5,
       });
       mockPrisma.auditLog.create.mockResolvedValue({});
-      const result = await service.addRecord(
-        'ind-1',
-        { value: 90, period: '2026-06' },
-        1,
-      );
+      const result = await service.addRecord('ind-1', { value: 90, period: '2026-06' }, 1);
       expect(result.variance).toBe(10);
     });
   });
@@ -235,13 +225,7 @@ describe('MonitoringService', () => {
       mockPrisma.notificationLog.create.mockResolvedValue({});
       mockPrisma.auditLog.create.mockResolvedValue({});
 
-      const result = await service.assignEvaluation(
-        'cyc-1',
-        2,
-        3,
-        'MANAGER',
-        1,
-      );
+      const result = await service.assignEvaluation('cyc-1', 2, 3, 'MANAGER', 1);
       expect(result.id).toBe('ev-1');
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -252,9 +236,9 @@ describe('MonitoringService', () => {
 
     it('deve lançar ConflictException se já atribuída', async () => {
       mockPrisma.userEvaluation.findUnique.mockResolvedValue({ id: 'ev-1' });
-      await expect(
-        service.assignEvaluation('cyc-1', 2, 3, 'MANAGER', 1),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.assignEvaluation('cyc-1', 2, 3, 'MANAGER', 1)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -279,9 +263,9 @@ describe('MonitoringService', () => {
 
     it('deve lançar NotFoundException se avaliação não existe', async () => {
       mockPrisma.userEvaluation.findUnique.mockResolvedValue(null);
-      await expect(
-        service.submitEvaluation('x', { score: 80 }, 3),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.submitEvaluation('x', { score: 80 }, 3)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

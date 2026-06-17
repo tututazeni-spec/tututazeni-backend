@@ -1,11 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsEnum,
-  IsBoolean,
-  IsInt,
-  Length,
-} from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsBoolean, IsInt, Length } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CertificateTemplateType } from '@prisma/client';
 

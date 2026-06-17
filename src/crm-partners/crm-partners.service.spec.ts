@@ -50,10 +50,7 @@ describe('CrmPartnersService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        CrmPartnersService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [CrmPartnersService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<CrmPartnersService>(CrmPartnersService);
     jest.clearAllMocks();
@@ -90,10 +87,7 @@ describe('CrmPartnersService', () => {
       });
       mockPrisma.auditLog.create.mockResolvedValue({});
 
-      const result = await service.create(
-        { name: 'Outro Parceiro', type: 'COMMERCIAL' as any },
-        1,
-      );
+      const result = await service.create({ name: 'Outro Parceiro', type: 'COMMERCIAL' as any }, 1);
       expect(result.code).toBe('PAR-00002');
     });
   });
@@ -133,9 +127,7 @@ describe('CrmPartnersService', () => {
 
     it('deve lançar NotFoundException se não existir', async () => {
       mockPrisma.partner.findUnique.mockResolvedValue(null);
-      await expect(service.findOne('nao-existe')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findOne('nao-existe')).rejects.toThrow(NotFoundException);
     });
 
     it('deve lançar NotFoundException se deletedAt preenchido', async () => {
@@ -158,11 +150,7 @@ describe('CrmPartnersService', () => {
       });
       mockPrisma.auditLog.create.mockResolvedValue({});
 
-      const result = await service.update(
-        'par-1',
-        { name: 'Nome Actualizado' } as any,
-        1,
-      );
+      const result = await service.update('par-1', { name: 'Nome Actualizado' } as any, 1);
       expect(result.name).toBe('Nome Actualizado');
       expect(mockPrisma.auditLog.create).toHaveBeenCalled();
     });
@@ -225,10 +213,7 @@ describe('CrmPartnersService', () => {
   describe('getInteractions', () => {
     it('deve retornar interacções paginadas', async () => {
       mockPrisma.partner.findUnique.mockResolvedValue(mockPartner);
-      mockPrisma.$transaction.mockResolvedValue([
-        [{ id: 'int-1', type: 'MEETING' }],
-        1,
-      ]);
+      mockPrisma.$transaction.mockResolvedValue([[{ id: 'int-1', type: 'MEETING' }], 1]);
       const result = await service.getInteractions('par-1', 1, 20);
       expect(result.total).toBe(1);
       expect(result.totalPages).toBe(1);
@@ -290,9 +275,7 @@ describe('CrmPartnersService', () => {
 
     it('deve lançar NotFoundException se milestone não existir', async () => {
       mockPrisma.partnerMilestone.findUnique.mockResolvedValue(null);
-      await expect(service.completeMilestone('nao-existe', 1)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.completeMilestone('nao-existe', 1)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -349,10 +332,7 @@ describe('CrmPartnersService', () => {
         12,
         4,
       ]);
-      const result = await service.getReport(
-        new Date('2026-01-01'),
-        new Date('2026-12-31'),
-      );
+      const result = await service.getReport(new Date('2026-01-01'), new Date('2026-12-31'));
       expect(result.created).toBe(7);
       expect(result.totalValue).toBe(3000000);
       expect(result.milestonesCompleted).toBe(4);

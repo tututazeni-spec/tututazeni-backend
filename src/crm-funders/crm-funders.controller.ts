@@ -80,11 +80,7 @@ export class CrmFundersController {
   @Put(':id')
   @Roles('ADMIN', 'RH', 'MANAGER')
   @ApiOperation({ summary: 'Actualizar financiador' })
-  update(
-    @Param('id') id: string,
-    @Body() dto: UpdateFunderDto,
-    @CurrentUser() user: any,
-  ) {
+  update(@Param('id') id: string, @Body() dto: UpdateFunderDto, @CurrentUser() user: any) {
     return this.service.update(id, dto, user.id);
   }
 
@@ -101,11 +97,7 @@ export class CrmFundersController {
   @Post(':id/grants')
   @Roles('ADMIN', 'RH', 'MANAGER')
   @ApiOperation({ summary: 'Criar grant (financiamento)' })
-  createGrant(
-    @Param('id') id: string,
-    @Body() dto: CreateGrantDto,
-    @CurrentUser() user: any,
-  ) {
+  createGrant(@Param('id') id: string, @Body() dto: CreateGrantDto, @CurrentUser() user: any) {
     return this.service.createGrant(id, dto, user.id);
   }
 

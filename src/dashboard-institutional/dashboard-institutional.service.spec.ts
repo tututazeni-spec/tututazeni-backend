@@ -37,23 +37,27 @@ describe('DashboardInstitutionalService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        DashboardInstitutionalService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [DashboardInstitutionalService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
-    service = module.get<DashboardInstitutionalService>(
-      DashboardInstitutionalService,
-    );
+    service = module.get<DashboardInstitutionalService>(DashboardInstitutionalService);
     jest.clearAllMocks();
   });
 
   describe('getExecutiveSummary', () => {
     it('deve retornar resumo com people, learning, crm, knowledge', async () => {
       mockPrisma.$transaction.mockResolvedValue([
-        100, 10, 25, 40, 60, 30, 5, 3,
+        100,
+        10,
+        25,
+        40,
+        60,
+        30,
+        5,
+        3,
         { _sum: { amount: 5000000 } },
-        50, 80, 20,
+        50,
+        80,
+        20,
       ]);
       const result = await service.getExecutiveSummary();
       expect(result).toHaveProperty('people');
@@ -66,7 +70,18 @@ describe('DashboardInstitutionalService', () => {
 
     it('deve calcular completionRate correctamente', async () => {
       mockPrisma.$transaction.mockResolvedValue([
-        100, 10, 25, 40, 50, 30, 5, 3, { _sum: { amount: 0 } }, 50, 80, 20,
+        100,
+        10,
+        25,
+        40,
+        50,
+        30,
+        5,
+        3,
+        { _sum: { amount: 0 } },
+        50,
+        80,
+        20,
       ]);
       const result = await service.getExecutiveSummary();
       expect(result.learning.completionRate).toBe(50);
@@ -113,9 +128,18 @@ describe('DashboardInstitutionalService', () => {
     it('deve criar snapshot com métricas em JSON', async () => {
       mockPrisma.institutionalSnapshot.findUnique.mockResolvedValue(null);
       mockPrisma.$transaction.mockResolvedValue([
-        100, 10, 25, 40, 60, 30, 5, 3,
+        100,
+        10,
+        25,
+        40,
+        60,
+        30,
+        5,
+        3,
         { _sum: { amount: 5000000 } },
-        50, 80, 20,
+        50,
+        80,
+        20,
       ]);
       mockPrisma.institutionalSnapshot.create.mockResolvedValue({
         id: 'snap-1',
@@ -134,9 +158,9 @@ describe('DashboardInstitutionalService', () => {
         id: 'snap-1',
         deletedAt: null,
       });
-      await expect(
-        service.createSnapshot({ period: '2026-06' }, 1),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.createSnapshot({ period: '2026-06' }, 1)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -176,9 +200,9 @@ describe('DashboardInstitutionalService', () => {
 
     it('deve lançar NotFoundException se snapshot não existe', async () => {
       mockPrisma.$transaction.mockResolvedValue([null, null]);
-      await expect(
-        service.compareSnapshots('2026-05', '2026-06'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.compareSnapshots('2026-05', '2026-06')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -194,9 +218,9 @@ describe('DashboardInstitutionalService', () => {
 
     it('updateWidget deve lançar NotFoundException se não existir', async () => {
       mockPrisma.dashboardWidget.findFirst.mockResolvedValue(null);
-      await expect(
-        service.updateWidget('w-1', { title: 'X' } as any, 1),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.updateWidget('w-1', { title: 'X' } as any, 1)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('deleteWidget deve remover (soft delete)', async () => {

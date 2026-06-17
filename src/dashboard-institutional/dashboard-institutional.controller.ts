@@ -18,12 +18,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 import { DashboardInstitutionalService } from './dashboard-institutional.service';
-import {
-  CreateSnapshotDto,
-  CreateWidgetDto,
-  UpdateWidgetDto,
-  FilterSnapshotDto,
-} from './dto';
+import { CreateSnapshotDto, CreateWidgetDto, UpdateWidgetDto, FilterSnapshotDto } from './dto';
 
 @ApiTags('Dashboard Institucional')
 @ApiBearerAuth()
@@ -44,9 +39,7 @@ export class DashboardInstitutionalController {
   @Get('growth-trend')
   @Roles('ADMIN', 'RH', 'MANAGER')
   @ApiOperation({ summary: 'Tendência de crescimento (N meses)' })
-  getGrowthTrend(
-    @Query('months', new DefaultValuePipe(12), ParseIntPipe) months: number,
-  ) {
+  getGrowthTrend(@Query('months', new DefaultValuePipe(12), ParseIntPipe) months: number) {
     return this.service.getGrowthTrend(months);
   }
 
@@ -107,11 +100,7 @@ export class DashboardInstitutionalController {
 
   @Put('widgets/:id')
   @ApiOperation({ summary: 'Actualizar widget' })
-  updateWidget(
-    @Param('id') id: string,
-    @Body() dto: UpdateWidgetDto,
-    @CurrentUser() user: any,
-  ) {
+  updateWidget(@Param('id') id: string, @Body() dto: UpdateWidgetDto, @CurrentUser() user: any) {
     return this.service.updateWidget(id, dto, user.id);
   }
 

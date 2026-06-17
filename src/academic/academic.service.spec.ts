@@ -1,11 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AcademicService } from './academic.service';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  NotFoundException,
-  ConflictException,
-  BadRequestException,
-} from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 
 const mockProgram = {
   id: 'prog-1',
@@ -66,10 +62,7 @@ describe('AcademicService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AcademicService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [AcademicService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<AcademicService>(AcademicService);
     jest.clearAllMocks();
@@ -131,10 +124,7 @@ describe('AcademicService', () => {
     it('deve lançar ConflictException se código já existe', async () => {
       mockPrisma.academicProgram.findUnique.mockResolvedValue(mockProgram);
       await expect(
-        service.createProgram(
-          { code: 'PROG-001', name: 'X', durationHours: 10 },
-          1,
-        ),
+        service.createProgram({ code: 'PROG-001', name: 'X', durationHours: 10 }, 1),
       ).rejects.toThrow(ConflictException);
     });
   });
@@ -147,10 +137,7 @@ describe('AcademicService', () => {
       mockPrisma.auditLog.create.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
-      const result = await service.enroll(
-        { userId: 1, programId: 'prog-1' },
-        2,
-      );
+      const result = await service.enroll({ userId: 1, programId: 'prog-1' }, 2);
       expect(result.code).toBe('MAT-00001');
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -162,9 +149,9 @@ describe('AcademicService', () => {
     it('deve lançar ConflictException se já matriculado', async () => {
       mockPrisma.academicProgram.findUnique.mockResolvedValue(mockProgram);
       mockPrisma.academicEnrollment.findFirst.mockResolvedValue(mockEnrollment);
-      await expect(
-        service.enroll({ userId: 1, programId: 'prog-1' }, 2),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.enroll({ userId: 1, programId: 'prog-1' }, 2)).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('deve lançar BadRequestException se pré-requisitos não cumpridos', async () => {
@@ -173,9 +160,9 @@ describe('AcademicService', () => {
         prerequisites: ['prog-0'],
       });
       mockPrisma.academicEnrollment.count.mockResolvedValue(0);
-      await expect(
-        service.enroll({ userId: 1, programId: 'prog-1' }, 2),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.enroll({ userId: 1, programId: 'prog-1' }, 2)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
@@ -197,20 +184,14 @@ describe('AcademicService', () => {
     });
 
     it('deve lançar BadRequestException se não está pendente', async () => {
-      mockPrisma.academicEnrollment.findUnique.mockResolvedValue(
-        mockEnrollment,
-      );
-      await expect(service.approveEnrollment('enr-1', 2)).rejects.toThrow(
-        BadRequestException,
-      );
+      mockPrisma.academicEnrollment.findUnique.mockResolvedValue(mockEnrollment);
+      await expect(service.approveEnrollment('enr-1', 2)).rejects.toThrow(BadRequestException);
     });
   });
 
   describe('gradeEnrollment', () => {
     it('deve lançar nota e marcar COMPLETED se passou', async () => {
-      mockPrisma.academicEnrollment.findUnique.mockResolvedValue(
-        mockEnrollment,
-      );
+      mockPrisma.academicEnrollment.findUnique.mockResolvedValue(mockEnrollment);
       mockPrisma.academicGrade.create.mockResolvedValue({ id: 'g1', score: 80 });
       mockPrisma.academicGrade.findMany.mockResolvedValue([
         { score: 80, maxScore: 100, weight: 1 },
@@ -237,7 +218,13 @@ describe('AcademicService', () => {
   describe('getReport', () => {
     it('deve retornar estatísticas académicas', async () => {
       mockPrisma.$transaction.mockResolvedValue([
-        10, 50, 30, 15, 5, { _avg: { finalScore: 72 } }, [],
+        10,
+        50,
+        30,
+        15,
+        5,
+        { _avg: { finalScore: 72 } },
+        [],
       ]);
       const result = await service.getAcademicReport();
       expect(result.completionRate).toBe(60);
@@ -294,9 +281,7 @@ describe('AcademicService', () => {
 
     it('findProgramById deve lançar NotFoundException', async () => {
       mockPrisma.academicProgram.findUnique.mockResolvedValue(null);
-      await expect(service.findProgramById('nao-existe')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findProgramById('nao-existe')).rejects.toThrow(NotFoundException);
     });
 
     it('createClass deve criar turma se programa existir', async () => {
@@ -348,10 +333,7 @@ describe('AcademicService', () => {
     });
 
     it('getTranscript deve retornar transcrição e matrículas', async () => {
-      mockPrisma.$transaction.mockResolvedValue([
-        { userId: 1, gpa: 80 },
-        [mockEnrollment],
-      ]);
+      mockPrisma.$transaction.mockResolvedValue([{ userId: 1, gpa: 80 }, [mockEnrollment]]);
       const result = await service.getTranscript(1);
       expect(result.transcript?.gpa).toBe(80);
       expect(result.enrollments).toHaveLength(1);

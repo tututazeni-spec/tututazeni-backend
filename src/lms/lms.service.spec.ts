@@ -100,9 +100,7 @@ describe('LmsService', () => {
   describe('findPathById', () => {
     it('deve lançar NotFoundException se não existir', async () => {
       mockPrisma.lmsLearningPath.findUnique.mockResolvedValue(null);
-      await expect(service.findPathById('nao-existe')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findPathById('nao-existe')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -133,9 +131,7 @@ describe('LmsService', () => {
         id: 'enr-1',
         deletedAt: null,
       });
-      await expect(service.enrollInPath('path-1', 1)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.enrollInPath('path-1', 1)).rejects.toThrow(ConflictException);
     });
   });
 
@@ -163,9 +159,9 @@ describe('LmsService', () => {
 
     it('deve lançar NotFoundException se inscrição não existir', async () => {
       mockPrisma.lmsPathEnrollment.findUnique.mockResolvedValue(null);
-      await expect(
-        service.updatePathProgress('path-1', 'c2', 1),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.updatePathProgress('path-1', 'c2', 1)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -206,16 +202,12 @@ describe('LmsService', () => {
         maxAttendees: 2,
         _count: { attendances: 2 },
       });
-      await expect(service.registerForSession('ses-1', 1)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.registerForSession('ses-1', 1)).rejects.toThrow(ConflictException);
     });
 
     it('deve lançar NotFoundException se sessão não existir', async () => {
       mockPrisma.lmsLiveSession.findUnique.mockResolvedValue(null);
-      await expect(service.registerForSession('nao-existe', 1)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.registerForSession('nao-existe', 1)).rejects.toThrow(NotFoundException);
     });
   });
 

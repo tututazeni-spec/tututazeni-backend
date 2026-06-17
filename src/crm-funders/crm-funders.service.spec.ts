@@ -80,10 +80,7 @@ describe('CrmFundersService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        CrmFundersService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [CrmFundersService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<CrmFundersService>(CrmFundersService);
     jest.clearAllMocks();
@@ -95,10 +92,7 @@ describe('CrmFundersService', () => {
       mockPrisma.funder.create.mockResolvedValue(mockFunder);
       mockPrisma.auditLog.create.mockResolvedValue({});
 
-      const result = await service.create(
-        { name: 'União Europeia', type: 'BILATERAL' as any },
-        1,
-      );
+      const result = await service.create({ name: 'União Europeia', type: 'BILATERAL' as any }, 1);
       expect(result.code).toBe('FIN-00001');
       expect(mockPrisma.auditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -138,9 +132,7 @@ describe('CrmFundersService', () => {
 
     it('deve lançar NotFoundException se não existir', async () => {
       mockPrisma.funder.findUnique.mockResolvedValue(null);
-      await expect(service.findOne('nao-existe')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findOne('nao-existe')).rejects.toThrow(NotFoundException);
     });
 
     it('deve lançar NotFoundException se deletedAt preenchido', async () => {
@@ -161,11 +153,7 @@ describe('CrmFundersService', () => {
       });
       mockPrisma.auditLog.create.mockResolvedValue({});
 
-      const result = await service.update(
-        'fun-1',
-        { name: 'UE Actualizada' } as any,
-        1,
-      );
+      const result = await service.update('fun-1', { name: 'UE Actualizada' } as any, 1);
       expect(result.name).toBe('UE Actualizada');
       expect(mockPrisma.auditLog.create).toHaveBeenCalled();
     });
@@ -244,9 +232,9 @@ describe('CrmFundersService', () => {
 
     it('deve lançar NotFoundException se grant não existir', async () => {
       mockPrisma.fundingGrant.findUnique.mockResolvedValue(null);
-      await expect(
-        service.updateGrantStatus('nao-existe', 'CLOSED', 1),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.updateGrantStatus('nao-existe', 'CLOSED', 1)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -258,9 +246,7 @@ describe('CrmFundersService', () => {
         amount: 1000000,
       });
       mockPrisma.fundingGrant.update.mockResolvedValue({});
-      mockPrisma.fundingGrant.findMany.mockResolvedValue([
-        { ...mockGrant, disbursed: 1000000 },
-      ]);
+      mockPrisma.fundingGrant.findMany.mockResolvedValue([{ ...mockGrant, disbursed: 1000000 }]);
       mockPrisma.funder.update.mockResolvedValue({});
       mockPrisma.auditLog.create.mockResolvedValue({});
 
@@ -278,22 +264,14 @@ describe('CrmFundersService', () => {
         disbursed: 4500000,
       });
       await expect(
-        service.addDisbursement(
-          'grt-1',
-          { amount: 600000, receivedAt: '2026-06-01' } as any,
-          1,
-        ),
+        service.addDisbursement('grt-1', { amount: 600000, receivedAt: '2026-06-01' } as any, 1),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('deve lançar NotFoundException se grant não existir', async () => {
       mockPrisma.fundingGrant.findUnique.mockResolvedValue(null);
       await expect(
-        service.addDisbursement(
-          'nao-existe',
-          { amount: 100, receivedAt: '2026-06-01' } as any,
-          1,
-        ),
+        service.addDisbursement('nao-existe', { amount: 100, receivedAt: '2026-06-01' } as any, 1),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -360,19 +338,15 @@ describe('CrmFundersService', () => {
       });
       mockPrisma.auditLog.create.mockResolvedValue({});
 
-      const result = await service.submitReport(
-        'rep-1',
-        'http://file.pdf',
-        1,
-      );
+      const result = await service.submitReport('rep-1', 'http://file.pdf', 1);
       expect(result.status).toBe('SUBMITTED');
     });
 
     it('deve lançar NotFoundException ao submeter relatório inexistente', async () => {
       mockPrisma.funderReport.findUnique.mockResolvedValue(null);
-      await expect(
-        service.submitReport('nao-existe', 'http://file.pdf', 1),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.submitReport('nao-existe', 'http://file.pdf', 1)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -409,17 +383,8 @@ describe('CrmFundersService', () => {
 
   describe('getReport', () => {
     it('deve retornar relatório por período', async () => {
-      mockPrisma.$transaction.mockResolvedValue([
-        3,
-        [],
-        2,
-        { _sum: { amount: 2500000 } },
-        4,
-      ]);
-      const result = await service.getReport(
-        new Date('2026-01-01'),
-        new Date('2026-12-31'),
-      );
+      mockPrisma.$transaction.mockResolvedValue([3, [], 2, { _sum: { amount: 2500000 } }, 4]);
+      const result = await service.getReport(new Date('2026-01-01'), new Date('2026-12-31'));
       expect(result.created).toBe(3);
       expect(result.totalDisbursed).toBe(2500000);
       expect(result.reportsSubmitted).toBe(4);

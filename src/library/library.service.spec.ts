@@ -60,10 +60,7 @@ describe('LibraryService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        LibraryService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [LibraryService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<LibraryService>(LibraryService);
     jest.clearAllMocks();
@@ -143,9 +140,7 @@ describe('LibraryService', () => {
 
     it('deve lançar NotFoundException se não existir', async () => {
       mockPrisma.libraryItem.findUnique.mockResolvedValue(null);
-      await expect(service.findItemById('nao-existe')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findItemById('nao-existe')).rejects.toThrow(NotFoundException);
     });
 
     it('deve lançar NotFoundException se deletedAt preenchido', async () => {
@@ -153,9 +148,7 @@ describe('LibraryService', () => {
         ...mockItem,
         deletedAt: new Date(),
       });
-      await expect(service.findItemById('item-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findItemById('item-1')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -168,11 +161,7 @@ describe('LibraryService', () => {
       });
       mockPrisma.auditLog.create.mockResolvedValue({});
 
-      const result = await service.updateItem(
-        'item-1',
-        { title: 'Novo título' } as any,
-        1,
-      );
+      const result = await service.updateItem('item-1', { title: 'Novo título' } as any, 1);
       expect(result.title).toBe('Novo título');
       expect(mockPrisma.auditLog.create).toHaveBeenCalled();
     });
@@ -246,10 +235,7 @@ describe('LibraryService', () => {
         id: 'rat-1',
         score: 5,
       });
-      mockPrisma.libraryRating.findMany.mockResolvedValue([
-        { score: 5 },
-        { score: 3 },
-      ]);
+      mockPrisma.libraryRating.findMany.mockResolvedValue([{ score: 5 }, { score: 3 }]);
       mockPrisma.libraryItem.update.mockResolvedValue({});
 
       const result = await service.rateItem('item-1', { score: 5 }, 1);
@@ -269,11 +255,7 @@ describe('LibraryService', () => {
         id: 'com-1',
         content: 'Ótimo',
       });
-      const result = await service.addComment(
-        'item-1',
-        { content: 'Ótimo' },
-        1,
-      );
+      const result = await service.addComment('item-1', { content: 'Ótimo' }, 1);
       expect(result.id).toBe('com-1');
     });
 
@@ -287,9 +269,7 @@ describe('LibraryService', () => {
 
     it('deve lançar NotFoundException ao remover comentário inexistente', async () => {
       mockPrisma.libraryComment.findUnique.mockResolvedValue(null);
-      await expect(service.deleteComment('nao-existe', 1)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.deleteComment('nao-existe', 1)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -303,18 +283,7 @@ describe('LibraryService', () => {
 
   describe('getDashboard', () => {
     it('deve retornar totais e rankings', async () => {
-      mockPrisma.$transaction.mockResolvedValue([
-        10,
-        2,
-        3,
-        [],
-        1,
-        [],
-        [],
-        [],
-        50,
-        30,
-      ]);
+      mockPrisma.$transaction.mockResolvedValue([10, 2, 3, [], 1, [], [], [], 50, 30]);
       const result = await service.getDashboard();
       expect(result).toHaveProperty('totals');
       expect(result).toHaveProperty('rankings');

@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateFunderDto,
@@ -20,17 +16,12 @@ export class CrmFundersService {
 
   // ─── CÓDIGO AUTO-GERADO ──────────────────────────────
 
-  private async generateCode(
-    prefix: string,
-    model: 'funder' | 'fundingGrant',
-  ): Promise<string> {
+  private async generateCode(prefix: string, model: 'funder' | 'fundingGrant'): Promise<string> {
     const last = await (this.prisma[model] as any).findFirst({
       orderBy: { code: 'desc' },
       select: { code: true },
     });
-    const num = last
-      ? parseInt(last.code.replace(`${prefix}-`, ''), 10) + 1
-      : 1;
+    const num = last ? parseInt(last.code.replace(`${prefix}-`, ''), 10) + 1 : 1;
     return `${prefix}-${String(num).padStart(5, '0')}`;
   }
 
@@ -62,15 +53,7 @@ export class CrmFundersService {
   }
 
   async findAll(filters: FilterFunderDto) {
-    const {
-      type,
-      status,
-      search,
-      country,
-      assignedToId,
-      page = 1,
-      limit = 20,
-    } = filters;
+    const { type, status, search, country, assignedToId, page = 1, limit = 20 } = filters;
     const where: any = {
       deletedAt: null,
       ...(type && { type }),
@@ -127,8 +110,7 @@ export class CrmFundersService {
         _count: { select: { grants: true, interactions: true } },
       },
     });
-    if (!funder || funder.deletedAt)
-      throw new NotFoundException('Financiador não encontrado');
+    if (!funder || funder.deletedAt) throw new NotFoundException('Financiador não encontrado');
     return funder;
   }
 
@@ -227,11 +209,7 @@ export class CrmFundersService {
 
   // ─── DESEMBOLSOS ─────────────────────────────────────
 
-  async addDisbursement(
-    grantId: string,
-    dto: CreateDisbursementDto,
-    userId: number,
-  ) {
+  async addDisbursement(grantId: string, dto: CreateDisbursementDto, userId: number) {
     const grant = await this.prisma.fundingGrant.findUnique({
       where: { id: grantId },
     });
@@ -284,11 +262,7 @@ export class CrmFundersService {
 
   // ─── INTERACÇÕES ─────────────────────────────────────
 
-  async addInteraction(
-    funderId: string,
-    dto: CreateFunderInteractionDto,
-    userId: number,
-  ) {
+  async addInteraction(funderId: string, dto: CreateFunderInteractionDto, userId: number) {
     await this.findOne(funderId);
     const { date, nextDate, ...rest } = dto;
     const interaction = await this.prisma.funderInteraction.create({
@@ -308,8 +282,7 @@ export class CrmFundersService {
     });
     const avg =
       ratings.length > 0
-        ? ratings.reduce((s, r) => s + (r.satisfaction || 0), 0) /
-          ratings.length
+        ? ratings.reduce((s, r) => s + (r.satisfaction || 0), 0) / ratings.length
         : 0;
 
     await this.prisma.funder.update({
@@ -328,11 +301,7 @@ export class CrmFundersService {
 
   // ─── RELATÓRIOS ──────────────────────────────────────
 
-  async createReport(
-    funderId: string,
-    dto: CreateFunderReportDto,
-    userId: number,
-  ) {
+  async createReport(funderId: string, dto: CreateFunderReportDto, userId: number) {
     await this.findOne(funderId);
     const { dueDate, ...rest } = dto;
     const report = await this.prisma.funderReport.create({
@@ -526,13 +495,7 @@ export class CrmFundersService {
     });
   }
 
-  private async audit(
-    userId: number,
-    action: string,
-    entity: string,
-    entityId: string,
-    meta: any,
-  ) {
+  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
     // AuditLog.entityId é Int? no schema; os IDs do CRM são cuid (String),
     // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
     await this.prisma.auditLog.create({

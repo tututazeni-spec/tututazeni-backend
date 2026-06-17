@@ -149,11 +149,7 @@ export class CrmBeneficiariesService {
 
   // ─── INTERACÇÕES ─────────────────────────────────────
 
-  async addInteraction(
-    beneficiaryId: string,
-    dto: CreateInteractionDto,
-    userId: number,
-  ) {
+  async addInteraction(beneficiaryId: string, dto: CreateInteractionDto, userId: number) {
     await this.findOne(beneficiaryId);
     const { date, nextActionDate, ...rest } = dto;
     const interaction = await this.prisma.beneficiaryInteraction.create({
@@ -174,8 +170,7 @@ export class CrmBeneficiariesService {
     });
     const avgSatisfaction =
       allInteractions.length > 0
-        ? allInteractions.reduce((s, i) => s + (i.satisfaction || 0), 0) /
-          allInteractions.length
+        ? allInteractions.reduce((s, i) => s + (i.satisfaction || 0), 0) / allInteractions.length
         : 0;
 
     await this.prisma.beneficiary.update({
@@ -187,13 +182,10 @@ export class CrmBeneficiariesService {
       },
     });
 
-    await this.audit(
-      userId,
-      'CREATE',
-      'BeneficiaryInteraction',
-      interaction.id,
-      { beneficiaryId, type: dto.type },
-    );
+    await this.audit(userId, 'CREATE', 'BeneficiaryInteraction', interaction.id, {
+      beneficiaryId,
+      type: dto.type,
+    });
     return interaction;
   }
 
@@ -343,24 +335,23 @@ export class CrmBeneficiariesService {
 
   async getReport(startDate: Date, endDate: Date) {
     const where = { createdAt: { gte: startDate, lte: endDate } };
-    const [created, byType, byProvince, interactions] =
-      await this.prisma.$transaction([
-        this.prisma.beneficiary.count({ where }),
-        (this.prisma.beneficiary.groupBy as any)({
-          by: ['type'],
-          where,
-          _count: { id: true },
-        }),
-        (this.prisma.beneficiary.groupBy as any)({
-          by: ['province'],
-          where: { ...where, province: { not: null } },
-          _count: { id: true },
-          orderBy: { _count: { id: 'desc' } },
-        }),
-        this.prisma.beneficiaryInteraction.count({
-          where: { createdAt: { gte: startDate, lte: endDate } },
-        }),
-      ]);
+    const [created, byType, byProvince, interactions] = await this.prisma.$transaction([
+      this.prisma.beneficiary.count({ where }),
+      (this.prisma.beneficiary.groupBy as any)({
+        by: ['type'],
+        where,
+        _count: { id: true },
+      }),
+      (this.prisma.beneficiary.groupBy as any)({
+        by: ['province'],
+        where: { ...where, province: { not: null } },
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+      }),
+      this.prisma.beneficiaryInteraction.count({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+      }),
+    ]);
     return {
       period: { start: startDate, end: endDate },
       created,
@@ -372,13 +363,7 @@ export class CrmBeneficiariesService {
 
   // ─── HELPER ──────────────────────────────────────────
 
-  private async audit(
-    userId: number,
-    action: string,
-    entity: string,
-    entityId: string,
-    meta: any,
-  ) {
+  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
     // AuditLog.entityId é Int? no schema; os IDs do CRM são cuid (String),
     // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
     await this.prisma.auditLog.create({

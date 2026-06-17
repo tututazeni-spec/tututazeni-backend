@@ -58,9 +58,7 @@ export class CrmPartnersController {
   @Get('expiring-contracts')
   @Roles('ADMIN', 'RH', 'MANAGER')
   @ApiOperation({ summary: 'Contratos a expirar nos próximos N dias' })
-  getExpiringContracts(
-    @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
-  ) {
+  getExpiringContracts(@Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number) {
     return this.service.getExpiringContracts(days);
   }
 
@@ -87,11 +85,7 @@ export class CrmPartnersController {
   @Put(':id')
   @Roles('ADMIN', 'RH', 'MANAGER')
   @ApiOperation({ summary: 'Actualizar parceiro' })
-  update(
-    @Param('id') id: string,
-    @Body() dto: UpdatePartnerDto,
-    @CurrentUser() user: any,
-  ) {
+  update(@Param('id') id: string, @Body() dto: UpdatePartnerDto, @CurrentUser() user: any) {
     return this.service.update(id, dto, user.id);
   }
 
@@ -130,20 +124,13 @@ export class CrmPartnersController {
   @Post(':id/milestones')
   @Roles('ADMIN', 'RH', 'MANAGER')
   @ApiOperation({ summary: 'Criar milestone do parceiro' })
-  addMilestone(
-    @Param('id') id: string,
-    @Body() dto: CreateMilestoneDto,
-    @CurrentUser() user: any,
-  ) {
+  addMilestone(@Param('id') id: string, @Body() dto: CreateMilestoneDto, @CurrentUser() user: any) {
     return this.service.addMilestone(id, dto, user.id);
   }
 
   @Put('milestones/:milestoneId/complete')
   @ApiOperation({ summary: 'Marcar milestone como concluído' })
-  completeMilestone(
-    @Param('milestoneId') milestoneId: string,
-    @CurrentUser() user: any,
-  ) {
+  completeMilestone(@Param('milestoneId') milestoneId: string, @CurrentUser() user: any) {
     return this.service.completeMilestone(milestoneId, user.id);
   }
 }

@@ -102,14 +102,7 @@ export class AcademicService {
   }
 
   async findAllPrograms(filters: FilterProgramDto) {
-    const {
-      level,
-      category,
-      search,
-      isMandatory,
-      page = 1,
-      limit = 20,
-    } = filters;
+    const { level, category, search, isMandatory, page = 1, limit = 20 } = filters;
     const where: any = {
       deletedAt: null,
       isActive: true,
@@ -154,8 +147,7 @@ export class AcademicService {
         _count: { select: { enrollments: true } },
       },
     });
-    if (!program || program.deletedAt)
-      throw new NotFoundException('Programa não encontrado');
+    if (!program || program.deletedAt) throw new NotFoundException('Programa não encontrado');
     return program;
   }
 
@@ -349,14 +341,8 @@ export class AcademicService {
       where: { enrollmentId: dto.enrollmentId },
     });
     const totalWeight = allGrades.reduce((s, g) => s + g.weight, 0);
-    const weightedScore = allGrades.reduce(
-      (s, g) => s + (g.score / g.maxScore) * g.weight,
-      0,
-    );
-    const finalScore =
-      totalWeight > 0
-        ? Math.round((weightedScore / totalWeight) * 1000) / 10
-        : 0;
+    const weightedScore = allGrades.reduce((s, g) => s + (g.score / g.maxScore) * g.weight, 0);
+    const finalScore = totalWeight > 0 ? Math.round((weightedScore / totalWeight) * 1000) / 10 : 0;
     const passed = finalScore >= enrollment.program.passingScore;
 
     await this.prisma.academicEnrollment.update({
@@ -412,40 +398,32 @@ export class AcademicService {
   // ─── RELATÓRIO ───────────────────────────────────────
 
   async getAcademicReport() {
-    const [
-      totalPrograms,
-      totalEnrollments,
-      completed,
-      inProgress,
-      pending,
-      avgScore,
-      byLevel,
-    ] = await this.prisma.$transaction([
-      this.prisma.academicProgram.count({
-        where: { deletedAt: null, isActive: true },
-      }),
-      this.prisma.academicEnrollment.count({ where: { deletedAt: null } }),
-      this.prisma.academicEnrollment.count({ where: { status: 'COMPLETED' } }),
-      this.prisma.academicEnrollment.count({ where: { status: 'IN_PROGRESS' } }),
-      this.prisma.academicEnrollment.count({ where: { status: 'PENDING' } }),
-      this.prisma.academicEnrollment.aggregate({
-        _avg: { finalScore: true },
-        where: { finalScore: { not: null } },
-      }),
-      (this.prisma.academicProgram.groupBy as any)({
-        by: ['level'],
-        where: { deletedAt: null },
-        _count: { id: true },
-      }),
-    ]);
+    const [totalPrograms, totalEnrollments, completed, inProgress, pending, avgScore, byLevel] =
+      await this.prisma.$transaction([
+        this.prisma.academicProgram.count({
+          where: { deletedAt: null, isActive: true },
+        }),
+        this.prisma.academicEnrollment.count({ where: { deletedAt: null } }),
+        this.prisma.academicEnrollment.count({ where: { status: 'COMPLETED' } }),
+        this.prisma.academicEnrollment.count({ where: { status: 'IN_PROGRESS' } }),
+        this.prisma.academicEnrollment.count({ where: { status: 'PENDING' } }),
+        this.prisma.academicEnrollment.aggregate({
+          _avg: { finalScore: true },
+          where: { finalScore: { not: null } },
+        }),
+        (this.prisma.academicProgram.groupBy as any)({
+          by: ['level'],
+          where: { deletedAt: null },
+          _count: { id: true },
+        }),
+      ]);
     return {
       totalPrograms,
       totalEnrollments,
       completed,
       inProgress,
       pending,
-      completionRate:
-        totalEnrollments > 0 ? (completed / totalEnrollments) * 100 : 0,
+      completionRate: totalEnrollments > 0 ? (completed / totalEnrollments) * 100 : 0,
       averageScore: avgScore._avg.finalScore || 0,
       byLevel,
     };
@@ -458,19 +436,13 @@ export class AcademicService {
       where: { userId, deletedAt: null },
       include: { program: { select: { durationHours: true } } },
     });
-    const completed = enrollments.filter((e) => e.status === 'COMPLETED');
-    const inProgress = enrollments.filter((e) => e.status === 'IN_PROGRESS');
-    const totalHours = completed.reduce(
-      (s, e) => s + (e.program.durationHours || 0),
-      0,
-    );
-    const scores = completed
-      .filter((e) => e.finalScore)
-      .map((e) => e.finalScore!);
+    const completed = enrollments.filter(e => e.status === 'COMPLETED');
+    const inProgress = enrollments.filter(e => e.status === 'IN_PROGRESS');
+    const totalHours = completed.reduce((s, e) => s + (e.program.durationHours || 0), 0);
+    const scores = completed.filter(e => e.finalScore).map(e => e.finalScore!);
     const gpa =
       scores.length > 0
-        ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) /
-          10
+        ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
         : 0;
 
     await this.prisma.academicTranscript.upsert({
@@ -491,13 +463,7 @@ export class AcademicService {
     });
   }
 
-  private async audit(
-    userId: number,
-    action: string,
-    entity: string,
-    entityId: string,
-    meta: any,
-  ) {
+  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
     // AuditLog.entityId é Int? no schema; os IDs deste módulo são cuid (String),
     // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
     await this.prisma.auditLog.create({

@@ -49,10 +49,7 @@ describe('CrmBeneficiariesService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        CrmBeneficiariesService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [CrmBeneficiariesService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = module.get<CrmBeneficiariesService>(CrmBeneficiariesService);
     jest.clearAllMocks();
@@ -66,10 +63,7 @@ describe('CrmBeneficiariesService', () => {
       mockPrisma.beneficiary.create.mockResolvedValue(mockBeneficiary);
       mockPrisma.auditLog.create.mockResolvedValue({});
 
-      const result = await service.create(
-        { fullName: 'João Teste', type: 'INDIVIDUAL' as any },
-        1,
-      );
+      const result = await service.create({ fullName: 'João Teste', type: 'INDIVIDUAL' as any }, 1);
 
       expect(result.code).toBe('BEN-00001');
       expect(mockPrisma.beneficiary.create).toHaveBeenCalledWith(
@@ -137,9 +131,7 @@ describe('CrmBeneficiariesService', () => {
 
     it('deve lançar NotFoundException se não existir', async () => {
       mockPrisma.beneficiary.findUnique.mockResolvedValue(null);
-      await expect(service.findOne('nao-existe')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findOne('nao-existe')).rejects.toThrow(NotFoundException);
     });
 
     it('deve lançar NotFoundException se deletedAt preenchido', async () => {
@@ -162,11 +154,7 @@ describe('CrmBeneficiariesService', () => {
       });
       mockPrisma.auditLog.create.mockResolvedValue({});
 
-      const result = await service.update(
-        'ben-1',
-        { fullName: 'João Actualizado' } as any,
-        1,
-      );
+      const result = await service.update('ben-1', { fullName: 'João Actualizado' } as any, 1);
       expect(result.fullName).toBe('João Actualizado');
       expect(mockPrisma.auditLog.create).toHaveBeenCalled();
     });
@@ -229,10 +217,7 @@ describe('CrmBeneficiariesService', () => {
   describe('getInteractions', () => {
     it('deve retornar interacções paginadas', async () => {
       mockPrisma.beneficiary.findUnique.mockResolvedValue(mockBeneficiary);
-      mockPrisma.$transaction.mockResolvedValue([
-        [{ id: 'int-1', type: 'CALL' }],
-        1,
-      ]);
+      mockPrisma.$transaction.mockResolvedValue([[{ id: 'int-1', type: 'CALL' }], 1]);
       const result = await service.getInteractions('ben-1', 1, 20);
       expect(result).toHaveProperty('data');
       expect(result.total).toBe(1);
@@ -288,9 +273,7 @@ describe('CrmBeneficiariesService', () => {
 
     it('deve lançar NotFoundException se necessidade não existir', async () => {
       mockPrisma.beneficiaryNeed.findUnique.mockResolvedValue(null);
-      await expect(service.resolveNeed('nao-existe', 1)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.resolveNeed('nao-existe', 1)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -312,10 +295,7 @@ describe('CrmBeneficiariesService', () => {
   describe('getReport', () => {
     it('deve retornar relatório por período', async () => {
       mockPrisma.$transaction.mockResolvedValue([10, [], [], 25]);
-      const result = await service.getReport(
-        new Date('2026-01-01'),
-        new Date('2026-12-31'),
-      );
+      const result = await service.getReport(new Date('2026-01-01'), new Date('2026-12-31'));
       expect(result).toHaveProperty('period');
       expect(result.created).toBe(10);
       expect(result.interactions).toBe(25);

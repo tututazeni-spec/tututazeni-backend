@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsEnum,
-  IsArray,
-  Length,
-} from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsArray, Length } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BadgeLevel } from '@prisma/client';
 

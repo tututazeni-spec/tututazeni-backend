@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsEnum,
-  IsInt,
-  Length,
-} from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsInt, Length } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { WidgetType } from '@prisma/client';

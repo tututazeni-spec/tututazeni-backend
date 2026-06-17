@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsEnum,
-  IsDateString,
-  Length,
-} from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsDateString, Length } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OkrType } from '@prisma/client';
 

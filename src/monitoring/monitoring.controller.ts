@@ -65,14 +65,8 @@ export class MonitoringController {
 
   @Get('okr/cycles/:cycleId/objectives')
   @ApiOperation({ summary: 'Objectivos de um ciclo' })
-  findObjectives(
-    @Param('cycleId') cycleId: string,
-    @Query('ownerId') ownerId?: string,
-  ) {
-    return this.service.findObjectives(
-      cycleId,
-      ownerId ? Number(ownerId) : undefined,
-    );
+  findObjectives(@Param('cycleId') cycleId: string, @Query('ownerId') ownerId?: string) {
+    return this.service.findObjectives(cycleId, ownerId ? Number(ownerId) : undefined);
   }
 
   @Post('okr/key-results')
@@ -113,11 +107,7 @@ export class MonitoringController {
   @Post('indicators/:id/records')
   @Roles('ADMIN', 'RH', 'MANAGER')
   @ApiOperation({ summary: 'Registar valor do indicador' })
-  addRecord(
-    @Param('id') id: string,
-    @Body() dto: CreateRecordDto,
-    @CurrentUser() user: any,
-  ) {
+  addRecord(@Param('id') id: string, @Body() dto: CreateRecordDto, @CurrentUser() user: any) {
     return this.service.addRecord(id, dto, user.id);
   }
 
@@ -146,13 +136,7 @@ export class MonitoringController {
     @Body('type') type: string,
     @CurrentUser() user: any,
   ) {
-    return this.service.assignEvaluation(
-      cycleId,
-      userId,
-      evaluatorId,
-      type || 'MANAGER',
-      user.id,
-    );
+    return this.service.assignEvaluation(cycleId, userId, evaluatorId, type || 'MANAGER', user.id);
   }
 
   @Put('evaluation/:id/submit')

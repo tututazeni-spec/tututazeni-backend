@@ -1,11 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsEnum,
-  IsNumber,
-  IsArray,
-  Length,
-} from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsArray, Length } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IndicatorFrequency } from '@prisma/client';

@@ -1,15 +1,6 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  CreateSnapshotDto,
-  CreateWidgetDto,
-  UpdateWidgetDto,
-  FilterSnapshotDto,
-} from './dto';
+import { CreateSnapshotDto, CreateWidgetDto, UpdateWidgetDto, FilterSnapshotDto } from './dto';
 
 @Injectable()
 export class DashboardInstitutionalService {
@@ -124,9 +115,7 @@ export class DashboardInstitutionalService {
   // ─── DISTRIBUIÇÃO GEOGRÁFICA ─────────────────────────
 
   async getGeographicDistribution() {
-    const beneficiariesByProvince = await (
-      this.prisma.beneficiary.groupBy as any
-    )({
+    const beneficiariesByProvince = await (this.prisma.beneficiary.groupBy as any)({
       by: ['province'],
       where: { deletedAt: null, province: { not: null } },
       _count: { id: true },
@@ -316,13 +305,7 @@ export class DashboardInstitutionalService {
 
   // ─── HELPER ──────────────────────────────────────────
 
-  private async audit(
-    userId: number,
-    action: string,
-    entity: string,
-    entityId: string,
-    meta: any,
-  ) {
+  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
     // AuditLog.entityId é Int? no schema; os IDs deste módulo são cuid (String),
     // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
     await this.prisma.auditLog.create({

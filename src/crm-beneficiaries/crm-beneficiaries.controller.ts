@@ -80,11 +80,7 @@ export class CrmBeneficiariesController {
   @Put(':id')
   @Roles('ADMIN', 'RH', 'MANAGER')
   @ApiOperation({ summary: 'Actualizar beneficiário' })
-  update(
-    @Param('id') id: string,
-    @Body() dto: UpdateBeneficiaryDto,
-    @CurrentUser() user: any,
-  ) {
+  update(@Param('id') id: string, @Body() dto: UpdateBeneficiaryDto, @CurrentUser() user: any) {
     return this.service.update(id, dto, user.id);
   }
 
@@ -122,11 +118,7 @@ export class CrmBeneficiariesController {
 
   @Post(':id/needs')
   @ApiOperation({ summary: 'Registar necessidade' })
-  addNeed(
-    @Param('id') id: string,
-    @Body() dto: CreateNeedDto,
-    @CurrentUser() user: any,
-  ) {
+  addNeed(@Param('id') id: string, @Body() dto: CreateNeedDto, @CurrentUser() user: any) {
     return this.service.addNeed(id, dto, user.id);
   }
 

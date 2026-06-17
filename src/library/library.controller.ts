@@ -80,11 +80,7 @@ export class LibraryController {
   @Put('items/:id')
   @Roles('ADMIN', 'RH', 'MANAGER')
   @ApiOperation({ summary: 'Actualizar item' })
-  updateItem(
-    @Param('id') id: string,
-    @Body() dto: UpdateItemDto,
-    @CurrentUser() user: any,
-  ) {
+  updateItem(@Param('id') id: string, @Body() dto: UpdateItemDto, @CurrentUser() user: any) {
     return this.service.updateItem(id, dto, user.id);
   }
 
@@ -121,11 +117,7 @@ export class LibraryController {
 
   @Post('items/:id/rate')
   @ApiOperation({ summary: 'Avaliar item (1-5)' })
-  rateItem(
-    @Param('id') id: string,
-    @Body() dto: CreateRatingDto,
-    @CurrentUser() user: any,
-  ) {
+  rateItem(@Param('id') id: string, @Body() dto: CreateRatingDto, @CurrentUser() user: any) {
     return this.service.rateItem(id, dto, user.id);
   }
 
@@ -133,21 +125,14 @@ export class LibraryController {
 
   @Post('items/:id/comments')
   @ApiOperation({ summary: 'Comentar item' })
-  addComment(
-    @Param('id') id: string,
-    @Body() dto: CreateCommentDto,
-    @CurrentUser() user: any,
-  ) {
+  addComment(@Param('id') id: string, @Body() dto: CreateCommentDto, @CurrentUser() user: any) {
     return this.service.addComment(id, dto, user.id);
   }
 
   @Delete('comments/:commentId')
   @ApiOperation({ summary: 'Remover comentário' })
   @HttpCode(HttpStatus.OK)
-  deleteComment(
-    @Param('commentId') commentId: string,
-    @CurrentUser() user: any,
-  ) {
+  deleteComment(@Param('commentId') commentId: string, @CurrentUser() user: any) {
     return this.service.deleteComment(commentId, user.id);
   }
 }

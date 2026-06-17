@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsDateString,
-  IsEnum,
-  Length,
-} from 'class-validator';
+import { IsString, IsOptional, IsDateString, IsEnum, Length } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PeriodType } from '@prisma/client';
 

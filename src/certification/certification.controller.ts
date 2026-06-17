@@ -101,11 +101,7 @@ export class CertificationController {
   @Put('certificates/:id/revoke')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Revogar certificado' })
-  revoke(
-    @Param('id') id: string,
-    @Body() dto: RevokeDto,
-    @CurrentUser() user: any,
-  ) {
+  revoke(@Param('id') id: string, @Body() dto: RevokeDto, @CurrentUser() user: any) {
     return this.service.revokeCertificate(id, dto, user.id);
   }
 

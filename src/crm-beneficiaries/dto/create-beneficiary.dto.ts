@@ -10,11 +10,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  BeneficiaryType,
-  Gender,
-  AngolaProvince,
-} from '@prisma/client';
+import { BeneficiaryType, Gender, AngolaProvince } from '@prisma/client';
 
 export class CreateBeneficiaryDto {
   @ApiProperty({ enum: BeneficiaryType })
