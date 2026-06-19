@@ -57,6 +57,7 @@ const mockPrismaBase: any = {
 
 const mockPrisma = new Proxy(mockPrismaBase, {
   get(target, prop) {
+    if (prop === 'db') return mockPrisma; // read-replica client → mesmo mock
     const val = target[prop];
     return val !== undefined ? val : fallbackModel();
   },

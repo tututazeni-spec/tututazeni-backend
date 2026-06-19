@@ -45,14 +45,22 @@ const ENROLLMENT_INCLUDE_BASIC = {
 export class EnrollmentsService {
   private readonly logger = new Logger(EnrollmentsService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): any {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   private async computeProgress(enrollmentId: number, courseId: number, userId: number) {
     const [totalLessons, completedLessons] = await Promise.all([
-      this.prisma.lesson.count({ where: { module: { courseId } } }),
-      this.prisma.lessonProgress.count({
+      this.prismaRead.lesson.count({ where: { module: { courseId } } }),
+      this.prismaRead.lessonProgress.count({
         where: { userId, completed: true, lesson: { module: { courseId } } },
       }),
     ]);
@@ -100,7 +108,7 @@ export class EnrollmentsService {
     }
 
     const [data, total] = await Promise.all([
-      this.prisma.enrollment.findMany({
+      this.prismaRead.enrollment.findMany({
         where,
         skip,
         take: limit,
@@ -110,7 +118,7 @@ export class EnrollmentsService {
         },
         orderBy: { enrolledAt: 'desc' },
       }),
-      this.prisma.enrollment.count({ where }),
+      this.prismaRead.enrollment.count({ where }),
     ]);
 
     // Batch progress for all enrollments in this page (eliminates N+1)
@@ -119,11 +127,11 @@ export class EnrollmentsService {
 
     // groupBy on enrollmentId uses direct index — avoids 3-table JOIN (lesson → module → courseId)
     const [moduleGroups, completedByEnrollment] = await Promise.all([
-      this.prisma.courseModule.findMany({
+      this.prismaRead.courseModule.findMany({
         where: { courseId: { in: courseIds } },
         select: { courseId: true, _count: { select: { lessons: true } } },
       }),
-      this.prisma.lessonProgress.groupBy({
+      this.prismaRead.lessonProgress.groupBy({
         by: ['enrollmentId'],
         where: { enrollmentId: { in: enrollmentIds }, completed: true },
         _count: { id: true },
@@ -161,7 +169,7 @@ export class EnrollmentsService {
   // ─── DETALHE ──────────────────────────────────────────────────────────────
 
   async findOne(id: number) {
-    const e = await this.prisma.enrollment.findUnique({
+    const e = await this.prismaRead.enrollment.findUnique({
       where: { id },
       include: {
         ...ENROLLMENT_INCLUDE_BASIC,
@@ -183,6 +191,7 @@ export class EnrollmentsService {
   // ─── MATRICULAR ───────────────────────────────────────────────────────────
 
   async enroll(dto: CreateEnrollmentDto) {
+    // Guard antes de escrita: força primary para não validar contra réplica atrasada.
     const exists = await this.prisma.enrollment.findFirst({
       where: {
         userId: dto.userId,
@@ -356,6 +365,7 @@ export class EnrollmentsService {
       throw new BadRequestException('Curso ainda não concluído');
     }
 
+    // Guard de idempotência antes de criar: força primary para evitar certificado duplicado.
     const exists = await this.prisma.certificate.findFirst({
       where: { enrollmentId },
     });
@@ -402,7 +412,7 @@ export class EnrollmentsService {
     if (filters?.status) where.status = filters.status;
     if (filters?.mandatory !== undefined) where.mandatory = filters.mandatory;
 
-    const enrollments = await this.prisma.enrollment.findMany({
+    const enrollments = await this.prismaRead.enrollment.findMany({
       where,
       include: {
         course: {
@@ -434,11 +444,11 @@ export class EnrollmentsService {
 
     // groupBy on enrollmentId uses direct index — avoids 3-table JOIN (lesson → module → courseId)
     const [moduleGroups, completedByEnrollment] = await Promise.all([
-      this.prisma.courseModule.findMany({
+      this.prismaRead.courseModule.findMany({
         where: { courseId: { in: courseIds } },
         select: { courseId: true, _count: { select: { lessons: true } } },
       }),
-      this.prisma.lessonProgress.groupBy({
+      this.prismaRead.lessonProgress.groupBy({
         by: ['enrollmentId'],
         where: { enrollmentId: { in: enrollmentIds }, completed: true },
         _count: { id: true },
@@ -484,13 +494,13 @@ export class EnrollmentsService {
 
     const [totalMandatory, completedMandatory, overdueCount, notStartedMandatory] =
       await Promise.all([
-        this.prisma.enrollment.count({
+        this.prismaRead.enrollment.count({
           where: { mandatory: true, user: userWhere },
         }),
-        this.prisma.enrollment.count({
+        this.prismaRead.enrollment.count({
           where: { mandatory: true, status: 'COMPLETED', user: userWhere },
         }),
-        this.prisma.enrollment.count({
+        this.prismaRead.enrollment.count({
           where: {
             mandatory: true,
             deadline: { lt: new Date() },
@@ -498,7 +508,7 @@ export class EnrollmentsService {
             user: userWhere,
           },
         }),
-        this.prisma.enrollment.count({
+        this.prismaRead.enrollment.count({
           where: { mandatory: true, status: 'NOT_STARTED', user: userWhere },
         }),
       ]);
@@ -506,7 +516,7 @@ export class EnrollmentsService {
     const complianceRate =
       totalMandatory > 0 ? Math.round((completedMandatory / totalMandatory) * 100) : 100;
 
-    const topOverdueCourses = await this.prisma.enrollment.groupBy({
+    const topOverdueCourses = await this.prismaRead.enrollment.groupBy({
       by: ['courseId'],
       where: {
         mandatory: true,
@@ -520,7 +530,7 @@ export class EnrollmentsService {
 
     const topOverdueWithTitles = await Promise.all(
       topOverdueCourses.map(async o => {
-        const c = await this.prisma.course.findUnique({
+        const c = await this.prismaRead.course.findUnique({
           where: { id: o.courseId },
           select: { id: true, title: true },
         });
@@ -543,7 +553,7 @@ export class EnrollmentsService {
   // ─── PROGRESSO DA EQUIPA (Manager) ────────────────────────────────────────
 
   async getTeamProgress(managerId: number, courseId?: number) {
-    const subordinates = await this.prisma.user.findMany({
+    const subordinates = await this.prismaRead.user.findMany({
       where: { managerId, active: true },
       select: { id: true, fullName: true, email: true, avatarUrl: true },
     });
@@ -553,7 +563,7 @@ export class EnrollmentsService {
         const where: any = { userId: sub.id };
         if (courseId) where.courseId = courseId;
 
-        const enrollments = await this.prisma.enrollment.findMany({
+        const enrollments = await this.prismaRead.enrollment.findMany({
           where,
           include: {
             course: { select: { id: true, title: true, mandatory: true } },
@@ -579,23 +589,23 @@ export class EnrollmentsService {
   async getAdminDashboard() {
     const [totalEnrollments, completed, inProgress, notStarted, overdue, mandatoryCount] =
       await Promise.all([
-        this.prisma.enrollment.count(),
-        this.prisma.enrollment.count({ where: { status: 'COMPLETED' } }),
-        this.prisma.enrollment.count({ where: { status: 'IN_PROGRESS' } }),
-        this.prisma.enrollment.count({ where: { status: 'NOT_STARTED' } }),
-        this.prisma.enrollment.count({
+        this.prismaRead.enrollment.count(),
+        this.prismaRead.enrollment.count({ where: { status: 'COMPLETED' } }),
+        this.prismaRead.enrollment.count({ where: { status: 'IN_PROGRESS' } }),
+        this.prismaRead.enrollment.count({ where: { status: 'NOT_STARTED' } }),
+        this.prismaRead.enrollment.count({
           where: {
             deadline: { lt: new Date() },
             status: { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] },
           },
         }),
-        this.prisma.enrollment.count({ where: { mandatory: true } }),
+        this.prismaRead.enrollment.count({ where: { mandatory: true } }),
       ]);
 
     const completionRate =
       totalEnrollments > 0 ? Math.round((completed / totalEnrollments) * 100) : 0;
 
-    const topCourses = await this.prisma.enrollment.groupBy({
+    const topCourses = await this.prismaRead.enrollment.groupBy({
       by: ['courseId'],
       _count: { courseId: true },
       orderBy: { _count: { courseId: 'desc' } },
@@ -604,7 +614,7 @@ export class EnrollmentsService {
 
     const topCoursesDetail = await Promise.all(
       topCourses.map(async tc => {
-        const c = await this.prisma.course.findUnique({
+        const c = await this.prismaRead.course.findUnique({
           where: { id: tc.courseId },
           select: { id: true, title: true, category: true },
         });
