@@ -101,7 +101,7 @@ export class UpdateCriticalPositionDto extends PartialType(CreateCriticalPositio
 
 // ─── Succession Plan (candidato → cargo) ─────────────────────────────────────
 
-export class CreateSuccessionPlanDto {
+export class SuccessionCreateSuccessionPlanDto {
   @ApiProperty({ description: 'ID do cargo crítico' })
   @IsInt()
   criticalPositionId!: number;
@@ -147,7 +147,7 @@ export class CreateSuccessionPlanDto {
   readinessByDate?: string;
 }
 
-export class UpdateSuccessionPlanDto extends PartialType(CreateSuccessionPlanDto) {}
+export class UpdateSuccessionPlanDto extends PartialType(SuccessionCreateSuccessionPlanDto) {}
 
 // ─── Talent Pool ──────────────────────────────────────────────────────────────
 

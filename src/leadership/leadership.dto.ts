@@ -150,7 +150,7 @@ export class UpdateParticipantProgressDto {
 
 // ─── One-on-One ───────────────────────────────────────────────────────────────
 
-export class CreateOneOnOneDto {
+export class LeadershipCreateOneOnOneDto {
   @ApiProperty({ description: 'ID do liderado' })
   @IsInt()
   subordinateId!: number;
@@ -176,7 +176,7 @@ export class CreateOneOnOneDto {
   meetingUrl?: string;
 }
 
-export class UpdateOneOnOneDto extends PartialType(CreateOneOnOneDto) {}
+export class UpdateOneOnOneDto extends PartialType(LeadershipCreateOneOnOneDto) {}
 
 export class CompleteOneOnOneDto {
   @ApiProperty()

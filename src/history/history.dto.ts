@@ -93,7 +93,7 @@ export class TimelineFilterDto {
 
 // ─── Manual Event ─────────────────────────────────────────────────
 
-export class CreateEventDto {
+export class HistoryCreateEventDto {
   @ApiProperty() @IsInt() userId!: number;
   @ApiProperty() @IsString() @MaxLength(100) action!: string;
   @ApiProperty() @IsString() @MaxLength(200) entity!: string;

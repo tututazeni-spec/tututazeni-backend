@@ -15,9 +15,9 @@ import {
   BulkTransferDto,
   CreateUnitDto,
   UpdateUnitDto,
-  CreateRoleDto,
+  DepartmentsCreateRoleDto,
   UpdateRoleDto,
-  CreatePermissionDto,
+  DepartmentsCreatePermissionDto,
   CreatePositionDto,
   UpdatePositionDto,
   CreateCareerPositionDto,
@@ -458,7 +458,7 @@ export class RolesService {
     return r;
   }
 
-  async create(dto: CreateRoleDto) {
+  async create(dto: DepartmentsCreateRoleDto) {
     const exists = await this.prisma.role.findFirst({ where: { name: dto.name } });
     if (exists) throw new ConflictException(`Role '${dto.name}' já existe`);
     return this.prisma.role.create({ data: dto });
@@ -474,7 +474,7 @@ export class RolesService {
     return this.prisma.role.delete({ where: { id } });
   }
 
-  async addPermission(dto: CreatePermissionDto) {
+  async addPermission(dto: DepartmentsCreatePermissionDto) {
     return (this.prisma as any).permission.create({ data: dto });
   }
 

@@ -249,7 +249,7 @@ export class CreateOneOnOneDto {
   @ApiPropertyOptional() @IsOptional() @IsString() frequency?: string;
 }
 
-export class UpdateOneOnOneDto {
+export class EngagementUpdateOneOnOneDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() scheduledAt?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() agenda?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;

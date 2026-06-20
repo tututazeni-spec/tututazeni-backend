@@ -17,8 +17,8 @@ import {
   DocumentRequestFilterDto,
   WorkDeclFilterDto,
   CreateDeclarationPurposeDto,
-  CreateTemplateDto,
-  UpdateTemplateDto,
+  DeclarationsCreateTemplateDto,
+  DeclarationsUpdateTemplateDto,
   CreateDocumentRequestDto,
   ApproveDocumentRequestDto,
   CreateWorkDeclFormDto,
@@ -106,7 +106,7 @@ export class DocumentDeclarationsController {
   @Post('templates')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar template (HTML com {{variáveis}})' })
-  createTemplate(@Body() dto: CreateTemplateDto, @CurrentUser() user: any) {
+  createTemplate(@Body() dto: DeclarationsCreateTemplateDto, @CurrentUser() user: any) {
     return this.svc.createTemplate(dto, user.id);
   }
 
@@ -115,7 +115,7 @@ export class DocumentDeclarationsController {
   @ApiOperation({ summary: 'Actualizar template (auto-incrementa versão)' })
   updateTemplate(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateTemplateDto,
+    @Body() dto: DeclarationsUpdateTemplateDto,
     @CurrentUser() user: any,
   ) {
     return this.svc.updateTemplate(id, dto, user.id);

@@ -5,8 +5,8 @@ import {
   CreateNotificationDto,
   BulkNotificationDto,
   NotificationFilterDto,
-  CreateTemplateDto,
-  UpdateTemplateDto,
+  NotificationsCreateTemplateDto,
+  NotificationsUpdateTemplateDto,
   UpdatePreferencesDto,
   NotificationPriority,
 } from './notifications.dto';
@@ -329,11 +329,11 @@ export class NotificationsService {
     });
   }
 
-  async createTemplate(dto: CreateTemplateDto) {
+  async createTemplate(dto: NotificationsCreateTemplateDto) {
     return this.prisma.notificationTemplate.create({ data: dto });
   }
 
-  async updateTemplate(id: number, dto: UpdateTemplateDto) {
+  async updateTemplate(id: number, dto: NotificationsUpdateTemplateDto) {
     return this.prisma.notificationTemplate.update({ where: { id }, data: dto });
   }
 

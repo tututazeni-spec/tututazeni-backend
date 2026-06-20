@@ -4,8 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateLeaderProfileDto,
   GiveFeedbackDto,
-  CreateOneOnOneDto,
-  AssignCourseDto,
+  LeaderCreateOneOnOneDto,
+  LeaderAssignCourseDto,
   TeamFilterDto,
   RiskLevel,
 } from './leader.dto';
@@ -481,7 +481,7 @@ export class LeaderService {
   // 1:1 MEETINGS
   // ══════════════════════════════════════════════════════
 
-  async createOneOnOne(leaderId: number, dto: CreateOneOnOneDto) {
+  async createOneOnOne(leaderId: number, dto: LeaderCreateOneOnOneDto) {
     const meeting = await safeM(this.prisma, 'oneOnOneMeeting')
       .create({
         data: {
@@ -648,7 +648,7 @@ export class LeaderService {
   // COURSE ASSIGNMENT
   // ══════════════════════════════════════════════════════
 
-  async assignCourse(dto: AssignCourseDto) {
+  async assignCourse(dto: LeaderAssignCourseDto) {
     const results = await Promise.allSettled(
       dto.userIds.map(uid =>
         this.prisma.enrollment

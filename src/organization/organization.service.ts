@@ -9,7 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateOrgDepartmentDto,
   UpdateOrgDepartmentDto,
-  DepartmentFilterDto,
+  OrganizationDepartmentFilterDto,
   CreateOrgPositionDto,
   UpdateOrgPositionDto,
   PositionFilterDto,
@@ -178,7 +178,7 @@ export class OrganizationService {
 
   // ─── DEPARTAMENTOS ────────────────────────────────────────────────────────
 
-  async getDepartments(filters: DepartmentFilterDto) {
+  async getDepartments(filters: OrganizationDepartmentFilterDto) {
     const { page = 1, limit = 30, search, status, parentId, unitId, rootOnly } = filters;
     const skip = (page - 1) * limit;
 

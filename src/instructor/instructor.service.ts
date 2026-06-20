@@ -15,7 +15,7 @@ import {
   InstructorFilterDto,
   CreateCohortDto,
   UpdateCohortDto,
-  AddParticipantsDto,
+  InstructorAddParticipantsDto,
   CohortFilterDto,
 } from './instructor.dto';
 
@@ -346,7 +346,7 @@ export class InstructorService {
     };
   }
 
-  async addParticipants(cohortId: number, userId: number, dto: AddParticipantsDto) {
+  async addParticipants(cohortId: number, userId: number, dto: InstructorAddParticipantsDto) {
     const cohort = await this.getCohortOrFail(cohortId, userId);
     if ((cohort as any).maxParticipants) {
       const current = await this.prisma.cohortParticipant.count({ where: { cohortId } });

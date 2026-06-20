@@ -86,7 +86,7 @@ export class CompetencyIndicatorDto {
   @ApiPropertyOptional() @IsOptional() @IsString() examples?: string;
 }
 
-export class CreateCompetencyDto {
+export class Evaluation360CreateCompetencyDto {
   @ApiProperty() @IsString() @IsNotEmpty() @MaxLength(120) name: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiProperty({ enum: CompetencyType }) @IsEnum(CompetencyType) type: CompetencyType;
@@ -103,7 +103,9 @@ export class CreateCompetencyDto {
   indicators?: CompetencyIndicatorDto[];
 }
 
-export class UpdateCompetencyDto extends PartialType(CreateCompetencyDto) {}
+export class Evaluation360UpdateCompetencyDto extends PartialType(
+  Evaluation360CreateCompetencyDto,
+) {}
 
 // ─── CYCLE COMPETENCY ────────────────────────────────────────
 export class CycleCompetencyDto {
@@ -164,7 +166,7 @@ export class PublishCycleDto {
 }
 
 // ─── QUESTIONS ───────────────────────────────────────────────
-export class CreateQuestionDto {
+export class Evaluation360CreateQuestionDto {
   @ApiPropertyOptional() @IsOptional() @IsString() cycleId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() competencyId?: string;
   @ApiProperty() @IsString() @IsNotEmpty() text: string;
@@ -181,7 +183,7 @@ export class CreateQuestionDto {
   @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() targetLevels?: string[];
 }
 
-export class UpdateQuestionDto extends PartialType(CreateQuestionDto) {}
+export class Evaluation360UpdateQuestionDto extends PartialType(Evaluation360CreateQuestionDto) {}
 
 // ─── PARTICIPANTS ─────────────────────────────────────────────
 export class AddParticipantsDto {
@@ -198,18 +200,18 @@ export class SuggestEvaluatorsDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) maxPerRole?: number;
 }
 
-export class AssignEvaluatorDto {
+export class Evaluation360AssignEvaluatorDto {
   @ApiProperty() @IsString() evaluateeId: string;
   @ApiProperty() @IsString() evaluatorId: string;
   @ApiProperty({ enum: EvaluatorRole }) @IsEnum(EvaluatorRole) role: EvaluatorRole;
 }
 
 export class BulkAssignEvaluatorsDto {
-  @ApiProperty({ type: [AssignEvaluatorDto] })
+  @ApiProperty({ type: [Evaluation360AssignEvaluatorDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => AssignEvaluatorDto)
-  assignments: AssignEvaluatorDto[];
+  @Type(() => Evaluation360AssignEvaluatorDto)
+  assignments: Evaluation360AssignEvaluatorDto[];
 }
 
 export class ApproveEvaluatorsDto {
@@ -217,7 +219,7 @@ export class ApproveEvaluatorsDto {
 }
 
 // ─── RESPONSES ───────────────────────────────────────────────
-export class AnswerDto {
+export class Evaluation360AnswerDto {
   @ApiProperty() @IsString() questionId: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() numericValue?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) textValue?: string;
@@ -225,11 +227,11 @@ export class AnswerDto {
 }
 
 export class SubmitResponseDto {
-  @ApiProperty({ type: [AnswerDto] })
+  @ApiProperty({ type: [Evaluation360AnswerDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => AnswerDto)
-  answers: AnswerDto[];
+  @Type(() => Evaluation360AnswerDto)
+  answers: Evaluation360AnswerDto[];
 
   @ApiPropertyOptional({ description: 'Se true, envia definitivamente. Se false, salva rascunho.' })
   @IsOptional()
@@ -289,7 +291,7 @@ export class GenerateReportDto {
 }
 
 // ─── CALIBRATION ─────────────────────────────────────────────
-export class CalibrateScoreDto {
+export class Evaluation360CalibrateScoreDto {
   @ApiProperty() @IsString() participantId: string;
   @ApiProperty() @IsNumber() @Min(0) @Max(10) calibratedScore: number;
   @ApiProperty() @IsString() @IsNotEmpty() justification: string;
@@ -310,7 +312,7 @@ export class SendRemindersDto {
 }
 
 // ─── PAGINATION ───────────────────────────────────────────────
-export class PaginationDto {
+export class Evaluation360PaginationDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(200) limit?: number = 20;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) offset?: number = 0;
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;

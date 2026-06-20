@@ -23,7 +23,7 @@ import {
   CreateIndicatorDto,
   CreateRecordDto,
   CreateEvalCycleDto,
-  SubmitEvaluationDto,
+  MonitoringSubmitEvaluationDto,
 } from './dto';
 
 @ApiTags('Monitoria e Avaliação')
@@ -143,7 +143,7 @@ export class MonitoringController {
   @ApiOperation({ summary: 'Submeter avaliação' })
   submitEvaluation(
     @Param('id') id: string,
-    @Body() dto: SubmitEvaluationDto,
+    @Body() dto: MonitoringSubmitEvaluationDto,
     @CurrentUser() user: any,
   ) {
     return this.service.submitEvaluation(id, dto, user.id);

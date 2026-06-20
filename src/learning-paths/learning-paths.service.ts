@@ -8,7 +8,7 @@
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateLearningPathDto,
+  LearningPathsCreateLearningPathDto,
   UpdateLearningPathDto,
   LearningPathFilterDto,
   AssignLearningPathDto,
@@ -100,7 +100,7 @@ export class LearningPathsService {
 
   // ─── CRUD ─────────────────────────────────────────────────────────────────
 
-  async create(dto: CreateLearningPathDto) {
+  async create(dto: LearningPathsCreateLearningPathDto) {
     const { courseIds, ...data } = dto;
 
     const lp = await this.prisma.learningPath.create({

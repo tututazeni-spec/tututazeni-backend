@@ -8,7 +8,7 @@ import {
   CreateIndicatorDto,
   CreateRecordDto,
   CreateEvalCycleDto,
-  SubmitEvaluationDto,
+  MonitoringSubmitEvaluationDto,
 } from './dto';
 
 @Injectable()
@@ -284,7 +284,7 @@ export class MonitoringService {
     return evaluation;
   }
 
-  async submitEvaluation(id: string, dto: SubmitEvaluationDto, evaluatorId: number) {
+  async submitEvaluation(id: string, dto: MonitoringSubmitEvaluationDto, evaluatorId: number) {
     const evaluation = await this.prisma.userEvaluation.findUnique({
       where: { id },
     });

@@ -8,15 +8,15 @@
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateCycleDto,
+  PerformanceCreateCycleDto,
   CreatePerformanceReviewDto,
   UpdatePerformanceReviewDto,
   SubmitReviewDto,
   CreateGoalDto,
   UpdatePerformanceGoalProgressDto,
-  CreateFeedbackDto,
+  PerformanceCreateFeedbackDto,
   CalibrateReviewDto,
-  CreateDisputeDto,
+  PerformanceCreateDisputeDto,
   Update9BoxDto,
   PerformanceFilterDto,
   ReviewStatus,
@@ -30,7 +30,7 @@ export class PerformanceService {
 
   // ─── CICLOS ───────────────────────────────────────────────────────────────
 
-  async createCycle(dto: CreateCycleDto) {
+  async createCycle(dto: PerformanceCreateCycleDto) {
     const goalsW = dto.goalsWeight ?? 40;
     const compW = dto.competenciesWeight ?? 40;
     const behavW = dto.behaviorsWeight ?? 20;
@@ -385,7 +385,7 @@ export class PerformanceService {
 
   // ─── FEEDBACK CONTÍNUO ────────────────────────────────────────────────────
 
-  async createFeedback(giverId: number, dto: CreateFeedbackDto) {
+  async createFeedback(giverId: number, dto: PerformanceCreateFeedbackDto) {
     const feedback = await (this.prisma as any).continuousFeedback.create({
       data: {
         giverId: giverId,
@@ -477,7 +477,7 @@ export class PerformanceService {
 
   // ─── DISPUTA ──────────────────────────────────────────────────────────────
 
-  async createDispute(userId: number, dto: CreateDisputeDto) {
+  async createDispute(userId: number, dto: PerformanceCreateDisputeDto) {
     const review = (await this.findOne(dto.reviewId)) as any;
     if (review.userId !== userId) throw new ForbiddenException('Sem permissão');
     if (review.status !== 'PUBLISHED') {

@@ -15,7 +15,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { EnrollmentsService } from './enrollments.service';
 import {
-  CreateEnrollmentDto,
+  EnrollmentsCreateEnrollmentDto,
   UpdateEnrollmentStatusDto,
   EnrollmentFilterDto,
   BulkEnrollDto,
@@ -120,7 +120,7 @@ export class EnrollmentsController {
   @Post()
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Matricular utilizador num curso' })
-  enroll(@CurrentUser() admin: any, @Body() dto: CreateEnrollmentDto) {
+  enroll(@CurrentUser() admin: any, @Body() dto: EnrollmentsCreateEnrollmentDto) {
     return this.svc.enroll({ ...dto, assignedById: admin.id });
   }
 

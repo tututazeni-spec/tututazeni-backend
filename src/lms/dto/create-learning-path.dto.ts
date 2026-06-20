@@ -12,7 +12,7 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PathLevel } from '@prisma/client';
 
-export class CreateLearningPathDto {
+export class LmsCreateLearningPathDto {
   @ApiProperty({ example: 'PATH-001' })
   @IsString()
   @Length(2, 50)

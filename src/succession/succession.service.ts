@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateCriticalPositionDto,
   UpdateCriticalPositionDto,
-  CreateSuccessionPlanDto,
+  SuccessionCreateSuccessionPlanDto,
   UpdateSuccessionPlanDto,
   AddToTalentPoolDto,
   GeneratePDIDto,
@@ -240,7 +240,7 @@ export class SuccessionService {
     return { ...s, matchScore: match.score, matchDetails: match.details };
   }
 
-  async create(dto: CreateSuccessionPlanDto) {
+  async create(dto: SuccessionCreateSuccessionPlanDto) {
     const cp = await this.prisma.criticalPosition.findUnique({
       where: { id: dto.criticalPositionId },
     });

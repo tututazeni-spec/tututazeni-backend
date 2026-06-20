@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   HistoryFilterDto,
   TimelineFilterDto,
-  CreateEventDto,
+  HistoryCreateEventDto,
   EventCategory,
   EventModule,
 } from './history.dto';
@@ -236,7 +236,7 @@ export class HistoryService {
     return raw.map(enrichEntry);
   }
 
-  async createEvent(dto: CreateEventDto) {
+  async createEvent(dto: HistoryCreateEventDto) {
     const entry = await this.prisma.auditLog.create({
       data: {
         userId: dto.userId,

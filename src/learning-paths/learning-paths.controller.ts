@@ -16,7 +16,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { LearningPathsService } from './learning-paths.service';
 import {
-  CreateLearningPathDto,
+  LearningPathsCreateLearningPathDto,
   UpdateLearningPathDto,
   LearningPathFilterDto,
   AssignLearningPathDto,
@@ -86,7 +86,7 @@ export class LearningPathsController {
   @Post()
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar trilha de aprendizagem' })
-  create(@Body() dto: CreateLearningPathDto) {
+  create(@Body() dto: LearningPathsCreateLearningPathDto) {
     return this.svc.create(dto);
   }
 

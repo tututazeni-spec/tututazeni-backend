@@ -73,7 +73,7 @@ export enum GoalStatus {
 
 // ─── Roles & Levels ───────────────────────────────────────────────────────────
 
-export class CreateRoleDto {
+export class CareerPlansCreateRoleDto {
   @ApiProperty() @IsString() name!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiProperty() @IsString() department!: string;
@@ -120,7 +120,7 @@ export class CareerPathStepDto {
   @ApiPropertyOptional() @IsOptional() @IsString() label?: string;
 }
 
-export class CreateCareerPathDto {
+export class CareerPlansCreateCareerPathDto {
   @ApiProperty() @IsString() name!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiProperty() @IsEnum(CareerPathType) type!: CareerPathType;
@@ -149,7 +149,7 @@ export class CreateProgressionRuleDto {
 
 // ─── Career Plans ─────────────────────────────────────────────────────────────
 
-export class CreateCareerPlanDto {
+export class CareerPlansCreateCareerPlanDto {
   @ApiProperty() @IsInt() userId!: number;
   @ApiProperty() @IsString() title!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
@@ -160,11 +160,11 @@ export class CreateCareerPlanDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() mentorId?: number;
 }
 
-export class UpdateCareerPlanDto extends PartialType(CreateCareerPlanDto) {}
+export class CareerPlansUpdateCareerPlanDto extends PartialType(CareerPlansCreateCareerPlanDto) {}
 
 // ─── Goals / PDI Actions ──────────────────────────────────────────────────────
 
-export class AddCareerGoalDto {
+export class CareerPlansAddCareerGoalDto {
   @ApiProperty() @IsInt() careerPlanId!: number;
   @ApiProperty() @IsString() title!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;

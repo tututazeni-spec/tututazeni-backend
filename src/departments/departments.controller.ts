@@ -33,9 +33,9 @@ import {
   BulkTransferDto,
   CreateUnitDto,
   UpdateUnitDto,
-  CreateRoleDto,
+  DepartmentsCreateRoleDto,
   UpdateRoleDto,
-  CreatePermissionDto,
+  DepartmentsCreatePermissionDto,
   CreatePositionDto,
   UpdatePositionDto,
   CreateCareerPositionDto,
@@ -201,7 +201,7 @@ export class RolesController {
   @Post()
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Criar role' })
-  create(@Body() dto: CreateRoleDto) {
+  create(@Body() dto: DepartmentsCreateRoleDto) {
     return this.svc.create(dto);
   }
 
@@ -215,7 +215,7 @@ export class RolesController {
   @Post('permissions')
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Criar permissão' })
-  addPermission(@Body() dto: CreatePermissionDto) {
+  addPermission(@Body() dto: DepartmentsCreatePermissionDto) {
     return this.svc.addPermission(dto);
   }
 
