@@ -16,14 +16,14 @@ import { CareerPlansService } from './career-plans.service';
 import {
   CareerPlanFilterDto,
   PromotionFilterDto,
-  CreateCareerPlanDto,
-  UpdateCareerPlanDto,
-  AddCareerGoalDto,
+  CareerPlansCreateCareerPlanDto,
+  CareerPlansUpdateCareerPlanDto,
+  CareerPlansAddCareerGoalDto,
   UpdateGoalProgressDto,
-  CreateRoleDto,
+  CareerPlansCreateRoleDto,
   CreateSkillDto,
   SetRoleSkillsDto,
-  CreateCareerPathDto,
+  CareerPlansCreateCareerPathDto,
   CreateProgressionRuleDto,
   CreatePromotionRequestDto,
   ReviewPromotionDto,
@@ -83,7 +83,7 @@ export class CareerPlansController {
   @Post('roles')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar cargo / nível' })
-  createRole(@Body() dto: CreateRoleDto) {
+  createRole(@Body() dto: CareerPlansCreateRoleDto) {
     return this.svc.createRole(dto);
   }
 
@@ -122,7 +122,7 @@ export class CareerPlansController {
   @Post('paths')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar trilha de carreira (linear, Y, W, horizontal)' })
-  createCareerPath(@Body() dto: CreateCareerPathDto, @CurrentUser() user: any) {
+  createCareerPath(@Body() dto: CareerPlansCreateCareerPathDto, @CurrentUser() user: any) {
     return this.svc.createCareerPath(dto, user.id);
   }
 
@@ -192,7 +192,7 @@ export class CareerPlansController {
   @Post()
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar plano (auto-gera metas com base no gap de skills)' })
-  create(@Body() dto: CreateCareerPlanDto, @CurrentUser() user: any) {
+  create(@Body() dto: CareerPlansCreateCareerPlanDto, @CurrentUser() user: any) {
     return this.svc.create(dto, user.id);
   }
 
@@ -201,7 +201,7 @@ export class CareerPlansController {
   @ApiOperation({ summary: 'Actualizar plano' })
   update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateCareerPlanDto,
+    @Body() dto: CareerPlansUpdateCareerPlanDto,
     @CurrentUser() user: any,
   ) {
     return this.svc.update(id, dto, user.id);
@@ -218,7 +218,7 @@ export class CareerPlansController {
 
   @Post('goals')
   @ApiOperation({ summary: 'Adicionar meta ao plano (curso, projecto, mentoria, etc.)' })
-  addGoal(@Body() dto: AddCareerGoalDto) {
+  addGoal(@Body() dto: CareerPlansAddCareerGoalDto) {
     return this.svc.addGoal(dto);
   }
 

@@ -6,7 +6,7 @@ import {
   UpdateItemDto,
   FilterItemDto,
   CreateRatingDto,
-  CreateCommentDto,
+  LibraryCreateCommentDto,
 } from './dto';
 
 @Injectable()
@@ -222,7 +222,7 @@ export class LibraryService {
 
   // ─── COMENTÁRIOS ─────────────────────────────────────
 
-  async addComment(itemId: string, dto: CreateCommentDto, userId: number) {
+  async addComment(itemId: string, dto: LibraryCreateCommentDto, userId: number) {
     await this.findItemById(itemId);
     const comment = await this.prisma.libraryComment.create({
       data: { ...dto, itemId, userId },

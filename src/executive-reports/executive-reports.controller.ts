@@ -19,7 +19,7 @@ import { ExecutiveReportsService } from './executive-reports.service';
 import {
   CreateExecutiveReportDto,
   UpdateExecutiveReportDto,
-  ReportFilterDto,
+  ExecutiveReportsReportFilterDto,
   ApproveReportDto,
   ReportType,
 } from './executive-reports.dto';
@@ -39,7 +39,7 @@ export class ExecutiveReportsController {
 
   @Get()
   @ApiOperation({ summary: 'Listar relatórios executivos com filtros' })
-  findAll(@Query() filters: ReportFilterDto) {
+  findAll(@Query() filters: ExecutiveReportsReportFilterDto) {
     return this.svc.findAll(filters);
   }
 

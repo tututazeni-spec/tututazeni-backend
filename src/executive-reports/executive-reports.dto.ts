@@ -197,7 +197,7 @@ export class ApproveReportDto {
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
-export class ReportFilterDto {
+export class ExecutiveReportsReportFilterDto {
   @ApiPropertyOptional({ enum: ReportType })
   @IsOptional()
   @IsEnum(ReportType)

@@ -9,7 +9,7 @@
 import { CertificateType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateEnrollmentDto,
+  EnrollmentsCreateEnrollmentDto,
   UpdateEnrollmentStatusDto,
   EnrollmentFilterDto,
   BulkEnrollDto,
@@ -182,7 +182,7 @@ export class EnrollmentsService {
 
   // ─── MATRICULAR ───────────────────────────────────────────────────────────
 
-  async enroll(dto: CreateEnrollmentDto) {
+  async enroll(dto: EnrollmentsCreateEnrollmentDto) {
     const exists = await this.prisma.enrollment.findFirst({
       where: {
         userId: dto.userId,

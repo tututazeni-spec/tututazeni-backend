@@ -177,7 +177,7 @@ export class CreateLearningPathDto {
   @ApiProperty({ type: [LearningPathItemDto] }) @IsArray() items!: LearningPathItemDto[];
 }
 
-export class LearningPathFilterDto {
+export class ContentLibraryLearningPathFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()

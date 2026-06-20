@@ -24,7 +24,7 @@ import {
   UpdateProgressDto,
   SaveNoteDto,
   CreateLearningPathDto,
-  LearningPathFilterDto,
+  ContentLibraryLearningPathFilterDto,
 } from './content-library.dto';
 
 const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR', 'INSTRUCTOR'] as const;
@@ -227,7 +227,7 @@ export class ContentLibraryController {
   @Get('paths/all')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Listar learning paths' })
-  getLearningPaths(@Query() filters: LearningPathFilterDto) {
+  getLearningPaths(@Query() filters: ContentLibraryLearningPathFilterDto) {
     return this.svc.getLearningPaths(filters);
   }
 

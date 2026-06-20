@@ -187,7 +187,7 @@ export class CalibrateScoreDto {
 
 // ─── Analytics DTOs ──────────────────────────────────────────────
 
-export class AnalyticsFilterDto {
+export class EvaluationAnalyticsFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) cycleId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() period?: string;

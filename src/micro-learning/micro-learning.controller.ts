@@ -22,8 +22,8 @@ import {
   MicroLearningFilterDto,
   CreatePlaylistDto,
   DispatchMicroLearningDto,
-  UpdateProgressDto,
-  SubmitQuizDto,
+  MicroLearningUpdateProgressDto,
+  MicroLearningSubmitQuizDto,
   InteractDto,
 } from './micro-learning.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -130,7 +130,7 @@ export class MicroLearningController {
   @Post('progress')
   @ApiOperation({ summary: 'Actualizar progresso de um conteúdo' })
   @HttpCode(HttpStatus.OK)
-  updateProgress(@CurrentUser() user: any, @Body() dto: UpdateProgressDto) {
+  updateProgress(@CurrentUser() user: any, @Body() dto: MicroLearningUpdateProgressDto) {
     return this.svc.updateProgress(user.id, dto);
   }
 
@@ -139,7 +139,7 @@ export class MicroLearningController {
   @Post('quiz/submit')
   @ApiOperation({ summary: 'Submeter respostas de quiz' })
   @HttpCode(HttpStatus.OK)
-  submitQuiz(@CurrentUser() user: any, @Body() dto: SubmitQuizDto) {
+  submitQuiz(@CurrentUser() user: any, @Body() dto: MicroLearningSubmitQuizDto) {
     return this.svc.submitQuiz(user.id, dto);
   }
 

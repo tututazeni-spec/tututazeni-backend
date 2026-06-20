@@ -292,7 +292,7 @@ export class UpdatePdiProgressDto {
 // ─── Documents ────────────────────────────────────────────────────────────────
 
 @ApiSchema({ name: 'CreateEmployeeDocumentDto' })
-export class CreateDocumentDto {
+export class EmployeesCreateDocumentDto {
   @ApiProperty() @IsInt() employeeId!: number;
   @ApiProperty() @IsString() name!: string;
   @ApiProperty() @IsString() type!: string;

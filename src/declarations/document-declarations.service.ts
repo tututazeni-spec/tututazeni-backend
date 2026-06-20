@@ -4,8 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import * as crypto from 'crypto';
 import {
-  CreateTemplateDto,
-  UpdateTemplateDto,
+  DeclarationsCreateTemplateDto,
+  DeclarationsUpdateTemplateDto,
   CreateDeclarationPurposeDto,
   CreateDocumentRequestDto,
   ApproveDocumentRequestDto,
@@ -78,7 +78,7 @@ export class DocumentDeclarationsService {
   // TEMPLATES
   // ══════════════════════════════════════════════════════════════════
 
-  async createTemplate(dto: CreateTemplateDto, createdById: number) {
+  async createTemplate(dto: DeclarationsCreateTemplateDto, createdById: number) {
     const detected = [
       ...new Set((dto.content.match(/\{\{(\w+)\}\}/g) ?? []).map(m => m.slice(2, -2))),
     ];
@@ -125,7 +125,7 @@ export class DocumentDeclarationsService {
     return t;
   }
 
-  async updateTemplate(id: number, dto: UpdateTemplateDto, updatedById: number) {
+  async updateTemplate(id: number, dto: DeclarationsUpdateTemplateDto, updatedById: number) {
     const current = await this.getTemplate(id);
 
     await this.prisma.declarationTemplate.update({

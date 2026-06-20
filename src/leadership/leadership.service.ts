@@ -11,7 +11,7 @@ import {
   UpdateLeadershipProgramDto,
   EnrollLeadershipDto,
   UpdateParticipantProgressDto,
-  CreateOneOnOneDto,
+  LeadershipCreateOneOnOneDto,
   CompleteOneOnOneDto,
   Submit360FeedbackDto,
   SubmitPulseDto,
@@ -378,7 +378,7 @@ export class LeadershipService {
 
   // ─── ONE-ON-ONE ───────────────────────────────────────────────────────────
 
-  async createOneOnOne(managerId: number, dto: CreateOneOnOneDto) {
+  async createOneOnOne(managerId: number, dto: LeadershipCreateOneOnOneDto) {
     const oneOnOne = await this.prisma.oneOnOne.create({
       data: {
         managerId,

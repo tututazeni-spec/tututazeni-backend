@@ -256,7 +256,7 @@ export class RegisterParticipantDto {
   allowWaitlist?: boolean;
 }
 
-export class UpdateParticipantStatusDto {
+export class TrainingsUpdateParticipantStatusDto {
   @ApiProperty({ enum: ParticipantStatus })
   @IsEnum(ParticipantStatus)
   status!: ParticipantStatus;

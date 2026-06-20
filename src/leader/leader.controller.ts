@@ -18,8 +18,8 @@ import { CurrentUser, Roles } from '../common/decorators';
 import {
   CreateLeaderProfileDto,
   GiveFeedbackDto,
-  CreateOneOnOneDto,
-  AssignCourseDto,
+  LeaderCreateOneOnOneDto,
+  LeaderAssignCourseDto,
   TeamFilterDto,
 } from './leader.dto';
 
@@ -132,7 +132,7 @@ export class LeaderController {
   @Post('1on1')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Agendar reunião 1:1' })
-  create1on1(@CurrentUser() user: any, @Body() dto: CreateOneOnOneDto) {
+  create1on1(@CurrentUser() user: any, @Body() dto: LeaderCreateOneOnOneDto) {
     return this.svc.createOneOnOne(user.id, dto);
   }
 
@@ -164,7 +164,7 @@ export class LeaderController {
   @Post('assign-course')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Atribuir curso a um ou vários membros da equipa' })
-  assignCourse(@Body() dto: AssignCourseDto) {
+  assignCourse(@Body() dto: LeaderAssignCourseDto) {
     return this.svc.assignCourse(dto);
   }
 

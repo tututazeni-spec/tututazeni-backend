@@ -270,7 +270,7 @@ export class AttendanceFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() sortOrder?: 'asc' | 'desc';
 }
 
-export class LeaveFilterDto {
+export class AttendanceLeaveFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
   @ApiPropertyOptional() @IsOptional() @IsEnum(LeaveType) type?: LeaveType;
   @ApiPropertyOptional() @IsOptional() @IsEnum(LeaveStatus) status?: LeaveStatus;

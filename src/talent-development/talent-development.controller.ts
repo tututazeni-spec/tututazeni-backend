@@ -21,23 +21,23 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators';
 import {
   PlanFilterDto,
-  CreateDevelopmentPlanDto,
-  UpdateDevelopmentPlanDto,
+  TalentDevelopmentCreateDevelopmentPlanDto,
+  TalentDevelopmentUpdateDevelopmentPlanDto,
   CancelPlanDto,
-  CreateGoalDto,
-  UpdateGoalDto,
+  TalentDevelopmentCreateGoalDto,
+  TalentDevelopmentUpdateGoalDto,
   CreateActionDto,
   UpdateActionDto,
-  UpdateProgressDto,
+  TalentDevelopmentUpdateProgressDto,
   ApproveActionDto,
   TalentFilterDto,
   SkillGapFilterDto,
-  CreateMentoringDto,
+  TalentDevelopmentCreateMentoringDto,
   CreateMentoringSessionDto,
   MentoringFilterDto,
   CareerSimulationDto,
   CreateFromTemplateDto,
-  DashboardFilterDto,
+  TalentDevelopmentDashboardFilterDto,
 } from './talent-development.dto';
 
 const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
@@ -116,7 +116,7 @@ export class TalentDevelopmentController {
   @Post('plans')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Criar plano de desenvolvimento (PDI)' })
-  createPlan(@Body() dto: CreateDevelopmentPlanDto, @Req() req: any) {
+  createPlan(@Body() dto: TalentDevelopmentCreateDevelopmentPlanDto, @Req() req: any) {
     return this.svc.createPlan(dto, req.user.id);
   }
 
@@ -137,7 +137,10 @@ export class TalentDevelopmentController {
   @Patch('plans/:id')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Actualizar plano' })
-  updatePlan(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDevelopmentPlanDto) {
+  updatePlan(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: TalentDevelopmentUpdateDevelopmentPlanDto,
+  ) {
     return this.svc.updatePlan(id, dto);
   }
 
@@ -174,14 +177,14 @@ export class TalentDevelopmentController {
   @Post('plans/:id/goals')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Adicionar meta ao plano' })
-  addGoal(@Param('id', ParseIntPipe) planId: number, @Body() dto: CreateGoalDto) {
+  addGoal(@Param('id', ParseIntPipe) planId: number, @Body() dto: TalentDevelopmentCreateGoalDto) {
     return this.svc.addGoal(planId, dto);
   }
 
   @Patch('goals/:id')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Actualizar meta (inclui progresso)' })
-  updateGoal(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateGoalDto) {
+  updateGoal(@Param('id', ParseIntPipe) id: number, @Body() dto: TalentDevelopmentUpdateGoalDto) {
     return this.svc.updateGoal(id, dto);
   }
 
@@ -214,7 +217,7 @@ export class TalentDevelopmentController {
   @ApiOperation({ summary: 'Colaborador actualiza o seu próprio progresso + evidência' })
   updateProgress(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateProgressDto,
+    @Body() dto: TalentDevelopmentUpdateProgressDto,
     @Req() req: any,
   ) {
     return this.svc.updateActionProgress(id, dto, req.user.id);
@@ -288,7 +291,7 @@ export class TalentDevelopmentController {
   @Post('mentoring')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Criar mentoria (pareamento)' })
-  createMentoring(@Body() dto: CreateMentoringDto) {
+  createMentoring(@Body() dto: TalentDevelopmentCreateMentoringDto) {
     return this.svc.createMentoring(dto);
   }
 
@@ -311,7 +314,7 @@ export class TalentDevelopmentController {
   @Get('analytics/dashboard')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Dashboard principal de talent development' })
-  dashboard(@Query() filters: DashboardFilterDto) {
+  dashboard(@Query() filters: TalentDevelopmentDashboardFilterDto) {
     return this.svc.getDashboard(filters);
   }
 

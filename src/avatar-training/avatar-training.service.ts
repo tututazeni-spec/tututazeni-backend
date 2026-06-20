@@ -15,7 +15,7 @@ import {
   StartSessionDto,
   SendMessageDto,
   CompleteSessionDto,
-  AnalyticsFilterDto,
+  AvatarTrainingAnalyticsFilterDto,
   SessionStatus,
 } from './avatar-training.dto';
 
@@ -732,7 +732,7 @@ export class AvatarTrainingService {
   // ANALYTICS
   // ══════════════════════════════════════════════════════
 
-  async getDashboard(filters: AnalyticsFilterDto = {}) {
+  async getDashboard(filters: AvatarTrainingAnalyticsFilterDto = {}) {
     const { departmentId, category } = filters;
     const userWhere: any = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;

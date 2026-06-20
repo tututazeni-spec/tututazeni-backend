@@ -15,12 +15,12 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/services/audit.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
-  CreateCompetencyDto,
-  UpdateCompetencyDto,
+  Evaluation360CreateCompetencyDto,
+  Evaluation360UpdateCompetencyDto,
   CreateEvaluationCycleDto,
   UpdateEvaluationCycleDto,
   PublishCycleDto,
-  CreateQuestionDto,
+  Evaluation360CreateQuestionDto,
   AddParticipantsDto,
   ConsentDto,
   SuggestEvaluatorsDto,
@@ -33,9 +33,9 @@ import {
   AnalyticsQueryDto,
   NineBoxQueryDto,
   GenerateReportDto,
-  CalibrateScoreDto,
+  Evaluation360CalibrateScoreDto,
   SendRemindersDto,
-  PaginationDto,
+  Evaluation360PaginationDto,
   EvaluatorRole,
   CycleStatus,
   AnonymityMode,
@@ -57,7 +57,7 @@ export class Evaluation360Service {
   // BANCO DE COMPETÊNCIAS
   // ============================================================
 
-  async createCompetency(dto: CreateCompetencyDto, actorId: string) {
+  async createCompetency(dto: Evaluation360CreateCompetencyDto, actorId: string) {
     const competency = await (this.prisma as any).competency.create({
       data: {
         name: dto.name,
@@ -90,7 +90,7 @@ export class Evaluation360Service {
     return competency;
   }
 
-  async updateCompetency(id: string, dto: UpdateCompetencyDto, actorId: string) {
+  async updateCompetency(id: string, dto: Evaluation360UpdateCompetencyDto, actorId: string) {
     const comp = await (this.prisma as any).competency.findUnique({ where: { id } });
     if (!comp) throw new NotFoundException('Competência não encontrada.');
     const updated = await (this.prisma as any).competency.update({ where: { id }, data: dto });
@@ -104,7 +104,7 @@ export class Evaluation360Service {
     return updated;
   }
 
-  async listCompetencies(tenantId?: string, query?: PaginationDto) {
+  async listCompetencies(tenantId?: string, query?: Evaluation360PaginationDto) {
     const where: any = { isActive: true };
     if (tenantId) where.OR = [{ isGlobal: true }, { tenantId }];
     else where.isGlobal = true;
@@ -233,7 +233,7 @@ export class Evaluation360Service {
     return updated;
   }
 
-  async listCycles(tenantId: string, query: PaginationDto) {
+  async listCycles(tenantId: string, query: Evaluation360PaginationDto) {
     const where: any = { tenantId };
     if (query.search) where.name = { contains: query.search };
     const [data, total] = await Promise.all([
@@ -271,7 +271,7 @@ export class Evaluation360Service {
   // QUESTÕES
   // ============================================================
 
-  async createQuestion(dto: CreateQuestionDto, actorId: string) {
+  async createQuestion(dto: Evaluation360CreateQuestionDto, actorId: string) {
     const question = await (this.prisma as any).evaluationQuestion.create({ data: dto });
     await this.audit.log({
       entity: 'EvaluationQuestion',
@@ -1055,7 +1055,7 @@ export class Evaluation360Service {
     return feedback;
   }
 
-  async listFeedbackForUser(userId: string, query: PaginationDto) {
+  async listFeedbackForUser(userId: string, query: Evaluation360PaginationDto) {
     const [data, total] = await Promise.all([
       (this.prisma as any).continuousFeedback.findMany({
         where: { toUserId: userId, isPrivate: false },
@@ -1092,7 +1092,7 @@ export class Evaluation360Service {
   // CALIBRAÇÃO (RH)
   // ============================================================
 
-  async calibrateScore(cycleId: string, dto: CalibrateScoreDto, actorId: string) {
+  async calibrateScore(cycleId: string, dto: Evaluation360CalibrateScoreDto, actorId: string) {
     const result = await (this.prisma as any).evaluationResult.findFirst({
       where: { cycleId, participantId: dto.participantId },
     });

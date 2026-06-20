@@ -7,8 +7,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateRoleDto,
-  UpdateRoleDto,
+  RolesPermissionsCreateRoleDto,
+  RolesPermissionsUpdateRoleDto,
   BulkAssignRoleDto,
   SimulatePermissionDto,
   RoleTemplateDto,
@@ -16,9 +16,9 @@ import {
 
 // Re-export DTOs so controller can import from service (legacy compat)
 export {
-  CreateRoleDto,
-  UpdateRoleDto,
-  CloneRoleDto,
+  RolesPermissionsCreateRoleDto,
+  RolesPermissionsUpdateRoleDto,
+  RolesPermissionsCloneRoleDto,
   BulkAssignRoleDto,
   SetPermissionsDto,
   SimulatePermissionDto,
@@ -78,7 +78,7 @@ export class RolesPermissionsService {
     return r;
   }
 
-  async create(dto: CreateRoleDto) {
+  async create(dto: RolesPermissionsCreateRoleDto) {
     const exists = await this.prisma.role.findFirst({ where: { name: dto.name } });
     if (exists) throw new ConflictException('Nome de role já existe');
 
@@ -110,7 +110,7 @@ export class RolesPermissionsService {
     return role;
   }
 
-  async update(id: number, dto: UpdateRoleDto) {
+  async update(id: number, dto: RolesPermissionsUpdateRoleDto) {
     const existing = await this.findOne(id);
     if ((existing as any).isSystem && dto.name !== existing.name) {
       throw new BadRequestException('Não é possível renomear um role de sistema');

@@ -19,8 +19,8 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
 import { LmsService } from './lms.service';
 import {
-  CreateLearningPathDto,
-  UpdateLearningPathDto,
+  LmsCreateLearningPathDto,
+  LmsUpdateLearningPathDto,
   CreateLiveSessionDto,
   AttendanceFeedbackDto,
   FilterPathDto,
@@ -38,7 +38,7 @@ export class LmsController {
   @Post('paths')
   @Roles('ADMIN', 'RH', 'MANAGER')
   @ApiOperation({ summary: 'Criar percurso de aprendizagem' })
-  createPath(@Body() dto: CreateLearningPathDto, @CurrentUser() user: any) {
+  createPath(@Body() dto: LmsCreateLearningPathDto, @CurrentUser() user: any) {
     return this.service.createPath(dto, user.id);
   }
 
@@ -84,7 +84,7 @@ export class LmsController {
   @ApiOperation({ summary: 'Actualizar percurso' })
   updatePath(
     @Param('id') id: string,
-    @Body() dto: UpdateLearningPathDto,
+    @Body() dto: LmsUpdateLearningPathDto,
     @CurrentUser() user: any,
   ) {
     return this.service.updatePath(id, dto, user.id);

@@ -19,12 +19,12 @@ import {
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Evaluation360Service } from './evaluation360.service';
 import {
-  CreateCompetencyDto,
-  UpdateCompetencyDto,
+  Evaluation360CreateCompetencyDto,
+  Evaluation360UpdateCompetencyDto,
   CreateEvaluationCycleDto,
   UpdateEvaluationCycleDto,
   PublishCycleDto,
-  CreateQuestionDto,
+  Evaluation360CreateQuestionDto,
   AddParticipantsDto,
   ConsentDto,
   SuggestEvaluatorsDto,
@@ -37,9 +37,9 @@ import {
   AnalyticsQueryDto,
   NineBoxQueryDto,
   GenerateReportDto,
-  CalibrateScoreDto,
+  Evaluation360CalibrateScoreDto,
   SendRemindersDto,
-  PaginationDto,
+  Evaluation360PaginationDto,
 } from './evaluation360.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -59,7 +59,7 @@ export class Evaluation360Controller {
   @Post('competencies')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar competência no banco de competências' })
-  async createCompetency(@Body() dto: CreateCompetencyDto, @Request() req: any) {
+  async createCompetency(@Body() dto: Evaluation360CreateCompetencyDto, @Request() req: any) {
     return this.service.createCompetency(dto, req.user.id);
   }
 
@@ -68,7 +68,7 @@ export class Evaluation360Controller {
   @ApiOperation({ summary: 'Actualizar competência' })
   async updateCompetency(
     @Param('id') id: string,
-    @Body() dto: UpdateCompetencyDto,
+    @Body() dto: Evaluation360UpdateCompetencyDto,
     @Request() req: any,
   ) {
     return this.service.updateCompetency(id, dto, req.user.id);
@@ -77,7 +77,10 @@ export class Evaluation360Controller {
   @Get('competencies')
   @ApiOperation({ summary: 'Listar banco de competências' })
   @ApiQuery({ name: 'tenantId', required: false })
-  async listCompetencies(@Query('tenantId') tenantId?: string, @Query() query?: PaginationDto) {
+  async listCompetencies(
+    @Query('tenantId') tenantId?: string,
+    @Query() query?: Evaluation360PaginationDto,
+  ) {
     return this.service.listCompetencies(tenantId, query);
   }
 
@@ -115,7 +118,10 @@ export class Evaluation360Controller {
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Listar ciclos de avaliação' })
   @ApiQuery({ name: 'tenantId', required: true })
-  async listCycles(@Query('tenantId') tenantId: string, @Query() query: PaginationDto) {
+  async listCycles(
+    @Query('tenantId') tenantId: string,
+    @Query() query: Evaluation360PaginationDto,
+  ) {
     return this.service.listCycles(tenantId, query);
   }
 
@@ -141,7 +147,7 @@ export class Evaluation360Controller {
   @Post('questions')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar questão (global ou vinculada a ciclo/competência)' })
-  async createQuestion(@Body() dto: CreateQuestionDto, @Request() req: any) {
+  async createQuestion(@Body() dto: Evaluation360CreateQuestionDto, @Request() req: any) {
     return this.service.createQuestion(dto, req.user.id);
   }
 
@@ -327,7 +333,7 @@ export class Evaluation360Controller {
   @ApiOperation({ summary: 'Calibrar score de participante (matriz de calibração RH)' })
   async calibrateScore(
     @Param('cycleId') cycleId: string,
-    @Body() dto: CalibrateScoreDto,
+    @Body() dto: Evaluation360CalibrateScoreDto,
     @Request() req: any,
   ) {
     return this.service.calibrateScore(cycleId, dto, req.user.id);
@@ -345,7 +351,7 @@ export class Evaluation360Controller {
 
   @Get('feedback/continuous/:userId')
   @ApiOperation({ summary: 'Listar feedbacks recebidos por utilizador' })
-  async listFeedback(@Param('userId') userId: string, @Query() query: PaginationDto) {
+  async listFeedback(@Param('userId') userId: string, @Query() query: Evaluation360PaginationDto) {
     return this.service.listFeedbackForUser(userId, query);
   }
 

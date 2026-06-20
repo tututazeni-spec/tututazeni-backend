@@ -23,7 +23,7 @@ import {
   CreateTrainingSessionDto,
   UpdateTrainingSessionDto,
   RegisterParticipantDto,
-  UpdateParticipantStatusDto,
+  TrainingsUpdateParticipantStatusDto,
   BulkAttendanceDto,
   RateTrainingDto,
 } from './trainings.dto';
@@ -175,7 +175,7 @@ export class TrainingController {
   @HttpCode(HttpStatus.OK)
   updateParticipantStatus(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateParticipantStatusDto,
+    @Body() dto: TrainingsUpdateParticipantStatusDto,
   ) {
     return this.svc.updateParticipantStatus(id, dto);
   }

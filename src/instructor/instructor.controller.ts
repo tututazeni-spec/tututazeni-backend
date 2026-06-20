@@ -24,7 +24,7 @@ import {
   InstructorFilterDto,
   CreateCohortDto,
   UpdateCohortDto,
-  AddParticipantsDto,
+  InstructorAddParticipantsDto,
   CohortFilterDto,
 } from './instructor.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -119,7 +119,7 @@ export class InstructorController {
   addParticipants(
     @CurrentUser() user: any,
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: AddParticipantsDto,
+    @Body() dto: InstructorAddParticipantsDto,
   ) {
     return this.svc.addParticipants(id, user.id, dto);
   }

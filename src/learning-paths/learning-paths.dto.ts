@@ -83,7 +83,7 @@ export class LearningPathStepDto {
   deadlineDays?: number;
 }
 
-export class CreateLearningPathDto {
+export class LearningPathsCreateLearningPathDto {
   @ApiProperty({ example: 'Onboarding Colaborador 2026' })
   @IsString()
   @MaxLength(200)
@@ -162,7 +162,7 @@ export class CreateLearningPathDto {
   courseIds?: number[];
 }
 
-export class UpdateLearningPathDto extends PartialType(CreateLearningPathDto) {}
+export class UpdateLearningPathDto extends PartialType(LearningPathsCreateLearningPathDto) {}
 
 export class LearningPathFilterDto {
   @ApiPropertyOptional()

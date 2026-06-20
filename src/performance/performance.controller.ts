@@ -16,15 +16,15 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PerformanceService } from './performance.service';
 import {
-  CreateCycleDto,
+  PerformanceCreateCycleDto,
   CreatePerformanceReviewDto,
   UpdatePerformanceReviewDto,
   SubmitReviewDto,
   CreateGoalDto,
   UpdatePerformanceGoalProgressDto,
-  CreateFeedbackDto,
+  PerformanceCreateFeedbackDto,
   CalibrateReviewDto,
-  CreateDisputeDto,
+  PerformanceCreateDisputeDto,
   Update9BoxDto,
   PerformanceFilterDto,
 } from './performance.dto';
@@ -56,7 +56,7 @@ export class PerformanceController {
   @Post('cycles')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar ciclo de avaliação' })
-  createCycle(@Body() dto: CreateCycleDto) {
+  createCycle(@Body() dto: PerformanceCreateCycleDto) {
     return this.svc.createCycle(dto);
   }
 
@@ -214,7 +214,7 @@ export class PerformanceController {
 
   @Post('feedback')
   @ApiOperation({ summary: 'Dar feedback contínuo a um colega' })
-  createFeedback(@CurrentUser() user: any, @Body() dto: CreateFeedbackDto) {
+  createFeedback(@CurrentUser() user: any, @Body() dto: PerformanceCreateFeedbackDto) {
     return this.svc.createFeedback(user.id, dto);
   }
 
@@ -239,7 +239,7 @@ export class PerformanceController {
 
   @Post('dispute')
   @ApiOperation({ summary: 'Contestar avaliação publicada' })
-  dispute(@CurrentUser() user: any, @Body() dto: CreateDisputeDto) {
+  dispute(@CurrentUser() user: any, @Body() dto: PerformanceCreateDisputeDto) {
     return this.svc.createDispute(user.id, dto);
   }
 

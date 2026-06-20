@@ -15,7 +15,7 @@ import {
   CreateTrainingSessionDto,
   UpdateTrainingSessionDto,
   RegisterParticipantDto,
-  UpdateParticipantStatusDto,
+  TrainingsUpdateParticipantStatusDto,
   BulkAttendanceDto,
   RateTrainingDto,
   ParticipantStatus,
@@ -318,7 +318,7 @@ export class TrainingService {
     return { message: 'Inscrição cancelada', waitlistPromoted: !!nextWaitlist };
   }
 
-  async updateParticipantStatus(id: number, dto: UpdateParticipantStatusDto) {
+  async updateParticipantStatus(id: number, dto: TrainingsUpdateParticipantStatusDto) {
     const p = await this.prisma.trainingParticipant.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('Participante não encontrado');
 

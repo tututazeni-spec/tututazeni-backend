@@ -227,7 +227,7 @@ export class BehavioralScoreDto {
 
 // ─── Analytics DTOs ──────────────────────────────────────────────
 
-export class AnalyticsFilterDto {
+export class AvatarTrainingAnalyticsFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) managerId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;

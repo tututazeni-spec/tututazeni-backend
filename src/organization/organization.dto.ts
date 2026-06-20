@@ -273,7 +273,7 @@ export class RecordOrgChangeDto {
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
-export class DepartmentFilterDto {
+export class OrganizationDepartmentFilterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

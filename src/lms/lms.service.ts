@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateLearningPathDto,
-  UpdateLearningPathDto,
+  LmsCreateLearningPathDto,
+  LmsUpdateLearningPathDto,
   CreateLiveSessionDto,
   AttendanceFeedbackDto,
   FilterPathDto,
@@ -25,7 +25,7 @@ export class LmsService {
 
   // ─── PERCURSOS DE APRENDIZAGEM ───────────────────────
 
-  async createPath(dto: CreateLearningPathDto, userId: number) {
+  async createPath(dto: LmsCreateLearningPathDto, userId: number) {
     const existing = await this.prisma.lmsLearningPath.findUnique({
       where: { code: dto.code },
     });
@@ -87,7 +87,7 @@ export class LmsService {
     return path;
   }
 
-  async updatePath(id: string, dto: UpdateLearningPathDto, userId: number) {
+  async updatePath(id: string, dto: LmsUpdateLearningPathDto, userId: number) {
     await this.findPathById(id);
     const updated = await this.prisma.lmsLearningPath.update({
       where: { id },

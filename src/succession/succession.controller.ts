@@ -19,7 +19,7 @@ import { SuccessionService } from './succession.service';
 import {
   CreateCriticalPositionDto,
   UpdateCriticalPositionDto,
-  CreateSuccessionPlanDto,
+  SuccessionCreateSuccessionPlanDto,
   UpdateSuccessionPlanDto,
   AddToTalentPoolDto,
   GeneratePDIDto,
@@ -132,7 +132,7 @@ export class SuccessionController {
   @Post()
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar plano de sucessão (match score calculado automaticamente)' })
-  create(@Body() dto: CreateSuccessionPlanDto) {
+  create(@Body() dto: SuccessionCreateSuccessionPlanDto) {
     return this.svc.create(dto);
   }
 

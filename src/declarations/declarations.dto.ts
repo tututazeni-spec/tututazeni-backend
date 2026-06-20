@@ -87,7 +87,7 @@ export class CreateDeclarationPurposeDto {
 
 // ─── Templates ────────────────────────────────────────────────────────────────
 
-export class CreateTemplateDto {
+export class DeclarationsCreateTemplateDto {
   @ApiProperty() @IsString() name!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() purposeId?: number;
@@ -100,7 +100,7 @@ export class CreateTemplateDto {
   @ApiProperty() @IsBoolean() active!: boolean;
 }
 
-export class UpdateTemplateDto extends PartialType(CreateTemplateDto) {}
+export class DeclarationsUpdateTemplateDto extends PartialType(DeclarationsCreateTemplateDto) {}
 
 // ─── Document Requests ────────────────────────────────────────────────────────
 

@@ -136,7 +136,7 @@ export class BulkNotificationDto {
 
 // ─── Template ─────────────────────────────────────────────────────────────────
 
-export class CreateTemplateDto {
+export class NotificationsCreateTemplateDto {
   @ApiProperty({ example: 'PDI aprovado' })
   @IsString()
   @MaxLength(120)
@@ -177,7 +177,7 @@ export class CreateTemplateDto {
   active?: boolean;
 }
 
-export class UpdateTemplateDto extends PartialType(CreateTemplateDto) {}
+export class NotificationsUpdateTemplateDto extends PartialType(NotificationsCreateTemplateDto) {}
 
 // ─── Preferences ──────────────────────────────────────────────────────────────
 

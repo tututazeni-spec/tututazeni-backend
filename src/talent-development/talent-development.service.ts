@@ -8,22 +8,22 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import {
   PlanFilterDto,
-  CreateDevelopmentPlanDto,
-  UpdateDevelopmentPlanDto,
-  CreateGoalDto,
-  UpdateGoalDto,
+  TalentDevelopmentCreateDevelopmentPlanDto,
+  TalentDevelopmentUpdateDevelopmentPlanDto,
+  TalentDevelopmentCreateGoalDto,
+  TalentDevelopmentUpdateGoalDto,
   CreateActionDto,
   UpdateActionDto,
-  UpdateProgressDto,
+  TalentDevelopmentUpdateProgressDto,
   ApproveActionDto,
   TalentFilterDto,
   SkillGapFilterDto,
-  CreateMentoringDto,
+  TalentDevelopmentCreateMentoringDto,
   CreateMentoringSessionDto,
   MentoringFilterDto,
   CareerSimulationDto,
   CreateFromTemplateDto,
-  DashboardFilterDto,
+  TalentDevelopmentDashboardFilterDto,
   PlanStatus,
   ActionStatus,
   TalentTier,
@@ -318,7 +318,7 @@ export class TalentDevelopmentService {
   // DEVELOPMENT PLANS — CRUD
   // ══════════════════════════════════════════════════════
 
-  async createPlan(dto: CreateDevelopmentPlanDto, createdById: number) {
+  async createPlan(dto: TalentDevelopmentCreateDevelopmentPlanDto, createdById: number) {
     const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
     if (!user) throw new NotFoundException('Colaborador não encontrado');
 
@@ -421,7 +421,7 @@ export class TalentDevelopmentService {
     return { ...plan, stats: getPlanStats(plan.actions, plan.goals) };
   }
 
-  async updatePlan(id: number, dto: UpdateDevelopmentPlanDto) {
+  async updatePlan(id: number, dto: TalentDevelopmentUpdateDevelopmentPlanDto) {
     await this.getPlan(id);
     const data: any = { ...dto };
     if (dto.startDate) data.startDate = new Date(dto.startDate);
@@ -584,7 +584,7 @@ export class TalentDevelopmentService {
   // GOALS
   // ══════════════════════════════════════════════════════
 
-  async addGoal(planId: number, dto: CreateGoalDto) {
+  async addGoal(planId: number, dto: TalentDevelopmentCreateGoalDto) {
     const plan = await this.prisma.developmentPlan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
@@ -602,7 +602,7 @@ export class TalentDevelopmentService {
     });
   }
 
-  async updateGoal(goalId: number, dto: UpdateGoalDto) {
+  async updateGoal(goalId: number, dto: TalentDevelopmentUpdateGoalDto) {
     const goal = await this.prisma.pdiGoal.findUnique({ where: { id: goalId } });
     if (!goal) throw new NotFoundException('Meta não encontrada');
 
@@ -683,7 +683,11 @@ export class TalentDevelopmentService {
     return updated;
   }
 
-  async updateActionProgress(actionId: number, dto: UpdateProgressDto, userId: number) {
+  async updateActionProgress(
+    actionId: number,
+    dto: TalentDevelopmentUpdateProgressDto,
+    userId: number,
+  ) {
     const action = await this.prisma.developmentPlanAction.findUnique({
       where: { id: actionId },
       include: { plan: { select: { userId: true, name: true } } },
@@ -996,7 +1000,7 @@ export class TalentDevelopmentService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async createMentoring(dto: CreateMentoringDto) {
+  async createMentoring(dto: TalentDevelopmentCreateMentoringDto) {
     const existing = await this.prisma.mentoring.findFirst({
       where: { mentorId: dto.mentorId, menteeId: dto.menteeId, status: 'ACTIVE' },
     });
@@ -1174,7 +1178,7 @@ export class TalentDevelopmentService {
   // ANALYTICS & DASHBOARDS
   // ══════════════════════════════════════════════════════
 
-  async getDashboard(filters: DashboardFilterDto = {}) {
+  async getDashboard(filters: TalentDevelopmentDashboardFilterDto = {}) {
     const { departmentId, managerId } = filters;
     const userWhere: any = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;

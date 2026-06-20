@@ -1,7 +1,7 @@
 import { IsString, IsOptional, Length } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class CreateCommentDto {
+export class LibraryCreateCommentDto {
   @ApiProperty()
   @IsString()
   @Length(1, 2000)

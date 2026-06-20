@@ -90,7 +90,7 @@ export class PlanFilterDto {
   limit?: number;
 }
 
-export class CreateDevelopmentPlanDto {
+export class TalentDevelopmentCreateDevelopmentPlanDto {
   @ApiProperty() @IsString() @MaxLength(200) name!: string;
   @ApiProperty() @IsString() goal!: string;
   @ApiProperty() @IsInt() userId!: number;
@@ -107,7 +107,7 @@ export class CreateDevelopmentPlanDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() performanceCycleId?: number;
 }
 
-export class UpdateDevelopmentPlanDto {
+export class TalentDevelopmentUpdateDevelopmentPlanDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) name?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() goal?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() managerId?: number;
@@ -126,7 +126,7 @@ export class CancelPlanDto {
 
 // ─── Goal DTOs ───────────────────────────────────────────────────
 
-export class CreateGoalDto {
+export class TalentDevelopmentCreateGoalDto {
   @ApiProperty() @IsString() @MaxLength(200) title!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() successIndicator?: string;
@@ -135,7 +135,7 @@ export class CreateGoalDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
 }
 
-export class UpdateGoalDto {
+export class TalentDevelopmentUpdateGoalDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) title?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() successIndicator?: string;
@@ -173,7 +173,7 @@ export class UpdateActionDto {
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsString({ each: true }) resources?: string[];
 }
 
-export class UpdateProgressDto {
+export class TalentDevelopmentUpdateProgressDto {
   @ApiProperty({ minimum: 0, maximum: 100 }) @IsInt() @Min(0) @Max(100) progress!: number;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() evidenceUrl?: string;
@@ -207,7 +207,7 @@ export class TalentFilterDto {
 
 // ─── Mentoring DTOs ──────────────────────────────────────────────
 
-export class CreateMentoringDto {
+export class TalentDevelopmentCreateMentoringDto {
   @ApiProperty() @IsInt() mentorId!: number;
   @ApiProperty() @IsInt() menteeId!: number;
   @ApiPropertyOptional() @IsOptional() @IsString() objective?: string;
@@ -267,7 +267,7 @@ export class CreateFromTemplateDto {
 
 // ─── Dashboard filter ────────────────────────────────────────────
 
-export class DashboardFilterDto {
+export class TalentDevelopmentDashboardFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) managerId?: number;
 }

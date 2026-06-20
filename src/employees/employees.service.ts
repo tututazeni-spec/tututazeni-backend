@@ -16,7 +16,7 @@ import {
   CreateEmployeeCareerPlanDto,
   CreatePdiDto,
   UpdatePdiProgressDto,
-  CreateDocumentDto,
+  EmployeesCreateDocumentDto,
   CreateTimelineEventDto,
   CreateSelfServiceRequestDto,
   ReviewRequestDto,
@@ -667,7 +667,7 @@ export class EmployeesService {
   // DOCUMENTS
   // ══════════════════════════════════════════════════════════════════
 
-  async createDocument(dto: CreateDocumentDto, uploadedById: number) {
+  async createDocument(dto: EmployeesCreateDocumentDto, uploadedById: number) {
     await this.findOne(dto.employeeId);
     const doc = await this.prisma.employeeDocument.create({
       data: {
