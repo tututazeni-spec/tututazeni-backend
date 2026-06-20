@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateExecutiveReportDto,
   UpdateExecutiveReportDto,
-  ReportFilterDto,
+  ExecutiveReportsReportFilterDto,
   ApproveReportDto,
   ReportType,
   KpiStatus,
@@ -24,7 +24,7 @@ export class ExecutiveReportsService {
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
 
-  async findAll(filters: ReportFilterDto) {
+  async findAll(filters: ExecutiveReportsReportFilterDto) {
     const { page = 1, limit = 20, type, status, departmentId, period } = filters;
     const skip = (page - 1) * limit;
     const where: any = {};

@@ -5,14 +5,14 @@ import { AuditService } from '../common/services/audit.service';
 import {
   CareerPlanFilterDto,
   PromotionFilterDto,
-  CreateCareerPlanDto,
-  UpdateCareerPlanDto,
-  AddCareerGoalDto,
+  CareerPlansCreateCareerPlanDto,
+  CareerPlansUpdateCareerPlanDto,
+  CareerPlansAddCareerGoalDto,
   UpdateGoalProgressDto,
-  CreateRoleDto,
+  CareerPlansCreateRoleDto,
   CreateSkillDto,
   SetRoleSkillsDto,
-  CreateCareerPathDto,
+  CareerPlansCreateCareerPathDto,
   CreateProgressionRuleDto,
   CreatePromotionRequestDto,
   ReviewPromotionDto,
@@ -40,7 +40,7 @@ export class CareerPlansService {
     private readonly audit: AuditService,
   ) {}
 
-  async createRole(dto: CreateRoleDto) {
+  async createRole(dto: CareerPlansCreateRoleDto) {
     return this.prisma.careerRole.create({ data: { ...dto, active: dto.active ?? true } });
   }
 
@@ -106,7 +106,7 @@ export class CareerPlansService {
     });
   }
 
-  async createCareerPath(dto: CreateCareerPathDto, createdById: number) {
+  async createCareerPath(dto: CareerPlansCreateCareerPathDto, createdById: number) {
     const { steps, ...rest } = dto;
     const path = await (this.prisma as any).careerPath.create({
       data: {
@@ -328,7 +328,7 @@ export class CareerPlansService {
     return { ...plan, readiness };
   }
 
-  async create(dto: CreateCareerPlanDto, createdById: number) {
+  async create(dto: CareerPlansCreateCareerPlanDto, createdById: number) {
     const plan = await this.prisma.userCareerPlan.create({
       data: {
         ...dto,
@@ -361,7 +361,7 @@ export class CareerPlansService {
     return this.findOne(plan.id);
   }
 
-  async update(id: number, dto: UpdateCareerPlanDto, updatedById: number) {
+  async update(id: number, dto: CareerPlansUpdateCareerPlanDto, updatedById: number) {
     await this.findOne(id);
     const data: any = { ...dto };
     if (dto.targetDate) data.targetDate = new Date(dto.targetDate);
@@ -376,7 +376,7 @@ export class CareerPlansService {
     });
   }
 
-  async addGoal(dto: AddCareerGoalDto) {
+  async addGoal(dto: CareerPlansAddCareerGoalDto) {
     return this.prisma.careerGoal.create({
       data: {
         ...dto,

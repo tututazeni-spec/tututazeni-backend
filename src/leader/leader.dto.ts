@@ -78,7 +78,7 @@ export class GiveFeedbackDto {
 
 // ─── 1:1 Meeting ─────────────────────────────────────────────────
 
-export class CreateOneOnOneDto {
+export class LeaderCreateOneOnOneDto {
   @ApiProperty() @IsInt() participantId!: number;
   @ApiPropertyOptional() @IsOptional() @IsDateString() scheduledAt?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() agenda?: string;
@@ -91,7 +91,7 @@ export class CreateOneOnOneDto {
 
 // ─── Course Assignment ────────────────────────────────────────────
 
-export class AssignCourseDto {
+export class LeaderAssignCourseDto {
   @ApiProperty({ type: [Number] }) @IsArray() @IsInt({ each: true }) userIds!: number[];
   @ApiProperty() @IsInt() courseId!: number;
 }

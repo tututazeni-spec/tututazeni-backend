@@ -21,7 +21,7 @@ import {
   LeadershipFilterDto,
   EnrollLeadershipDto,
   UpdateParticipantProgressDto,
-  CreateOneOnOneDto,
+  LeadershipCreateOneOnOneDto,
   CompleteOneOnOneDto,
   Submit360FeedbackDto,
   SubmitPulseDto,
@@ -166,7 +166,7 @@ export class LeadershipController {
   @Post('1on1')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Agendar 1:1 com liderado' })
-  createOneOnOne(@CurrentUser() user: any, @Body() dto: CreateOneOnOneDto) {
+  createOneOnOne(@CurrentUser() user: any, @Body() dto: LeadershipCreateOneOnOneDto) {
     return this.svc.createOneOnOne(user.id, dto);
   }
 

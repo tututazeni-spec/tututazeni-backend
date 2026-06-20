@@ -27,7 +27,7 @@ import {
   StartSessionDto,
   SendMessageDto,
   CompleteSessionDto,
-  AnalyticsFilterDto,
+  AvatarTrainingAnalyticsFilterDto,
 } from './avatar-training.dto';
 
 const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
@@ -215,7 +215,7 @@ export class AvatarTrainingController {
   @Get('analytics/dashboard')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Dashboard de analytics (KPIs, top cenários, por categoria)' })
-  dashboard(@Query() filters: AnalyticsFilterDto) {
+  dashboard(@Query() filters: AvatarTrainingAnalyticsFilterDto) {
     return this.svc.getDashboard(filters);
   }
 

@@ -22,7 +22,7 @@ import {
   UpdateItemDto,
   FilterItemDto,
   CreateRatingDto,
-  CreateCommentDto,
+  LibraryCreateCommentDto,
 } from './dto';
 
 @ApiTags('Biblioteca Digital')
@@ -125,7 +125,11 @@ export class LibraryController {
 
   @Post('items/:id/comments')
   @ApiOperation({ summary: 'Comentar item' })
-  addComment(@Param('id') id: string, @Body() dto: CreateCommentDto, @CurrentUser() user: any) {
+  addComment(
+    @Param('id') id: string,
+    @Body() dto: LibraryCreateCommentDto,
+    @CurrentUser() user: any,
+  ) {
     return this.service.addComment(id, dto, user.id);
   }
 

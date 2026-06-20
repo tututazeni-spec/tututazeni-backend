@@ -9,7 +9,7 @@ import {
   UpdateProgressDto,
   SaveNoteDto,
   CreateLearningPathDto,
-  LearningPathFilterDto,
+  ContentLibraryLearningPathFilterDto,
   ContentStatus,
 } from './content-library.dto';
 
@@ -647,7 +647,7 @@ export class ContentLibraryService {
     return path;
   }
 
-  async getLearningPaths(filters: LearningPathFilterDto = {}) {
+  async getLearningPaths(filters: ContentLibraryLearningPathFilterDto = {}) {
     const { page = 1, limit = 20, search } = filters;
     const skip = (page - 1) * limit;
     const where: any = {};

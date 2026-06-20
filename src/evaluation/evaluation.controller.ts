@@ -24,7 +24,7 @@ import {
   AssignEvaluatorDto,
   BulkAssignDto,
   CalibrateScoreDto,
-  AnalyticsFilterDto,
+  EvaluationAnalyticsFilterDto,
   CreateEvaluationDto,
 } from './evaluation.dto';
 
@@ -222,7 +222,7 @@ export class EvaluationController {
   @ApiOperation({
     summary: 'Dashboard de analytics — distribuição, top performers, por departamento',
   })
-  analyticsDashboard(@Query() filters: AnalyticsFilterDto) {
+  analyticsDashboard(@Query() filters: EvaluationAnalyticsFilterDto) {
     return this.svc.getAnalyticsDashboard(filters);
   }
 

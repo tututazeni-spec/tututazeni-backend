@@ -16,7 +16,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { AttendanceService } from './attendance.service';
 import {
   AttendanceFilterDto,
-  LeaveFilterDto,
+  AttendanceLeaveFilterDto,
   CreateAttendanceDto,
   UpdateAttendanceDto,
   ClockInDto,
@@ -197,7 +197,7 @@ export class AttendanceController {
   @Get('leaves')
   @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Listar pedidos de licença' })
-  getLeaves(@Query() filters: LeaveFilterDto) {
+  getLeaves(@Query() filters: AttendanceLeaveFilterDto) {
     return this.svc.getLeaves(filters);
   }
 

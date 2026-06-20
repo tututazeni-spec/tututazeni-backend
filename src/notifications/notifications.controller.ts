@@ -19,8 +19,8 @@ import {
   CreateNotificationDto,
   BulkNotificationDto,
   NotificationFilterDto,
-  CreateTemplateDto,
-  UpdateTemplateDto,
+  NotificationsCreateTemplateDto,
+  NotificationsUpdateTemplateDto,
   UpdatePreferencesDto,
 } from './notifications.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -104,14 +104,17 @@ export class NotificationsController {
   @Post('templates')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Criar template' })
-  createTemplate(@Body() dto: CreateTemplateDto) {
+  createTemplate(@Body() dto: NotificationsCreateTemplateDto) {
     return this.svc.createTemplate(dto);
   }
 
   @Patch('templates/:id')
   @Roles('ADMIN', 'RH')
   @ApiOperation({ summary: 'Actualizar template' })
-  updateTemplate(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTemplateDto) {
+  updateTemplate(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: NotificationsUpdateTemplateDto,
+  ) {
     return this.svc.updateTemplate(id, dto);
   }
 

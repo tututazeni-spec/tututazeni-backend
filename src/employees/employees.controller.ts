@@ -23,7 +23,7 @@ import {
   CreateEmployeeCareerPlanDto,
   CreatePdiDto,
   UpdatePdiProgressDto,
-  CreateDocumentDto,
+  EmployeesCreateDocumentDto,
   AssignSkillDto,
   UpdateSkillLevelDto,
   CreateTimelineEventDto,
@@ -299,7 +299,7 @@ export class EmployeesController {
   @ApiOperation({ summary: 'Adicionar documento' })
   createDocument(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CreateDocumentDto,
+    @Body() dto: EmployeesCreateDocumentDto,
     @CurrentUser() user: any,
   ) {
     return this.svc.createDocument({ ...dto, employeeId: id }, user.id);

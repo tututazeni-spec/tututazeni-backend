@@ -34,7 +34,7 @@ export enum EnrollmentOrigin {
 
 // ─── Create Enrollment ────────────────────────────────────────────────────────
 
-export class CreateEnrollmentDto {
+export class EnrollmentsCreateEnrollmentDto {
   @ApiProperty({ description: 'ID do utilizador' })
   @IsInt()
   userId!: number;

@@ -11,7 +11,7 @@ import { AuditService } from '../common/services/audit.service';
 import * as crypto from 'crypto';
 import {
   AttendanceFilterDto,
-  LeaveFilterDto,
+  AttendanceLeaveFilterDto,
   CreateAttendanceDto,
   UpdateAttendanceDto,
   ClockInDto,
@@ -449,7 +449,7 @@ export class AttendanceService {
     return updated;
   }
 
-  async getLeaves(filters: LeaveFilterDto) {
+  async getLeaves(filters: AttendanceLeaveFilterDto) {
     const { page = 1, limit = 20, userId, type, status, from, to } = filters;
     const skip = (page - 1) * limit;
     const where: any = {};

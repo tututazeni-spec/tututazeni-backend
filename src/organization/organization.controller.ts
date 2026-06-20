@@ -15,7 +15,7 @@ import { OrganizationService } from './organization.service';
 import {
   CreateOrgDepartmentDto,
   UpdateOrgDepartmentDto,
-  DepartmentFilterDto,
+  OrganizationDepartmentFilterDto,
   CreateOrgPositionDto,
   UpdateOrgPositionDto,
   PositionFilterDto,
@@ -102,7 +102,7 @@ export class OrganizationController {
 
   @Get('departments')
   @ApiOperation({ summary: 'Listar departamentos com filtros e paginação' })
-  getDepartments(@Query() filters: DepartmentFilterDto) {
+  getDepartments(@Query() filters: OrganizationDepartmentFilterDto) {
     return this.svc.getDepartments(filters);
   }
 

@@ -154,7 +154,7 @@ export class UpdateUnitDto extends PartialType(CreateUnitDto) {}
 
 // ─── Role ─────────────────────────────────────────────────────────────────────
 
-export class CreateRoleDto {
+export class DepartmentsCreateRoleDto {
   @ApiProperty({ example: 'GESTOR' })
   @IsString()
   @MaxLength(60)
@@ -166,9 +166,9 @@ export class CreateRoleDto {
   description?: string;
 }
 
-export class UpdateRoleDto extends PartialType(CreateRoleDto) {}
+export class UpdateRoleDto extends PartialType(DepartmentsCreateRoleDto) {}
 
-export class CreatePermissionDto {
+export class DepartmentsCreatePermissionDto {
   @ApiProperty({ example: 'read:courses' })
   @IsString()
   name: string;

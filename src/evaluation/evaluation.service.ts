@@ -15,7 +15,7 @@ import {
   AssignEvaluatorDto,
   BulkAssignDto,
   CalibrateScoreDto,
-  AnalyticsFilterDto,
+  EvaluationAnalyticsFilterDto,
   CreateEvaluationDto,
   EvalType,
   CycleStatus,
@@ -860,7 +860,7 @@ export class EvaluationService {
   // ANALYTICS
   // ══════════════════════════════════════════════════════
 
-  async getAnalyticsDashboard(filters: AnalyticsFilterDto = {}) {
+  async getAnalyticsDashboard(filters: EvaluationAnalyticsFilterDto = {}) {
     const { cycleId, departmentId } = filters;
     const where: any = {};
     if (cycleId) where.cycleId = cycleId;

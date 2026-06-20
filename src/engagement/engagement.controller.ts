@@ -28,7 +28,7 @@ import {
   CreateRecognitionDto,
   RecognitionFilterDto,
   CreateOneOnOneDto,
-  UpdateOneOnOneDto,
+  EngagementUpdateOneOnOneDto,
   CreateActionPlanDto,
   UpdateActionPlanDto,
   EngagementFilterDto,
@@ -229,7 +229,7 @@ export class EngagementController {
   updateOneOnOne(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: any,
-    @Body() dto: UpdateOneOnOneDto,
+    @Body() dto: EngagementUpdateOneOnOneDto,
   ) {
     return this.svc.updateOneOnOne(id, user.id, dto);
   }

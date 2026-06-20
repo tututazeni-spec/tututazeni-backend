@@ -14,7 +14,7 @@ import {
   CreateRecognitionDto,
   RecognitionFilterDto,
   CreateOneOnOneDto,
-  UpdateOneOnOneDto,
+  EngagementUpdateOneOnOneDto,
   CreateActionPlanDto,
   UpdateActionPlanDto,
   EngagementFilterDto,
@@ -806,7 +806,7 @@ export class EngagementService {
       .catch(() => [] as any[]);
   }
 
-  async updateOneOnOne(id: number, userId: number, dto: UpdateOneOnOneDto) {
+  async updateOneOnOne(id: number, userId: number, dto: EngagementUpdateOneOnOneDto) {
     const data: any = { ...dto };
     if (dto.scheduledAt) data.scheduledAt = new Date(dto.scheduledAt);
     if (dto.completed) data.status = 'COMPLETED';

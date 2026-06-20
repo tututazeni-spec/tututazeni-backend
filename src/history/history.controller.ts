@@ -5,7 +5,7 @@ import { HistoryService } from './history.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
-import { HistoryFilterDto, TimelineFilterDto, CreateEventDto } from './history.dto';
+import { HistoryFilterDto, TimelineFilterDto, HistoryCreateEventDto } from './history.dto';
 
 const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
 const MGMT_ROLES = ['ADMIN', 'RH', 'LIDER'] as const;
@@ -37,7 +37,7 @@ export class HistoryController {
   @Post('events')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Registar evento manual (promoção, marco de carreira, etc.)' })
-  createEvent(@Body() dto: CreateEventDto) {
+  createEvent(@Body() dto: HistoryCreateEventDto) {
     return this.svc.createEvent(dto);
   }
 

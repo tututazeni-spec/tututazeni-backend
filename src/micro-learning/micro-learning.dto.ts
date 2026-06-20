@@ -208,7 +208,7 @@ export class DispatchMicroLearningDto {
 
 // ─── Progress ─────────────────────────────────────────────────────────────────
 
-export class UpdateProgressDto {
+export class MicroLearningUpdateProgressDto {
   @ApiProperty()
   @IsInt()
   microLearningId!: number;
@@ -228,7 +228,7 @@ export class UpdateProgressDto {
 
 // ─── Quiz Submit ──────────────────────────────────────────────────────────────
 
-export class SubmitQuizDto {
+export class MicroLearningSubmitQuizDto {
   @ApiProperty()
   @IsInt()
   microLearningId!: number;

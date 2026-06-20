@@ -71,7 +71,7 @@ export enum FeedbackType {
 
 // ─── Review Cycle ─────────────────────────────────────────────────────────────
 
-export class CreateCycleDto {
+export class PerformanceCreateCycleDto {
   @ApiProperty({ example: 'Avaliação Anual 2026' })
   @IsString()
   @MaxLength(200)
@@ -138,7 +138,7 @@ export class CreateCycleDto {
   scoreScale?: number;
 }
 
-export class UpdateCycleDto extends PartialType(CreateCycleDto) {}
+export class PerformanceUpdateCycleDto extends PartialType(PerformanceCreateCycleDto) {}
 
 // ─── Performance Review ───────────────────────────────────────────────────────
 
@@ -291,7 +291,7 @@ export class CreateGoalDto {
   dueDate?: string;
 }
 
-export class UpdateGoalDto extends PartialType(CreateGoalDto) {}
+export class PerformanceUpdateGoalDto extends PartialType(CreateGoalDto) {}
 
 export class UpdatePerformanceGoalProgressDto {
   @ApiProperty()
@@ -307,7 +307,7 @@ export class UpdatePerformanceGoalProgressDto {
 
 // ─── Feedback contínuo ────────────────────────────────────────────────────────
 
-export class CreateFeedbackDto {
+export class PerformanceCreateFeedbackDto {
   @ApiProperty({ description: 'ID do colaborador que recebe' })
   @IsInt()
   targetUserId!: number;
@@ -356,7 +356,7 @@ export class CalibrateReviewDto {
 
 // ─── Disputa ──────────────────────────────────────────────────────────────────
 
-export class CreateDisputeDto {
+export class PerformanceCreateDisputeDto {
   @ApiProperty()
   @IsInt()
   reviewId!: number;

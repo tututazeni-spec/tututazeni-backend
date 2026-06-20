@@ -5,7 +5,7 @@ import { Type } from 'class-transformer';
 
 // ─── Role DTOs ────────────────────────────────────────────────────
 
-export class CreateRoleDto {
+export class RolesPermissionsCreateRoleDto {
   @ApiProperty()
   @IsString()
   @MaxLength(100)
@@ -50,9 +50,9 @@ export class CreateRoleDto {
   permissionIds?: number[];
 }
 
-export class UpdateRoleDto extends PartialType(CreateRoleDto) {}
+export class RolesPermissionsUpdateRoleDto extends PartialType(RolesPermissionsCreateRoleDto) {}
 
-export class CloneRoleDto {
+export class RolesPermissionsCloneRoleDto {
   @ApiProperty({ description: 'Nome do role clonado (tem de ser único)' })
   @IsString()
   @MaxLength(100)

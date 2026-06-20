@@ -264,7 +264,7 @@ export class StartAttemptDto {
 
 // ─── Submit ───────────────────────────────────────────────────────────────────
 
-export class AnswerDto {
+export class AssessmentsAnswerDto {
   @ApiProperty({ description: 'ID da pergunta' })
   @IsInt()
   questionId: number;
@@ -291,11 +291,11 @@ export class SubmitAttemptDto {
   @IsInt()
   attemptId: number;
 
-  @ApiProperty({ type: [AnswerDto] })
+  @ApiProperty({ type: [AssessmentsAnswerDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => AnswerDto)
-  answers: AnswerDto[];
+  @Type(() => AssessmentsAnswerDto)
+  answers: AssessmentsAnswerDto[];
 }
 
 // ─── Auto-save ────────────────────────────────────────────────────────────────
@@ -305,11 +305,11 @@ export class AutoSaveDto {
   @IsInt()
   attemptId: number;
 
-  @ApiProperty({ type: [AnswerDto] })
+  @ApiProperty({ type: [AssessmentsAnswerDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => AnswerDto)
-  answers: AnswerDto[];
+  @Type(() => AssessmentsAnswerDto)
+  answers: AssessmentsAnswerDto[];
 }
 
 // ─── Manual review (open questions) ──────────────────────────────────────────

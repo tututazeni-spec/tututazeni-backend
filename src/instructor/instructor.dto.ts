@@ -140,7 +140,7 @@ export class UpdateCohortDto extends PartialType(CreateCohortDto) {
   status?: CohortStatus;
 }
 
-export class AddParticipantsDto {
+export class InstructorAddParticipantsDto {
   @ApiProperty({ type: [Number] })
   @IsArray()
   @IsInt({ each: true })

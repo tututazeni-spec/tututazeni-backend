@@ -16,8 +16,8 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import {
   RolesPermissionsService,
-  CreateRoleDto,
-  UpdateRoleDto,
+  RolesPermissionsCreateRoleDto,
+  RolesPermissionsUpdateRoleDto,
   BulkAssignRoleDto,
   SimulatePermissionDto,
   RoleTemplateDto,
@@ -76,13 +76,13 @@ export class RolesPermissionsController {
 
   @Post()
   @ApiOperation({ summary: 'Criar novo role com permissões' })
-  create(@Body() dto: CreateRoleDto) {
+  create(@Body() dto: RolesPermissionsCreateRoleDto) {
     return this.svc.create(dto);
   }
 
   @Put(':id')
   @ApiOperation({ summary: 'Actualizar role (nome, descrição, permissões)' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRoleDto) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: RolesPermissionsUpdateRoleDto) {
     return this.svc.update(id, dto);
   }
 

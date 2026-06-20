@@ -13,8 +13,8 @@ import {
   MicroLearningFilterDto,
   CreatePlaylistDto,
   DispatchMicroLearningDto,
-  UpdateProgressDto,
-  SubmitQuizDto,
+  MicroLearningUpdateProgressDto,
+  MicroLearningSubmitQuizDto,
   InteractDto,
 } from './micro-learning.dto';
 
@@ -280,7 +280,7 @@ export class MicroLearningService {
 
   // ─── PROGRESSO ────────────────────────────────────────────────────────────
 
-  async updateProgress(userId: number, dto: UpdateProgressDto) {
+  async updateProgress(userId: number, dto: MicroLearningUpdateProgressDto) {
     const ml = await this.findOne(dto.microLearningId);
 
     const existing = await this.prisma.microLearningProgress.findFirst({
@@ -373,7 +373,7 @@ export class MicroLearningService {
 
   // ─── QUIZ ─────────────────────────────────────────────────────────────────
 
-  async submitQuiz(userId: number, dto: SubmitQuizDto) {
+  async submitQuiz(userId: number, dto: MicroLearningSubmitQuizDto) {
     const questions = await this.prisma.microQuizQuestion.findMany({
       where: { microLearningId: dto.microLearningId },
       orderBy: { seq: 'asc' },
