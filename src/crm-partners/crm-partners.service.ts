@@ -12,6 +12,16 @@ import {
 export class CrmPartnersService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   * Nota: leituras puras usam Promise.all (não $transaction), pois a extensão
+   * de réplicas encaminha sempre $transaction para o primary.
+   */
+  private get prismaRead(): any {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   // ─── CÓDIGO AUTO-GERADO ──────────────────────────────
 
   private async generateCode(): Promise<string> {
@@ -66,8 +76,8 @@ export class CrmPartnersService {
         ],
       }),
     };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.partner.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.partner.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -77,13 +87,13 @@ export class CrmPartnersService {
           _count: { select: { interactions: true, milestones: true } },
         },
       }),
-      this.prisma.partner.count({ where }),
+      this.prismaRead.partner.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: string) {
-    const partner = await this.prisma.partner.findUnique({
+    const partner = await this.prismaRead.partner.findUnique({
       where: { id },
       include: {
         createdBy: { select: { fullName: true } },
@@ -177,15 +187,15 @@ export class CrmPartnersService {
   async getInteractions(partnerId: string, page = 1, limit = 20) {
     await this.findOne(partnerId);
     const where = { partnerId, deletedAt: null };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.partnerInteraction.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.partnerInteraction.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { date: 'desc' },
         include: { user: { select: { fullName: true } } },
       }),
-      this.prisma.partnerInteraction.count({ where }),
+      this.prismaRead.partnerInteraction.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -225,7 +235,7 @@ export class CrmPartnersService {
   }
 
   async getOverdueMilestones() {
-    return this.prisma.partnerMilestone.findMany({
+    return this.prismaRead.partnerMilestone.findMany({
       where: {
         status: { in: ['PENDING', 'IN_PROGRESS'] },
         dueDate: { lt: new Date() },
@@ -244,7 +254,7 @@ export class CrmPartnersService {
   async getExpiringContracts(days = 30) {
     const until = new Date();
     until.setDate(until.getDate() + Number(days));
-    return this.prisma.partner.findMany({
+    return this.prismaRead.partner.findMany({
       where: {
         deletedAt: null,
         status: 'ACTIVE',
@@ -283,48 +293,48 @@ export class CrmPartnersService {
       overdueMilestones,
       recentInteractions,
       avgSatisfaction,
-    ] = await this.prisma.$transaction([
-      this.prisma.partner.count({ where: { deletedAt: null } }),
-      this.prisma.partner.count({
+    ] = await Promise.all([
+      this.prismaRead.partner.count({ where: { deletedAt: null } }),
+      this.prismaRead.partner.count({
         where: { createdAt: { gte: startOfMonth } },
       }),
-      this.prisma.partner.count({
+      this.prismaRead.partner.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      (this.prisma.partner.groupBy as any)({
+      this.prismaRead.partner.groupBy({
         by: ['type'],
         where: { deletedAt: null },
         _count: { id: true },
       }),
-      (this.prisma.partner.groupBy as any)({
+      this.prismaRead.partner.groupBy({
         by: ['tier'],
         where: { deletedAt: null, status: 'ACTIVE' },
         _count: { id: true },
       }),
-      (this.prisma.partner.groupBy as any)({
+      this.prismaRead.partner.groupBy({
         by: ['status'],
         where: { deletedAt: null },
         _count: { id: true },
       }),
-      this.prisma.partner.aggregate({
+      this.prismaRead.partner.aggregate({
         _sum: { annualValue: true },
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prisma.partner.count({
+      this.prismaRead.partner.count({
         where: {
           status: 'ACTIVE',
           deletedAt: null,
           contractEnd: { lte: in30Days, gte: now },
         },
       }),
-      this.prisma.partnerMilestone.count({
+      this.prismaRead.partnerMilestone.count({
         where: {
           status: { in: ['PENDING', 'IN_PROGRESS'] },
           dueDate: { lt: now },
           deletedAt: null,
         },
       }),
-      this.prisma.partnerInteraction.findMany({
+      this.prismaRead.partnerInteraction.findMany({
         where: { deletedAt: null },
         orderBy: { date: 'desc' },
         take: 5,
@@ -333,7 +343,7 @@ export class CrmPartnersService {
           user: { select: { fullName: true } },
         },
       }),
-      this.prisma.partner.aggregate({
+      this.prismaRead.partner.aggregate({
         _avg: { satisfactionAvg: true },
         where: { deletedAt: null, satisfactionAvg: { gt: 0 } },
       }),
@@ -356,33 +366,32 @@ export class CrmPartnersService {
 
   async getReport(startDate: Date, endDate: Date) {
     const where = { createdAt: { gte: startDate, lte: endDate } };
-    const [created, byType, byTier, totalValue, interactions, milestones] =
-      await this.prisma.$transaction([
-        this.prisma.partner.count({ where }),
-        (this.prisma.partner.groupBy as any)({
-          by: ['type'],
-          where,
-          _count: { id: true },
-        }),
-        (this.prisma.partner.groupBy as any)({
-          by: ['tier'],
-          where,
-          _count: { id: true },
-        }),
-        this.prisma.partner.aggregate({
-          _sum: { annualValue: true },
-          where: { ...where, status: 'ACTIVE' },
-        }),
-        this.prisma.partnerInteraction.count({
-          where: { createdAt: { gte: startDate, lte: endDate } },
-        }),
-        this.prisma.partnerMilestone.count({
-          where: {
-            status: 'COMPLETED',
-            completedAt: { gte: startDate, lte: endDate },
-          },
-        }),
-      ]);
+    const [created, byType, byTier, totalValue, interactions, milestones] = await Promise.all([
+      this.prismaRead.partner.count({ where }),
+      this.prismaRead.partner.groupBy({
+        by: ['type'],
+        where,
+        _count: { id: true },
+      }),
+      this.prismaRead.partner.groupBy({
+        by: ['tier'],
+        where,
+        _count: { id: true },
+      }),
+      this.prismaRead.partner.aggregate({
+        _sum: { annualValue: true },
+        where: { ...where, status: 'ACTIVE' },
+      }),
+      this.prismaRead.partnerInteraction.count({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+      }),
+      this.prismaRead.partnerMilestone.count({
+        where: {
+          status: 'COMPLETED',
+          completedAt: { gte: startDate, lte: endDate },
+        },
+      }),
+    ]);
     return {
       period: { start: startDate, end: endDate },
       created,

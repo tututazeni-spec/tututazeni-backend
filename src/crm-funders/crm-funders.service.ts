@@ -14,6 +14,16 @@ import {
 export class CrmFundersService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   * Nota: leituras puras usam Promise.all (não $transaction), pois a extensão
+   * de réplicas encaminha sempre $transaction para o primary.
+   */
+  private get prismaRead(): any {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   // ─── CÓDIGO AUTO-GERADO ──────────────────────────────
 
   private async generateCode(prefix: string, model: 'funder' | 'fundingGrant'): Promise<string> {
@@ -68,8 +78,8 @@ export class CrmFundersService {
         ],
       }),
     };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.funder.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.funder.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -79,13 +89,13 @@ export class CrmFundersService {
           _count: { select: { grants: true, interactions: true } },
         },
       }),
-      this.prisma.funder.count({ where }),
+      this.prismaRead.funder.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: string) {
-    const funder = await this.prisma.funder.findUnique({
+    const funder = await this.prismaRead.funder.findUnique({
       where: { id },
       include: {
         createdBy: { select: { fullName: true } },
@@ -178,8 +188,8 @@ export class CrmFundersService {
   async findGrants(funderId: string, page = 1, limit = 20) {
     await this.findOne(funderId);
     const where = { funderId, deletedAt: null };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.fundingGrant.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.fundingGrant.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -188,7 +198,7 @@ export class CrmFundersService {
           _count: { select: { disbursements: true, reports: true } },
         },
       }),
-      this.prisma.fundingGrant.count({ where }),
+      this.prismaRead.fundingGrant.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -247,15 +257,15 @@ export class CrmFundersService {
 
   async getDisbursements(grantId: string, page = 1, limit = 20) {
     const where = { grantId, deletedAt: null };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.grantDisbursement.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.grantDisbursement.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { receivedAt: 'desc' },
         include: { createdBy: { select: { fullName: true } } },
       }),
-      this.prisma.grantDisbursement.count({ where }),
+      this.prismaRead.grantDisbursement.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -335,7 +345,7 @@ export class CrmFundersService {
   }
 
   async getOverdueReports() {
-    return this.prisma.funderReport.findMany({
+    return this.prismaRead.funderReport.findMany({
       where: {
         status: { in: ['PENDING', 'REJECTED'] },
         dueDate: { lt: new Date() },
@@ -369,45 +379,45 @@ export class CrmFundersService {
       reportsThisMonth,
       recentDisbursements,
       recentInteractions,
-    ] = await this.prisma.$transaction([
-      this.prisma.funder.count({ where: { deletedAt: null } }),
-      this.prisma.funder.count({
+    ] = await Promise.all([
+      this.prismaRead.funder.count({ where: { deletedAt: null } }),
+      this.prismaRead.funder.count({
         where: { createdAt: { gte: startOfMonth } },
       }),
-      this.prisma.funder.count({
+      this.prismaRead.funder.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      (this.prisma.funder.groupBy as any)({
+      this.prismaRead.funder.groupBy({
         by: ['type'],
         where: { deletedAt: null },
         _count: { id: true },
       }),
-      (this.prisma.funder.groupBy as any)({
+      this.prismaRead.funder.groupBy({
         by: ['status'],
         where: { deletedAt: null },
         _count: { id: true },
       }),
-      this.prisma.fundingGrant.aggregate({
+      this.prismaRead.fundingGrant.aggregate({
         _sum: { amount: true },
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prisma.fundingGrant.aggregate({
+      this.prismaRead.fundingGrant.aggregate({
         _sum: { disbursed: true },
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prisma.fundingGrant.count({
+      this.prismaRead.fundingGrant.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prisma.funderReport.count({
+      this.prismaRead.funderReport.count({
         where: {
           status: { in: ['PENDING', 'REJECTED'] },
           dueDate: { lt: now },
         },
       }),
-      this.prisma.funderReport.count({
+      this.prismaRead.funderReport.count({
         where: { dueDate: { lte: in30Days, gte: now }, status: 'PENDING' },
       }),
-      this.prisma.grantDisbursement.findMany({
+      this.prismaRead.grantDisbursement.findMany({
         where: { createdAt: { gte: startOfMonth }, deletedAt: null },
         orderBy: { receivedAt: 'desc' },
         take: 5,
@@ -416,7 +426,7 @@ export class CrmFundersService {
           createdBy: { select: { fullName: true } },
         },
       }),
-      this.prisma.funderInteraction.findMany({
+      this.prismaRead.funderInteraction.findMany({
         where: { deletedAt: null },
         orderBy: { date: 'desc' },
         take: 5,
@@ -451,21 +461,20 @@ export class CrmFundersService {
 
   async getReport(startDate: Date, endDate: Date) {
     const range = { gte: startDate, lte: endDate };
-    const [created, byType, grantsCreated, totalDisbursed, reports] =
-      await this.prisma.$transaction([
-        this.prisma.funder.count({ where: { createdAt: range } }),
-        (this.prisma.funder.groupBy as any)({
-          by: ['type'],
-          where: { createdAt: range },
-          _count: { id: true },
-        }),
-        this.prisma.fundingGrant.count({ where: { createdAt: range } }),
-        this.prisma.grantDisbursement.aggregate({
-          _sum: { amount: true },
-          where: { receivedAt: range },
-        }),
-        this.prisma.funderReport.count({ where: { submittedAt: range } }),
-      ]);
+    const [created, byType, grantsCreated, totalDisbursed, reports] = await Promise.all([
+      this.prismaRead.funder.count({ where: { createdAt: range } }),
+      this.prismaRead.funder.groupBy({
+        by: ['type'],
+        where: { createdAt: range },
+        _count: { id: true },
+      }),
+      this.prismaRead.fundingGrant.count({ where: { createdAt: range } }),
+      this.prismaRead.grantDisbursement.aggregate({
+        _sum: { amount: true },
+        where: { receivedAt: range },
+      }),
+      this.prismaRead.funderReport.count({ where: { submittedAt: range } }),
+    ]);
     return {
       period: { start: startDate, end: endDate },
       created,

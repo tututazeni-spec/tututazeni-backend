@@ -101,7 +101,8 @@ describe('CrmBeneficiariesService', () => {
 
   describe('findAll', () => {
     it('deve retornar lista paginada', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[mockBeneficiary], 1]);
+      mockPrisma.beneficiary.findMany.mockResolvedValue([mockBeneficiary]);
+      mockPrisma.beneficiary.count.mockResolvedValue(1);
 
       const result = await service.findAll({ page: 1, limit: 20 });
 
@@ -111,7 +112,8 @@ describe('CrmBeneficiariesService', () => {
     });
 
     it('deve filtrar por tipo e status', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+      mockPrisma.beneficiary.findMany.mockResolvedValue([]);
+      mockPrisma.beneficiary.count.mockResolvedValue(0);
       const result = await service.findAll({
         type: 'INDIVIDUAL' as any,
         status: 'ACTIVE' as any,
@@ -217,7 +219,8 @@ describe('CrmBeneficiariesService', () => {
   describe('getInteractions', () => {
     it('deve retornar interacções paginadas', async () => {
       mockPrisma.beneficiary.findUnique.mockResolvedValue(mockBeneficiary);
-      mockPrisma.$transaction.mockResolvedValue([[{ id: 'int-1', type: 'CALL' }], 1]);
+      mockPrisma.beneficiaryInteraction.findMany.mockResolvedValue([{ id: 'int-1', type: 'CALL' }]);
+      mockPrisma.beneficiaryInteraction.count.mockResolvedValue(1);
       const result = await service.getInteractions('ben-1', 1, 20);
       expect(result).toHaveProperty('data');
       expect(result.total).toBe(1);
@@ -294,7 +297,9 @@ describe('CrmBeneficiariesService', () => {
 
   describe('getReport', () => {
     it('deve retornar relatório por período', async () => {
-      mockPrisma.$transaction.mockResolvedValue([10, [], [], 25]);
+      mockPrisma.beneficiary.count.mockResolvedValue(10);
+      mockPrisma.beneficiary.groupBy.mockResolvedValue([]);
+      mockPrisma.beneficiaryInteraction.count.mockResolvedValue(25);
       const result = await service.getReport(new Date('2026-01-01'), new Date('2026-12-31'));
       expect(result).toHaveProperty('period');
       expect(result.created).toBe(10);
@@ -306,18 +311,11 @@ describe('CrmBeneficiariesService', () => {
 
   describe('getDashboard', () => {
     it('deve retornar totais e distribuições', async () => {
-      mockPrisma.$transaction.mockResolvedValue([
-        5,
-        2,
-        4,
-        [],
-        [],
-        [],
-        1,
-        [],
-        3,
-        { _avg: { satisfactionAvg: 4.2 } },
-      ]);
+      mockPrisma.beneficiary.count.mockResolvedValue(5);
+      mockPrisma.beneficiary.groupBy.mockResolvedValue([]);
+      mockPrisma.beneficiaryInteraction.findMany.mockResolvedValue([]);
+      mockPrisma.beneficiaryNeed.count.mockResolvedValue(3);
+      mockPrisma.beneficiary.aggregate.mockResolvedValue({ _avg: { satisfactionAvg: 4.2 } });
       const result = await service.getDashboard();
       expect(result).toHaveProperty('totals');
       expect(result).toHaveProperty('distributions');

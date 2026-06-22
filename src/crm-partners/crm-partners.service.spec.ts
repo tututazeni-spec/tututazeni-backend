@@ -96,7 +96,8 @@ describe('CrmPartnersService', () => {
 
   describe('findAll', () => {
     it('deve retornar lista paginada com totais', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[mockPartner], 1]);
+      mockPrisma.partner.findMany.mockResolvedValue([mockPartner]);
+      mockPrisma.partner.count.mockResolvedValue(1);
       const result = await service.findAll({ page: 1, limit: 20 });
       expect(result).toMatchObject({
         data: expect.any(Array),
@@ -106,7 +107,8 @@ describe('CrmPartnersService', () => {
     });
 
     it('deve filtrar por tipo, tier e status', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+      mockPrisma.partner.findMany.mockResolvedValue([]);
+      mockPrisma.partner.count.mockResolvedValue(0);
       const result = await service.findAll({
         type: 'TECHNOLOGY' as any,
         tier: 'GOLD' as any,
@@ -213,7 +215,8 @@ describe('CrmPartnersService', () => {
   describe('getInteractions', () => {
     it('deve retornar interacções paginadas', async () => {
       mockPrisma.partner.findUnique.mockResolvedValue(mockPartner);
-      mockPrisma.$transaction.mockResolvedValue([[{ id: 'int-1', type: 'MEETING' }], 1]);
+      mockPrisma.partnerInteraction.findMany.mockResolvedValue([{ id: 'int-1', type: 'MEETING' }]);
+      mockPrisma.partnerInteraction.count.mockResolvedValue(1);
       const result = await service.getInteractions('par-1', 1, 20);
       expect(result.total).toBe(1);
       expect(result.totalPages).toBe(1);
@@ -300,19 +303,14 @@ describe('CrmPartnersService', () => {
 
   describe('getDashboard', () => {
     it('deve retornar totais, distribuições e interacções recentes', async () => {
-      mockPrisma.$transaction.mockResolvedValue([
-        10,
-        2,
-        8,
-        [],
-        [],
-        [],
-        { _sum: { annualValue: 5000000 } },
-        1,
-        0,
-        [],
-        { _avg: { satisfactionAvg: 4.5 } },
-      ]);
+      mockPrisma.partner.count.mockResolvedValue(10);
+      mockPrisma.partner.groupBy.mockResolvedValue([]);
+      mockPrisma.partner.aggregate.mockResolvedValue({
+        _sum: { annualValue: 5000000 },
+        _avg: { satisfactionAvg: 4.5 },
+      });
+      mockPrisma.partnerMilestone.count.mockResolvedValue(0);
+      mockPrisma.partnerInteraction.findMany.mockResolvedValue([]);
       const result = await service.getDashboard();
       expect(result).toHaveProperty('totals');
       expect(result).toHaveProperty('distributions');
@@ -324,14 +322,11 @@ describe('CrmPartnersService', () => {
 
   describe('getReport', () => {
     it('deve retornar relatório por período', async () => {
-      mockPrisma.$transaction.mockResolvedValue([
-        7,
-        [],
-        [],
-        { _sum: { annualValue: 3000000 } },
-        12,
-        4,
-      ]);
+      mockPrisma.partner.count.mockResolvedValue(7);
+      mockPrisma.partner.groupBy.mockResolvedValue([]);
+      mockPrisma.partner.aggregate.mockResolvedValue({ _sum: { annualValue: 3000000 } });
+      mockPrisma.partnerInteraction.count.mockResolvedValue(12);
+      mockPrisma.partnerMilestone.count.mockResolvedValue(4);
       const result = await service.getReport(new Date('2026-01-01'), new Date('2026-12-31'));
       expect(result.created).toBe(7);
       expect(result.totalValue).toBe(3000000);

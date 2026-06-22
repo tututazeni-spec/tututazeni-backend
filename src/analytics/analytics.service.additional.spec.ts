@@ -86,8 +86,10 @@ const fallbackModel = () => ({
   upsert: jest.fn().mockResolvedValue({}),
 });
 
-const mockPrismaProxy = new Proxy(mockPrisma, {
+const mockPrismaProxy: any = new Proxy(mockPrisma, {
   get(target, prop) {
+    // O serviço usa this.prisma.db para a réplica; devolve o próprio mock.
+    if (prop === 'db') return mockPrismaProxy;
     const val = target[prop];
     return val !== undefined ? val : fallbackModel();
   },
