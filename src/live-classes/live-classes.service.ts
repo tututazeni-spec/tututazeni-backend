@@ -82,7 +82,7 @@ export class LiveClassesService {
   }
 
   async joinClass(liveClassId: number, userId: number) {
-    const existing = await this.prismaRead.liveAttendance.findUnique({
+    const existing = await this.prisma.liveAttendance.findUnique({
       where: { liveClassId_userId: { liveClassId, userId } },
     });
     if (existing) {
@@ -122,7 +122,7 @@ export class LiveClassesService {
   }
 
   async createPostEvaluation(liveClassId: number) {
-    const exists = await this.prismaRead.postClassEvaluation.findUnique({ where: { liveClassId } });
+    const exists = await this.prisma.postClassEvaluation.findUnique({ where: { liveClassId } });
     if (exists) throw new ConflictException('Avaliação pós-aula já criada');
     return this.prisma.postClassEvaluation.create({
       data: { liveClassId },

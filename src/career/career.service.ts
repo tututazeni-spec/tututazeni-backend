@@ -333,7 +333,7 @@ export class CareerService {
   async addCareerPathStep(pathId: number, dto: AddCareerPathStepDto) {
     await this.findOneCareerPath(pathId);
 
-    const existing = await this.prismaRead.careerPathStep.findFirst({
+    const existing = await this.prisma.careerPathStep.findFirst({
       where: { careerPathId: pathId, order: dto.order },
     });
     if (existing) throw new ConflictException(`Já existe um passo na ordem ${dto.order}`);
@@ -381,7 +381,7 @@ export class CareerService {
 
   async createCareerPlan(userId: number, dto: CreateCareerPlanDto) {
     // Só um plano activo por vez
-    const existing = await this.prismaRead.userCareerPlan.findFirst({
+    const existing = await this.prisma.userCareerPlan.findFirst({
       where: { userId, status: 'ACTIVE' },
     });
     if (existing) {
@@ -575,7 +575,7 @@ export class CareerService {
     if (!vacancy) throw new NotFoundException('Vaga não encontrada');
     if (vacancy.status !== 'OPEN') throw new BadRequestException('Esta vaga não está aberta');
 
-    const existing = await this.prismaRead.internalApplication.findUnique({
+    const existing = await this.prisma.internalApplication.findUnique({
       where: { vacancyId_userId: { vacancyId, userId } },
     });
     if (existing) throw new ConflictException('Já te candidataste a esta vaga');
@@ -847,7 +847,7 @@ export class CareerService {
   }
 
   async createSuccessionPlan(dto: CreateSuccessionPlanDto) {
-    const existing = await this.prismaRead.successionPlan.findFirst({
+    const existing = await this.prisma.successionPlan.findFirst({
       where: { positionId: dto.positionId, candidateId: dto.candidateId },
     });
     if (existing) throw new ConflictException('Este candidato já está mapeado para este cargo');

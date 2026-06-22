@@ -132,7 +132,7 @@ export class ProcessStandardService {
   // ─── CRIAR ────────────────────────────────────────────────────────────────
 
   async create(ownerId: number, dto: CreateProcessDto) {
-    const existing = await this.prismaRead.processStandard.findFirst({
+    const existing = await this.prisma.processStandard.findFirst({
       where: { code: dto.code },
     });
     if (existing) throw new ConflictException(`Código ${dto.code} já existe`);

@@ -233,7 +233,7 @@ export class ContentLibraryService {
 
     if (dto.status === ContentStatus.ACTIVE) {
       // Bump version on publish
-      const current = await this.prismaRead.contentAsset.findUnique({ where: { id } });
+      const current = await this.prisma.contentAsset.findUnique({ where: { id } });
       const [major, minor] = ((current as any).version ?? '1.0').split('.').map(Number);
       data.version = `${major}.${(minor ?? 0) + 1}`;
     }
@@ -269,7 +269,7 @@ export class ContentLibraryService {
 
   async bookmark(id: number, userId: number) {
     await this.findOne(id);
-    const existing = await this.prismaRead.auditLog.findFirst({
+    const existing = await this.prisma.auditLog.findFirst({
       where: { userId, action: 'CONTENT_BOOKMARK', entity: 'ContentAsset', entityId: id },
     });
 

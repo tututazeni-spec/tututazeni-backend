@@ -180,7 +180,7 @@ export class EngagementService {
     if (!survey) throw new NotFoundException('Inquérito não encontrado');
     if (survey.status !== 'ACTIVE') throw new BadRequestException('Inquérito não está activo');
 
-    const existing = await this.prismaRead.surveyResponse.findFirst({
+    const existing = await this.prisma.surveyResponse.findFirst({
       where: { userId, surveyId: dto.surveyId },
     });
     if (existing) return { message: 'Já respondeste a este inquérito', alreadySubmitted: true };

@@ -32,7 +32,7 @@ export class SuccessionService {
     const position = await this.prismaRead.position.findUnique({ where: { id: dto.positionId } });
     if (!position) throw new NotFoundException('Posição não encontrada');
 
-    const exists = await this.prismaRead.criticalPosition.findUnique({
+    const exists = await this.prisma.criticalPosition.findUnique({
       where: { positionId: dto.positionId },
     });
     if (exists) throw new ConflictException('Esta posição já está classificada como crítica');
@@ -258,7 +258,7 @@ export class SuccessionService {
     if (!candidate) throw new NotFoundException('Candidato não encontrado');
 
     // Verificar duplicação
-    const exists = await this.prismaRead.successionPlan.findFirst({
+    const exists = await this.prisma.successionPlan.findFirst({
       where: { criticalPositionId: dto.criticalPositionId, candidateId: dto.candidateId },
     });
     if (exists) throw new ConflictException('Candidato já está no plano de sucessão deste cargo');
@@ -411,7 +411,7 @@ export class SuccessionService {
   }
 
   async addToTalentPool(dto: AddToTalentPoolDto) {
-    const exists = await this.prismaRead.talentPool.findUnique({ where: { userId: dto.userId } });
+    const exists = await this.prisma.talentPool.findUnique({ where: { userId: dto.userId } });
     if (exists) throw new ConflictException('Colaborador já está no Talent Pool');
 
     return this.prisma.talentPool.create({

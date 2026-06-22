@@ -23,7 +23,7 @@ export class LmsService {
   // ─── GERAÇÃO DE CÓDIGOS ──────────────────────────────
 
   private async generateSessionCode(): Promise<string> {
-    const last = await this.prismaRead.lmsLiveSession.findFirst({
+    const last = await this.prisma.lmsLiveSession.findFirst({
       orderBy: { code: 'desc' },
       select: { code: true },
     });
@@ -34,7 +34,7 @@ export class LmsService {
   // ─── PERCURSOS DE APRENDIZAGEM ───────────────────────
 
   async createPath(dto: LmsCreateLearningPathDto, userId: number) {
-    const existing = await this.prismaRead.lmsLearningPath.findUnique({
+    const existing = await this.prisma.lmsLearningPath.findUnique({
       where: { code: dto.code },
     });
     if (existing && !existing.deletedAt) {
@@ -121,7 +121,7 @@ export class LmsService {
 
   async enrollInPath(pathId: string, userId: number) {
     const path = await this.findPathById(pathId);
-    const existing = await this.prismaRead.lmsPathEnrollment.findUnique({
+    const existing = await this.prisma.lmsPathEnrollment.findUnique({
       where: { pathId_userId: { pathId, userId } },
     });
     if (existing && !existing.deletedAt) {
@@ -258,7 +258,7 @@ export class LmsService {
     if (session.maxAttendees && session._count.attendances >= session.maxAttendees) {
       throw new ConflictException('Sessão lotada');
     }
-    const existing = await this.prismaRead.lmsLiveAttendance.findUnique({
+    const existing = await this.prisma.lmsLiveAttendance.findUnique({
       where: { sessionId_userId: { sessionId, userId } },
     });
     if (existing) throw new ConflictException('Já inscrito nesta sessão');
@@ -394,7 +394,7 @@ export class LmsService {
   // ─── HELPERS ─────────────────────────────────────────
 
   private async updateAnalytics(userId: number, increments: any) {
-    const existing = await this.prismaRead.lmsLearningAnalytics.findUnique({
+    const existing = await this.prisma.lmsLearningAnalytics.findUnique({
       where: { userId },
     });
     if (!existing) {

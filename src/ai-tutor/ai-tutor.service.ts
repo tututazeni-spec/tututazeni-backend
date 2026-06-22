@@ -253,7 +253,7 @@ export class AiTutorService {
       case AgentAction.ENROLL_COURSE: {
         const { courseId } = dto.params;
         if (!courseId) throw new BadRequestException('courseId obrigatório');
-        const existing = await this.prismaRead.enrollment.findFirst({ where: { userId, courseId } });
+        const existing = await this.prisma.enrollment.findFirst({ where: { userId, courseId } });
         if (existing) throw new BadRequestException('Já inscrito neste curso');
         result = await this.prisma.enrollment.create({
           data: { userId, courseId, status: 'NOT_STARTED', origin: 'AI_TUTOR' },

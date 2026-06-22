@@ -230,7 +230,7 @@ export class OnboardingService {
     const template = (await this.findOneTemplate(dto.templateId)) as any;
 
     // Verificar se já existe plano activo para este utilizador
-    const existing = await this.prismaRead.onboardingPlan.findFirst({
+    const existing = await this.prisma.onboardingPlan.findFirst({
       where: { userId: dto.userId, status: { in: ['NOT_STARTED', 'IN_PROGRESS'] } },
     });
     if (existing) throw new ConflictException('Utilizador já tem um plano de onboarding activo');
@@ -534,7 +534,7 @@ export class OnboardingService {
     });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
-    const existing = await this.prismaRead.onboardingSurvey.findFirst({
+    const existing = await this.prisma.onboardingSurvey.findFirst({
       where: { planId: dto.planId, milestone: dto.milestone },
     });
     if (existing) throw new ConflictException(`Pesquisa do ${dto.milestone} já submetida`);

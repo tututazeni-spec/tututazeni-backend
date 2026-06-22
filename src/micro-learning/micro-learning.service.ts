@@ -291,7 +291,7 @@ export class MicroLearningService {
   async updateProgress(userId: number, dto: MicroLearningUpdateProgressDto) {
     const ml = await this.findOne(dto.microLearningId);
 
-    const existing = await this.prismaRead.microLearningProgress.findFirst({
+    const existing = await this.prisma.microLearningProgress.findFirst({
       where: { userId, microLearningId: dto.microLearningId },
     });
 
@@ -423,7 +423,7 @@ export class MicroLearningService {
 
   async interact(userId: number, dto: InteractDto) {
     if (dto.action === 'LIKE' || dto.action === 'SAVE') {
-      const existing = await this.prismaRead.microLearningInteraction.findFirst({
+      const existing = await this.prisma.microLearningInteraction.findFirst({
         where: { userId, microLearningId: dto.microLearningId, action: dto.action },
       });
       if (existing) {

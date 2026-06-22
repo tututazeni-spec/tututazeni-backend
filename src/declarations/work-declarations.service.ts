@@ -224,7 +224,7 @@ export class WorkDeclarationsService {
     if (!form.active) throw new BadRequestException('Formulário inactivo');
 
     // Verificar se já existe uma submissão não-rascunho
-    const existing = await this.prismaRead.workDeclSubmission.findFirst({
+    const existing = await this.prisma.workDeclSubmission.findFirst({
       where: { userId, formId: dto.formId, status: { not: WorkDeclStatus.DRAFT } },
     });
     if (

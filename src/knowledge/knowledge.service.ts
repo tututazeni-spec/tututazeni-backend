@@ -55,7 +55,7 @@ export class KnowledgeService {
         .toLowerCase()
         .replace(/\s+/g, '-')
         .replace(/[^a-z0-9-]/g, '');
-    const exists = await this.prismaRead.knowledgeCategory.findFirst({ where: { slug } });
+    const exists = await this.prisma.knowledgeCategory.findFirst({ where: { slug } });
     if (exists) throw new ConflictException(`Categoria com slug "${slug}" já existe`);
 
     return this.prisma.knowledgeCategory.create({
@@ -261,7 +261,7 @@ export class KnowledgeService {
   }
 
   async update(id: number, dto: UpdateKnowledgeArticleDto, updatedById?: number) {
-    const existing = await this.prismaRead.knowledgeArticle.findUnique({
+    const existing = await this.prisma.knowledgeArticle.findUnique({
       where: { id },
       include: { _count: { select: { versions: true } } },
     });
@@ -380,7 +380,7 @@ export class KnowledgeService {
   async interact(userId: number, dto: KnowledgeInteractionDto) {
     // LIKE e BOOKMARK fazem toggle
     if (dto.action === 'LIKE' || dto.action === 'BOOKMARK') {
-      const existing = await this.prismaRead.knowledgeInteraction.findFirst({
+      const existing = await this.prisma.knowledgeInteraction.findFirst({
         where: { userId, articleId: dto.articleId, action: dto.action },
       });
       if (existing) {
@@ -507,7 +507,7 @@ export class KnowledgeService {
   // ─── LEITURA OBRIGATÓRIA ──────────────────────────────────────────────────
 
   async acknowledgeArticle(userId: number, dto: AcknowledgeArticleDto) {
-    const existing = await this.prismaRead.articleAcknowledgement.findFirst({
+    const existing = await this.prisma.articleAcknowledgement.findFirst({
       where: { userId, articleId: dto.articleId },
     });
     if (existing) return { alreadyAcknowledged: true, acknowledgedAt: existing.acknowledgedAt };

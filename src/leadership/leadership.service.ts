@@ -122,7 +122,7 @@ export class LeadershipService {
   // ─── PARTICIPAÇÃO ─────────────────────────────────────────────────────────
 
   async enroll(dto: EnrollLeadershipDto) {
-    const exists = await this.prismaRead.leadershipParticipant.findUnique({
+    const exists = await this.prisma.leadershipParticipant.findUnique({
       where: { userId_programId: { userId: dto.userId, programId: dto.programId } },
     });
     if (exists) throw new ConflictException('Utilizador já inscrito neste programa');
@@ -205,7 +205,7 @@ export class LeadershipService {
   }
 
   async withdraw(userId: number, programId: number) {
-    const existing = await this.prismaRead.leadershipParticipant.findUnique({
+    const existing = await this.prisma.leadershipParticipant.findUnique({
       where: { userId_programId: { userId, programId } },
     });
     if (!existing) throw new NotFoundException('Inscrição não encontrada');
@@ -321,7 +321,7 @@ export class LeadershipService {
   // ─── TEAM HEALTH ──────────────────────────────────────────────────────────
 
   async getTeamHealth(managerId: number) {
-    const existing = await this.prismaRead.teamHealth.findUnique({ where: { managerId } });
+    const existing = await this.prisma.teamHealth.findUnique({ where: { managerId } });
 
     // Calcular métricas automáticas
     const teamIds = (
@@ -548,7 +548,7 @@ export class LeadershipService {
   // ─── MENTORING ────────────────────────────────────────────────────────────
 
   async createMentoring(dto: CreateMentoringDto) {
-    const existing = await this.prismaRead.mentoring.findFirst({
+    const existing = await this.prisma.mentoring.findFirst({
       where: { mentorId: dto.mentorId, menteeId: dto.menteeId, status: 'ACTIVE' },
     });
     if (existing)

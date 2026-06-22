@@ -119,7 +119,7 @@ export class InstructorService {
   }
 
   async createProfile(userId: number, dto: CreateInstructorProfileDto) {
-    const exists = await this.prismaRead.instructorProfile.findUnique({ where: { userId } });
+    const exists = await this.prisma.instructorProfile.findUnique({ where: { userId } });
     if (exists) throw new ConflictException('Perfil de instrutor já existe');
 
     return this.prisma.instructorProfile.create({

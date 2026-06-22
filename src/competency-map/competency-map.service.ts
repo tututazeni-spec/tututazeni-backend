@@ -225,7 +225,7 @@ export class CompetencyMapService {
       throw new BadRequestException('Autoavaliação de nível 5 requer validação do gestor');
     }
 
-    const existing = await this.prismaRead.legacyEmployeeSkill.findUnique({
+    const existing = await this.prisma.legacyEmployeeSkill.findUnique({
       where: { userId_skillId: { userId: dto.userId, skillId: dto.skillId } },
     });
 
@@ -340,7 +340,7 @@ export class CompetencyMapService {
       where: { userId, skillId },
       orderBy: { snapshotAt: 'asc' },
     });
-    const current = await this.prismaRead.legacyEmployeeSkill.findUnique({
+    const current = await this.prisma.legacyEmployeeSkill.findUnique({
       where: { userId_skillId: { userId, skillId } },
       include: { skill: true },
     });

@@ -24,7 +24,7 @@ export class LibraryService {
   // ─── CÓDIGO AUTO-GERADO ──────────────────────────────
 
   private async generateCode(): Promise<string> {
-    const last = await this.prismaRead.libraryItem.findFirst({
+    const last = await this.prisma.libraryItem.findFirst({
       orderBy: { code: 'desc' },
       select: { code: true },
     });

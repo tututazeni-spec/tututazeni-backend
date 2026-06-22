@@ -722,7 +722,7 @@ export class AutomationService {
     const tpl = DEFAULT_RULES[templateIndex];
     if (!tpl) return { message: 'Template não encontrado' };
 
-    const exists = await this.prismaRead.automationRule.findFirst({ where: { name: tpl.name } });
+    const exists = await this.prisma.automationRule.findFirst({ where: { name: tpl.name } });
     if (exists) return { message: 'Automação com este nome já existe', rule: exists };
 
     return this.createRule(tpl);
@@ -735,7 +735,7 @@ export class AutomationService {
   async initDefaultRules() {
     const created = [];
     for (const r of DEFAULT_RULES) {
-      const exists = await this.prismaRead.automationRule.findFirst({ where: { name: r.name } });
+      const exists = await this.prisma.automationRule.findFirst({ where: { name: r.name } });
       if (!exists) created.push(await this.createRule(r));
     }
     return {

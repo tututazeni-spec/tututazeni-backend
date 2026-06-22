@@ -94,7 +94,7 @@ export class AcademicService {
   // ─── PROGRAMAS ───────────────────────────────────────
 
   async createProgram(dto: CreateProgramDto, userId: number) {
-    const existing = await this.prismaRead.academicProgram.findUnique({
+    const existing = await this.prisma.academicProgram.findUnique({
       where: { code: dto.code },
     });
     if (existing && !existing.deletedAt) {
@@ -183,7 +183,7 @@ export class AcademicService {
   // ─── MATRÍCULAS ──────────────────────────────────────
 
   private async generateEnrollmentCode(): Promise<string> {
-    const last = await this.prismaRead.academicEnrollment.findFirst({
+    const last = await this.prisma.academicEnrollment.findFirst({
       orderBy: { code: 'desc' },
       select: { code: true },
     });
@@ -212,7 +212,7 @@ export class AcademicService {
     }
 
     // Verifica duplicado
-    const existing = await this.prismaRead.academicEnrollment.findFirst({
+    const existing = await this.prisma.academicEnrollment.findFirst({
       where: {
         userId: dto.userId,
         programId: dto.programId,

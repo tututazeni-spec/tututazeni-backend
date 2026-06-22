@@ -760,7 +760,7 @@ export class ScalabilityService {
       const row = rows[i];
       try {
         this.validateUserRow(row, i + 1);
-        const existing = await this.prismaRead.user.findFirst({ where: { email: row.email } });
+        const existing = await this.prisma.user.findFirst({ where: { email: row.email } });
 
         if (existing) {
           if (dto.upsert) {

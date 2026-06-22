@@ -420,7 +420,7 @@ export class LearningPathsService {
 
       // Matricular nos cursos individuais
       for (const lpc of courses) {
-        const exists = await this.prismaRead.enrollment.findFirst({
+        const exists = await this.prisma.enrollment.findFirst({
           where: { userId, courseId: lpc.courseId, status: { notIn: ['EXPIRED'] } },
         });
         if (!exists) {
@@ -460,7 +460,7 @@ export class LearningPathsService {
       throw new BadRequestException('Apenas trilhas publicadas aceitam matrículas');
     }
 
-    const existing = await this.prismaRead.learningPathEnrollment.findFirst({
+    const existing = await this.prisma.learningPathEnrollment.findFirst({
       where: { learningPathId, userId },
     });
     if (existing) throw new ConflictException('Já está matriculado nesta trilha');
@@ -535,7 +535,7 @@ export class LearningPathsService {
   }
 
   private async completePath(learningPathId: number, userId: number) {
-    const existing = await this.prismaRead.learningPathEnrollment.findFirst({
+    const existing = await this.prisma.learningPathEnrollment.findFirst({
       where: { learningPathId, userId, status: { not: 'COMPLETED' } },
     });
     if (!existing) return;

@@ -243,7 +243,7 @@ export class TrainingService {
 
   async registerParticipant(dto: RegisterParticipantDto) {
     // Verificar se já está inscrito
-    const existing = await this.prismaRead.trainingParticipant.findFirst({
+    const existing = await this.prisma.trainingParticipant.findFirst({
       where: { sessionId: dto.sessionId, userId: dto.userId, status: { not: 'CANCELLED' } },
     });
     if (existing) throw new ConflictException('Utilizador já inscrito nesta sessão');

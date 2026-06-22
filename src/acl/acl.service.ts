@@ -583,7 +583,7 @@ export class AclService {
   async seedBuiltinPermissions() {
     const created: any[] = [];
     for (const p of BUILTIN_PERMISSIONS) {
-      const existing = await this.prismaRead.permission.findFirst({ where: { name: p.name } });
+      const existing = await this.prisma.permission.findFirst({ where: { name: p.name } });
       if (!existing) {
         const perm = await (this.prisma as any).permission.create({
           data: { name: p.name, action: p.action, subject: p.subject },

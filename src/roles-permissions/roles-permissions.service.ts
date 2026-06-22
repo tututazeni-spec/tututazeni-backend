@@ -87,7 +87,7 @@ export class RolesPermissionsService {
   }
 
   async create(dto: RolesPermissionsCreateRoleDto) {
-    const exists = await this.prismaRead.role.findFirst({ where: { name: dto.name } });
+    const exists = await this.prisma.role.findFirst({ where: { name: dto.name } });
     if (exists) throw new ConflictException('Nome de role já existe');
 
     const { permissionIds, ...data } = dto;
@@ -181,7 +181,7 @@ export class RolesPermissionsService {
 
   async cloneRole(id: number, newName: string) {
     const source = await this.findOne(id);
-    const exists = await this.prismaRead.role.findFirst({ where: { name: newName } });
+    const exists = await this.prisma.role.findFirst({ where: { name: newName } });
     if (exists) throw new ConflictException('Nome de role já existe');
 
     const clone = await this.prisma.role.create({

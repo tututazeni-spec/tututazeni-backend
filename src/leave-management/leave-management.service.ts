@@ -941,7 +941,7 @@ export class LeaveManagementService {
     mode?: DurationMode,
     requestId?: number,
   ) {
-    const current = await this.prismaRead.leaveBalance.findUnique({
+    const current = await this.prisma.leaveBalance.findUnique({
       where: { userId_leaveType: { userId, leaveType: leaveTypeCode as any } },
     });
     const balanceBefore = current?.balance ?? 0;
@@ -974,7 +974,7 @@ export class LeaveManagementService {
     mode?: DurationMode,
     requestId?: number,
   ) {
-    const current = await this.prismaRead.leaveBalance.findUnique({
+    const current = await this.prisma.leaveBalance.findUnique({
       where: { userId_leaveType: { userId, leaveType: leaveTypeCode as any } },
     });
     const balanceBefore = current?.balance ?? 0;

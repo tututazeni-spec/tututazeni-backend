@@ -1009,7 +1009,7 @@ export class TalentDevelopmentService {
   }
 
   async createMentoring(dto: TalentDevelopmentCreateMentoringDto) {
-    const existing = await this.prismaRead.mentoring.findFirst({
+    const existing = await this.prisma.mentoring.findFirst({
       where: { mentorId: dto.mentorId, menteeId: dto.menteeId, status: 'ACTIVE' },
     });
     if (existing) throw new ConflictException('Já existe mentoria activa entre este par');

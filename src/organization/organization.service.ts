@@ -251,7 +251,7 @@ export class OrganizationService {
   }
 
   async createDepartment(dto: CreateOrgDepartmentDto) {
-    const exists = await this.prismaRead.department.findFirst({
+    const exists = await this.prisma.department.findFirst({
       where: { code: { equals: dto.code, mode: 'insensitive' } },
     });
     if (exists) throw new ConflictException(`Código "${dto.code}" já existe`);
@@ -346,7 +346,7 @@ export class OrganizationService {
   }
 
   async createPosition(dto: CreateOrgPositionDto) {
-    const exists = await this.prismaRead.position.findFirst({
+    const exists = await this.prisma.position.findFirst({
       where: {
         name: { equals: dto.name, mode: 'insensitive' },
         departmentId: dto.departmentId ?? undefined,
@@ -399,7 +399,7 @@ export class OrganizationService {
   }
 
   async createUnit(dto: CreateOrgUnitDto) {
-    const exists = await this.prismaRead.unit.findFirst({
+    const exists = await this.prisma.unit.findFirst({
       where: { code: { equals: dto.code, mode: 'insensitive' } },
     });
     if (exists) throw new ConflictException(`Código "${dto.code}" já existe`);

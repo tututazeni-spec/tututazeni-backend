@@ -185,7 +185,7 @@ export class PayslipsService {
 
   // ─── CRIAR INDIVIDUAL ──────────────────────────────────────────────────────
   async create(dto: CreatePayslipDto) {
-    const exists = await this.prismaRead.payslip.findFirst({
+    const exists = await this.prisma.payslip.findFirst({
       where: { userId: dto.userId, period: dto.period },
     });
     if (exists) {
@@ -228,7 +228,7 @@ export class PayslipsService {
 
     for (const u of users) {
       try {
-        const exists = await this.prismaRead.payslip.findFirst({
+        const exists = await this.prisma.payslip.findFirst({
           where: { userId: u.id, period },
         });
         if (exists) {

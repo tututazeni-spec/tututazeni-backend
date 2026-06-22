@@ -472,7 +472,7 @@ export class CourseModulesService {
   }
 
   private async notifyNextModuleUnlock(currentModuleId: number, userId: number, courseId: number) {
-    const current = await this.prismaRead.courseModule.findUnique({ where: { id: currentModuleId } });
+    const current = await this.prisma.courseModule.findUnique({ where: { id: currentModuleId } });
     if (!current) return;
 
     const nextModule = await this.prismaRead.courseModule.findFirst({

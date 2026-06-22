@@ -82,7 +82,7 @@ export class CompetenciesService {
   }
 
   async create(dto: CreateCompetencyDto) {
-    const exists = await this.prismaRead.competency.findFirst({
+    const exists = await this.prisma.competency.findFirst({
       where: { name: { equals: dto.name, mode: 'insensitive' } },
     });
     if (exists) throw new ConflictException(`Competência "${dto.name}" já existe`);
@@ -131,7 +131,7 @@ export class CompetenciesService {
 
   async createProficiencyLevel(dto: CreateProficiencyLevelDto) {
     await this.findOne(dto.competencyId);
-    const exists = await this.prismaRead.proficiencyLevel.findFirst({
+    const exists = await this.prisma.proficiencyLevel.findFirst({
       where: { competencyId: dto.competencyId, value: dto.value },
     });
     if (exists) throw new ConflictException(`Nível ${dto.value} já existe para esta competência`);
@@ -146,7 +146,7 @@ export class CompetenciesService {
   // ─── COMPETÊNCIAS DO UTILIZADOR ──────────────────────────────────────────
 
   async upsertUserCompetency(dto: UpsertUserCompetencyDto, updatedById?: number) {
-    const existing = await this.prismaRead.userCompetency.findFirst({
+    const existing = await this.prisma.userCompetency.findFirst({
       where: { userId: dto.userId, competencyId: dto.competencyId },
     });
 
@@ -228,7 +228,7 @@ export class CompetenciesService {
   // Avaliação pelo gestor
   async managerAssess(managerId: number, dto: ManagerAssessmentDto) {
     // Gravar nível do gestor separadamente e recalcular nível actual
-    const existing = await this.prismaRead.userCompetency.findFirst({
+    const existing = await this.prisma.userCompetency.findFirst({
       where: { userId: dto.userId, competencyId: dto.competencyId },
     });
 
@@ -417,7 +417,7 @@ export class CompetenciesService {
       throw new BadRequestException('Não pode endorsar a si próprio');
     }
 
-    const existing = await this.prismaRead.competencyEndorsement.findFirst({
+    const existing = await this.prisma.competencyEndorsement.findFirst({
       where: { endorserId, userId: dto.targetUserId, competencyId: dto.competencyId },
     });
     if (existing) throw new ConflictException('Já endorsou esta competência para este utilizador');
@@ -605,7 +605,7 @@ export class CompetenciesService {
     });
 
     for (const cc of courseComps) {
-      const existing = await this.prismaRead.userCompetency.findFirst({
+      const existing = await this.prisma.userCompetency.findFirst({
         where: { userId, competencyId: cc.competencyId },
       });
       const newLevel = Math.min(

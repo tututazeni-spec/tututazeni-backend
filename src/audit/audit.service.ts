@@ -34,7 +34,7 @@ export class AuditService {
   }
 
   private async getLastHash(): Promise<string> {
-    const last = await this.prismaRead.auditLog.findFirst({
+    const last = await this.prisma.auditLog.findFirst({
       orderBy: { timestamp: 'desc' },
       select: { hash: true },
     });

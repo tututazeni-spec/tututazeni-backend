@@ -219,7 +219,7 @@ export class EventsService {
     if (event.status === 'CANCELLED') throw new BadRequestException('Evento cancelado');
     if (event.status === 'ENDED') throw new BadRequestException('Evento já encerrado');
 
-    const existing = await this.prismaRead.eventParticipant.findUnique({
+    const existing = await this.prisma.eventParticipant.findUnique({
       where: { eventId_userId: { eventId, userId } },
     });
     if (existing && existing.status !== 'CANCELLED') {
@@ -391,7 +391,7 @@ export class EventsService {
     if (participant?.status !== 'PRESENT') return;
 
     // Verificar se já existe
-    const existing = await this.prismaRead.certificate.findFirst({
+    const existing = await this.prisma.certificate.findFirst({
       where: { userId, eventId },
     });
     if (existing) return;

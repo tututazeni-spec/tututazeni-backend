@@ -153,7 +153,7 @@ export class MonitoringService {
   // ════════════════════════════════════════════════════
 
   async createIndicator(dto: CreateIndicatorDto, userId: number) {
-    const existing = await this.prismaRead.monitoringIndicator.findUnique({
+    const existing = await this.prisma.monitoringIndicator.findUnique({
       where: { code: dto.code },
     });
     if (existing && !existing.deletedAt) {
@@ -261,7 +261,7 @@ export class MonitoringService {
     type: string,
     assignedBy: number,
   ) {
-    const existing = await this.prismaRead.userEvaluation.findUnique({
+    const existing = await this.prisma.userEvaluation.findUnique({
       where: {
         cycleId_userId_evaluatorId_type: {
           cycleId,
