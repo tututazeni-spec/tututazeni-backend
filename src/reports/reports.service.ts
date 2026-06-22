@@ -46,7 +46,7 @@ export class ReportsService {
    * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
    * caindo para o primary quando .db não existe (ex.: mocks de teste).
    */
-  private get prismaRead(): PrismaService {
+  private get prismaRead(): any {
     return (this.prisma as any).db ?? this.prisma;
   }
 
