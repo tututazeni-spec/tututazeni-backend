@@ -22,6 +22,14 @@ import {
 @Injectable()
 export class OrganizationService {
   private readonly logger = new Logger(OrganizationService.name);
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
 
   constructor(private prisma: PrismaService) {}
 
@@ -30,12 +38,12 @@ export class OrganizationService {
   async getStats() {
     const [units, departments, positions, totalStaff, managers, activePositions] =
       await Promise.all([
-        this.prisma.unit.count(),
-        this.prisma.department.count({ where: { status: 'ACTIVE' } }),
-        this.prisma.position.count(),
-        this.prisma.user.count({ where: { active: true } }),
-        this.prisma.user.count({ where: { active: true, managerId: null, id: { gt: 0 } } }),
-        this.prisma.position.findMany({
+        this.prismaRead.unit.count(),
+        this.prismaRead.department.count({ where: { status: 'ACTIVE' } }),
+        this.prismaRead.position.count(),
+        this.prismaRead.user.count({ where: { active: true } }),
+        this.prismaRead.user.count({ where: { active: true, managerId: null, id: { gt: 0 } } }),
+        this.prismaRead.position.findMany({
           select: { id: true, headcountPlanned: true, _count: { select: { users: true } } },
         }),
       ]);
@@ -47,7 +55,7 @@ export class OrganizationService {
 
     // Span of control (média de liderados por gestor)
     const managerIds = (
-      await this.prisma.user.findMany({
+      await this.prismaRead.user.findMany({
         where: { active: true, managerId: { not: null } },
         select: { managerId: true },
         distinct: ['managerId'],
@@ -63,7 +71,7 @@ export class OrganizationService {
     const maxDepth = await this.calcMaxHierarchyDepth();
 
     // Distribuição por departamento
-    const deptDist = await this.prisma.department.findMany({
+    const deptDist = await this.prismaRead.department.findMany({
       where: { status: 'ACTIVE' },
       select: { id: true, name: true, _count: { select: { users: true } } },
       orderBy: { users: { _count: 'desc' } },
@@ -84,7 +92,7 @@ export class OrganizationService {
         spanOfControl,
         managerCount: managerIds.length,
         maxHierarchyDepth: maxDepth,
-        managersOverloaded: await this.prisma.user.count({
+        managersOverloaded: await this.prismaRead.user.count({
           where: {
             active: true,
             subordinates: { some: {} },
@@ -98,7 +106,7 @@ export class OrganizationService {
 
   private async calcMaxHierarchyDepth(): Promise<number> {
     // Conta colaboradores sem gestor (raízes) e calcula profundidade
-    const roots = await this.prisma.user.findMany({
+    const roots = await this.prismaRead.user.findMany({
       where: { active: true, managerId: null },
       select: { id: true },
     });
@@ -112,7 +120,7 @@ export class OrganizationService {
       visited.add(userId);
       maxDepth = Math.max(maxDepth, depth);
 
-      const subs = await this.prisma.user.findMany({
+      const subs = await this.prismaRead.user.findMany({
         where: { managerId: userId, active: true },
         select: { id: true },
         take: 20,
@@ -136,7 +144,7 @@ export class OrganizationService {
       rootWhere.managerId = null; // raízes da org
     else rootWhere.departmentId = departmentId;
 
-    const roots = await this.prisma.user.findMany({
+    const roots = await this.prismaRead.user.findMany({
       where: rootWhere,
       select: this.orgChartSelect(),
       take: departmentId ? 100 : 20,
@@ -164,7 +172,7 @@ export class OrganizationService {
     const node: any = { ...user, children: [] };
 
     if (currentDepth < maxDepth) {
-      const children = await this.prisma.user.findMany({
+      const children = await this.prismaRead.user.findMany({
         where: { managerId: user.id, active: true },
         select: this.orgChartSelect(),
       });
@@ -195,7 +203,7 @@ export class OrganizationService {
     }
 
     const [data, total] = await Promise.all([
-      this.prisma.department.findMany({
+      this.prismaRead.department.findMany({
         where,
         skip,
         take: limit,
@@ -207,14 +215,14 @@ export class OrganizationService {
         },
         orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
       }),
-      this.prisma.department.count({ where }),
+      this.prismaRead.department.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async getDepartmentDetails(id: number) {
-    const dept = await this.prisma.department.findUnique({
+    const dept = await this.prismaRead.department.findUnique({
       where: { id },
       include: {
         head: { select: { id: true, fullName: true, avatarUrl: true, email: true } },
@@ -243,13 +251,13 @@ export class OrganizationService {
   }
 
   async createDepartment(dto: CreateOrgDepartmentDto) {
-    const exists = await this.prisma.department.findFirst({
+    const exists = await this.prismaRead.department.findFirst({
       where: { code: { equals: dto.code, mode: 'insensitive' } },
     });
     if (exists) throw new ConflictException(`Código "${dto.code}" já existe`);
 
     if (dto.parentId) {
-      const parent = await this.prisma.department.findUnique({ where: { id: dto.parentId } });
+      const parent = await this.prismaRead.department.findUnique({ where: { id: dto.parentId } });
       if (!parent) throw new NotFoundException('Departamento pai não encontrado');
     }
 
@@ -271,7 +279,7 @@ export class OrganizationService {
   }
 
   async updateDepartment(id: number, dto: UpdateOrgDepartmentDto) {
-    const dept = await this.prisma.department.findUnique({ where: { id } });
+    const dept = await this.prismaRead.department.findUnique({ where: { id } });
     if (!dept) throw new NotFoundException('Departamento não encontrado');
 
     // Verificar loop hierárquico
@@ -283,7 +291,7 @@ export class OrganizationService {
   }
 
   async deleteDepartment(id: number) {
-    const dept = await this.prisma.department.findUnique({
+    const dept = await this.prismaRead.department.findUnique({
       where: { id },
       include: { _count: { select: { users: true, children: true } } },
     });
@@ -312,7 +320,7 @@ export class OrganizationService {
     if (search) where.name = { contains: search, mode: 'insensitive' };
 
     const [data, total] = await Promise.all([
-      this.prisma.position.findMany({
+      this.prismaRead.position.findMany({
         where,
         skip,
         take: limit,
@@ -321,7 +329,7 @@ export class OrganizationService {
         },
         orderBy: [{ level: 'asc' }, { name: 'asc' }],
       }),
-      this.prisma.position.count({ where }),
+      this.prismaRead.position.count({ where }),
     ]);
 
     return {
@@ -338,7 +346,7 @@ export class OrganizationService {
   }
 
   async createPosition(dto: CreateOrgPositionDto) {
-    const exists = await this.prisma.position.findFirst({
+    const exists = await this.prismaRead.position.findFirst({
       where: {
         name: { equals: dto.name, mode: 'insensitive' },
         departmentId: dto.departmentId ?? undefined,
@@ -361,13 +369,13 @@ export class OrganizationService {
   }
 
   async updatePosition(id: number, dto: UpdateOrgPositionDto) {
-    const pos = await this.prisma.position.findUnique({ where: { id } });
+    const pos = await this.prismaRead.position.findUnique({ where: { id } });
     if (!pos) throw new NotFoundException('Posição não encontrada');
     return this.prisma.position.update({ where: { id }, data: dto });
   }
 
   async deletePosition(id: number) {
-    const pos = await this.prisma.position.findUnique({
+    const pos = await this.prismaRead.position.findUnique({
       where: { id },
       include: { _count: { select: { users: true } } },
     });
@@ -382,7 +390,7 @@ export class OrganizationService {
   // ─── UNIDADES ─────────────────────────────────────────────────────────────
 
   async getUnits() {
-    return this.prisma.unit.findMany({
+    return this.prismaRead.unit.findMany({
       include: {
         _count: { select: { users: true, departments: true } },
       },
@@ -391,7 +399,7 @@ export class OrganizationService {
   }
 
   async createUnit(dto: CreateOrgUnitDto) {
-    const exists = await this.prisma.unit.findFirst({
+    const exists = await this.prismaRead.unit.findFirst({
       where: { code: { equals: dto.code, mode: 'insensitive' } },
     });
     if (exists) throw new ConflictException(`Código "${dto.code}" já existe`);
@@ -402,7 +410,7 @@ export class OrganizationService {
   }
 
   async updateUnit(id: number, dto: UpdateOrgUnitDto) {
-    const unit = await this.prisma.unit.findUnique({ where: { id } });
+    const unit = await this.prismaRead.unit.findUnique({ where: { id } });
     if (!unit) throw new NotFoundException('Unidade não encontrada');
     return this.prisma.unit.update({ where: { id }, data: dto });
   }
@@ -446,7 +454,7 @@ export class OrganizationService {
   }
 
   async getUserOrgHistory(userId: number) {
-    return this.prisma.orgChangeLog.findMany({
+    return this.prismaRead.orgChangeLog.findMany({
       where: { userId },
       include: {
         fromDepartment: { select: { id: true, name: true } },
@@ -464,7 +472,7 @@ export class OrganizationService {
     if (fromDate) where.effectiveDate = { gte: new Date(fromDate) };
     if (toDate) where.effectiveDate = { ...where.effectiveDate, lte: new Date(toDate) };
 
-    return this.prisma.orgChangeLog.findMany({
+    return this.prismaRead.orgChangeLog.findMany({
       where,
       include: {
         user: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -481,7 +489,7 @@ export class OrganizationService {
   // ─── HEADCOUNT & KPIs ─────────────────────────────────────────────────────
 
   async getHeadcountByDepartment() {
-    const depts = await this.prisma.department.findMany({
+    const depts = await this.prismaRead.department.findMany({
       where: { status: 'ACTIVE' },
       select: {
         id: true,
@@ -493,7 +501,7 @@ export class OrganizationService {
       orderBy: { users: { _count: 'desc' } },
     });
 
-    const positions = await this.prisma.position.findMany({
+    const positions = await this.prismaRead.position.findMany({
       select: { departmentId: true, headcountPlanned: true, _count: { select: { users: true } } },
     });
 
@@ -512,7 +520,7 @@ export class OrganizationService {
   }
 
   async getSpanOfControlReport() {
-    const managers = await this.prisma.user.findMany({
+    const managers = await this.prismaRead.user.findMany({
       where: { active: true, subordinates: { some: {} } },
       select: {
         id: true,
@@ -550,7 +558,7 @@ export class OrganizationService {
   // ─── PERFIL ORGANIZACIONAL DO COLABORADOR ─────────────────────────────────
 
   async getUserOrgProfile(userId: number) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prismaRead.user.findUnique({
       where: { id: userId },
       select: {
         id: true,

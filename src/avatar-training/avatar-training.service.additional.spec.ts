@@ -67,6 +67,7 @@ const mockPrisma: any = new Proxy(
   },
   {
     get(target, prop) {
+      if (prop === 'db') return mockPrisma;
       if (prop in target) return (target as any)[prop];
       return {
         findMany: jest.fn().mockResolvedValue([]),

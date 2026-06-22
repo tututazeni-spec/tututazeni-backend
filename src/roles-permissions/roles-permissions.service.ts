@@ -31,6 +31,14 @@ export {
 
 @Injectable()
 export class RolesPermissionsService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -38,7 +46,7 @@ export class RolesPermissionsService {
   // ══════════════════════════════════════════════════════
 
   async findAll() {
-    const roles = await this.prisma.role.findMany({
+    const roles = await this.prismaRead.role.findMany({
       include: {
         permissions: { select: { id: true, name: true, action: true, subject: true } },
         _count: { select: { users: true } },
@@ -56,7 +64,7 @@ export class RolesPermissionsService {
   }
 
   async findOne(id: number) {
-    const r = await this.prisma.role.findUnique({
+    const r = await this.prismaRead.role.findUnique({
       where: { id },
       include: {
         permissions: true,
@@ -79,7 +87,7 @@ export class RolesPermissionsService {
   }
 
   async create(dto: RolesPermissionsCreateRoleDto) {
-    const exists = await this.prisma.role.findFirst({ where: { name: dto.name } });
+    const exists = await this.prismaRead.role.findFirst({ where: { name: dto.name } });
     if (exists) throw new ConflictException('Nome de role já existe');
 
     const { permissionIds, ...data } = dto;
@@ -173,7 +181,7 @@ export class RolesPermissionsService {
 
   async cloneRole(id: number, newName: string) {
     const source = await this.findOne(id);
-    const exists = await this.prisma.role.findFirst({ where: { name: newName } });
+    const exists = await this.prismaRead.role.findFirst({ where: { name: newName } });
     if (exists) throw new ConflictException('Nome de role já existe');
 
     const clone = await this.prisma.role.create({
@@ -273,8 +281,8 @@ export class RolesPermissionsService {
 
   async getPermissionMatrix() {
     const [roles, permissions] = await Promise.all([
-      this.prisma.role.findMany({ include: { permissions: { select: { id: true, name: true } } } }),
-      this.prisma.permission.findMany({ orderBy: [{ subject: 'asc' }, { action: 'asc' }] }),
+      this.prismaRead.role.findMany({ include: { permissions: { select: { id: true, name: true } } } }),
+      this.prismaRead.permission.findMany({ orderBy: [{ subject: 'asc' }, { action: 'asc' }] }),
     ]);
 
     // Group permissions by subject
@@ -328,7 +336,7 @@ export class RolesPermissionsService {
   // ══════════════════════════════════════════════════════
 
   async simulatePermission(dto: SimulatePermissionDto) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prismaRead.user.findUnique({
       where: { id: dto.userId },
       include: { role: { include: { permissions: true } } },
     });
@@ -425,7 +433,7 @@ export class RolesPermissionsService {
     if (!template) return { applied: 0, message: 'Sem template para esta posição' };
 
     // Apply role to all users in this position
-    const users = await this.prisma.user.findMany({
+    const users = await this.prismaRead.user.findMany({
       where: { positionId, active: true },
       select: { id: true },
     });
@@ -445,10 +453,10 @@ export class RolesPermissionsService {
 
   async getGovernanceStats() {
     const [roles, permissions, usersWithoutRole, deniedLogs, usersPerRole] = await Promise.all([
-      this.prisma.role.count(),
-      this.prisma.permission.count(),
-      this.prisma.user.count({ where: { active: true, roleId: null } }),
-      this.prisma.auditLog.count({ where: { action: 'ACCESS_DENIED' } }).catch(() => 0),
+      this.prismaRead.role.count(),
+      this.prismaRead.permission.count(),
+      this.prismaRead.user.count({ where: { active: true, roleId: null } }),
+      this.prismaRead.auditLog.count({ where: { action: 'ACCESS_DENIED' } }).catch(() => 0),
       this.prisma.user
         .groupBy({
           by: ['roleId'],
@@ -457,7 +465,7 @@ export class RolesPermissionsService {
         })
         .then(async rows => {
           const ids = rows.map(r => r.roleId).filter(Boolean);
-          const rols = await this.prisma.role.findMany({
+          const rols = await this.prismaRead.role.findMany({
             where: { id: { in: ids } },
             select: { id: true, name: true, code: true },
           });
@@ -469,7 +477,7 @@ export class RolesPermissionsService {
     ]);
 
     // Roles with no users (unused)
-    const unusedRoles = await this.prisma.role.findMany({
+    const unusedRoles = await this.prismaRead.role.findMany({
       where: { users: { none: {} } },
       select: { id: true, name: true, code: true },
     });
@@ -501,7 +509,7 @@ export class RolesPermissionsService {
 
   async getUsersWithRole(roleId: number) {
     await this.findOne(roleId);
-    return this.prisma.user.findMany({
+    return this.prismaRead.user.findMany({
       where: { roleId, active: true },
       select: {
         id: true,
@@ -516,7 +524,7 @@ export class RolesPermissionsService {
   }
 
   async getUsersWithoutRole() {
-    return this.prisma.user.findMany({
+    return this.prismaRead.user.findMany({
       where: { active: true, roleId: null },
       select: {
         id: true,

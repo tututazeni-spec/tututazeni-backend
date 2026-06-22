@@ -22,13 +22,21 @@ import {
 export class CourseModulesService {
   private readonly logger = new Logger(CourseModulesService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── MÓDULOS — CRUD ───────────────────────────────────────────────────────
 
   async createModule(dto: CreateModuleDto) {
     // Verificar que o curso existe
-    const course = await this.prisma.course.findUnique({ where: { id: dto.courseId } });
+    const course = await this.prismaRead.course.findUnique({ where: { id: dto.courseId } });
     if (!course) throw new NotFoundException('Curso não encontrado');
 
     return this.prisma.courseModule.create({
@@ -57,7 +65,7 @@ export class CourseModulesService {
   }
 
   async findModuleOrFail(id: number) {
-    const mod = await this.prisma.courseModule.findUnique({
+    const mod = await this.prismaRead.courseModule.findUnique({
       where: { id },
       include: {
         lessons: {
@@ -104,7 +112,7 @@ export class CourseModulesService {
     const mod = (await this.findModuleOrFail(id)) as any;
 
     // Verificar se há progresso activo nas aulas
-    const activeProgress = await this.prisma.lessonProgress.count({
+    const activeProgress = await this.prismaRead.lessonProgress.count({
       where: { lesson: { moduleId: id } },
     });
     if (activeProgress > 0) {
@@ -120,7 +128,7 @@ export class CourseModulesService {
   async reorderModules(courseId: number, dto: ReorderModulesDto) {
     // Validar que todos os IDs pertencem ao curso
     const moduleIds = dto.order.map(o => o.id);
-    const modules = await this.prisma.courseModule.findMany({
+    const modules = await this.prismaRead.courseModule.findMany({
       where: { id: { in: moduleIds }, courseId },
     });
     if (modules.length !== moduleIds.length) {
@@ -133,7 +141,7 @@ export class CourseModulesService {
       ),
     );
 
-    return this.prisma.courseModule.findMany({
+    return this.prismaRead.courseModule.findMany({
       where: { courseId },
       orderBy: { seq: 'asc' },
       include: {
@@ -149,11 +157,11 @@ export class CourseModulesService {
     const original = (await this.findModuleOrFail(moduleId)) as any;
 
     // Verificar curso destino
-    const targetCourse = await this.prisma.course.findUnique({ where: { id: dto.targetCourseId } });
+    const targetCourse = await this.prismaRead.course.findUnique({ where: { id: dto.targetCourseId } });
     if (!targetCourse) throw new NotFoundException('Curso destino não encontrado');
 
     // Determinar posição
-    const maxSeq = await this.prisma.courseModule.findFirst({
+    const maxSeq = await this.prismaRead.courseModule.findFirst({
       where: { courseId: dto.targetCourseId },
       orderBy: { seq: 'desc' },
       select: { seq: true },
@@ -214,7 +222,7 @@ export class CourseModulesService {
   // ─── AULAS ────────────────────────────────────────────────────────────────
 
   async createLesson(dto: CreateModuleLessonDto) {
-    const mod = await this.prisma.courseModule.findUnique({ where: { id: dto.moduleId } });
+    const mod = await this.prismaRead.courseModule.findUnique({ where: { id: dto.moduleId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
 
     return this.prisma.lesson.create({
@@ -234,16 +242,16 @@ export class CourseModulesService {
   }
 
   async updateLesson(id: number, dto: UpdateModuleLessonDto) {
-    const lesson = await this.prisma.lesson.findUnique({ where: { id } });
+    const lesson = await this.prismaRead.lesson.findUnique({ where: { id } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
     return this.prisma.lesson.update({ where: { id }, data: dto });
   }
 
   async moveLesson(lessonId: number, dto: MoveLessonDto) {
-    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    const lesson = await this.prismaRead.lesson.findUnique({ where: { id: lessonId } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
 
-    const targetMod = await this.prisma.courseModule.findUnique({
+    const targetMod = await this.prismaRead.courseModule.findUnique({
       where: { id: dto.targetModuleId },
     });
     if (!targetMod) throw new NotFoundException('Módulo de destino não encontrado');
@@ -258,18 +266,18 @@ export class CourseModulesService {
     await Promise.all(
       order.map(({ id, seq }) => this.prisma.lesson.update({ where: { id }, data: { seq } })),
     );
-    return this.prisma.lesson.findMany({
+    return this.prismaRead.lesson.findMany({
       where: { moduleId },
       orderBy: { seq: 'asc' },
     });
   }
 
   async deleteLesson(id: number) {
-    const lesson = await this.prisma.lesson.findUnique({ where: { id } });
+    const lesson = await this.prismaRead.lesson.findUnique({ where: { id } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
 
     // Aviso se há progresso — não bloquear, apenas informar
-    const progressCount = await this.prisma.lessonProgress.count({ where: { lessonId: id } });
+    const progressCount = await this.prismaRead.lessonProgress.count({ where: { lessonId: id } });
 
     await this.prisma.lesson.delete({ where: { id } });
     return { message: 'Aula eliminada', hadProgress: progressCount > 0, progressCount };
@@ -285,7 +293,7 @@ export class CourseModulesService {
   }
 
   async removeMaterial(materialId: number) {
-    const mat = await this.prisma.moduleMaterial.findUnique({ where: { id: materialId } });
+    const mat = await this.prismaRead.moduleMaterial.findUnique({ where: { id: materialId } });
     if (!mat) throw new NotFoundException('Material não encontrado');
     return this.prisma.moduleMaterial.delete({ where: { id: materialId } });
   }
@@ -297,7 +305,7 @@ export class CourseModulesService {
     lessonId: number,
     userId: number,
   ): Promise<{ accessible: boolean; reason?: string }> {
-    const lesson = await this.prisma.lesson.findUnique({
+    const lesson = await this.prismaRead.lesson.findUnique({
       where: { id: lessonId },
       include: { module: { include: { course: true } } },
     });
@@ -311,7 +319,7 @@ export class CourseModulesService {
     }
 
     // Verificar matrícula
-    const enrollment = await this.prisma.enrollment.findFirst({
+    const enrollment = await this.prismaRead.enrollment.findFirst({
       where: { userId, courseId: course.id },
     });
     if (!enrollment) return { accessible: false, reason: 'Não está matriculado neste curso' };
@@ -334,7 +342,7 @@ export class CourseModulesService {
 
     // Verificar progressão sequencial
     if (mod.progressionType === 'SEQUENTIAL' && mod.seq > 0) {
-      const previousModule = await this.prisma.courseModule.findFirst({
+      const previousModule = await this.prismaRead.courseModule.findFirst({
         where: { courseId: course.id, seq: mod.seq - 1, status: 'PUBLISHED' },
       });
       if (previousModule) {
@@ -350,7 +358,7 @@ export class CourseModulesService {
 
   // Verificar se módulo está concluído segundo as regras configuradas
   async isModuleCompleted(moduleId: number, userId: number): Promise<boolean> {
-    const mod = await this.prisma.courseModule.findUnique({
+    const mod = await this.prismaRead.courseModule.findUnique({
       where: { id: moduleId },
       include: { lessons: true },
     });
@@ -360,7 +368,7 @@ export class CourseModulesService {
     const totalLessons = lessons.length;
     if (totalLessons === 0) return true;
 
-    const completedCount = await this.prisma.lessonProgress.count({
+    const completedCount = await this.prismaRead.lessonProgress.count({
       where: { userId, completed: true, lessonId: { in: lessons.map((l: any) => l.id) } },
     });
 
@@ -376,11 +384,11 @@ export class CourseModulesService {
     }
 
     if (rule === 'QUIZ_PASS') {
-      const quiz = await this.prisma.quiz.findFirst({
+      const quiz = await this.prismaRead.quiz.findFirst({
         where: { lesson: { moduleId } },
       });
       if (!quiz) return completedCount >= totalLessons;
-      const passed = await this.prisma.quizAttempt.findFirst({
+      const passed = await this.prismaRead.quizAttempt.findFirst({
         where: { quizId: quiz.id, userId, passed: true },
       });
       return !!passed;
@@ -389,9 +397,9 @@ export class CourseModulesService {
     if (rule === 'COMBINED') {
       const pct = (mod as any).minCompletionPercent ?? 80;
       const lessonOk = (completedCount / totalLessons) * 100 >= pct;
-      const quiz = await this.prisma.quiz.findFirst({ where: { lesson: { moduleId } } });
+      const quiz = await this.prismaRead.quiz.findFirst({ where: { lesson: { moduleId } } });
       const quizOk = quiz
-        ? !!(await this.prisma.quizAttempt.findFirst({
+        ? !!(await this.prismaRead.quizAttempt.findFirst({
             where: { quizId: quiz.id, userId, passed: true },
           }))
         : true;
@@ -408,7 +416,7 @@ export class CourseModulesService {
       throw new ForbiddenException(access.reason ?? 'Aula não acessível');
     }
 
-    const lesson = await this.prisma.lesson.findUnique({
+    const lesson = await this.prismaRead.lesson.findUnique({
       where: { id: dto.lessonId },
       include: { module: { include: { course: true } } },
     });
@@ -435,7 +443,7 @@ export class CourseModulesService {
     });
 
     // Actualizar enrollment para IN_PROGRESS se necessário
-    const enrollment = await this.prisma.enrollment.findFirst({ where: { userId, courseId } });
+    const enrollment = await this.prismaRead.enrollment.findFirst({ where: { userId, courseId } });
     if (enrollment && enrollment.status === 'NOT_STARTED') {
       await this.prisma.enrollment.update({
         where: { id: enrollment.id },
@@ -464,10 +472,10 @@ export class CourseModulesService {
   }
 
   private async notifyNextModuleUnlock(currentModuleId: number, userId: number, courseId: number) {
-    const current = await this.prisma.courseModule.findUnique({ where: { id: currentModuleId } });
+    const current = await this.prismaRead.courseModule.findUnique({ where: { id: currentModuleId } });
     if (!current) return;
 
-    const nextModule = await this.prisma.courseModule.findFirst({
+    const nextModule = await this.prismaRead.courseModule.findFirst({
       where: { courseId, seq: (current as any).seq + 1, status: 'PUBLISHED' },
       include: { course: { select: { title: true } } },
     });
@@ -486,7 +494,7 @@ export class CourseModulesService {
   }
 
   async getLessonProgress(userId: number, courseId: number) {
-    const modules = await this.prisma.courseModule.findMany({
+    const modules = await this.prismaRead.courseModule.findMany({
       where: { courseId },
       orderBy: { seq: 'asc' },
       include: {
@@ -554,12 +562,12 @@ export class CourseModulesService {
 
   // Verificar e marcar curso como concluído
   private async checkAndCompleteCourse(enrollmentId: number, userId: number, courseId: number) {
-    const enrollment = await this.prisma.enrollment.findUnique({
+    const enrollment = await this.prismaRead.enrollment.findUnique({
       where: { id: enrollmentId },
     });
     if (!enrollment || enrollment.status === 'COMPLETED') return;
 
-    const mandatoryModules = await this.prisma.courseModule.findMany({
+    const mandatoryModules = await this.prismaRead.courseModule.findMany({
       where: { courseId, mandatory: true, status: 'PUBLISHED' },
     });
 
@@ -594,7 +602,7 @@ export class CourseModulesService {
       .catch(() => {});
 
     // Notificar
-    const course = await this.prisma.course.findUnique({ where: { id: courseId } });
+    const course = await this.prismaRead.course.findUnique({ where: { id: courseId } });
     await this.prisma.notificationLog
       .create({
         data: {
@@ -612,7 +620,7 @@ export class CourseModulesService {
   async getModuleAnalytics(moduleId: number) {
     await this.findModuleOrFail(moduleId);
 
-    const lessons = await this.prisma.lesson.findMany({
+    const lessons = await this.prismaRead.lesson.findMany({
       where: { moduleId },
       select: { id: true, title: true },
     });
@@ -638,7 +646,7 @@ export class CourseModulesService {
         .then(groups => groups.filter(g => g._count >= lessonIds.length).length),
 
       // Média de segundos vistos
-      this.prisma.lessonProgress.aggregate({
+      this.prismaRead.lessonProgress.aggregate({
         where: { lessonId: { in: lessonIds } },
         _avg: { watchedSeconds: true },
       }),
@@ -646,7 +654,7 @@ export class CourseModulesService {
       // Stats por aula
       Promise.all(
         lessons.map(async l => {
-          const completions = await this.prisma.lessonProgress.count({
+          const completions = await this.prismaRead.lessonProgress.count({
             where: { lessonId: l.id, completed: true },
           });
           return { lessonId: l.id, title: l.title, completions };

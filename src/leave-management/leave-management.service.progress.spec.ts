@@ -67,8 +67,9 @@ const mockPrismaBase: any = {
   },
 };
 
-const mockPrismaProxy = new Proxy(mockPrismaBase, {
+const mockPrismaProxy: any = new Proxy(mockPrismaBase, {
   get(target, prop) {
+      if (prop === 'db') return mockPrismaProxy;
     if (prop === 'leaveTypeConfig') return leaveTypeConfig;
     if (prop === 'leavePolicy') return leavePolicy;
     if (prop === 'leaveBalance') return leaveBalance;

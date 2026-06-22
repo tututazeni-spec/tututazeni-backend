@@ -20,13 +20,21 @@ import {
 @Injectable()
 export class LearningPathsService {
   private readonly logger = new Logger(LearningPathsService.name);
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
 
   constructor(private prisma: PrismaService) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   private async calcTotalHours(learningPathId: number): Promise<number> {
-    const steps = await this.prisma.learningPathCourse.findMany({
+    const steps = await this.prismaRead.learningPathCourse.findMany({
       where: { learningPathId },
       include: { course: { select: { workloadHours: true } } },
     });
@@ -54,7 +62,7 @@ export class LearningPathsService {
     }
 
     const [data, total] = await Promise.all([
-      this.prisma.learningPath.findMany({
+      this.prismaRead.learningPath.findMany({
         where,
         skip,
         take: limit,
@@ -63,14 +71,14 @@ export class LearningPathsService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.learningPath.count({ where }),
+      this.prismaRead.learningPath.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const lp = await this.prisma.learningPath.findUnique({
+    const lp = await this.prismaRead.learningPath.findUnique({
       where: { id },
       include: {
         courses: {
@@ -256,7 +264,7 @@ export class LearningPathsService {
   async addStep(learningPathId: number, dto: LearningPathStepDto) {
     const lp = await this.findOne(learningPathId);
 
-    const course = await this.prisma.course.findUnique({ where: { id: dto.courseId } });
+    const course = await this.prismaRead.course.findUnique({ where: { id: dto.courseId } });
     if (!course) throw new NotFoundException('Curso não encontrado');
 
     const step = await this.prisma.learningPathCourse.upsert({
@@ -332,25 +340,25 @@ export class LearningPathsService {
     if (dto.targetType === AssignmentTarget.USER) {
       userIds = [dto.targetId];
     } else if (dto.targetType === AssignmentTarget.DEPARTMENT) {
-      const users = await this.prisma.user.findMany({
+      const users = await this.prismaRead.user.findMany({
         where: { departmentId: dto.targetId, active: true },
         select: { id: true },
       });
       userIds = users.map(u => u.id);
     } else if (dto.targetType === AssignmentTarget.POSITION) {
-      const users = await this.prisma.user.findMany({
+      const users = await this.prismaRead.user.findMany({
         where: { positionId: dto.targetId, active: true },
         select: { id: true },
       });
       userIds = users.map(u => u.id);
     } else if (dto.targetType === AssignmentTarget.UNIT) {
-      const users = await this.prisma.user.findMany({
+      const users = await this.prismaRead.user.findMany({
         where: { unitId: dto.targetId, active: true },
         select: { id: true },
       });
       userIds = users.map(u => u.id);
     } else if (dto.targetType === AssignmentTarget.ROLE) {
-      const users = await this.prisma.user.findMany({
+      const users = await this.prismaRead.user.findMany({
         where: { roleId: dto.targetId, active: true },
         select: { id: true },
       });
@@ -378,7 +386,7 @@ export class LearningPathsService {
   }
 
   async getAssignments(learningPathId: number) {
-    return this.prisma.learningPathAssignment.findMany({
+    return this.prismaRead.learningPathAssignment.findMany({
       where: { learningPathId },
       orderBy: { createdAt: 'desc' },
     });
@@ -412,7 +420,7 @@ export class LearningPathsService {
 
       // Matricular nos cursos individuais
       for (const lpc of courses) {
-        const exists = await this.prisma.enrollment.findFirst({
+        const exists = await this.prismaRead.enrollment.findFirst({
           where: { userId, courseId: lpc.courseId, status: { notIn: ['EXPIRED'] } },
         });
         if (!exists) {
@@ -452,7 +460,7 @@ export class LearningPathsService {
       throw new BadRequestException('Apenas trilhas publicadas aceitam matrículas');
     }
 
-    const existing = await this.prisma.learningPathEnrollment.findFirst({
+    const existing = await this.prismaRead.learningPathEnrollment.findFirst({
       where: { learningPathId, userId },
     });
     if (existing) throw new ConflictException('Já está matriculado nesta trilha');
@@ -464,7 +472,7 @@ export class LearningPathsService {
 
   async getMyProgress(learningPathId: number, userId: number) {
     const lp = (await this.findOne(learningPathId)) as any;
-    const enrollment = await this.prisma.learningPathEnrollment.findFirst({
+    const enrollment = await this.prismaRead.learningPathEnrollment.findFirst({
       where: { learningPathId, userId },
     });
 
@@ -473,7 +481,7 @@ export class LearningPathsService {
 
     const stepsWithProgress = await Promise.all(
       steps.map(async (step: any, idx: number) => {
-        const courseEnrollment = await this.prisma.enrollment.findFirst({
+        const courseEnrollment = await this.prismaRead.enrollment.findFirst({
           where: { userId, courseId: step.courseId },
         });
 
@@ -481,7 +489,7 @@ export class LearningPathsService {
         let locked = false;
         if (progressionType === 'SEQUENTIAL' && idx > 0) {
           const prevStep = steps[idx - 1];
-          const prevEnrollment = await this.prisma.enrollment.findFirst({
+          const prevEnrollment = await this.prismaRead.enrollment.findFirst({
             where: { userId, courseId: prevStep.courseId },
           });
           locked = prevEnrollment?.status !== 'COMPLETED';
@@ -527,7 +535,7 @@ export class LearningPathsService {
   }
 
   private async completePath(learningPathId: number, userId: number) {
-    const existing = await this.prisma.learningPathEnrollment.findFirst({
+    const existing = await this.prismaRead.learningPathEnrollment.findFirst({
       where: { learningPathId, userId, status: { not: 'COMPLETED' } },
     });
     if (!existing) return;
@@ -537,7 +545,7 @@ export class LearningPathsService {
       data: { status: 'COMPLETED', completedAt: new Date() },
     });
 
-    const lp = await this.prisma.learningPath.findUnique({ where: { id: learningPathId } });
+    const lp = await this.prismaRead.learningPath.findUnique({ where: { id: learningPathId } });
 
     // Gamificação
     await this.prisma.userPoints
@@ -566,7 +574,7 @@ export class LearningPathsService {
   // ─── MATRÍCULAS DO UTILIZADOR ─────────────────────────────────────────────
 
   async getMyEnrollments(userId: number) {
-    return this.prisma.learningPathEnrollment.findMany({
+    return this.prismaRead.learningPathEnrollment.findMany({
       where: { userId },
       include: {
         learningPath: {
@@ -593,15 +601,15 @@ export class LearningPathsService {
     await this.findOne(learningPathId);
 
     const [totalEnrollments, completed, inProgress, notStarted, overdueCount] = await Promise.all([
-      this.prisma.learningPathEnrollment.count({ where: { learningPathId } }),
-      this.prisma.learningPathEnrollment.count({ where: { learningPathId, status: 'COMPLETED' } }),
-      this.prisma.learningPathEnrollment.count({
+      this.prismaRead.learningPathEnrollment.count({ where: { learningPathId } }),
+      this.prismaRead.learningPathEnrollment.count({ where: { learningPathId, status: 'COMPLETED' } }),
+      this.prismaRead.learningPathEnrollment.count({
         where: { learningPathId, status: 'IN_PROGRESS' },
       }),
-      this.prisma.learningPathEnrollment.count({
+      this.prismaRead.learningPathEnrollment.count({
         where: { learningPathId, status: 'NOT_STARTED' },
       }),
-      this.prisma.learningPathEnrollment.count({
+      this.prismaRead.learningPathEnrollment.count({
         where: {
           learningPathId,
           deadline: { lt: new Date() },
@@ -617,7 +625,7 @@ export class LearningPathsService {
     const lp = (await this.findOne(learningPathId)) as any;
     const stepDropoff = await Promise.all(
       (lp.courses as any[]).map(async (step: any) => {
-        const stepCompleted = await this.prisma.enrollment.count({
+        const stepCompleted = await this.prismaRead.enrollment.count({
           where: { courseId: step.courseId, status: 'COMPLETED' },
         });
         return {
@@ -642,13 +650,13 @@ export class LearningPathsService {
 
   async getAdminDashboard() {
     const [totalPaths, published, totalEnrollments, completedEnrollments] = await Promise.all([
-      this.prisma.learningPath.count(),
-      this.prisma.learningPath.count({ where: { status: 'PUBLISHED' } }),
-      this.prisma.learningPathEnrollment.count(),
-      this.prisma.learningPathEnrollment.count({ where: { status: 'COMPLETED' } }),
+      this.prismaRead.learningPath.count(),
+      this.prismaRead.learningPath.count({ where: { status: 'PUBLISHED' } }),
+      this.prismaRead.learningPathEnrollment.count(),
+      this.prismaRead.learningPathEnrollment.count({ where: { status: 'COMPLETED' } }),
     ]);
 
-    const topPaths = await this.prisma.learningPath.findMany({
+    const topPaths = await this.prismaRead.learningPath.findMany({
       where: { status: 'PUBLISHED' },
       include: { _count: { select: { enrollments: true } } },
       orderBy: { enrollments: { _count: 'desc' } },

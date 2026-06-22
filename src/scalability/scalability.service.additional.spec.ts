@@ -74,7 +74,7 @@ const userMock = {
   count: jest.fn().mockResolvedValue(0),
 };
 
-const mockPrisma = new Proxy(
+const mockPrisma: any = new Proxy(
   {
     tenantConfig: tenantMock,
     integrationConfig: integrationMock,
@@ -83,6 +83,7 @@ const mockPrisma = new Proxy(
   },
   {
     get(target, prop) {
+      if (prop === 'db') return mockPrisma;
       if (prop in target) return target[prop as string];
       return {
         findMany: jest.fn().mockResolvedValue([]),

@@ -49,6 +49,14 @@ function buildVariablesFromUser(
 
 @Injectable()
 export class DocumentDeclarationsService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -63,7 +71,7 @@ export class DocumentDeclarationsService {
   }
 
   async getPurposes(activeOnly = true) {
-    return this.prisma.declarationPurpose.findMany({
+    return this.prismaRead.declarationPurpose.findMany({
       where: activeOnly ? { active: true } : {},
       // FIX: fullName → name (DeclarationPurpose has field `name`)
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
@@ -108,7 +116,7 @@ export class DocumentDeclarationsService {
     if (purposeId) where.purposeId = purposeId;
     if (language) where.language = language;
 
-    return this.prisma.declarationTemplate.findMany({
+    return this.prismaRead.declarationTemplate.findMany({
       where,
       include: { purpose: true },
       // FIX: fullName → name (DeclarationTemplate has field `name`)
@@ -117,7 +125,7 @@ export class DocumentDeclarationsService {
   }
 
   async getTemplate(id: number) {
-    const t = await this.prisma.declarationTemplate.findUnique({
+    const t = await this.prismaRead.declarationTemplate.findUnique({
       where: { id },
       include: { purpose: true },
     });
@@ -195,7 +203,7 @@ export class DocumentDeclarationsService {
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const [data, total] = await Promise.all([
-      this.prisma.declarationRequest.findMany({
+      this.prismaRead.declarationRequest.findMany({
         where,
         skip,
         take: limit,
@@ -210,14 +218,14 @@ export class DocumentDeclarationsService {
           approval: { include: { reviewer: { select: { id: true, fullName: true } } } },
         },
       }),
-      this.prisma.declarationRequest.count({ where }),
+      this.prismaRead.declarationRequest.count({ where }),
     ]);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async findOne(id: number, requesterId?: number) {
-    const r = await this.prisma.declarationRequest.findUnique({
+    const r = await this.prismaRead.declarationRequest.findUnique({
       where: { id },
       include: {
         template: true,
@@ -246,7 +254,7 @@ export class DocumentDeclarationsService {
     if (!template.active) throw new BadRequestException('Template inactivo');
 
     const requiresApproval = dto.purposeId
-      ? (await this.prisma.declarationPurpose.findUnique({ where: { id: dto.purposeId } }))
+      ? (await this.prismaRead.declarationPurpose.findUnique({ where: { id: dto.purposeId } }))
           ?.requiresApproval
       : template.requiresApproval;
 
@@ -415,7 +423,7 @@ export class DocumentDeclarationsService {
   }
 
   async verify(verificationCode: string) {
-    const req = await this.prisma.declarationRequest.findFirst({
+    const req = await this.prismaRead.declarationRequest.findFirst({
       where: { verificationCode },
       include: {
         template: { select: { name: true } },
@@ -439,13 +447,13 @@ export class DocumentDeclarationsService {
 
   async getDashboard() {
     const [pending, generated, issued, total] = await Promise.all([
-      this.prisma.declarationRequest.count({ where: { status: DocumentRequestStatus.PENDING } }),
-      this.prisma.declarationRequest.count({ where: { status: DocumentRequestStatus.GENERATED } }),
-      this.prisma.declarationRequest.count({ where: { status: DocumentRequestStatus.ISSUED } }),
-      this.prisma.declarationRequest.count(),
+      this.prismaRead.declarationRequest.count({ where: { status: DocumentRequestStatus.PENDING } }),
+      this.prismaRead.declarationRequest.count({ where: { status: DocumentRequestStatus.GENERATED } }),
+      this.prismaRead.declarationRequest.count({ where: { status: DocumentRequestStatus.ISSUED } }),
+      this.prismaRead.declarationRequest.count(),
     ]);
 
-    const byTemplate = await this.prisma.declarationRequest.groupBy({
+    const byTemplate = await this.prismaRead.declarationRequest.groupBy({
       by: ['templateId'],
       _count: true,
       orderBy: { _count: { templateId: 'desc' } },
@@ -459,7 +467,7 @@ export class DocumentDeclarationsService {
 
   private async loadUserData(userId: number) {
     // FIX: removed employee sub-select — User has no employee relation
-    return this.prisma.user.findUnique({
+    return this.prismaRead.user.findUnique({
       where: { id: userId },
       select: { id: true, fullName: true, email: true },
     });
@@ -474,7 +482,7 @@ export class DocumentDeclarationsService {
   private async notifyRH(type: string, message: string) {
     try {
       // FIX: role: 'RH' → roleCode: 'RH' (role is a relation, not a string)
-      const hr = await this.prisma.user.findFirst({ where: { roleCode: 'RH' } as any });
+      const hr = await this.prismaRead.user.findFirst({ where: { roleCode: 'RH' } as any });
       if (hr)
         await this.prisma.notificationLog.create({
           data: { userId: hr.id, type, message, success: true },

@@ -15,16 +15,24 @@ import {
 @Injectable()
 export class SuccessionService {
   private readonly logger = new Logger(SuccessionService.name);
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
 
   constructor(private prisma: PrismaService) {}
 
   // ─── CARGOS CRÍTICOS ──────────────────────────────────────────────────────
 
   async createCriticalPosition(dto: CreateCriticalPositionDto) {
-    const position = await this.prisma.position.findUnique({ where: { id: dto.positionId } });
+    const position = await this.prismaRead.position.findUnique({ where: { id: dto.positionId } });
     if (!position) throw new NotFoundException('Posição não encontrada');
 
-    const exists = await this.prisma.criticalPosition.findUnique({
+    const exists = await this.prismaRead.criticalPosition.findUnique({
       where: { positionId: dto.positionId },
     });
     if (exists) throw new ConflictException('Esta posição já está classificada como crítica');
@@ -62,7 +70,7 @@ export class SuccessionService {
     if (departmentId) where.position = { departmentId };
 
     const [data, total] = await Promise.all([
-      this.prisma.criticalPosition.findMany({
+      this.prismaRead.criticalPosition.findMany({
         where,
         skip,
         take: limit,
@@ -87,7 +95,7 @@ export class SuccessionService {
         },
         orderBy: [{ exitRisk: 'desc' }, { businessImpact: 'desc' }],
       }),
-      this.prisma.criticalPosition.count({ where }),
+      this.prismaRead.criticalPosition.count({ where }),
     ]);
 
     // Filtrar cargos sem sucessores (pós-query para simplificar)
@@ -113,7 +121,7 @@ export class SuccessionService {
   }
 
   async findOneCriticalPosition(id: number) {
-    const cp = await this.prisma.criticalPosition.findUnique({
+    const cp = await this.prismaRead.criticalPosition.findUnique({
       where: { id },
       include: {
         position: {
@@ -148,7 +156,7 @@ export class SuccessionService {
   }
 
   async updateCriticalPosition(id: number, dto: UpdateCriticalPositionDto) {
-    const cp = await this.prisma.criticalPosition.findUnique({ where: { id } });
+    const cp = await this.prismaRead.criticalPosition.findUnique({ where: { id } });
     if (!cp) throw new NotFoundException('Cargo crítico não encontrado');
     return this.prisma.criticalPosition.update({ where: { id }, data: dto });
   }
@@ -175,7 +183,7 @@ export class SuccessionService {
     if (departmentId) where.candidate = { departmentId };
 
     const [data, total] = await Promise.all([
-      this.prisma.successionPlan.findMany({
+      this.prismaRead.successionPlan.findMany({
         where,
         skip,
         take: limit,
@@ -197,14 +205,14 @@ export class SuccessionService {
         },
         orderBy: [{ priority: 'asc' }, { readinessLevel: 'asc' }],
       }),
-      this.prisma.successionPlan.count({ where }),
+      this.prismaRead.successionPlan.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const s = await this.prisma.successionPlan.findUnique({
+    const s = await this.prismaRead.successionPlan.findUnique({
       where: { id },
       include: {
         criticalPosition: {
@@ -241,16 +249,16 @@ export class SuccessionService {
   }
 
   async create(dto: SuccessionCreateSuccessionPlanDto) {
-    const cp = await this.prisma.criticalPosition.findUnique({
+    const cp = await this.prismaRead.criticalPosition.findUnique({
       where: { id: dto.criticalPositionId },
     });
     if (!cp) throw new NotFoundException('Cargo crítico não encontrado');
 
-    const candidate = await this.prisma.user.findUnique({ where: { id: dto.candidateId } });
+    const candidate = await this.prismaRead.user.findUnique({ where: { id: dto.candidateId } });
     if (!candidate) throw new NotFoundException('Candidato não encontrado');
 
     // Verificar duplicação
-    const exists = await this.prisma.successionPlan.findFirst({
+    const exists = await this.prismaRead.successionPlan.findFirst({
       where: { criticalPositionId: dto.criticalPositionId, candidateId: dto.candidateId },
     });
     if (exists) throw new ConflictException('Candidato já está no plano de sucessão deste cargo');
@@ -312,11 +320,11 @@ export class SuccessionService {
   // ─── CÁLCULO DE MATCH ─────────────────────────────────────────────────────
 
   private async calculateMatchScoreForCandidate(criticalPositionId: number, candidateId: number) {
-    const cp = await this.prisma.criticalPosition.findUnique({
+    const cp = await this.prismaRead.criticalPosition.findUnique({
       where: { id: criticalPositionId },
       include: { position: { include: { competencies: true } } },
     });
-    const candidate = await this.prisma.user.findUnique({
+    const candidate = await this.prismaRead.user.findUnique({
       where: { id: candidateId },
       include: {
         userCompetencies: true,
@@ -377,7 +385,7 @@ export class SuccessionService {
   // ─── TALENT POOL ──────────────────────────────────────────────────────────
 
   async getTalentPool() {
-    return this.prisma.talentPool.findMany({
+    return this.prismaRead.talentPool.findMany({
       include: {
         user: {
           select: {
@@ -403,7 +411,7 @@ export class SuccessionService {
   }
 
   async addToTalentPool(dto: AddToTalentPoolDto) {
-    const exists = await this.prisma.talentPool.findUnique({ where: { userId: dto.userId } });
+    const exists = await this.prismaRead.talentPool.findUnique({ where: { userId: dto.userId } });
     if (exists) throw new ConflictException('Colaborador já está no Talent Pool');
 
     return this.prisma.talentPool.create({
@@ -421,7 +429,7 @@ export class SuccessionService {
   }
 
   async removeFromTalentPool(userId: number) {
-    const entry = await this.prisma.talentPool.findUnique({ where: { userId } });
+    const entry = await this.prismaRead.talentPool.findUnique({ where: { userId } });
     if (!entry) throw new NotFoundException('Colaborador não está no Talent Pool');
     await this.prisma.talentPool.delete({ where: { userId } });
     return { message: 'Removido do Talent Pool' };
@@ -437,13 +445,13 @@ export class SuccessionService {
     const gapCompIds = gaps.map((g: any) => g.competencyId);
 
     // Sugerir cursos mapeados aos gaps
-    const suggestedCourses = await this.prisma.courseCompetency.findMany({
+    const suggestedCourses = await this.prismaRead.courseCompetency.findMany({
       where: { competencyId: { in: gapCompIds } },
       include: { course: { select: { id: true, title: true, thumbnailUrl: true } } },
       take: 10,
     });
 
-    const suggestedLPs = await this.prisma.learningPath.findMany({
+    const suggestedLPs = await this.prismaRead.learningPath.findMany({
       where: { status: 'PUBLISHED' },
       select: { id: true, title: true, pathType: true },
       take: 5,
@@ -476,7 +484,7 @@ export class SuccessionService {
   // ─── SUMÁRIO POR CARGO ────────────────────────────────────────────────────
 
   async getPositionSummary(positionId: number) {
-    const cp = await this.prisma.criticalPosition.findUnique({
+    const cp = await this.prismaRead.criticalPosition.findUnique({
       where: { positionId },
       include: {
         position: {
@@ -583,13 +591,13 @@ export class SuccessionService {
 
   async getDashboard() {
     const [totalCritical, withoutSuccessor, readyNowCount, highRisk, allPlans] = await Promise.all([
-      this.prisma.criticalPosition.count(),
-      this.prisma.criticalPosition.count({
+      this.prismaRead.criticalPosition.count(),
+      this.prismaRead.criticalPosition.count({
         where: { successionPlans: { none: {} } },
       }),
-      this.prisma.successionPlan.count({ where: { readinessLevel: 'READY_NOW' } }),
-      this.prisma.criticalPosition.count({ where: { exitRisk: { in: ['HIGH', 'CRITICAL'] } } }),
-      this.prisma.successionPlan.findMany({
+      this.prismaRead.successionPlan.count({ where: { readinessLevel: 'READY_NOW' } }),
+      this.prismaRead.criticalPosition.count({ where: { exitRisk: { in: ['HIGH', 'CRITICAL'] } } }),
+      this.prismaRead.successionPlan.findMany({
         select: { matchScore: true, readinessLevel: true, criticalPositionId: true },
       }),
     ]);
@@ -607,7 +615,7 @@ export class SuccessionService {
         : 0;
 
     // Alertas críticos
-    const criticalAlerts = await this.prisma.criticalPosition.findMany({
+    const criticalAlerts = await this.prismaRead.criticalPosition.findMany({
       where: {
         OR: [
           { exitRisk: 'CRITICAL' },
@@ -642,21 +650,21 @@ export class SuccessionService {
 
   async compareProfiles(candidateAId: number, candidateBId: number, criticalPositionId: number) {
     const [a, b, cp] = await Promise.all([
-      this.prisma.user.findUnique({
+      this.prismaRead.user.findUnique({
         where: { id: candidateAId },
         include: {
           userCompetencies: { include: { competency: true } },
           performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
         },
       }),
-      this.prisma.user.findUnique({
+      this.prismaRead.user.findUnique({
         where: { id: candidateBId },
         include: {
           userCompetencies: { include: { competency: true } },
           performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
         },
       }),
-      this.prisma.criticalPosition.findUnique({
+      this.prismaRead.criticalPosition.findUnique({
         where: { id: criticalPositionId },
         include: { position: { include: { competencies: { include: { competency: true } } } } },
       }),

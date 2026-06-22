@@ -21,6 +21,14 @@ import {
 @Injectable()
 export class MicroLearningService {
   private readonly logger = new Logger(MicroLearningService.name);
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
 
   constructor(private prisma: PrismaService) {}
 
@@ -70,7 +78,7 @@ export class MicroLearningService {
         },
         orderBy,
       }),
-      this.prisma.microLearning.count({ where }),
+      this.prismaRead.microLearning.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -223,7 +231,7 @@ export class MicroLearningService {
         },
         orderBy,
       }),
-      this.prisma.microLearning.count({ where }),
+      this.prismaRead.microLearning.count({ where }),
     ]);
 
     // Enriquecer com progresso e estado do utilizador
@@ -256,14 +264,14 @@ export class MicroLearningService {
   }
 
   private async getUserProgressMap(userId: number, ids: number[]) {
-    const records = await this.prisma.microLearningProgress.findMany({
+    const records = await this.prismaRead.microLearningProgress.findMany({
       where: { userId, microLearningId: { in: ids } },
     });
     return new Map(records.map(r => [r.microLearningId, r]));
   }
 
   private async getUserLikesSet(userId: number, ids: number[]) {
-    const likes = await this.prisma.microLearningInteraction.findMany({
+    const likes = await this.prismaRead.microLearningInteraction.findMany({
       where: { userId, microLearningId: { in: ids }, action: 'LIKE' },
       select: { microLearningId: true },
     });
@@ -283,7 +291,7 @@ export class MicroLearningService {
   async updateProgress(userId: number, dto: MicroLearningUpdateProgressDto) {
     const ml = await this.findOne(dto.microLearningId);
 
-    const existing = await this.prisma.microLearningProgress.findFirst({
+    const existing = await this.prismaRead.microLearningProgress.findFirst({
       where: { userId, microLearningId: dto.microLearningId },
     });
 
@@ -342,7 +350,7 @@ export class MicroLearningService {
   }
 
   private async updateStreak(userId: number) {
-    const streak = await this.prisma.learningStreak.findUnique({ where: { userId } });
+    const streak = await this.prismaRead.learningStreak.findUnique({ where: { userId } });
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -374,7 +382,7 @@ export class MicroLearningService {
   // ─── QUIZ ─────────────────────────────────────────────────────────────────
 
   async submitQuiz(userId: number, dto: MicroLearningSubmitQuizDto) {
-    const questions = await this.prisma.microQuizQuestion.findMany({
+    const questions = await this.prismaRead.microQuizQuestion.findMany({
       where: { microLearningId: dto.microLearningId },
       orderBy: { seq: 'asc' },
     });
@@ -415,7 +423,7 @@ export class MicroLearningService {
 
   async interact(userId: number, dto: InteractDto) {
     if (dto.action === 'LIKE' || dto.action === 'SAVE') {
-      const existing = await this.prisma.microLearningInteraction.findFirst({
+      const existing = await this.prismaRead.microLearningInteraction.findFirst({
         where: { userId, microLearningId: dto.microLearningId, action: dto.action },
       });
       if (existing) {
@@ -498,7 +506,7 @@ export class MicroLearningService {
   }
 
   async getPlaylists() {
-    return this.prisma.microLearningPlaylist.findMany({
+    return this.prismaRead.microLearningPlaylist.findMany({
       include: {
         author: { select: { id: true, fullName: true } },
         _count: { select: { items: true } },
@@ -513,7 +521,7 @@ export class MicroLearningService {
     await this.findOne(dto.microLearningId);
 
     // Criar apenas para quem ainda não recebeu
-    const existing = await this.prisma.microLearningProgress.findMany({
+    const existing = await this.prismaRead.microLearningProgress.findMany({
       where: { microLearningId: dto.microLearningId, userId: { in: dto.userIds } },
       select: { userId: true },
     });
@@ -550,7 +558,7 @@ export class MicroLearningService {
 
   async dispatchToAll(microLearningId: number) {
     await this.findOne(microLearningId);
-    const users = await this.prisma.user.findMany({
+    const users = await this.prismaRead.user.findMany({
       where: { active: true },
       select: { id: true },
     });
@@ -561,13 +569,13 @@ export class MicroLearningService {
 
   async getMyDashboard(userId: number) {
     const [streak, totalCompleted, totalMinutes, recentActivity, quizAttempts] = await Promise.all([
-      this.prisma.learningStreak.findUnique({ where: { userId } }),
-      this.prisma.microLearningProgress.count({ where: { userId, progress: { gte: 100 } } }),
-      this.prisma.microLearningProgress.aggregate({
+      this.prismaRead.learningStreak.findUnique({ where: { userId } }),
+      this.prismaRead.microLearningProgress.count({ where: { userId, progress: { gte: 100 } } }),
+      this.prismaRead.microLearningProgress.aggregate({
         where: { userId },
         _sum: { watchedSeconds: true },
       }),
-      this.prisma.microLearningProgress.findMany({
+      this.prismaRead.microLearningProgress.findMany({
         where: { userId, progress: { gt: 0 } },
         include: {
           microLearning: {
@@ -577,14 +585,14 @@ export class MicroLearningService {
         orderBy: { updatedAt: 'desc' },
         take: 5,
       }),
-      this.prisma.microQuizAttempt.aggregate({
+      this.prismaRead.microQuizAttempt.aggregate({
         where: { userId },
         _avg: { score: true },
         _count: true,
       }),
     ]);
 
-    const userPoints = await this.prisma.userPoints.findUnique({ where: { userId } });
+    const userPoints = await this.prismaRead.userPoints.findUnique({ where: { userId } });
 
     return {
       streak: {
@@ -609,20 +617,20 @@ export class MicroLearningService {
     await this.findOne(id);
 
     const [totalViews, completions, avgProgress, quizStats, likeCount] = await Promise.all([
-      this.prisma.microLearningProgress.count({ where: { microLearningId: id } }),
-      this.prisma.microLearningProgress.count({
+      this.prismaRead.microLearningProgress.count({ where: { microLearningId: id } }),
+      this.prismaRead.microLearningProgress.count({
         where: { microLearningId: id, progress: { gte: 100 } },
       }),
-      this.prisma.microLearningProgress.aggregate({
+      this.prismaRead.microLearningProgress.aggregate({
         where: { microLearningId: id },
         _avg: { progress: true, watchedSeconds: true },
       }),
-      this.prisma.microQuizAttempt.aggregate({
+      this.prismaRead.microQuizAttempt.aggregate({
         where: { microLearningId: id },
         _avg: { score: true },
         _count: true,
       }),
-      this.prisma.microLearningInteraction.count({
+      this.prismaRead.microLearningInteraction.count({
         where: { microLearningId: id, action: 'LIKE' },
       }),
     ]);
@@ -646,19 +654,19 @@ export class MicroLearningService {
 
   async getAdminDashboard() {
     const [total, published, totalViews, topContent, activeStreaks] = await Promise.all([
-      this.prisma.microLearning.count(),
-      this.prisma.microLearning.count({ where: { status: 'PUBLISHED' } }),
-      this.prisma.microLearning.aggregate({ _sum: { viewCount: true } }),
+      this.prismaRead.microLearning.count(),
+      this.prismaRead.microLearning.count({ where: { status: 'PUBLISHED' } }),
+      this.prismaRead.microLearning.aggregate({ _sum: { viewCount: true } }),
       (this.prisma as any).microLearning.findMany({
         where: { status: 'PUBLISHED' },
         include: { author: { select: { fullName: true } }, _count: { select: { likes: true } } },
         orderBy: { viewCount: 'desc' },
         take: 5,
       }),
-      this.prisma.learningStreak.count({ where: { currentStreak: { gt: 0 } } }),
+      this.prismaRead.learningStreak.count({ where: { currentStreak: { gt: 0 } } }),
     ]);
 
-    const avgCompletionRate = await this.prisma.microLearningProgress.aggregate({
+    const avgCompletionRate = await this.prismaRead.microLearningProgress.aggregate({
       _avg: { progress: true },
     });
 

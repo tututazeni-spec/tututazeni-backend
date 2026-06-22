@@ -18,7 +18,7 @@ export class CrmBeneficiariesService {
    * Nota: leituras puras usam Promise.all (não $transaction), pois a extensão
    * de réplicas encaminha sempre $transaction para o primary.
    */
-  private get prismaRead(): any {
+  private get prismaRead(): PrismaService {
     return (this.prisma as any).db ?? this.prisma;
   }
 

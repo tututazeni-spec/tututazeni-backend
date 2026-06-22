@@ -19,7 +19,7 @@ const baseProcess = {
   steps: [{ id: 1, type: 'APPROVAL', title: 'Passo 1', order: 1 }],
 };
 
-const mockPrisma = new Proxy(
+const mockPrisma: any = new Proxy(
   {
     processStandard: {
       findUnique: makeFind(baseProcess),
@@ -45,6 +45,7 @@ const mockPrisma = new Proxy(
   },
   {
     get(target, prop) {
+      if (prop === 'db') return mockPrisma;
       return (
         (target as any)[prop] ?? {
           create: makeFind({}),

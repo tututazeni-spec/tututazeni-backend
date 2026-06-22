@@ -10,12 +10,20 @@ import {
 
 @Injectable()
 export class LmsService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── GERAÇÃO DE CÓDIGOS ──────────────────────────────
 
   private async generateSessionCode(): Promise<string> {
-    const last = await this.prisma.lmsLiveSession.findFirst({
+    const last = await this.prismaRead.lmsLiveSession.findFirst({
       orderBy: { code: 'desc' },
       select: { code: true },
     });
@@ -26,7 +34,7 @@ export class LmsService {
   // ─── PERCURSOS DE APRENDIZAGEM ───────────────────────
 
   async createPath(dto: LmsCreateLearningPathDto, userId: number) {
-    const existing = await this.prisma.lmsLearningPath.findUnique({
+    const existing = await this.prismaRead.lmsLearningPath.findUnique({
       where: { code: dto.code },
     });
     if (existing && !existing.deletedAt) {
@@ -59,8 +67,8 @@ export class LmsService {
         ],
       }),
     };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.lmsLearningPath.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.lmsLearningPath.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -70,13 +78,13 @@ export class LmsService {
           _count: { select: { enrollments: true } },
         },
       }),
-      this.prisma.lmsLearningPath.count({ where }),
+      this.prismaRead.lmsLearningPath.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findPathById(id: string) {
-    const path = await this.prisma.lmsLearningPath.findUnique({
+    const path = await this.prismaRead.lmsLearningPath.findUnique({
       where: { id },
       include: {
         createdBy: { select: { fullName: true } },
@@ -113,7 +121,7 @@ export class LmsService {
 
   async enrollInPath(pathId: string, userId: number) {
     const path = await this.findPathById(pathId);
-    const existing = await this.prisma.lmsPathEnrollment.findUnique({
+    const existing = await this.prismaRead.lmsPathEnrollment.findUnique({
       where: { pathId_userId: { pathId, userId } },
     });
     if (existing && !existing.deletedAt) {
@@ -146,7 +154,7 @@ export class LmsService {
   }
 
   async updatePathProgress(pathId: string, completedCourseId: string, userId: number) {
-    const enrollment = await this.prisma.lmsPathEnrollment.findUnique({
+    const enrollment = await this.prismaRead.lmsPathEnrollment.findUnique({
       where: { pathId_userId: { pathId, userId } },
       include: { path: true },
     });
@@ -182,7 +190,7 @@ export class LmsService {
   }
 
   async getMyPaths(userId: number) {
-    return this.prisma.lmsPathEnrollment.findMany({
+    return this.prismaRead.lmsPathEnrollment.findMany({
       where: { userId, deletedAt: null },
       orderBy: { startedAt: 'desc' },
       include: {
@@ -225,8 +233,8 @@ export class LmsService {
       status: { in: ['SCHEDULED', 'LIVE'] as any },
       scheduledAt: { gte: new Date() },
     };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.lmsLiveSession.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.lmsLiveSession.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -236,13 +244,13 @@ export class LmsService {
           _count: { select: { attendances: true } },
         },
       }),
-      this.prisma.lmsLiveSession.count({ where }),
+      this.prismaRead.lmsLiveSession.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async registerForSession(sessionId: string, userId: number) {
-    const session = await this.prisma.lmsLiveSession.findUnique({
+    const session = await this.prismaRead.lmsLiveSession.findUnique({
       where: { id: sessionId },
       include: { _count: { select: { attendances: true } } },
     });
@@ -250,7 +258,7 @@ export class LmsService {
     if (session.maxAttendees && session._count.attendances >= session.maxAttendees) {
       throw new ConflictException('Sessão lotada');
     }
-    const existing = await this.prisma.lmsLiveAttendance.findUnique({
+    const existing = await this.prismaRead.lmsLiveAttendance.findUnique({
       where: { sessionId_userId: { sessionId, userId } },
     });
     if (existing) throw new ConflictException('Já inscrito nesta sessão');
@@ -261,7 +269,7 @@ export class LmsService {
   }
 
   async markAttendance(sessionId: string, userId: number) {
-    const attendance = await this.prisma.lmsLiveAttendance.findUnique({
+    const attendance = await this.prismaRead.lmsLiveAttendance.findUnique({
       where: { sessionId_userId: { sessionId, userId } },
     });
     if (!attendance) throw new NotFoundException('Inscrição na sessão não encontrada');
@@ -275,7 +283,7 @@ export class LmsService {
   }
 
   async submitSessionFeedback(sessionId: string, dto: AttendanceFeedbackDto, userId: number) {
-    const attendance = await this.prisma.lmsLiveAttendance.findUnique({
+    const attendance = await this.prismaRead.lmsLiveAttendance.findUnique({
       where: { sessionId_userId: { sessionId, userId } },
     });
     if (!attendance) throw new NotFoundException('Presença não encontrada');
@@ -289,18 +297,18 @@ export class LmsService {
 
   async getRecommendations(userId: number) {
     // Recomendações baseadas na actividade do utilizador
-    await this.prisma.user.findUnique({
+    await this.prismaRead.user.findUnique({
       where: { id: userId },
       select: { roleId: true, fullName: true },
     });
 
-    const enrolled = await this.prisma.lmsPathEnrollment.findMany({
+    const enrolled = await this.prismaRead.lmsPathEnrollment.findMany({
       where: { userId, deletedAt: null },
       select: { pathId: true },
     });
     const enrolledIds = enrolled.map(e => e.pathId);
 
-    const recommended = await this.prisma.lmsLearningPath.findMany({
+    const recommended = await this.prismaRead.lmsLearningPath.findMany({
       where: {
         deletedAt: null,
         isActive: true,
@@ -328,7 +336,7 @@ export class LmsService {
   // ─── ANALYTICS DO UTILIZADOR ─────────────────────────
 
   async getMyAnalytics(userId: number) {
-    let analytics = await this.prisma.lmsLearningAnalytics.findUnique({
+    let analytics = await this.prismaRead.lmsLearningAnalytics.findUnique({
       where: { userId },
     });
     if (!analytics) {
@@ -348,22 +356,22 @@ export class LmsService {
       upcomingSessions,
       totalSessions,
       byLevel,
-    ] = await this.prisma.$transaction([
-      this.prisma.lmsLearningPath.count({ where: { deletedAt: null } }),
-      this.prisma.lmsLearningPath.count({
+    ] = await Promise.all([
+      this.prismaRead.lmsLearningPath.count({ where: { deletedAt: null } }),
+      this.prismaRead.lmsLearningPath.count({
         where: { isActive: true, deletedAt: null },
       }),
-      this.prisma.lmsPathEnrollment.count({ where: { deletedAt: null } }),
-      this.prisma.lmsPathEnrollment.count({ where: { status: 'COMPLETED' } }),
-      this.prisma.lmsLiveSession.count({
+      this.prismaRead.lmsPathEnrollment.count({ where: { deletedAt: null } }),
+      this.prismaRead.lmsPathEnrollment.count({ where: { status: 'COMPLETED' } }),
+      this.prismaRead.lmsLiveSession.count({
         where: {
           status: 'SCHEDULED',
           scheduledAt: { gte: new Date() },
           deletedAt: null,
         },
       }),
-      this.prisma.lmsLiveSession.count({ where: { deletedAt: null } }),
-      (this.prisma.lmsLearningPath.groupBy as any)({
+      this.prismaRead.lmsLiveSession.count({ where: { deletedAt: null } }),
+      (this.prismaRead.lmsLearningPath.groupBy as any)({
         by: ['level'],
         where: { deletedAt: null },
         _count: { id: true },
@@ -386,7 +394,7 @@ export class LmsService {
   // ─── HELPERS ─────────────────────────────────────────
 
   private async updateAnalytics(userId: number, increments: any) {
-    const existing = await this.prisma.lmsLearningAnalytics.findUnique({
+    const existing = await this.prismaRead.lmsLearningAnalytics.findUnique({
       where: { userId },
     });
     if (!existing) {

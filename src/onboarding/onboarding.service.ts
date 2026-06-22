@@ -26,12 +26,20 @@ import {
 export class OnboardingService {
   private readonly logger = new Logger(OnboardingService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── TEMPLATES ────────────────────────────────────────────────────────────
 
   async findAllTemplates() {
-    return this.prisma.onboardingTemplate.findMany({
+    return this.prismaRead.onboardingTemplate.findMany({
       include: {
         position: { select: { id: true, name: true } },
         department: { select: { id: true, name: true } },
@@ -43,7 +51,7 @@ export class OnboardingService {
   }
 
   async findOneTemplate(id: number) {
-    const t = await this.prisma.onboardingTemplate.findUnique({
+    const t = await this.prismaRead.onboardingTemplate.findUnique({
       where: { id },
       include: {
         tasks: { orderBy: { seq: 'asc' } },
@@ -64,7 +72,7 @@ export class OnboardingService {
   }
 
   async deleteTemplate(id: number) {
-    const t = await this.prisma.onboardingTemplate.findUnique({
+    const t = await this.prismaRead.onboardingTemplate.findUnique({
       where: { id },
       include: { _count: { select: { plans: true } } },
     });
@@ -84,7 +92,7 @@ export class OnboardingService {
   }
 
   async updateTemplateTask(taskId: number, dto: UpdateTemplateTaskDto) {
-    const task = await this.prisma.onboardingTemplateTask.findUnique({ where: { id: taskId } });
+    const task = await this.prismaRead.onboardingTemplateTask.findUnique({ where: { id: taskId } });
     if (!task) throw new NotFoundException('Tarefa do template não encontrada');
     return this.prisma.onboardingTemplateTask.update({ where: { id: taskId }, data: dto });
   }
@@ -106,7 +114,7 @@ export class OnboardingService {
     if (departmentId) where.user = { departmentId };
 
     const [data, total] = await Promise.all([
-      this.prisma.onboardingPlan.findMany({
+      this.prismaRead.onboardingPlan.findMany({
         where,
         skip,
         take: limit,
@@ -127,14 +135,14 @@ export class OnboardingService {
         },
         orderBy: { startDate: 'desc' },
       }),
-      this.prisma.onboardingPlan.count({ where }),
+      this.prismaRead.onboardingPlan.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findByUser(userId: number) {
-    return this.prisma.onboardingPlan.findMany({
+    return this.prismaRead.onboardingPlan.findMany({
       where: { userId },
       include: {
         template: { select: { id: true, name: true, durationDays: true, welcomeVideoUrl: true } },
@@ -167,7 +175,7 @@ export class OnboardingService {
   }
 
   async findOne(id: number) {
-    const plan = await this.prisma.onboardingPlan.findUnique({
+    const plan = await this.prismaRead.onboardingPlan.findUnique({
       where: { id },
       include: {
         user: {
@@ -222,7 +230,7 @@ export class OnboardingService {
     const template = (await this.findOneTemplate(dto.templateId)) as any;
 
     // Verificar se já existe plano activo para este utilizador
-    const existing = await this.prisma.onboardingPlan.findFirst({
+    const existing = await this.prismaRead.onboardingPlan.findFirst({
       where: { userId: dto.userId, status: { in: ['NOT_STARTED', 'IN_PROGRESS'] } },
     });
     if (existing) throw new ConflictException('Utilizador já tem um plano de onboarding activo');
@@ -288,7 +296,7 @@ export class OnboardingService {
 
   async createFromTemplate(userId: number, positionId?: number, departmentId?: number) {
     // Encontrar o template mais adequado
-    const template = await this.prisma.onboardingTemplate.findFirst({
+    const template = await this.prismaRead.onboardingTemplate.findFirst({
       where: {
         active: true,
         OR: [
@@ -305,7 +313,7 @@ export class OnboardingService {
 
     if (!template) throw new NotFoundException('Nenhum template de onboarding configurado');
 
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prismaRead.user.findUnique({
       where: { id: userId },
       select: { managerId: true },
     });
@@ -320,7 +328,7 @@ export class OnboardingService {
   // ─── TAREFAS ──────────────────────────────────────────────────────────────
 
   async completeTask(dto: CompleteTaskDto, userId: number) {
-    const instance = await this.prisma.onboardingTaskInstance.findUnique({
+    const instance = await this.prismaRead.onboardingTaskInstance.findUnique({
       where: { id: dto.taskInstanceId },
       include: { templateTask: true, plan: true },
     });
@@ -333,7 +341,7 @@ export class OnboardingService {
     // Verificar dependências
     const dependencies = (instance.templateTask as any).dependsOn ?? [];
     if (dependencies.length > 0) {
-      const blockers = await this.prisma.onboardingTaskInstance.findMany({
+      const blockers = await this.prismaRead.onboardingTaskInstance.findMany({
         where: {
           planId: (instance as any).planId,
           templateTaskId: { in: dependencies },
@@ -382,7 +390,7 @@ export class OnboardingService {
   }
 
   async skipTask(dto: SkipTaskDto, approverId: number) {
-    const instance = await this.prisma.onboardingTaskInstance.findUnique({
+    const instance = await this.prismaRead.onboardingTaskInstance.findUnique({
       where: { id: dto.taskInstanceId },
     });
     if (!instance) throw new NotFoundException('Tarefa não encontrada');
@@ -398,7 +406,7 @@ export class OnboardingService {
   }
 
   async approveTask(dto: ApproveTaskDto, approverId: number) {
-    const instance = await this.prisma.onboardingTaskInstance.findUnique({
+    const instance = await this.prismaRead.onboardingTaskInstance.findUnique({
       where: { id: dto.taskInstanceId },
       include: { templateTask: true, plan: true },
     });
@@ -436,8 +444,8 @@ export class OnboardingService {
 
   private async checkPlanCompletion(planId: number) {
     const [total, completed] = await Promise.all([
-      this.prisma.onboardingTaskInstance.count({ where: { planId } }),
-      this.prisma.onboardingTaskInstance.count({
+      this.prismaRead.onboardingTaskInstance.count({ where: { planId } }),
+      this.prismaRead.onboardingTaskInstance.count({
         where: { planId, status: { in: ['COMPLETED', 'SKIPPED'] } },
       }),
     ]);
@@ -448,7 +456,7 @@ export class OnboardingService {
         data: { status: 'COMPLETED', completedAt: new Date() },
       });
 
-      const plan = await this.prisma.onboardingPlan.findUnique({
+      const plan = await this.prismaRead.onboardingPlan.findUnique({
         where: { id: planId },
         select: { userId: true, template: { select: { name: true } } },
       });
@@ -486,7 +494,7 @@ export class OnboardingService {
   // ─── DOCUMENTOS ───────────────────────────────────────────────────────────
 
   async uploadDocument(userId: number, dto: UploadDocumentDto) {
-    const plan = await this.prisma.onboardingPlan.findFirst({
+    const plan = await this.prismaRead.onboardingPlan.findFirst({
       where: { id: dto.planId, userId },
     });
     if (!plan) throw new NotFoundException('Plano não encontrado');
@@ -504,7 +512,7 @@ export class OnboardingService {
   }
 
   async validateDocument(dto: ValidateDocumentDto, validatorId: number) {
-    const doc = await this.prisma.onboardingDocument.findUnique({ where: { id: dto.documentId } });
+    const doc = await this.prismaRead.onboardingDocument.findUnique({ where: { id: dto.documentId } });
     if (!doc) throw new NotFoundException('Documento não encontrado');
 
     return this.prisma.onboardingDocument.update({
@@ -521,12 +529,12 @@ export class OnboardingService {
   // ─── PESQUISAS ────────────────────────────────────────────────────────────
 
   async submitSurvey(userId: number, dto: SubmitOnboardingSurveyDto) {
-    const plan = await this.prisma.onboardingPlan.findFirst({
+    const plan = await this.prismaRead.onboardingPlan.findFirst({
       where: { id: dto.planId, userId },
     });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
-    const existing = await this.prisma.onboardingSurvey.findFirst({
+    const existing = await this.prismaRead.onboardingSurvey.findFirst({
       where: { planId: dto.planId, milestone: dto.milestone },
     });
     if (existing) throw new ConflictException(`Pesquisa do ${dto.milestone} já submetida`);
@@ -550,13 +558,13 @@ export class OnboardingService {
 
     const [totalPlans, byStatus, activeWithProgress, overdueTasks, avgSurveyScore] =
       await Promise.all([
-        this.prisma.onboardingPlan.count({ where }),
-        this.prisma.onboardingPlan.groupBy({
+        this.prismaRead.onboardingPlan.count({ where }),
+        this.prismaRead.onboardingPlan.groupBy({
           by: ['status'],
           where,
           _count: true,
         }),
-        this.prisma.onboardingPlan.findMany({
+        this.prismaRead.onboardingPlan.findMany({
           where: { ...where, status: { in: ['NOT_STARTED', 'IN_PROGRESS'] } },
           include: {
             user: {
@@ -573,14 +581,14 @@ export class OnboardingService {
           orderBy: { startDate: 'asc' },
           take: 20,
         }),
-        this.prisma.onboardingTaskInstance.count({
+        this.prismaRead.onboardingTaskInstance.count({
           where: {
             plan: where,
             status: { not: 'COMPLETED' },
             dueDate: { lt: new Date() },
           },
         }),
-        this.prisma.onboardingSurvey.aggregate({ _avg: { score: true } }),
+        this.prismaRead.onboardingSurvey.aggregate({ _avg: { score: true } }),
       ]);
 
     const activeWithMetrics = activeWithProgress.map(plan => {

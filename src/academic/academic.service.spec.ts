@@ -217,15 +217,14 @@ describe('AcademicService', () => {
 
   describe('getReport', () => {
     it('deve retornar estatísticas académicas', async () => {
-      mockPrisma.$transaction.mockResolvedValue([
-        10,
-        50,
-        30,
-        15,
-        5,
-        { _avg: { finalScore: 72 } },
-        [],
-      ]);
+      mockPrisma.academicProgram.count.mockResolvedValue(10);
+      mockPrisma.academicEnrollment.count
+        .mockResolvedValueOnce(50)
+        .mockResolvedValueOnce(30)
+        .mockResolvedValueOnce(15)
+        .mockResolvedValueOnce(5);
+      mockPrisma.academicEnrollment.aggregate.mockResolvedValue({ _avg: { finalScore: 72 } });
+      mockPrisma.academicProgram.groupBy.mockResolvedValue([]);
       const result = await service.getAcademicReport();
       expect(result.completionRate).toBe(60);
       expect(result.averageScore).toBe(72);
@@ -267,7 +266,8 @@ describe('AcademicService', () => {
 
   describe('programas e turmas (leitura/escrita)', () => {
     it('findAllPrograms deve retornar paginação', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[mockProgram], 1]);
+      mockPrisma.academicProgram.findMany.mockResolvedValue([mockProgram]);
+      mockPrisma.academicProgram.count.mockResolvedValue(1);
       const result = await service.findAllPrograms({ page: 1, limit: 20 });
       expect(result.total).toBe(1);
       expect(result.totalPages).toBe(1);
@@ -321,7 +321,8 @@ describe('AcademicService', () => {
 
   describe('matrículas/notas/transcrição (leitura)', () => {
     it('getMyEnrollments deve retornar paginação', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[mockEnrollment], 1]);
+      mockPrisma.academicEnrollment.findMany.mockResolvedValue([mockEnrollment]);
+      mockPrisma.academicEnrollment.count.mockResolvedValue(1);
       const result = await service.getMyEnrollments(1, 1, 20);
       expect(result.total).toBe(1);
     });
@@ -333,7 +334,8 @@ describe('AcademicService', () => {
     });
 
     it('getTranscript deve retornar transcrição e matrículas', async () => {
-      mockPrisma.$transaction.mockResolvedValue([{ userId: 1, gpa: 80 }, [mockEnrollment]]);
+      mockPrisma.academicTranscript.findUnique.mockResolvedValue({ userId: 1, gpa: 80 });
+      mockPrisma.academicEnrollment.findMany.mockResolvedValue([mockEnrollment]);
       const result = await service.getTranscript(1);
       expect(result.transcript?.gpa).toBe(80);
       expect(result.enrollments).toHaveLength(1);

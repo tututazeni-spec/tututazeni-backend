@@ -120,6 +120,14 @@ Avatar:`;
 
 @Injectable()
 export class AvatarTrainingService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -257,14 +265,14 @@ export class AvatarTrainingService {
       ];
 
     const [data, total] = await Promise.all([
-      this.prisma.avatarScenario.findMany({
+      this.prismaRead.avatarScenario.findMany({
         where,
         skip,
         take: limit,
         include: { competency: { select: { id: true, name: true } } },
         orderBy: { difficulty: 'asc' },
       }),
-      this.prisma.avatarScenario.count({ where }),
+      this.prismaRead.avatarScenario.count({ where }),
     ]);
 
     // Enrich with user completion stats
@@ -619,7 +627,7 @@ export class AvatarTrainingService {
   // ══════════════════════════════════════════════════════
 
   async getMyHistory(userId: number, limit = 20) {
-    const sessions = await this.prisma.avatarSession.findMany({
+    const sessions = await this.prismaRead.avatarSession.findMany({
       where: { userId },
       include: { scenario: { include: { competency: true } } },
       orderBy: { startedAt: 'desc' },
@@ -666,7 +674,7 @@ export class AvatarTrainingService {
   // ══════════════════════════════════════════════════════
 
   async getLeaderboard(scenarioId: number, limit = 10) {
-    const sessions = await this.prisma.avatarSession.findMany({
+    const sessions = await this.prismaRead.avatarSession.findMany({
       where: { scenarioId, status: 'COMPLETED' },
       include: {
         user: {
@@ -708,7 +716,7 @@ export class AvatarTrainingService {
       .catch(() => [] as any[]);
 
     const userIds = (grouped as any[]).map((g: any) => g.userId);
-    const users = await this.prisma.user.findMany({
+    const users = await this.prismaRead.user.findMany({
       where: { id: { in: userIds } },
       select: {
         id: true,
@@ -750,9 +758,9 @@ export class AvatarTrainingService {
       recentCompletions,
       avgScoreResult,
     ] = await Promise.all([
-      this.prisma.avatarScenario.count({ where: { active: true } }),
-      this.prisma.avatarSession.count({ where: { ...sessionsWhere, status: 'IN_PROGRESS' } }),
-      this.prisma.avatarSession.count({ where: { ...sessionsWhere, status: 'COMPLETED' } }),
+      this.prismaRead.avatarScenario.count({ where: { active: true } }),
+      this.prismaRead.avatarSession.count({ where: { ...sessionsWhere, status: 'IN_PROGRESS' } }),
+      this.prismaRead.avatarSession.count({ where: { ...sessionsWhere, status: 'COMPLETED' } }),
       // Top scenarios by completions
       this.prisma.avatarSession
         .groupBy({
@@ -840,7 +848,7 @@ export class AvatarTrainingService {
       {},
     );
 
-    const points = await this.prisma.userPoints.findUnique({ where: { userId } });
+    const points = await this.prismaRead.userPoints.findUnique({ where: { userId } });
 
     return {
       userId,
@@ -865,14 +873,14 @@ export class AvatarTrainingService {
   }
 
   async getTeamAnalytics(managerId: number) {
-    const team = await this.prisma.user.findMany({
+    const team = await this.prismaRead.user.findMany({
       where: { managerId, active: true },
       select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } },
     });
     if (!team.length) return { team: [], message: 'Sem equipa directa' };
 
     const teamIds = team.map(u => u.id);
-    const sessions = await this.prisma.avatarSession.findMany({
+    const sessions = await this.prismaRead.avatarSession.findMany({
       where: { userId: { in: teamIds }, status: 'COMPLETED' },
       select: { userId: true, score: true, scenarioId: true, completedAt: true },
     });
@@ -910,7 +918,7 @@ export class AvatarTrainingService {
   // ══════════════════════════════════════════════════════
 
   async getRecommendedScenarios(userId: number, limit = 6) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prismaRead.user.findUnique({
       where: { id: userId },
       select: { userCompetencies: { select: { competencyId: true, currentLevel: true } } },
     });
@@ -932,7 +940,7 @@ export class AvatarTrainingService {
     };
     if (gapCompIds.length) where.competencyId = { in: gapCompIds };
 
-    const scenarios = await this.prisma.avatarScenario.findMany({
+    const scenarios = await this.prismaRead.avatarScenario.findMany({
       where,
       include: { competency: { select: { name: true } } },
       orderBy: { difficulty: 'asc' },
@@ -941,7 +949,7 @@ export class AvatarTrainingService {
 
     // Fallback to popular if none match
     if (!scenarios.length) {
-      return this.prisma.avatarScenario.findMany({
+      return this.prismaRead.avatarScenario.findMany({
         where: { active: true, id: completedIds.length ? { notIn: completedIds } : undefined },
         include: { competency: { select: { name: true } } },
         orderBy: { createdAt: 'desc' },

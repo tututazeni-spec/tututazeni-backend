@@ -56,8 +56,9 @@ const mockPrisma = {
   userPoints: { update: jest.fn().mockResolvedValue({}) },
 };
 
-const mockPrismaProxy = new Proxy(mockPrisma, {
+const mockPrismaProxy: any = new Proxy(mockPrisma, {
   get(target, prop) {
+      if (prop === 'db') return mockPrismaProxy;
     if (prop === 'engagementSurvey') return engagementSurveyMock;
     return (target as any)[prop];
   },

@@ -20,6 +20,14 @@ import {
 
 @Injectable()
 export class WorkDeclarationsService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -67,7 +75,7 @@ export class WorkDeclarationsService {
   }
 
   async getForms(type?: WorkDeclType, activeOnly = true) {
-    return this.prisma.workDeclForm.findMany({
+    return this.prismaRead.workDeclForm.findMany({
       where: {
         ...(activeOnly ? { active: true } : {}),
         ...(type ? { type } : {}),
@@ -81,7 +89,7 @@ export class WorkDeclarationsService {
   }
 
   async getForm(id: number) {
-    const f = await this.prisma.workDeclForm.findUnique({
+    const f = await this.prismaRead.workDeclForm.findUnique({
       where: { id },
       include: { questions: { orderBy: { order: 'asc' } } },
     });
@@ -120,14 +128,14 @@ export class WorkDeclarationsService {
   // ══════════════════════════════════════════════════════════════════
 
   async getPendingForUser(userId: number) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prismaRead.user.findUnique({
       where: { id: userId },
       select: { id: true, fullName: true, departmentId: true, roleId: true },
     });
     if (!user) throw new NotFoundException();
 
     // Buscar todos os forms activos dirigidos a este colaborador
-    const allForms = await this.prisma.workDeclForm.findMany({
+    const allForms = await this.prismaRead.workDeclForm.findMany({
       where: {
         active: true,
         OR: [
@@ -139,7 +147,7 @@ export class WorkDeclarationsService {
     });
 
     // Quais já foram submetidos?
-    const submitted = await this.prisma.workDeclSubmission.findMany({
+    const submitted = await this.prismaRead.workDeclSubmission.findMany({
       where: {
         userId,
         status: { in: [WorkDeclStatus.SUBMITTED, WorkDeclStatus.APPROVED] },
@@ -149,7 +157,7 @@ export class WorkDeclarationsService {
     const submittedIds = new Set(submitted.map(s => s.formId));
 
     const pending = allForms.filter(f => !submittedIds.has(f.id));
-    const drafts = await this.prisma.workDeclSubmission.findMany({
+    const drafts = await this.prismaRead.workDeclSubmission.findMany({
       where: { userId, status: WorkDeclStatus.DRAFT },
       include: { form: { select: { id: true, title: true, type: true } } },
     });
@@ -179,7 +187,7 @@ export class WorkDeclarationsService {
       where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
 
     const [data, total] = await Promise.all([
-      this.prisma.workDeclSubmission.findMany({
+      this.prismaRead.workDeclSubmission.findMany({
         where,
         skip,
         take: limit,
@@ -191,14 +199,14 @@ export class WorkDeclarationsService {
           review: { include: { reviewer: { select: { id: true, fullName: true } } } },
         },
       }),
-      this.prisma.workDeclSubmission.count({ where }),
+      this.prismaRead.workDeclSubmission.count({ where }),
     ]);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async findOneSubmission(id: number) {
-    const s = await this.prisma.workDeclSubmission.findUnique({
+    const s = await this.prismaRead.workDeclSubmission.findUnique({
       where: { id },
       include: {
         form: { include: { questions: { orderBy: { order: 'asc' } } } },
@@ -216,7 +224,7 @@ export class WorkDeclarationsService {
     if (!form.active) throw new BadRequestException('Formulário inactivo');
 
     // Verificar se já existe uma submissão não-rascunho
-    const existing = await this.prisma.workDeclSubmission.findFirst({
+    const existing = await this.prismaRead.workDeclSubmission.findFirst({
       where: { userId, formId: dto.formId, status: { not: WorkDeclStatus.DRAFT } },
     });
     if (
@@ -357,7 +365,7 @@ export class WorkDeclarationsService {
   async sendReminder(formId: number, department?: string) {
     const form = await this.getForm(formId);
     // Buscar utilizadores que ainda não submeteram
-    const submitted = await this.prisma.workDeclSubmission.findMany({
+    const submitted = await this.prismaRead.workDeclSubmission.findMany({
       where: { formId, status: { not: WorkDeclStatus.DRAFT } },
       select: { userId: true },
     });
@@ -366,7 +374,7 @@ export class WorkDeclarationsService {
     const where: any = {};
     if (department) where.employee = { department: { contains: department, mode: 'insensitive' } };
 
-    const users = await this.prisma.user.findMany({ where, select: { id: true } });
+    const users = await this.prismaRead.user.findMany({ where, select: { id: true } });
     const pending = users.filter(u => !submittedIds.has(u.id));
 
     await Promise.allSettled(
@@ -411,20 +419,20 @@ export class WorkDeclarationsService {
       where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
 
     const [total, pending, approved, rejected, expired] = await Promise.all([
-      this.prisma.workDeclSubmission.count({ where }),
-      this.prisma.workDeclSubmission.count({
+      this.prismaRead.workDeclSubmission.count({ where }),
+      this.prismaRead.workDeclSubmission.count({
         where: { ...where, status: WorkDeclStatus.SUBMITTED },
       }),
-      this.prisma.workDeclSubmission.count({
+      this.prismaRead.workDeclSubmission.count({
         where: { ...where, status: WorkDeclStatus.APPROVED },
       }),
-      this.prisma.workDeclSubmission.count({
+      this.prismaRead.workDeclSubmission.count({
         where: { ...where, status: WorkDeclStatus.REJECTED },
       }),
-      this.prisma.workDeclSubmission.count({ where: { ...where, status: WorkDeclStatus.EXPIRED } }),
+      this.prismaRead.workDeclSubmission.count({ where: { ...where, status: WorkDeclStatus.EXPIRED } }),
     ]);
 
-    const byType = await this.prisma.workDeclSubmission.groupBy({
+    const byType = await this.prismaRead.workDeclSubmission.groupBy({
       by: ['formId'],
       where,
       _count: true,
@@ -439,15 +447,15 @@ export class WorkDeclarationsService {
   }
 
   async getComplianceReport(department?: string) {
-    const forms = await this.prisma.workDeclForm.findMany({
+    const forms = await this.prismaRead.workDeclForm.findMany({
       where: { active: true, mandatory: true },
     });
     const where: any = { employee: { isNot: null } };
     if (department) where.employee = { department: { contains: department, mode: 'insensitive' } };
 
-    const users = await this.prisma.user.findMany({ where, select: { id: true, fullName: true } });
+    const users = await this.prismaRead.user.findMany({ where, select: { id: true, fullName: true } });
 
-    const submissions = await this.prisma.workDeclSubmission.findMany({
+    const submissions = await this.prismaRead.workDeclSubmission.findMany({
       where: {
         formId: { in: forms.map(f => f.id) },
         status: { in: [WorkDeclStatus.SUBMITTED, WorkDeclStatus.APPROVED] },
@@ -488,7 +496,7 @@ export class WorkDeclarationsService {
 
   private async notifyRH(type: string, message: string) {
     try {
-      const hr = await this.prisma.user.findFirst({ where: { roleCode: 'RH' } as any });
+      const hr = await this.prismaRead.user.findFirst({ where: { roleCode: 'RH' } as any });
       if (hr)
         await this.prisma.notificationLog.create({
           data: { userId: hr.id, type, message, success: true },
@@ -499,7 +507,7 @@ export class WorkDeclarationsService {
   // ── Auto-trigger (chamado por outros módulos) ─────────────────────────────
 
   async triggerOnboarding(userId: number) {
-    const forms = await this.prisma.workDeclForm.findMany({
+    const forms = await this.prismaRead.workDeclForm.findMany({
       where: { type: WorkDeclType.ONBOARDING, active: true },
     });
     // Criar submissões em estado DRAFT para o utilizador preencher
@@ -519,16 +527,16 @@ export class WorkDeclarationsService {
 
   async triggerPeriodic() {
     const today = new Date();
-    const forms = await this.prisma.workDeclForm.findMany({
+    const forms = await this.prismaRead.workDeclForm.findMany({
       where: { type: WorkDeclType.PERIODIC, active: true, periodicity: 'ANNUAL' },
     });
 
     let triggered = 0;
     for (const form of forms) {
-      const users = await this.prisma.user.findMany({ select: { id: true } });
+      const users = await this.prismaRead.user.findMany({ select: { id: true } });
       for (const user of users) {
         const thisYear = today.getFullYear().toString();
-        const alreadyDone = await this.prisma.workDeclSubmission.findFirst({
+        const alreadyDone = await this.prismaRead.workDeclSubmission.findFirst({
           where: {
             userId: user.id,
             formId: form.id,

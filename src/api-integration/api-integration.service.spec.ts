@@ -10,7 +10,7 @@ const integrationMock = {
   count: jest.fn().mockResolvedValue(0),
 };
 
-const mockPrisma = new Proxy(
+const mockPrisma: any = new Proxy(
   {
     integrationConfig: integrationMock,
     apiIntegrationLog: {
@@ -23,6 +23,7 @@ const mockPrisma = new Proxy(
   },
   {
     get(target, prop) {
+      if (prop === 'db') return mockPrisma;
       return (
         (target as any)[prop] ?? {
           findMany: jest.fn().mockResolvedValue([]),

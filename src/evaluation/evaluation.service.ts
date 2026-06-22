@@ -79,6 +79,14 @@ const safeM = (prisma: any, name: string) =>
 
 @Injectable()
 export class EvaluationService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -232,7 +240,7 @@ export class EvaluationService {
     const deptFilter: any = {};
     if (cycle.targetDeptIds?.length) deptFilter.departmentId = { in: cycle.targetDeptIds };
 
-    const users = await this.prisma.user.findMany({
+    const users = await this.prismaRead.user.findMany({
       where: { active: true, ...deptFilter },
       select: { id: true, managerId: true },
     });
@@ -588,7 +596,7 @@ export class EvaluationService {
     const where: any = { evaluatedId: userId };
     if (period) where.period = { contains: period };
 
-    return this.prisma.performanceEvaluation.findMany({
+    return this.prismaRead.performanceEvaluation.findMany({
       where,
       include: { evaluator: { select: { id: true, fullName: true, avatarUrl: true } } },
       orderBy: { createdAt: 'desc' },
@@ -600,7 +608,7 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async getResults(evaluatedId: number, cycleId?: number) {
-    const evaluated = await this.prisma.user.findUnique({
+    const evaluated = await this.prismaRead.user.findUnique({
       where: { id: evaluatedId },
       select: {
         id: true,
@@ -615,7 +623,7 @@ export class EvaluationService {
     const where: any = { evaluatedId };
     if (cycleId) where.cycleId = cycleId;
 
-    const evaluations = await this.prisma.performanceEvaluation.findMany({
+    const evaluations = await this.prismaRead.performanceEvaluation.findMany({
       where,
       include: { evaluator: { select: { id: true, fullName: true } } },
       orderBy: { createdAt: 'desc' },
@@ -728,7 +736,7 @@ export class EvaluationService {
   }
 
   async getSummary(userId: number, period: string) {
-    const evals = await this.prisma.performanceEvaluation.findMany({
+    const evals = await this.prismaRead.performanceEvaluation.findMany({
       where: { evaluatedId: userId, period: { contains: period } },
     });
     if (!evals.length) return { userId, period, total: 0, avgScore: 0, byType: {} };
@@ -747,7 +755,7 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async getCycleForCalibration(cycleId: number) {
-    const evals = await this.prisma.performanceEvaluation.findMany({
+    const evals = await this.prismaRead.performanceEvaluation.findMany({
       where: { ...(cycleId ? ({ cycleId } as any) : {}) },
       include: {
         evaluated: {
@@ -867,7 +875,7 @@ export class EvaluationService {
     if (departmentId) where.evaluated = { departmentId };
 
     const [evals, totalRequests, completedRequests] = await Promise.all([
-      this.prisma.performanceEvaluation.findMany({
+      this.prismaRead.performanceEvaluation.findMany({
         where,
         include: {
           evaluated: {
@@ -960,7 +968,7 @@ export class EvaluationService {
   }
 
   async getTeamDashboard(managerId: number, cycleId?: number) {
-    const team = await this.prisma.user.findMany({
+    const team = await this.prismaRead.user.findMany({
       where: { managerId, active: true },
       select: {
         id: true,
@@ -976,7 +984,7 @@ export class EvaluationService {
     const where: any = { evaluatedId: { in: teamIds } };
     if (cycleId) where.cycleId = cycleId;
 
-    const evals = await this.prisma.performanceEvaluation.findMany({ where });
+    const evals = await this.prismaRead.performanceEvaluation.findMany({ where });
 
     const pending = await this.prisma.evaluationRequest
       .findMany({
@@ -1015,7 +1023,7 @@ export class EvaluationService {
   }
 
   async getUserEvolution(userId: number) {
-    const evals = await this.prisma.performanceEvaluation.findMany({
+    const evals = await this.prismaRead.performanceEvaluation.findMany({
       where: { evaluatedId: userId },
       orderBy: { createdAt: 'asc' },
       select: { overallScore: true, type: true, period: true, createdAt: true },

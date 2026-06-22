@@ -22,6 +22,14 @@ import {
 export class AssessmentsService {
   private readonly logger = new Logger(AssessmentsService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── CRUD Assessments ─────────────────────────────────────────────────────
@@ -78,7 +86,7 @@ export class AssessmentsService {
     if (filters.type) where.type = filters.type;
     if (filters.status) where.status = filters.status;
 
-    return this.prisma.assessment.findMany({
+    return this.prismaRead.assessment.findMany({
       where,
       include: {
         _count: { select: { questions: true, attempts: true } },
@@ -88,7 +96,7 @@ export class AssessmentsService {
   }
 
   async findOne(id: number, forUser = false) {
-    const a = await this.prisma.assessment.findUnique({
+    const a = await this.prismaRead.assessment.findUnique({
       where: { id },
       include: {
         questions: {
@@ -234,7 +242,7 @@ export class AssessmentsService {
 
     // Verificar tentativas máximas
     if (assessment.maxAttempts > 0) {
-      const totalAttempts = await this.prisma.assessmentAttempt.count({
+      const totalAttempts = await this.prismaRead.assessmentAttempt.count({
         where: { assessmentId: dto.assessmentId, userId },
       });
       if (totalAttempts >= assessment.maxAttempts) {
@@ -244,7 +252,7 @@ export class AssessmentsService {
 
     // Verificar cooldown
     if (assessment.cooldownHours > 0) {
-      const lastAttempt = await this.prisma.assessmentAttempt.findFirst({
+      const lastAttempt = await this.prismaRead.assessmentAttempt.findFirst({
         where: { assessmentId: dto.assessmentId, userId },
         orderBy: { startedAt: 'desc' },
       });
@@ -261,7 +269,7 @@ export class AssessmentsService {
     }
 
     // Verificar tentativa em progresso
-    const inProgress = await this.prisma.assessmentAttempt.findFirst({
+    const inProgress = await this.prismaRead.assessmentAttempt.findFirst({
       where: { assessmentId: dto.assessmentId, userId, status: 'IN_PROGRESS' },
     });
     if (inProgress) {
@@ -305,7 +313,7 @@ export class AssessmentsService {
   }
 
   async autoSave(userId: number, dto: AutoSaveDto) {
-    const attempt = await this.prisma.assessmentAttempt.findFirst({
+    const attempt = await this.prismaRead.assessmentAttempt.findFirst({
       where: { id: dto.attemptId, userId, status: 'IN_PROGRESS' },
     });
     if (!attempt) throw new NotFoundException('Tentativa não encontrada ou já submetida');
@@ -317,7 +325,7 @@ export class AssessmentsService {
   }
 
   async submitAttempt(userId: number, dto: SubmitAttemptDto) {
-    const attempt = await this.prisma.assessmentAttempt.findFirst({
+    const attempt = await this.prismaRead.assessmentAttempt.findFirst({
       where: { id: dto.attemptId, userId },
       include: { assessment: { include: { questions: true } } },
     });
@@ -482,7 +490,7 @@ export class AssessmentsService {
   }
 
   async getAttemptDetail(attemptId: number, userId: number) {
-    const attempt = await this.prisma.assessmentAttempt.findFirst({
+    const attempt = await this.prismaRead.assessmentAttempt.findFirst({
       where: { id: attemptId, userId },
       include: {
         assessment: {
@@ -513,7 +521,7 @@ export class AssessmentsService {
   // ─── Revisão manual ───────────────────────────────────────────────────────
 
   async reviewAnswer(dto: ReviewAnswerDto, reviewerId: number) {
-    const answer = await this.prisma.assessmentAttemptAnswer.findUnique({
+    const answer = await this.prismaRead.assessmentAttemptAnswer.findUnique({
       where: { id: dto.attemptAnswerId },
       include: { attempt: { include: { assessment: true } } },
     });
@@ -533,13 +541,13 @@ export class AssessmentsService {
 
     // Verificar se todas as questões manuais foram revistas
     const attempt = (answer as any).attempt;
-    const pendingReview = await this.prisma.assessmentAttemptAnswer.count({
+    const pendingReview = await this.prismaRead.assessmentAttemptAnswer.count({
       where: { attemptId: attempt.id, needsReview: true },
     });
 
     if (pendingReview === 0) {
       // Recalcular score final
-      const allAnswers = await this.prisma.assessmentAttemptAnswer.findMany({
+      const allAnswers = await this.prismaRead.assessmentAttemptAnswer.findMany({
         where: { attemptId: attempt.id },
       });
       const totalEarned = allAnswers.reduce((s, a) => {
@@ -564,7 +572,7 @@ export class AssessmentsService {
   }
 
   async getPendingReviews() {
-    return this.prisma.assessmentAttemptAnswer.findMany({
+    return this.prismaRead.assessmentAttemptAnswer.findMany({
       where: { needsReview: true },
       include: {
         attempt: {
@@ -582,7 +590,7 @@ export class AssessmentsService {
     const where: any = { userId };
     if (assessmentId) where.assessmentId = assessmentId;
 
-    return this.prisma.assessmentAttempt.findMany({
+    return this.prismaRead.assessmentAttempt.findMany({
       where,
       include: {
         assessment: { select: { id: true, title: true, type: true, passingScore: true } },
@@ -597,24 +605,24 @@ export class AssessmentsService {
     await this.findOne(assessmentId);
 
     const [totalAttempts, passed, failed, avgScore, questions] = await Promise.all([
-      this.prisma.assessmentAttempt.count({
+      this.prismaRead.assessmentAttempt.count({
         where: { assessmentId, status: { not: 'IN_PROGRESS' } },
       }),
-      this.prisma.assessmentAttempt.count({ where: { assessmentId, status: 'PASSED' } }),
-      this.prisma.assessmentAttempt.count({ where: { assessmentId, status: 'FAILED' } }),
-      this.prisma.assessmentAttempt.aggregate({
+      this.prismaRead.assessmentAttempt.count({ where: { assessmentId, status: 'PASSED' } }),
+      this.prismaRead.assessmentAttempt.count({ where: { assessmentId, status: 'FAILED' } }),
+      this.prismaRead.assessmentAttempt.aggregate({
         where: { assessmentId, status: { not: 'IN_PROGRESS' } },
         _avg: { score: true, timeSpentMinutes: true },
       }),
-      this.prisma.assessmentQuestion.findMany({ where: { assessmentId } }),
+      this.prismaRead.assessmentQuestion.findMany({ where: { assessmentId } }),
     ]);
 
     // Análise por pergunta
     const questionStats = await Promise.all(
       questions.map(async q => {
         const [total, correct] = await Promise.all([
-          this.prisma.assessmentAttemptAnswer.count({ where: { questionId: q.id } }),
-          this.prisma.assessmentAttemptAnswer.count({
+          this.prismaRead.assessmentAttemptAnswer.count({ where: { questionId: q.id } }),
+          this.prismaRead.assessmentAttemptAnswer.count({
             where: { questionId: q.id, isCorrect: true },
           }),
         ]);

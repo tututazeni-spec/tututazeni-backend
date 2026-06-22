@@ -3,6 +3,14 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class MobileService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // Registrar sessão mobile
@@ -38,12 +46,12 @@ export class MobileService {
 
   // Obter dados mobile para dashboard simplificado
   async getUserMobileDashboard(userId: number) {
-    const enrollments = await this.prisma.enrollment.findMany({
+    const enrollments = await this.prismaRead.enrollment.findMany({
       where: { userId },
       include: { course: true, certificate: true },
     });
 
-    const evaluations = await this.prisma.evaluationAttempt.findMany({
+    const evaluations = await this.prismaRead.evaluationAttempt.findMany({
       where: { enrollment: { userId } },
     });
 

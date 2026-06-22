@@ -27,6 +27,14 @@ import {
 export class CareerService {
   private readonly logger = new Logger(CareerService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── PERFIL DE CARREIRA DO COLABORADOR ───────────────────────────────────
@@ -142,11 +150,11 @@ export class CareerService {
     if (!user?.positionId) return [];
 
     const [positionCompetencies, userCompetencies] = await Promise.all([
-      this.prisma.positionCompetency.findMany({
+      this.prismaRead.positionCompetency.findMany({
         where: { positionId: user.positionId },
         include: { competency: true },
       }),
-      this.prisma.userCompetency.findMany({ where: { userId } }),
+      this.prismaRead.userCompetency.findMany({ where: { userId } }),
     ]);
 
     const userCompetencyMap = new Map(
@@ -177,19 +185,19 @@ export class CareerService {
     });
     if (!user) throw new NotFoundException('Utilizador não encontrado');
 
-    const targetPosition = await this.prisma.position.findUnique({
+    const targetPosition = await this.prismaRead.position.findUnique({
       where: { id: targetPositionId },
       include: { competencies: { include: { competency: true } } },
     });
     if (!targetPosition) throw new NotFoundException('Cargo alvo não encontrado');
 
     const [userCompetencies, completedCourseIds, performanceAvg] = await Promise.all([
-      this.prisma.userCompetency.findMany({ where: { userId }, include: { competency: true } }),
-      this.prisma.enrollment.findMany({
+      this.prismaRead.userCompetency.findMany({ where: { userId }, include: { competency: true } }),
+      this.prismaRead.enrollment.findMany({
         where: { userId, status: 'COMPLETED' },
         select: { courseId: true },
       }),
-      this.prisma.performanceReview.aggregate({
+      this.prismaRead.performanceReview.aggregate({
         where: { userId, score: { not: null } },
         _avg: { score: true },
       }),
@@ -219,7 +227,7 @@ export class CareerService {
     const gapCompetencyIds = competencyGaps.filter(g => !g.met).map(g => g.competency.id);
     const recommendedCourses =
       gapCompetencyIds.length > 0
-        ? await this.prisma.courseCompetency.findMany({
+        ? await this.prismaRead.courseCompetency.findMany({
             where: { competencyId: { in: gapCompetencyIds } },
             include: {
               course: { select: { id: true, title: true, thumbnailUrl: true, status: true } },
@@ -258,7 +266,7 @@ export class CareerService {
   // ─── TRILHAS DE CARREIRA ──────────────────────────────────────────────────
 
   async findAllCareerPaths(departmentId?: number) {
-    return this.prisma.careerPath.findMany({
+    return this.prismaRead.careerPath.findMany({
       where: {
         active: true,
         ...(departmentId ? { departmentId } : {}),
@@ -282,7 +290,7 @@ export class CareerService {
   }
 
   async findOneCareerPath(id: number) {
-    const path = await this.prisma.careerPath.findUnique({
+    const path = await this.prismaRead.careerPath.findUnique({
       where: { id },
       include: {
         department: { select: { id: true, name: true } },
@@ -325,7 +333,7 @@ export class CareerService {
   async addCareerPathStep(pathId: number, dto: AddCareerPathStepDto) {
     await this.findOneCareerPath(pathId);
 
-    const existing = await this.prisma.careerPathStep.findFirst({
+    const existing = await this.prismaRead.careerPathStep.findFirst({
       where: { careerPathId: pathId, order: dto.order },
     });
     if (existing) throw new ConflictException(`Já existe um passo na ordem ${dto.order}`);
@@ -345,7 +353,7 @@ export class CareerService {
   }
 
   async removeCareerPathStep(stepId: number) {
-    const step = await this.prisma.careerPathStep.findUnique({ where: { id: stepId } });
+    const step = await this.prismaRead.careerPathStep.findUnique({ where: { id: stepId } });
     if (!step) throw new NotFoundException('Passo não encontrado');
     await this.prisma.careerPathStep.delete({ where: { id: stepId } });
     return { message: 'Passo removido' };
@@ -354,7 +362,7 @@ export class CareerService {
   // ─── PLANO DE CARREIRA PESSOAL ────────────────────────────────────────────
 
   async getMyCareerPlan(userId: number) {
-    return this.prisma.userCareerPlan.findFirst({
+    return this.prismaRead.userCareerPlan.findFirst({
       where: { userId, status: { in: ['ACTIVE', 'DRAFT'] } },
       include: {
         goals: { orderBy: [{ createdAt: 'asc' }] },
@@ -373,7 +381,7 @@ export class CareerService {
 
   async createCareerPlan(userId: number, dto: CreateCareerPlanDto) {
     // Só um plano activo por vez
-    const existing = await this.prisma.userCareerPlan.findFirst({
+    const existing = await this.prismaRead.userCareerPlan.findFirst({
       where: { userId, status: 'ACTIVE' },
     });
     if (existing) {
@@ -399,7 +407,7 @@ export class CareerService {
   }
 
   async updateCareerPlan(planId: number, userId: number, dto: UpdateCareerPlanDto) {
-    const plan = await this.prisma.userCareerPlan.findFirst({ where: { id: planId, userId } });
+    const plan = await this.prismaRead.userCareerPlan.findFirst({ where: { id: planId, userId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
     return (this.prisma as any).userCareerPlan.update({
@@ -416,7 +424,7 @@ export class CareerService {
   }
 
   async addGoalToPlan(planId: number, userId: number, dto: AddCareerGoalDto) {
-    const plan = await this.prisma.userCareerPlan.findFirst({ where: { id: planId, userId } });
+    const plan = await this.prismaRead.userCareerPlan.findFirst({ where: { id: planId, userId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
     return (this.prisma as any).careerGoal.create({
@@ -433,7 +441,7 @@ export class CareerService {
   }
 
   async updateGoalProgress(goalId: number, userId: number, progress: number) {
-    const goal = await this.prisma.careerGoal.findUnique({
+    const goal = await this.prismaRead.careerGoal.findUnique({
       where: { id: goalId },
       include: { careerPlan: { select: { userId: true } } },
     });
@@ -466,7 +474,7 @@ export class CareerService {
     else where.status = 'OPEN'; // por defeito só abertas
 
     const [data, total] = await Promise.all([
-      this.prisma.internalVacancy.findMany({
+      this.prismaRead.internalVacancy.findMany({
         where,
         skip,
         take: limit,
@@ -478,19 +486,19 @@ export class CareerService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.internalVacancy.count({ where }),
+      this.prismaRead.internalVacancy.count({ where }),
     ]);
 
     // Se userId fornecido, enriquecer com match score e status de candidatura
     let enriched = data as any[];
     if (userId) {
-      const userComps = await this.prisma.userCompetency.findMany({
+      const userComps = await this.prismaRead.userCompetency.findMany({
         where: { userId },
         select: { competencyId: true, currentLevel: true },
       });
       const userCompMap = new Map(userComps.map(uc => [uc.competencyId, uc.currentLevel]));
 
-      const myApplications = await this.prisma.internalApplication.findMany({
+      const myApplications = await this.prismaRead.internalApplication.findMany({
         where: { userId, vacancyId: { in: data.map(v => v.id) } },
         select: { vacancyId: true, status: true },
       });
@@ -546,7 +554,7 @@ export class CareerService {
   }
 
   async publishVacancy(id: number) {
-    const v = await this.prisma.internalVacancy.findUnique({ where: { id } });
+    const v = await this.prismaRead.internalVacancy.findUnique({ where: { id } });
     if (!v) throw new NotFoundException('Vaga não encontrada');
     if (v.status !== 'DRAFT')
       throw new BadRequestException('Apenas vagas em rascunho podem ser publicadas');
@@ -563,11 +571,11 @@ export class CareerService {
   }
 
   async applyToVacancy(vacancyId: number, userId: number, dto: ApplyToVacancyDto) {
-    const vacancy = await this.prisma.internalVacancy.findUnique({ where: { id: vacancyId } });
+    const vacancy = await this.prismaRead.internalVacancy.findUnique({ where: { id: vacancyId } });
     if (!vacancy) throw new NotFoundException('Vaga não encontrada');
     if (vacancy.status !== 'OPEN') throw new BadRequestException('Esta vaga não está aberta');
 
-    const existing = await this.prisma.internalApplication.findUnique({
+    const existing = await this.prismaRead.internalApplication.findUnique({
       where: { vacancyId_userId: { vacancyId, userId } },
     });
     if (existing) throw new ConflictException('Já te candidataste a esta vaga');
@@ -598,7 +606,7 @@ export class CareerService {
   }
 
   async updateApplicationStatus(appId: number, dto: UpdateApplicationStatusDto) {
-    const app = await this.prisma.internalApplication.findUnique({
+    const app = await this.prismaRead.internalApplication.findUnique({
       where: { id: appId },
       include: { user: { select: { id: true } }, vacancy: { select: { title: true } } },
     });
@@ -625,7 +633,7 @@ export class CareerService {
   }
 
   async getMyApplications(userId: number) {
-    return this.prisma.internalApplication.findMany({
+    return this.prismaRead.internalApplication.findMany({
       where: { userId },
       include: {
         vacancy: {
@@ -642,13 +650,13 @@ export class CareerService {
   // ─── MATCHING AUTOMÁTICO ──────────────────────────────────────────────────
 
   private async getMatchingVacanciesForUser(userId: number, limit = 5) {
-    const userComps = await this.prisma.userCompetency.findMany({
+    const userComps = await this.prismaRead.userCompetency.findMany({
       where: { userId },
       select: { competencyId: true, currentLevel: true },
     });
     const userCompMap = new Map(userComps.map(uc => [uc.competencyId, uc.currentLevel]));
 
-    const openVacancies = await this.prisma.internalVacancy.findMany({
+    const openVacancies = await this.prismaRead.internalVacancy.findMany({
       where: { status: 'OPEN' },
       include: {
         position: { select: { id: true, name: true } },
@@ -674,7 +682,7 @@ export class CareerService {
   }
 
   private async notifyMatchingUsers(vacancyId: number) {
-    const vacancy = await this.prisma.internalVacancy.findUnique({
+    const vacancy = await this.prismaRead.internalVacancy.findUnique({
       where: { id: vacancyId },
       select: { title: true, requiredCompetencyIds: true },
     });
@@ -684,7 +692,7 @@ export class CareerService {
     if (!reqIds.length) return;
 
     // Encontrar utilizadores que têm ≥50% das competências exigidas
-    const usersWithComps = await this.prisma.userCompetency.findMany({
+    const usersWithComps = await this.prismaRead.userCompetency.findMany({
       where: { competencyId: { in: reqIds } },
       select: { userId: true, competencyId: true },
     });
@@ -728,7 +736,7 @@ export class CareerService {
 
     const [gaps, avgPerformance, monthsInRole] = await Promise.all([
       this.getCompetencyGapsForUser(userId),
-      this.prisma.performanceReview.aggregate({
+      this.prismaRead.performanceReview.aggregate({
         where: { userId, score: { not: null } },
         _avg: { score: true },
       }),
@@ -820,7 +828,7 @@ export class CareerService {
   // ─── PLANEAMENTO DE SUCESSÃO ──────────────────────────────────────────────
 
   async getSuccessionPlans(positionId?: number) {
-    return this.prisma.successionPlan.findMany({
+    return this.prismaRead.successionPlan.findMany({
       where: positionId ? { positionId } : undefined,
       include: {
         position: { select: { id: true, name: true, level: true } },
@@ -839,7 +847,7 @@ export class CareerService {
   }
 
   async createSuccessionPlan(dto: CreateSuccessionPlanDto) {
-    const existing = await this.prisma.successionPlan.findFirst({
+    const existing = await this.prismaRead.successionPlan.findFirst({
       where: { positionId: dto.positionId, candidateId: dto.candidateId },
     });
     if (existing) throw new ConflictException('Este candidato já está mapeado para este cargo');
@@ -873,7 +881,7 @@ export class CareerService {
   }
 
   async updateSuccessionReadiness(planId: number, readiness: string, justification?: string) {
-    const plan = await this.prisma.successionPlan.findUnique({ where: { id: planId } });
+    const plan = await this.prismaRead.successionPlan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plano de sucessão não encontrado');
 
     return (this.prisma as any).successionPlan.update({
@@ -929,17 +937,17 @@ export class CareerService {
       avgCompetencyGap,
       topSkillGaps,
     ] = await Promise.all([
-      this.prisma.user.count({ where: { ...where, active: true } }),
-      this.prisma.userCareerPlan.count({
+      this.prismaRead.user.count({ where: { ...where, active: true } }),
+      this.prismaRead.userCareerPlan.count({
         where: { status: 'ACTIVE', user: { ...where } },
       }),
-      this.prisma.internalVacancy.count({ where: { status: 'OPEN' } }),
-      this.prisma.internalApplication.count({
+      this.prismaRead.internalVacancy.count({ where: { status: 'OPEN' } }),
+      this.prismaRead.internalApplication.count({
         where: { appliedAt: { gte: startDate, lte: endDate } },
       }),
       0, // Placeholder — promoções via OrgChangeLog
       0, // Placeholder
-      this.prisma.positionCompetency.groupBy({
+      this.prismaRead.positionCompetency.groupBy({
         by: ['competencyId'],
         _count: true,
         orderBy: { _count: { competencyId: 'desc' } },
@@ -953,7 +961,7 @@ export class CareerService {
     let riskUsers: any[] = [];
     if (includeRisk) {
       const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 3600 * 1000);
-      const usersAtRisk = await this.prisma.user.findMany({
+      const usersAtRisk = await this.prismaRead.user.findMany({
         where: {
           ...where,
           active: true,
@@ -974,7 +982,7 @@ export class CareerService {
     }
 
     // Carreira mais populares (vagas)
-    const topVacancyTypes = await this.prisma.internalVacancy.groupBy({
+    const topVacancyTypes = await this.prismaRead.internalVacancy.groupBy({
       by: ['type'],
       _count: true,
       orderBy: { _count: { type: 'desc' } },
@@ -1001,7 +1009,7 @@ export class CareerService {
     const where: any = { active: true };
     if (departmentId) where.departmentId = departmentId;
 
-    const users = await this.prisma.user.findMany({
+    const users = await this.prismaRead.user.findMany({
       where,
       select: {
         id: true,

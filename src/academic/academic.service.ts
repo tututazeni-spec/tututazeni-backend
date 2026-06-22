@@ -17,6 +17,14 @@ import {
 
 @Injectable()
 export class AcademicService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── ANOS LECTIVOS ───────────────────────────────────
@@ -44,14 +52,14 @@ export class AcademicService {
   }
 
   async getCurrentYear() {
-    return this.prisma.academicYear.findFirst({
+    return this.prismaRead.academicYear.findFirst({
       where: { isCurrent: true, deletedAt: null },
       include: { periods: { where: { deletedAt: null } } },
     });
   }
 
   async findAllYears() {
-    return this.prisma.academicYear.findMany({
+    return this.prismaRead.academicYear.findMany({
       where: { deletedAt: null },
       orderBy: { startDate: 'desc' },
       include: {
@@ -63,7 +71,7 @@ export class AcademicService {
   // ─── PERÍODOS ────────────────────────────────────────
 
   async createPeriod(dto: CreatePeriodDto, userId: number) {
-    const year = await this.prisma.academicYear.findUnique({
+    const year = await this.prismaRead.academicYear.findUnique({
       where: { id: dto.yearId },
     });
     if (!year) throw new NotFoundException('Ano lectivo não encontrado');
@@ -86,7 +94,7 @@ export class AcademicService {
   // ─── PROGRAMAS ───────────────────────────────────────
 
   async createProgram(dto: CreateProgramDto, userId: number) {
-    const existing = await this.prisma.academicProgram.findUnique({
+    const existing = await this.prismaRead.academicProgram.findUnique({
       where: { code: dto.code },
     });
     if (existing && !existing.deletedAt) {
@@ -116,8 +124,8 @@ export class AcademicService {
         ],
       }),
     };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.academicProgram.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.academicProgram.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -127,13 +135,13 @@ export class AcademicService {
           _count: { select: { enrollments: true, classes: true } },
         },
       }),
-      this.prisma.academicProgram.count({ where }),
+      this.prismaRead.academicProgram.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findProgramById(id: string) {
-    const program = await this.prisma.academicProgram.findUnique({
+    const program = await this.prismaRead.academicProgram.findUnique({
       where: { id },
       include: {
         createdBy: { select: { fullName: true } },
@@ -154,7 +162,7 @@ export class AcademicService {
   // ─── TURMAS ──────────────────────────────────────────
 
   async createClass(dto: CreateClassDto, userId: number) {
-    const program = await this.prisma.academicProgram.findUnique({
+    const program = await this.prismaRead.academicProgram.findUnique({
       where: { id: dto.programId },
     });
     if (!program) throw new NotFoundException('Programa não encontrado');
@@ -175,7 +183,7 @@ export class AcademicService {
   // ─── MATRÍCULAS ──────────────────────────────────────
 
   private async generateEnrollmentCode(): Promise<string> {
-    const last = await this.prisma.academicEnrollment.findFirst({
+    const last = await this.prismaRead.academicEnrollment.findFirst({
       orderBy: { code: 'desc' },
       select: { code: true },
     });
@@ -184,14 +192,14 @@ export class AcademicService {
   }
 
   async enroll(dto: CreateEnrollmentDto, userId: number) {
-    const program = await this.prisma.academicProgram.findUnique({
+    const program = await this.prismaRead.academicProgram.findUnique({
       where: { id: dto.programId },
     });
     if (!program) throw new NotFoundException('Programa não encontrado');
 
     // Verifica pré-requisitos
     if (program.prerequisites?.length) {
-      const completed = await this.prisma.academicEnrollment.count({
+      const completed = await this.prismaRead.academicEnrollment.count({
         where: {
           userId: dto.userId,
           programId: { in: program.prerequisites },
@@ -204,7 +212,7 @@ export class AcademicService {
     }
 
     // Verifica duplicado
-    const existing = await this.prisma.academicEnrollment.findFirst({
+    const existing = await this.prismaRead.academicEnrollment.findFirst({
       where: {
         userId: dto.userId,
         programId: dto.programId,
@@ -216,7 +224,7 @@ export class AcademicService {
 
     // Verifica vagas na turma
     if (dto.classId) {
-      const cls = await this.prisma.academicClass.findUnique({
+      const cls = await this.prismaRead.academicClass.findUnique({
         where: { id: dto.classId },
         include: { _count: { select: { enrollments: true } } },
       });
@@ -258,7 +266,7 @@ export class AcademicService {
   }
 
   async approveEnrollment(id: string, approverId: number) {
-    const enrollment = await this.prisma.academicEnrollment.findUnique({
+    const enrollment = await this.prismaRead.academicEnrollment.findUnique({
       where: { id },
       include: { program: true },
     });
@@ -291,8 +299,8 @@ export class AcademicService {
 
   async getMyEnrollments(userId: number, page = 1, limit = 20) {
     const where = { userId, deletedAt: null };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.academicEnrollment.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.academicEnrollment.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -309,7 +317,7 @@ export class AcademicService {
           class: { select: { name: true, modality: true } },
         },
       }),
-      this.prisma.academicEnrollment.count({ where }),
+      this.prismaRead.academicEnrollment.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -317,7 +325,7 @@ export class AcademicService {
   // ─── NOTAS ───────────────────────────────────────────
 
   async gradeEnrollment(dto: GradeEnrollmentDto, graderId: number) {
-    const enrollment = await this.prisma.academicEnrollment.findUnique({
+    const enrollment = await this.prismaRead.academicEnrollment.findUnique({
       where: { id: dto.enrollmentId },
       include: { program: true },
     });
@@ -337,7 +345,7 @@ export class AcademicService {
     });
 
     // Recalcula nota final ponderada
-    const allGrades = await this.prisma.academicGrade.findMany({
+    const allGrades = await this.prismaRead.academicGrade.findMany({
       where: { enrollmentId: dto.enrollmentId },
     });
     const totalWeight = allGrades.reduce((s, g) => s + g.weight, 0);
@@ -364,7 +372,7 @@ export class AcademicService {
   }
 
   async getEnrollmentGrades(enrollmentId: string) {
-    return this.prisma.academicGrade.findMany({
+    return this.prismaRead.academicGrade.findMany({
       where: { enrollmentId },
       orderBy: { gradedAt: 'desc' },
       include: { gradedBy: { select: { fullName: true } } },
@@ -374,9 +382,9 @@ export class AcademicService {
   // ─── TRANSCRIÇÃO ─────────────────────────────────────
 
   async getTranscript(userId: number) {
-    const [transcript, enrollments] = await this.prisma.$transaction([
-      this.prisma.academicTranscript.findUnique({ where: { userId } }),
-      this.prisma.academicEnrollment.findMany({
+    const [transcript, enrollments] = await Promise.all([
+      this.prismaRead.academicTranscript.findUnique({ where: { userId } }),
+      this.prismaRead.academicEnrollment.findMany({
         where: { userId, deletedAt: null },
         orderBy: { createdAt: 'desc' },
         include: {
@@ -399,19 +407,19 @@ export class AcademicService {
 
   async getAcademicReport() {
     const [totalPrograms, totalEnrollments, completed, inProgress, pending, avgScore, byLevel] =
-      await this.prisma.$transaction([
-        this.prisma.academicProgram.count({
+      await Promise.all([
+        this.prismaRead.academicProgram.count({
           where: { deletedAt: null, isActive: true },
         }),
-        this.prisma.academicEnrollment.count({ where: { deletedAt: null } }),
-        this.prisma.academicEnrollment.count({ where: { status: 'COMPLETED' } }),
-        this.prisma.academicEnrollment.count({ where: { status: 'IN_PROGRESS' } }),
-        this.prisma.academicEnrollment.count({ where: { status: 'PENDING' } }),
-        this.prisma.academicEnrollment.aggregate({
+        this.prismaRead.academicEnrollment.count({ where: { deletedAt: null } }),
+        this.prismaRead.academicEnrollment.count({ where: { status: 'COMPLETED' } }),
+        this.prismaRead.academicEnrollment.count({ where: { status: 'IN_PROGRESS' } }),
+        this.prismaRead.academicEnrollment.count({ where: { status: 'PENDING' } }),
+        this.prismaRead.academicEnrollment.aggregate({
           _avg: { finalScore: true },
           where: { finalScore: { not: null } },
         }),
-        (this.prisma.academicProgram.groupBy as any)({
+        (this.prismaRead.academicProgram.groupBy as any)({
           by: ['level'],
           where: { deletedAt: null },
           _count: { id: true },
@@ -432,7 +440,7 @@ export class AcademicService {
   // ─── HELPERS ─────────────────────────────────────────
 
   private async updateTranscript(userId: number) {
-    const enrollments = await this.prisma.academicEnrollment.findMany({
+    const enrollments = await this.prismaRead.academicEnrollment.findMany({
       where: { userId, deletedAt: null },
       include: { program: { select: { durationHours: true } } },
     });

@@ -23,6 +23,14 @@ import {
 export class AiTutorService {
   private readonly logger = new Logger(AiTutorService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(
     private prisma: PrismaService,
     private aiProviders: AiProvidersService,
@@ -32,7 +40,7 @@ export class AiTutorService {
 
   async startSession(userId: number, dto: StartAiSessionDto) {
     // 1. Carregar perfil completo do utilizador
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prismaRead.user.findUnique({
       where: { id: userId },
       include: {
         position: { select: { name: true, level: true } },
@@ -50,7 +58,7 @@ export class AiTutorService {
     let courseContext = '';
     let courseTitle = '';
     if (dto.courseId) {
-      const course = await this.prisma.course.findUnique({
+      const course = await this.prismaRead.course.findUnique({
         where: { id: dto.courseId },
         include: {
           modules: {
@@ -69,7 +77,7 @@ export class AiTutorService {
     // 3. Contexto do PDI
     let pdiContext = '';
     if (dto.planId) {
-      const plan = await this.prisma.developmentPlan.findFirst({
+      const plan = await this.prismaRead.developmentPlan.findFirst({
         where: { id: dto.planId, userId },
         include: { actions: { select: { title: true, status: true, type: true }, take: 5 } },
       });
@@ -80,10 +88,10 @@ export class AiTutorService {
     }
 
     // 4. Memória persistente (últimas interações resumidas)
-    const memory = await this.prisma.aiTutorMemory.findUnique({ where: { userId } });
+    const memory = await this.prismaRead.aiTutorMemory.findUnique({ where: { userId } });
 
     // 5. Histórico de aprendizagem
-    const recentCourses = await this.prisma.enrollment.findMany({
+    const recentCourses = await this.prismaRead.enrollment.findMany({
       where: { userId, status: { in: ['COMPLETED', 'IN_PROGRESS'] } },
       include: { course: { select: { title: true } } },
       orderBy: { enrolledAt: 'desc' },
@@ -133,7 +141,7 @@ export class AiTutorService {
   // ─── ENVIAR MENSAGEM ──────────────────────────────────────────────────────
 
   async sendMessage(userId: number, dto: SendAiMessageDto) {
-    const session = await this.prisma.aiTutorSession.findFirst({
+    const session = await this.prismaRead.aiTutorSession.findFirst({
       where: { id: dto.sessionId, userId },
       include: {
         messages: { orderBy: { createdAt: 'asc' } },
@@ -214,7 +222,7 @@ export class AiTutorService {
   // ─── AVALIAR RESPOSTA ─────────────────────────────────────────────────────
 
   async rateMessage(userId: number, dto: RateMessageDto) {
-    const msg = await this.prisma.aiMessage.findFirst({
+    const msg = await this.prismaRead.aiMessage.findFirst({
       where: { id: dto.messageId, session: { userId } },
     });
     if (!msg) throw new NotFoundException('Mensagem não encontrada');
@@ -233,7 +241,7 @@ export class AiTutorService {
     if (!dto.confirmed)
       throw new BadRequestException('Confirmação explícita obrigatória para acções do tutor');
 
-    const session = await this.prisma.aiTutorSession.findFirst({
+    const session = await this.prismaRead.aiTutorSession.findFirst({
       where: { id: dto.sessionId, userId },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
@@ -245,7 +253,7 @@ export class AiTutorService {
       case AgentAction.ENROLL_COURSE: {
         const { courseId } = dto.params;
         if (!courseId) throw new BadRequestException('courseId obrigatório');
-        const existing = await this.prisma.enrollment.findFirst({ where: { userId, courseId } });
+        const existing = await this.prismaRead.enrollment.findFirst({ where: { userId, courseId } });
         if (existing) throw new BadRequestException('Já inscrito neste curso');
         result = await this.prisma.enrollment.create({
           data: { userId, courseId, status: 'NOT_STARTED', origin: 'AI_TUTOR' },
@@ -257,7 +265,7 @@ export class AiTutorService {
       case AgentAction.UPDATE_PDI_ACTION: {
         const { actionId, status } = dto.params;
         if (!actionId) throw new BadRequestException('actionId obrigatório');
-        const action = await this.prisma.pdiAction.findFirst({
+        const action = await this.prismaRead.pdiAction.findFirst({
           where: { id: actionId, plan: { userId } },
         });
         if (!action) throw new ForbiddenException('Acção PDI não pertence ao utilizador');
@@ -271,7 +279,7 @@ export class AiTutorService {
 
       case AgentAction.NOTIFY_MANAGER: {
         const { message } = dto.params;
-        const user = await this.prisma.user.findUnique({
+        const user = await this.prismaRead.user.findUnique({
           where: { id: userId },
           select: { managerId: true, fullName: true },
         });
@@ -332,7 +340,7 @@ export class AiTutorService {
     let contextText = '';
 
     if (dto.courseId) {
-      const course = await this.prisma.course.findUnique({
+      const course = await this.prismaRead.course.findUnique({
         where: { id: dto.courseId },
         include: {
           modules: { include: { lessons: { select: { title: true, content: true } } }, take: 3 },
@@ -386,24 +394,24 @@ export class AiTutorService {
 
   async getRecommendations(userId: number) {
     const [user, enrollments, competencies, activePDI] = await Promise.all([
-      this.prisma.user.findUnique({
+      this.prismaRead.user.findUnique({
         where: { id: userId },
         include: {
           position: { select: { name: true, level: true } },
           department: { select: { name: true } },
         },
       }),
-      this.prisma.enrollment.findMany({
+      this.prismaRead.enrollment.findMany({
         where: { userId, status: 'COMPLETED' },
         include: { course: { select: { category: true, title: true } } },
         orderBy: { completedAt: 'desc' },
         take: 5,
       }),
-      this.prisma.userCompetency.findMany({
+      this.prismaRead.userCompetency.findMany({
         where: { userId, targetLevel: { not: null } },
         include: { competency: { select: { name: true } } },
       }),
-      this.prisma.developmentPlan.findFirst({
+      this.prismaRead.developmentPlan.findFirst({
         where: { userId, status: 'ACTIVE' },
       }),
     ]);
@@ -416,7 +424,7 @@ export class AiTutorService {
       .map(c => (c.competency as any).name);
 
     // Cursos não concluídos relacionados com gaps
-    const recommended = await this.prisma.course.findMany({
+    const recommended = await this.prismaRead.course.findMany({
       where: {
         status: 'PUBLISHED',
         category: { in: completedCategories.length > 0 ? completedCategories : undefined },
@@ -449,7 +457,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
   // ─── SESSÃO / HISTÓRICO ───────────────────────────────────────────────────
 
   async endSession(userId: number, sessionId: number) {
-    const session = await this.prisma.aiTutorSession.findFirst({
+    const session = await this.prismaRead.aiTutorSession.findFirst({
       where: { id: sessionId, userId },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
@@ -460,7 +468,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
   }
 
   async getSession(userId: number, sessionId: number) {
-    const session = await this.prisma.aiTutorSession.findFirst({
+    const session = await this.prismaRead.aiTutorSession.findFirst({
       where: { id: sessionId, userId },
       include: {
         messages: { where: { role: { not: 'SYSTEM' } }, orderBy: { createdAt: 'asc' } },
@@ -479,7 +487,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
     if (activeOnly) where.endedAt = null;
 
     const [data, total] = await Promise.all([
-      this.prisma.aiTutorSession.findMany({
+      this.prismaRead.aiTutorSession.findMany({
         where,
         skip,
         take: limit,
@@ -489,7 +497,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
         },
         orderBy: { startedAt: 'desc' },
       }),
-      this.prisma.aiTutorSession.count({ where }),
+      this.prismaRead.aiTutorSession.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -523,15 +531,15 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
   async getUsageStats() {
     const [totalSessions, activeSessions, totalMessages, tokensUsed, avgRating, byProvider] =
       await Promise.all([
-        this.prisma.aiTutorSession.count(),
-        this.prisma.aiTutorSession.count({ where: { endedAt: null } }),
-        this.prisma.aiMessage.count({ where: { role: 'USER' } }),
-        this.prisma.aiMessage.aggregate({ _sum: { tokensUsed: true } }),
-        this.prisma.aiMessage.aggregate({
+        this.prismaRead.aiTutorSession.count(),
+        this.prismaRead.aiTutorSession.count({ where: { endedAt: null } }),
+        this.prismaRead.aiMessage.count({ where: { role: 'USER' } }),
+        this.prismaRead.aiMessage.aggregate({ _sum: { tokensUsed: true } }),
+        this.prismaRead.aiMessage.aggregate({
           where: { rating: { not: null } },
           _avg: { rating: true },
         }),
-        this.prisma.aiMessage.groupBy({
+        this.prismaRead.aiMessage.groupBy({
           by: ['provider'],
           where: { provider: { not: null } },
           _count: true,
