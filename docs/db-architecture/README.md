@@ -89,3 +89,6 @@ Se houver **obrigação de _on-premise_** (servidor próprio), o setup manual co
 - `02-app-read-write-split.md` — código pronto NestJS/Prisma para routing leitura/escrita
 - `03-self-managed-replication.md` — scripts on-prem (streaming replication, PgBouncer, HAProxy, Patroni)
 - `04-monitoring.sql` — queries de monitorização de performance, lag de réplica e saúde
+- `05-f2-activation-runbook.md` — runbook executável: provisionar réplica → secrets staging → `USE_REPLICAS=true` → load-test (Fase F2)
+
+> Verificação da réplica: `node scripts/verify-replica.cjs --probe-lag` (também `npm run db:verify-replica`) confirma standby + lag antes de activar.
