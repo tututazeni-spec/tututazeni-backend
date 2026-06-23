@@ -429,7 +429,9 @@ export class WorkDeclarationsService {
       this.prismaRead.workDeclSubmission.count({
         where: { ...where, status: WorkDeclStatus.REJECTED },
       }),
-      this.prismaRead.workDeclSubmission.count({ where: { ...where, status: WorkDeclStatus.EXPIRED } }),
+      this.prismaRead.workDeclSubmission.count({
+        where: { ...where, status: WorkDeclStatus.EXPIRED },
+      }),
     ]);
 
     const byType = await this.prismaRead.workDeclSubmission.groupBy({
@@ -453,7 +455,10 @@ export class WorkDeclarationsService {
     const where: any = { employee: { isNot: null } };
     if (department) where.employee = { department: { contains: department, mode: 'insensitive' } };
 
-    const users = await this.prismaRead.user.findMany({ where, select: { id: true, fullName: true } });
+    const users = await this.prismaRead.user.findMany({
+      where,
+      select: { id: true, fullName: true },
+    });
 
     const submissions = await this.prismaRead.workDeclSubmission.findMany({
       where: {

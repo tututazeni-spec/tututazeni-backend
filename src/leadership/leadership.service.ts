@@ -33,7 +33,6 @@ export class LeadershipService {
     return (this.prisma as any).db ?? this.prisma;
   }
 
-
   constructor(private prisma: PrismaService) {}
 
   // ─── PROGRAMAS ────────────────────────────────────────────────────────────
@@ -664,7 +663,9 @@ export class LeadershipService {
   async recalcLeadershipScore(leaderId: number) {
     const [teamHealth, programsCompleted, feedback360, oneOnOnes] = await Promise.all([
       this.prismaRead.teamHealth.findUnique({ where: { managerId: leaderId } }),
-      this.prismaRead.leadershipParticipant.count({ where: { userId: leaderId, status: 'COMPLETED' } }),
+      this.prismaRead.leadershipParticipant.count({
+        where: { userId: leaderId, status: 'COMPLETED' },
+      }),
       this.get360Summary(leaderId),
       this.prismaRead.oneOnOne.count({ where: { managerId: leaderId, status: 'COMPLETED' } }),
     ]);

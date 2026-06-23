@@ -281,7 +281,9 @@ export class RolesPermissionsService {
 
   async getPermissionMatrix() {
     const [roles, permissions] = await Promise.all([
-      this.prismaRead.role.findMany({ include: { permissions: { select: { id: true, name: true } } } }),
+      this.prismaRead.role.findMany({
+        include: { permissions: { select: { id: true, name: true } } },
+      }),
       this.prismaRead.permission.findMany({ orderBy: [{ subject: 'asc' }, { action: 'asc' }] }),
     ]);
 

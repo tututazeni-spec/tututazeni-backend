@@ -512,7 +512,9 @@ export class OnboardingService {
   }
 
   async validateDocument(dto: ValidateDocumentDto, validatorId: number) {
-    const doc = await this.prismaRead.onboardingDocument.findUnique({ where: { id: dto.documentId } });
+    const doc = await this.prismaRead.onboardingDocument.findUnique({
+      where: { id: dto.documentId },
+    });
     if (!doc) throw new NotFoundException('Documento não encontrado');
 
     return this.prisma.onboardingDocument.update({

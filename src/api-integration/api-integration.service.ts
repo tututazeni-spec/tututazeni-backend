@@ -265,7 +265,11 @@ export class ApiIntegrationService {
     const { page = 1, limit = 50 } = filters;
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
-      this.prismaRead.apiIntegrationLog.findMany({ skip, take: limit, orderBy: { createdAt: 'desc' } }),
+      this.prismaRead.apiIntegrationLog.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
       this.prismaRead.apiIntegrationLog.count(),
     ]);
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };

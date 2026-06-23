@@ -673,7 +673,9 @@ export class TalentDevelopmentService {
   }
 
   async updateAction(actionId: number, dto: UpdateActionDto) {
-    const action = await this.prismaRead.developmentPlanAction.findUnique({ where: { id: actionId } });
+    const action = await this.prismaRead.developmentPlanAction.findUnique({
+      where: { id: actionId },
+    });
     if (!action) throw new NotFoundException('Acção não encontrada');
 
     const data: any = { ...dto };
@@ -783,7 +785,9 @@ export class TalentDevelopmentService {
   }
 
   async deleteAction(actionId: number) {
-    const action = await this.prismaRead.developmentPlanAction.findUnique({ where: { id: actionId } });
+    const action = await this.prismaRead.developmentPlanAction.findUnique({
+      where: { id: actionId },
+    });
     if (!action) throw new NotFoundException('Acção não encontrada');
     await this.prisma.developmentPlanAction.delete({ where: { id: actionId } });
     await this.recalculatePlanProgress(action.planId);

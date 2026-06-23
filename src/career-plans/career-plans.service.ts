@@ -707,8 +707,12 @@ export class CareerPlansService {
       plansByStatus,
     ] = await Promise.all([
       this.prismaRead.userCareerPlan.count({ where }),
-      this.prismaRead.userCareerPlan.count({ where: { ...where, status: CareerPlanStatus.ACTIVE } }),
-      this.prismaRead.userCareerPlan.count({ where: { ...where, status: CareerPlanStatus.COMPLETED } }),
+      this.prismaRead.userCareerPlan.count({
+        where: { ...where, status: CareerPlanStatus.ACTIVE },
+      }),
+      this.prismaRead.userCareerPlan.count({
+        where: { ...where, status: CareerPlanStatus.COMPLETED },
+      }),
       this.prismaRead.promotionRequest.count(),
       this.prismaRead.promotionRequest.count({ where: { status: PromotionStatus.APPROVED } }),
       this.prismaRead.userCareerPlan.groupBy({ by: ['status'], _count: true }),

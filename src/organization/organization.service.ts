@@ -30,7 +30,6 @@ export class OrganizationService {
     return (this.prisma as any).db ?? this.prisma;
   }
 
-
   constructor(private prisma: PrismaService) {}
 
   // ─── ESTATÍSTICAS / DASHBOARD ─────────────────────────────────────────────

@@ -157,7 +157,9 @@ export class CourseModulesService {
     const original = (await this.findModuleOrFail(moduleId)) as any;
 
     // Verificar curso destino
-    const targetCourse = await this.prismaRead.course.findUnique({ where: { id: dto.targetCourseId } });
+    const targetCourse = await this.prismaRead.course.findUnique({
+      where: { id: dto.targetCourseId },
+    });
     if (!targetCourse) throw new NotFoundException('Curso destino não encontrado');
 
     // Determinar posição

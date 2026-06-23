@@ -587,7 +587,9 @@ export class RoiImpactService {
 
   async simulateWhatIf(dto: WhatIfDto) {
     const currentEnrollments = await this.prismaRead.enrollment.count();
-    const currentCompleted = await this.prismaRead.enrollment.count({ where: { status: 'CONCLUIDO' } });
+    const currentCompleted = await this.prismaRead.enrollment.count({
+      where: { status: 'CONCLUIDO' },
+    });
 
     const targetEnrollments = dto.targetEnrollments ?? currentEnrollments;
     const costPerEnroll = dto.costPerEnrollment ?? DEFAULTS.costPerEnrollment;

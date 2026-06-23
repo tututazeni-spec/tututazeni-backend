@@ -32,7 +32,6 @@ export class TrainingService {
     return (this.prisma as any).db ?? this.prisma;
   }
 
-
   constructor(private prisma: PrismaService) {}
 
   // ─── CATÁLOGO ─────────────────────────────────────────────────────────────
@@ -292,7 +291,9 @@ export class TrainingService {
   }
 
   async cancelParticipant(participantId: number, userId: number, reason?: string) {
-    const p = await this.prismaRead.trainingParticipant.findUnique({ where: { id: participantId } });
+    const p = await this.prismaRead.trainingParticipant.findUnique({
+      where: { id: participantId },
+    });
     if (!p) throw new NotFoundException('Inscrição não encontrada');
     if ((p as any).userId !== userId) throw new ForbiddenException('Sem permissão');
 
@@ -372,7 +373,9 @@ export class TrainingService {
   // ─── PRESENÇA EM MASSA ────────────────────────────────────────────────────
 
   async bulkAttendance(dto: BulkAttendanceDto, registrarId: number) {
-    const session = await this.prismaRead.trainingSession.findUnique({ where: { id: dto.sessionId } });
+    const session = await this.prismaRead.trainingSession.findUnique({
+      where: { id: dto.sessionId },
+    });
     if (!session) throw new NotFoundException('Sessão não encontrada');
 
     const participants = await this.prismaRead.trainingParticipant.findMany({

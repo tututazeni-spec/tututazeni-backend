@@ -447,8 +447,12 @@ export class DocumentDeclarationsService {
 
   async getDashboard() {
     const [pending, generated, issued, total] = await Promise.all([
-      this.prismaRead.declarationRequest.count({ where: { status: DocumentRequestStatus.PENDING } }),
-      this.prismaRead.declarationRequest.count({ where: { status: DocumentRequestStatus.GENERATED } }),
+      this.prismaRead.declarationRequest.count({
+        where: { status: DocumentRequestStatus.PENDING },
+      }),
+      this.prismaRead.declarationRequest.count({
+        where: { status: DocumentRequestStatus.GENERATED },
+      }),
       this.prismaRead.declarationRequest.count({ where: { status: DocumentRequestStatus.ISSUED } }),
       this.prismaRead.declarationRequest.count(),
     ]);

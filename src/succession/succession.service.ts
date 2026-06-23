@@ -23,7 +23,6 @@ export class SuccessionService {
     return (this.prisma as any).db ?? this.prisma;
   }
 
-
   constructor(private prisma: PrismaService) {}
 
   // ─── CARGOS CRÍTICOS ──────────────────────────────────────────────────────

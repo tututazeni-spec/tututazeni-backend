@@ -28,7 +28,6 @@ export class LearningPathsService {
     return (this.prisma as any).db ?? this.prisma;
   }
 
-
   constructor(private prisma: PrismaService) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -602,7 +601,9 @@ export class LearningPathsService {
 
     const [totalEnrollments, completed, inProgress, notStarted, overdueCount] = await Promise.all([
       this.prismaRead.learningPathEnrollment.count({ where: { learningPathId } }),
-      this.prismaRead.learningPathEnrollment.count({ where: { learningPathId, status: 'COMPLETED' } }),
+      this.prismaRead.learningPathEnrollment.count({
+        where: { learningPathId, status: 'COMPLETED' },
+      }),
       this.prismaRead.learningPathEnrollment.count({
         where: { learningPathId, status: 'IN_PROGRESS' },
       }),

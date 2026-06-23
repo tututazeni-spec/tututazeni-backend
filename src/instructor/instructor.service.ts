@@ -30,7 +30,6 @@ export class InstructorService {
     return (this.prisma as any).db ?? this.prisma;
   }
 
-
   constructor(private prisma: PrismaService) {}
 
   // ─── PROFILES ─────────────────────────────────────────────────────────────

@@ -65,7 +65,9 @@ export class AuthService {
 
     const hashed = await bcrypt.hash(dto.password, 12);
 
-    const collaboratorRole = await this.prismaRead.role.findFirst({ where: { name: 'COLABORADOR' } });
+    const collaboratorRole = await this.prismaRead.role.findFirst({
+      where: { name: 'COLABORADOR' },
+    });
 
     const user = await this.prisma.user.create({
       data: {

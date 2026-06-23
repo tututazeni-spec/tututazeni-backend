@@ -541,7 +541,9 @@ export class EventsService {
       }),
       this.prismaRead.event.groupBy({ by: ['status'], _count: true }),
       this.prismaRead.event.count(),
-      this.prismaRead.eventParticipant.count({ where: { status: { in: ['CONFIRMED', 'PRESENT'] } } }),
+      this.prismaRead.eventParticipant.count({
+        where: { status: { in: ['CONFIRMED', 'PRESENT'] } },
+      }),
     ]);
 
     return {
