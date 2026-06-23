@@ -33,8 +33,9 @@ const mockPrisma = {
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
-const proxyPrisma = new Proxy(mockPrisma, {
+const proxyPrisma: any = new Proxy(mockPrisma, {
   get(target, prop) {
+    if (prop === 'db') return proxyPrisma;
     if (prop in target) return (target as any)[prop];
     return {
       findMany: jest.fn().mockResolvedValue([]),

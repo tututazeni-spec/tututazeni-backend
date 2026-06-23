@@ -46,8 +46,9 @@ const mockPrisma = {
   auditLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
-const mockPrismaProxy = new Proxy(mockPrisma, {
+const mockPrismaProxy: any = new Proxy(mockPrisma, {
   get(target, prop) {
+    if (prop === 'db') return mockPrismaProxy;
     if (prop === 'leaveTypeConfig') return leaveTypeConfig;
     if (prop === 'leavePolicy') return leavePolicy;
     if (prop === 'leaveBalance') return leaveBalance;

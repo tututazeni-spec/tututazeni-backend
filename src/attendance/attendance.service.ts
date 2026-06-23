@@ -81,6 +81,14 @@ function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number):
 
 @Injectable()
 export class AttendanceService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -390,6 +398,7 @@ export class AttendanceService {
 
     if (end < start) throw new BadRequestException('Data de fim anterior ao início');
 
+    // Guard de sobreposição antes de criar: força primary para não validar contra réplica atrasada.
     const conflict = await this.prisma.leaveRequest.findFirst({
       where: {
         userId,
@@ -454,7 +463,7 @@ export class AttendanceService {
     }
 
     const [data, total] = await Promise.all([
-      this.prisma.leaveRequest.findMany({
+      this.prismaRead.leaveRequest.findMany({
         where,
         skip,
         take: limit,
@@ -464,7 +473,7 @@ export class AttendanceService {
           user: { select: { id: true, fullName: true, email: true } },
         },
       }),
-      this.prisma.leaveRequest.count({ where }),
+      this.prismaRead.leaveRequest.count({ where }),
     ]);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
@@ -475,7 +484,7 @@ export class AttendanceService {
     const start = new Date(year, 0, 1);
     const end = new Date(year, 11, 31);
 
-    const approved = await this.prisma.leaveRequest.findMany({
+    const approved = await this.prismaRead.leaveRequest.findMany({
       where: { userId, status: LeaveStatus.APPROVED, startDate: { gte: start, lte: end } },
     });
 
@@ -506,7 +515,7 @@ export class AttendanceService {
   }
 
   async getWorkSchedules() {
-    return this.prisma.workSchedule.findMany({ orderBy: { name: 'asc' } });
+    return this.prismaRead.workSchedule.findMany({ orderBy: { name: 'asc' } });
   }
 
   async assignSchedule(dto: AssignScheduleDto) {
@@ -551,7 +560,7 @@ export class AttendanceService {
   }
 
   async getOvertimeBalance(userId: number) {
-    const records = await this.prisma.overtimeRecord.findMany({
+    const records = await this.prismaRead.overtimeRecord.findMany({
       where: { userId, status: { in: [OvertimeStatus.APPROVED] } },
     });
     const totalMin = records.filter(r => !r.compensated).reduce((a, r) => a + r.overtimeMinutes, 0);
@@ -617,7 +626,7 @@ export class AttendanceService {
 
   async getPendingJustifications(managerId?: number) {
     const where: any = { status: 'PENDING' };
-    return this.prisma.attendanceJustification.findMany({
+    return this.prismaRead.attendanceJustification.findMany({
       where,
       include: {
         // FIX: attendance.user → cast as any since Attendance uses Employee not User
@@ -753,9 +762,9 @@ export class AttendanceService {
         where,
         include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
       }),
-      this.prisma.leaveRequest.count({ where: { status: LeaveStatus.PENDING } }),
-      this.prisma.attendanceJustification.count({ where: { status: 'PENDING' } }),
-      this.prisma.overtimeRecord.count({ where: { status: OvertimeStatus.PENDING } }),
+      this.prismaRead.leaveRequest.count({ where: { status: LeaveStatus.PENDING } }),
+      this.prismaRead.attendanceJustification.count({ where: { status: 'PENDING' } }),
+      this.prismaRead.overtimeRecord.count({ where: { status: OvertimeStatus.PENDING } }),
     ]);
 
     const present = records.filter((r: any) =>
@@ -872,7 +881,7 @@ export class AttendanceService {
   }
 
   private async getActiveSchedule(userId: number) {
-    const userSchedule = await this.prisma.userSchedule.findUnique({
+    const userSchedule = await this.prismaRead.userSchedule.findUnique({
       where: { userId },
       include: { schedule: true },
     });
@@ -880,7 +889,7 @@ export class AttendanceService {
   }
 
   private async validateGeofence(userId: number, lat: number, lon: number) {
-    const locations = await this.prisma.allowedLocation.findMany();
+    const locations = await this.prismaRead.allowedLocation.findMany();
     if (locations.length === 0) return;
 
     const inRange = locations.some(

@@ -23,6 +23,14 @@ import {
 export class ProcessStandardService {
   private readonly logger = new Logger(ProcessStandardService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -82,7 +90,7 @@ export class ProcessStandardService {
     }
 
     const [data, total] = await Promise.all([
-      this.prisma.processStandard.findMany({
+      this.prismaRead.processStandard.findMany({
         where,
         skip,
         take: limit,
@@ -93,7 +101,7 @@ export class ProcessStandardService {
         },
         orderBy: { updatedAt: 'desc' },
       }),
-      this.prisma.processStandard.count({ where }),
+      this.prismaRead.processStandard.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -102,7 +110,7 @@ export class ProcessStandardService {
   // ─── DETALHE ─────────────────────────────────────────────────────────────
 
   async findOne(id: number) {
-    const p = await this.prisma.processStandard.findUnique({
+    const p = await this.prismaRead.processStandard.findUnique({
       where: { id },
       include: {
         steps: {
@@ -183,7 +191,7 @@ export class ProcessStandardService {
     }
 
     if (dto.code && dto.code !== existing.code) {
-      const codeExists = await this.prisma.processStandard.findFirst({
+      const codeExists = await this.prismaRead.processStandard.findFirst({
         where: { code: dto.code, id: { not: id } },
       });
       if (codeExists) throw new ConflictException(`Código ${dto.code} já em uso`);
@@ -348,7 +356,7 @@ export class ProcessStandardService {
   // ─── COMPARAR VERSÕES ─────────────────────────────────────────────────────
 
   async compareVersions(id: number, versionA: string, versionB: string) {
-    const versions = await this.prisma.processVersion.findMany({
+    const versions = await this.prismaRead.processVersion.findMany({
       where: { processId: id, version: { in: [versionA, versionB] } },
     });
 
@@ -454,7 +462,7 @@ export class ProcessStandardService {
     if (userId) where.OR = [{ initiatedById: userId }, { targetUserId: userId }];
 
     const [data, total] = await Promise.all([
-      this.prisma.processInstance.findMany({
+      this.prismaRead.processInstance.findMany({
         where,
         skip,
         take: limit,
@@ -466,14 +474,14 @@ export class ProcessStandardService {
         },
         orderBy: { startedAt: 'desc' },
       }),
-      this.prisma.processInstance.count({ where }),
+      this.prismaRead.processInstance.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async getInstanceDetail(instanceId: number) {
-    const inst = await this.prisma.processInstance.findUnique({
+    const inst = await this.prismaRead.processInstance.findUnique({
       where: { id: instanceId },
       include: {
         process: { include: { steps: { orderBy: { order: 'asc' } } } },
@@ -492,13 +500,13 @@ export class ProcessStandardService {
   }
 
   async completeStep(instanceId: number, stepId: number, userId: number, dto: CompleteStepDto) {
-    const sp = await this.prisma.stepProgress.findUnique({
+    const sp = await this.prismaRead.stepProgress.findUnique({
       where: { instanceId_stepId: { instanceId, stepId } },
     });
     if (!sp) throw new NotFoundException('Passo não encontrado nesta instância');
     if (sp.status === 'COMPLETED') throw new ConflictException('Passo já concluído');
 
-    const step = await this.prisma.processStep.findUnique({ where: { id: stepId } });
+    const step = await this.prismaRead.processStep.findUnique({ where: { id: stepId } });
 
     // Validar upload obrigatório
     if ((step as any)?.requiresUpload && (!dto.evidenceIds || dto.evidenceIds.length === 0)) {
@@ -522,7 +530,7 @@ export class ProcessStandardService {
     });
 
     // Activar próximo passo
-    const nextStep = await this.prisma.stepProgress.findFirst({
+    const nextStep = await this.prismaRead.stepProgress.findFirst({
       where: { instanceId, stepOrder: { gt: sp.stepOrder }, status: 'WAITING' },
       orderBy: { stepOrder: 'asc' },
     });
@@ -534,7 +542,7 @@ export class ProcessStandardService {
     }
 
     // Verificar conclusão total
-    const pendingCount = await this.prisma.stepProgress.count({
+    const pendingCount = await this.prismaRead.stepProgress.count({
       where: { instanceId, status: { notIn: ['COMPLETED', 'SKIPPED'] } },
     });
     if (pendingCount === 0) {
@@ -558,7 +566,7 @@ export class ProcessStandardService {
   }
 
   async rejectStep(instanceId: number, stepId: number, userId: number, dto: RejectStepDto) {
-    const sp = await this.prisma.stepProgress.findUnique({
+    const sp = await this.prismaRead.stepProgress.findUnique({
       where: { instanceId_stepId: { instanceId, stepId } },
     });
     if (!sp) throw new NotFoundException('Passo não encontrado');
@@ -589,7 +597,7 @@ export class ProcessStandardService {
   }
 
   async cancelInstance(instanceId: number, userId: number, reason: string) {
-    const inst = await this.prisma.processInstance.findUnique({ where: { id: instanceId } });
+    const inst = await this.prismaRead.processInstance.findUnique({ where: { id: instanceId } });
     if (!inst) throw new NotFoundException('Instância não encontrada');
     if (inst.status === 'COMPLETED') throw new ForbiddenException('Instância já concluída');
 
@@ -610,7 +618,7 @@ export class ProcessStandardService {
   // ─── MINHAS TAREFAS ───────────────────────────────────────────────────────
 
   async getMyTasks(userId: number) {
-    const tasks = await this.prisma.stepProgress.findMany({
+    const tasks = await this.prismaRead.stepProgress.findMany({
       where: {
         OR: [{ instance: { targetUserId: userId } }, { step: { responsibleId: userId } }],
         status: 'PENDING',
@@ -644,24 +652,24 @@ export class ProcessStandardService {
       instancesCompleted,
       overdueSteps,
     ] = await Promise.all([
-      this.prisma.processStandard.count({ where: { status: 'ACTIVE' } }),
-      this.prisma.processStandard.count({ where: { status: 'DRAFT' } }),
-      this.prisma.processStandard.count({ where: { status: 'IN_REVIEW' } }),
-      this.prisma.processInstance.count({ where: { status: 'IN_PROGRESS' } }),
-      this.prisma.processInstance.count({ where: { status: 'COMPLETED' } }),
-      this.prisma.stepProgress.count({
+      this.prismaRead.processStandard.count({ where: { status: 'ACTIVE' } }),
+      this.prismaRead.processStandard.count({ where: { status: 'DRAFT' } }),
+      this.prismaRead.processStandard.count({ where: { status: 'IN_REVIEW' } }),
+      this.prismaRead.processInstance.count({ where: { status: 'IN_PROGRESS' } }),
+      this.prismaRead.processInstance.count({ where: { status: 'COMPLETED' } }),
+      this.prismaRead.stepProgress.count({
         where: { status: 'PENDING', slaDeadline: { lt: new Date() } },
       }),
     ]);
 
-    const avgCycleTime = await this.prisma.processInstance.aggregate({
+    const avgCycleTime = await this.prismaRead.processInstance.aggregate({
       where: { status: 'COMPLETED', completedAt: { not: null } },
       _avg: {
         /* duration field needed */
       },
     });
 
-    const recentInstances = await this.prisma.processInstance.findMany({
+    const recentInstances = await this.prismaRead.processInstance.findMany({
       take: 5,
       orderBy: { startedAt: 'desc' },
       include: {
@@ -687,14 +695,14 @@ export class ProcessStandardService {
     if (instanceId) where.instanceId = instanceId;
 
     const [data, total] = await Promise.all([
-      this.prisma.processAuditLog.findMany({
+      this.prismaRead.processAuditLog.findMany({
         where,
         skip,
         take: limit,
         include: { user: { select: { id: true, fullName: true } } },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.processAuditLog.count({ where }),
+      this.prismaRead.processAuditLog.count({ where }),
     ]);
 
     return { data, total, page, limit };

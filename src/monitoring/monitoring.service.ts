@@ -13,6 +13,14 @@ import {
 
 @Injectable()
 export class MonitoringService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ════════════════════════════════════════════════════
@@ -34,7 +42,7 @@ export class MonitoringService {
   }
 
   async findAllCycles() {
-    return this.prisma.okrCycle.findMany({
+    return this.prismaRead.okrCycle.findMany({
       where: { deletedAt: null },
       orderBy: { startDate: 'desc' },
       include: { _count: { select: { objectives: true } } },
@@ -42,7 +50,7 @@ export class MonitoringService {
   }
 
   async createObjective(dto: CreateObjectiveDto, userId: number) {
-    const cycle = await this.prisma.okrCycle.findUnique({
+    const cycle = await this.prismaRead.okrCycle.findUnique({
       where: { id: dto.cycleId },
     });
     if (!cycle) throw new NotFoundException('Ciclo OKR não encontrado');
@@ -54,7 +62,7 @@ export class MonitoringService {
   }
 
   async findObjectives(cycleId: string, ownerId?: number) {
-    return this.prisma.objective.findMany({
+    return this.prismaRead.objective.findMany({
       where: { cycleId, deletedAt: null, ...(ownerId && { ownerId }) },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -65,7 +73,7 @@ export class MonitoringService {
   }
 
   async createKeyResult(dto: CreateKeyResultDto, userId: number) {
-    const objective = await this.prisma.objective.findUnique({
+    const objective = await this.prismaRead.objective.findUnique({
       where: { id: dto.objectiveId },
     });
     if (!objective) throw new NotFoundException('Objectivo não encontrado');
@@ -82,7 +90,7 @@ export class MonitoringService {
   }
 
   async updateKeyResult(id: string, dto: UpdateKeyResultDto, userId: number) {
-    const kr = await this.prisma.keyResult.findUnique({ where: { id } });
+    const kr = await this.prismaRead.keyResult.findUnique({ where: { id } });
     if (!kr) throw new NotFoundException('Key Result não encontrado');
 
     const range = kr.targetValue - kr.startValue;
@@ -125,7 +133,7 @@ export class MonitoringService {
   }
 
   private async recalcObjectiveProgress(objectiveId: string) {
-    const krs = await this.prisma.keyResult.findMany({
+    const krs = await this.prismaRead.keyResult.findMany({
       where: { objectiveId, deletedAt: null },
       select: { progress: true },
     });
@@ -164,21 +172,21 @@ export class MonitoringService {
       isActive: true,
       ...(category && { category }),
     };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.monitoringIndicator.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.monitoringIndicator.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: { _count: { select: { records: true } } },
       }),
-      this.prisma.monitoringIndicator.count({ where }),
+      this.prismaRead.monitoringIndicator.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async addRecord(indicatorId: string, dto: CreateRecordDto, userId: number) {
-    const indicator = await this.prisma.monitoringIndicator.findUnique({
+    const indicator = await this.prismaRead.monitoringIndicator.findUnique({
       where: { id: indicatorId },
     });
     if (!indicator) throw new NotFoundException('Indicador não encontrado');
@@ -212,11 +220,11 @@ export class MonitoringService {
   }
 
   async getIndicatorHistory(indicatorId: string) {
-    const [indicator, records] = await this.prisma.$transaction([
-      this.prisma.monitoringIndicator.findUnique({
+    const [indicator, records] = await Promise.all([
+      this.prismaRead.monitoringIndicator.findUnique({
         where: { id: indicatorId },
       }),
-      this.prisma.monitoringRecord.findMany({
+      this.prismaRead.monitoringRecord.findMany({
         where: { indicatorId, deletedAt: null },
         orderBy: { date: 'asc' },
         include: { recordedBy: { select: { fullName: true } } },
@@ -285,7 +293,7 @@ export class MonitoringService {
   }
 
   async submitEvaluation(id: string, dto: MonitoringSubmitEvaluationDto, evaluatorId: number) {
-    const evaluation = await this.prisma.userEvaluation.findUnique({
+    const evaluation = await this.prismaRead.userEvaluation.findUnique({
       where: { id },
     });
     if (!evaluation) throw new NotFoundException('Avaliação não encontrada');
@@ -322,7 +330,7 @@ export class MonitoringService {
   }
 
   async getMyEvaluations(userId: number) {
-    return this.prisma.userEvaluation.findMany({
+    return this.prismaRead.userEvaluation.findMany({
       where: { userId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -333,7 +341,7 @@ export class MonitoringService {
   }
 
   async getEvaluationsToComplete(evaluatorId: number) {
-    return this.prisma.userEvaluation.findMany({
+    return this.prismaRead.userEvaluation.findMany({
       where: {
         evaluatorId,
         status: { in: ['PENDING', 'OPEN'] },
@@ -362,30 +370,30 @@ export class MonitoringService {
       activeEvalCycles,
       pendingEvaluations,
       completedEvaluations,
-    ] = await this.prisma.$transaction([
-      this.prisma.okrCycle.count({
+    ] = await Promise.all([
+      this.prismaRead.okrCycle.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prisma.objective.count({ where: { deletedAt: null } }),
-      this.prisma.objective.count({
+      this.prismaRead.objective.count({ where: { deletedAt: null } }),
+      this.prismaRead.objective.count({
         where: { status: 'COMPLETED', deletedAt: null },
       }),
-      this.prisma.monitoringIndicator.count({
+      this.prismaRead.monitoringIndicator.count({
         where: { isActive: true, deletedAt: null },
       }),
-      this.prisma.monitoringRecord.count({
+      this.prismaRead.monitoringRecord.count({
         where: { createdAt: { gte: startOfMonth } },
       }),
-      this.prisma.evaluationCycle.count({
+      this.prismaRead.evaluationCycle.count({
         where: {
           status: { in: ['OPEN', 'SELF_EVAL', 'MANAGER_EVAL'] },
           deletedAt: null,
         },
       }),
-      this.prisma.userEvaluation.count({
+      this.prismaRead.userEvaluation.count({
         where: { status: { in: ['PENDING', 'OPEN'] }, deletedAt: null },
       }),
-      this.prisma.userEvaluation.count({
+      this.prismaRead.userEvaluation.count({
         where: { status: 'CLOSED', deletedAt: null },
       }),
     ]);

@@ -104,7 +104,8 @@ describe('CrmFundersService', () => {
 
   describe('findAll', () => {
     it('deve retornar lista paginada', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[mockFunder], 1]);
+      mockPrisma.funder.findMany.mockResolvedValue([mockFunder]);
+      mockPrisma.funder.count.mockResolvedValue(1);
       const result = await service.findAll({ page: 1, limit: 20 });
       expect(result).toMatchObject({
         data: expect.any(Array),
@@ -114,7 +115,8 @@ describe('CrmFundersService', () => {
     });
 
     it('deve filtrar por tipo e status', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+      mockPrisma.funder.findMany.mockResolvedValue([]);
+      mockPrisma.funder.count.mockResolvedValue(0);
       const result = await service.findAll({
         type: 'GOVERNMENT' as any,
         status: 'ACTIVE' as any,
@@ -209,7 +211,8 @@ describe('CrmFundersService', () => {
   describe('findGrants', () => {
     it('deve retornar grants paginados', async () => {
       mockPrisma.funder.findUnique.mockResolvedValue(mockFunder);
-      mockPrisma.$transaction.mockResolvedValue([[mockGrant], 1]);
+      mockPrisma.fundingGrant.findMany.mockResolvedValue([mockGrant]);
+      mockPrisma.fundingGrant.count.mockResolvedValue(1);
       const result = await service.findGrants('fun-1', 1, 20);
       expect(result.total).toBe(1);
     });
@@ -278,7 +281,8 @@ describe('CrmFundersService', () => {
 
   describe('getDisbursements', () => {
     it('deve retornar desembolsos paginados', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[{ id: 'dis-1' }], 1]);
+      mockPrisma.grantDisbursement.findMany.mockResolvedValue([{ id: 'dis-1' }]);
+      mockPrisma.grantDisbursement.count.mockResolvedValue(1);
       const result = await service.getDisbursements('grt-1', 1, 20);
       expect(result.total).toBe(1);
     });
@@ -360,20 +364,15 @@ describe('CrmFundersService', () => {
 
   describe('getDashboard', () => {
     it('deve retornar totais financeiros e taxa de execução', async () => {
-      mockPrisma.$transaction.mockResolvedValue([
-        5,
-        1,
-        4,
-        [],
-        [],
-        { _sum: { amount: 10000000 } },
-        { _sum: { disbursed: 6000000 } },
-        3,
-        0,
-        2,
-        [],
-        [],
-      ]);
+      mockPrisma.funder.count.mockResolvedValue(5);
+      mockPrisma.funder.groupBy.mockResolvedValue([]);
+      mockPrisma.fundingGrant.aggregate.mockResolvedValue({
+        _sum: { amount: 10000000, disbursed: 6000000 },
+      });
+      mockPrisma.fundingGrant.count.mockResolvedValue(3);
+      mockPrisma.funderReport.count.mockResolvedValue(0);
+      mockPrisma.grantDisbursement.findMany.mockResolvedValue([]);
+      mockPrisma.funderInteraction.findMany.mockResolvedValue([]);
       const result = await service.getDashboard();
       expect(result).toHaveProperty('totals');
       expect(result.totals.executionRate).toBe(60);
@@ -383,7 +382,11 @@ describe('CrmFundersService', () => {
 
   describe('getReport', () => {
     it('deve retornar relatório por período', async () => {
-      mockPrisma.$transaction.mockResolvedValue([3, [], 2, { _sum: { amount: 2500000 } }, 4]);
+      mockPrisma.funder.count.mockResolvedValue(3);
+      mockPrisma.funder.groupBy.mockResolvedValue([]);
+      mockPrisma.fundingGrant.count.mockResolvedValue(2);
+      mockPrisma.grantDisbursement.aggregate.mockResolvedValue({ _sum: { amount: 2500000 } });
+      mockPrisma.funderReport.count.mockResolvedValue(4);
       const result = await service.getReport(new Date('2026-01-01'), new Date('2026-12-31'));
       expect(result.created).toBe(3);
       expect(result.totalDisbursed).toBe(2500000);

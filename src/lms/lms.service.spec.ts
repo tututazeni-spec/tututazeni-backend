@@ -91,7 +91,8 @@ describe('LmsService', () => {
 
   describe('findAllPaths', () => {
     it('deve retornar lista paginada', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[mockPath], 1]);
+      mockPrisma.lmsLearningPath.findMany.mockResolvedValue([mockPath]);
+      mockPrisma.lmsLearningPath.count.mockResolvedValue(1);
       const result = await service.findAllPaths({ page: 1, limit: 20 });
       expect(result).toMatchObject({ total: 1, totalPages: 1 });
     });
@@ -257,7 +258,10 @@ describe('LmsService', () => {
 
   describe('getLmsDashboard', () => {
     it('deve retornar totais e taxa de conclusão', async () => {
-      mockPrisma.$transaction.mockResolvedValue([10, 8, 50, 30, 3, 15, []]);
+      mockPrisma.lmsLearningPath.count.mockResolvedValueOnce(10).mockResolvedValueOnce(8);
+      mockPrisma.lmsPathEnrollment.count.mockResolvedValueOnce(50).mockResolvedValueOnce(30);
+      mockPrisma.lmsLiveSession.count.mockResolvedValueOnce(3).mockResolvedValueOnce(15);
+      mockPrisma.lmsLearningPath.groupBy.mockResolvedValue([]);
       const result = await service.getLmsDashboard();
       expect(result.totals.pathCompletionRate).toBe(60);
     });

@@ -10,6 +10,14 @@ import {
 
 @Injectable()
 export class LiveClassesService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   async findAll(filters: LiveClassFilterDto) {
@@ -19,7 +27,7 @@ export class LiveClassesService {
     if (courseId) where.courseId = courseId;
 
     const [data, total] = await Promise.all([
-      this.prisma.liveClass.findMany({
+      this.prismaRead.liveClass.findMany({
         where,
         skip,
         take: limit,
@@ -30,13 +38,13 @@ export class LiveClassesService {
         },
         orderBy: { scheduledAt: 'desc' },
       }),
-      this.prisma.liveClass.count({ where }),
+      this.prismaRead.liveClass.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const lc = await this.prisma.liveClass.findUnique({
+    const lc = await this.prismaRead.liveClass.findUnique({
       where: { id },
       include: {
         course: { select: { id: true, title: true } },
@@ -104,7 +112,7 @@ export class LiveClassesService {
 
   async getMessages(liveClassId: number, page = 1, limit = 50) {
     const skip = (page - 1) * limit;
-    return this.prisma.liveChatMessage.findMany({
+    return this.prismaRead.liveChatMessage.findMany({
       where: { liveClassId },
       include: { user: { select: { id: true, fullName: true } } },
       orderBy: { createdAt: 'asc' },
@@ -122,7 +130,7 @@ export class LiveClassesService {
   }
 
   async submitPostResponse(userId: number, dto: PostClassResponseDto) {
-    const evaluation = await this.prisma.postClassEvaluation.findUnique({
+    const evaluation = await this.prismaRead.postClassEvaluation.findUnique({
       where: { id: dto.evaluationId },
     });
     if (!evaluation) throw new NotFoundException('Avaliação não encontrada');
@@ -138,7 +146,7 @@ export class LiveClassesService {
       update: { rating: dto.rating, feedback: dto.feedback },
     });
 
-    const avg = await this.prisma.postClassResponse.aggregate({
+    const avg = await this.prismaRead.postClassResponse.aggregate({
       where: { evaluationId: dto.evaluationId },
       _avg: { rating: true },
     });
@@ -151,7 +159,7 @@ export class LiveClassesService {
   }
 
   async getAttendanceReport(liveClassId: number) {
-    const attendances = await this.prisma.liveAttendance.findMany({
+    const attendances = await this.prismaRead.liveAttendance.findMany({
       where: { liveClassId },
       include: { user: { select: { id: true, fullName: true, email: true } } },
     });
@@ -164,7 +172,7 @@ export class LiveClassesService {
   }
 
   async getUpcoming() {
-    return this.prisma.liveClass.findMany({
+    return this.prismaRead.liveClass.findMany({
       where: { scheduledAt: { gte: new Date() } },
       include: {
         course: { select: { id: true, title: true } },

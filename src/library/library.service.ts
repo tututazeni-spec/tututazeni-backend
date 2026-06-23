@@ -11,6 +11,14 @@ import {
 
 @Injectable()
 export class LibraryService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── CÓDIGO AUTO-GERADO ──────────────────────────────
@@ -35,7 +43,7 @@ export class LibraryService {
   }
 
   async findAllCollections() {
-    return this.prisma.libraryCollection.findMany({
+    return this.prismaRead.libraryCollection.findMany({
       where: { deletedAt: null },
       orderBy: { order: 'asc' },
       include: {
@@ -85,8 +93,8 @@ export class LibraryService {
         ],
       }),
     };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.libraryItem.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.libraryItem.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -97,13 +105,13 @@ export class LibraryService {
           _count: { select: { comments: true, ratings: true } },
         },
       }),
-      this.prisma.libraryItem.count({ where }),
+      this.prismaRead.libraryItem.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findItemById(id: string) {
-    const item = await this.prisma.libraryItem.findUnique({
+    const item = await this.prismaRead.libraryItem.findUnique({
       where: { id },
       include: {
         collection: { select: { name: true } },
@@ -207,7 +215,7 @@ export class LibraryService {
     });
 
     // Recalcula média de avaliações
-    const ratings = await this.prisma.libraryRating.findMany({
+    const ratings = await this.prismaRead.libraryRating.findMany({
       where: { itemId },
       select: { score: true },
     });
@@ -232,7 +240,7 @@ export class LibraryService {
   }
 
   async deleteComment(commentId: string, userId: number) {
-    const comment = await this.prisma.libraryComment.findUnique({
+    const comment = await this.prismaRead.libraryComment.findUnique({
       where: { id: commentId },
     });
     if (!comment) throw new NotFoundException('Comentário não encontrado');
@@ -261,27 +269,27 @@ export class LibraryService {
       topRated,
       totalViews,
       totalDownloads,
-    ] = await this.prisma.$transaction([
-      this.prisma.libraryItem.count({ where: { deletedAt: null } }),
-      this.prisma.libraryItem.count({
+    ] = await Promise.all([
+      this.prismaRead.libraryItem.count({ where: { deletedAt: null } }),
+      this.prismaRead.libraryItem.count({
         where: { createdAt: { gte: startOfMonth } },
       }),
-      this.prisma.libraryCollection.count({ where: { deletedAt: null } }),
-      (this.prisma.libraryItem.groupBy as any)({
+      this.prismaRead.libraryCollection.count({ where: { deletedAt: null } }),
+      (this.prismaRead.libraryItem.groupBy as any)({
         by: ['type'],
         where: { deletedAt: null },
         _count: { id: true },
       }),
-      this.prisma.libraryItem.count({
+      this.prismaRead.libraryItem.count({
         where: { isApproved: false, deletedAt: null },
       }),
-      this.prisma.libraryItem.findMany({
+      this.prismaRead.libraryItem.findMany({
         where: { deletedAt: null },
         orderBy: { views: 'desc' },
         take: 5,
         select: { id: true, code: true, title: true, views: true, type: true },
       }),
-      this.prisma.libraryItem.findMany({
+      this.prismaRead.libraryItem.findMany({
         where: { deletedAt: null },
         orderBy: { downloads: 'desc' },
         take: 5,
@@ -293,7 +301,7 @@ export class LibraryService {
           type: true,
         },
       }),
-      this.prisma.libraryItem.findMany({
+      this.prismaRead.libraryItem.findMany({
         where: { deletedAt: null, ratingCount: { gt: 0 } },
         orderBy: { rating: 'desc' },
         take: 5,
@@ -305,8 +313,8 @@ export class LibraryService {
           ratingCount: true,
         },
       }),
-      this.prisma.libraryAccess.count({ where: { action: 'VIEW' } }),
-      this.prisma.libraryAccess.count({ where: { action: 'DOWNLOAD' } }),
+      this.prismaRead.libraryAccess.count({ where: { action: 'VIEW' } }),
+      this.prismaRead.libraryAccess.count({ where: { action: 'DOWNLOAD' } }),
     ]);
 
     return {

@@ -40,6 +40,7 @@ const mockPrismaBase = {
 
 const mockPrisma = new Proxy(mockPrismaBase, {
   get(target, prop) {
+    if (prop === 'db') return mockPrisma; // read-replica client → mesmo mock
     return (
       (target as any)[prop] ?? {
         findMany: jest.fn().mockResolvedValue([]),

@@ -28,10 +28,11 @@ const automationMock = {
   count: jest.fn().mockResolvedValue(0),
 };
 
-const mockPrisma = new Proxy(
+const mockPrisma: any = new Proxy(
   {},
   {
     get(_t, prop) {
+      if (prop === 'db') return mockPrisma;
       if (prop === 'tenantConfig') return tenantMock;
       if (prop === 'integrationConfig') return integrationMock;
       if (prop === 'automationRule') return automationMock;

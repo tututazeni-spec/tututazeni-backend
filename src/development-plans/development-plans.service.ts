@@ -25,6 +25,14 @@ import {
 export class DevelopmentPlansService {
   private readonly logger = new Logger(DevelopmentPlansService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── PLANOS ───────────────────────────────────────────────────────────────
@@ -42,7 +50,7 @@ export class DevelopmentPlansService {
     if (overdue) where.endDate = { lt: new Date() };
 
     const [data, total] = await Promise.all([
-      this.prisma.developmentPlan.findMany({
+      this.prismaRead.developmentPlan.findMany({
         where,
         skip,
         take: limit,
@@ -62,7 +70,7 @@ export class DevelopmentPlansService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.developmentPlan.count({ where }),
+      this.prismaRead.developmentPlan.count({ where }),
     ]);
 
     const enriched = data.map(p => {
@@ -85,7 +93,7 @@ export class DevelopmentPlansService {
   }
 
   async findOne(id: number) {
-    const plan = await this.prisma.developmentPlan.findUnique({
+    const plan = await this.prismaRead.developmentPlan.findUnique({
       where: { id },
       include: {
         user: {
@@ -329,6 +337,7 @@ export class DevelopmentPlansService {
   }
 
   async updateAction(actionId: number, dto: UpdatePlanActionDto, userId: number) {
+    // Leitura que decide lógica de escrita (XP/transição): força primary.
     const action = await this.prisma.developmentPlanAction.findUnique({
       where: { id: actionId },
       include: { plan: true },
@@ -462,6 +471,7 @@ export class DevelopmentPlansService {
   // ─── PROGRESSO ────────────────────────────────────────────────────────────
 
   private async recalcPlanProgress(planId: number) {
+    // Recalcula estado derivado e grava — lê do primary para não computar sobre réplica atrasada.
     const [actions, goals] = await Promise.all([
       this.prisma.developmentPlanAction.findMany({
         where: { planId },
@@ -490,7 +500,7 @@ export class DevelopmentPlansService {
   // ─── DASHBOARD & ANALYTICS ────────────────────────────────────────────────
 
   async getMyPlans(userId: number) {
-    const plans = await this.prisma.developmentPlan.findMany({
+    const plans = await this.prismaRead.developmentPlan.findMany({
       where: { userId },
       include: {
         actions: { select: { status: true, dueDate: true } },
@@ -527,19 +537,19 @@ export class DevelopmentPlansService {
 
   async getStats(userId: number) {
     const [total, active, completed, cancelled] = await Promise.all([
-      this.prisma.developmentPlan.count({ where: { userId } }),
-      this.prisma.developmentPlan.count({ where: { userId, status: 'ACTIVE' } }),
-      this.prisma.developmentPlan.count({ where: { userId, status: 'COMPLETED' } }),
-      this.prisma.developmentPlan.count({ where: { userId, status: 'CANCELLED' } }),
+      this.prismaRead.developmentPlan.count({ where: { userId } }),
+      this.prismaRead.developmentPlan.count({ where: { userId, status: 'ACTIVE' } }),
+      this.prismaRead.developmentPlan.count({ where: { userId, status: 'COMPLETED' } }),
+      this.prismaRead.developmentPlan.count({ where: { userId, status: 'CANCELLED' } }),
     ]);
 
-    const actionStats = await this.prisma.developmentPlanAction.groupBy({
+    const actionStats = await this.prismaRead.developmentPlanAction.groupBy({
       by: ['status'],
       where: { plan: { userId } },
       _count: true,
     });
 
-    const totalXp = await this.prisma.userPoints.findUnique({
+    const totalXp = await this.prismaRead.userPoints.findUnique({
       where: { userId },
       select: { points: true },
     });
@@ -553,7 +563,7 @@ export class DevelopmentPlansService {
   }
 
   async getTeamDashboard(managerId: number) {
-    const plans = await this.prisma.developmentPlan.findMany({
+    const plans = await this.prismaRead.developmentPlan.findMany({
       where: { managerId, status: { in: ['ACTIVE', 'PENDING_APPROVAL'] } },
       include: {
         user: {

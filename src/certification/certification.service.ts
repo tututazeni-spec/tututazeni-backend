@@ -12,11 +12,20 @@ import {
 
 @Injectable()
 export class CertificationService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── GERAÇÃO DE CÓDIGOS ──────────────────────────────
 
   private async generateCertCode(): Promise<string> {
+    // Geração de código sequencial: força primary para não gerar códigos duplicados via réplica.
     const last = await this.prisma.issuedCertificate.findFirst({
       orderBy: { code: 'desc' },
       select: { code: true },
@@ -52,7 +61,7 @@ export class CertificationService {
   }
 
   async findAllTemplates() {
-    return this.prisma.certificateTemplate.findMany({
+    return this.prismaRead.certificateTemplate.findMany({
       where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { certificates: true } } },
@@ -62,6 +71,7 @@ export class CertificationService {
   // ─── EMISSÃO DE CERTIFICADOS ─────────────────────────
 
   async issueCertificate(dto: IssueCertificateDto, issuerId: number) {
+    // Leituras dentro de método de escrita: força primary (consistência forte na emissão).
     const user = await this.prisma.user.findUnique({
       where: { id: dto.userId },
       select: { fullName: true, email: true },
@@ -143,7 +153,7 @@ export class CertificationService {
       }),
     };
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.issuedCertificate.findMany({
+      this.prismaRead.issuedCertificate.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -153,13 +163,13 @@ export class CertificationService {
           issuedBy: { select: { fullName: true } },
         },
       }),
-      this.prisma.issuedCertificate.count({ where }),
+      this.prismaRead.issuedCertificate.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findCertificateById(id: string) {
-    const cert = await this.prisma.issuedCertificate.findUnique({
+    const cert = await this.prismaRead.issuedCertificate.findUnique({
       where: { id },
       include: {
         user: { select: { fullName: true, email: true } },
@@ -174,7 +184,7 @@ export class CertificationService {
   // ─── VERIFICAÇÃO PÚBLICA ─────────────────────────────
 
   async verify(verificationCode: string): Promise<any> {
-    const cert = await this.prisma.issuedCertificate.findUnique({
+    const cert = await this.prismaRead.issuedCertificate.findUnique({
       where: { verificationCode },
       include: {
         user: { select: { fullName: true } },
@@ -268,6 +278,7 @@ export class CertificationService {
   // ─── BADGES DIGITAIS ─────────────────────────────────
 
   private async generateBadgeCode(): Promise<string> {
+    // Geração de código sequencial: força primary para não gerar códigos duplicados via réplica.
     const last = await this.prisma.digitalBadge.findFirst({
       orderBy: { code: 'desc' },
       select: { code: true },
@@ -289,7 +300,7 @@ export class CertificationService {
   }
 
   async findAllBadges() {
-    return this.prisma.digitalBadge.findMany({
+    return this.prismaRead.digitalBadge.findMany({
       where: { deletedAt: null, isActive: true },
       orderBy: { level: 'asc' },
       include: { _count: { select: { issuances: true } } },
@@ -297,6 +308,7 @@ export class CertificationService {
   }
 
   async issueBadge(dto: IssueBadgeDto, issuerId: number) {
+    // Leituras de guard/enrichment dentro de emissão (escrita): força primary.
     const [badge, user] = await this.prisma.$transaction([
       this.prisma.digitalBadge.findUnique({ where: { id: dto.badgeId } }),
       this.prisma.user.findUnique({
@@ -342,7 +354,7 @@ export class CertificationService {
   }
 
   async getMyBadges(userId: number) {
-    return this.prisma.badgeIssuance.findMany({
+    return this.prismaRead.badgeIssuance.findMany({
       where: { userId, deletedAt: null, isRevoked: false },
       orderBy: { issuedAt: 'desc' },
       include: { badge: true },
@@ -352,13 +364,13 @@ export class CertificationService {
   async getMyCertificates(userId: number, page = 1, limit = 20) {
     const where = { userId, deletedAt: null };
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.issuedCertificate.findMany({
+      this.prismaRead.issuedCertificate.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { issuedAt: 'desc' },
       }),
-      this.prisma.issuedCertificate.count({ where }),
+      this.prismaRead.issuedCertificate.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -381,35 +393,35 @@ export class CertificationService {
       totalVerifications,
       recentCerts,
     ] = await this.prisma.$transaction([
-      this.prisma.issuedCertificate.count({ where: { deletedAt: null } }),
-      this.prisma.issuedCertificate.count({
+      this.prismaRead.issuedCertificate.count({ where: { deletedAt: null } }),
+      this.prismaRead.issuedCertificate.count({
         where: { issuedAt: { gte: startOfMonth } },
       }),
-      this.prisma.issuedCertificate.count({
+      this.prismaRead.issuedCertificate.count({
         where: { isRevoked: true, deletedAt: null },
       }),
-      this.prisma.issuedCertificate.count({
+      this.prismaRead.issuedCertificate.count({
         where: { expiresAt: { lt: now }, isRevoked: false, deletedAt: null },
       }),
-      (this.prisma.issuedCertificate.groupBy as any)({
+      (this.prismaRead.issuedCertificate.groupBy as any)({
         by: ['type'],
         where: { deletedAt: null },
         _count: { id: true },
       }),
-      this.prisma.digitalBadge.count({
+      this.prismaRead.digitalBadge.count({
         where: { deletedAt: null, isActive: true },
       }),
-      this.prisma.badgeIssuance.count({
+      this.prismaRead.badgeIssuance.count({
         where: { deletedAt: null, isRevoked: false },
       }),
-      this.prisma.certificateTemplate.count({
+      this.prismaRead.certificateTemplate.count({
         where: { deletedAt: null, isActive: true },
       }),
-      this.prisma.issuedCertificate.aggregate({
+      this.prismaRead.issuedCertificate.aggregate({
         _sum: { verifyCount: true },
         where: { deletedAt: null },
       }),
-      this.prisma.issuedCertificate.findMany({
+      this.prismaRead.issuedCertificate.findMany({
         where: { deletedAt: null },
         orderBy: { issuedAt: 'desc' },
         take: 5,

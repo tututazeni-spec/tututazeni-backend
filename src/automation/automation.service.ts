@@ -141,6 +141,14 @@ const DEFAULT_RULES: Omit<CreateRuleDto, never>[] = [
 export class AutomationService {
   private readonly logger = new Logger(AutomationService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -151,7 +159,7 @@ export class AutomationService {
     const where: any = {};
     if (category) where.category = category;
 
-    const rules = await this.prisma.automationRule.findMany({
+    const rules = await this.prismaRead.automationRule.findMany({
       where,
       orderBy: [{ active: 'desc' }, { priority: 'asc' }, { name: 'asc' }],
     });
@@ -184,7 +192,7 @@ export class AutomationService {
   }
 
   async getRule(id: number) {
-    const r = await this.prisma.automationRule.findUnique({ where: { id } });
+    const r = await this.prismaRead.automationRule.findUnique({ where: { id } });
     if (!r) throw new NotFoundException('Regra não encontrada');
     return r;
   }
@@ -227,7 +235,7 @@ export class AutomationService {
   }
 
   async toggleRule(id: number) {
-    const r = await this.prisma.automationRule.findUnique({ where: { id } });
+    const r = await this.prismaRead.automationRule.findUnique({ where: { id } });
     if (!r) throw new NotFoundException('Regra não encontrada');
     return this.prisma.automationRule.update({ where: { id }, data: { active: !r.active } });
   }
@@ -251,7 +259,7 @@ export class AutomationService {
 
   async triggerEvent(dto: TriggerEventDto) {
     // Find active rules matching this event trigger
-    const rules = await this.prisma.automationRule.findMany({
+    const rules = await this.prismaRead.automationRule.findMany({
       where: { active: true, trigger: dto.event },
       orderBy: { priority: 'asc' },
     });
@@ -286,7 +294,7 @@ export class AutomationService {
   // ══════════════════════════════════════════════════════
 
   async runAllActiveRules() {
-    const rules = await this.prisma.automationRule.findMany({ where: { active: true } });
+    const rules = await this.prismaRead.automationRule.findMany({ where: { active: true } });
     const results = [];
 
     for (const rule of rules) {
@@ -455,7 +463,7 @@ export class AutomationService {
         case ActionType.NOTIFY_HR: {
           const roleCode = rule.action === ActionType.NOTIFY_HR ? 'RH' : undefined;
           const managers = roleCode
-            ? await this.prisma.user.findMany({
+            ? await this.prismaRead.user.findMany({
                 where: { role: { code: roleCode } },
                 select: { id: true },
                 take: 20,
@@ -537,7 +545,7 @@ export class AutomationService {
 
   private async sendEnrollmentReminders(): Promise<any> {
     const cutoff = new Date(Date.now() - 14 * 86400000);
-    const enrollments = await this.prisma.enrollment.findMany({
+    const enrollments = await this.prismaRead.enrollment.findMany({
       where: { status: 'EM_ANDAMENTO', enrolledAt: { lte: cutoff } },
       include: {
         user: { select: { id: true, fullName: true } },
@@ -571,7 +579,7 @@ export class AutomationService {
       .count({ where: { period, status: 'DRAFT' } })
       .catch(() => 0);
     if (drafted > 0) {
-      const hrUsers = await this.prisma.user.findMany({
+      const hrUsers = await this.prismaRead.user.findMany({
         where: { role: { code: 'RH' } },
         select: { id: true },
         take: 10,
@@ -666,8 +674,8 @@ export class AutomationService {
 
   async getStats() {
     const [total, active, execTotal, execSuccess, execFailed] = await Promise.all([
-      this.prisma.automationRule.count(),
-      this.prisma.automationRule.count({ where: { active: true } }),
+      this.prismaRead.automationRule.count(),
+      this.prismaRead.automationRule.count({ where: { active: true } }),
       safeM(this.prisma, 'automationExecution').count({}),
       safeM(this.prisma, 'automationExecution').count({ where: { status: 'SUCCESS' } }),
       safeM(this.prisma, 'automationExecution').count({ where: { status: 'FAILED' } }),

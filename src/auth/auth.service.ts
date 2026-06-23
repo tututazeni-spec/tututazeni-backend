@@ -17,6 +17,14 @@ import {
 
 @Injectable()
 export class AuthService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -26,7 +34,7 @@ export class AuthService {
     // Apenas role+permissions — unit/department/position não são necessários
     // para autenticar e custavam 3 queries extra por login. O perfil completo
     // vem de GET /auth/me ou do JwtStrategy nos pedidos seguintes.
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prismaRead.user.findUnique({
       where: { email: dto.email },
       include: {
         role: { include: { permissions: true } },
@@ -57,7 +65,9 @@ export class AuthService {
 
     const hashed = await bcrypt.hash(dto.password, 12);
 
-    const collaboratorRole = await this.prisma.role.findFirst({ where: { name: 'COLABORADOR' } });
+    const collaboratorRole = await this.prismaRead.role.findFirst({
+      where: { name: 'COLABORADOR' },
+    });
 
     const user = await this.prisma.user.create({
       data: {
@@ -84,7 +94,7 @@ export class AuthService {
   }
 
   async changePassword(userId: number, dto: ChangePasswordDto) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prismaRead.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
     if (!user.password) throw new UnauthorizedException('Sem password definida');
@@ -112,7 +122,7 @@ export class AuthService {
   }
 
   async me(userId: number) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prismaRead.user.findUnique({
       where: { id: userId },
       include: {
         role: { include: { permissions: true } },

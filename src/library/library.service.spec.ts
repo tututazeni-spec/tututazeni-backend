@@ -115,7 +115,8 @@ describe('LibraryService', () => {
 
   describe('findAllItems', () => {
     it('deve retornar lista paginada', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[mockItem], 1]);
+      mockPrisma.libraryItem.findMany.mockResolvedValue([mockItem]);
+      mockPrisma.libraryItem.count.mockResolvedValue(1);
       const result = await service.findAllItems({ page: 1, limit: 20 });
       expect(result).toMatchObject({
         data: expect.any(Array),
@@ -125,7 +126,8 @@ describe('LibraryService', () => {
     });
 
     it('deve filtrar por tipo', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+      mockPrisma.libraryItem.findMany.mockResolvedValue([]);
+      mockPrisma.libraryItem.count.mockResolvedValue(0);
       const result = await service.findAllItems({ type: 'VIDEO' as any });
       expect(result.total).toBe(0);
     });
@@ -283,7 +285,14 @@ describe('LibraryService', () => {
 
   describe('getDashboard', () => {
     it('deve retornar totais e rankings', async () => {
-      mockPrisma.$transaction.mockResolvedValue([10, 2, 3, [], 1, [], [], [], 50, 30]);
+      mockPrisma.libraryItem.count
+        .mockResolvedValueOnce(10)
+        .mockResolvedValueOnce(2)
+        .mockResolvedValueOnce(1);
+      mockPrisma.libraryCollection.count.mockResolvedValue(3);
+      mockPrisma.libraryItem.groupBy.mockResolvedValue([]);
+      mockPrisma.libraryItem.findMany.mockResolvedValue([]);
+      mockPrisma.libraryAccess.count.mockResolvedValueOnce(50).mockResolvedValueOnce(30);
       const result = await service.getDashboard();
       expect(result).toHaveProperty('totals');
       expect(result).toHaveProperty('rankings');

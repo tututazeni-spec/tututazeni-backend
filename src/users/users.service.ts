@@ -60,6 +60,14 @@ const USER_INCLUDE_BASIC = {
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
@@ -107,7 +115,7 @@ export class UsersService {
     }
 
     const [data, total] = await Promise.all([
-      this.prisma.user.findMany({
+      this.prismaRead.user.findMany({
         where,
         skip,
         take: limit,
@@ -122,7 +130,7 @@ export class UsersService {
         },
         orderBy: { fullName: 'asc' },
       }),
-      this.prisma.user.count({ where }),
+      this.prismaRead.user.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -131,7 +139,7 @@ export class UsersService {
   // ─── DETALHE ──────────────────────────────────────────────────────────────
 
   async findOne(id: number) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prismaRead.user.findUnique({
       where: { id },
       include: {
         ...USER_INCLUDE_BASIC,
@@ -188,6 +196,7 @@ export class UsersService {
   // ─── CRIAR ────────────────────────────────────────────────────────────────
 
   async create(dto: CreateUserDto) {
+    // Guards de unicidade antes da escrita: força primary para não validar contra réplica atrasada.
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email já registado');
 
@@ -253,6 +262,7 @@ export class UsersService {
     const existing = await this.findOne(id);
 
     if (dto.email && dto.email !== (existing as any).email) {
+      // Guards de unicidade antes da escrita: força primary.
       const emailExists = await this.prisma.user.findFirst({
         where: { email: dto.email, id: { not: id } },
       });
@@ -351,6 +361,7 @@ export class UsersService {
   // ─── ALTERAR PASSWORD ─────────────────────────────────────────────────────
 
   async changePassword(userId: number, dto: UserChangePasswordDto) {
+    // Validação de credenciais antes de escrita: força primary (dado sensível, sem réplica atrasada).
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException();
 
@@ -367,7 +378,7 @@ export class UsersService {
   // ─── EQUIPA DO GESTOR ─────────────────────────────────────────────────────
 
   async getTeam(managerId: number) {
-    const subordinates = await this.prisma.user.findMany({
+    const subordinates = await this.prismaRead.user.findMany({
       where: { managerId, active: true },
       select: {
         ...USER_SELECT_SAFE,
@@ -380,9 +391,9 @@ export class UsersService {
     const stats = await Promise.all(
       subordinates.map(async s => {
         const [completed, inProgress, overdue] = await Promise.all([
-          this.prisma.enrollment.count({ where: { userId: s.id, status: 'COMPLETED' } }),
-          this.prisma.enrollment.count({ where: { userId: s.id, status: 'IN_PROGRESS' } }),
-          this.prisma.enrollment.count({
+          this.prismaRead.enrollment.count({ where: { userId: s.id, status: 'COMPLETED' } }),
+          this.prismaRead.enrollment.count({ where: { userId: s.id, status: 'IN_PROGRESS' } }),
+          this.prismaRead.enrollment.count({
             where: {
               userId: s.id,
               deadline: { lt: new Date() },
@@ -412,20 +423,20 @@ export class UsersService {
       overdueCount,
       recentActivity,
     ] = await Promise.all([
-      this.prisma.enrollment.count({ where: { userId: id } }),
-      this.prisma.enrollment.count({ where: { userId: id, status: 'COMPLETED' } }),
-      this.prisma.enrollment.count({ where: { userId: id, status: 'IN_PROGRESS' } }),
-      this.prisma.userPoints.findUnique({ where: { userId: id } }),
-      this.prisma.badgeAward.count({ where: { userId: id } }),
-      this.prisma.userCompetency.count({ where: { userId: id } }),
-      this.prisma.enrollment.count({
+      this.prismaRead.enrollment.count({ where: { userId: id } }),
+      this.prismaRead.enrollment.count({ where: { userId: id, status: 'COMPLETED' } }),
+      this.prismaRead.enrollment.count({ where: { userId: id, status: 'IN_PROGRESS' } }),
+      this.prismaRead.userPoints.findUnique({ where: { userId: id } }),
+      this.prismaRead.badgeAward.count({ where: { userId: id } }),
+      this.prismaRead.userCompetency.count({ where: { userId: id } }),
+      this.prismaRead.enrollment.count({
         where: {
           userId: id,
           deadline: { lt: new Date() },
           status: { notIn: ['COMPLETED', 'EXPIRED'] },
         },
       }),
-      this.prisma.enrollment.findMany({
+      this.prismaRead.enrollment.findMany({
         where: { userId: id },
         orderBy: { enrolledAt: 'desc' },
         take: 3,
@@ -456,7 +467,7 @@ export class UsersService {
       ];
     }
 
-    return this.prisma.user.findMany({
+    return this.prismaRead.user.findMany({
       where,
       select: {
         id: true,
@@ -531,6 +542,7 @@ export class UsersService {
   // ─── CONVIDAR UTILIZADOR ──────────────────────────────────────────────────
 
   async invite(dto: InviteUserDto) {
+    // Guard de unicidade antes da escrita: força primary.
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email já registado');
 
@@ -579,14 +591,14 @@ export class UsersService {
   async getAuditLogs(userId: number, page = 1, limit = 30) {
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
-      this.prisma.userAuditLog.findMany({
+      this.prismaRead.userAuditLog.findMany({
         where: { userId },
         skip,
         take: limit,
         include: { performedBy: { select: { id: true, fullName: true } } },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.userAuditLog.count({ where: { userId } }),
+      this.prismaRead.userAuditLog.count({ where: { userId } }),
     ]);
     return { data, total, page, limit };
   }
@@ -596,11 +608,11 @@ export class UsersService {
   async getAdminDashboard() {
     const [totalUsers, activeUsers, pendingUsers, suspendedUsers, byDepartment] = await Promise.all(
       [
-        this.prisma.user.count(),
-        this.prisma.user.count({ where: { active: true } }),
-        this.prisma.user.count({ where: { accountStatus: 'PENDING' } }),
-        this.prisma.user.count({ where: { accountStatus: 'SUSPENDED' } }),
-        this.prisma.department.findMany({
+        this.prismaRead.user.count(),
+        this.prismaRead.user.count({ where: { active: true } }),
+        this.prismaRead.user.count({ where: { accountStatus: 'PENDING' } }),
+        this.prismaRead.user.count({ where: { accountStatus: 'SUSPENDED' } }),
+        this.prismaRead.department.findMany({
           include: { _count: { select: { users: true } } },
           orderBy: { users: { _count: 'desc' } },
           take: 10,

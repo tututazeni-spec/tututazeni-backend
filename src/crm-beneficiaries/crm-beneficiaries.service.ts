@@ -12,6 +12,16 @@ import {
 export class CrmBeneficiariesService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   * Nota: leituras puras usam Promise.all (não $transaction), pois a extensão
+   * de réplicas encaminha sempre $transaction para o primary.
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   // ─── GERAÇÃO DE CÓDIGO ───────────────────────────────
 
   private async generateCode(): Promise<string> {
@@ -76,8 +86,8 @@ export class CrmBeneficiariesService {
         ],
       }),
     };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.beneficiary.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.beneficiary.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -87,13 +97,13 @@ export class CrmBeneficiariesService {
           _count: { select: { interactions: true, needs: true } },
         },
       }),
-      this.prisma.beneficiary.count({ where }),
+      this.prismaRead.beneficiary.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: string) {
-    const beneficiary = await this.prisma.beneficiary.findUnique({
+    const beneficiary = await this.prismaRead.beneficiary.findUnique({
       where: { id },
       include: {
         createdBy: { select: { fullName: true } },
@@ -192,15 +202,15 @@ export class CrmBeneficiariesService {
   async getInteractions(beneficiaryId: string, page = 1, limit = 20) {
     await this.findOne(beneficiaryId);
     const where = { beneficiaryId, deletedAt: null };
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.beneficiaryInteraction.findMany({
+    const [data, total] = await Promise.all([
+      this.prismaRead.beneficiaryInteraction.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { date: 'desc' },
         include: { user: { select: { fullName: true } } },
       }),
-      this.prisma.beneficiaryInteraction.count({ where }),
+      this.prismaRead.beneficiaryInteraction.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -238,7 +248,7 @@ export class CrmBeneficiariesService {
   async getFollowUps(userId: number, days = 7) {
     const until = new Date();
     until.setDate(until.getDate() + Number(days));
-    return this.prisma.beneficiary.findMany({
+    return this.prismaRead.beneficiary.findMany({
       where: {
         deletedAt: null,
         status: 'ACTIVE',
@@ -277,39 +287,39 @@ export class CrmBeneficiariesService {
       recentInteractions,
       openNeeds,
       avgSatisfaction,
-    ] = await this.prisma.$transaction([
-      this.prisma.beneficiary.count({ where: { deletedAt: null } }),
-      this.prisma.beneficiary.count({
+    ] = await Promise.all([
+      this.prismaRead.beneficiary.count({ where: { deletedAt: null } }),
+      this.prismaRead.beneficiary.count({
         where: { createdAt: { gte: startOfMonth } },
       }),
-      this.prisma.beneficiary.count({
+      this.prismaRead.beneficiary.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      (this.prisma.beneficiary.groupBy as any)({
+      this.prismaRead.beneficiary.groupBy({
         by: ['type'],
         where: { deletedAt: null },
         _count: { id: true },
       }),
-      (this.prisma.beneficiary.groupBy as any)({
+      this.prismaRead.beneficiary.groupBy({
         by: ['status'],
         where: { deletedAt: null },
         _count: { id: true },
       }),
-      (this.prisma.beneficiary.groupBy as any)({
+      this.prismaRead.beneficiary.groupBy({
         by: ['province'],
         where: { deletedAt: null, province: { not: null } },
         _count: { id: true },
         orderBy: { _count: { id: 'desc' } },
         take: 10,
       }),
-      this.prisma.beneficiary.count({
+      this.prismaRead.beneficiary.count({
         where: {
           nextFollowUpAt: { lte: in30Days },
           status: 'ACTIVE',
           deletedAt: null,
         },
       }),
-      this.prisma.beneficiaryInteraction.findMany({
+      this.prismaRead.beneficiaryInteraction.findMany({
         where: { deletedAt: null },
         orderBy: { date: 'desc' },
         take: 5,
@@ -318,8 +328,8 @@ export class CrmBeneficiariesService {
           user: { select: { fullName: true } },
         },
       }),
-      this.prisma.beneficiaryNeed.count({ where: { status: 'OPEN' } }),
-      this.prisma.beneficiary.aggregate({
+      this.prismaRead.beneficiaryNeed.count({ where: { status: 'OPEN' } }),
+      this.prismaRead.beneficiary.aggregate({
         _avg: { satisfactionAvg: true },
         where: { deletedAt: null, satisfactionAvg: { gt: 0 } },
       }),
@@ -335,20 +345,20 @@ export class CrmBeneficiariesService {
 
   async getReport(startDate: Date, endDate: Date) {
     const where = { createdAt: { gte: startDate, lte: endDate } };
-    const [created, byType, byProvince, interactions] = await this.prisma.$transaction([
-      this.prisma.beneficiary.count({ where }),
-      (this.prisma.beneficiary.groupBy as any)({
+    const [created, byType, byProvince, interactions] = await Promise.all([
+      this.prismaRead.beneficiary.count({ where }),
+      this.prismaRead.beneficiary.groupBy({
         by: ['type'],
         where,
         _count: { id: true },
       }),
-      (this.prisma.beneficiary.groupBy as any)({
+      this.prismaRead.beneficiary.groupBy({
         by: ['province'],
         where: { ...where, province: { not: null } },
         _count: { id: true },
         orderBy: { _count: { id: 'desc' } },
       }),
-      this.prisma.beneficiaryInteraction.count({
+      this.prismaRead.beneficiaryInteraction.count({
         where: { createdAt: { gte: startDate, lte: endDate } },
       }),
     ]);

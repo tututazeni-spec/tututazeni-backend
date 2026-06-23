@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SearchService } from './search.service';
 import { PrismaService } from '../prisma/prisma.service';
 
-const mockPrisma = new Proxy(
+const mockPrisma: any = new Proxy(
   {
     user: { findMany: jest.fn().mockResolvedValue([]) },
     enrollment: { findMany: jest.fn().mockResolvedValue([]) },
@@ -12,6 +12,7 @@ const mockPrisma = new Proxy(
   },
   {
     get(target, prop) {
+      if (prop === 'db') return mockPrisma;
       return (
         (target as any)[prop] ?? {
           findMany: jest.fn().mockResolvedValue([]),

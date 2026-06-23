@@ -160,6 +160,14 @@ function enrichEntry(log: any): any {
 
 @Injectable()
 export class HistoryService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -199,14 +207,14 @@ export class HistoryService {
     }
 
     const [raw, total] = await Promise.all([
-      this.prisma.auditLog.findMany({
+      this.prismaRead.auditLog.findMany({
         where,
         skip,
         take: limit,
         include: { user: { select: { id: true, fullName: true, email: true, avatarUrl: true } } },
         orderBy: { timestamp: 'desc' },
       }),
-      this.prisma.auditLog.count({ where }),
+      this.prismaRead.auditLog.count({ where }),
     ]);
 
     let data = raw.map(enrichEntry);
@@ -219,7 +227,7 @@ export class HistoryService {
   }
 
   async getUserActivity(userId: number, limit = 50) {
-    const raw = await this.prisma.auditLog.findMany({
+    const raw = await this.prismaRead.auditLog.findMany({
       where: { userId },
       orderBy: { timestamp: 'desc' },
       take: limit,
@@ -228,7 +236,7 @@ export class HistoryService {
   }
 
   async getEntityHistory(entity: string, entityId: number) {
-    const raw = await this.prisma.auditLog.findMany({
+    const raw = await this.prismaRead.auditLog.findMany({
       where: { entity, entityId },
       include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
       orderBy: { timestamp: 'desc' },
@@ -265,14 +273,14 @@ export class HistoryService {
     }
 
     // --- Source 1: AuditLog (system events) ---
-    const auditEntries = await this.prisma.auditLog.findMany({
+    const auditEntries = await this.prismaRead.auditLog.findMany({
       where,
       orderBy: { timestamp: 'desc' },
       take: 200,
     });
 
     // --- Source 2: Enrollments ---
-    const enrollments = await this.prisma.enrollment.findMany({
+    const enrollments = await this.prismaRead.enrollment.findMany({
       where: { userId, ...(filters.from && { enrolledAt: { gte: new Date(filters.from) } }) },
       include: { course: { select: { id: true, title: true, category: true } } },
       orderBy: { enrolledAt: 'desc' },
@@ -280,14 +288,14 @@ export class HistoryService {
     });
 
     // --- Source 3: Performance reviews ---
-    const reviews = await this.prisma.performanceReview.findMany({
+    const reviews = await this.prismaRead.performanceReview.findMany({
       where: { userId, ...(filters.from && { createdAt: { gte: new Date(filters.from) } }) },
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
 
     // --- Source 4: Badges ---
-    const badges = await this.prisma.badgeAward.findMany({
+    const badges = await this.prismaRead.badgeAward.findMany({
       where: { userId, ...(filters.from && { awardedAt: { gte: new Date(filters.from) } }) },
       include: { badge: true },
       orderBy: { awardedAt: 'desc' },
@@ -295,7 +303,7 @@ export class HistoryService {
     });
 
     // --- Source 5: Development plans ---
-    const plans = await this.prisma.developmentPlan.findMany({
+    const plans = await this.prismaRead.developmentPlan.findMany({
       where: {
         userId,
         isTemplate: false,
@@ -489,7 +497,7 @@ export class HistoryService {
 
   // Team timeline (manager view)
   async getTeamTimeline(managerId: number, filters: TimelineFilterDto) {
-    const team = await this.prisma.user.findMany({
+    const team = await this.prismaRead.user.findMany({
       where: { managerId, active: true },
       select: { id: true, fullName: true, avatarUrl: true },
     });
@@ -507,14 +515,14 @@ export class HistoryService {
     const skip = (page - 1) * limit;
 
     const [raw, total] = await Promise.all([
-      this.prisma.auditLog.findMany({
+      this.prismaRead.auditLog.findMany({
         where,
         skip,
         take: limit,
         include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
         orderBy: { timestamp: 'desc' },
       }),
-      this.prisma.auditLog.count({ where }),
+      this.prismaRead.auditLog.count({ where }),
     ]);
 
     return {
@@ -530,7 +538,7 @@ export class HistoryService {
 
   async getUserMilestones(userId: number) {
     const [completedPlans, certs, badges, promotions, highPerfReviews] = await Promise.all([
-      this.prisma.developmentPlan.findMany({
+      this.prismaRead.developmentPlan.findMany({
         where: { userId, status: 'COMPLETED', isTemplate: false },
         select: { id: true, name: true, completedAt: true, createdAt: true },
         orderBy: { completedAt: 'desc' },
@@ -541,7 +549,7 @@ export class HistoryService {
           orderBy: { issuedAt: 'desc' },
         })
         .catch(() => [] as any[]),
-      this.prisma.badgeAward.findMany({
+      this.prismaRead.badgeAward.findMany({
         where: { userId },
         include: { badge: true },
         orderBy: { awardedAt: 'desc' },
@@ -554,7 +562,7 @@ export class HistoryService {
           take: 10,
         })
         .catch(() => [] as any[]),
-      this.prisma.performanceReview.findMany({
+      this.prismaRead.performanceReview.findMany({
         where: { userId, score: { gte: 4 } },
         select: { id: true, score: true, createdAt: true },
         orderBy: { createdAt: 'desc' },
@@ -621,15 +629,15 @@ export class HistoryService {
     const yearAgo = new Date(Date.now() - 365 * 86400000);
 
     const [allLogs, enrollments, completions, badges, points] = await Promise.all([
-      this.prisma.auditLog.findMany({
+      this.prismaRead.auditLog.findMany({
         where: { userId, timestamp: { gte: yearAgo } },
         select: { timestamp: true, action: true },
         orderBy: { timestamp: 'asc' },
       }),
-      this.prisma.enrollment.count({ where: { userId } }),
-      this.prisma.enrollment.count({ where: { userId, status: 'CONCLUIDO' } }),
-      this.prisma.badgeAward.count({ where: { userId } }),
-      this.prisma.userPoints.findUnique({ where: { userId } }),
+      this.prismaRead.enrollment.count({ where: { userId } }),
+      this.prismaRead.enrollment.count({ where: { userId, status: 'CONCLUIDO' } }),
+      this.prismaRead.badgeAward.count({ where: { userId } }),
+      this.prismaRead.userPoints.findUnique({ where: { userId } }),
     ]);
 
     // Daily activity heatmap (last 365 days)
@@ -738,7 +746,7 @@ export class HistoryService {
     }
 
     const [total, byAction, topUsers, recentAlerts] = await Promise.all([
-      this.prisma.auditLog.count({ where }),
+      this.prismaRead.auditLog.count({ where }),
       this.prisma.auditLog
         .groupBy({
           by: ['action'],
@@ -758,7 +766,7 @@ export class HistoryService {
         })
         .then(async rows => {
           const ids = rows.map(r => r.userId).filter(Boolean);
-          const users = await this.prisma.user.findMany({
+          const users = await this.prismaRead.user.findMany({
             where: { id: { in: ids } },
             select: { id: true, fullName: true },
           });

@@ -15,6 +15,14 @@ import {
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── ENVIO ────────────────────────────────────────────────────────────────
@@ -148,14 +156,14 @@ export class NotificationsService {
     if (read !== undefined) where.read = read;
 
     const [data, total, unreadCount] = await Promise.all([
-      this.prisma.notificationLog.findMany({
+      this.prismaRead.notificationLog.findMany({
         where,
         skip,
         take: limit,
         orderBy: [{ read: 'asc' }, { createdAt: 'desc' }],
       }),
-      this.prisma.notificationLog.count({ where }),
-      this.prisma.notificationLog.count({ where: { userId, read: false } }),
+      this.prismaRead.notificationLog.count({ where }),
+      this.prismaRead.notificationLog.count({ where: { userId, read: false } }),
     ]);
 
     // Agrupar por data
@@ -189,7 +197,7 @@ export class NotificationsService {
   }
 
   async getUnreadCount(userId: number): Promise<{ count: number }> {
-    const count = await this.prisma.notificationLog.count({
+    const count = await this.prismaRead.notificationLog.count({
       where: {
         userId,
         read: false,
@@ -249,14 +257,14 @@ export class NotificationsService {
     if (priority) where.priority = priority;
 
     const [data, total] = await Promise.all([
-      this.prisma.notificationLog.findMany({
+      this.prismaRead.notificationLog.findMany({
         where,
         skip,
         take: limit,
         include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.notificationLog.count({ where }),
+      this.prismaRead.notificationLog.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -264,20 +272,20 @@ export class NotificationsService {
 
   async getStats() {
     const [total, readCount, byType, byCategory, byPriority] = await Promise.all([
-      this.prisma.notificationLog.count(),
-      this.prisma.notificationLog.count({ where: { read: true } }),
-      this.prisma.notificationLog.groupBy({
+      this.prismaRead.notificationLog.count(),
+      this.prismaRead.notificationLog.count({ where: { read: true } }),
+      this.prismaRead.notificationLog.groupBy({
         by: ['type'],
         _count: true,
         orderBy: { _count: { type: 'desc' } },
         take: 10,
       }),
-      this.prisma.notificationLog.groupBy({
+      this.prismaRead.notificationLog.groupBy({
         by: ['category'],
         _count: true,
         orderBy: { _count: { category: 'desc' } },
       }),
-      this.prisma.notificationLog.groupBy({ by: ['priority'], _count: true }),
+      this.prismaRead.notificationLog.groupBy({ by: ['priority'], _count: true }),
     ]);
 
     const unread = total - readCount;
@@ -324,7 +332,7 @@ export class NotificationsService {
   // ─── TEMPLATES ────────────────────────────────────────────────────────────
 
   async getTemplates() {
-    return this.prisma.notificationTemplate.findMany({
+    return this.prismaRead.notificationTemplate.findMany({
       orderBy: { eventType: 'asc' },
     });
   }
@@ -374,7 +382,7 @@ export class NotificationsService {
   // ─── AUTOMATION RULES ─────────────────────────────────────────────────────
 
   async getAutomationRules() {
-    return this.prisma.automationRule.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.prismaRead.automationRule.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
   async createAutomationRule(data: {

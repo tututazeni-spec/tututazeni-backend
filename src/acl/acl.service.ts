@@ -192,6 +192,14 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
 
 @Injectable()
 export class AclService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -199,7 +207,9 @@ export class AclService {
   // ══════════════════════════════════════════════════════
 
   async getAllPermissions() {
-    return this.prisma.permission.findMany({ orderBy: [{ subject: 'asc' }, { action: 'asc' }] });
+    return this.prismaRead.permission.findMany({
+      orderBy: [{ subject: 'asc' }, { action: 'asc' }],
+    });
   }
 
   async createPermission(dto: CreatePermissionDto) {
@@ -226,7 +236,7 @@ export class AclService {
   // ══════════════════════════════════════════════════════
 
   async getRoles() {
-    return this.prisma.role.findMany({
+    return this.prismaRead.role.findMany({
       include: {
         permissions: { select: { id: true, name: true, action: true, subject: true } },
         _count: { select: { users: true } },
@@ -236,7 +246,7 @@ export class AclService {
   }
 
   async getRole(id: number) {
-    return this.prisma.role.findUnique({
+    return this.prismaRead.role.findUnique({
       where: { id },
       include: { permissions: true, _count: { select: { users: true } } },
     });
@@ -287,7 +297,7 @@ export class AclService {
   }
 
   async getRolePermissions(roleId: number) {
-    return this.prisma.role.findUnique({
+    return this.prismaRead.role.findUnique({
       where: { id: roleId },
       include: { permissions: true },
     });
@@ -364,7 +374,7 @@ export class AclService {
     if (cached)
       return { userId, roleCode: cached.roleCode, permissions: cached.permissions, cached: true };
 
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prismaRead.user.findUnique({
       where: { id: userId },
       include: { role: { include: { permissions: true } } },
     });
@@ -495,14 +505,14 @@ export class AclService {
     }
 
     const [data, total] = await Promise.all([
-      this.prisma.auditLog.findMany({
+      this.prismaRead.auditLog.findMany({
         where,
         skip,
         take: limit,
         include: { user: { select: { id: true, fullName: true, email: true } } },
         orderBy: { timestamp: 'desc' },
       }),
-      this.prisma.auditLog.count({ where }),
+      this.prismaRead.auditLog.count({ where }),
     ]);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
@@ -515,14 +525,14 @@ export class AclService {
     if (filters.userId) where.userId = filters.userId;
 
     const [data, total] = await Promise.all([
-      this.prisma.auditLog.findMany({
+      this.prismaRead.auditLog.findMany({
         where,
         skip,
         take: limit,
         include: { user: { select: { id: true, fullName: true } } },
         orderBy: { timestamp: 'desc' },
       }),
-      this.prisma.auditLog.count({ where }),
+      this.prismaRead.auditLog.count({ where }),
     ]);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
@@ -548,8 +558,10 @@ export class AclService {
 
   async getPermissionMatrix() {
     const [roles, permissions] = await Promise.all([
-      this.prisma.role.findMany({ include: { permissions: { select: { id: true, name: true } } } }),
-      this.prisma.permission.findMany({ orderBy: [{ subject: 'asc' }, { action: 'asc' }] }),
+      this.prismaRead.role.findMany({
+        include: { permissions: { select: { id: true, name: true } } },
+      }),
+      this.prismaRead.permission.findMany({ orderBy: [{ subject: 'asc' }, { action: 'asc' }] }),
     ]);
 
     // Build matrix: permission × role → granted
@@ -590,7 +602,7 @@ export class AclService {
     const isWildcard = permNames.includes('*');
 
     if (isWildcard) {
-      const allPerms = await this.prisma.permission.findMany({ select: { id: true } });
+      const allPerms = await this.prismaRead.permission.findMany({ select: { id: true } });
       await this.prisma.role.update({
         where: { id: roleId },
         data: { permissions: { connect: allPerms.map(p => ({ id: p.id })) } },
@@ -598,7 +610,7 @@ export class AclService {
       return;
     }
 
-    const perms = await this.prisma.permission.findMany({ where: { name: { in: permNames } } });
+    const perms = await this.prismaRead.permission.findMany({ where: { name: { in: permNames } } });
     if (perms.length) {
       await this.prisma.role.update({
         where: { id: roleId },
@@ -614,10 +626,10 @@ export class AclService {
   async getStats() {
     const [totalUsers, totalRoles, totalPermissions, deniedCount, recentDenied] = await Promise.all(
       [
-        this.prisma.user.count({ where: { active: true } }),
-        this.prisma.role.count(),
-        this.prisma.permission.count(),
-        this.prisma.auditLog.count({ where: { action: 'ACCESS_DENIED' } }).catch(() => 0),
+        this.prismaRead.user.count({ where: { active: true } }),
+        this.prismaRead.role.count(),
+        this.prismaRead.permission.count(),
+        this.prismaRead.auditLog.count({ where: { action: 'ACCESS_DENIED' } }).catch(() => 0),
         this.prisma.auditLog
           .findMany({
             where: { action: 'ACCESS_DENIED' },
@@ -638,7 +650,7 @@ export class AclService {
       })
       .then(async rows => {
         const ids = rows.map(r => r.roleId).filter(Boolean);
-        const roles = await this.prisma.role.findMany({
+        const roles = await this.prismaRead.role.findMany({
           where: { id: { in: ids } },
           select: { id: true, name: true, code: true },
         });

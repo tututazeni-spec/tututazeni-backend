@@ -29,6 +29,14 @@ import {
 export class DepartmentsService {
   private readonly logger = new Logger(DepartmentsService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // Validar que não há loop hierárquico (A → B → A)
@@ -66,7 +74,7 @@ export class DepartmentsService {
     }
 
     const [data, total] = await Promise.all([
-      this.prisma.department.findMany({
+      this.prismaRead.department.findMany({
         where,
         skip,
         take: limit,
@@ -78,7 +86,7 @@ export class DepartmentsService {
         },
         orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
       }),
-      this.prisma.department.count({ where }),
+      this.prismaRead.department.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -86,7 +94,7 @@ export class DepartmentsService {
 
   // Árvore hierárquica completa (para org chart)
   async getTree() {
-    const all = await this.prisma.department.findMany({
+    const all = await this.prismaRead.department.findMany({
       where: { active: true },
       include: {
         head: { select: { id: true, fullName: true, email: true } },
@@ -103,7 +111,7 @@ export class DepartmentsService {
   }
 
   async findOne(id: number) {
-    const d = await this.prisma.department.findUnique({
+    const d = await this.prismaRead.department.findUnique({
       where: { id },
       include: {
         head: { select: { id: true, fullName: true, email: true, position: true } },
@@ -306,10 +314,10 @@ export class DepartmentsService {
     await this.findOne(id);
 
     const [totalUsers, activeUsers, transfersIn, transfersOut] = await Promise.all([
-      this.prisma.user.count({ where: { departmentId: id } }),
-      this.prisma.user.count({ where: { departmentId: id, active: true } }),
-      this.prisma.departmentTransferLog.count({ where: { toDepartmentId: id } }),
-      this.prisma.departmentTransferLog.count({ where: { fromDepartmentId: id } }),
+      this.prismaRead.user.count({ where: { departmentId: id } }),
+      this.prismaRead.user.count({ where: { departmentId: id, active: true } }),
+      this.prismaRead.departmentTransferLog.count({ where: { toDepartmentId: id } }),
+      this.prismaRead.departmentTransferLog.count({ where: { fromDepartmentId: id } }),
     ]);
 
     // Breadcrumb da hierarquia
@@ -331,7 +339,7 @@ export class DepartmentsService {
     const trail: Array<{ id: number; name: string; code: string }> = [];
     let current: number | null = id;
     while (current) {
-      const dept = await this.prisma.department.findUnique({
+      const dept = await this.prismaRead.department.findUnique({
         where: { id: current },
         select: { id: true, name: true, code: true, parentId: true },
       });
@@ -344,7 +352,7 @@ export class DepartmentsService {
 
   // Dashboard comparativo de departamentos
   async getComparativeDashboard() {
-    const depts = await this.prisma.department.findMany({
+    const depts = await this.prismaRead.department.findMany({
       where: { active: true },
       include: {
         _count: { select: { users: true } },
@@ -369,7 +377,7 @@ export class DepartmentsService {
     const where = { OR: [{ fromDepartmentId: id }, { toDepartmentId: id }] };
 
     const [data, total] = await Promise.all([
-      this.prisma.departmentTransferLog.findMany({
+      this.prismaRead.departmentTransferLog.findMany({
         where,
         skip,
         take: limit,
@@ -380,7 +388,7 @@ export class DepartmentsService {
         },
         orderBy: { transferredAt: 'desc' },
       }),
-      this.prisma.departmentTransferLog.count({ where }),
+      this.prismaRead.departmentTransferLog.count({ where }),
     ]);
 
     return { data, total, page, limit };
@@ -393,8 +401,12 @@ export class DepartmentsService {
 export class UnitsService {
   constructor(private prisma: PrismaService) {}
 
+  private get prismaRead(): any {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   async findAll() {
-    return this.prisma.unit.findMany({
+    return this.prismaRead.unit.findMany({
       include: {
         departments: { select: { id: true, name: true, code: true } },
         _count: { select: { users: true } },
@@ -404,7 +416,7 @@ export class UnitsService {
   }
 
   async findOne(id: number) {
-    const u = await this.prisma.unit.findUnique({
+    const u = await this.prismaRead.unit.findUnique({
       where: { id },
       include: {
         departments: { select: { id: true, name: true, code: true } },
@@ -436,8 +448,12 @@ export class UnitsService {
 export class RolesService {
   constructor(private prisma: PrismaService) {}
 
+  private get prismaRead(): any {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   async findAll() {
-    return this.prisma.role.findMany({
+    return this.prismaRead.role.findMany({
       include: {
         permissions: true,
         _count: { select: { users: true } },
@@ -447,7 +463,7 @@ export class RolesService {
   }
 
   async findOne(id: number) {
-    const r = await this.prisma.role.findUnique({
+    const r = await this.prismaRead.role.findUnique({
       where: { id },
       include: {
         permissions: true,
@@ -518,8 +534,12 @@ export class RolesService {
 export class PositionsService {
   constructor(private prisma: PrismaService) {}
 
+  private get prismaRead(): any {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   async findAll() {
-    return this.prisma.position.findMany({
+    return this.prismaRead.position.findMany({
       include: {
         _count: { select: { users: true } },
       },
@@ -528,7 +548,7 @@ export class PositionsService {
   }
 
   async findOne(id: number) {
-    const p = await this.prisma.position.findUnique({
+    const p = await this.prismaRead.position.findUnique({
       where: { id },
       include: {
         users: { select: { id: true, fullName: true, email: true } },
@@ -559,8 +579,12 @@ export class PositionsService {
 export class CareersService {
   constructor(private prisma: PrismaService) {}
 
+  private get prismaRead(): any {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   async findAllPositions() {
-    return this.prisma.careerPosition.findMany({
+    return this.prismaRead.careerPosition.findMany({
       include: {
         competencies: { include: { competency: true } },
         _count: { select: { users: true } },
@@ -593,7 +617,7 @@ export class CareersService {
   }
 
   async getUserCareerHistory(userId: number) {
-    return this.prisma.userCareer.findMany({
+    return this.prismaRead.userCareer.findMany({
       where: { userId },
       include: { position: true },
       orderBy: { startedAt: 'desc' },
@@ -613,7 +637,7 @@ export class CareersService {
   }
 
   async getCareerLadder() {
-    return this.prisma.careerPosition.findMany({
+    return this.prismaRead.careerPosition.findMany({
       include: {
         competencies: { include: { competency: true } },
         _count: { select: { users: true } },

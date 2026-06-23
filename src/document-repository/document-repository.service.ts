@@ -62,6 +62,14 @@ function buildAccessWhere(userId: number, userDept?: string, role?: string) {
 
 @Injectable()
 export class DocumentRepositoryService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -76,7 +84,7 @@ export class DocumentRepositoryService {
   }
 
   async getCategories() {
-    return this.prisma.docCategoryModel.findMany({
+    return this.prismaRead.docCategoryModel.findMany({
       where: { active: true },
       orderBy: { name: 'asc' },
     });
@@ -142,7 +150,7 @@ export class DocumentRepositoryService {
     }
 
     const [data, total] = await Promise.all([
-      this.prisma.document.findMany({
+      this.prismaRead.document.findMany({
         where,
         skip,
         take: limit,
@@ -153,7 +161,7 @@ export class DocumentRepositoryService {
           _count: { select: { versions: true, downloads: true, permissions: true } },
         },
       }),
-      this.prisma.document.count({ where }),
+      this.prismaRead.document.count({ where }),
     ]);
 
     return {
@@ -163,7 +171,7 @@ export class DocumentRepositoryService {
   }
 
   async findOne(id: number, requesterId?: number) {
-    const doc = await this.prisma.document.findUnique({
+    const doc = await this.prismaRead.document.findUnique({
       where: { id },
       include: {
         createdBy: { select: { id: true, fullName: true } },
@@ -281,7 +289,7 @@ export class DocumentRepositoryService {
   async newVersion(id: number, dto: NewVersionDto, uploadedById: number) {
     const doc = await this.findOne(id);
 
-    const lastVersion = await this.prisma.docVersion.findFirst({
+    const lastVersion = await this.prismaRead.docVersion.findFirst({
       where: { documentId: id },
       orderBy: { versionNumber: 'desc' },
     });
@@ -311,7 +319,7 @@ export class DocumentRepositoryService {
   }
 
   async restoreVersion(documentId: number, versionId: number, restoredById: number) {
-    const version = await this.prisma.docVersion.findUnique({ where: { id: versionId } });
+    const version = await this.prismaRead.docVersion.findUnique({ where: { id: versionId } });
     if (!version || version.documentId !== documentId)
       throw new NotFoundException('Versão não encontrada');
 
@@ -445,7 +453,7 @@ export class DocumentRepositoryService {
   }
 
   async resolveShareLink(token: string, password?: string) {
-    const link = await this.prisma.docShareLink.findUnique({
+    const link = await this.prismaRead.docShareLink.findUnique({
       where: { token },
       include: { document: true },
     });
@@ -478,7 +486,7 @@ export class DocumentRepositoryService {
 
   async processExpiredDocuments() {
     const now = new Date();
-    const expired = await this.prisma.document.findMany({
+    const expired = await this.prismaRead.document.findMany({
       where: { expiresAt: { lt: now }, status: DocStatus.ACTIVE },
     });
 
@@ -502,7 +510,7 @@ export class DocumentRepositoryService {
     const from = new Date();
     const to = new Date(Date.now() + days * 86400000);
 
-    return this.prisma.document.findMany({
+    return this.prismaRead.document.findMany({
       where: { expiresAt: { gt: from, lte: to }, status: DocStatus.ACTIVE },
       include: {
         owner: { select: { id: true, fullName: true, email: true } },
@@ -529,7 +537,7 @@ export class DocumentRepositoryService {
   // ══════════════════════════════════════════════════════════════════
 
   async getAuditLog(documentId: number, limit = 50) {
-    return this.prisma.docAuditLog.findMany({
+    return this.prismaRead.docAuditLog.findMany({
       where: { documentId },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -538,7 +546,7 @@ export class DocumentRepositoryService {
   }
 
   async getAccessLog(documentId: number) {
-    return this.prisma.docDownload.findMany({
+    return this.prismaRead.docDownload.findMany({
       where: { documentId },
       orderBy: { downloadedAt: 'desc' },
       include: { user: { select: { id: true, fullName: true, email: true } } },
@@ -564,27 +572,27 @@ export class DocumentRepositoryService {
       newThisMonth,
       recentDownloads,
     ] = await Promise.all([
-      this.prisma.document.count(),
-      this.prisma.document.count({ where: { status: DocStatus.ACTIVE } }),
-      this.prisma.document.count({ where: { status: DocStatus.EXPIRED } }),
-      this.prisma.document.count({
+      this.prismaRead.document.count(),
+      this.prismaRead.document.count({ where: { status: DocStatus.ACTIVE } }),
+      this.prismaRead.document.count({ where: { status: DocStatus.EXPIRED } }),
+      this.prismaRead.document.count({
         where: { expiresAt: { gt: now, lte: soon }, status: DocStatus.ACTIVE },
       }),
-      this.prisma.document.count({ where: { status: DocStatus.ARCHIVED } }),
-      this.prisma.document.groupBy({
+      this.prismaRead.document.count({ where: { status: DocStatus.ARCHIVED } }),
+      this.prismaRead.document.groupBy({
         by: ['category'],
         where: { status: DocStatus.ACTIVE },
         _count: true,
         orderBy: { _count: { category: 'desc' } },
       }),
-      this.prisma.document.aggregate({
+      this.prismaRead.document.aggregate({
         where: { status: DocStatus.ACTIVE },
         _sum: { fileSize: true },
       }),
-      this.prisma.document.count({
+      this.prismaRead.document.count({
         where: { createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
       }),
-      this.prisma.docDownload.count({
+      this.prismaRead.docDownload.count({
         where: { downloadedAt: { gte: new Date(Date.now() - 30 * 86400000) } },
       }),
     ]);
@@ -609,15 +617,15 @@ export class DocumentRepositoryService {
     if (department) where.department = { contains: department, mode: 'insensitive' };
 
     const [byCategory, bySensitivity, topDownloaded, recentUploads] = await Promise.all([
-      this.prisma.document.groupBy({ by: ['category'], where, _count: true }),
-      this.prisma.document.groupBy({ by: ['sensitivity'], where, _count: true }),
-      this.prisma.document.findMany({
+      this.prismaRead.document.groupBy({ by: ['category'], where, _count: true }),
+      this.prismaRead.document.groupBy({ by: ['sensitivity'], where, _count: true }),
+      this.prismaRead.document.findMany({
         where,
         orderBy: { downloadCount: 'desc' },
         take: 5,
         select: { id: true, title: true, downloadCount: true, category: true },
       }),
-      this.prisma.document.findMany({
+      this.prismaRead.document.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         take: 5,
@@ -639,7 +647,7 @@ export class DocumentRepositoryService {
   // ══════════════════════════════════════════════════════════════════
 
   async getAllTags() {
-    const docs = await this.prisma.document.findMany({
+    const docs = await this.prismaRead.document.findMany({
       where: { status: DocStatus.ACTIVE },
       select: { tags: true },
     });

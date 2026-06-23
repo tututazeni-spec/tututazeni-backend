@@ -4,6 +4,14 @@ import { CreateSnapshotDto, CreateWidgetDto, UpdateWidgetDto, FilterSnapshotDto 
 
 @Injectable()
 export class DashboardInstitutionalService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── RESUMO EXECUTIVO ────────────────────────────────
@@ -27,29 +35,29 @@ export class DashboardInstitutionalService {
       certificates,
       badgesIssued,
     ] = await this.prisma.$transaction([
-      this.prisma.user.count({ where: { active: true } }),
-      this.prisma.user.count({ where: { createdAt: { gte: startOfMonth } } }),
-      this.prisma.course.count({ where: { status: 'PUBLISHED' } }),
-      this.prisma.enrollment.count({ where: { status: 'IN_PROGRESS' } }),
-      this.prisma.enrollment.count({
+      this.prismaRead.user.count({ where: { active: true } }),
+      this.prismaRead.user.count({ where: { createdAt: { gte: startOfMonth } } }),
+      this.prismaRead.course.count({ where: { status: 'PUBLISHED' } }),
+      this.prismaRead.enrollment.count({ where: { status: 'IN_PROGRESS' } }),
+      this.prismaRead.enrollment.count({
         where: { status: 'COMPLETED', completedAt: { gte: startOfYear } },
       }),
-      this.prisma.beneficiary.count({
+      this.prismaRead.beneficiary.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prisma.partner.count({
+      this.prismaRead.partner.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prisma.funder.count({
+      this.prismaRead.funder.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prisma.fundingGrant.aggregate({
+      this.prismaRead.fundingGrant.aggregate({
         _sum: { amount: true },
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prisma.libraryItem.count({ where: { deletedAt: null } }),
-      this.prisma.issuedCertificate.count({ where: { deletedAt: null } }),
-      this.prisma.badgeIssuance.count({
+      this.prismaRead.libraryItem.count({ where: { deletedAt: null } }),
+      this.prismaRead.issuedCertificate.count({ where: { deletedAt: null } }),
+      this.prismaRead.badgeIssuance.count({
         where: { deletedAt: null, isRevoked: false },
       }),
     ]);
@@ -92,9 +100,9 @@ export class DashboardInstitutionalService {
       const range = { gte: start, lte: end };
 
       const [users, enrollments, completions] = await this.prisma.$transaction([
-        this.prisma.user.count({ where: { createdAt: range } }),
-        this.prisma.enrollment.count({ where: { enrolledAt: range } }),
-        this.prisma.enrollment.count({
+        this.prismaRead.user.count({ where: { createdAt: range } }),
+        this.prismaRead.enrollment.count({ where: { enrolledAt: range } }),
+        this.prismaRead.enrollment.count({
           where: { status: 'COMPLETED', completedAt: range },
         }),
       ]);
@@ -115,7 +123,7 @@ export class DashboardInstitutionalService {
   // ─── DISTRIBUIÇÃO GEOGRÁFICA ─────────────────────────
 
   async getGeographicDistribution() {
-    const beneficiariesByProvince = await (this.prisma.beneficiary.groupBy as any)({
+    const beneficiariesByProvince = await (this.prismaRead.beneficiary.groupBy as any)({
       by: ['province'],
       where: { deletedAt: null, province: { not: null } },
       _count: { id: true },
@@ -139,34 +147,34 @@ export class DashboardInstitutionalService {
       overdueMilestones,
       pendingApprovals,
     ] = await this.prisma.$transaction([
-      this.prisma.issuedCertificate.count({
+      this.prismaRead.issuedCertificate.count({
         where: { expiresAt: { lt: now }, isRevoked: false, deletedAt: null },
       }),
-      this.prisma.funderReport.count({
+      this.prismaRead.funderReport.count({
         where: { dueDate: { lt: now }, status: { in: ['PENDING', 'REJECTED'] } },
       }),
-      this.prisma.beneficiary.count({
+      this.prismaRead.beneficiary.count({
         where: {
           nextFollowUpAt: { lte: in7Days },
           status: 'ACTIVE',
           deletedAt: null,
         },
       }),
-      this.prisma.partner.count({
+      this.prismaRead.partner.count({
         where: {
           contractEnd: { lte: in30Days, gte: now },
           status: 'ACTIVE',
           deletedAt: null,
         },
       }),
-      this.prisma.partnerMilestone.count({
+      this.prismaRead.partnerMilestone.count({
         where: {
           status: { in: ['PENDING', 'IN_PROGRESS'] },
           dueDate: { lt: now },
           deletedAt: null,
         },
       }),
-      this.prisma.libraryItem.count({
+      this.prismaRead.libraryItem.count({
         where: { isApproved: false, deletedAt: null },
       }),
     ]);
@@ -189,6 +197,7 @@ export class DashboardInstitutionalService {
   // ─── SNAPSHOTS (HISTÓRICO DE KPIs) ───────────────────
 
   async createSnapshot(dto: CreateSnapshotDto, userId: number) {
+    // Guard de unicidade antes da escrita: força primary.
     const existing = await this.prisma.institutionalSnapshot.findUnique({
       where: { period_type: { period: dto.period, type: dto.type || 'MONTHLY' } },
     });
@@ -223,24 +232,24 @@ export class DashboardInstitutionalService {
     const { type, page = 1, limit = 12 } = filters;
     const where = { deletedAt: null, ...(type && { type }) };
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.institutionalSnapshot.findMany({
+      this.prismaRead.institutionalSnapshot.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { period: 'desc' },
         include: { createdBy: { select: { fullName: true } } },
       }),
-      this.prisma.institutionalSnapshot.count({ where }),
+      this.prismaRead.institutionalSnapshot.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async compareSnapshots(period1: string, period2: string, type = 'MONTHLY') {
     const [s1, s2] = await this.prisma.$transaction([
-      this.prisma.institutionalSnapshot.findUnique({
+      this.prismaRead.institutionalSnapshot.findUnique({
         where: { period_type: { period: period1, type: type as any } },
       }),
-      this.prisma.institutionalSnapshot.findUnique({
+      this.prismaRead.institutionalSnapshot.findUnique({
         where: { period_type: { period: period2, type: type as any } },
       }),
     ]);
@@ -277,7 +286,7 @@ export class DashboardInstitutionalService {
   }
 
   async getMyWidgets(userId: number) {
-    return this.prisma.dashboardWidget.findMany({
+    return this.prismaRead.dashboardWidget.findMany({
       where: { userId, deletedAt: null, isVisible: true },
       orderBy: { position: 'asc' },
     });

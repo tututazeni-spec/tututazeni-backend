@@ -18,7 +18,7 @@ const baseIntegration = {
   endpoint: 'https://api.example.com',
 };
 
-const mockPrisma = new Proxy(
+const mockPrisma: any = new Proxy(
   {
     integrationConfig: {
       findMany: makeFindMany([baseIntegration]),
@@ -38,6 +38,7 @@ const mockPrisma = new Proxy(
   },
   {
     get(target, prop) {
+      if (prop === 'db') return mockPrisma;
       return (
         (target as any)[prop] ?? {
           findMany: makeFindMany([]),

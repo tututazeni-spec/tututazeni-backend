@@ -48,6 +48,14 @@ export class EmployeesService {
     private readonly audit: AuditService,
   ) {}
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   // ══════════════════════════════════════════════════════════════════
   // CORE — LIST & DETAIL
   // ══════════════════════════════════════════════════════════════════
@@ -123,7 +131,7 @@ export class EmployeesService {
     }
 
     const [data, total] = await Promise.all([
-      this.prisma.employee.findMany({
+      this.prismaRead.employee.findMany({
         where,
         skip,
         take: limit,
@@ -142,7 +150,7 @@ export class EmployeesService {
           },
         },
       }),
-      this.prisma.employee.count({ where }),
+      this.prismaRead.employee.count({ where }),
     ]);
 
     return {
@@ -159,7 +167,7 @@ export class EmployeesService {
   }
 
   async findOne(id: number, requesterId?: number) {
-    const employee = await this.prisma.employee.findUnique({
+    const employee = await this.prismaRead.employee.findUnique({
       where: { id },
       include: {
         manager: { select: { id: true, name: true, avatarUrl: true, role: true } },
@@ -323,30 +331,30 @@ export class EmployeesService {
       skills,
       badges,
     ] = await Promise.all([
-      this.prisma.contract.count({ where: { employeeId: id } }),
-      this.prisma.feedback360.aggregate({
+      this.prismaRead.contract.count({ where: { employeeId: id } }),
+      this.prismaRead.feedback360.aggregate({
         where: { employeeId: id },
         _avg: { score: true },
         _count: true,
       }),
-      this.prisma.careerPlan.count({ where: { employeeId: id, status: 'ACTIVE' } }),
-      this.prisma.attendance.aggregate({
+      this.prismaRead.careerPlan.count({ where: { employeeId: id, status: 'ACTIVE' } }),
+      this.prismaRead.attendance.aggregate({
         where: { employeeId: id },
         _sum: { hoursWorked: true },
         _avg: { hoursWorked: true },
         _count: true,
       }),
-      this.prisma.legacyPdi.findFirst({
+      this.prismaRead.legacyPdi.findFirst({
         where: { employeeId: id, status: 'ACTIVE' },
         select: { progressPercent: true, title: true },
       }),
-      this.prisma.enrollment
+      this.prismaRead.enrollment
         ?.count({
           where: { userId: id, completedAt: { not: null } },
         })
         .catch(() => 0),
-      this.prisma.employeeSkill.count({ where: { employeeId: id } }),
-      this.prisma.badgeAward.count({ where: { userId: id } }).catch(() => 0),
+      this.prismaRead.employeeSkill.count({ where: { employeeId: id } }),
+      this.prismaRead.badgeAward.count({ where: { userId: id } }).catch(() => 0),
     ]);
 
     return {
@@ -368,30 +376,30 @@ export class EmployeesService {
   async getHeadcountStats() {
     const [total, byStatus, byDepartment, bySeniority, byContractType, byWorkMode, recentHires] =
       await Promise.all([
-        this.prisma.employee.count({ where: { status: EmployeeStatus.ACTIVE } }),
-        this.prisma.employee.groupBy({ by: ['status'], _count: true }),
-        this.prisma.employee.groupBy({
+        this.prismaRead.employee.count({ where: { status: EmployeeStatus.ACTIVE } }),
+        this.prismaRead.employee.groupBy({ by: ['status'], _count: true }),
+        this.prismaRead.employee.groupBy({
           by: ['department'],
           _count: true,
           where: { status: 'ACTIVE' },
           orderBy: { _count: { department: 'desc' } },
         }),
-        this.prisma.employee.groupBy({
+        this.prismaRead.employee.groupBy({
           by: ['seniority'],
           _count: true,
           where: { status: 'ACTIVE' },
         }),
-        this.prisma.employee.groupBy({
+        this.prismaRead.employee.groupBy({
           by: ['contractType'],
           _count: true,
           where: { status: 'ACTIVE' },
         }),
-        this.prisma.employee.groupBy({
+        this.prismaRead.employee.groupBy({
           by: ['workMode'],
           _count: true,
           where: { status: 'ACTIVE' },
         }),
-        this.prisma.employee.count({
+        this.prismaRead.employee.count({
           where: {
             status: 'ACTIVE',
             joinedAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
@@ -419,7 +427,7 @@ export class EmployeesService {
 
   async getContracts(employeeId: number) {
     await this.findOne(employeeId);
-    return this.prisma.contract.findMany({
+    return this.prismaRead.contract.findMany({
       where: { employeeId },
       orderBy: { startDate: 'desc' },
     });
@@ -453,7 +461,7 @@ export class EmployeesService {
       if (to) where.date.lte = new Date(to);
     }
 
-    const records = await this.prisma.attendance.findMany({
+    const records = await this.prismaRead.attendance.findMany({
       where,
       orderBy: { date: 'desc' },
     });
@@ -493,7 +501,7 @@ export class EmployeesService {
     const where: any = { employeeId };
     if (cycle) where.cycle = cycle;
 
-    const feedbacks = await this.prisma.feedback360.findMany({
+    const feedbacks = await this.prismaRead.feedback360.findMany({
       where,
       orderBy: { evaluatedAt: 'desc' },
     });
@@ -529,7 +537,7 @@ export class EmployeesService {
 
   async getCareerPlans(employeeId: number) {
     await this.findOne(employeeId);
-    return this.prisma.careerPlan.findMany({
+    return this.prismaRead.careerPlan.findMany({
       where: { employeeId },
       orderBy: { createdAt: 'desc' },
     });
@@ -586,7 +594,7 @@ export class EmployeesService {
 
   async getPdis(employeeId: number) {
     await this.findOne(employeeId);
-    return this.prisma.legacyPdi.findMany({
+    return this.prismaRead.legacyPdi.findMany({
       where: { employeeId },
       include: { actions: true },
       orderBy: { createdAt: 'desc' },
@@ -599,7 +607,7 @@ export class EmployeesService {
 
   async getEmployeeSkills(employeeId: number) {
     await this.findOne(employeeId);
-    const skills = await this.prisma.employeeSkill.findMany({
+    const skills = await this.prismaRead.employeeSkill.findMany({
       where: { employeeId },
       include: { skill: true } as any,
       orderBy: [{ skill: { type: 'asc' } }, { currentLevel: 'desc' }] as any,
@@ -691,7 +699,7 @@ export class EmployeesService {
 
   async getDocuments(employeeId: number) {
     await this.findOne(employeeId);
-    const docs = await this.prisma.employeeDocument.findMany({
+    const docs = await this.prismaRead.employeeDocument.findMany({
       where: { employeeId },
       orderBy: { createdAt: 'desc' },
     });
@@ -744,7 +752,7 @@ export class EmployeesService {
     const where: any = { employeeId };
     if (type) where.type = type;
 
-    return this.prisma.employeeTimeline.findMany({
+    return this.prismaRead.employeeTimeline.findMany({
       where,
       orderBy: { occurredAt: 'desc' },
       take: limit,
@@ -770,7 +778,7 @@ export class EmployeesService {
   async getRequests(employeeId: number, status?: string) {
     const where: any = { employeeId };
     if (status) where.status = status;
-    return this.prisma.selfServiceRequest.findMany({
+    return this.prismaRead.selfServiceRequest.findMany({
       where,
       orderBy: { createdAt: 'desc' },
     });
@@ -812,7 +820,7 @@ export class EmployeesService {
     if (rootId) where.managerId = rootId;
     else where.managerId = null;
 
-    const root = await this.prisma.employee.findMany({
+    const root = await this.prismaRead.employee.findMany({
       where,
       select: {
         id: true,
@@ -832,7 +840,7 @@ export class EmployeesService {
   private async buildTree(nodes: any[]): Promise<any[]> {
     return Promise.all(
       nodes.map(async node => {
-        const children = await this.prisma.employee.findMany({
+        const children = await this.prismaRead.employee.findMany({
           where: { managerId: node.id, status: EmployeeStatus.ACTIVE },
           select: {
             id: true,
@@ -914,7 +922,7 @@ export class EmployeesService {
   // ══════════════════════════════════════════════════════════════════
 
   async getAuditLog(employeeId: number, limit = 50) {
-    return this.prisma.auditLog.findMany({
+    return this.prismaRead.auditLog.findMany({
       where: { entity: 'Employee', entityId: employeeId },
       orderBy: { createdAt: 'desc' },
       take: limit,

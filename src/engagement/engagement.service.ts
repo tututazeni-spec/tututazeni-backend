@@ -44,6 +44,14 @@ function toIndex(avg: number, scale: number): number {
 
 @Injectable()
 export class EngagementService {
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -58,20 +66,20 @@ export class EngagementService {
     if (status) where.status = status;
 
     const [data, total] = await Promise.all([
-      this.prisma.engagementSurvey.findMany({
+      this.prismaRead.engagementSurvey.findMany({
         where,
         skip,
         take: limit,
         include: { _count: { select: { responses: true, questions: true } } },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.engagementSurvey.count({ where }),
+      this.prismaRead.engagementSurvey.count({ where }),
     ]);
 
     const enriched = await Promise.all(
       data.map(async s => {
         // Participation rate: responses / total active users
-        const totalUsers = await this.prisma.user.count({ where: { active: true } });
+        const totalUsers = await this.prismaRead.user.count({ where: { active: true } });
         const rate = totalUsers > 0 ? +((s._count.responses / totalUsers) * 100).toFixed(1) : 0;
         return { ...s, participationRate: rate };
       }),
@@ -81,7 +89,7 @@ export class EngagementService {
   }
 
   async getSurvey(id: number) {
-    const s = await this.prisma.engagementSurvey.findUnique({
+    const s = await this.prismaRead.engagementSurvey.findUnique({
       where: { id },
       include: {
         questions: { orderBy: { order: 'asc' } },
@@ -90,7 +98,7 @@ export class EngagementService {
     });
     if (!s) throw new NotFoundException('Inquérito não encontrado');
 
-    const totalUsers = await this.prisma.user.count({ where: { active: true } });
+    const totalUsers = await this.prismaRead.user.count({ where: { active: true } });
     return {
       ...s,
       participationRate: totalUsers > 0 ? +((s._count.responses / totalUsers) * 100).toFixed(1) : 0,
@@ -137,7 +145,7 @@ export class EngagementService {
     });
 
     // Notify all active users
-    const users = await this.prisma.user.findMany({
+    const users = await this.prismaRead.user.findMany({
       where: { active: true },
       select: { id: true },
     });
@@ -302,7 +310,7 @@ export class EngagementService {
         .sort((a, b) => b.avgScore - a.avgScore);
     }
 
-    const totalUsers = await this.prisma.user.count({ where: { active: true } });
+    const totalUsers = await this.prismaRead.user.count({ where: { active: true } });
     const participationRate =
       totalUsers > 0 ? +((totalResponses / totalUsers) * 100).toFixed(1) : 0;
 
@@ -444,7 +452,7 @@ export class EngagementService {
   }
 
   async getTeamMoodOverview(managerId: number) {
-    const team = await this.prisma.user.findMany({
+    const team = await this.prismaRead.user.findMany({
       where: { managerId, active: true },
       select: { id: true, fullName: true, avatarUrl: true },
     });
@@ -617,7 +625,7 @@ export class EngagementService {
     if (fromUserId === dto.toUserId)
       throw new BadRequestException('Não podes reconhecer-te a ti próprio');
 
-    const to = await this.prisma.user.findUnique({
+    const to = await this.prismaRead.user.findUnique({
       where: { id: dto.toUserId },
       select: { id: true, fullName: true },
     });
@@ -721,7 +729,7 @@ export class EngagementService {
     if (departmentId) where.departmentId = departmentId;
 
     if (type === 'points') {
-      const users = await this.prisma.user.findMany({
+      const users = await this.prismaRead.user.findMany({
         where,
         include: { points: true, position: { select: { name: true } } },
         orderBy: { points: { points: 'desc' } },
@@ -746,7 +754,7 @@ export class EngagementService {
       .catch(() => [] as any[]);
 
     const userIds = (data as any[]).map((d: any) => d.toUserId);
-    const users = await this.prisma.user.findMany({
+    const users = await this.prismaRead.user.findMany({
       where: { id: { in: userIds } },
       select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } },
     });
@@ -925,7 +933,7 @@ export class EngagementService {
     const trend = history.length > 1 ? +(currentIndex - (history[1]?.avgScore ?? 0)).toFixed(2) : 0;
 
     // Participation trend
-    const totalUsers = await this.prisma.user.count({ where: { active: true } });
+    const totalUsers = await this.prismaRead.user.count({ where: { active: true } });
     const latestParticipation = surveys[0]
       ? +((surveys[0].responses.length / Math.max(totalUsers, 1)) * 100).toFixed(1)
       : 0;
@@ -965,9 +973,9 @@ export class EngagementService {
       recentRecognitions,
       activePlans,
     ] = await Promise.all([
-      this.prisma.user.count({ where: userWhere }),
-      this.prisma.engagementSurvey.count({ where: { status: 'ACTIVE' } }),
-      this.prisma.engagementSurvey.count({ where: { status: 'COMPLETED' } }),
+      this.prismaRead.user.count({ where: userWhere }),
+      this.prismaRead.engagementSurvey.count({ where: { status: 'ACTIVE' } }),
+      this.prismaRead.engagementSurvey.count({ where: { status: 'COMPLETED' } }),
       this.getEngagementIndex(departmentId),
       this.getENPSScore(departmentId),
       (this.prisma as any).recognition?.count().catch(() => 0),
@@ -1009,7 +1017,7 @@ export class EngagementService {
   }
 
   async getEngagementHeatmap(metric: 'score' | 'participation' | 'mood' = 'score') {
-    const departments = await this.prisma.department.findMany({
+    const departments = await this.prismaRead.department.findMany({
       select: { id: true, name: true, users: { where: { active: true }, select: { id: true } } },
     });
 
@@ -1019,7 +1027,7 @@ export class EngagementService {
         if (!userIds.length) return { department: dept.name, value: null, count: 0 };
 
         if (metric === 'score') {
-          const responses = await this.prisma.surveyResponse.findMany({
+          const responses = await this.prismaRead.surveyResponse.findMany({
             where: { userId: { in: userIds } },
             select: { score: true },
             orderBy: { createdAt: 'desc' },
@@ -1032,7 +1040,7 @@ export class EngagementService {
         }
 
         if (metric === 'participation') {
-          const responded = await this.prisma.surveyResponse.count({
+          const responded = await this.prismaRead.surveyResponse.count({
             where: { userId: { in: userIds } },
           });
           const rate = userIds.length > 0 ? +((responded / userIds.length) * 100).toFixed(1) : 0;
@@ -1063,7 +1071,7 @@ export class EngagementService {
   }
 
   async getManagerInsights(managerId: number) {
-    const team = await this.prisma.user.findMany({
+    const team = await this.prismaRead.user.findMany({
       where: { managerId, active: true },
       select: { id: true },
     });
@@ -1071,7 +1079,7 @@ export class EngagementService {
     if (!userIds.length) return { message: 'Sem equipa directa', data: [] };
 
     const [teamResponses, teamMood, recentRecognitions, pendingOneOnOnes] = await Promise.all([
-      this.prisma.surveyResponse.findMany({
+      this.prismaRead.surveyResponse.findMany({
         where: { userId: { in: userIds } },
         select: { userId: true, score: true, createdAt: true },
         orderBy: { createdAt: 'desc' },
@@ -1150,23 +1158,23 @@ export class EngagementService {
   async getHumanSuccessScore(userId: number) {
     // Composite: Engagement (33%) + Performance (33%) + Learning (34%)
     const [responses, reviews, enrollments, points] = await Promise.all([
-      this.prisma.surveyResponse.findMany({
+      this.prismaRead.surveyResponse.findMany({
         where: { userId },
         select: { score: true },
         orderBy: { createdAt: 'desc' },
         take: 5,
       }),
-      this.prisma.performanceReview.findMany({
+      this.prismaRead.performanceReview.findMany({
         where: { userId, status: 'COMPLETED' },
         select: { score: true },
         orderBy: { createdAt: 'desc' },
         take: 3,
       }),
-      this.prisma.enrollment.findMany({
+      this.prismaRead.enrollment.findMany({
         where: { userId, status: 'COMPLETED' },
         select: { id: true },
       }),
-      this.prisma.userPoints.findUnique({ where: { userId } }),
+      this.prismaRead.userPoints.findUnique({ where: { userId } }),
     ]);
 
     const engScore = responses.length
@@ -1203,7 +1211,7 @@ export class EngagementService {
         take: 5,
       }),
       (this.prisma as any).recognition?.count({ where: { toUserId: userId } }).catch(() => 0),
-      this.prisma.userPoints.findUnique({ where: { userId } }),
+      this.prismaRead.userPoints.findUnique({ where: { userId } }),
       (this.prisma as any).moodCheckin
         ?.findFirst({
           where: { userId },

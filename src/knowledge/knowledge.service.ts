@@ -24,12 +24,20 @@ import {
 export class KnowledgeService {
   private readonly logger = new Logger(KnowledgeService.name);
 
+  /**
+   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
+   * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   */
+  private get prismaRead(): PrismaService {
+    return (this.prisma as any).db ?? this.prisma;
+  }
+
   constructor(private prisma: PrismaService) {}
 
   // ─── CATEGORIAS ───────────────────────────────────────────────────────────
 
   async findAllCategories() {
-    const cats = await this.prisma.knowledgeCategory.findMany({
+    const cats = await this.prismaRead.knowledgeCategory.findMany({
       include: {
         parent: { select: { id: true, name: true } },
         children: { select: { id: true, name: true, _count: { select: { articles: true } } } },
@@ -101,7 +109,7 @@ export class KnowledgeService {
     if (sortBy === 'UPDATED') orderBy = { updatedAt: 'desc' };
 
     const [data, total] = await Promise.all([
-      this.prisma.knowledgeArticle.findMany({
+      this.prismaRead.knowledgeArticle.findMany({
         where,
         skip,
         take: limit,
@@ -113,14 +121,14 @@ export class KnowledgeService {
         },
         orderBy,
       }),
-      this.prisma.knowledgeArticle.count({ where }),
+      this.prismaRead.knowledgeArticle.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number, userId?: number) {
-    const article = await this.prisma.knowledgeArticle.findUnique({
+    const article = await this.prismaRead.knowledgeArticle.findUnique({
       where: { id },
       include: {
         author: {
@@ -157,7 +165,7 @@ export class KnowledgeService {
 
     // Registar VIEW (uma por utilizador por sessão de 30 min)
     if (userId) {
-      const recentView = await this.prisma.knowledgeInteraction.findFirst({
+      const recentView = await this.prismaRead.knowledgeInteraction.findFirst({
         where: {
           userId,
           articleId: id,
@@ -177,13 +185,13 @@ export class KnowledgeService {
 
       // Verificar bookmark e rating do user
       const [bookmark, rating, acknowledged] = await Promise.all([
-        this.prisma.knowledgeInteraction.findFirst({
+        this.prismaRead.knowledgeInteraction.findFirst({
           where: { userId, articleId: id, action: 'BOOKMARK' },
         }),
-        this.prisma.articleRating.findFirst({
+        this.prismaRead.articleRating.findFirst({
           where: { userId, articleId: id },
         }),
-        this.prisma.articleAcknowledgement.findFirst({
+        this.prismaRead.articleAcknowledgement.findFirst({
           where: { userId, articleId: id },
         }),
       ]);
@@ -291,7 +299,7 @@ export class KnowledgeService {
     }
 
     // Notificar seguidores/bookmarkers
-    const bookmarkers = await this.prisma.knowledgeInteraction.findMany({
+    const bookmarkers = await this.prismaRead.knowledgeInteraction.findMany({
       where: { articleId: id, action: 'BOOKMARK' },
       select: { userId: true },
       distinct: ['userId'],
@@ -313,7 +321,7 @@ export class KnowledgeService {
   }
 
   async publish(id: number) {
-    const article = await this.prisma.knowledgeArticle.findUnique({ where: { id } });
+    const article = await this.prismaRead.knowledgeArticle.findUnique({ where: { id } });
     if (!article) throw new NotFoundException('Artigo não encontrado');
     return this.prisma.knowledgeArticle.update({
       where: { id },
@@ -326,7 +334,7 @@ export class KnowledgeService {
   }
 
   async remove(id: number) {
-    const article = await this.prisma.knowledgeArticle.findUnique({
+    const article = await this.prismaRead.knowledgeArticle.findUnique({
       where: { id },
       include: { _count: { select: { acknowledgements: true } } },
     });
@@ -343,7 +351,7 @@ export class KnowledgeService {
   // ─── VERSÕES ──────────────────────────────────────────────────────────────
 
   async getVersions(articleId: number) {
-    return this.prisma.articleVersion.findMany({
+    return this.prismaRead.articleVersion.findMany({
       where: { articleId },
       include: { author: { select: { id: true, fullName: true } } },
       orderBy: { version: 'desc' },
@@ -351,7 +359,7 @@ export class KnowledgeService {
   }
 
   async restoreVersion(articleId: number, versionId: number, userId: number) {
-    const version = await this.prisma.articleVersion.findFirst({
+    const version = await this.prismaRead.articleVersion.findFirst({
       where: { id: versionId, articleId },
     });
     if (!version) throw new NotFoundException('Versão não encontrada');
@@ -398,7 +406,7 @@ export class KnowledgeService {
     });
 
     // Recalcular média
-    const avg = await this.prisma.articleRating.aggregate({
+    const avg = await this.prismaRead.articleRating.aggregate({
       where: { articleId: dto.articleId },
       _avg: { score: true },
     });
@@ -427,7 +435,7 @@ export class KnowledgeService {
     });
 
     // Notificar autor do artigo
-    const article = await this.prisma.knowledgeArticle.findUnique({
+    const article = await this.prismaRead.knowledgeArticle.findUnique({
       where: { id: dto.articleId },
       select: { authorId: true, title: true },
     });
@@ -448,7 +456,7 @@ export class KnowledgeService {
   }
 
   async deleteComment(commentId: number, userId: number) {
-    const comment = await this.prisma.articleComment.findUnique({ where: { id: commentId } });
+    const comment = await this.prismaRead.articleComment.findUnique({ where: { id: commentId } });
     if (!comment) throw new NotFoundException('Comentário não encontrado');
     if ((comment as any).authorId !== userId) throw new ForbiddenException('Sem permissão');
     await this.prisma.articleComment.delete({ where: { id: commentId } });
@@ -469,7 +477,7 @@ export class KnowledgeService {
   }
 
   async answerQuestion(userId: number, dto: AnswerQuestionDto) {
-    const question = await this.prisma.articleQuestion.findUnique({
+    const question = await this.prismaRead.articleQuestion.findUnique({
       where: { id: dto.questionId },
     });
     if (!question) throw new NotFoundException('Pergunta não encontrada');
@@ -512,11 +520,11 @@ export class KnowledgeService {
   }
 
   async getAcknowledgementReport(articleId: number) {
-    const article = await this.prisma.knowledgeArticle.findUnique({ where: { id: articleId } });
+    const article = await this.prismaRead.knowledgeArticle.findUnique({ where: { id: articleId } });
     if (!article) throw new NotFoundException('Artigo não encontrado');
 
     const [acknowledged, allUsers] = await Promise.all([
-      this.prisma.articleAcknowledgement.findMany({
+      this.prismaRead.articleAcknowledgement.findMany({
         where: { articleId },
         include: {
           user: {
@@ -529,7 +537,7 @@ export class KnowledgeService {
           },
         },
       }),
-      this.prisma.user.findMany({
+      this.prismaRead.user.findMany({
         where: { active: true },
         select: { id: true, fullName: true, department: { select: { name: true } } },
       }),
@@ -553,7 +561,7 @@ export class KnowledgeService {
   // ─── TRENDING ─────────────────────────────────────────────────────────────
 
   async getTrending(limit = 10) {
-    const articles = await this.prisma.knowledgeArticle.findMany({
+    const articles = await this.prismaRead.knowledgeArticle.findMany({
       where: { status: 'PUBLISHED' },
       include: {
         author: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -567,7 +575,7 @@ export class KnowledgeService {
   }
 
   async getBookmarks(userId: number) {
-    const bookmarks = await this.prisma.knowledgeInteraction.findMany({
+    const bookmarks = await this.prismaRead.knowledgeInteraction.findMany({
       where: { userId, action: 'BOOKMARK' },
       include: {
         article: {
@@ -588,7 +596,7 @@ export class KnowledgeService {
   async searchFullText(query: string, userId?: number) {
     if (!query || query.trim().length < 2) return [];
 
-    const results = await this.prisma.knowledgeArticle.findMany({
+    const results = await this.prismaRead.knowledgeArticle.findMany({
       where: {
         status: 'PUBLISHED',
         OR: [
@@ -624,11 +632,11 @@ export class KnowledgeService {
   async getDashboard() {
     const [totalArticles, published, totalViews, emptySearches, topArticles, recentlyUpdated] =
       await Promise.all([
-        this.prisma.knowledgeArticle.count(),
-        this.prisma.knowledgeArticle.count({ where: { status: 'PUBLISHED' } }),
-        this.prisma.knowledgeArticle.aggregate({ _sum: { viewCount: true } }),
-        this.prisma.knowledgeSearchLog.count({ where: { resultsCount: 0 } }),
-        this.prisma.knowledgeArticle.findMany({
+        this.prismaRead.knowledgeArticle.count(),
+        this.prismaRead.knowledgeArticle.count({ where: { status: 'PUBLISHED' } }),
+        this.prismaRead.knowledgeArticle.aggregate({ _sum: { viewCount: true } }),
+        this.prismaRead.knowledgeSearchLog.count({ where: { resultsCount: 0 } }),
+        this.prismaRead.knowledgeArticle.findMany({
           where: { status: 'PUBLISHED' },
           include: {
             author: { select: { id: true, fullName: true } },
@@ -637,7 +645,7 @@ export class KnowledgeService {
           orderBy: { viewCount: 'desc' },
           take: 5,
         }),
-        this.prisma.knowledgeArticle.findMany({
+        this.prismaRead.knowledgeArticle.findMany({
           where: { status: 'PUBLISHED' },
           include: { author: { select: { id: true, fullName: true } } },
           orderBy: { updatedAt: 'desc' },
@@ -647,12 +655,12 @@ export class KnowledgeService {
 
     // Artigos desactualizados (sem actualização há >6 meses)
     const staleThreshold = new Date(Date.now() - 180 * 24 * 3600 * 1000);
-    const staleArticles = await this.prisma.knowledgeArticle.count({
+    const staleArticles = await this.prismaRead.knowledgeArticle.count({
       where: { status: 'PUBLISHED', updatedAt: { lt: staleThreshold } },
     });
 
     // Top termos de busca sem resultado
-    const gapSearches = await this.prisma.knowledgeSearchLog.groupBy({
+    const gapSearches = await this.prismaRead.knowledgeSearchLog.groupBy({
       by: ['query'],
       where: { resultsCount: 0 },
       _count: true,

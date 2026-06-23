@@ -210,7 +210,8 @@ describe('MonitoringService', () => {
 
   describe('findAllIndicators', () => {
     it('deve retornar lista paginada', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[{ id: 'ind-1' }], 1]);
+      mockPrisma.monitoringIndicator.findMany.mockResolvedValue([{ id: 'ind-1' }]);
+      mockPrisma.monitoringIndicator.count.mockResolvedValue(1);
       const result = await service.findAllIndicators(1, 20);
       expect(result.total).toBe(1);
     });
@@ -271,7 +272,12 @@ describe('MonitoringService', () => {
 
   describe('getDashboard', () => {
     it('deve retornar OKRs, monitoring e evaluation', async () => {
-      mockPrisma.$transaction.mockResolvedValue([2, 10, 6, 5, 20, 1, 3, 7]);
+      mockPrisma.okrCycle.count.mockResolvedValue(2);
+      mockPrisma.objective.count.mockResolvedValueOnce(10).mockResolvedValueOnce(6);
+      mockPrisma.monitoringIndicator.count.mockResolvedValue(5);
+      mockPrisma.monitoringRecord.count.mockResolvedValue(20);
+      mockPrisma.evaluationCycle.count.mockResolvedValue(1);
+      mockPrisma.userEvaluation.count.mockResolvedValueOnce(3).mockResolvedValueOnce(7);
       const result = await service.getDashboard();
       expect(result).toHaveProperty('okrs');
       expect(result).toHaveProperty('monitoring');
