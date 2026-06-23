@@ -173,9 +173,116 @@ Repetir Passos 2–7 no ambiente de produção, fora de hora de pico, com janela
 
 ---
 
+## Apêndice A — Ensaio local com Docker (sem AWS)
+
+> Para validar o pipeline F2 **ponta-a-ponta na tua máquina** antes de tocar em staging/AWS:
+> um primary + um standby real com *streaming replication*. Útil para confirmar que
+> `verify-replica`, o routing de leitura e o read-after-write funcionam contra uma réplica
+> verdadeira (com lag real), não contra a própria primary.
+>
+> Requisitos: **Docker Desktop**. Não é produção — é um ensaio descartável.
+
+### A.1 — Subir primary + standby
+
+As imagens **Bitnami** fazem a replicação com meia dúzia de env vars (sem mexer em
+`postgresql.conf`/`pg_hba.conf` à mão). Cria `docker-compose.replica.yml` na raiz:
+
+```yaml
+services:
+  postgres-primary:
+    image: bitnami/postgresql:16
+    environment:
+      POSTGRESQL_REPLICATION_MODE: master
+      POSTGRESQL_REPLICATION_USER: repl_user
+      POSTGRESQL_REPLICATION_PASSWORD: repl_pass
+      POSTGRESQL_USERNAME: postgres
+      POSTGRESQL_PASSWORD: postgres
+      POSTGRESQL_DATABASE: innova_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_primary:/bitnami/postgresql
+
+  postgres-replica:
+    image: bitnami/postgresql:16
+    depends_on:
+      - postgres-primary
+    environment:
+      POSTGRESQL_REPLICATION_MODE: slave
+      POSTGRESQL_REPLICATION_USER: repl_user
+      POSTGRESQL_REPLICATION_PASSWORD: repl_pass
+      POSTGRESQL_MASTER_HOST: postgres-primary
+      POSTGRESQL_MASTER_PORT_NUMBER: 5432
+      POSTGRESQL_USERNAME: postgres
+      POSTGRESQL_PASSWORD: postgres
+    ports:
+      - "5433:5432"   # standby exposto na 5433
+
+volumes:
+  pg_primary:
+```
+
+```bash
+docker compose -f docker-compose.replica.yml up -d
+# Esperar o standby sincronizar (~10-20s na 1ª vez)
+```
+
+### A.2 — Apontar a app ao par e migrar o schema
+
+No `.env` (ensaio local — primary na 5432, standby na 5433):
+
+```dotenv
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/innova_dev"
+DATABASE_REPLICA_URL="postgresql://postgres:postgres@127.0.0.1:5433/innova_dev"
+USE_REPLICAS=false          # ligar só depois do verify
+```
+
+```bash
+# Aplicar as migrações no PRIMARY (a réplica recebe por replicação, não migrar nela)
+npx prisma migrate deploy
+```
+
+### A.3 — Validar o gate contra uma réplica a sério
+
+```bash
+node -r dotenv/config scripts/verify-replica.cjs --probe-lag
+# Agora deve dar: replica in_recovery=true, lag baixo, probe visível -> ✅
+```
+
+Ao contrário do `DATABASE_REPLICA_URL == DATABASE_URL` (que o gate rejeita), aqui o standby
+está mesmo em `pg_is_in_recovery()=true` e o probe escrita→leitura mede o lag real.
+
+### A.4 — Activar e exercitar
+
+```dotenv
+USE_REPLICAS=true
+```
+
+```bash
+npm run start:loadtest &        # ou o teu start normal
+npm run seed:loadtest
+npm run test:smoke
+npm run test:load               # observar p95 e read-after-write como nos Passos 5–6
+```
+
+Nos logs da app deve aparecer `Read replicas ACTIVAS — leituras encaminhadas para a réplica.`
+
+### A.5 — Teardown
+
+```bash
+docker compose -f docker-compose.replica.yml down -v   # -v remove os volumes
+```
+
+> Depois do ensaio, repor o `.env` local para `USE_REPLICAS=false` e a `DATABASE_URL` de
+> sempre. O ensaio Docker **não** substitui o staging gerido (sem failover Multi-AZ), mas
+> prova que o lado-app do F2 está correcto antes de gastares tempo na AWS.
+
+---
+
 ## Estado / o que falta
 
 - [x] F3 — read/write split na app (PR #2, build verde, suite unitária verde)
+- [ ] F2.0 (opcional) — ensaio local com Docker (Apêndice A) para validar o pipeline sem AWS
 - [ ] F2.1 — provisionar `innova-replica-1` (Passo 1) — **infra, requer acesso AWS**
 - [ ] F2.2 — secrets de staging + `verify-replica` verde (Passos 2–3)
 - [ ] F2.3 — `USE_REPLICAS=true` em staging + load-test dentro dos critérios (Passos 4–6)
