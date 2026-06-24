@@ -43,6 +43,12 @@ const baseUser = {
 describe('AuthService', () => {
   let service: AuthService;
 
+  // generateTokens recusa-se a correr sem JWT_REFRESH_SECRET (sem fallback
+  // inseguro), por isso definimos um valor de teste antes das suites.
+  beforeAll(() => {
+    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret';
+  });
+
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
