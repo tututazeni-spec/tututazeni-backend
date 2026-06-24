@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { LmsService } from './lms.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException, ConflictException } from '@nestjs/common';
+import { AuditService } from '../common/services/audit.service';
 
 const mockPath = {
   id: 'path-1',
@@ -53,12 +54,30 @@ const mockPrisma = {
   $transaction: jest.fn(),
 };
 
+const mockAudit = {
+  logEntity: jest.fn((userId, action, entity, entityId, meta = {}) =>
+    mockPrisma.auditLog.create({
+      data: { userId, action, entity, metadata: JSON.stringify({ ...meta, entityId }) },
+    }),
+  ),
+};
+
 describe('LmsService', () => {
   let service: LmsService;
 
   beforeEach(async () => {
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [LmsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        LmsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAudit },
+      ],
     }).compile();
     service = module.get<LmsService>(LmsService);
     jest.clearAllMocks();

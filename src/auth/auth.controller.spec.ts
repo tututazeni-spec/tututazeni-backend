@@ -41,8 +41,10 @@ describe('AuthController', () => {
 
   it('register → chama authService.register', async () => {
     const dto = { email: 'a@b.com', password: '123', fullName: 'Test' };
-    await controller.register(dto as any, mockRes as any);
+    // register é operação administrativa: não recebe @Res nem define cookie.
+    await controller.register(dto as any);
     expect(mockSvc.register).toHaveBeenCalledWith(dto);
+    expect(mockRes.cookie).not.toHaveBeenCalled();
   });
 
   it('refresh → chama authService.refreshToken', async () => {

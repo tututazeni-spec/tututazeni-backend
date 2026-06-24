@@ -16,7 +16,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { LmsService } from './lms.service';
 import {
   LmsCreateLearningPathDto,
@@ -25,6 +25,7 @@ import {
   AttendanceFeedbackDto,
   FilterPathDto,
 } from './dto';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('LMS — Aprendizagem')
 @ApiBearerAuth()
@@ -36,9 +37,9 @@ export class LmsController {
   // ─── PERCURSOS ───────────────────────────────────────
 
   @Post('paths')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar percurso de aprendizagem' })
-  createPath(@Body() dto: LmsCreateLearningPathDto, @CurrentUser() user: any) {
+  createPath(@Body() dto: LmsCreateLearningPathDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createPath(dto, user.id);
   }
 
@@ -49,7 +50,7 @@ export class LmsController {
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard do LMS' })
   getDashboard() {
     return this.service.getLmsDashboard();
@@ -57,19 +58,19 @@ export class LmsController {
 
   @Get('recommendations')
   @ApiOperation({ summary: 'Recomendações personalizadas' })
-  getRecommendations(@CurrentUser() user: any) {
+  getRecommendations(@CurrentUser() user: CurrentUserData) {
     return this.service.getRecommendations(user.id);
   }
 
   @Get('my-paths')
   @ApiOperation({ summary: 'Meus percursos' })
-  getMyPaths(@CurrentUser() user: any) {
+  getMyPaths(@CurrentUser() user: CurrentUserData) {
     return this.service.getMyPaths(user.id);
   }
 
   @Get('my-analytics')
   @ApiOperation({ summary: 'As minhas estatísticas de aprendizagem' })
-  getMyAnalytics(@CurrentUser() user: any) {
+  getMyAnalytics(@CurrentUser() user: CurrentUserData) {
     return this.service.getMyAnalytics(user.id);
   }
 
@@ -80,27 +81,27 @@ export class LmsController {
   }
 
   @Put('paths/:id')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar percurso' })
   updatePath(
     @Param('id') id: string,
     @Body() dto: LmsUpdateLearningPathDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.updatePath(id, dto, user.id);
   }
 
   @Delete('paths/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remover percurso' })
-  removePath(@Param('id') id: string, @CurrentUser() user: any) {
+  removePath(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.softDeletePath(id, user.id);
   }
 
   @Post('paths/:id/enroll')
   @ApiOperation({ summary: 'Inscrever-me no percurso' })
-  enrollInPath(@Param('id') id: string, @CurrentUser() user: any) {
+  enrollInPath(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.enrollInPath(id, user.id);
   }
 
@@ -109,7 +110,7 @@ export class LmsController {
   updateProgress(
     @Param('id') id: string,
     @Body('completedCourseId') completedCourseId: string,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.updatePathProgress(id, completedCourseId, user.id);
   }
@@ -117,9 +118,9 @@ export class LmsController {
   // ─── SESSÕES AO VIVO ─────────────────────────────────
 
   @Post('sessions')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar sessão ao vivo' })
-  createSession(@Body() dto: CreateLiveSessionDto, @CurrentUser() user: any) {
+  createSession(@Body() dto: CreateLiveSessionDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createSession(dto, user.id);
   }
 
@@ -134,13 +135,13 @@ export class LmsController {
 
   @Post('sessions/:id/register')
   @ApiOperation({ summary: 'Inscrever-me na sessão' })
-  registerForSession(@Param('id') id: string, @CurrentUser() user: any) {
+  registerForSession(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.registerForSession(id, user.id);
   }
 
   @Put('sessions/:id/attend')
   @ApiOperation({ summary: 'Marcar presença' })
-  markAttendance(@Param('id') id: string, @CurrentUser() user: any) {
+  markAttendance(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.markAttendance(id, user.id);
   }
 
@@ -149,7 +150,7 @@ export class LmsController {
   submitFeedback(
     @Param('id') id: string,
     @Body() dto: AttendanceFeedbackDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.submitSessionFeedback(id, dto, user.id);
   }

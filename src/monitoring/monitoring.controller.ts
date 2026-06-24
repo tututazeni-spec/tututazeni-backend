@@ -13,7 +13,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { MonitoringService } from './monitoring.service';
 import {
   CreateOkrCycleDto,
@@ -25,6 +25,7 @@ import {
   CreateEvalCycleDto,
   MonitoringSubmitEvaluationDto,
 } from './dto';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Monitoria e Avaliação')
 @ApiBearerAuth()
@@ -36,7 +37,7 @@ export class MonitoringController {
   // ─── DASHBOARD ───────────────────────────────────────
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard de Monitoria e Avaliação' })
   getDashboard() {
     return this.service.getDashboard();
@@ -45,9 +46,9 @@ export class MonitoringController {
   // ─── OKRs ────────────────────────────────────────────
 
   @Post('okr/cycles')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar ciclo OKR' })
-  createOkrCycle(@Body() dto: CreateOkrCycleDto, @CurrentUser() user: any) {
+  createOkrCycle(@Body() dto: CreateOkrCycleDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createOkrCycle(dto, user.id);
   }
 
@@ -59,7 +60,7 @@ export class MonitoringController {
 
   @Post('okr/objectives')
   @ApiOperation({ summary: 'Criar objectivo' })
-  createObjective(@Body() dto: CreateObjectiveDto, @CurrentUser() user: any) {
+  createObjective(@Body() dto: CreateObjectiveDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createObjective(dto, user.id);
   }
 
@@ -71,7 +72,7 @@ export class MonitoringController {
 
   @Post('okr/key-results')
   @ApiOperation({ summary: 'Criar Key Result' })
-  createKeyResult(@Body() dto: CreateKeyResultDto, @CurrentUser() user: any) {
+  createKeyResult(@Body() dto: CreateKeyResultDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createKeyResult(dto, user.id);
   }
 
@@ -80,7 +81,7 @@ export class MonitoringController {
   updateKeyResult(
     @Param('id') id: string,
     @Body() dto: UpdateKeyResultDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.updateKeyResult(id, dto, user.id);
   }
@@ -88,9 +89,9 @@ export class MonitoringController {
   // ─── INDICADORES ─────────────────────────────────────
 
   @Post('indicators')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar indicador de monitoria' })
-  createIndicator(@Body() dto: CreateIndicatorDto, @CurrentUser() user: any) {
+  createIndicator(@Body() dto: CreateIndicatorDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createIndicator(dto, user.id);
   }
 
@@ -105,9 +106,13 @@ export class MonitoringController {
   }
 
   @Post('indicators/:id/records')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Registar valor do indicador' })
-  addRecord(@Param('id') id: string, @Body() dto: CreateRecordDto, @CurrentUser() user: any) {
+  addRecord(
+    @Param('id') id: string,
+    @Body() dto: CreateRecordDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.service.addRecord(id, dto, user.id);
   }
 
@@ -120,21 +125,21 @@ export class MonitoringController {
   // ─── AVALIAÇÃO ───────────────────────────────────────
 
   @Post('evaluation/cycles')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar ciclo de avaliação' })
-  createEvalCycle(@Body() dto: CreateEvalCycleDto, @CurrentUser() user: any) {
+  createEvalCycle(@Body() dto: CreateEvalCycleDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createEvalCycle(dto, user.id);
   }
 
   @Post('evaluation/cycles/:cycleId/assign')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Atribuir avaliação' })
   assignEvaluation(
     @Param('cycleId') cycleId: string,
     @Body('userId', ParseIntPipe) userId: number,
     @Body('evaluatorId', ParseIntPipe) evaluatorId: number,
     @Body('type') type: string,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.assignEvaluation(cycleId, userId, evaluatorId, type || 'MANAGER', user.id);
   }
@@ -144,20 +149,20 @@ export class MonitoringController {
   submitEvaluation(
     @Param('id') id: string,
     @Body() dto: MonitoringSubmitEvaluationDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.submitEvaluation(id, dto, user.id);
   }
 
   @Get('evaluation/my-evaluations')
   @ApiOperation({ summary: 'As minhas avaliações' })
-  getMyEvaluations(@CurrentUser() user: any) {
+  getMyEvaluations(@CurrentUser() user: CurrentUserData) {
     return this.service.getMyEvaluations(user.id);
   }
 
   @Get('evaluation/to-complete')
   @ApiOperation({ summary: 'Avaliações que tenho de completar' })
-  getEvaluationsToComplete(@CurrentUser() user: any) {
+  getEvaluationsToComplete(@CurrentUser() user: CurrentUserData) {
     return this.service.getEvaluationsToComplete(user.id);
   }
 }

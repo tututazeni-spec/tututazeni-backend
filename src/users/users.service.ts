@@ -60,14 +60,6 @@ const USER_INCLUDE_BASIC = {
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private prisma: PrismaService) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
@@ -115,7 +107,7 @@ export class UsersService {
     }
 
     const [data, total] = await Promise.all([
-      this.prismaRead.user.findMany({
+      this.prisma.read.user.findMany({
         where,
         skip,
         take: limit,
@@ -130,7 +122,7 @@ export class UsersService {
         },
         orderBy: { fullName: 'asc' },
       }),
-      this.prismaRead.user.count({ where }),
+      this.prisma.read.user.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -139,7 +131,7 @@ export class UsersService {
   // ─── DETALHE ──────────────────────────────────────────────────────────────
 
   async findOne(id: number) {
-    const user = await this.prismaRead.user.findUnique({
+    const user = await this.prisma.read.user.findUnique({
       where: { id },
       include: {
         ...USER_INCLUDE_BASIC,
@@ -378,7 +370,7 @@ export class UsersService {
   // ─── EQUIPA DO GESTOR ─────────────────────────────────────────────────────
 
   async getTeam(managerId: number) {
-    const subordinates = await this.prismaRead.user.findMany({
+    const subordinates = await this.prisma.read.user.findMany({
       where: { managerId, active: true },
       select: {
         ...USER_SELECT_SAFE,
@@ -391,9 +383,9 @@ export class UsersService {
     const stats = await Promise.all(
       subordinates.map(async s => {
         const [completed, inProgress, overdue] = await Promise.all([
-          this.prismaRead.enrollment.count({ where: { userId: s.id, status: 'COMPLETED' } }),
-          this.prismaRead.enrollment.count({ where: { userId: s.id, status: 'IN_PROGRESS' } }),
-          this.prismaRead.enrollment.count({
+          this.prisma.read.enrollment.count({ where: { userId: s.id, status: 'COMPLETED' } }),
+          this.prisma.read.enrollment.count({ where: { userId: s.id, status: 'IN_PROGRESS' } }),
+          this.prisma.read.enrollment.count({
             where: {
               userId: s.id,
               deadline: { lt: new Date() },
@@ -423,20 +415,20 @@ export class UsersService {
       overdueCount,
       recentActivity,
     ] = await Promise.all([
-      this.prismaRead.enrollment.count({ where: { userId: id } }),
-      this.prismaRead.enrollment.count({ where: { userId: id, status: 'COMPLETED' } }),
-      this.prismaRead.enrollment.count({ where: { userId: id, status: 'IN_PROGRESS' } }),
-      this.prismaRead.userPoints.findUnique({ where: { userId: id } }),
-      this.prismaRead.badgeAward.count({ where: { userId: id } }),
-      this.prismaRead.userCompetency.count({ where: { userId: id } }),
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({ where: { userId: id } }),
+      this.prisma.read.enrollment.count({ where: { userId: id, status: 'COMPLETED' } }),
+      this.prisma.read.enrollment.count({ where: { userId: id, status: 'IN_PROGRESS' } }),
+      this.prisma.read.userPoints.findUnique({ where: { userId: id } }),
+      this.prisma.read.badgeAward.count({ where: { userId: id } }),
+      this.prisma.read.userCompetency.count({ where: { userId: id } }),
+      this.prisma.read.enrollment.count({
         where: {
           userId: id,
           deadline: { lt: new Date() },
           status: { notIn: ['COMPLETED', 'EXPIRED'] },
         },
       }),
-      this.prismaRead.enrollment.findMany({
+      this.prisma.read.enrollment.findMany({
         where: { userId: id },
         orderBy: { enrolledAt: 'desc' },
         take: 3,
@@ -467,7 +459,7 @@ export class UsersService {
       ];
     }
 
-    return this.prismaRead.user.findMany({
+    return this.prisma.read.user.findMany({
       where,
       select: {
         id: true,
@@ -591,14 +583,14 @@ export class UsersService {
   async getAuditLogs(userId: number, page = 1, limit = 30) {
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
-      this.prismaRead.userAuditLog.findMany({
+      this.prisma.read.userAuditLog.findMany({
         where: { userId },
         skip,
         take: limit,
         include: { performedBy: { select: { id: true, fullName: true } } },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.userAuditLog.count({ where: { userId } }),
+      this.prisma.read.userAuditLog.count({ where: { userId } }),
     ]);
     return { data, total, page, limit };
   }
@@ -608,11 +600,11 @@ export class UsersService {
   async getAdminDashboard() {
     const [totalUsers, activeUsers, pendingUsers, suspendedUsers, byDepartment] = await Promise.all(
       [
-        this.prismaRead.user.count(),
-        this.prismaRead.user.count({ where: { active: true } }),
-        this.prismaRead.user.count({ where: { accountStatus: 'PENDING' } }),
-        this.prismaRead.user.count({ where: { accountStatus: 'SUSPENDED' } }),
-        this.prismaRead.department.findMany({
+        this.prisma.read.user.count(),
+        this.prisma.read.user.count({ where: { active: true } }),
+        this.prisma.read.user.count({ where: { accountStatus: 'PENDING' } }),
+        this.prisma.read.user.count({ where: { accountStatus: 'SUSPENDED' } }),
+        this.prisma.read.department.findMany({
           include: { _count: { select: { users: true } } },
           orderBy: { users: { _count: 'desc' } },
           take: 10,

@@ -85,6 +85,12 @@ describe('PerformanceService (progress)', () => {
     mockPrisma = buildMockPrisma();
 
     // continuousFeedback accessed via (this.prisma as any)
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [PerformanceService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();

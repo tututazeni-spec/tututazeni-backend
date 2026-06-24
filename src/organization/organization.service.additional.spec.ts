@@ -59,6 +59,12 @@ describe('OrganizationService — additional coverage', () => {
     mockPrisma.user.findMany.mockResolvedValue([]);
     mockPrisma.department.findMany.mockResolvedValue([]);
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [OrganizationService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();

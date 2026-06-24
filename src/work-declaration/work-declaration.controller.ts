@@ -42,9 +42,9 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { Role } from '../auth/enums/role.enum';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { IAuthUser } from '../common/interfaces/auth-user.interface';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Work Declarations')
 @ApiBearerAuth()

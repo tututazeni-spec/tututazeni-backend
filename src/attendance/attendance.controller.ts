@@ -34,7 +34,8 @@ import {
 } from './attendance.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ export class AttendanceController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard operacional — presenças do dia' })
   @ApiQuery({ name: 'department', required: false })
   getDashboard(@Query('department') department?: string) {
@@ -58,7 +59,7 @@ export class AttendanceController {
   }
 
   @Get('report/monthly')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Relatório mensal de presenças' })
   @ApiQuery({ name: 'year', type: Number })
   @ApiQuery({ name: 'month', type: Number })
@@ -72,7 +73,7 @@ export class AttendanceController {
   }
 
   @Get('report/absenteeism')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório de absenteísmo por período' })
   @ApiQuery({ name: 'from' })
   @ApiQuery({ name: 'to' })
@@ -86,7 +87,7 @@ export class AttendanceController {
   }
 
   @Get('kpi-trend')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Tendência de KPIs (últimos N dias)' })
   @ApiQuery({ name: 'userId', required: false, type: Number })
   @ApiQuery({ name: 'days', required: false, type: Number })
@@ -100,13 +101,13 @@ export class AttendanceController {
 
   @Post('clock-in')
   @ApiOperation({ summary: 'Check-in (entrada) — suporta QR, GPS, selfie, token' })
-  clockIn(@CurrentUser() user: any, @Body() dto: ClockInDto) {
+  clockIn(@CurrentUser() user: CurrentUserData, @Body() dto: ClockInDto) {
     return this.svc.clockIn(user.id, dto);
   }
 
   @Post('clock-out')
   @ApiOperation({ summary: 'Check-out (saída) com cálculo automático de horas' })
-  clockOut(@CurrentUser() user: any, @Body() dto: ClockOutDto) {
+  clockOut(@CurrentUser() user: CurrentUserData, @Body() dto: ClockOutDto) {
     return this.svc.clockOut(user.id, dto);
   }
 
@@ -118,19 +119,23 @@ export class AttendanceController {
   @ApiOperation({ summary: 'Minhas presenças com resumo' })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
-  myAttendance(@CurrentUser() user: any, @Query('from') from?: string, @Query('to') to?: string) {
+  myAttendance(
+    @CurrentUser() user: CurrentUserData,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
     return this.svc.findByUser(user.id, from, to);
   }
 
   @Get('my/leave-balance')
   @ApiOperation({ summary: 'Saldo de licenças e férias' })
-  myLeaveBalance(@CurrentUser() user: any) {
+  myLeaveBalance(@CurrentUser() user: CurrentUserData) {
     return this.svc.getLeaveBalance(user.id);
   }
 
   @Get('my/overtime')
   @ApiOperation({ summary: 'Banco de horas (saldo de horas extras)' })
-  myOvertimeBalance(@CurrentUser() user: any) {
+  myOvertimeBalance(@CurrentUser() user: CurrentUserData) {
     return this.svc.getOvertimeBalance(user.id);
   }
 
@@ -139,21 +144,21 @@ export class AttendanceController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar presenças com filtros avançados' })
   findAll(@Query() filters: AttendanceFilterDto) {
     return this.svc.findAll(filters);
   }
 
   @Get(':id')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Detalhe de registo de presença' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
   }
 
   @Get('user/:userId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Presenças de um colaborador específico' })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
@@ -166,25 +171,25 @@ export class AttendanceController {
   }
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Registar presença manualmente (RH/Admin)' })
   create(@Body() dto: CreateAttendanceDto) {
     return this.svc.create(dto);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar registo (cria log de ajuste automático)' })
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateAttendanceDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.update(id, dto, user.id);
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover registo' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -195,14 +200,14 @@ export class AttendanceController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get('leaves')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar pedidos de licença' })
   getLeaves(@Query() filters: AttendanceLeaveFilterDto) {
     return this.svc.getLeaves(filters);
   }
 
   @Get('leaves/pending')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Licenças pendentes de aprovação' })
   getPendingLeaves() {
     return this.svc.getLeaves({ status: 'PENDING' as any });
@@ -210,23 +215,23 @@ export class AttendanceController {
 
   @Post('leaves')
   @ApiOperation({ summary: 'Solicitar licença ou férias' })
-  createLeave(@CurrentUser() user: any, @Body() dto: CreateLeaveRequestDto) {
+  createLeave(@CurrentUser() user: CurrentUserData, @Body() dto: CreateLeaveRequestDto) {
     return this.svc.createLeaveRequest(user.id, dto);
   }
 
   @Patch('leaves/:id/review')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Aprovar ou rejeitar pedido de licença' })
   reviewLeave(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ReviewLeaveDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.reviewLeave(id, dto, user.id);
   }
 
   @Get('leaves/balance/:userId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Saldo de licenças de um colaborador' })
   getLeaveBalance(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.getLeaveBalance(userId);
@@ -237,21 +242,21 @@ export class AttendanceController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get('schedules')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Listar jornadas/escalas configuradas' })
   getSchedules() {
     return this.svc.getWorkSchedules();
   }
 
   @Post('schedules')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar jornada de trabalho / escala' })
   createSchedule(@Body() dto: CreateWorkScheduleDto) {
     return this.svc.createWorkSchedule(dto);
   }
 
   @Post('schedules/assign')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atribuir jornada a um colaborador' })
   assignSchedule(@Body() dto: AssignScheduleDto) {
     return this.svc.assignSchedule(dto);
@@ -263,17 +268,17 @@ export class AttendanceController {
 
   @Post('overtime')
   @ApiOperation({ summary: 'Registar hora extra' })
-  createOvertime(@CurrentUser() user: any, @Body() dto: CreateOvertimeDto) {
+  createOvertime(@CurrentUser() user: CurrentUserData, @Body() dto: CreateOvertimeDto) {
     return this.svc.createOvertime(user.id, dto);
   }
 
   @Patch('overtime/:id/review')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Aprovar/rejeitar hora extra' })
   reviewOvertime(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ReviewOvertimeDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.reviewOvertime(id, dto, user.id);
   }
@@ -283,25 +288,25 @@ export class AttendanceController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get('justifications/pending')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Justificativas pendentes de aprovação' })
-  getPendingJustifications(@CurrentUser() user: any) {
+  getPendingJustifications(@CurrentUser() user: CurrentUserData) {
     return this.svc.getPendingJustifications(user.id);
   }
 
   @Post('justifications')
   @ApiOperation({ summary: 'Enviar justificativa de ausência' })
-  createJustification(@CurrentUser() user: any, @Body() dto: CreateJustificationDto) {
+  createJustification(@CurrentUser() user: CurrentUserData, @Body() dto: CreateJustificationDto) {
     return this.svc.createJustification(user.id, dto);
   }
 
   @Patch('justifications/:id/review')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Aprovar ou rejeitar justificativa' })
   reviewJustification(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ReviewJustificationDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.reviewJustification(id, dto, user.id);
   }
@@ -311,15 +316,15 @@ export class AttendanceController {
   // ══════════════════════════════════════════════════════════════════
 
   @Post('qr/generate')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Gerar QR code de check-in (dinâmico com TTL)' })
-  generateQr(@CurrentUser() user: any, @Body() dto: GenerateQrDto) {
+  generateQr(@CurrentUser() user: CurrentUserData, @Body() dto: GenerateQrDto) {
     return this.svc.generateQrCode(user.id, dto);
   }
 
   @Post('qr/validate')
   @ApiOperation({ summary: 'Validar QR code e efectuar check-in' })
-  validateQr(@CurrentUser() user: any, @Body() dto: ValidateQrDto) {
+  validateQr(@CurrentUser() user: CurrentUserData, @Body() dto: ValidateQrDto) {
     return this.svc.clockIn(user.id, {
       method: 'QR_DYNAMIC' as any,
       qrToken: dto.token,
@@ -335,7 +340,7 @@ export class AttendanceController {
   @Post('events/:eventId/check-in')
   @ApiOperation({ summary: 'Check-in em evento presencial/virtual' })
   checkInEvent(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Param('eventId', ParseIntPipe) eventId: number,
     @Body() dto: ClockInDto,
   ) {
@@ -345,7 +350,7 @@ export class AttendanceController {
   @Post('sessions/:sessionId/check-in')
   @ApiOperation({ summary: 'Check-in em sessão de webinar/LMS' })
   checkInSession(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Param('sessionId', ParseIntPipe) sessionId: number,
     @Body() dto: ClockInDto,
   ) {
@@ -353,7 +358,7 @@ export class AttendanceController {
   }
 
   @Get('events/:eventId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Lista de presenças de um evento' })
   getEventAttendance(@Param('eventId', ParseIntPipe) eventId: number) {
     return this.svc.getEventAttendance(eventId);

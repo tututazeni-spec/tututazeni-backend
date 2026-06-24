@@ -81,6 +81,12 @@ describe('EngagementService', () => {
     mockPrisma.user.count.mockResolvedValue(100);
     mockPrisma.user.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
 
+    Object.defineProperty(mockPrismaProxy, 'read', {
+      get() {
+        return mockPrismaProxy;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [EngagementService, { provide: PrismaService, useValue: mockPrismaProxy }],
     }).compile();

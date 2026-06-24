@@ -30,7 +30,8 @@ import {
 } from './knowledge.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Knowledge Base')
 @ApiBearerAuth()
@@ -42,7 +43,7 @@ export class KnowledgeController {
   // ── Dashboard ─────────────────────────────────────────────────────────────
 
   @Get('admin/dashboard')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Dashboard admin (métricas, gaps, artigos desactualizados)' })
   dashboard() {
     return this.svc.getDashboard();
@@ -57,14 +58,14 @@ export class KnowledgeController {
   }
 
   @Post('categories')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar categoria' })
   createCategory(@Body() dto: CreateKnowledgeCategoryDto) {
     return this.svc.createCategory(dto);
   }
 
   @Put('categories/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar categoria' })
   updateCategory(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateKnowledgeCategoryDto) {
     return this.svc.updateCategory(id, dto);
@@ -88,31 +89,31 @@ export class KnowledgeController {
   @Get('search')
   @ApiOperation({ summary: 'Pesquisa full-text (regista buscas sem resultado para gap analysis)' })
   @ApiQuery({ name: 'q', required: true })
-  search(@Query('q') q: string, @CurrentUser() user: any) {
+  search(@Query('q') q: string, @CurrentUser() user: CurrentUserData) {
     return this.svc.searchFullText(q, user.id);
   }
 
   @Get('my/bookmarks')
   @ApiOperation({ summary: 'Os meus artigos guardados (bookmarks)' })
-  myBookmarks(@CurrentUser() user: any) {
+  myBookmarks(@CurrentUser() user: CurrentUserData) {
     return this.svc.getBookmarks(user.id);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do artigo (regista visualização única/30min)' })
-  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user.id);
   }
 
   @Get(':id/versions')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Histórico de versões do artigo' })
   versions(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getVersions(id);
   }
 
   @Get(':id/acknowledgements')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório de confirmação de leitura (leu / não leu)' })
   acknowledgements(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAcknowledgementReport(id);
@@ -122,7 +123,7 @@ export class KnowledgeController {
 
   @Post()
   @ApiOperation({ summary: 'Criar artigo (inicia como DRAFT)' })
-  create(@CurrentUser() user: any, @Body() dto: CreateKnowledgeArticleDto) {
+  create(@CurrentUser() user: CurrentUserData, @Body() dto: CreateKnowledgeArticleDto) {
     return this.svc.create(user.id, dto);
   }
 
@@ -130,14 +131,14 @@ export class KnowledgeController {
   @ApiOperation({ summary: 'Actualizar artigo (cria nova versão automaticamente)' })
   update(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: UpdateKnowledgeArticleDto,
   ) {
     return this.svc.update(id, dto, user.id);
   }
 
   @Patch(':id/publish')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Publicar artigo (DRAFT → PUBLISHED)' })
   @HttpCode(HttpStatus.OK)
   publish(@Param('id', ParseIntPipe) id: number) {
@@ -145,7 +146,7 @@ export class KnowledgeController {
   }
 
   @Patch(':id/archive')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Arquivar artigo' })
   @HttpCode(HttpStatus.OK)
   archive(@Param('id', ParseIntPipe) id: number) {
@@ -153,18 +154,18 @@ export class KnowledgeController {
   }
 
   @Post(':id/versions/:versionId/restore')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Restaurar versão anterior do artigo' })
   restoreVersion(
     @Param('id', ParseIntPipe) id: number,
     @Param('versionId', ParseIntPipe) versionId: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.restoreVersion(id, versionId, user.id);
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Eliminar artigo (não permitido se obrigatório com confirmações)' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -175,21 +176,21 @@ export class KnowledgeController {
   @Post('interact')
   @ApiOperation({ summary: 'Interagir com artigo (LIKE/BOOKMARK toggle, SHARE)' })
   @HttpCode(HttpStatus.OK)
-  interact(@CurrentUser() user: any, @Body() dto: KnowledgeInteractionDto) {
+  interact(@CurrentUser() user: CurrentUserData, @Body() dto: KnowledgeInteractionDto) {
     return this.svc.interact(user.id, dto);
   }
 
   @Post('rate')
   @ApiOperation({ summary: 'Avaliar artigo (1-5 estrelas)' })
   @HttpCode(HttpStatus.OK)
-  rate(@CurrentUser() user: any, @Body() dto: RateArticleDto) {
+  rate(@CurrentUser() user: CurrentUserData, @Body() dto: RateArticleDto) {
     return this.svc.rateArticle(user.id, dto);
   }
 
   @Post('acknowledge')
   @ApiOperation({ summary: 'Confirmar leitura de artigo obrigatório ("Li e estou ciente")' })
   @HttpCode(HttpStatus.OK)
-  acknowledge(@CurrentUser() user: any, @Body() dto: AcknowledgeArticleDto) {
+  acknowledge(@CurrentUser() user: CurrentUserData, @Body() dto: AcknowledgeArticleDto) {
     return this.svc.acknowledgeArticle(user.id, dto);
   }
 
@@ -197,13 +198,16 @@ export class KnowledgeController {
 
   @Post('comments')
   @ApiOperation({ summary: 'Comentar artigo (ou responder a comentário)' })
-  createComment(@CurrentUser() user: any, @Body() dto: CreateCommentDto) {
+  createComment(@CurrentUser() user: CurrentUserData, @Body() dto: CreateCommentDto) {
     return this.svc.createComment(user.id, dto);
   }
 
   @Delete('comments/:commentId')
   @ApiOperation({ summary: 'Remover comentário próprio' })
-  deleteComment(@Param('commentId', ParseIntPipe) commentId: number, @CurrentUser() user: any) {
+  deleteComment(
+    @Param('commentId', ParseIntPipe) commentId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.svc.deleteComment(commentId, user.id);
   }
 
@@ -211,14 +215,14 @@ export class KnowledgeController {
 
   @Post('questions')
   @ApiOperation({ summary: 'Colocar pergunta num artigo' })
-  createQuestion(@CurrentUser() user: any, @Body() dto: CreateKnowledgeQuestionDto) {
+  createQuestion(@CurrentUser() user: CurrentUserData, @Body() dto: CreateKnowledgeQuestionDto) {
     return this.svc.createQuestion(user.id, dto);
   }
 
   @Post('questions/answer')
   @ApiOperation({ summary: 'Responder a uma pergunta' })
   @HttpCode(HttpStatus.OK)
-  answerQuestion(@CurrentUser() user: any, @Body() dto: AnswerQuestionDto) {
+  answerQuestion(@CurrentUser() user: CurrentUserData, @Body() dto: AnswerQuestionDto) {
     return this.svc.answerQuestion(user.id, dto);
   }
 }

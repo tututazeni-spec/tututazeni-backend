@@ -30,4 +30,21 @@ export class AuditService {
       },
     });
   }
+
+  /**
+   * Variante para módulos cujos IDs são cuid (String): como AuditLog.entityId é
+   * Int?, o id real vai dentro de metadata (sempre JSON.stringify). Substitui o
+   * helper de auditoria que estava duplicado em vários serviços.
+   */
+  async logEntity(
+    userId: number,
+    action: string,
+    entity: string,
+    entityId: string,
+    meta: Record<string, any> = {},
+  ) {
+    return this.prisma.auditLog.create({
+      data: { userId, action, entity, metadata: JSON.stringify({ ...meta, entityId }) },
+    });
+  }
 }

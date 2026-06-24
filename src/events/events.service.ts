@@ -21,14 +21,6 @@ import {
 export class EventsService {
   private readonly logger = new Logger(EventsService.name);
 
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private prisma: PrismaService) {}
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
@@ -58,7 +50,7 @@ export class EventsService {
     if (upcoming) where.startAt = { gte: new Date() };
 
     const [data, total] = await Promise.all([
-      this.prismaRead.event.findMany({
+      this.prisma.read.event.findMany({
         where,
         skip,
         take: limit,
@@ -68,7 +60,7 @@ export class EventsService {
         },
         orderBy: { startAt: 'asc' },
       }),
-      this.prismaRead.event.count({ where }),
+      this.prisma.read.event.count({ where }),
     ]);
 
     return {
@@ -88,7 +80,7 @@ export class EventsService {
   }
 
   async findOne(id: number) {
-    const e = await this.prismaRead.event.findUnique({
+    const e = await this.prisma.read.event.findUnique({
       where: { id },
       include: {
         organizer: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -181,7 +173,7 @@ export class EventsService {
     await this.prisma.event.update({ where: { id }, data: { status: 'CANCELLED' } });
 
     // Notificar participantes
-    const participants = await this.prismaRead.eventParticipant.findMany({
+    const participants = await this.prisma.read.eventParticipant.findMany({
       where: { eventId: id, status: { in: ['CONFIRMED', 'PENDING'] } },
       select: { userId: true },
     });
@@ -227,7 +219,7 @@ export class EventsService {
     }
 
     // Verificar capacidade
-    const participantCount = await this.prismaRead.eventParticipant.count({
+    const participantCount = await this.prisma.read.eventParticipant.count({
       where: { eventId, status: { in: ['PENDING', 'CONFIRMED'] } },
     });
 
@@ -275,7 +267,7 @@ export class EventsService {
   }
 
   async leave(eventId: number, userId: number) {
-    const participant = await this.prismaRead.eventParticipant.findUnique({
+    const participant = await this.prisma.read.eventParticipant.findUnique({
       where: { eventId_userId: { eventId, userId } },
     });
     if (!participant) throw new NotFoundException('Inscrição não encontrada');
@@ -286,9 +278,9 @@ export class EventsService {
     });
 
     // Promover da lista de espera
-    const event = await this.prismaRead.event.findUnique({ where: { id: eventId } });
+    const event = await this.prisma.read.event.findUnique({ where: { id: eventId } });
     if ((event as any)?.waitlistEnabled) {
-      const nextOnWaitlist = await this.prismaRead.eventParticipant.findFirst({
+      const nextOnWaitlist = await this.prisma.read.eventParticipant.findFirst({
         where: { eventId, status: 'WAITLIST' },
         orderBy: { registeredAt: 'asc' },
       });
@@ -325,10 +317,10 @@ export class EventsService {
   // ─── CHECK-IN ─────────────────────────────────────────────────────────────
 
   async checkIn(userId: number, dto: CheckInDto) {
-    const event = await this.prismaRead.event.findUnique({ where: { id: dto.eventId } });
+    const event = await this.prisma.read.event.findUnique({ where: { id: dto.eventId } });
     if (!event) throw new NotFoundException('Evento não encontrado');
 
-    const participant = await this.prismaRead.eventParticipant.findUnique({
+    const participant = await this.prisma.read.eventParticipant.findUnique({
       where: { eventId_userId: { eventId: dto.eventId, userId } },
     });
     if (!participant) throw new BadRequestException('Não inscrito neste evento');
@@ -353,7 +345,7 @@ export class EventsService {
   // ─── FEEDBACK / NPS ───────────────────────────────────────────────────────
 
   async submitFeedback(eventId: number, userId: number, dto: SubmitFeedbackDto) {
-    const participant = await this.prismaRead.eventParticipant.findUnique({
+    const participant = await this.prisma.read.eventParticipant.findUnique({
       where: { eventId_userId: { eventId, userId } },
     });
     if (!participant) throw new BadRequestException('Não participaste neste evento');
@@ -382,10 +374,10 @@ export class EventsService {
   // ─── CERTIFICADOS ─────────────────────────────────────────────────────────
 
   private async autoIssueCertificate(eventId: number, userId: number) {
-    const event = await this.prismaRead.event.findUnique({ where: { id: eventId } });
+    const event = await this.prisma.read.event.findUnique({ where: { id: eventId } });
     if (!(event as any)?.certificateEnabled) return;
 
-    const participant = await this.prismaRead.eventParticipant.findUnique({
+    const participant = await this.prisma.read.eventParticipant.findUnique({
       where: { eventId_userId: { eventId, userId } },
     });
     if (participant?.status !== 'PRESENT') return;
@@ -424,7 +416,7 @@ export class EventsService {
 
   async getOrganizerDashboard(userId: number) {
     const [myEvents, totalParticipants, upcomingCount] = await Promise.all([
-      this.prismaRead.event.findMany({
+      this.prisma.read.event.findMany({
         where: { organizerId: userId, status: { in: ['PUBLISHED', 'LIVE', 'ENDED'] } },
         include: {
           _count: { select: { participants: true, feedbacks: true } },
@@ -433,10 +425,10 @@ export class EventsService {
         orderBy: { startAt: 'desc' },
         take: 10,
       }),
-      this.prismaRead.eventParticipant.count({
+      this.prisma.read.eventParticipant.count({
         where: { event: { organizerId: userId } },
       }),
-      this.prismaRead.event.count({
+      this.prisma.read.event.count({
         where: { organizerId: userId, startAt: { gte: new Date() }, status: 'PUBLISHED' },
       }),
     ]);
@@ -490,7 +482,7 @@ export class EventsService {
   // ─── MEUS EVENTOS ─────────────────────────────────────────────────────────
 
   async getMyEvents(userId: number) {
-    const participations = await this.prismaRead.eventParticipant.findMany({
+    const participations = await this.prisma.read.eventParticipant.findMany({
       where: { userId },
       include: {
         event: {
@@ -511,7 +503,7 @@ export class EventsService {
   }
 
   async getUpcoming() {
-    const data = await this.prismaRead.event.findMany({
+    const data = await this.prisma.read.event.findMany({
       where: { startAt: { gte: new Date() }, status: 'PUBLISHED' },
       include: {
         organizer: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -534,14 +526,14 @@ export class EventsService {
 
   async getStats() {
     const [byType, byStatus, total, totalParticipants] = await Promise.all([
-      this.prismaRead.event.groupBy({
+      this.prisma.read.event.groupBy({
         by: ['type'],
         _count: true,
         orderBy: { _count: { type: 'desc' } },
       }),
-      this.prismaRead.event.groupBy({ by: ['status'], _count: true }),
-      this.prismaRead.event.count(),
-      this.prismaRead.eventParticipant.count({
+      this.prisma.read.event.groupBy({ by: ['status'], _count: true }),
+      this.prisma.read.event.count(),
+      this.prisma.read.eventParticipant.count({
         where: { status: { in: ['CONFIRMED', 'PRESENT'] } },
       }),
     ]);

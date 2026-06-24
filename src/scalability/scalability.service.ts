@@ -44,14 +44,6 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 export class ScalabilityService {
   private readonly logger = new Logger(ScalabilityService.name);
 
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
@@ -211,14 +203,14 @@ export class ScalabilityService {
     const where: any = { tenantId };
     if (query.search) where.name = { contains: query.search };
     const [data, total] = await Promise.all([
-      this.prismaRead.integrationConfig.findMany({
+      this.prisma.read.integrationConfig.findMany({
         where,
         skip: query.offset ?? 0,
         take: query.limit ?? 20,
         orderBy: { createdAt: 'desc' },
         include: { syncLogs: { take: 1, orderBy: { startedAt: 'desc' } } },
       }),
-      this.prismaRead.integrationConfig.count({ where }),
+      this.prisma.read.integrationConfig.count({ where }),
     ]);
     return { data, total };
   }
@@ -300,14 +292,14 @@ export class ScalabilityService {
     const where: any = { tenantId };
     if (query.search) where.name = { contains: query.search };
     const [data, total] = await Promise.all([
-      this.prismaRead.automationRule.findMany({
+      this.prisma.read.automationRule.findMany({
         where,
         skip: query.offset ?? 0,
         take: query.limit ?? 20,
         orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
         include: { _count: { select: { executions: true } } },
       }),
-      this.prismaRead.automationRule.count({ where }),
+      this.prisma.read.automationRule.count({ where }),
     ]);
     return { data, total };
   }
@@ -347,7 +339,7 @@ export class ScalabilityService {
     triggerType: AutomationTrigger,
     payload: Record<string, any>,
   ) {
-    const rules = await this.prismaRead.automationRule.findMany({
+    const rules = await this.prisma.read.automationRule.findMany({
       where: { tenantId, triggerType, isActive: true },
       orderBy: { priority: 'asc' },
     });
@@ -845,12 +837,12 @@ export class ScalabilityService {
         where: { tenantId },
         orderBy: { capturedAt: 'desc' },
       }),
-      this.prismaRead.integrationConfig.groupBy({
+      this.prisma.read.integrationConfig.groupBy({
         by: ['status'],
         where: { tenantId },
         _count: { id: true },
       }),
-      this.prismaRead.automationRule.aggregate({
+      this.prisma.read.automationRule.aggregate({
         where: { tenantId },
         _count: { id: true },
       }),
@@ -864,7 +856,7 @@ export class ScalabilityService {
       }),
     ]);
 
-    const activeUsers = await this.prismaRead.user.count();
+    const activeUsers = await this.prisma.read.user.count();
     const activeIntegrations = integrations
       .filter(i => i.status === 'ACTIVE')
       .reduce((s, i) => s + i._count.id, 0);
@@ -891,7 +883,7 @@ export class ScalabilityService {
     const failedToday = await (this.prisma as any).automationExecution.count({
       where: { startedAt: { gte: todayStart }, status: 'FAILED', rule: { tenantId } },
     });
-    const activeRules = await this.prismaRead.automationRule.count({
+    const activeRules = await this.prisma.read.automationRule.count({
       where: { tenantId, isActive: true },
     });
 

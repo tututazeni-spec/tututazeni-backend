@@ -27,7 +27,8 @@ import {
 } from './process-standard.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Process Standard')
 @ApiBearerAuth()
@@ -45,7 +46,7 @@ export class ProcessStandardController {
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard operacional de processos' })
   dashboard() {
     return this.svc.getDashboard();
@@ -53,12 +54,12 @@ export class ProcessStandardController {
 
   @Get('my-tasks')
   @ApiOperation({ summary: 'Minhas tarefas pendentes em instâncias activas' })
-  myTasks(@CurrentUser() user: any) {
+  myTasks(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyTasks(user.id);
   }
 
   @Get('audit-logs')
-  @Roles('ADMIN', 'AUDITOR')
+  @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Logs de auditoria globais' })
   @ApiQuery({ name: 'processId', required: false })
   @ApiQuery({ name: 'instanceId', required: false })
@@ -88,7 +89,7 @@ export class ProcessStandardController {
   }
 
   @Get(':id/versions/compare')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Comparar duas versões de um processo' })
   @ApiQuery({ name: 'versionA', example: '1.0' })
   @ApiQuery({ name: 'versionB', example: '2.0' })
@@ -103,75 +104,75 @@ export class ProcessStandardController {
   // ── Gestão de Processo ─────────────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar novo processo standard' })
-  create(@CurrentUser() user: any, @Body() dto: CreateProcessDto) {
+  create(@CurrentUser() user: CurrentUserData, @Body() dto: CreateProcessDto) {
     return this.svc.create(user.id, dto);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar processo (apenas DRAFT)' })
   update(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: UpdateProcessDto,
   ) {
     return this.svc.update(id, dto, user.id);
   }
 
   @Post(':id/new-version')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar nova versão semântica do processo' })
   @HttpCode(HttpStatus.OK)
-  newVersion(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  newVersion(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.createNewVersion(id, user.id);
   }
 
   @Patch(':id/submit-review')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Submeter processo para revisão/aprovação' })
   @HttpCode(HttpStatus.OK)
-  submitReview(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  submitReview(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.submitForReview(id, user.id);
   }
 
   @Patch(':id/approval')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Aprovar ou rejeitar processo (Admin)' })
   @HttpCode(HttpStatus.OK)
   approvalAction(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: ApprovalActionDto,
   ) {
     return this.svc.approvalAction(id, user.id, dto);
   }
 
   @Patch(':id/archive')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Arquivar processo' })
   @HttpCode(HttpStatus.OK)
-  archive(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  archive(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.archive(id, user.id);
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar processo (apenas DRAFT/ARCHIVED)' })
-  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.remove(id, user.id);
   }
 
   // ── Instâncias ─────────────────────────────────────────────────────────────
 
   @Get('instances/list')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar instâncias de processos' })
   @ApiQuery({ name: 'processId', required: false })
   @ApiQuery({ name: 'status', required: false })
   getInstances(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Query('processId') processId?: string,
     @Query('status') status?: string,
     @Query('page') page?: string,
@@ -190,23 +191,23 @@ export class ProcessStandardController {
   }
 
   @Post(':id/start')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Iniciar instância de processo para um colaborador' })
   startInstance(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: StartInstanceDto,
   ) {
     return this.svc.startInstance(id, user.id, dto);
   }
 
   @Patch('instances/:instanceId/cancel')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Cancelar instância' })
   @HttpCode(HttpStatus.OK)
   cancelInstance(
     @Param('instanceId', ParseIntPipe) instanceId: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body('reason') reason: string,
   ) {
     return this.svc.cancelInstance(instanceId, user.id, reason);
@@ -220,7 +221,7 @@ export class ProcessStandardController {
   completeStep(
     @Param('instanceId', ParseIntPipe) instanceId: number,
     @Param('stepId', ParseIntPipe) stepId: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: CompleteStepDto,
   ) {
     return this.svc.completeStep(instanceId, stepId, user.id, dto);
@@ -232,7 +233,7 @@ export class ProcessStandardController {
   rejectStep(
     @Param('instanceId', ParseIntPipe) instanceId: number,
     @Param('stepId', ParseIntPipe) stepId: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: RejectStepDto,
   ) {
     return this.svc.rejectStep(instanceId, stepId, user.id, dto);

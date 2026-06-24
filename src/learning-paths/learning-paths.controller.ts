@@ -25,7 +25,8 @@ import {
 } from './learning-paths.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Learning Paths')
 @ApiBearerAuth()
@@ -43,7 +44,7 @@ export class LearningPathsController {
   }
 
   @Get('admin/dashboard')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Dashboard administrativo de Learning Paths' })
   adminDashboard() {
     return this.svc.getAdminDashboard();
@@ -51,7 +52,7 @@ export class LearningPathsController {
 
   @Get('my/enrollments')
   @ApiOperation({ summary: 'As minhas trilhas de aprendizagem' })
-  myEnrollments(@CurrentUser() user: any) {
+  myEnrollments(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyEnrollments(user.id);
   }
 
@@ -62,14 +63,14 @@ export class LearningPathsController {
   }
 
   @Get(':id/analytics')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Analytics da trilha (conclusão, drop-off por etapa)' })
   analytics(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAnalytics(id);
   }
 
   @Get(':id/assignments')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atribuições da trilha' })
   assignments(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAssignments(id);
@@ -77,28 +78,28 @@ export class LearningPathsController {
 
   @Get(':id/progress')
   @ApiOperation({ summary: 'Progresso do utilizador autenticado na trilha' })
-  progress(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  progress(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getMyProgress(id, user.id);
   }
 
   // ── Gestão (Admin/RH) ────────────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar trilha de aprendizagem' })
   create(@Body() dto: LearningPathsCreateLearningPathDto) {
     return this.svc.create(dto);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar trilha' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLearningPathDto) {
     return this.svc.update(id, dto);
   }
 
   @Patch(':id/publish')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Publicar trilha (DRAFT → PUBLISHED)' })
   @HttpCode(HttpStatus.OK)
   publish(@Param('id', ParseIntPipe) id: number) {
@@ -106,7 +107,7 @@ export class LearningPathsController {
   }
 
   @Patch(':id/archive')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Arquivar trilha' })
   @HttpCode(HttpStatus.OK)
   archive(@Param('id', ParseIntPipe) id: number) {
@@ -114,14 +115,14 @@ export class LearningPathsController {
   }
 
   @Post(':id/duplicate')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Duplicar trilha (cria cópia em DRAFT)' })
   duplicate(@Param('id', ParseIntPipe) id: number) {
     return this.svc.duplicate(id);
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar trilha (apenas DRAFT sem matrículas)' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -130,14 +131,14 @@ export class LearningPathsController {
   // ── Steps ─────────────────────────────────────────────────────────────────
 
   @Post(':id/steps')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Adicionar curso à trilha' })
   addStep(@Param('id', ParseIntPipe) id: number, @Body() dto: LearningPathStepDto) {
     return this.svc.addStep(id, dto);
   }
 
   @Patch(':id/steps/reorder')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Reordenar steps da trilha (drag & drop)' })
   @HttpCode(HttpStatus.OK)
   reorderSteps(@Param('id', ParseIntPipe) id: number, @Body() dto: ReorderStepsDto) {
@@ -145,7 +146,7 @@ export class LearningPathsController {
   }
 
   @Delete(':id/steps/:courseId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover curso da trilha' })
   removeStep(
     @Param('id', ParseIntPipe) id: number,
@@ -157,7 +158,7 @@ export class LearningPathsController {
   // ── Milestones ────────────────────────────────────────────────────────────
 
   @Post(':id/milestones')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar milestone na trilha' })
   createMilestone(
     @Param('id', ParseIntPipe) id: number,
@@ -167,7 +168,7 @@ export class LearningPathsController {
   }
 
   @Delete('milestones/:milestoneId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover milestone' })
   removeMilestone(@Param('milestoneId', ParseIntPipe) milestoneId: number) {
     return this.svc.removeMilestone(milestoneId);
@@ -177,12 +178,12 @@ export class LearningPathsController {
 
   @Post(':id/enroll')
   @ApiOperation({ summary: 'Auto-matrícula do utilizador autenticado' })
-  selfEnroll(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  selfEnroll(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.selfEnroll(id, user.id);
   }
 
   @Post('assign')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Atribuir trilha a utilizador, departamento, cargo, unidade ou role' })
   assign(@Body() dto: AssignLearningPathDto) {
     return this.svc.assign(dto);

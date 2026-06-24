@@ -4,7 +4,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SearchService } from './search.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { GlobalSearchDto, TypedSearchDto, AutocompleteDto, SearchEntityType } from './search.dto';
 
 const ADMIN = ['ADMIN', 'RH'] as const;
@@ -22,7 +22,7 @@ export class SearchController {
   @ApiOperation({
     summary: 'Pesquisa global — colaboradores, cursos, conteúdos, PDIs, documentos, competências',
   })
-  globalSearch(@Query() dto: GlobalSearchDto, @CurrentUser() user: any) {
+  globalSearch(@Query() dto: GlobalSearchDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.globalSearch(dto.q, user.id, dto);
   }
 
@@ -30,43 +30,43 @@ export class SearchController {
 
   @Get('users')
   @ApiOperation({ summary: 'Pesquisa de colaboradores (nome, email, cargo, departamento)' })
-  users(@Query() dto: TypedSearchDto, @CurrentUser() user: any) {
+  users(@Query() dto: TypedSearchDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.searchByType(SearchEntityType.USER, dto.q, user.id, dto);
   }
 
   @Get('courses')
   @ApiOperation({ summary: 'Pesquisa de cursos (título, categoria, descrição)' })
-  courses(@Query() dto: TypedSearchDto, @CurrentUser() user: any) {
+  courses(@Query() dto: TypedSearchDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.searchByType(SearchEntityType.COURSE, dto.q, user.id, dto);
   }
 
   @Get('content')
   @ApiOperation({ summary: 'Pesquisa de conteúdos (ContentAsset)' })
-  content(@Query() dto: TypedSearchDto, @CurrentUser() user: any) {
+  content(@Query() dto: TypedSearchDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.searchByType(SearchEntityType.CONTENT, dto.q, user.id, dto);
   }
 
   @Get('documents')
   @ApiOperation({ summary: 'Pesquisa de documentos e artigos de conhecimento' })
-  documents(@Query() dto: TypedSearchDto, @CurrentUser() user: any) {
+  documents(@Query() dto: TypedSearchDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.searchByType(SearchEntityType.DOCUMENT, dto.q, user.id, dto);
   }
 
   @Get('pdi')
   @ApiOperation({ summary: 'Pesquisa de planos de desenvolvimento (PDI)' })
-  pdis(@Query() dto: TypedSearchDto, @CurrentUser() user: any) {
+  pdis(@Query() dto: TypedSearchDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.searchByType(SearchEntityType.PDI, dto.q, user.id, dto);
   }
 
   @Get('competencies')
   @ApiOperation({ summary: 'Pesquisa de competências' })
-  competencies(@Query() dto: TypedSearchDto, @CurrentUser() user: any) {
+  competencies(@Query() dto: TypedSearchDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.searchByType(SearchEntityType.COMPETENCY, dto.q, user.id, dto);
   }
 
   @Get('scenarios')
   @ApiOperation({ summary: 'Pesquisa de cenários de avatar training' })
-  scenarios(@Query() dto: TypedSearchDto, @CurrentUser() user: any) {
+  scenarios(@Query() dto: TypedSearchDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.searchByType(SearchEntityType.SCENARIO, dto.q, user.id, dto);
   }
 
@@ -74,7 +74,7 @@ export class SearchController {
 
   @Get('autocomplete')
   @ApiOperation({ summary: 'Sugestões em tempo real (autocomplete + histórico recente)' })
-  autocomplete(@Query() dto: AutocompleteDto, @CurrentUser() user: any) {
+  autocomplete(@Query() dto: AutocompleteDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.autocomplete(dto.q, user.id, dto.limit ?? 5);
   }
 
@@ -84,7 +84,7 @@ export class SearchController {
   @ApiOperation({
     summary: 'Sugestões personalizadas — cursos recomendados, conteúdo popular, trending',
   })
-  suggestions(@CurrentUser() user: any) {
+  suggestions(@CurrentUser() user: CurrentUserData) {
     return this.svc.getSuggestions(user.id);
   }
 
@@ -92,13 +92,13 @@ export class SearchController {
 
   @Get('history')
   @ApiOperation({ summary: 'Histórico de pesquisas do utilizador' })
-  history(@CurrentUser() user: any, @Query('limit') limit?: string) {
+  history(@CurrentUser() user: CurrentUserData, @Query('limit') limit?: string) {
     return this.svc.getHistory(user.id, limit ? +limit : 20);
   }
 
   @Delete('history')
   @ApiOperation({ summary: 'Limpar histórico de pesquisas' })
-  clearHistory(@CurrentUser() user: any) {
+  clearHistory(@CurrentUser() user: CurrentUserData) {
     return this.svc.clearHistory(user.id);
   }
 

@@ -45,6 +45,12 @@ export class ReportsService {
   /**
    * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
    * caindo para o primary quando .db não existe (ex.: mocks de teste).
+   *
+   * NOTA: este serviço NÃO usa o `this.prisma.read` centralizado de propósito.
+   * Mantém o getter local tipado `any` porque acede a modelos/propriedades que
+   * não existem no tipo gerado do Prisma (recognition, savedReport,
+   * reportSchedule, _count em select, etc.) e que só compilam com `any`. São
+   * problemas latentes A REVER — até lá, preservamos o comportamento original.
    */
   private get prismaRead(): any {
     return (this.prisma as any).db ?? this.prisma;

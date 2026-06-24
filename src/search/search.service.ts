@@ -50,14 +50,6 @@ function normalise(
 
 @Injectable()
 export class SearchService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -158,7 +150,7 @@ export class SearchService {
     };
     if (opts.departmentId) where.departmentId = opts.departmentId;
 
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where,
       select: {
         id: true,
@@ -260,7 +252,7 @@ export class SearchService {
   }
 
   private async searchPdis(q: string, opts: { limit: number; userId: number }): Promise<any[]> {
-    const plans = await this.prismaRead.developmentPlan.findMany({
+    const plans = await this.prisma.read.developmentPlan.findMany({
       where: {
         OR: [{ name: iLike(q) }, { goal: iLike(q) }],
         isTemplate: false,
@@ -377,7 +369,7 @@ export class SearchService {
     if (q.length < 1) return { suggestions: [] };
 
     const [users, courses, content] = await Promise.all([
-      this.prismaRead.user.findMany({
+      this.prisma.read.user.findMany({
         where: { fullName: iLike(q), active: true },
         select: { fullName: true },
         take: limit,
@@ -387,7 +379,7 @@ export class SearchService {
         select: { title: true },
         take: limit,
       }),
-      this.prismaRead.contentAsset.findMany({
+      this.prisma.read.contentAsset.findMany({
         where: { title: iLike(q), active: true },
         select: { title: true },
         take: limit,
@@ -429,7 +421,7 @@ export class SearchService {
   // ══════════════════════════════════════════════════════
 
   async getSuggestions(userId: number) {
-    const user = await this.prismaRead.user.findUnique({
+    const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
       select: {
         departmentId: true,

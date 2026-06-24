@@ -4,7 +4,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { DashboardFilterDto, OrgFilterDto, DashboardPeriod } from './dashboard.dto';
 
 const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
@@ -23,14 +23,14 @@ export class DashboardController {
   @Get('my')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Dashboard pessoal — learning, PDI, gamification, pendências' })
-  myDashboard(@CurrentUser() user: any) {
+  myDashboard(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyDashboard(user.id);
   }
 
   @Get('manager')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Dashboard do gestor — equipa, KPIs, alertas, drill-down' })
-  managerDashboard(@CurrentUser() user: any, @Query() filters: DashboardFilterDto) {
+  managerDashboard(@CurrentUser() user: CurrentUserData, @Query() filters: DashboardFilterDto) {
     return this.svc.getManagerDashboard(user.id, filters);
   }
 
@@ -62,7 +62,7 @@ export class DashboardController {
   @Get('alerts')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Central de alertas personalizada por perfil' })
-  alerts(@CurrentUser() user: any) {
+  alerts(@CurrentUser() user: CurrentUserData) {
     return this.svc.getAlerts(user.id, user.roleCode);
   }
 

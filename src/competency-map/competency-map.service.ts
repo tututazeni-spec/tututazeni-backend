@@ -45,14 +45,6 @@ function calcWeightedScore(
 
 @Injectable()
 export class CompetencyMapService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -67,7 +59,7 @@ export class CompetencyMapService {
   }
 
   async getCategories() {
-    return this.prismaRead.skillCategory.findMany({
+    return this.prisma.read.skillCategory.findMany({
       where: { active: true },
       include: { _count: { select: { skills: true } } },
       orderBy: [{ family: 'asc' }, { name: 'asc' }],
@@ -106,7 +98,7 @@ export class CompetencyMapService {
     if (categoryId) where.categoryId = categoryId;
 
     const [data, total] = await Promise.all([
-      this.prismaRead.skill.findMany({
+      this.prisma.read.skill.findMany({
         where,
         skip,
         take: limit,
@@ -117,14 +109,14 @@ export class CompetencyMapService {
         },
         orderBy: [{ type: 'asc' }, { name: 'asc' }],
       }),
-      this.prismaRead.skill.count({ where }),
+      this.prisma.read.skill.count({ where }),
     ]);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async getSkill(id: number) {
-    const s = await this.prismaRead.skill.findUnique({
+    const s = await this.prisma.read.skill.findUnique({
       where: { id },
       include: {
         category: true,
@@ -160,7 +152,7 @@ export class CompetencyMapService {
   }
 
   async getProficiencyLevels(skillId: number) {
-    return this.prismaRead.skillProficiencyLevel.findMany({
+    return this.prisma.read.skillProficiencyLevel.findMany({
       where: { skillId },
       orderBy: { level: 'asc' },
     });
@@ -194,7 +186,7 @@ export class CompetencyMapService {
   }
 
   async getRoleSkillMatrix(roleCode: string) {
-    const matrix = await this.prismaRead.roleSkillMatrix.findUnique({
+    const matrix = await this.prisma.read.roleSkillMatrix.findUnique({
       where: { roleCode },
       include: {
         requirements: {
@@ -208,7 +200,7 @@ export class CompetencyMapService {
   }
 
   async getAllRoleMatrices(department?: string) {
-    return this.prismaRead.roleSkillMatrix.findMany({
+    return this.prisma.read.roleSkillMatrix.findMany({
       where: department ? { department: { contains: department, mode: 'insensitive' } } : {},
       include: { _count: { select: { requirements: true } } },
       orderBy: { roleCode: 'asc' },
@@ -313,7 +305,7 @@ export class CompetencyMapService {
   }
 
   async getEmployeeSkills(userId: number) {
-    const skills = await this.prismaRead.legacyEmployeeSkill.findMany({
+    const skills = await this.prisma.read.legacyEmployeeSkill.findMany({
       where: { userId },
       include: {
         skill: { include: { category: true, proficiencyLevels: true } },
@@ -336,7 +328,7 @@ export class CompetencyMapService {
   }
 
   async getSkillHistory(userId: number, skillId: number) {
-    const history = await this.prismaRead.skillAssessmentHistory.findMany({
+    const history = await this.prisma.read.skillAssessmentHistory.findMany({
       where: { userId, skillId },
       orderBy: { snapshotAt: 'asc' },
     });
@@ -353,13 +345,13 @@ export class CompetencyMapService {
 
   async getUserGapAnalysis(userId: number, roleCode?: string) {
     // Buscar role code do colaborador se não fornecido
-    const user = await this.prismaRead.user.findUnique({
+    const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
     });
     const targetRole = roleCode ?? (user as any)?.employee?.role;
 
     // Skills do colaborador
-    const employeeSkills = await this.prismaRead.legacyEmployeeSkill.findMany({
+    const employeeSkills = await this.prisma.read.legacyEmployeeSkill.findMany({
       where: { userId },
       include: { skill: { include: { category: true } } },
     });
@@ -431,7 +423,7 @@ export class CompetencyMapService {
     if (filters.userId) where.userId = filters.userId;
     if (filters.skillType) where.skill = { type: filters.skillType };
 
-    const allEmployeeSkills = await this.prismaRead.legacyEmployeeSkill.findMany({
+    const allEmployeeSkills = await this.prisma.read.legacyEmployeeSkill.findMany({
       where,
       include: {
         skill: { include: { category: true } },
@@ -512,14 +504,14 @@ export class CompetencyMapService {
   }
 
   async getDepartmentMap(department: string) {
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where: {
         /* employee department filter removed — no direct relation */
       } as any,
       select: { id: true, fullName: true, avatarUrl: true } as any,
     });
 
-    const allSkills = await this.prismaRead.legacyEmployeeSkill.findMany({
+    const allSkills = await this.prisma.read.legacyEmployeeSkill.findMany({
       where: { userId: { in: users.map((u: any) => u.id) } },
       include: { skill: { include: { category: true } } },
     });
@@ -553,7 +545,7 @@ export class CompetencyMapService {
   // ══════════════════════════════════════════════════════════════════
 
   async getTeamMap(managerId: number) {
-    const subordinates = await this.prismaRead.user.findMany({
+    const subordinates = await this.prisma.read.user.findMany({
       where: { managerId },
       select: { id: true, fullName: true, avatarUrl: true } as any,
     });
@@ -621,7 +613,7 @@ export class CompetencyMapService {
         /* employee department filter removed — no direct relation */
       } as any;
 
-    const data = await this.prismaRead.legacyEmployeeSkill.findMany({
+    const data = await this.prisma.read.legacyEmployeeSkill.findMany({
       where,
       select: {
         userId: true,
@@ -658,7 +650,7 @@ export class CompetencyMapService {
 
   private async notifyManager(userId: number, type: string, message: string) {
     try {
-      const user = await this.prismaRead.user.findUnique({ where: { id: userId } });
+      const user = await this.prisma.read.user.findUnique({ where: { id: userId } });
       const managerId = (user as any)?.employee?.managerId;
       if (managerId)
         await this.prisma.notificationLog.create({ data: { userId: managerId, type, message } });

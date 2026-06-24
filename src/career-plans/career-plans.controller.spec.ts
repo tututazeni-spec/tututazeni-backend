@@ -209,6 +209,6 @@ describe('CareerPlansController', () => {
   it('reviewPromotion → reviewPromotion(id, dto, userId, role)', async () => {
     const dto = {} as any;
     await controller.reviewPromotion(3, dto, mockUser as any);
-    expect(mockSvc.reviewPromotion).toHaveBeenCalledWith(3, dto, 1, mockUser.role);
+    expect(mockSvc.reviewPromotion).toHaveBeenCalledWith(3, dto, 1, mockUser.role.name);
   });
 });

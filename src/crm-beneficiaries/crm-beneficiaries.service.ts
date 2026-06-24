@@ -7,20 +7,14 @@ import {
   CreateInteractionDto,
   CreateNeedDto,
 } from './dto';
+import { AuditService } from '../common/services/audit.service';
 
 @Injectable()
 export class CrmBeneficiariesService {
-  constructor(private prisma: PrismaService) {}
-
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   * Nota: leituras puras usam Promise.all (não $transaction), pois a extensão
-   * de réplicas encaminha sempre $transaction para o primary.
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
+  constructor(
+    private prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ─── GERAÇÃO DE CÓDIGO ───────────────────────────────
 
@@ -51,7 +45,7 @@ export class CrmBeneficiariesService {
         assignedTo: { select: { fullName: true } },
       },
     });
-    await this.audit(userId, 'CREATE', 'Beneficiary', beneficiary.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'Beneficiary', beneficiary.id, {
       code,
       type: dto.type,
     });
@@ -87,7 +81,7 @@ export class CrmBeneficiariesService {
       }),
     };
     const [data, total] = await Promise.all([
-      this.prismaRead.beneficiary.findMany({
+      this.prisma.read.beneficiary.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -97,13 +91,13 @@ export class CrmBeneficiariesService {
           _count: { select: { interactions: true, needs: true } },
         },
       }),
-      this.prismaRead.beneficiary.count({ where }),
+      this.prisma.read.beneficiary.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: string) {
-    const beneficiary = await this.prismaRead.beneficiary.findUnique({
+    const beneficiary = await this.prisma.read.beneficiary.findUnique({
       where: { id },
       include: {
         createdBy: { select: { fullName: true } },
@@ -141,7 +135,7 @@ export class CrmBeneficiariesService {
         ...(nextFollowUpAt && { nextFollowUpAt: new Date(nextFollowUpAt) }),
       },
     });
-    await this.audit(userId, 'UPDATE', 'Beneficiary', id, dto);
+    await this.audit.logEntity(userId, 'UPDATE', 'Beneficiary', id, dto);
     return updated;
   }
 
@@ -151,7 +145,7 @@ export class CrmBeneficiariesService {
       where: { id },
       data: { deletedAt: new Date(), status: 'INACTIVE' },
     });
-    await this.audit(userId, 'DELETE', 'Beneficiary', id, {
+    await this.audit.logEntity(userId, 'DELETE', 'Beneficiary', id, {
       deletedAt: new Date(),
     });
     return { message: 'Beneficiário removido com sucesso' };
@@ -192,7 +186,7 @@ export class CrmBeneficiariesService {
       },
     });
 
-    await this.audit(userId, 'CREATE', 'BeneficiaryInteraction', interaction.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'BeneficiaryInteraction', interaction.id, {
       beneficiaryId,
       type: dto.type,
     });
@@ -203,14 +197,14 @@ export class CrmBeneficiariesService {
     await this.findOne(beneficiaryId);
     const where = { beneficiaryId, deletedAt: null };
     const [data, total] = await Promise.all([
-      this.prismaRead.beneficiaryInteraction.findMany({
+      this.prisma.read.beneficiaryInteraction.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { date: 'desc' },
         include: { user: { select: { fullName: true } } },
       }),
-      this.prismaRead.beneficiaryInteraction.count({ where }),
+      this.prisma.read.beneficiaryInteraction.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -222,7 +216,7 @@ export class CrmBeneficiariesService {
     const need = await this.prisma.beneficiaryNeed.create({
       data: { ...dto, beneficiaryId },
     });
-    await this.audit(userId, 'CREATE', 'BeneficiaryNeed', need.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'BeneficiaryNeed', need.id, {
       beneficiaryId,
     });
     return need;
@@ -237,7 +231,7 @@ export class CrmBeneficiariesService {
       where: { id: needId },
       data: { status: 'RESOLVED', resolvedAt: new Date(), resolvedById: userId },
     });
-    await this.audit(userId, 'UPDATE', 'BeneficiaryNeed', needId, {
+    await this.audit.logEntity(userId, 'UPDATE', 'BeneficiaryNeed', needId, {
       status: 'RESOLVED',
     });
     return updated;
@@ -248,7 +242,7 @@ export class CrmBeneficiariesService {
   async getFollowUps(userId: number, days = 7) {
     const until = new Date();
     until.setDate(until.getDate() + Number(days));
-    return this.prismaRead.beneficiary.findMany({
+    return this.prisma.read.beneficiary.findMany({
       where: {
         deletedAt: null,
         status: 'ACTIVE',
@@ -288,38 +282,38 @@ export class CrmBeneficiariesService {
       openNeeds,
       avgSatisfaction,
     ] = await Promise.all([
-      this.prismaRead.beneficiary.count({ where: { deletedAt: null } }),
-      this.prismaRead.beneficiary.count({
+      this.prisma.read.beneficiary.count({ where: { deletedAt: null } }),
+      this.prisma.read.beneficiary.count({
         where: { createdAt: { gte: startOfMonth } },
       }),
-      this.prismaRead.beneficiary.count({
+      this.prisma.read.beneficiary.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prismaRead.beneficiary.groupBy({
+      this.prisma.read.beneficiary.groupBy({
         by: ['type'],
         where: { deletedAt: null },
         _count: { id: true },
       }),
-      this.prismaRead.beneficiary.groupBy({
+      this.prisma.read.beneficiary.groupBy({
         by: ['status'],
         where: { deletedAt: null },
         _count: { id: true },
       }),
-      this.prismaRead.beneficiary.groupBy({
+      this.prisma.read.beneficiary.groupBy({
         by: ['province'],
         where: { deletedAt: null, province: { not: null } },
         _count: { id: true },
         orderBy: { _count: { id: 'desc' } },
         take: 10,
       }),
-      this.prismaRead.beneficiary.count({
+      this.prisma.read.beneficiary.count({
         where: {
           nextFollowUpAt: { lte: in30Days },
           status: 'ACTIVE',
           deletedAt: null,
         },
       }),
-      this.prismaRead.beneficiaryInteraction.findMany({
+      this.prisma.read.beneficiaryInteraction.findMany({
         where: { deletedAt: null },
         orderBy: { date: 'desc' },
         take: 5,
@@ -328,8 +322,8 @@ export class CrmBeneficiariesService {
           user: { select: { fullName: true } },
         },
       }),
-      this.prismaRead.beneficiaryNeed.count({ where: { status: 'OPEN' } }),
-      this.prismaRead.beneficiary.aggregate({
+      this.prisma.read.beneficiaryNeed.count({ where: { status: 'OPEN' } }),
+      this.prisma.read.beneficiary.aggregate({
         _avg: { satisfactionAvg: true },
         where: { deletedAt: null, satisfactionAvg: { gt: 0 } },
       }),
@@ -346,19 +340,19 @@ export class CrmBeneficiariesService {
   async getReport(startDate: Date, endDate: Date) {
     const where = { createdAt: { gte: startDate, lte: endDate } };
     const [created, byType, byProvince, interactions] = await Promise.all([
-      this.prismaRead.beneficiary.count({ where }),
-      this.prismaRead.beneficiary.groupBy({
+      this.prisma.read.beneficiary.count({ where }),
+      this.prisma.read.beneficiary.groupBy({
         by: ['type'],
         where,
         _count: { id: true },
       }),
-      this.prismaRead.beneficiary.groupBy({
+      this.prisma.read.beneficiary.groupBy({
         by: ['province'],
         where: { ...where, province: { not: null } },
         _count: { id: true },
         orderBy: { _count: { id: 'desc' } },
       }),
-      this.prismaRead.beneficiaryInteraction.count({
+      this.prisma.read.beneficiaryInteraction.count({
         where: { createdAt: { gte: startDate, lte: endDate } },
       }),
     ]);
@@ -372,17 +366,4 @@ export class CrmBeneficiariesService {
   }
 
   // ─── HELPER ──────────────────────────────────────────
-
-  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
-    // AuditLog.entityId é Int? no schema; os IDs do CRM são cuid (String),
-    // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
-    await this.prisma.auditLog.create({
-      data: {
-        userId,
-        action,
-        entity,
-        metadata: JSON.stringify({ ...meta, entityId }),
-      },
-    });
-  }
 }

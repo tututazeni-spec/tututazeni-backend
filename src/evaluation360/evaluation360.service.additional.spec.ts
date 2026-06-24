@@ -82,6 +82,12 @@ describe('Evaluation360Service (additional)', () => {
     mockPrisma.user.findMany.mockResolvedValue([]);
     mockPrisma.user.findUnique.mockResolvedValue(null);
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         Evaluation360Service,

@@ -30,7 +30,8 @@ import {
 } from './competencies.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Competencies')
 @ApiBearerAuth()
@@ -48,7 +49,7 @@ export class CompetenciesController {
   }
 
   @Get('top')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Top competências da organização (mais frequentes)' })
   @ApiQuery({ name: 'limit', required: false })
   top(@Query('limit') limit?: string) {
@@ -56,7 +57,7 @@ export class CompetenciesController {
   }
 
   @Get('skill-matrix')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Skill Matrix — grid utilizadores × competências' })
   @ApiQuery({ name: 'departmentId', required: false })
   @ApiQuery({ name: 'positionId', required: false })
@@ -71,7 +72,7 @@ export class CompetenciesController {
   }
 
   @Get('dashboard/gaps')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Dashboard de gaps organizacionais' })
   @ApiQuery({ name: 'departmentId', required: false })
   orgGapDashboard(@Query('departmentId') departmentId?: string) {
@@ -87,21 +88,21 @@ export class CompetenciesController {
   // ── Gestão (Admin/RH) ────────────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar competência' })
   create(@Body() dto: CreateCompetencyDto) {
     return this.svc.create(dto);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar competência' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCompetencyDto) {
     return this.svc.update(id, dto);
   }
 
   @Patch(':id/archive')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Arquivar competência (soft inactivate)' })
   @HttpCode(HttpStatus.OK)
   archive(@Param('id', ParseIntPipe) id: number) {
@@ -109,7 +110,7 @@ export class CompetenciesController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar competência (só sem utilizadores associados)' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -118,14 +119,14 @@ export class CompetenciesController {
   // ── Níveis de Proficiência ────────────────────────────────────────────────
 
   @Post('proficiency-levels')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar nível de proficiência para uma competência' })
   createProficiencyLevel(@Body() dto: CreateProficiencyLevelDto) {
     return this.svc.createProficiencyLevel(dto);
   }
 
   @Delete('proficiency-levels/:levelId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover nível de proficiência' })
   removeProficiencyLevel(@Param('levelId', ParseIntPipe) levelId: number) {
     return this.svc.removeProficiencyLevel(levelId);
@@ -134,14 +135,14 @@ export class CompetenciesController {
   // ── Mapeamentos ───────────────────────────────────────────────────────────
 
   @Post('map/position')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Mapear competência a um cargo (com nível requerido)' })
   mapToPosition(@Body() dto: MapCompetencyToPositionDto) {
     return this.svc.mapToPosition(dto);
   }
 
   @Delete('map/position/:positionId/:competencyId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover mapeamento cargo → competência' })
   unmapFromPosition(
     @Param('positionId', ParseIntPipe) positionId: number,
@@ -151,7 +152,7 @@ export class CompetenciesController {
   }
 
   @Post('map/course')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Mapear competência a um curso' })
   mapToCourse(@Body() dto: MapCompetencyToCourseDto) {
     return this.svc.mapToCourse(dto);
@@ -161,26 +162,29 @@ export class CompetenciesController {
 
   @Get('my/profile')
   @ApiOperation({ summary: 'O meu perfil de competências' })
-  myCompetencies(@CurrentUser() user: any) {
+  myCompetencies(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserCompetencies(user.id);
   }
 
   @Get('my/gap/:positionId')
   @ApiOperation({ summary: 'O meu gap para um cargo' })
-  myGap(@CurrentUser() user: any, @Param('positionId', ParseIntPipe) positionId: number) {
+  myGap(
+    @CurrentUser() user: CurrentUserData,
+    @Param('positionId', ParseIntPipe) positionId: number,
+  ) {
     return this.svc.getCompetencyGap(user.id, positionId);
   }
 
   @Get('my/recommendations')
   @ApiOperation({ summary: 'Recomendações baseadas nos meus gaps' })
-  myRecommendations(@CurrentUser() user: any) {
+  myRecommendations(@CurrentUser() user: CurrentUserData) {
     return this.svc.getRecommendations(user.id);
   }
 
   @Get('my/evolution')
   @ApiOperation({ summary: 'Histórico de evolução das minhas competências' })
   @ApiQuery({ name: 'competencyId', required: false })
-  myEvolution(@CurrentUser() user: any, @Query('competencyId') competencyId?: string) {
+  myEvolution(@CurrentUser() user: CurrentUserData, @Query('competencyId') competencyId?: string) {
     return this.svc.getCompetencyEvolution(
       user.id,
       competencyId ? parseInt(competencyId) : undefined,
@@ -190,27 +194,27 @@ export class CompetenciesController {
   @Post('my/self-assess')
   @ApiOperation({ summary: 'Autoavaliação de competência' })
   @HttpCode(HttpStatus.OK)
-  selfAssess(@CurrentUser() user: any, @Body() dto: SelfAssessmentDto) {
+  selfAssess(@CurrentUser() user: CurrentUserData, @Body() dto: SelfAssessmentDto) {
     return this.svc.selfAssess(user.id, dto);
   }
 
   @Get('my/endorsements')
   @ApiOperation({ summary: 'Os meus endorsements recebidos' })
-  myEndorsements(@CurrentUser() user: any) {
+  myEndorsements(@CurrentUser() user: CurrentUserData) {
     return this.svc.getEndorsements(user.id);
   }
 
   // ── Gestão de utilizadores (Admin/RH/Gestor) ──────────────────────────────
 
   @Get('user/:userId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Perfil de competências de um utilizador' })
   userCompetencies(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.getUserCompetencies(userId);
   }
 
   @Get('user/:userId/gap/:positionId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Gap analysis de um utilizador para um cargo' })
   gapAnalysis(
     @Param('userId', ParseIntPipe) userId: number,
@@ -220,7 +224,7 @@ export class CompetenciesController {
   }
 
   @Get('user/:userId/evolution')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Histórico de evolução de competências de um utilizador' })
   userEvolution(
     @Param('userId', ParseIntPipe) userId: number,
@@ -239,16 +243,16 @@ export class CompetenciesController {
   }
 
   @Post('user/upsert')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Atribuir/actualizar competência de utilizador (Admin/RH/Gestor)' })
-  upsertUser(@CurrentUser() updater: any, @Body() dto: UpsertUserCompetencyDto) {
+  upsertUser(@CurrentUser() updater: CurrentUserData, @Body() dto: UpsertUserCompetencyDto) {
     return this.svc.upsertUserCompetency(dto, updater.id);
   }
 
   @Post('user/manager-assess')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Avaliação de competência pelo gestor' })
-  managerAssess(@CurrentUser() manager: any, @Body() dto: ManagerAssessmentDto) {
+  managerAssess(@CurrentUser() manager: CurrentUserData, @Body() dto: ManagerAssessmentDto) {
     return this.svc.managerAssess(manager.id, dto);
   }
 
@@ -256,7 +260,7 @@ export class CompetenciesController {
 
   @Post('endorse')
   @ApiOperation({ summary: 'Endorsar competência de um colega' })
-  endorse(@CurrentUser() user: any, @Body() dto: CreateEndorsementDto) {
+  endorse(@CurrentUser() user: CurrentUserData, @Body() dto: CreateEndorsementDto) {
     return this.svc.addEndorsement(user.id, dto);
   }
 }

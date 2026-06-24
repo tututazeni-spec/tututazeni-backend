@@ -81,14 +81,6 @@ function getTier(score: number): TalentTier {
 
 @Injectable()
 export class TalentDevelopmentService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -102,7 +94,7 @@ export class TalentDevelopmentService {
     if (departmentId) where.departmentId = departmentId;
     if (positionId) where.positionId = positionId;
 
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where,
       include: {
         userCompetencies: { select: { currentLevel: true, targetLevel: true, competencyId: true } },
@@ -237,7 +229,7 @@ export class TalentDevelopmentService {
   // ══════════════════════════════════════════════════════
 
   async getSuccessionCandidates(positionId: number) {
-    const plans = await this.prismaRead.successionPlan.findMany({
+    const plans = await this.prisma.read.successionPlan.findMany({
       where: { positionId },
       include: {
         candidate: {
@@ -280,7 +272,7 @@ export class TalentDevelopmentService {
 
   async getSuccessionDashboard() {
     const [positions, plans] = await Promise.all([
-      this.prismaRead.position.findMany({
+      this.prisma.read.position.findMany({
         select: {
           id: true,
           name: true,
@@ -288,7 +280,7 @@ export class TalentDevelopmentService {
           _count: { select: { users: true, successionPlans: true } },
         },
       }),
-      this.prismaRead.successionPlan.findMany({
+      this.prisma.read.successionPlan.findMany({
         include: { candidate: { select: { id: true, fullName: true } } },
       }),
     ]);
@@ -327,7 +319,7 @@ export class TalentDevelopmentService {
   // ══════════════════════════════════════════════════════
 
   async createPlan(dto: TalentDevelopmentCreateDevelopmentPlanDto, createdById: number) {
-    const user = await this.prismaRead.user.findUnique({ where: { id: dto.userId } });
+    const user = await this.prisma.read.user.findUnique({ where: { id: dto.userId } });
     if (!user) throw new NotFoundException('Colaborador não encontrado');
 
     const plan = await this.prisma.developmentPlan.create({
@@ -378,7 +370,7 @@ export class TalentDevelopmentService {
     if (isTemplate !== undefined) where.isTemplate = isTemplate;
 
     const [data, total] = await Promise.all([
-      this.prismaRead.developmentPlan.findMany({
+      this.prisma.read.developmentPlan.findMany({
         where,
         skip,
         take: limit,
@@ -400,7 +392,7 @@ export class TalentDevelopmentService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.developmentPlan.count({ where }),
+      this.prisma.read.developmentPlan.count({ where }),
     ]);
 
     const enriched = data.map(p => ({ ...p, stats: getPlanStats(p.actions, p.goals) }));
@@ -408,7 +400,7 @@ export class TalentDevelopmentService {
   }
 
   async getPlan(id: number) {
-    const plan = await this.prismaRead.developmentPlan.findUnique({
+    const plan = await this.prisma.read.developmentPlan.findUnique({
       where: { id },
       include: {
         user: { select: { id: true, fullName: true, avatarUrl: true, email: true } },
@@ -521,7 +513,7 @@ export class TalentDevelopmentService {
   // ─── Templates ───────────────────────────────────────
 
   async getTemplates() {
-    return this.prismaRead.developmentPlan.findMany({
+    return this.prisma.read.developmentPlan.findMany({
       where: { isTemplate: true },
       include: {
         actions: { orderBy: { seq: 'asc' } },
@@ -593,7 +585,7 @@ export class TalentDevelopmentService {
   // ══════════════════════════════════════════════════════
 
   async addGoal(planId: number, dto: TalentDevelopmentCreateGoalDto) {
-    const plan = await this.prismaRead.developmentPlan.findUnique({ where: { id: planId } });
+    const plan = await this.prisma.read.developmentPlan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
     return this.prisma.pdiGoal.create({
@@ -611,7 +603,7 @@ export class TalentDevelopmentService {
   }
 
   async updateGoal(goalId: number, dto: TalentDevelopmentUpdateGoalDto) {
-    const goal = await this.prismaRead.pdiGoal.findUnique({ where: { id: goalId } });
+    const goal = await this.prisma.read.pdiGoal.findUnique({ where: { id: goalId } });
     if (!goal) throw new NotFoundException('Meta não encontrada');
 
     const data: any = { ...dto };
@@ -624,7 +616,7 @@ export class TalentDevelopmentService {
   }
 
   async deleteGoal(goalId: number) {
-    const goal = await this.prismaRead.pdiGoal.findUnique({ where: { id: goalId } });
+    const goal = await this.prisma.read.pdiGoal.findUnique({ where: { id: goalId } });
     if (!goal) throw new NotFoundException('Meta não encontrada');
     await this.prisma.pdiGoal.delete({ where: { id: goalId } });
     return { message: 'Meta removida' };
@@ -635,7 +627,7 @@ export class TalentDevelopmentService {
   // ══════════════════════════════════════════════════════
 
   async addAction(planId: number, dto: CreateActionDto) {
-    const plan = await this.prismaRead.developmentPlan.findUnique({ where: { id: planId } });
+    const plan = await this.prisma.read.developmentPlan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
     const action = await this.prisma.developmentPlanAction.create({
@@ -673,7 +665,7 @@ export class TalentDevelopmentService {
   }
 
   async updateAction(actionId: number, dto: UpdateActionDto) {
-    const action = await this.prismaRead.developmentPlanAction.findUnique({
+    const action = await this.prisma.read.developmentPlanAction.findUnique({
       where: { id: actionId },
     });
     if (!action) throw new NotFoundException('Acção não encontrada');
@@ -698,7 +690,7 @@ export class TalentDevelopmentService {
     dto: TalentDevelopmentUpdateProgressDto,
     userId: number,
   ) {
-    const action = await this.prismaRead.developmentPlanAction.findUnique({
+    const action = await this.prisma.read.developmentPlanAction.findUnique({
       where: { id: actionId },
       include: { plan: { select: { userId: true, name: true } } },
     });
@@ -755,7 +747,7 @@ export class TalentDevelopmentService {
   }
 
   async approveActionEvidence(actionId: number, dto: ApproveActionDto, approverId: number) {
-    const action = await this.prismaRead.developmentPlanAction.findUnique({
+    const action = await this.prisma.read.developmentPlanAction.findUnique({
       where: { id: actionId },
       include: { plan: { select: { userId: true } } },
     });
@@ -785,7 +777,7 @@ export class TalentDevelopmentService {
   }
 
   async deleteAction(actionId: number) {
-    const action = await this.prismaRead.developmentPlanAction.findUnique({
+    const action = await this.prisma.read.developmentPlanAction.findUnique({
       where: { id: actionId },
     });
     if (!action) throw new NotFoundException('Acção não encontrada');
@@ -799,7 +791,7 @@ export class TalentDevelopmentService {
   // ══════════════════════════════════════════════════════
 
   async getUserSkillGaps(userId: number) {
-    const user = await this.prismaRead.user.findUnique({
+    const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -811,7 +803,7 @@ export class TalentDevelopmentService {
     if (!user) throw new NotFoundException('Utilizador não encontrado');
 
     // User skills — using legacyEmployeeSkill (userId-based)
-    const userSkills = await this.prismaRead.legacyEmployeeSkill.findMany({
+    const userSkills = await this.prisma.read.legacyEmployeeSkill.findMany({
       where: { userId },
       include: {
         skill: { include: { category: true, proficiencyLevels: { orderBy: { level: 'asc' } } } },
@@ -822,7 +814,7 @@ export class TalentDevelopmentService {
     // Role skill requirements via RoleSkillMatrix
     let requirements: any[] = [];
     if (user.role) {
-      const matrix = await this.prismaRead.roleSkillMatrix.findFirst({
+      const matrix = await this.prisma.read.roleSkillMatrix.findFirst({
         where: { roleCode: { contains: user.role.name, mode: 'insensitive' } },
         include: {
           requirements: {
@@ -891,7 +883,7 @@ export class TalentDevelopmentService {
     if (filters.departmentId) where.user = { departmentId: filters.departmentId };
     if (filters.skillType) where.skill = { type: filters.skillType };
 
-    const records = await this.prismaRead.legacyEmployeeSkill.findMany({
+    const records = await this.prisma.read.legacyEmployeeSkill.findMany({
       where,
       include: {
         skill: { include: { category: true } },
@@ -937,7 +929,7 @@ export class TalentDevelopmentService {
     const where: any = {};
     if (departmentId) where.user = { departmentId };
 
-    const data = await this.prismaRead.legacyEmployeeSkill.findMany({
+    const data = await this.prisma.read.legacyEmployeeSkill.findMany({
       where,
       include: {
         skill: { select: { id: true, name: true, type: true } },
@@ -980,7 +972,7 @@ export class TalentDevelopmentService {
     if (status) where.status = status;
 
     const [data, total] = await Promise.all([
-      this.prismaRead.mentoring.findMany({
+      this.prisma.read.mentoring.findMany({
         where,
         skip,
         take: limit,
@@ -1006,7 +998,7 @@ export class TalentDevelopmentService {
         },
         orderBy: { startedAt: 'desc' },
       }),
-      this.prismaRead.mentoring.count({ where }),
+      this.prisma.read.mentoring.count({ where }),
     ]);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
@@ -1019,11 +1011,11 @@ export class TalentDevelopmentService {
     if (existing) throw new ConflictException('Já existe mentoria activa entre este par');
 
     const [mentor, mentee] = await Promise.all([
-      this.prismaRead.user.findUnique({
+      this.prisma.read.user.findUnique({
         where: { id: dto.mentorId },
         select: { id: true, fullName: true },
       }),
-      this.prismaRead.user.findUnique({
+      this.prisma.read.user.findUnique({
         where: { id: dto.menteeId },
         select: { id: true, fullName: true },
       }),
@@ -1069,7 +1061,7 @@ export class TalentDevelopmentService {
   }
 
   async getMentoring(id: number) {
-    const m = await this.prismaRead.mentoring.findUnique({
+    const m = await this.prisma.read.mentoring.findUnique({
       where: { id },
       include: {
         mentor: {
@@ -1096,7 +1088,7 @@ export class TalentDevelopmentService {
   }
 
   async addMentoringSession(mentoringId: number, dto: CreateMentoringSessionDto) {
-    const m = await this.prismaRead.mentoring.findUnique({
+    const m = await this.prisma.read.mentoring.findUnique({
       where: { id: mentoringId },
       select: { id: true, status: true, mentorId: true, menteeId: true },
     });
@@ -1116,7 +1108,7 @@ export class TalentDevelopmentService {
   }
 
   async getMentorRecommendations(menteeId: number) {
-    const mentee = await this.prismaRead.user.findUnique({
+    const mentee = await this.prisma.read.user.findUnique({
       where: { id: menteeId },
       select: {
         id: true,
@@ -1129,7 +1121,7 @@ export class TalentDevelopmentService {
       .findMany({ where: { menteeId, status: 'ACTIVE' }, select: { mentorId: true } })
       .then(ms => ms.map(m => m.mentorId));
 
-    const candidates = await this.prismaRead.user.findMany({
+    const candidates = await this.prisma.read.user.findMany({
       where: { active: true, id: { notIn: [...activeIds, menteeId] } },
       include: {
         instructorProfile: { select: { approved: true, expertiseArea: true } },
@@ -1177,7 +1169,7 @@ export class TalentDevelopmentService {
   }
 
   async completeMentoring(id: number) {
-    const m = await this.prismaRead.mentoring.findUnique({ where: { id } });
+    const m = await this.prisma.read.mentoring.findUnique({ where: { id } });
     if (!m) throw new NotFoundException('Mentoria não encontrada');
     if (m.status !== 'ACTIVE') throw new BadRequestException('Mentoria não está activa');
     return this.prisma.mentoring.update({
@@ -1209,32 +1201,32 @@ export class TalentDevelopmentService {
       recentCompletions,
       topTrainingNeeds,
     ] = await Promise.all([
-      this.prismaRead.user.count({ where: userWhere }),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.user.count({ where: userWhere }),
+      this.prisma.read.developmentPlan.count({
         where: { status: 'ACTIVE', isTemplate: false, user: userWhere },
       }),
-      this.prismaRead.developmentPlan.count({ where: { isTemplate: false, user: userWhere } }),
-      this.prismaRead.developmentPlan.groupBy({
+      this.prisma.read.developmentPlan.count({ where: { isTemplate: false, user: userWhere } }),
+      this.prisma.read.developmentPlan.groupBy({
         by: ['status'],
         where: { isTemplate: false, user: userWhere },
         _count: true,
       }),
-      this.prismaRead.developmentPlanAction.count({
+      this.prisma.read.developmentPlanAction.count({
         where: { plan: { user: userWhere, isTemplate: false } },
       }),
-      this.prismaRead.developmentPlanAction.count({
+      this.prisma.read.developmentPlanAction.count({
         where: { plan: { user: userWhere, isTemplate: false }, status: 'COMPLETED' },
       }),
-      this.prismaRead.developmentPlanAction.count({
+      this.prisma.read.developmentPlanAction.count({
         where: {
           plan: { user: userWhere, isTemplate: false },
           status: { notIn: ['COMPLETED', 'CANCELLED'] },
           dueDate: { lt: new Date() },
         },
       }),
-      this.prismaRead.mentoring.count({ where: { status: 'ACTIVE' } }),
-      this.prismaRead.legacyEmployeeSkill.count({ where: { user: userWhere } }),
-      this.prismaRead.developmentPlan.findMany({
+      this.prisma.read.mentoring.count({ where: { status: 'ACTIVE' } }),
+      this.prisma.read.legacyEmployeeSkill.count({ where: { user: userWhere } }),
+      this.prisma.read.developmentPlan.findMany({
         where: { status: 'COMPLETED', isTemplate: false, user: userWhere },
         orderBy: { completedAt: 'desc' },
         take: 5,
@@ -1268,16 +1260,16 @@ export class TalentDevelopmentService {
     if (departmentId) userWhere.departmentId = departmentId;
 
     const [total, withPlan, withSkills, withReview, withMentoring, hiPos] = await Promise.all([
-      this.prismaRead.user.count({ where: userWhere }),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({ where: userWhere }),
+      this.prisma.read.user.count({
         where: {
           ...userWhere,
           developmentPlans: { some: { status: 'ACTIVE', isTemplate: false } },
         },
       }),
-      this.prismaRead.user.count({ where: { ...userWhere, legacySkills: { some: {} } } }),
-      this.prismaRead.user.count({ where: { ...userWhere, performanceReviews: { some: {} } } }),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({ where: { ...userWhere, legacySkills: { some: {} } } }),
+      this.prisma.read.user.count({ where: { ...userWhere, performanceReviews: { some: {} } } }),
+      this.prisma.read.user.count({
         where: {
           ...userWhere,
           OR: [
@@ -1314,34 +1306,34 @@ export class TalentDevelopmentService {
   }
 
   async getUserEvolution(userId: number) {
-    const user = await this.prismaRead.user.findUnique({
+    const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
       select: { id: true, fullName: true, avatarUrl: true, createdAt: true },
     });
     if (!user) throw new NotFoundException('Utilizador não encontrado');
 
     const [plans, skills, reviews, badges, points] = await Promise.all([
-      this.prismaRead.developmentPlan.findMany({
+      this.prisma.read.developmentPlan.findMany({
         where: { userId, isTemplate: false },
         include: { actions: { select: { status: true, progress: true } }, goals: true },
         orderBy: { createdAt: 'asc' },
       }),
-      this.prismaRead.legacyEmployeeSkill.findMany({
+      this.prisma.read.legacyEmployeeSkill.findMany({
         where: { userId },
         include: { skill: { select: { id: true, name: true, type: true } } },
         orderBy: { assessedAt: 'asc' },
       }),
-      this.prismaRead.performanceReview.findMany({
+      this.prisma.read.performanceReview.findMany({
         where: { userId },
         orderBy: { createdAt: 'asc' },
         select: { score: true, potentialScore: true, type: true, createdAt: true },
       }),
-      this.prismaRead.badgeAward.findMany({
+      this.prisma.read.badgeAward.findMany({
         where: { userId },
         include: { badge: true },
         orderBy: { awardedAt: 'asc' },
       }),
-      this.prismaRead.userPoints.findUnique({ where: { userId } }),
+      this.prisma.read.userPoints.findUnique({ where: { userId } }),
     ]);
 
     const allActions = plans.flatMap(p => p.actions);
@@ -1395,11 +1387,11 @@ export class TalentDevelopmentService {
   async getRecommendations(userId: number) {
     const [gapData, userPlans, points] = await Promise.all([
       this.getUserSkillGaps(userId),
-      this.prismaRead.developmentPlan.findMany({
+      this.prisma.read.developmentPlan.findMany({
         where: { userId, isTemplate: false, status: { in: ['ACTIVE', 'COMPLETED'] } },
         include: { actions: { select: { type: true, courseId: true, status: true } } },
       }),
-      this.prismaRead.userPoints.findUnique({ where: { userId } }),
+      this.prisma.read.userPoints.findUnique({ where: { userId } }),
     ]);
 
     const existingCourseIds = userPlans
@@ -1456,11 +1448,11 @@ export class TalentDevelopmentService {
 
   async simulateCareer(userId: number, dto: CareerSimulationDto) {
     const [user, targetRole, gapData] = await Promise.all([
-      this.prismaRead.user.findUnique({
+      this.prisma.read.user.findUnique({
         where: { id: userId },
         select: { id: true, fullName: true, role: { select: { name: true } } },
       }),
-      this.prismaRead.careerRole.findUnique({
+      this.prisma.read.careerRole.findUnique({
         where: { id: dto.targetRoleId },
         include: { skillRequirements: { include: { skill: true } } },
       }),
@@ -1516,7 +1508,7 @@ export class TalentDevelopmentService {
   // ══════════════════════════════════════════════════════
 
   private async recalculatePlanProgress(planId: number) {
-    const actions = await this.prismaRead.developmentPlanAction.findMany({
+    const actions = await this.prisma.read.developmentPlanAction.findMany({
       where: { planId },
       select: { progress: true, status: true },
     });

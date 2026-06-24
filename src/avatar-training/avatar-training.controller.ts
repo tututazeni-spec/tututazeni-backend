@@ -17,7 +17,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AvatarTrainingService } from './avatar-training.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   CreateAvatarDto,
   UpdateAvatarDto,
@@ -46,7 +46,7 @@ export class AvatarTrainingController {
   @Post('avatars')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Criar avatar de treino (tutor, coach, personagem, clone…)' })
-  createAvatar(@CurrentUser() user: any, @Body() dto: CreateAvatarDto) {
+  createAvatar(@CurrentUser() user: CurrentUserData, @Body() dto: CreateAvatarDto) {
     return this.svc.createAvatar(user.id, dto);
   }
 
@@ -94,7 +94,7 @@ export class AvatarTrainingController {
   @Post('scenarios')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Criar cenário de simulação com turns e árvore de decisão' })
-  createScenario(@CurrentUser() user: any, @Body() dto: CreateScenarioDto) {
+  createScenario(@CurrentUser() user: CurrentUserData, @Body() dto: CreateScenarioDto) {
     return this.svc.createScenario(user.id, dto);
   }
 
@@ -110,14 +110,14 @@ export class AvatarTrainingController {
   @Get('scenarios/recommended')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Cenários recomendados baseados no perfil e gaps do utilizador' })
-  recommended(@CurrentUser() user: any, @Query('limit') limit?: string) {
+  recommended(@CurrentUser() user: CurrentUserData, @Query('limit') limit?: string) {
     return this.svc.getRecommendedScenarios(user.id, limit ? +limit : 6);
   }
 
   @Get('scenarios/:id')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Detalhe do cenário com turns e melhor tentativa do utilizador' })
-  getScenario(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  getScenario(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getScenario(id, user.id);
   }
 
@@ -133,7 +133,7 @@ export class AvatarTrainingController {
   @Post('sessions/start')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Iniciar sessão de simulação com avatar' })
-  start(@CurrentUser() user: any, @Body() dto: StartSessionDto) {
+  start(@CurrentUser() user: CurrentUserData, @Body() dto: StartSessionDto) {
     return this.svc.startSession(user.id, dto);
   }
 
@@ -142,7 +142,7 @@ export class AvatarTrainingController {
   @ApiOperation({ summary: 'Enviar mensagem na sessão — avatar responde + score em tempo real' })
   sendMessage(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: SendMessageDto,
   ) {
     return this.svc.sendMessage(id, user.id, dto);
@@ -155,7 +155,7 @@ export class AvatarTrainingController {
   })
   complete(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: CompleteSessionDto,
   ) {
     return this.svc.completeSession(id, user.id, dto);
@@ -164,21 +164,21 @@ export class AvatarTrainingController {
   @Post('sessions/:id/pause')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Pausar sessão' })
-  pause(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  pause(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.pauseSession(id, user.id);
   }
 
   @Post('sessions/:id/resume')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Retomar sessão pausada' })
-  resume(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  resume(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.resumeSession(id, user.id);
   }
 
   @Get('sessions/:id')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Detalhe de sessão com histórico de conversa + scores comportamentais' })
-  sessionDetail(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  sessionDetail(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getSessionDetail(id, user.id);
   }
 
@@ -187,14 +187,14 @@ export class AvatarTrainingController {
   @Get('my-history')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Meu histórico + estatísticas (streak, score médio, XP)' })
-  myHistory(@CurrentUser() user: any, @Query('limit') limit?: string) {
+  myHistory(@CurrentUser() user: CurrentUserData, @Query('limit') limit?: string) {
     return this.svc.getMyHistory(user.id, limit ? +limit : 20);
   }
 
   @Get('my-analytics')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Análise pessoal aprofundada (por categoria, evolução, competências)' })
-  myAnalytics(@CurrentUser() user: any) {
+  myAnalytics(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserAnalytics(user.id);
   }
 

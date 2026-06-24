@@ -67,6 +67,12 @@ describe('LearningPathsService — additional coverage', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockPrisma.learningPathCourse.aggregate.mockResolvedValue({ _sum: { durationMinutes: 120 } });
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [LearningPathsService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();

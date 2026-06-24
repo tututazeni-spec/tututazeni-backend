@@ -7,18 +7,14 @@ import {
   AttendanceFeedbackDto,
   FilterPathDto,
 } from './dto';
+import { AuditService } from '../common/services/audit.service';
 
 @Injectable()
 export class LmsService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ─── GERAÇÃO DE CÓDIGOS ──────────────────────────────
 
@@ -47,7 +43,7 @@ export class LmsService {
         createdById: userId,
       },
     });
-    await this.audit(userId, 'CREATE', 'LmsLearningPath', path.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'LmsLearningPath', path.id, {
       code: dto.code,
     });
     return path;
@@ -68,7 +64,7 @@ export class LmsService {
       }),
     };
     const [data, total] = await Promise.all([
-      this.prismaRead.lmsLearningPath.findMany({
+      this.prisma.read.lmsLearningPath.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -78,13 +74,13 @@ export class LmsService {
           _count: { select: { enrollments: true } },
         },
       }),
-      this.prismaRead.lmsLearningPath.count({ where }),
+      this.prisma.read.lmsLearningPath.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findPathById(id: string) {
-    const path = await this.prismaRead.lmsLearningPath.findUnique({
+    const path = await this.prisma.read.lmsLearningPath.findUnique({
       where: { id },
       include: {
         createdBy: { select: { fullName: true } },
@@ -101,7 +97,7 @@ export class LmsService {
       where: { id },
       data: dto,
     });
-    await this.audit(userId, 'UPDATE', 'LmsLearningPath', id, dto);
+    await this.audit.logEntity(userId, 'UPDATE', 'LmsLearningPath', id, dto);
     return updated;
   }
 
@@ -111,7 +107,7 @@ export class LmsService {
       where: { id },
       data: { deletedAt: new Date() },
     });
-    await this.audit(userId, 'DELETE', 'LmsLearningPath', id, {
+    await this.audit.logEntity(userId, 'DELETE', 'LmsLearningPath', id, {
       deletedAt: new Date(),
     });
     return { message: 'Percurso removido com sucesso' };
@@ -147,14 +143,14 @@ export class LmsService {
         metadata: JSON.stringify({ pathId }),
       },
     });
-    await this.audit(userId, 'CREATE', 'LmsPathEnrollment', enrollment.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'LmsPathEnrollment', enrollment.id, {
       pathId,
     });
     return enrollment;
   }
 
   async updatePathProgress(pathId: string, completedCourseId: string, userId: number) {
-    const enrollment = await this.prismaRead.lmsPathEnrollment.findUnique({
+    const enrollment = await this.prisma.read.lmsPathEnrollment.findUnique({
       where: { pathId_userId: { pathId, userId } },
       include: { path: true },
     });
@@ -190,7 +186,7 @@ export class LmsService {
   }
 
   async getMyPaths(userId: number) {
-    return this.prismaRead.lmsPathEnrollment.findMany({
+    return this.prisma.read.lmsPathEnrollment.findMany({
       where: { userId, deletedAt: null },
       orderBy: { startedAt: 'desc' },
       include: {
@@ -220,7 +216,7 @@ export class LmsService {
         createdById: userId,
       },
     });
-    await this.audit(userId, 'CREATE', 'LmsLiveSession', session.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'LmsLiveSession', session.id, {
       code,
       title: dto.title,
     });
@@ -234,7 +230,7 @@ export class LmsService {
       scheduledAt: { gte: new Date() },
     };
     const [data, total] = await Promise.all([
-      this.prismaRead.lmsLiveSession.findMany({
+      this.prisma.read.lmsLiveSession.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -244,13 +240,13 @@ export class LmsService {
           _count: { select: { attendances: true } },
         },
       }),
-      this.prismaRead.lmsLiveSession.count({ where }),
+      this.prisma.read.lmsLiveSession.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async registerForSession(sessionId: string, userId: number) {
-    const session = await this.prismaRead.lmsLiveSession.findUnique({
+    const session = await this.prisma.read.lmsLiveSession.findUnique({
       where: { id: sessionId },
       include: { _count: { select: { attendances: true } } },
     });
@@ -269,7 +265,7 @@ export class LmsService {
   }
 
   async markAttendance(sessionId: string, userId: number) {
-    const attendance = await this.prismaRead.lmsLiveAttendance.findUnique({
+    const attendance = await this.prisma.read.lmsLiveAttendance.findUnique({
       where: { sessionId_userId: { sessionId, userId } },
     });
     if (!attendance) throw new NotFoundException('Inscrição na sessão não encontrada');
@@ -283,7 +279,7 @@ export class LmsService {
   }
 
   async submitSessionFeedback(sessionId: string, dto: AttendanceFeedbackDto, userId: number) {
-    const attendance = await this.prismaRead.lmsLiveAttendance.findUnique({
+    const attendance = await this.prisma.read.lmsLiveAttendance.findUnique({
       where: { sessionId_userId: { sessionId, userId } },
     });
     if (!attendance) throw new NotFoundException('Presença não encontrada');
@@ -297,18 +293,18 @@ export class LmsService {
 
   async getRecommendations(userId: number) {
     // Recomendações baseadas na actividade do utilizador
-    await this.prismaRead.user.findUnique({
+    await this.prisma.read.user.findUnique({
       where: { id: userId },
       select: { roleId: true, fullName: true },
     });
 
-    const enrolled = await this.prismaRead.lmsPathEnrollment.findMany({
+    const enrolled = await this.prisma.read.lmsPathEnrollment.findMany({
       where: { userId, deletedAt: null },
       select: { pathId: true },
     });
     const enrolledIds = enrolled.map(e => e.pathId);
 
-    const recommended = await this.prismaRead.lmsLearningPath.findMany({
+    const recommended = await this.prisma.read.lmsLearningPath.findMany({
       where: {
         deletedAt: null,
         isActive: true,
@@ -336,7 +332,7 @@ export class LmsService {
   // ─── ANALYTICS DO UTILIZADOR ─────────────────────────
 
   async getMyAnalytics(userId: number) {
-    let analytics = await this.prismaRead.lmsLearningAnalytics.findUnique({
+    let analytics = await this.prisma.read.lmsLearningAnalytics.findUnique({
       where: { userId },
     });
     if (!analytics) {
@@ -357,21 +353,21 @@ export class LmsService {
       totalSessions,
       byLevel,
     ] = await Promise.all([
-      this.prismaRead.lmsLearningPath.count({ where: { deletedAt: null } }),
-      this.prismaRead.lmsLearningPath.count({
+      this.prisma.read.lmsLearningPath.count({ where: { deletedAt: null } }),
+      this.prisma.read.lmsLearningPath.count({
         where: { isActive: true, deletedAt: null },
       }),
-      this.prismaRead.lmsPathEnrollment.count({ where: { deletedAt: null } }),
-      this.prismaRead.lmsPathEnrollment.count({ where: { status: 'COMPLETED' } }),
-      this.prismaRead.lmsLiveSession.count({
+      this.prisma.read.lmsPathEnrollment.count({ where: { deletedAt: null } }),
+      this.prisma.read.lmsPathEnrollment.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.read.lmsLiveSession.count({
         where: {
           status: 'SCHEDULED',
           scheduledAt: { gte: new Date() },
           deletedAt: null,
         },
       }),
-      this.prismaRead.lmsLiveSession.count({ where: { deletedAt: null } }),
-      (this.prismaRead.lmsLearningPath.groupBy as any)({
+      this.prisma.read.lmsLiveSession.count({ where: { deletedAt: null } }),
+      (this.prisma.read.lmsLearningPath.groupBy as any)({
         by: ['level'],
         where: { deletedAt: null },
         _count: { id: true },
@@ -410,19 +406,6 @@ export class LmsService {
     await this.prisma.lmsLearningAnalytics.update({
       where: { userId },
       data,
-    });
-  }
-
-  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
-    // AuditLog.entityId é Int? no schema; os IDs deste módulo são cuid (String),
-    // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
-    await this.prisma.auditLog.create({
-      data: {
-        userId,
-        action,
-        entity,
-        metadata: JSON.stringify({ ...meta, entityId }),
-      },
     });
   }
 }

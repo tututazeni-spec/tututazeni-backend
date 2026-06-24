@@ -23,6 +23,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private prisma: PrismaService,
     private config: ConfigService,
   ) {
+    // Sem JWT_SECRET não há forma segura de verificar tokens — falhar alto no
+    // arranque em vez de aceitar/rejeitar tokens de forma imprevisível.
+    const jwtSecret = config.get<string>('JWT_SECRET');
+    if (!jwtSecret) {
+      throw new Error(
+        'JWT_SECRET não está definido — recusado por segurança. Configure a variável de ambiente.',
+      );
+    }
+
     super({
       // Cookie httpOnly tem prioridade; header Bearer mantém-se como fallback
       // (compatibilidade com Swagger e clientes que ainda enviam o header).
@@ -31,7 +40,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         ExtractJwt.fromAuthHeaderAsBearerToken(),
       ]),
       ignoreExpiration: false,
-      secretOrKey: config.get<string>('JWT_SECRET'),
+      secretOrKey: jwtSecret,
     });
   }
 

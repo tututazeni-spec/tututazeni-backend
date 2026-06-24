@@ -60,14 +60,6 @@ function healthStatusInverse(
 
 @Injectable()
 export class DashboardRhService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -96,16 +88,16 @@ export class DashboardRhService {
       topBadgeAwardees,
       recentActivity,
     ] = await Promise.all([
-      this.prismaRead.user.count({ where: { active: true } }),
-      this.prismaRead.user.count({ where: { active: false } }),
-      this.prismaRead.user.count({ where: { createdAt: { gte: mS } } }),
-      this.prismaRead.user.count({ where: { createdAt: { gte: mS1, lt: mS } } }),
-      this.prismaRead.user.groupBy({
+      this.prisma.read.user.count({ where: { active: true } }),
+      this.prisma.read.user.count({ where: { active: false } }),
+      this.prisma.read.user.count({ where: { createdAt: { gte: mS } } }),
+      this.prisma.read.user.count({ where: { createdAt: { gte: mS1, lt: mS } } }),
+      this.prisma.read.user.groupBy({
         by: ['departmentId'],
         where: { active: true },
         _count: { id: true },
       }),
-      this.prismaRead.user.groupBy({
+      this.prisma.read.user.groupBy({
         by: ['positionId'],
         where: { active: true },
         _count: { id: true },
@@ -116,15 +108,17 @@ export class DashboardRhService {
           _avg: { score: true },
         })
         .catch(() => ({ _avg: { score: null } })),
-      this.prismaRead.developmentPlan.count({ where: { status: 'ACTIVE', isTemplate: false } }),
-      this.prismaRead.enrollment.count({ where: { status: 'CONCLUIDO', enrolledAt: { gte: mS } } }),
+      this.prisma.read.developmentPlan.count({ where: { status: 'ACTIVE', isTemplate: false } }),
+      this.prisma.read.enrollment.count({
+        where: { status: 'CONCLUIDO', enrolledAt: { gte: mS } },
+      }),
       this.prisma.enrollment
         .count({
           where: { course: { mandatory: true } as any, status: 'CONCLUIDO' },
         })
         .catch(() => 0),
-      this.prismaRead.surveyResponse.count({ where: { createdAt: { gte: mS } } }),
-      this.prismaRead.avatarSession.count({
+      this.prisma.read.surveyResponse.count({ where: { createdAt: { gte: mS } } }),
+      this.prisma.read.avatarSession.count({
         where: { status: 'COMPLETED', startedAt: { gte: mS } },
       }),
       this.prisma.badgeAward
@@ -153,7 +147,7 @@ export class DashboardRhService {
     // Enrich dept breakdown with names
     const deptIds = deptBreakdown.map(d => d.departmentId).filter(Boolean);
     const departments = deptIds.length
-      ? await this.prismaRead.department.findMany({
+      ? await this.prisma.read.department.findMany({
           where: { id: { in: deptIds } },
           select: { id: true, name: true },
         })
@@ -162,7 +156,7 @@ export class DashboardRhService {
 
     const posIds = posBreakdown.map(p => p.positionId).filter(Boolean);
     const positions = posIds.length
-      ? await this.prismaRead.position.findMany({
+      ? await this.prisma.read.position.findMany({
           where: { id: { in: posIds } },
           select: { id: true, name: true, level: true },
         })
@@ -214,9 +208,9 @@ export class DashboardRhService {
     const deptFilter = departmentId ? { departmentId } : {};
 
     const [total, active, byDept, byPos, byTenure] = await Promise.all([
-      this.prismaRead.user.count({ where: deptFilter }),
-      this.prismaRead.user.count({ where: { ...deptFilter, active: true } }),
-      this.prismaRead.department.findMany({
+      this.prisma.read.user.count({ where: deptFilter }),
+      this.prisma.read.user.count({ where: { ...deptFilter, active: true } }),
+      this.prisma.read.department.findMany({
         select: { id: true, name: true, _count: { select: { users: true } } },
       }),
       (this.prisma as any).position.findMany({
@@ -275,8 +269,8 @@ export class DashboardRhService {
       const endDate = monthEnd(i);
       const start = monthStart(i);
       const [count, newInMonth] = await Promise.all([
-        this.prismaRead.user.count({ where: { createdAt: { lte: endDate }, active: true } }),
-        this.prismaRead.user.count({ where: { createdAt: { gte: start, lte: endDate } } }),
+        this.prisma.read.user.count({ where: { createdAt: { lte: endDate }, active: true } }),
+        this.prisma.read.user.count({ where: { createdAt: { gte: start, lte: endDate } } }),
       ]);
       const label = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}`;
       trend.push({ month: label, count, new: newInMonth });
@@ -291,16 +285,16 @@ export class DashboardRhService {
   async getTurnoverPanel(months = 12) {
     const now = new Date();
     const [total, inactive] = await Promise.all([
-      this.prismaRead.user.count(),
-      this.prismaRead.user.count({ where: { active: false } }),
+      this.prisma.read.user.count(),
+      this.prisma.read.user.count({ where: { active: false } }),
     ]);
 
-    const recent3 = await this.prismaRead.user.count({
+    const recent3 = await this.prisma.read.user.count({
       where: { active: false, updatedAt: { gte: monthStart(3) } },
     });
 
     // Tenure distribution of active users
-    const activeUsers = await this.prismaRead.user.findMany({
+    const activeUsers = await this.prisma.read.user.findMany({
       where: { active: true },
       select: {
         id: true,
@@ -371,9 +365,9 @@ export class DashboardRhService {
       avatarSessions,
       badgeAwards,
     ] = await Promise.all([
-      this.prismaRead.user.count({ where: { active: true, ...uWhere } }),
-      this.prismaRead.surveyResponse.count({ where: { createdAt: { gte: mS }, user: uWhere } }),
-      this.prismaRead.engagementSurvey.count({ where: { status: 'ACTIVE' } }),
+      this.prisma.read.user.count({ where: { active: true, ...uWhere } }),
+      this.prisma.read.surveyResponse.count({ where: { createdAt: { gte: mS }, user: uWhere } }),
+      this.prisma.read.engagementSurvey.count({ where: { status: 'ACTIVE' } }),
       this.prisma.surveyResponse
         .aggregate({
           where: { createdAt: { gte: mS }, user: uWhere },
@@ -381,10 +375,10 @@ export class DashboardRhService {
         })
         .catch(() => ({ _avg: { score: null } })),
       safeM(this.prisma, 'recognition').count({ where: { createdAt: { gte: mS } } }),
-      this.prismaRead.avatarSession.count({
+      this.prisma.read.avatarSession.count({
         where: { status: 'COMPLETED', startedAt: { gte: mS }, user: uWhere },
       }),
-      this.prismaRead.badgeAward.count({ where: { awardedAt: { gte: mS }, user: uWhere } }),
+      this.prisma.read.badgeAward.count({ where: { awardedAt: { gte: mS }, user: uWhere } }),
     ]);
 
     const participationRate = pct(surveyResponses, totalUsers);
@@ -403,7 +397,7 @@ export class DashboardRhService {
       })
       .then(async rows => {
         const uIds = rows.map(r => r.userId);
-        const users = await this.prismaRead.user.findMany({
+        const users = await this.prisma.read.user.findMany({
           where: { id: { in: uIds } },
           select: { id: true, departmentId: true },
         });
@@ -413,7 +407,7 @@ export class DashboardRhService {
           const dId = u?.departmentId ?? 0;
           deptC[dId] = (deptC[dId] ?? 0) + 1;
         }
-        const depts = await this.prismaRead.department.findMany({
+        const depts = await this.prisma.read.department.findMany({
           where: { id: { in: Object.keys(deptC).map(Number) } },
           select: { id: true, name: true },
         });
@@ -449,7 +443,7 @@ export class DashboardRhService {
     const uWhere = departmentId ? { departmentId } : {};
 
     const [reviews, userCount, hiPos, activePlans] = await Promise.all([
-      this.prismaRead.performanceReview.findMany({
+      this.prisma.read.performanceReview.findMany({
         where: { user: uWhere },
         include: {
           user: {
@@ -464,7 +458,7 @@ export class DashboardRhService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.user.count({ where: { active: true, ...uWhere } }),
+      this.prisma.read.user.count({ where: { active: true, ...uWhere } }),
       this.prisma.userCompetency
         .groupBy({
           by: ['userId'],
@@ -474,7 +468,7 @@ export class DashboardRhService {
         })
         .then(r => r.length)
         .catch(() => 0),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.developmentPlan.count({
         where: { status: 'ACTIVE', isTemplate: false, user: uWhere },
       }),
     ]);
@@ -546,7 +540,7 @@ export class DashboardRhService {
           include: { skill: { select: { id: true, name: true, type: true } } },
         })
         .catch(() => [] as any[]),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({
         where: { active: true, ...(departmentId ? { departmentId } : {}) },
       }),
     ]);
@@ -601,12 +595,12 @@ export class DashboardRhService {
       mandatoryComplete,
       topCourses,
     ] = await Promise.all([
-      this.prismaRead.enrollment.count({ where: { enrolledAt: { gte: mS }, ...uWhere } }),
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({ where: { enrolledAt: { gte: mS }, ...uWhere } }),
+      this.prisma.read.enrollment.count({
         where: { status: 'CONCLUIDO', enrolledAt: { gte: mS }, ...uWhere },
       }),
-      this.prismaRead.enrollment.count({ where: { status: 'EM_ANDAMENTO', ...uWhere } }),
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({ where: { status: 'EM_ANDAMENTO', ...uWhere } }),
+      this.prisma.read.enrollment.count({
         where: { status: 'CANCELADO', enrolledAt: { gte: mS }, ...uWhere },
       }),
       this.prisma.enrollment
@@ -625,7 +619,7 @@ export class DashboardRhService {
         })
         .then(async rows => {
           const ids = rows.map(r => r.courseId);
-          const courses = await this.prismaRead.course.findMany({
+          const courses = await this.prisma.read.course.findMany({
             where: { id: { in: ids } },
             select: { id: true, title: true, category: true },
           });
@@ -634,7 +628,7 @@ export class DashboardRhService {
         }),
     ]);
 
-    const totalUsers = await this.prismaRead.user.count({
+    const totalUsers = await this.prisma.read.user.count({
       where: { active: true, ...(departmentId ? { departmentId } : {}) },
     });
     const completionRate = pct(completed, enrollments);
@@ -676,7 +670,7 @@ export class DashboardRhService {
       this.prisma.enrollment
         .count({ where: { course: { mandatory: true } as any, status: 'CONCLUIDO' } })
         .catch(() => 0),
-      this.prismaRead.auditLog
+      this.prisma.read.auditLog
         .count({ where: { timestamp: { gte: monthStart() } } })
         .catch(() => 0),
       this.prisma.certificate
@@ -716,7 +710,7 @@ export class DashboardRhService {
   async getAnniversariesThisMonth() {
     const now = new Date();
     const month = now.getMonth() + 1;
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where: { active: true },
       select: {
         id: true,
@@ -749,7 +743,7 @@ export class DashboardRhService {
   async getAttendancePanel(from?: string, to?: string) {
     const dateFrom = from ? new Date(from) : monthStart();
     const dateTo = to ? new Date(to) : new Date();
-    const records = await this.prismaRead.attendance.findMany({
+    const records = await this.prisma.read.attendance.findMany({
       where: { date: { gte: dateFrom, lte: dateTo } },
       include: { employee: { select: { id: true, name: true } } },
     });
@@ -777,7 +771,7 @@ export class DashboardRhService {
 
   async getTalentPipeline() {
     const [positions, plans, hiPos] = await Promise.all([
-      this.prismaRead.position.findMany({
+      this.prisma.read.position.findMany({
         select: {
           id: true,
           name: true,
@@ -787,7 +781,7 @@ export class DashboardRhService {
         orderBy: { level: 'desc' },
         take: 20,
       }),
-      this.prismaRead.successionPlan.findMany({
+      this.prisma.read.successionPlan.findMany({
         include: {
           candidate: {
             select: {
@@ -811,7 +805,7 @@ export class DashboardRhService {
         })
         .then(async rows => {
           const ids = rows.map(r => r.userId);
-          const users = await this.prismaRead.user.findMany({
+          const users = await this.prisma.read.user.findMany({
             where: { id: { in: ids }, active: true },
             select: {
               id: true,
@@ -870,7 +864,7 @@ export class DashboardRhService {
       this.prisma.surveyResponse
         .count({ where: { createdAt: { gte: mS } } })
         .then(async r => {
-          const total = await this.prismaRead.user.count({ where: { active: true } });
+          const total = await this.prisma.read.user.count({ where: { active: true } });
           return total > 0 && r / total < 0.3; // <30% participation = low
         })
         .catch(() => false),
@@ -940,7 +934,7 @@ export class DashboardRhService {
       this.prisma.performanceReview
         .count({ where: { score: { lt: 2 }, status: 'COMPLETED' } })
         .catch(() => 0),
-      this.prismaRead.surveyResponse.count({ where: { createdAt: { gte: monthStart() } } }),
+      this.prisma.read.surveyResponse.count({ where: { createdAt: { gte: monthStart() } } }),
     ]);
 
     return {
@@ -959,7 +953,7 @@ export class DashboardRhService {
   // ══════════════════════════════════════════════════════
 
   async getCorrelations() {
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where: { active: true },
       select: { id: true, createdAt: true },
       take: 500,
@@ -967,15 +961,15 @@ export class DashboardRhService {
     const userIds = users.map(u => u.id);
 
     const [perfReviews, enrollments, surveyResponses] = await Promise.all([
-      this.prismaRead.performanceReview.findMany({
+      this.prisma.read.performanceReview.findMany({
         where: { userId: { in: userIds } },
         select: { userId: true, score: true },
       }),
-      this.prismaRead.enrollment.findMany({
+      this.prisma.read.enrollment.findMany({
         where: { userId: { in: userIds }, status: 'CONCLUIDO' },
         select: { userId: true },
       }),
-      this.prismaRead.surveyResponse.findMany({
+      this.prisma.read.surveyResponse.findMany({
         where: { userId: { in: userIds } },
         select: { userId: true, score: true },
       }),
@@ -1052,7 +1046,7 @@ export class DashboardRhService {
   // ══════════════════════════════════════════════════════
 
   async getPayrollPanel(period: string) {
-    const records = await this.prismaRead.historyRecord.findMany({
+    const records = await this.prisma.read.historyRecord.findMany({
       where: { action: 'PAYSLIP', description: { contains: `"period":"${period}"` } },
       include: { user: { select: { id: true, fullName: true, department: true } } },
     });

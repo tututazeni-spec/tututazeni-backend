@@ -1,5 +1,6 @@
 // ─── src/declarations/declarations.dto.ts ────────────────────────────────────
 import {
+  Max,
   IsString,
   IsInt,
   IsOptional,
@@ -134,7 +135,7 @@ export class DocumentRequestFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Max(100) @Type(() => Number) limit?: number;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -238,5 +239,5 @@ export class WorkDeclFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Max(100) @Type(() => Number) limit?: number;
 }

@@ -54,14 +54,6 @@ const RETRY_DELAYS = [10, 60, 300, 1800]; // seconds: 10s, 1m, 5m, 30m
 export class ApiIntegrationService {
   private readonly logger = new Logger(ApiIntegrationService.name);
 
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -69,14 +61,14 @@ export class ApiIntegrationService {
   // ══════════════════════════════════════════════════════
 
   async getIntegrations() {
-    const integrations = await this.prismaRead.integrationConfig.findMany({
+    const integrations = await this.prisma.read.integrationConfig.findMany({
       orderBy: { name: 'asc' },
     });
 
     // Enrich with last log status
     return Promise.all(
       integrations.map(async i => {
-        const lastLog = await this.prismaRead.apiIntegrationLog.findFirst({
+        const lastLog = await this.prisma.read.apiIntegrationLog.findFirst({
           where: { integrationId: i.id },
           orderBy: { createdAt: 'desc' },
         });
@@ -92,14 +84,14 @@ export class ApiIntegrationService {
   }
 
   async getIntegration(id: number) {
-    const i = await this.prismaRead.integrationConfig.findUnique({ where: { id } });
+    const i = await this.prisma.read.integrationConfig.findUnique({ where: { id } });
     if (!i) throw new NotFoundException('Integração não encontrada');
 
     const [logs24h, errRate] = await Promise.all([
-      this.prismaRead.apiIntegrationLog.count({
+      this.prisma.read.apiIntegrationLog.count({
         where: { integrationId: id, createdAt: { gte: new Date(Date.now() - 86400000) } },
       }),
-      this.prismaRead.apiIntegrationLog.count({
+      this.prisma.read.apiIntegrationLog.count({
         where: {
           integrationId: id,
           status: 'ERROR',
@@ -150,7 +142,7 @@ export class ApiIntegrationService {
   }
 
   async toggleIntegration(id: number) {
-    const i = await this.prismaRead.integrationConfig.findUnique({ where: { id } });
+    const i = await this.prisma.read.integrationConfig.findUnique({ where: { id } });
     if (!i) throw new NotFoundException('Integração não encontrada');
 
     const updated = await this.prisma.integrationConfig.update({
@@ -184,7 +176,7 @@ export class ApiIntegrationService {
   // ══════════════════════════════════════════════════════
 
   async testIntegration(id: number) {
-    const integration = await this.prismaRead.integrationConfig.findUnique({ where: { id } });
+    const integration = await this.prisma.read.integrationConfig.findUnique({ where: { id } });
     if (!integration) return { success: false, message: 'Integração não encontrada' };
 
     const url = integration.baseUrl ?? integration.endpoint;
@@ -249,13 +241,13 @@ export class ApiIntegrationService {
     }
 
     const [data, total] = await Promise.all([
-      this.prismaRead.apiIntegrationLog.findMany({
+      this.prisma.read.apiIntegrationLog.findMany({
         where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.apiIntegrationLog.count({ where }),
+      this.prisma.read.apiIntegrationLog.count({ where }),
     ]);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
@@ -265,12 +257,12 @@ export class ApiIntegrationService {
     const { page = 1, limit = 50 } = filters;
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
-      this.prismaRead.apiIntegrationLog.findMany({
+      this.prisma.read.apiIntegrationLog.findMany({
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.apiIntegrationLog.count(),
+      this.prisma.read.apiIntegrationLog.count(),
     ]);
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
@@ -580,10 +572,10 @@ export class ApiIntegrationService {
       totalWebhooks,
       apiKeys,
     ] = await Promise.all([
-      this.prismaRead.integrationConfig.count(),
-      this.prismaRead.integrationConfig.count({ where: { active: true } }),
-      this.prismaRead.apiIntegrationLog.count({ where: { createdAt: { gte: since24h } } }),
-      this.prismaRead.apiIntegrationLog.count({
+      this.prisma.read.integrationConfig.count(),
+      this.prisma.read.integrationConfig.count({ where: { active: true } }),
+      this.prisma.read.apiIntegrationLog.count({ where: { createdAt: { gte: since24h } } }),
+      this.prisma.read.apiIntegrationLog.count({
         where: { createdAt: { gte: since24h }, status: 'ERROR' },
       }),
       (this.prisma as any).apiIntegrationLog
@@ -601,15 +593,15 @@ export class ApiIntegrationService {
     ]);
 
     // Per-integration health
-    const integrations = await this.prismaRead.integrationConfig.findMany({
+    const integrations = await this.prisma.read.integrationConfig.findMany({
       select: { id: true, name: true, active: true },
     });
     const integrationHealth = await Promise.all(
       integrations.map(async i => {
-        const logs7d = await this.prismaRead.apiIntegrationLog.count({
+        const logs7d = await this.prisma.read.apiIntegrationLog.count({
           where: { integrationId: i.id, createdAt: { gte: since7d } },
         });
-        const errors7d = await this.prismaRead.apiIntegrationLog.count({
+        const errors7d = await this.prisma.read.apiIntegrationLog.count({
           where: { integrationId: i.id, status: 'ERROR', createdAt: { gte: since7d } },
         });
         const errorRate = logs7d > 0 ? +((errors7d / logs7d) * 100).toFixed(1) : 0;

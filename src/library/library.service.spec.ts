@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { LibraryService } from './library.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException } from '@nestjs/common';
+import { AuditService } from '../common/services/audit.service';
 
 const mockItem = {
   id: 'item-1',
@@ -55,12 +56,30 @@ const mockPrisma = {
   $transaction: jest.fn(),
 };
 
+const mockAudit = {
+  logEntity: jest.fn((userId, action, entity, entityId, meta = {}) =>
+    mockPrisma.auditLog.create({
+      data: { userId, action, entity, metadata: JSON.stringify({ ...meta, entityId }) },
+    }),
+  ),
+};
+
 describe('LibraryService', () => {
   let service: LibraryService;
 
   beforeEach(async () => {
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [LibraryService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        LibraryService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAudit },
+      ],
     }).compile();
     service = module.get<LibraryService>(LibraryService);
     jest.clearAllMocks();

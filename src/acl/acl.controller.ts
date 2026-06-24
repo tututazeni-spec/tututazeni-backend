@@ -17,7 +17,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AclService } from './acl.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   CreatePermissionDto,
   BulkAssignPermissionsDto,
@@ -28,6 +28,7 @@ import {
   AssignRoleToUserDto,
   AclAuditFilterDto,
 } from './acl.dto';
+import { Role } from '../auth/enums/role.enum';
 
 const ADMIN = ['ADMIN', 'RH'] as const;
 
@@ -41,9 +42,17 @@ export class AclController {
   // ─── My permissions ───────────────────────────────────────────
 
   @Get('my-permissions')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR', 'INSTRUCTOR', 'AUDITOR', 'DIRECTOR')
+  @Roles(
+    Role.ADMIN,
+    Role.RH,
+    Role.LIDER,
+    Role.COLABORADOR,
+    Role.INSTRUCTOR,
+    Role.AUDITOR,
+    Role.DIRECTOR,
+  )
   @ApiOperation({ summary: 'As minhas permissões actuais (cached)' })
-  myPermissions(@CurrentUser() user: any) {
+  myPermissions(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserPermissions(user.id);
   }
 
@@ -147,7 +156,7 @@ export class AclController {
   // ─── Permission check ─────────────────────────────────────────
 
   @Post('check')
-  @Roles(...ADMIN, 'LIDER', 'COLABORADOR', 'INSTRUCTOR', 'AUDITOR', 'DIRECTOR')
+  @Roles(...ADMIN, Role.LIDER, Role.COLABORADOR, Role.INSTRUCTOR, Role.AUDITOR, Role.DIRECTOR)
   @ApiOperation({ summary: 'Verificar se utilizador tem permissão para acção+subject' })
   check(@Body() dto: CheckPermissionDto) {
     return this.svc.checkPermission(dto);
@@ -174,7 +183,7 @@ export class AclController {
   @Post('policies')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Criar política de acesso (condition JSON, effect ALLOW/DENY)' })
-  createPolicy(@Body() dto: CreatePolicyDto, @CurrentUser() user: any) {
+  createPolicy(@Body() dto: CreatePolicyDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createPolicy(dto, user.id);
   }
 
@@ -206,7 +215,7 @@ export class AclController {
   // ─── Seed ────────────────────────────────────────────────────
 
   @Post('seed-permissions')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: '[ADMIN] Criar permissões built-in (35+) se não existirem' })
   seedPermissions() {
     return this.svc.seedBuiltinPermissions();

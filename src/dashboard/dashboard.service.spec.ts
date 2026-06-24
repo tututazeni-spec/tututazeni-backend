@@ -76,6 +76,12 @@ describe('DashboardService', () => {
     mockPrisma.enrollment.count.mockResolvedValue(50);
     mockPrisma.certificate.count.mockResolvedValue(10);
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [DashboardService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();

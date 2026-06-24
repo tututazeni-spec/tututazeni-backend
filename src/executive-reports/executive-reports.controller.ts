@@ -25,12 +25,13 @@ import {
 } from './executive-reports.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Executive Reports')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN', 'RH')
+@Roles(Role.ADMIN, Role.RH)
 @Controller('executive-reports')
 export class ExecutiveReportsController {
   constructor(private readonly svc: ExecutiveReportsService) {}
@@ -63,7 +64,7 @@ export class ExecutiveReportsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do relatório (regista acesso)' })
-  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user.id);
   }
 
@@ -71,7 +72,7 @@ export class ExecutiveReportsController {
 
   @Post()
   @ApiOperation({ summary: 'Criar relatório executivo manualmente' })
-  create(@CurrentUser() user: any, @Body() dto: CreateExecutiveReportDto) {
+  create(@CurrentUser() user: CurrentUserData, @Body() dto: CreateExecutiveReportDto) {
     return this.svc.create(user.id, dto);
   }
 
@@ -86,7 +87,7 @@ export class ExecutiveReportsController {
   @ApiQuery({ name: 'type', required: false, enum: ReportType })
   @ApiQuery({ name: 'departmentId', required: false })
   autoGenerate(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Query('type') type?: string,
     @Query('departmentId') departmentId?: string,
   ) {
@@ -109,7 +110,7 @@ export class ExecutiveReportsController {
   @Post('approve')
   @ApiOperation({ summary: 'Aprovar ou rejeitar relatório (IN_REVIEW → APPROVED/DRAFT)' })
   @HttpCode(HttpStatus.OK)
-  approve(@CurrentUser() user: any, @Body() dto: ApproveReportDto) {
+  approve(@CurrentUser() user: CurrentUserData, @Body() dto: ApproveReportDto) {
     return this.svc.approveReport(dto, user.id);
   }
 

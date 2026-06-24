@@ -31,7 +31,8 @@ import {
 } from './career-plans.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Career Plans')
 @ApiBearerAuth()
@@ -43,7 +44,7 @@ export class CareerPlansController {
   // ── Analytics & Dashboard ─────────────────────────────────────────
 
   @Get('analytics')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Analytics — planos, promoções, tempo médio' })
   @ApiQuery({ name: 'department', required: false })
   getAnalytics(@Query('department') department?: string) {
@@ -51,7 +52,7 @@ export class CareerPlansController {
   }
 
   @Get('succession')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard de sucessão — risco por cargo sénior' })
   @ApiQuery({ name: 'department', required: false })
   getSuccessionDashboard(@Query('department') department?: string) {
@@ -59,7 +60,7 @@ export class CareerPlansController {
   }
 
   @Get('succession/:roleId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Pipeline de sucessão para um cargo específico' })
   getSuccessionPipeline(@Param('roleId', ParseIntPipe) roleId: number) {
     return this.svc.getSuccessionPipeline(roleId);
@@ -81,14 +82,14 @@ export class CareerPlansController {
   }
 
   @Post('roles')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar cargo / nível' })
   createRole(@Body() dto: CareerPlansCreateRoleDto) {
     return this.svc.createRole(dto);
   }
 
   @Post('roles/skills')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Configurar skill requirements de um cargo' })
   setRoleSkills(@Body() dto: SetRoleSkillsDto) {
     return this.svc.setRoleSkills(dto);
@@ -104,7 +105,7 @@ export class CareerPlansController {
   }
 
   @Post('skills')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar skill/competência' })
   createSkill(@Body() dto: CreateSkillDto) {
     return this.svc.createSkill(dto);
@@ -120,16 +121,19 @@ export class CareerPlansController {
   }
 
   @Post('paths')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar trilha de carreira (linear, Y, W, horizontal)' })
-  createCareerPath(@Body() dto: CareerPlansCreateCareerPathDto, @CurrentUser() user: any) {
+  createCareerPath(
+    @Body() dto: CareerPlansCreateCareerPathDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.svc.createCareerPath(dto, user.id);
   }
 
   // ── Progression Rules ─────────────────────────────────────────────
 
   @Get('progression-rules')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Listar regras de progressão' })
   @ApiQuery({ name: 'fromRoleId', required: false, type: Number })
   getProgressionRules(@Query('fromRoleId') fromRoleId?: string) {
@@ -137,7 +141,7 @@ export class CareerPlansController {
   }
 
   @Post('progression-rules')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar regra de progressão entre cargos' })
   createProgressionRule(@Body() dto: CreateProgressionRuleDto) {
     return this.svc.createProgressionRule(dto);
@@ -164,14 +168,14 @@ export class CareerPlansController {
 
   @Get('my')
   @ApiOperation({ summary: 'Meu plano de carreira activo com readiness e metas' })
-  myPlan(@CurrentUser() user: any) {
+  myPlan(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyPlan(user.id);
   }
 
   // ── Plans CRUD ────────────────────────────────────────────────────
 
   @Get()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar planos de carreira com readiness enriquecido' })
   findAll(@Query() filters: CareerPlanFilterDto) {
     return this.svc.findAll(filters);
@@ -190,27 +194,27 @@ export class CareerPlansController {
   }
 
   @Post()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar plano (auto-gera metas com base no gap de skills)' })
-  create(@Body() dto: CareerPlansCreateCareerPlanDto, @CurrentUser() user: any) {
+  create(@Body() dto: CareerPlansCreateCareerPlanDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.create(dto, user.id);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar plano' })
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CareerPlansUpdateCareerPlanDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.update(id, dto, user.id);
   }
 
   @Patch(':id/activate')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Activar plano de carreira' })
-  activate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  activate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.activate(id, user.id);
   }
 
@@ -227,7 +231,7 @@ export class CareerPlansController {
   updateGoalProgress(
     @Param('goalId', ParseIntPipe) goalId: number,
     @Body() dto: UpdateGoalProgressDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.updateGoalProgress(goalId, dto, user.id);
   }
@@ -235,7 +239,7 @@ export class CareerPlansController {
   // ── Promotions ────────────────────────────────────────────────────
 
   @Get('promotions')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar pedidos de promoção' })
   getPromotions(@Query() filters: PromotionFilterDto) {
     return this.svc.getPromotions(filters);
@@ -243,18 +247,18 @@ export class CareerPlansController {
 
   @Post('promotions')
   @ApiOperation({ summary: 'Solicitar promoção (valida regras + calcula readiness)' })
-  requestPromotion(@Body() dto: CreatePromotionRequestDto, @CurrentUser() user: any) {
+  requestPromotion(@Body() dto: CreatePromotionRequestDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.requestPromotion(dto, user.id);
   }
 
   @Patch('promotions/:id/review')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Aprovar / rejeitar promoção' })
   reviewPromotion(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ReviewPromotionDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.reviewPromotion(id, dto, user.id, user.role);
+    return this.svc.reviewPromotion(id, dto, user.id, user.role?.name);
   }
 }

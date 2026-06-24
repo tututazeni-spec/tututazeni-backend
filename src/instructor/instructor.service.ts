@@ -22,13 +22,6 @@ import {
 @Injectable()
 export class InstructorService {
   private readonly logger = new Logger(InstructorService.name);
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
 
   constructor(private prisma: PrismaService) {}
 
@@ -48,7 +41,7 @@ export class InstructorService {
       ];
 
     const [data, total] = await Promise.all([
-      this.prismaRead.instructorProfile.findMany({
+      this.prisma.read.instructorProfile.findMany({
         where,
         skip,
         take: limit,
@@ -66,14 +59,14 @@ export class InstructorService {
         },
         orderBy: { ratingAverage: 'desc' },
       }),
-      this.prismaRead.instructorProfile.count({ where }),
+      this.prisma.read.instructorProfile.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const profile = await this.prismaRead.instructorProfile.findUnique({
+    const profile = await this.prisma.read.instructorProfile.findUnique({
       where: { id },
       include: {
         user: { select: { id: true, fullName: true, email: true, avatarUrl: true } },
@@ -100,7 +93,7 @@ export class InstructorService {
   }
 
   async findByUser(userId: number) {
-    const profile = await this.prismaRead.instructorProfile.findUnique({
+    const profile = await this.prisma.read.instructorProfile.findUnique({
       where: { userId },
       include: {
         reviews: { orderBy: { createdAt: 'desc' }, take: 5 },
@@ -157,7 +150,7 @@ export class InstructorService {
     const instructorId = profile.id;
 
     const [cohorts, totalReviews, recentReviews] = await Promise.all([
-      this.prismaRead.instructorCohort.findMany({
+      this.prisma.read.instructorCohort.findMany({
         where: { instructorId, status: { in: ['ACTIVE', 'OPEN'] } },
         include: {
           course: { select: { id: true, title: true } },
@@ -167,8 +160,8 @@ export class InstructorService {
         orderBy: { startDate: 'asc' },
         take: 10,
       }),
-      this.prismaRead.instructorReview.count({ where: { instructorId } }),
-      this.prismaRead.instructorReview.findMany({
+      this.prisma.read.instructorReview.count({ where: { instructorId } }),
+      this.prisma.read.instructorReview.findMany({
         where: { instructorId },
         include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
         orderBy: { createdAt: 'desc' },
@@ -281,7 +274,7 @@ export class InstructorService {
     if (status) where.status = status;
 
     const [data, total] = await Promise.all([
-      this.prismaRead.instructorCohort.findMany({
+      this.prisma.read.instructorCohort.findMany({
         where,
         skip,
         take: limit,
@@ -291,7 +284,7 @@ export class InstructorService {
         },
         orderBy: { startDate: 'desc' },
       }),
-      this.prismaRead.instructorCohort.count({ where }),
+      this.prisma.read.instructorCohort.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -300,7 +293,7 @@ export class InstructorService {
   async getCohortDetail(cohortId: number, userId: number) {
     await this.getCohortOrFail(cohortId, userId);
 
-    const cohort = await this.prismaRead.instructorCohort.findUnique({
+    const cohort = await this.prisma.read.instructorCohort.findUnique({
       where: { id: cohortId },
       include: {
         course: { select: { id: true, title: true, workloadHours: true } },
@@ -325,7 +318,7 @@ export class InstructorService {
     const participants = cohort?.participants as any[];
     const enriched = await Promise.all(
       participants.map(async p => {
-        const enrollment = await this.prismaRead.enrollment.findFirst({
+        const enrollment = await this.prisma.read.enrollment.findFirst({
           where: { userId: p.userId, courseId: (cohort as any).courseId },
           select: { progresses: true, status: true, completedAt: true },
         });
@@ -356,7 +349,7 @@ export class InstructorService {
   async addParticipants(cohortId: number, userId: number, dto: InstructorAddParticipantsDto) {
     const cohort = await this.getCohortOrFail(cohortId, userId);
     if ((cohort as any).maxParticipants) {
-      const current = await this.prismaRead.cohortParticipant.count({ where: { cohortId } });
+      const current = await this.prisma.read.cohortParticipant.count({ where: { cohortId } });
       if (current + dto.userIds.length > (cohort as any).maxParticipants) {
         throw new BadRequestException('Capacidade máxima da turma atingida');
       }
@@ -401,22 +394,22 @@ export class InstructorService {
     const instructorId = profile.id;
 
     const [allCohorts, totalStudents, reviewStats, topCourses] = await Promise.all([
-      this.prismaRead.instructorCohort.findMany({
+      this.prisma.read.instructorCohort.findMany({
         where: { instructorId },
         include: {
           _count: { select: { participants: true } },
           course: { select: { id: true, title: true } },
         },
       }),
-      this.prismaRead.cohortParticipant.count({
+      this.prisma.read.cohortParticipant.count({
         where: { cohort: { instructorId } },
       }),
-      this.prismaRead.instructorReview.aggregate({
+      this.prisma.read.instructorReview.aggregate({
         where: { instructorId },
         _avg: { rating: true },
         _count: true,
       }),
-      this.prismaRead.instructorCohort.groupBy({
+      this.prisma.read.instructorCohort.groupBy({
         by: ['courseId'],
         where: { instructorId },
         _count: true,
@@ -458,7 +451,7 @@ export class InstructorService {
   async getAtRiskStudents(userId: number) {
     const profile = await this.findByUser(userId);
 
-    const cohorts = await this.prismaRead.instructorCohort.findMany({
+    const cohorts = await this.prisma.read.instructorCohort.findMany({
       where: { instructorId: profile.id, status: 'ACTIVE' },
       include: {
         course: { select: { id: true, title: true } },
@@ -472,7 +465,7 @@ export class InstructorService {
 
     for (const cohort of cohorts) {
       for (const p of cohort.participants as any[]) {
-        const enrollment = await this.prismaRead.enrollment.findFirst({
+        const enrollment = await this.prisma.read.enrollment.findFirst({
           where: { userId: p.userId, courseId: (cohort as any).courseId },
           select: { progress: true, status: true, enrolledAt: true },
         });
@@ -514,7 +507,7 @@ export class InstructorService {
       update: { rating: dto.rating, comment: dto.comment },
     });
 
-    const avg = await this.prismaRead.instructorReview.aggregate({
+    const avg = await this.prisma.read.instructorReview.aggregate({
       where: { instructorId: dto.instructorId },
       _avg: { rating: true },
     });
@@ -558,7 +551,7 @@ export class InstructorService {
   async getMarketplaceCourses(page = 1, limit = 20) {
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
-      this.prismaRead.marketplaceCourse.findMany({
+      this.prisma.read.marketplaceCourse.findMany({
         skip,
         take: limit,
         include: {
@@ -568,7 +561,7 @@ export class InstructorService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.marketplaceCourse.count(),
+      this.prisma.read.marketplaceCourse.count(),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -581,7 +574,7 @@ export class InstructorService {
 
   async getPayoutHistory(userId: number) {
     const profile = await this.findByUser(userId);
-    return this.prismaRead.instructorPayout.findMany({
+    return this.prisma.read.instructorPayout.findMany({
       where: { instructorId: profile.id },
       orderBy: { createdAt: 'desc' },
     });
@@ -591,7 +584,7 @@ export class InstructorService {
 
   private async getCohortOrFail(cohortId: number, userId: number) {
     const profile = await this.findByUser(userId);
-    const cohort = await this.prismaRead.instructorCohort.findFirst({
+    const cohort = await this.prisma.read.instructorCohort.findFirst({
       where: { id: cohortId, instructorId: profile.id },
     });
     if (!cohort) throw new NotFoundException('Turma não encontrada ou sem permissão');

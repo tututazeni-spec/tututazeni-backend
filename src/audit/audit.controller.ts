@@ -15,12 +15,13 @@ import { AuditService } from './audit.service';
 import { AuditFilterDto } from './audit.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Audit Logs')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN', 'RH')
+@Roles(Role.ADMIN, Role.RH)
 @Controller('audit')
 export class AuditController {
   constructor(private readonly svc: AuditService) {}
@@ -72,7 +73,7 @@ export class AuditController {
   // ── Integridade ───────────────────────────────────────────────────────────
 
   @Get('integrity/verify')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Verificar integridade da hash chain (detecta adulteração)' })
   @ApiQuery({ name: 'limit', required: false })
   verify(@Query('limit') limit?: string) {
@@ -82,10 +83,10 @@ export class AuditController {
   // ── Exportação ────────────────────────────────────────────────────────────
 
   @Post('export')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Exportar logs (regista a própria exportação como evento auditável)' })
   @HttpCode(HttpStatus.OK)
-  export(@CurrentUser() user: any, @Query() filters: AuditFilterDto) {
+  export(@CurrentUser() user: CurrentUserData, @Query() filters: AuditFilterDto) {
     return this.svc.exportLogs(filters, user.id);
   }
 }

@@ -60,7 +60,7 @@ describe('PayslipsController', () => {
 
   it('myPayslip → findOne + logAccess', async () => {
     await controller.myPayslip(3, mockUser as any, mockReq);
-    expect(mockSvc.findOne).toHaveBeenCalledWith(3, 1, mockUser.role);
+    expect(mockSvc.findOne).toHaveBeenCalledWith(3, 1, mockUser.role.name);
     expect(mockSvc.logAccess).toHaveBeenCalledWith(3, 1, 'VIEW', '127.0.0.1');
   });
 

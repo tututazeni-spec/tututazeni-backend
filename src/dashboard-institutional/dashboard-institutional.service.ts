@@ -1,18 +1,14 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSnapshotDto, CreateWidgetDto, UpdateWidgetDto, FilterSnapshotDto } from './dto';
+import { AuditService } from '../common/services/audit.service';
 
 @Injectable()
 export class DashboardInstitutionalService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ─── RESUMO EXECUTIVO ────────────────────────────────
 
@@ -35,29 +31,29 @@ export class DashboardInstitutionalService {
       certificates,
       badgesIssued,
     ] = await this.prisma.$transaction([
-      this.prismaRead.user.count({ where: { active: true } }),
-      this.prismaRead.user.count({ where: { createdAt: { gte: startOfMonth } } }),
-      this.prismaRead.course.count({ where: { status: 'PUBLISHED' } }),
-      this.prismaRead.enrollment.count({ where: { status: 'IN_PROGRESS' } }),
-      this.prismaRead.enrollment.count({
+      this.prisma.read.user.count({ where: { active: true } }),
+      this.prisma.read.user.count({ where: { createdAt: { gte: startOfMonth } } }),
+      this.prisma.read.course.count({ where: { status: 'PUBLISHED' } }),
+      this.prisma.read.enrollment.count({ where: { status: 'IN_PROGRESS' } }),
+      this.prisma.read.enrollment.count({
         where: { status: 'COMPLETED', completedAt: { gte: startOfYear } },
       }),
-      this.prismaRead.beneficiary.count({
+      this.prisma.read.beneficiary.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prismaRead.partner.count({
+      this.prisma.read.partner.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prismaRead.funder.count({
+      this.prisma.read.funder.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prismaRead.fundingGrant.aggregate({
+      this.prisma.read.fundingGrant.aggregate({
         _sum: { amount: true },
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prismaRead.libraryItem.count({ where: { deletedAt: null } }),
-      this.prismaRead.issuedCertificate.count({ where: { deletedAt: null } }),
-      this.prismaRead.badgeIssuance.count({
+      this.prisma.read.libraryItem.count({ where: { deletedAt: null } }),
+      this.prisma.read.issuedCertificate.count({ where: { deletedAt: null } }),
+      this.prisma.read.badgeIssuance.count({
         where: { deletedAt: null, isRevoked: false },
       }),
     ]);
@@ -100,9 +96,9 @@ export class DashboardInstitutionalService {
       const range = { gte: start, lte: end };
 
       const [users, enrollments, completions] = await this.prisma.$transaction([
-        this.prismaRead.user.count({ where: { createdAt: range } }),
-        this.prismaRead.enrollment.count({ where: { enrolledAt: range } }),
-        this.prismaRead.enrollment.count({
+        this.prisma.read.user.count({ where: { createdAt: range } }),
+        this.prisma.read.enrollment.count({ where: { enrolledAt: range } }),
+        this.prisma.read.enrollment.count({
           where: { status: 'COMPLETED', completedAt: range },
         }),
       ]);
@@ -123,7 +119,7 @@ export class DashboardInstitutionalService {
   // ─── DISTRIBUIÇÃO GEOGRÁFICA ─────────────────────────
 
   async getGeographicDistribution() {
-    const beneficiariesByProvince = await (this.prismaRead.beneficiary.groupBy as any)({
+    const beneficiariesByProvince = await (this.prisma.read.beneficiary.groupBy as any)({
       by: ['province'],
       where: { deletedAt: null, province: { not: null } },
       _count: { id: true },
@@ -147,34 +143,34 @@ export class DashboardInstitutionalService {
       overdueMilestones,
       pendingApprovals,
     ] = await this.prisma.$transaction([
-      this.prismaRead.issuedCertificate.count({
+      this.prisma.read.issuedCertificate.count({
         where: { expiresAt: { lt: now }, isRevoked: false, deletedAt: null },
       }),
-      this.prismaRead.funderReport.count({
+      this.prisma.read.funderReport.count({
         where: { dueDate: { lt: now }, status: { in: ['PENDING', 'REJECTED'] } },
       }),
-      this.prismaRead.beneficiary.count({
+      this.prisma.read.beneficiary.count({
         where: {
           nextFollowUpAt: { lte: in7Days },
           status: 'ACTIVE',
           deletedAt: null,
         },
       }),
-      this.prismaRead.partner.count({
+      this.prisma.read.partner.count({
         where: {
           contractEnd: { lte: in30Days, gte: now },
           status: 'ACTIVE',
           deletedAt: null,
         },
       }),
-      this.prismaRead.partnerMilestone.count({
+      this.prisma.read.partnerMilestone.count({
         where: {
           status: { in: ['PENDING', 'IN_PROGRESS'] },
           dueDate: { lt: now },
           deletedAt: null,
         },
       }),
-      this.prismaRead.libraryItem.count({
+      this.prisma.read.libraryItem.count({
         where: { isApproved: false, deletedAt: null },
       }),
     ]);
@@ -222,7 +218,7 @@ export class DashboardInstitutionalService {
         createdById: userId,
       },
     });
-    await this.audit(userId, 'CREATE', 'InstitutionalSnapshot', snapshot.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'InstitutionalSnapshot', snapshot.id, {
       period: dto.period,
     });
     return snapshot;
@@ -232,24 +228,24 @@ export class DashboardInstitutionalService {
     const { type, page = 1, limit = 12 } = filters;
     const where = { deletedAt: null, ...(type && { type }) };
     const [data, total] = await this.prisma.$transaction([
-      this.prismaRead.institutionalSnapshot.findMany({
+      this.prisma.read.institutionalSnapshot.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { period: 'desc' },
         include: { createdBy: { select: { fullName: true } } },
       }),
-      this.prismaRead.institutionalSnapshot.count({ where }),
+      this.prisma.read.institutionalSnapshot.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async compareSnapshots(period1: string, period2: string, type = 'MONTHLY') {
     const [s1, s2] = await this.prisma.$transaction([
-      this.prismaRead.institutionalSnapshot.findUnique({
+      this.prisma.read.institutionalSnapshot.findUnique({
         where: { period_type: { period: period1, type: type as any } },
       }),
-      this.prismaRead.institutionalSnapshot.findUnique({
+      this.prisma.read.institutionalSnapshot.findUnique({
         where: { period_type: { period: period2, type: type as any } },
       }),
     ]);
@@ -286,7 +282,7 @@ export class DashboardInstitutionalService {
   }
 
   async getMyWidgets(userId: number) {
-    return this.prismaRead.dashboardWidget.findMany({
+    return this.prisma.read.dashboardWidget.findMany({
       where: { userId, deletedAt: null, isVisible: true },
       orderBy: { position: 'asc' },
     });
@@ -313,17 +309,4 @@ export class DashboardInstitutionalService {
   }
 
   // ─── HELPER ──────────────────────────────────────────
-
-  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
-    // AuditLog.entityId é Int? no schema; os IDs deste módulo são cuid (String),
-    // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
-    await this.prisma.auditLog.create({
-      data: {
-        userId,
-        action,
-        entity,
-        metadata: JSON.stringify({ ...meta, entityId }),
-      },
-    });
-  }
 }

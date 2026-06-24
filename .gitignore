@@ -81,3 +81,10 @@ playwright-report/
 # SonarCloud scanner cache e logs
 .scannerwork/
 sonar-scan.log
+
+# Scratch / saídas de diagnóstico (não versionar)
+build-out.txt
+build-*.txt
+diff-*.txt
+tc-result.txt
+*-out.txt

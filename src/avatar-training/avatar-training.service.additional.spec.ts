@@ -99,6 +99,12 @@ describe('AvatarTrainingService (additional)', () => {
     mockPrisma.user.findUnique.mockResolvedValue(null);
     mockPrisma.userPoints.findUnique.mockResolvedValue(null);
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [AvatarTrainingService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();

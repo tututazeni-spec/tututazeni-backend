@@ -71,6 +71,12 @@ describe('DashboardRhService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    Object.defineProperty(mockPrismaProxy, 'read', {
+      get() {
+        return mockPrismaProxy;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [DashboardRhService, { provide: PrismaService, useValue: mockPrismaProxy }],
     }).compile();

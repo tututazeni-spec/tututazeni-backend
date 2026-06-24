@@ -72,6 +72,12 @@ describe('EvaluationService (additional)', () => {
     });
     mockPrisma.notificationLog.createMany.mockResolvedValue({ count: 0 });
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [EvaluationService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();

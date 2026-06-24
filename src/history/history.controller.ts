@@ -4,7 +4,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { HistoryService } from './history.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { HistoryFilterDto, TimelineFilterDto, HistoryCreateEventDto } from './history.dto';
 
 const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
@@ -48,7 +48,7 @@ export class HistoryController {
   @ApiOperation({
     summary: 'Timeline pessoal — multi-fonte: cursos, badges, PDI, avaliações, avatar',
   })
-  myTimeline(@CurrentUser() user: any, @Query() filters: TimelineFilterDto) {
+  myTimeline(@CurrentUser() user: CurrentUserData, @Query() filters: TimelineFilterDto) {
     return this.svc.getUserTimeline(user.id, filters);
   }
 
@@ -62,7 +62,7 @@ export class HistoryController {
   @Get('timeline/team')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Timeline da equipa do gestor' })
-  teamTimeline(@CurrentUser() user: any, @Query() filters: TimelineFilterDto) {
+  teamTimeline(@CurrentUser() user: CurrentUserData, @Query() filters: TimelineFilterDto) {
     return this.svc.getTeamTimeline(user.id, filters);
   }
 
@@ -71,7 +71,7 @@ export class HistoryController {
   @Get('milestones/me')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Os meus marcos: PDI concluídos, certificados, promoções, badges' })
-  myMilestones(@CurrentUser() user: any) {
+  myMilestones(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserMilestones(user.id);
   }
 
@@ -87,7 +87,7 @@ export class HistoryController {
   @Get('stats/me')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Estatísticas pessoais: streak, heatmap, conclusões, XP' })
-  myStats(@CurrentUser() user: any) {
+  myStats(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserActivityStats(user.id);
   }
 

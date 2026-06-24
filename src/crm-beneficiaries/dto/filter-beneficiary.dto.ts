@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsString, IsInt, Min } from 'class-validator';
+import { Max, IsOptional, IsEnum, IsString, IsInt, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { BeneficiaryType, BeneficiaryStatus, AngolaProvince } from '@prisma/client';
@@ -47,5 +47,6 @@ export class FilterBeneficiaryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100)
   limit?: number = 20;
 }

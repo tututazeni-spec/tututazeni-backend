@@ -25,13 +25,6 @@ import {
 @Injectable()
 export class LeadershipService {
   private readonly logger = new Logger(LeadershipService.name);
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
 
   constructor(private prisma: PrismaService) {}
 
@@ -47,21 +40,21 @@ export class LeadershipService {
     if (mandatory !== undefined) where.mandatory = mandatory;
 
     const [data, total] = await Promise.all([
-      this.prismaRead.leadershipProgram.findMany({
+      this.prisma.read.leadershipProgram.findMany({
         where,
         skip,
         take: limit,
         include: { _count: { select: { participants: true } } },
         orderBy: [{ level: 'asc' }, { createdAt: 'desc' }],
       }),
-      this.prismaRead.leadershipProgram.count({ where }),
+      this.prisma.read.leadershipProgram.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const p = await this.prismaRead.leadershipProgram.findUnique({
+    const p = await this.prisma.read.leadershipProgram.findUnique({
       where: { id },
       include: {
         participants: {
@@ -154,7 +147,7 @@ export class LeadershipService {
   }
 
   async updateProgress(userId: number, programId: number, dto: UpdateParticipantProgressDto) {
-    const participant = await this.prismaRead.leadershipParticipant.findUnique({
+    const participant = await this.prisma.read.leadershipParticipant.findUnique({
       where: { userId_programId: { userId, programId } },
       include: { program: true },
     });
@@ -215,7 +208,7 @@ export class LeadershipService {
   }
 
   async getMyPrograms(userId: number) {
-    return this.prismaRead.leadershipParticipant.findMany({
+    return this.prisma.read.leadershipParticipant.findMany({
       where: { userId },
       include: {
         program: {
@@ -229,10 +222,10 @@ export class LeadershipService {
   async getProgramStats(programId: number) {
     await this.findOne(programId);
     const [total, completed, inProgress, avgProgress] = await Promise.all([
-      this.prismaRead.leadershipParticipant.count({ where: { programId } }),
-      this.prismaRead.leadershipParticipant.count({ where: { programId, status: 'COMPLETED' } }),
-      this.prismaRead.leadershipParticipant.count({ where: { programId, status: 'IN_PROGRESS' } }),
-      this.prismaRead.leadershipParticipant.aggregate({
+      this.prisma.read.leadershipParticipant.count({ where: { programId } }),
+      this.prisma.read.leadershipParticipant.count({ where: { programId, status: 'COMPLETED' } }),
+      this.prisma.read.leadershipParticipant.count({ where: { programId, status: 'IN_PROGRESS' } }),
+      this.prisma.read.leadershipParticipant.aggregate({
         where: { programId },
         _avg: { progress: true },
       }),
@@ -251,7 +244,7 @@ export class LeadershipService {
   // ─── TEAM DASHBOARD ───────────────────────────────────────────────────────
 
   async getTeamDashboard(managerId: number) {
-    const team = await this.prismaRead.user.findMany({
+    const team = await this.prisma.read.user.findMany({
       where: { managerId, active: true },
       select: {
         id: true,
@@ -266,12 +259,12 @@ export class LeadershipService {
     const teamData = await Promise.all(
       team.map(async member => {
         const [latestReview, pendingApprovals, feedbackCount] = await Promise.all([
-          this.prismaRead.performanceReview.findFirst({
+          this.prisma.read.performanceReview.findFirst({
             where: { userId: member.id },
             orderBy: { createdAt: 'desc' },
             select: { score: true, category: true, status: true },
           }),
-          this.prismaRead.performanceReview.count({
+          this.prisma.read.performanceReview.count({
             where: { userId: member.id, status: 'PENDING_APPROVAL' },
           }),
           (this.prisma as any).continuousFeedback.count({
@@ -324,21 +317,21 @@ export class LeadershipService {
 
     // Calcular métricas automáticas
     const teamIds = (
-      await this.prismaRead.user.findMany({
+      await this.prisma.read.user.findMany({
         where: { managerId, active: true },
         select: { id: true },
       })
     ).map(u => u.id);
 
     const [completedReviews, totalReviews, completedPdis, totalPdis] = await Promise.all([
-      this.prismaRead.performanceReview.count({
+      this.prisma.read.performanceReview.count({
         where: { userId: { in: teamIds }, status: 'FINALIZED' },
       }),
-      this.prismaRead.performanceReview.count({ where: { userId: { in: teamIds } } }),
-      this.prismaRead.leadershipParticipant.count({
+      this.prisma.read.performanceReview.count({ where: { userId: { in: teamIds } } }),
+      this.prisma.read.leadershipParticipant.count({
         where: { userId: { in: teamIds }, status: 'COMPLETED' },
       }),
-      this.prismaRead.leadershipParticipant.count({ where: { userId: { in: teamIds } } }),
+      this.prisma.read.leadershipParticipant.count({ where: { userId: { in: teamIds } } }),
     ]);
 
     const evaluationsOnTimePct =
@@ -416,7 +409,7 @@ export class LeadershipService {
     const where: any = { managerId };
     if (subordinateId) where.subordinateId = subordinateId;
 
-    return this.prismaRead.oneOnOne.findMany({
+    return this.prisma.read.oneOnOne.findMany({
       where,
       include: {
         subordinate: {
@@ -434,7 +427,7 @@ export class LeadershipService {
   }
 
   async completeOneOnOne(managerId: number, dto: CompleteOneOnOneDto) {
-    const meeting = await this.prismaRead.oneOnOne.findFirst({
+    const meeting = await this.prisma.read.oneOnOne.findFirst({
       where: { id: dto.oneOnOneId, managerId },
     });
     if (!meeting) throw new NotFoundException('1:1 não encontrado');
@@ -490,7 +483,7 @@ export class LeadershipService {
   }
 
   async get360Summary(leaderId: number) {
-    const feedbacks = await this.prismaRead.leadershipFeedback360.findMany({
+    const feedbacks = await this.prisma.read.leadershipFeedback360.findMany({
       where: { leaderId },
       include: { responses: true },
     });
@@ -566,7 +559,7 @@ export class LeadershipService {
   }
 
   async logMentoringSession(userId: number, dto: LogMentoringSessionDto) {
-    const mentoring = await this.prismaRead.mentoring.findFirst({
+    const mentoring = await this.prisma.read.mentoring.findFirst({
       where: { id: dto.mentoringId, OR: [{ mentorId: userId }, { menteeId: userId }] },
     });
     if (!mentoring) throw new NotFoundException('Mentoring não encontrado ou sem acesso');
@@ -585,7 +578,7 @@ export class LeadershipService {
 
   async getMyMentoring(userId: number) {
     const [asMentor, asMentee] = await Promise.all([
-      this.prismaRead.mentoring.findMany({
+      this.prisma.read.mentoring.findMany({
         where: { mentorId: userId, status: 'ACTIVE' },
         include: {
           mentee: {
@@ -599,7 +592,7 @@ export class LeadershipService {
           sessions: { orderBy: { sessionDate: 'desc' }, take: 3 },
         },
       }),
-      this.prismaRead.mentoring.findMany({
+      this.prisma.read.mentoring.findMany({
         where: { menteeId: userId, status: 'ACTIVE' },
         include: {
           mentor: {
@@ -647,7 +640,7 @@ export class LeadershipService {
     const where: any = {};
     if (userId) where.receiverId = userId;
 
-    return this.prismaRead.kudos.findMany({
+    return this.prisma.read.kudos.findMany({
       where,
       include: {
         sender: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -662,12 +655,12 @@ export class LeadershipService {
 
   async recalcLeadershipScore(leaderId: number) {
     const [teamHealth, programsCompleted, feedback360, oneOnOnes] = await Promise.all([
-      this.prismaRead.teamHealth.findUnique({ where: { managerId: leaderId } }),
-      this.prismaRead.leadershipParticipant.count({
+      this.prisma.read.teamHealth.findUnique({ where: { managerId: leaderId } }),
+      this.prisma.read.leadershipParticipant.count({
         where: { userId: leaderId, status: 'COMPLETED' },
       }),
       this.get360Summary(leaderId),
-      this.prismaRead.oneOnOne.count({ where: { managerId: leaderId, status: 'COMPLETED' } }),
+      this.prisma.read.oneOnOne.count({ where: { managerId: leaderId, status: 'COMPLETED' } }),
     ]);
 
     const teamHealthScore = teamHealth ? ((teamHealth as any).engagementScore ?? 0) : 0;
@@ -700,11 +693,11 @@ export class LeadershipService {
   }
 
   async getLeadershipScore(userId: number) {
-    return this.prismaRead.leadershipScore.findUnique({ where: { userId } });
+    return this.prisma.read.leadershipScore.findUnique({ where: { userId } });
   }
 
   async getLeadershipRanking() {
-    return this.prismaRead.leadershipScore.findMany({
+    return this.prisma.read.leadershipScore.findMany({
       include: {
         user: {
           select: {
@@ -727,7 +720,7 @@ export class LeadershipService {
       this.getLeadershipScore(userId),
       this.getMyPrograms(userId),
       this.getMyMentoring(userId),
-      this.prismaRead.oneOnOne.findMany({
+      this.prisma.read.oneOnOne.findMany({
         where: { managerId: userId, status: 'SCHEDULED', scheduledAt: { gte: new Date() } },
         include: { subordinate: { select: { id: true, fullName: true, avatarUrl: true } } },
         orderBy: { scheduledAt: 'asc' },

@@ -26,7 +26,8 @@ import {
 } from './organization.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Organization')
 @ApiBearerAuth()
@@ -46,14 +47,14 @@ export class OrganizationController {
   }
 
   @Get('headcount')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Headcount por departamento (ocupado vs planeado)' })
   headcount() {
     return this.svc.getHeadcountByDepartment();
   }
 
   @Get('span-of-control')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório de span of control por gestor' })
   spanOfControl() {
     return this.svc.getSpanOfControlReport();
@@ -70,7 +71,7 @@ export class OrganizationController {
   // ── Timeline / Histórico ──────────────────────────────────────────────────
 
   @Get('timeline')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Timeline de movimentações organizacionais' })
   @ApiQuery({ name: 'fromDate', required: false })
   @ApiQuery({ name: 'toDate', required: false })
@@ -79,14 +80,14 @@ export class OrganizationController {
   }
 
   @Post('changes')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Registar mudança organizacional (promoção, transferência, etc.)' })
-  recordChange(@CurrentUser() user: any, @Body() dto: RecordOrgChangeDto) {
+  recordChange(@CurrentUser() user: CurrentUserData, @Body() dto: RecordOrgChangeDto) {
     return this.svc.recordOrgChange(dto, user.id);
   }
 
   @Get('users/:userId/history')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Histórico organizacional de um colaborador' })
   userHistory(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.getUserOrgHistory(userId);
@@ -113,21 +114,21 @@ export class OrganizationController {
   }
 
   @Post('departments')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar departamento' })
   createDepartment(@Body() dto: CreateOrgDepartmentDto) {
     return this.svc.createDepartment(dto);
   }
 
   @Put('departments/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar departamento' })
   updateDepartment(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOrgDepartmentDto) {
     return this.svc.updateDepartment(id, dto);
   }
 
   @Delete('departments/:id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar departamento (apenas sem colaboradores)' })
   deleteDepartment(@Param('id', ParseIntPipe) id: number) {
     return this.svc.deleteDepartment(id);
@@ -142,21 +143,21 @@ export class OrganizationController {
   }
 
   @Post('positions')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar posição/cargo' })
   createPosition(@Body() dto: CreateOrgPositionDto) {
     return this.svc.createPosition(dto);
   }
 
   @Put('positions/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar posição/cargo' })
   updatePosition(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOrgPositionDto) {
     return this.svc.updatePosition(id, dto);
   }
 
   @Delete('positions/:id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar posição (apenas sem colaboradores)' })
   deletePosition(@Param('id', ParseIntPipe) id: number) {
     return this.svc.deletePosition(id);
@@ -171,14 +172,14 @@ export class OrganizationController {
   }
 
   @Post('units')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar unidade/filial' })
   createUnit(@Body() dto: CreateOrgUnitDto) {
     return this.svc.createUnit(dto);
   }
 
   @Put('units/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar unidade' })
   updateUnit(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOrgUnitDto) {
     return this.svc.updateUnit(id, dto);

@@ -36,6 +36,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
    */
   public readonly db: ReturnType<PrismaService['buildDbClient']>;
 
+  /**
+   * Cliente de leitura: réplica quando activa, senão o primary.
+   * Centraliza o getter que estava duplicado em ~65 serviços
+   * (`(this.prisma as any).db ?? this.prisma`). Usar `this.prisma.read.modelo.*`.
+   */
+  get read(): PrismaService {
+    return ((this as unknown as { db?: PrismaService }).db ?? this) as PrismaService;
+  }
+
   constructor() {
     // ─── Primary (escrita) — mantém o comportamento e o pool actuais ───
     const writePool = makePool(

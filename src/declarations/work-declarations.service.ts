@@ -20,14 +20,6 @@ import {
 
 @Injectable()
 export class WorkDeclarationsService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -75,7 +67,7 @@ export class WorkDeclarationsService {
   }
 
   async getForms(type?: WorkDeclType, activeOnly = true) {
-    return this.prismaRead.workDeclForm.findMany({
+    return this.prisma.read.workDeclForm.findMany({
       where: {
         ...(activeOnly ? { active: true } : {}),
         ...(type ? { type } : {}),
@@ -89,7 +81,7 @@ export class WorkDeclarationsService {
   }
 
   async getForm(id: number) {
-    const f = await this.prismaRead.workDeclForm.findUnique({
+    const f = await this.prisma.read.workDeclForm.findUnique({
       where: { id },
       include: { questions: { orderBy: { order: 'asc' } } },
     });
@@ -128,14 +120,14 @@ export class WorkDeclarationsService {
   // ══════════════════════════════════════════════════════════════════
 
   async getPendingForUser(userId: number) {
-    const user = await this.prismaRead.user.findUnique({
+    const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
       select: { id: true, fullName: true, departmentId: true, roleId: true },
     });
     if (!user) throw new NotFoundException();
 
     // Buscar todos os forms activos dirigidos a este colaborador
-    const allForms = await this.prismaRead.workDeclForm.findMany({
+    const allForms = await this.prisma.read.workDeclForm.findMany({
       where: {
         active: true,
         OR: [
@@ -147,7 +139,7 @@ export class WorkDeclarationsService {
     });
 
     // Quais já foram submetidos?
-    const submitted = await this.prismaRead.workDeclSubmission.findMany({
+    const submitted = await this.prisma.read.workDeclSubmission.findMany({
       where: {
         userId,
         status: { in: [WorkDeclStatus.SUBMITTED, WorkDeclStatus.APPROVED] },
@@ -157,7 +149,7 @@ export class WorkDeclarationsService {
     const submittedIds = new Set(submitted.map(s => s.formId));
 
     const pending = allForms.filter(f => !submittedIds.has(f.id));
-    const drafts = await this.prismaRead.workDeclSubmission.findMany({
+    const drafts = await this.prisma.read.workDeclSubmission.findMany({
       where: { userId, status: WorkDeclStatus.DRAFT },
       include: { form: { select: { id: true, title: true, type: true } } },
     });
@@ -187,7 +179,7 @@ export class WorkDeclarationsService {
       where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
 
     const [data, total] = await Promise.all([
-      this.prismaRead.workDeclSubmission.findMany({
+      this.prisma.read.workDeclSubmission.findMany({
         where,
         skip,
         take: limit,
@@ -199,14 +191,14 @@ export class WorkDeclarationsService {
           review: { include: { reviewer: { select: { id: true, fullName: true } } } },
         },
       }),
-      this.prismaRead.workDeclSubmission.count({ where }),
+      this.prisma.read.workDeclSubmission.count({ where }),
     ]);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async findOneSubmission(id: number) {
-    const s = await this.prismaRead.workDeclSubmission.findUnique({
+    const s = await this.prisma.read.workDeclSubmission.findUnique({
       where: { id },
       include: {
         form: { include: { questions: { orderBy: { order: 'asc' } } } },
@@ -365,7 +357,7 @@ export class WorkDeclarationsService {
   async sendReminder(formId: number, department?: string) {
     const form = await this.getForm(formId);
     // Buscar utilizadores que ainda não submeteram
-    const submitted = await this.prismaRead.workDeclSubmission.findMany({
+    const submitted = await this.prisma.read.workDeclSubmission.findMany({
       where: { formId, status: { not: WorkDeclStatus.DRAFT } },
       select: { userId: true },
     });
@@ -374,7 +366,7 @@ export class WorkDeclarationsService {
     const where: any = {};
     if (department) where.employee = { department: { contains: department, mode: 'insensitive' } };
 
-    const users = await this.prismaRead.user.findMany({ where, select: { id: true } });
+    const users = await this.prisma.read.user.findMany({ where, select: { id: true } });
     const pending = users.filter(u => !submittedIds.has(u.id));
 
     await Promise.allSettled(
@@ -419,22 +411,22 @@ export class WorkDeclarationsService {
       where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
 
     const [total, pending, approved, rejected, expired] = await Promise.all([
-      this.prismaRead.workDeclSubmission.count({ where }),
-      this.prismaRead.workDeclSubmission.count({
+      this.prisma.read.workDeclSubmission.count({ where }),
+      this.prisma.read.workDeclSubmission.count({
         where: { ...where, status: WorkDeclStatus.SUBMITTED },
       }),
-      this.prismaRead.workDeclSubmission.count({
+      this.prisma.read.workDeclSubmission.count({
         where: { ...where, status: WorkDeclStatus.APPROVED },
       }),
-      this.prismaRead.workDeclSubmission.count({
+      this.prisma.read.workDeclSubmission.count({
         where: { ...where, status: WorkDeclStatus.REJECTED },
       }),
-      this.prismaRead.workDeclSubmission.count({
+      this.prisma.read.workDeclSubmission.count({
         where: { ...where, status: WorkDeclStatus.EXPIRED },
       }),
     ]);
 
-    const byType = await this.prismaRead.workDeclSubmission.groupBy({
+    const byType = await this.prisma.read.workDeclSubmission.groupBy({
       by: ['formId'],
       where,
       _count: true,
@@ -449,18 +441,18 @@ export class WorkDeclarationsService {
   }
 
   async getComplianceReport(department?: string) {
-    const forms = await this.prismaRead.workDeclForm.findMany({
+    const forms = await this.prisma.read.workDeclForm.findMany({
       where: { active: true, mandatory: true },
     });
     const where: any = { employee: { isNot: null } };
     if (department) where.employee = { department: { contains: department, mode: 'insensitive' } };
 
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where,
       select: { id: true, fullName: true },
     });
 
-    const submissions = await this.prismaRead.workDeclSubmission.findMany({
+    const submissions = await this.prisma.read.workDeclSubmission.findMany({
       where: {
         formId: { in: forms.map(f => f.id) },
         status: { in: [WorkDeclStatus.SUBMITTED, WorkDeclStatus.APPROVED] },
@@ -501,7 +493,7 @@ export class WorkDeclarationsService {
 
   private async notifyRH(type: string, message: string) {
     try {
-      const hr = await this.prismaRead.user.findFirst({ where: { roleCode: 'RH' } as any });
+      const hr = await this.prisma.read.user.findFirst({ where: { roleCode: 'RH' } as any });
       if (hr)
         await this.prisma.notificationLog.create({
           data: { userId: hr.id, type, message, success: true },
@@ -512,7 +504,7 @@ export class WorkDeclarationsService {
   // ── Auto-trigger (chamado por outros módulos) ─────────────────────────────
 
   async triggerOnboarding(userId: number) {
-    const forms = await this.prismaRead.workDeclForm.findMany({
+    const forms = await this.prisma.read.workDeclForm.findMany({
       where: { type: WorkDeclType.ONBOARDING, active: true },
     });
     // Criar submissões em estado DRAFT para o utilizador preencher
@@ -532,16 +524,16 @@ export class WorkDeclarationsService {
 
   async triggerPeriodic() {
     const today = new Date();
-    const forms = await this.prismaRead.workDeclForm.findMany({
+    const forms = await this.prisma.read.workDeclForm.findMany({
       where: { type: WorkDeclType.PERIODIC, active: true, periodicity: 'ANNUAL' },
     });
 
     let triggered = 0;
     for (const form of forms) {
-      const users = await this.prismaRead.user.findMany({ select: { id: true } });
+      const users = await this.prisma.read.user.findMany({ select: { id: true } });
       for (const user of users) {
         const thisYear = today.getFullYear().toString();
-        const alreadyDone = await this.prismaRead.workDeclSubmission.findFirst({
+        const alreadyDone = await this.prisma.read.workDeclSubmission.findFirst({
           where: {
             userId: user.id,
             formId: form.id,

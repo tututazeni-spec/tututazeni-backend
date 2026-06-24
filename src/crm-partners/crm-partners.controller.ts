@@ -16,7 +16,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { CrmPartnersService } from './crm-partners.service';
 import {
   CreatePartnerDto,
@@ -25,6 +25,7 @@ import {
   CreatePartnerInteractionDto,
   CreateMilestoneDto,
 } from './dto';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('CRM — Parceiros')
 @ApiBearerAuth()
@@ -36,9 +37,9 @@ export class CrmPartnersController {
   // ─── CRUD ────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar parceiro' })
-  create(@Body() dto: CreatePartnerDto, @CurrentUser() user: any) {
+  create(@Body() dto: CreatePartnerDto, @CurrentUser() user: CurrentUserData) {
     return this.service.create(dto, user.id);
   }
 
@@ -49,28 +50,28 @@ export class CrmPartnersController {
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard CRM Parceiros' })
   getDashboard() {
     return this.service.getDashboard();
   }
 
   @Get('expiring-contracts')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Contratos a expirar nos próximos N dias' })
   getExpiringContracts(@Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number) {
     return this.service.getExpiringContracts(days);
   }
 
   @Get('overdue-milestones')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Milestones em atraso' })
   getOverdueMilestones() {
     return this.service.getOverdueMilestones();
   }
 
   @Get('report')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório por período' })
   getReport(@Query('start') start: string, @Query('end') end: string) {
     return this.service.getReport(new Date(start), new Date(end));
@@ -83,17 +84,21 @@ export class CrmPartnersController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar parceiro' })
-  update(@Param('id') id: string, @Body() dto: UpdatePartnerDto, @CurrentUser() user: any) {
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdatePartnerDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.service.update(id, dto, user.id);
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remover parceiro (soft delete)' })
-  remove(@Param('id') id: string, @CurrentUser() user: any) {
+  remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.softDelete(id, user.id);
   }
 
@@ -104,7 +109,7 @@ export class CrmPartnersController {
   addInteraction(
     @Param('id') id: string,
     @Body() dto: CreatePartnerInteractionDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.addInteraction(id, dto, user.id);
   }
@@ -122,15 +127,22 @@ export class CrmPartnersController {
   // ─── MILESTONES ──────────────────────────────────────
 
   @Post(':id/milestones')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar milestone do parceiro' })
-  addMilestone(@Param('id') id: string, @Body() dto: CreateMilestoneDto, @CurrentUser() user: any) {
+  addMilestone(
+    @Param('id') id: string,
+    @Body() dto: CreateMilestoneDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.service.addMilestone(id, dto, user.id);
   }
 
   @Put('milestones/:milestoneId/complete')
   @ApiOperation({ summary: 'Marcar milestone como concluído' })
-  completeMilestone(@Param('milestoneId') milestoneId: string, @CurrentUser() user: any) {
+  completeMilestone(
+    @Param('milestoneId') milestoneId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.service.completeMilestone(milestoneId, user.id);
   }
 }

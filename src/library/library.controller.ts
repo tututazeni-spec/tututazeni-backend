@@ -14,7 +14,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { LibraryService } from './library.service';
 import {
   CreateCollectionDto,
@@ -24,6 +24,7 @@ import {
   CreateRatingDto,
   LibraryCreateCommentDto,
 } from './dto';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Biblioteca Digital')
 @ApiBearerAuth()
@@ -35,9 +36,9 @@ export class LibraryController {
   // ─── COLECÇÕES ───────────────────────────────────────
 
   @Post('collections')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar colecção' })
-  createCollection(@Body() dto: CreateCollectionDto, @CurrentUser() user: any) {
+  createCollection(@Body() dto: CreateCollectionDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createCollection(dto, user.id);
   }
 
@@ -50,7 +51,7 @@ export class LibraryController {
   // ─── DASHBOARD ───────────────────────────────────────
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard da Biblioteca' })
   getDashboard() {
     return this.service.getDashboard();
@@ -59,9 +60,9 @@ export class LibraryController {
   // ─── ITENS ───────────────────────────────────────────
 
   @Post('items')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Adicionar item à biblioteca' })
-  createItem(@Body() dto: CreateItemDto, @CurrentUser() user: any) {
+  createItem(@Body() dto: CreateItemDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createItem(dto, user.id);
   }
 
@@ -78,24 +79,28 @@ export class LibraryController {
   }
 
   @Put('items/:id')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar item' })
-  updateItem(@Param('id') id: string, @Body() dto: UpdateItemDto, @CurrentUser() user: any) {
+  updateItem(
+    @Param('id') id: string,
+    @Body() dto: UpdateItemDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.service.updateItem(id, dto, user.id);
   }
 
   @Delete('items/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remover item (soft delete)' })
-  removeItem(@Param('id') id: string, @CurrentUser() user: any) {
+  removeItem(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.softDeleteItem(id, user.id);
   }
 
   @Put('items/:id/approve')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Aprovar item' })
-  approveItem(@Param('id') id: string, @CurrentUser() user: any) {
+  approveItem(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.approveItem(id, user.id);
   }
 
@@ -103,13 +108,13 @@ export class LibraryController {
 
   @Post('items/:id/view')
   @ApiOperation({ summary: 'Registar visualização' })
-  view(@Param('id') id: string, @CurrentUser() user: any) {
+  view(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.view(id, user.id);
   }
 
   @Post('items/:id/download')
   @ApiOperation({ summary: 'Registar download e obter URL' })
-  download(@Param('id') id: string, @CurrentUser() user: any) {
+  download(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.download(id, user.id);
   }
 
@@ -117,7 +122,11 @@ export class LibraryController {
 
   @Post('items/:id/rate')
   @ApiOperation({ summary: 'Avaliar item (1-5)' })
-  rateItem(@Param('id') id: string, @Body() dto: CreateRatingDto, @CurrentUser() user: any) {
+  rateItem(
+    @Param('id') id: string,
+    @Body() dto: CreateRatingDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.service.rateItem(id, dto, user.id);
   }
 
@@ -128,7 +137,7 @@ export class LibraryController {
   addComment(
     @Param('id') id: string,
     @Body() dto: LibraryCreateCommentDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.addComment(id, dto, user.id);
   }
@@ -136,7 +145,7 @@ export class LibraryController {
   @Delete('comments/:commentId')
   @ApiOperation({ summary: 'Remover comentário' })
   @HttpCode(HttpStatus.OK)
-  deleteComment(@Param('commentId') commentId: string, @CurrentUser() user: any) {
+  deleteComment(@Param('commentId') commentId: string, @CurrentUser() user: CurrentUserData) {
     return this.service.deleteComment(commentId, user.id);
   }
 }

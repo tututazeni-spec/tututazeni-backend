@@ -112,6 +112,12 @@ describe('DashboardService (additional)', () => {
     mockPrisma.user.findUnique.mockResolvedValue(baseUser);
     mockPrisma.user.findMany.mockResolvedValue([]);
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [DashboardService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();

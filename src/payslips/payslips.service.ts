@@ -43,14 +43,6 @@ const INSS_EMPLOYER_RATE = 0.08; // 8%
 export class PayslipsService {
   private readonly logger = new Logger(PayslipsService.name);
 
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private prisma: PrismaService) {}
 
   // ─── Cálculo IRT Angola 2026 (método progressivo) ─────────────────────────
@@ -131,7 +123,7 @@ export class PayslipsService {
     if (year && !period) where.period = { startsWith: year };
 
     const [data, total] = await Promise.all([
-      this.prismaRead.payslip.findMany({
+      this.prisma.read.payslip.findMany({
         where,
         skip,
         take: limit,
@@ -148,7 +140,7 @@ export class PayslipsService {
         },
         orderBy: [{ period: 'desc' }, { userId: 'asc' }],
       }),
-      this.prismaRead.payslip.count({ where }),
+      this.prisma.read.payslip.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -219,7 +211,7 @@ export class PayslipsService {
     const where: any = { active: true };
     if (userIds?.length) where.id = { in: userIds };
 
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where,
       include: { position: true },
     });
@@ -387,7 +379,7 @@ export class PayslipsService {
           acknowledgedAt: true,
         },
       }),
-      this.prismaRead.payslip.count({ where }),
+      this.prisma.read.payslip.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -395,7 +387,7 @@ export class PayslipsService {
 
   // ─── RESUMO ANUAL ──────────────────────────────────────────────────────────
   async annualSummary(userId: number, year: string) {
-    const payslips = await this.prismaRead.payslip.findMany({
+    const payslips = await this.prisma.read.payslip.findMany({
       where: { userId, period: { startsWith: year }, status: { not: 'DRAFT' } },
       orderBy: { period: 'asc' },
     });
@@ -433,8 +425,8 @@ export class PayslipsService {
   // ─── COMPARAÇÃO DE 2 MESES ─────────────────────────────────────────────────
   async compare(userId: number, periodA: string, periodB: string) {
     const [a, b] = await Promise.all([
-      this.prismaRead.payslip.findFirst({ where: { userId, period: periodA } }),
-      this.prismaRead.payslip.findFirst({ where: { userId, period: periodB } }),
+      this.prisma.read.payslip.findFirst({ where: { userId, period: periodA } }),
+      this.prisma.read.payslip.findFirst({ where: { userId, period: periodB } }),
     ]);
 
     if (!a) throw new NotFoundException(`Recibo de ${periodA} não encontrado`);
@@ -511,16 +503,16 @@ export class PayslipsService {
     const targetPeriod = period ?? new Date().toISOString().slice(0, 7);
 
     const [total, issued, acknowledged, disputed, notViewed] = await Promise.all([
-      this.prismaRead.payslip.count({ where: { period: targetPeriod } }),
-      this.prismaRead.payslip.count({ where: { period: targetPeriod, status: 'ISSUED' } }),
-      this.prismaRead.payslip.count({ where: { period: targetPeriod, status: 'ACKNOWLEDGED' } }),
-      this.prismaRead.payslip.count({ where: { period: targetPeriod, status: 'DISPUTED' } }),
-      this.prismaRead.payslip.count({
+      this.prisma.read.payslip.count({ where: { period: targetPeriod } }),
+      this.prisma.read.payslip.count({ where: { period: targetPeriod, status: 'ISSUED' } }),
+      this.prisma.read.payslip.count({ where: { period: targetPeriod, status: 'ACKNOWLEDGED' } }),
+      this.prisma.read.payslip.count({ where: { period: targetPeriod, status: 'DISPUTED' } }),
+      this.prisma.read.payslip.count({
         where: { period: targetPeriod, status: 'ISSUED', acknowledgedAt: null },
       }),
     ]);
 
-    const agg = await this.prismaRead.payslip.aggregate({
+    const agg = await this.prisma.read.payslip.aggregate({
       where: { period: targetPeriod },
       _sum: {
         grossSalary: true,
@@ -559,7 +551,7 @@ export class PayslipsService {
 
   // ─── LOGS DE ACESSO ────────────────────────────────────────────────────────
   async getAccessLogs(payslipId: number) {
-    return this.prismaRead.payslipAccessLog.findMany({
+    return this.prisma.read.payslipAccessLog.findMany({
       where: { payslipId },
       orderBy: { accessedAt: 'desc' },
       take: 50,

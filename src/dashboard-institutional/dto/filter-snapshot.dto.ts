@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsInt, Min } from 'class-validator';
+import { Max, IsOptional, IsEnum, IsInt, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { SnapshotType } from '@prisma/client';
@@ -21,5 +21,6 @@ export class FilterSnapshotDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100)
   limit?: number = 12;
 }

@@ -1,5 +1,6 @@
 // ─── src/document-repository/document-repository.dto.ts ──────────────────────
 import {
+  Max,
   IsString,
   IsOptional,
   IsInt,
@@ -149,7 +150,7 @@ export class DocumentFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) expiringSoon?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) expired?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Max(100) @Type(() => Number) limit?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortOrder?: 'asc' | 'desc';
 }

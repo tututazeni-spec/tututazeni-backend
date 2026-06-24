@@ -57,6 +57,12 @@ describe('CareerService (progress)', () => {
   beforeEach(async () => {
     mockPrisma = buildMockPrisma();
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [CareerService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
