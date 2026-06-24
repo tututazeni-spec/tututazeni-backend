@@ -18,7 +18,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ApiIntegrationService } from './api-integration.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   CreateIntegrationDto,
   UpdateIntegrationDto,
@@ -105,25 +105,25 @@ export class ApiIntegrationController {
 
   @Get('api-keys/list')
   @ApiOperation({ summary: 'Listar API Keys (sem revelar o valor)' })
-  getApiKeys(@CurrentUser() user: any) {
+  getApiKeys(@CurrentUser() user: CurrentUserData) {
     return this.svc.getApiKeys();
   }
 
   @Post('api-keys')
   @ApiOperation({ summary: 'Criar nova API Key (retorna o valor RAW uma única vez)' })
-  createApiKey(@Body() dto: CreateApiKeyDto, @CurrentUser() user: any) {
+  createApiKey(@Body() dto: CreateApiKeyDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createApiKey(dto, user.id);
   }
 
   @Post('api-keys/:id/revoke')
   @ApiOperation({ summary: 'Revogar API Key imediatamente' })
-  revokeApiKey(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  revokeApiKey(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.revokeApiKey(id, user.id);
   }
 
   @Post('api-keys/:id/rotate')
   @ApiOperation({ summary: 'Rotacionar API Key (gera nova, invalida antiga)' })
-  rotateApiKey(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  rotateApiKey(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.rotateApiKey(id, user.id);
   }
 
@@ -143,7 +143,7 @@ export class ApiIntegrationController {
 
   @Post('webhooks')
   @ApiOperation({ summary: 'Registar webhook externo (URL + eventos subscritos)' })
-  createWebhook(@Body() dto: CreateWebhookDto, @CurrentUser() user: any) {
+  createWebhook(@Body() dto: CreateWebhookDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createWebhook(dto, user.id);
   }
 

@@ -29,7 +29,7 @@ import {
 } from './instructor.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Instructors')
@@ -57,31 +57,31 @@ export class InstructorController {
 
   @Get('my/profile')
   @ApiOperation({ summary: 'Meu perfil de instrutor' })
-  myProfile(@CurrentUser() user: any) {
+  myProfile(@CurrentUser() user: CurrentUserData) {
     return this.svc.findByUser(user.id);
   }
 
   @Get('my/dashboard')
   @ApiOperation({ summary: 'Dashboard do instrutor (métricas, turmas activas, alertas)' })
-  myDashboard(@CurrentUser() user: any) {
+  myDashboard(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyDashboard(user.id);
   }
 
   @Get('my/analytics')
   @ApiOperation({ summary: 'Analytics do instrutor (totais, avaliações, rating)' })
-  myAnalytics(@CurrentUser() user: any) {
+  myAnalytics(@CurrentUser() user: CurrentUserData) {
     return this.svc.getAnalytics(user.id);
   }
 
   @Get('my/at-risk-students')
   @ApiOperation({ summary: 'Alunos em risco nas minhas turmas activas' })
-  atRisk(@CurrentUser() user: any) {
+  atRisk(@CurrentUser() user: CurrentUserData) {
     return this.svc.getAtRiskStudents(user.id);
   }
 
   @Get('my/payouts')
   @ApiOperation({ summary: 'Histórico de pagamentos (instrutores externos)' })
-  myPayouts(@CurrentUser() user: any) {
+  myPayouts(@CurrentUser() user: CurrentUserData) {
     return this.svc.getPayoutHistory(user.id);
   }
 
@@ -89,26 +89,26 @@ export class InstructorController {
 
   @Get('my/cohorts')
   @ApiOperation({ summary: 'As minhas turmas com filtros' })
-  myCohorts(@CurrentUser() user: any, @Query() filters: CohortFilterDto) {
+  myCohorts(@CurrentUser() user: CurrentUserData, @Query() filters: CohortFilterDto) {
     return this.svc.getCohorts(user.id, filters);
   }
 
   @Get('my/cohorts/:id')
   @ApiOperation({ summary: 'Detalhe de turma (participantes, progresso, alertas)' })
-  cohortDetail(@CurrentUser() user: any, @Param('id', ParseIntPipe) id: number) {
+  cohortDetail(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
     return this.svc.getCohortDetail(id, user.id);
   }
 
   @Post('my/cohorts')
   @ApiOperation({ summary: 'Criar nova turma' })
-  createCohort(@CurrentUser() user: any, @Body() dto: CreateCohortDto) {
+  createCohort(@CurrentUser() user: CurrentUserData, @Body() dto: CreateCohortDto) {
     return this.svc.createCohort(user.id, dto);
   }
 
   @Put('my/cohorts/:id')
   @ApiOperation({ summary: 'Actualizar turma' })
   updateCohort(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateCohortDto,
   ) {
@@ -118,7 +118,7 @@ export class InstructorController {
   @Post('my/cohorts/:id/participants')
   @ApiOperation({ summary: 'Adicionar participantes à turma' })
   addParticipants(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: InstructorAddParticipantsDto,
   ) {
@@ -128,7 +128,7 @@ export class InstructorController {
   @Delete('my/cohorts/:id/participants/:userId')
   @ApiOperation({ summary: 'Remover participante da turma' })
   removeParticipant(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Param('id', ParseIntPipe) id: number,
     @Param('userId', ParseIntPipe) participantUserId: number,
   ) {
@@ -145,13 +145,13 @@ export class InstructorController {
 
   @Post('profile')
   @ApiOperation({ summary: 'Criar perfil de instrutor' })
-  createProfile(@CurrentUser() user: any, @Body() dto: CreateInstructorProfileDto) {
+  createProfile(@CurrentUser() user: CurrentUserData, @Body() dto: CreateInstructorProfileDto) {
     return this.svc.createProfile(user.id, dto);
   }
 
   @Put('my/profile')
   @ApiOperation({ summary: 'Actualizar meu perfil de instrutor' })
-  updateProfile(@CurrentUser() user: any, @Body() dto: UpdateInstructorProfileDto) {
+  updateProfile(@CurrentUser() user: CurrentUserData, @Body() dto: UpdateInstructorProfileDto) {
     return this.svc.updateProfile(user.id, dto);
   }
 
@@ -159,7 +159,7 @@ export class InstructorController {
 
   @Post('reviews')
   @ApiOperation({ summary: 'Avaliar instrutor (1-5)' })
-  review(@CurrentUser() user: any, @Body() dto: InstructorReviewDto) {
+  review(@CurrentUser() user: CurrentUserData, @Body() dto: InstructorReviewDto) {
     return this.svc.addReview(user.id, dto);
   }
 
@@ -167,7 +167,7 @@ export class InstructorController {
 
   @Post('marketplace/courses')
   @ApiOperation({ summary: 'Criar curso no marketplace' })
-  createCourse(@CurrentUser() user: any, @Body() dto: CreateMarketplaceCourseDto) {
+  createCourse(@CurrentUser() user: CurrentUserData, @Body() dto: CreateMarketplaceCourseDto) {
     return this.svc.createMarketplaceCourse(user.id, dto);
   }
 

@@ -17,7 +17,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   DepartmentsService,
   UnitsService,
@@ -334,7 +334,7 @@ export class CareersController {
 
   @Get('my')
   @ApiOperation({ summary: 'Meu histórico de carreira' })
-  myHistory(@CurrentUser() user: any) {
+  myHistory(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserCareerHistory(user.id);
   }
 

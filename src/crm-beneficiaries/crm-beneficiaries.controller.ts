@@ -16,7 +16,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { CrmBeneficiariesService } from './crm-beneficiaries.service';
 import {
   CreateBeneficiaryDto,
@@ -39,7 +39,7 @@ export class CrmBeneficiariesController {
   @Post()
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar beneficiário' })
-  create(@Body() dto: CreateBeneficiaryDto, @CurrentUser() user: any) {
+  create(@Body() dto: CreateBeneficiaryDto, @CurrentUser() user: CurrentUserData) {
     return this.service.create(dto, user.id);
   }
 
@@ -59,7 +59,7 @@ export class CrmBeneficiariesController {
   @Get('follow-ups')
   @ApiOperation({ summary: 'Follow-ups pendentes do utilizador' })
   getFollowUps(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Query('days', new DefaultValuePipe(7), ParseIntPipe) days: number,
   ) {
     return this.service.getFollowUps(user.id, days);
@@ -81,7 +81,11 @@ export class CrmBeneficiariesController {
   @Put(':id')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar beneficiário' })
-  update(@Param('id') id: string, @Body() dto: UpdateBeneficiaryDto, @CurrentUser() user: any) {
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateBeneficiaryDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.service.update(id, dto, user.id);
   }
 
@@ -89,7 +93,7 @@ export class CrmBeneficiariesController {
   @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remover beneficiário (soft delete)' })
-  remove(@Param('id') id: string, @CurrentUser() user: any) {
+  remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.softDelete(id, user.id);
   }
 
@@ -100,7 +104,7 @@ export class CrmBeneficiariesController {
   addInteraction(
     @Param('id') id: string,
     @Body() dto: CreateInteractionDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.addInteraction(id, dto, user.id);
   }
@@ -119,13 +123,17 @@ export class CrmBeneficiariesController {
 
   @Post(':id/needs')
   @ApiOperation({ summary: 'Registar necessidade' })
-  addNeed(@Param('id') id: string, @Body() dto: CreateNeedDto, @CurrentUser() user: any) {
+  addNeed(
+    @Param('id') id: string,
+    @Body() dto: CreateNeedDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.service.addNeed(id, dto, user.id);
   }
 
   @Put('needs/:needId/resolve')
   @ApiOperation({ summary: 'Resolver necessidade' })
-  resolveNeed(@Param('needId') needId: string, @CurrentUser() user: any) {
+  resolveNeed(@Param('needId') needId: string, @CurrentUser() user: CurrentUserData) {
     return this.service.resolveNeed(needId, user.id);
   }
 }

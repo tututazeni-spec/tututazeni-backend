@@ -14,7 +14,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EvaluationService } from './evaluation.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   CreateCycleDto,
   UpdateCycleDto,
@@ -44,7 +44,7 @@ export class EvaluationController {
   @Post('cycles')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Criar ciclo de avaliação com pesos por tipo de avaliador' })
-  createCycle(@Body() dto: CreateCycleDto, @CurrentUser() user: any) {
+  createCycle(@Body() dto: CreateCycleDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createCycle(dto, user.id);
   }
 
@@ -88,7 +88,7 @@ export class EvaluationController {
   @Post('forms')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Criar formulário de avaliação com perguntas por competência' })
-  createForm(@Body() dto: CreateFormDto, @CurrentUser() user: any) {
+  createForm(@Body() dto: CreateFormDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createForm(dto, user.id);
   }
 
@@ -127,7 +127,7 @@ export class EvaluationController {
   @Post('submit')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Submeter avaliação (ou guardar rascunho)' })
-  submit(@CurrentUser() user: any, @Body() dto: SubmitEvaluationDto) {
+  submit(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitEvaluationDto) {
     return this.svc.submitEvaluation(user.id, dto);
   }
 
@@ -136,7 +136,7 @@ export class EvaluationController {
   @Post()
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: '[Legacy] Submeter avaliação simples (compatibilidade)' })
-  create(@CurrentUser() user: any, @Body() dto: CreateEvaluationDto) {
+  create(@CurrentUser() user: CurrentUserData, @Body() dto: CreateEvaluationDto) {
     return this.svc.create(user.id, dto);
   }
 
@@ -145,21 +145,21 @@ export class EvaluationController {
   @Get('pending')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Avaliações que me estão pendentes' })
-  pending(@CurrentUser() user: any) {
+  pending(@CurrentUser() user: CurrentUserData) {
     return this.svc.getPendingEvaluations(user.id);
   }
 
   @Get('my-progress')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'O meu progresso de avaliações (taxa de conclusão)' })
-  myProgress(@CurrentUser() user: any) {
+  myProgress(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyProgress(user.id);
   }
 
   @Get('my-evaluations')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'As minhas avaliações recebidas' })
-  myEvals(@CurrentUser() user: any, @Query('period') period?: string) {
+  myEvals(@CurrentUser() user: CurrentUserData, @Query('period') period?: string) {
     return this.svc.findByUser(user.id, period);
   }
 
@@ -210,7 +210,7 @@ export class EvaluationController {
   calibrate(
     @Param('cycleId', ParseIntPipe) cycleId: number,
     @Body() dto: CalibrateScoreDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.calibrateScore(cycleId, dto, user.id);
   }

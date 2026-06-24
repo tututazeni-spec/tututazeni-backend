@@ -28,7 +28,7 @@ import {
 } from './micro-learning.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Micro-Learning')
@@ -72,7 +72,7 @@ export class MicroLearningController {
   @Post()
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar micro-learning' })
-  create(@CurrentUser() user: any, @Body() dto: CreateMicroLearningDto) {
+  create(@CurrentUser() user: CurrentUserData, @Body() dto: CreateMicroLearningDto) {
     return this.svc.create(dto, user.id);
   }
 
@@ -110,19 +110,19 @@ export class MicroLearningController {
 
   @Get('feed/me')
   @ApiOperation({ summary: 'Feed personalizado do utilizador autenticado' })
-  myFeed(@CurrentUser() user: any, @Query() filters: MicroLearningFilterDto) {
+  myFeed(@CurrentUser() user: CurrentUserData, @Query() filters: MicroLearningFilterDto) {
     return this.svc.getMyFeed(user.id, filters);
   }
 
   @Get('saved/me')
   @ApiOperation({ summary: 'Conteúdos guardados (saved) pelo utilizador' })
-  mySaved(@CurrentUser() user: any) {
+  mySaved(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMySaved(user.id);
   }
 
   @Get('dashboard/me')
   @ApiOperation({ summary: 'Dashboard pessoal (streak, XP, histórico)' })
-  myDashboard(@CurrentUser() user: any) {
+  myDashboard(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyDashboard(user.id);
   }
 
@@ -131,7 +131,10 @@ export class MicroLearningController {
   @Post('progress')
   @ApiOperation({ summary: 'Actualizar progresso de um conteúdo' })
   @HttpCode(HttpStatus.OK)
-  updateProgress(@CurrentUser() user: any, @Body() dto: MicroLearningUpdateProgressDto) {
+  updateProgress(
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: MicroLearningUpdateProgressDto,
+  ) {
     return this.svc.updateProgress(user.id, dto);
   }
 
@@ -140,7 +143,7 @@ export class MicroLearningController {
   @Post('quiz/submit')
   @ApiOperation({ summary: 'Submeter respostas de quiz' })
   @HttpCode(HttpStatus.OK)
-  submitQuiz(@CurrentUser() user: any, @Body() dto: MicroLearningSubmitQuizDto) {
+  submitQuiz(@CurrentUser() user: CurrentUserData, @Body() dto: MicroLearningSubmitQuizDto) {
     return this.svc.submitQuiz(user.id, dto);
   }
 
@@ -149,7 +152,7 @@ export class MicroLearningController {
   @Post('interact')
   @ApiOperation({ summary: 'Like / Save / Skip (toggle)' })
   @HttpCode(HttpStatus.OK)
-  interact(@CurrentUser() user: any, @Body() dto: InteractDto) {
+  interact(@CurrentUser() user: CurrentUserData, @Body() dto: InteractDto) {
     return this.svc.interact(user.id, dto);
   }
 
@@ -170,7 +173,7 @@ export class MicroLearningController {
   @Post('playlists')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar playlist de micro-learning' })
-  createPlaylist(@CurrentUser() user: any, @Body() dto: CreatePlaylistDto) {
+  createPlaylist(@CurrentUser() user: CurrentUserData, @Body() dto: CreatePlaylistDto) {
     return this.svc.createPlaylist(dto, user.id);
   }
 

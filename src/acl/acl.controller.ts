@@ -17,7 +17,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AclService } from './acl.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   CreatePermissionDto,
   BulkAssignPermissionsDto,
@@ -52,7 +52,7 @@ export class AclController {
     Role.DIRECTOR,
   )
   @ApiOperation({ summary: 'As minhas permissões actuais (cached)' })
-  myPermissions(@CurrentUser() user: any) {
+  myPermissions(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserPermissions(user.id);
   }
 
@@ -183,7 +183,7 @@ export class AclController {
   @Post('policies')
   @Roles(...ADMIN)
   @ApiOperation({ summary: 'Criar política de acesso (condition JSON, effect ALLOW/DENY)' })
-  createPolicy(@Body() dto: CreatePolicyDto, @CurrentUser() user: any) {
+  createPolicy(@Body() dto: CreatePolicyDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createPolicy(dto, user.id);
   }
 

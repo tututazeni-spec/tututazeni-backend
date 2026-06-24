@@ -25,7 +25,7 @@ import {
 } from './document-repository.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Document Repository')
@@ -93,19 +93,19 @@ export class DocumentRepositoryController {
 
   @Get()
   @ApiOperation({ summary: 'Listar documentos (filtros + busca inteligente por OCR text + tags)' })
-  findAll(@Query() filters: DocumentFilterDto, @CurrentUser() user: any) {
-    return this.svc.findAll(filters, user.id, user.employee?.department, user.role);
+  findAll(@Query() filters: DocumentFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.findAll(filters, user.id, user.employee?.department, user.role?.name);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do documento com versões, permissões e metadata' })
-  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user.id);
   }
 
   @Get(':id/download')
   @ApiOperation({ summary: 'Download (regista no audit log e incrementa contador)' })
-  download(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  download(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.download(id, user.id);
   }
 
@@ -126,7 +126,7 @@ export class DocumentRepositoryController {
   @Post()
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Publicar documento (cria v1.0, calcula retenção legal automática)' })
-  create(@CurrentUser() user: any, @Body() dto: CreateDocumentDto) {
+  create(@CurrentUser() user: CurrentUserData, @Body() dto: CreateDocumentDto) {
     return this.svc.create(user.id, dto);
   }
 
@@ -136,7 +136,7 @@ export class DocumentRepositoryController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateDocumentDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.update(id, dto, user.id);
   }
@@ -149,7 +149,7 @@ export class DocumentRepositoryController {
   newVersion(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: NewVersionDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.newVersion(id, dto, user.id);
   }
@@ -160,7 +160,7 @@ export class DocumentRepositoryController {
   restoreVersion(
     @Param('id', ParseIntPipe) id: number,
     @Param('versionId', ParseIntPipe) versionId: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.restoreVersion(id, versionId, user.id);
   }
@@ -173,7 +173,7 @@ export class DocumentRepositoryController {
   archive(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { reason?: string },
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.archive(id, user.id, body.reason);
   }
@@ -184,7 +184,7 @@ export class DocumentRepositoryController {
   renew(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { newExpiresAt: string },
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.renewDocument(id, body.newExpiresAt, user.id);
   }
@@ -195,7 +195,7 @@ export class DocumentRepositoryController {
   remove(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { reason: string },
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.softDelete(id, user.id, body.reason);
   }
@@ -205,14 +205,14 @@ export class DocumentRepositoryController {
   @Post('permissions')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Conceder permissão a utilizador ou departamento' })
-  grantPermission(@Body() dto: GrantPermissionDto, @CurrentUser() user: any) {
+  grantPermission(@Body() dto: GrantPermissionDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.grantPermission(dto, user.id);
   }
 
   @Delete('permissions/:id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Revogar permissão' })
-  revokePermission(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  revokePermission(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.revokePermission(id, user.id);
   }
 
@@ -221,7 +221,7 @@ export class DocumentRepositoryController {
   @Post('share')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar link de partilha externo (com expiração e password)' })
-  createShareLink(@Body() dto: CreateShareLinkDto, @CurrentUser() user: any) {
+  createShareLink(@Body() dto: CreateShareLinkDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createShareLink(dto, user.id);
   }
 

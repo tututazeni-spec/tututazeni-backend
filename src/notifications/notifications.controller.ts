@@ -25,7 +25,7 @@ import {
 } from './notifications.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Notifications')
@@ -39,27 +39,27 @@ export class NotificationsController {
 
   @Get('my')
   @ApiOperation({ summary: 'As minhas notificações (com agrupamento por data)' })
-  my(@CurrentUser() user: any, @Query() filters: NotificationFilterDto) {
+  my(@CurrentUser() user: CurrentUserData, @Query() filters: NotificationFilterDto) {
     return this.svc.getMyNotifications(user.id, filters);
   }
 
   @Get('my/unread-count')
   @ApiOperation({ summary: 'Contagem de não lidas (badge do sino)' })
-  unreadCount(@CurrentUser() user: any) {
+  unreadCount(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUnreadCount(user.id);
   }
 
   @Patch('my/:id/read')
   @ApiOperation({ summary: 'Marcar notificação como lida' })
   @HttpCode(HttpStatus.OK)
-  markRead(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  markRead(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.markAsRead(id, user.id);
   }
 
   @Patch('my/read-all')
   @ApiOperation({ summary: 'Marcar todas como lidas' })
   @HttpCode(HttpStatus.OK)
-  readAll(@CurrentUser() user: any) {
+  readAll(@CurrentUser() user: CurrentUserData) {
     return this.svc.markAllAsRead(user.id);
   }
 
@@ -67,14 +67,14 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Marcar lista de IDs como lidas' })
   @HttpCode(HttpStatus.OK)
   @ApiBody({ schema: { properties: { ids: { type: 'array', items: { type: 'number' } } } } })
-  readBulk(@CurrentUser() user: any, @Body() body: { ids: number[] }) {
+  readBulk(@CurrentUser() user: CurrentUserData, @Body() body: { ids: number[] }) {
     return this.svc.markBulkAsRead(user.id, body.ids);
   }
 
   @Patch('my/:id/archive')
   @ApiOperation({ summary: 'Arquivar notificação' })
   @HttpCode(HttpStatus.OK)
-  archive(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  archive(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.archiveNotification(id, user.id);
   }
 
@@ -82,14 +82,14 @@ export class NotificationsController {
 
   @Get('preferences')
   @ApiOperation({ summary: 'As minhas preferências de notificação' })
-  getPrefs(@CurrentUser() user: any) {
+  getPrefs(@CurrentUser() user: CurrentUserData) {
     return this.svc.getPreferences(user.id);
   }
 
   @Patch('preferences')
   @ApiOperation({ summary: 'Actualizar preferências (canais, horário silencioso, digest)' })
   @HttpCode(HttpStatus.OK)
-  updatePrefs(@CurrentUser() user: any, @Body() dto: UpdatePreferencesDto) {
+  updatePrefs(@CurrentUser() user: CurrentUserData, @Body() dto: UpdatePreferencesDto) {
     return this.svc.updatePreferences(user.id, dto);
   }
 

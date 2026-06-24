@@ -15,7 +15,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { ReportFilterDto, SaveReportDto, CreateScheduleDto, ReportCategory } from './reports.dto';
 
 const ALL_MGMT = ['ADMIN', 'RH', 'LIDER', 'DIRECTOR'] as const;
@@ -156,14 +156,14 @@ export class ReportsController {
   @Get('saved')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Listar relatórios guardados do utilizador' })
-  listSaved(@CurrentUser() user: any, @Query('category') category?: ReportCategory) {
+  listSaved(@CurrentUser() user: CurrentUserData, @Query('category') category?: ReportCategory) {
     return this.svc.listSavedReports(user.id, category);
   }
 
   @Post('saved')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Guardar relatório personalizado' })
-  saveReport(@CurrentUser() user: any, @Body() dto: SaveReportDto) {
+  saveReport(@CurrentUser() user: CurrentUserData, @Body() dto: SaveReportDto) {
     return this.svc.saveReport(user.id, dto);
   }
 
@@ -188,14 +188,14 @@ export class ReportsController {
   @Post('schedules')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Agendar relatório recorrente com distribuição por email' })
-  createSchedule(@CurrentUser() user: any, @Body() dto: CreateScheduleDto) {
+  createSchedule(@CurrentUser() user: CurrentUserData, @Body() dto: CreateScheduleDto) {
     return this.svc.createSchedule(user.id, dto);
   }
 
   @Get('schedules')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Listar agendamentos activos' })
-  listSchedules(@CurrentUser() user: any) {
+  listSchedules(@CurrentUser() user: CurrentUserData) {
     return this.svc.listSchedules(user.id);
   }
 

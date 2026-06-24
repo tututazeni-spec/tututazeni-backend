@@ -33,7 +33,7 @@ import {
 } from './career.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Career')
@@ -47,19 +47,19 @@ export class CareerController {
 
   @Get('me')
   @ApiOperation({ summary: 'Dashboard de carreira do utilizador autenticado' })
-  myProfile(@CurrentUser() user: any) {
+  myProfile(@CurrentUser() user: CurrentUserData) {
     return this.svc.getCareerProfile(user.id);
   }
 
   @Get('me/gap-analysis')
   @ApiOperation({ summary: 'Análise de gap de competências para o cargo actual' })
-  myGapAnalysis(@CurrentUser() user: any) {
+  myGapAnalysis(@CurrentUser() user: CurrentUserData) {
     return this.svc.getCompetencyGapsForUser(user.id);
   }
 
   @Get('me/promotion-eligibility')
   @ApiOperation({ summary: 'Verificar elegibilidade para promoção' })
-  myPromotionEligibility(@CurrentUser() user: any) {
+  myPromotionEligibility(@CurrentUser() user: CurrentUserData) {
     return this.svc.checkPromotionEligibility(user.id);
   }
 
@@ -67,7 +67,7 @@ export class CareerController {
   @ApiOperation({ summary: 'Submeter pedido de promoção' })
   @HttpCode(HttpStatus.OK)
   requestPromotion(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body('targetPositionId', ParseIntPipe) targetPositionId: number,
     @Body('justification') justification: string,
   ) {
@@ -77,7 +77,7 @@ export class CareerController {
   @Get('me/simulate/:targetPositionId')
   @ApiOperation({ summary: 'Simulador de carreira — o que falta para chegar ao cargo X' })
   simulate(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Param('targetPositionId', ParseIntPipe) targetPositionId: number,
   ) {
     return this.svc.simulateNextRole(user.id, targetPositionId);
@@ -85,7 +85,7 @@ export class CareerController {
 
   @Put('me/interests')
   @ApiOperation({ summary: 'Atualizar interesses e objetivos de carreira' })
-  updateInterests(@CurrentUser() user: any, @Body() dto: CareerInterestDto) {
+  updateInterests(@CurrentUser() user: CurrentUserData, @Body() dto: CareerInterestDto) {
     return this.svc.updateCareerInterests(user.id, dto);
   }
 
@@ -160,20 +160,20 @@ export class CareerController {
 
   @Get('me/plan')
   @ApiOperation({ summary: 'Obter plano de carreira activo' })
-  myPlan(@CurrentUser() user: any) {
+  myPlan(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyCareerPlan(user.id);
   }
 
   @Post('me/plan')
   @ApiOperation({ summary: 'Criar plano de carreira' })
-  createPlan(@CurrentUser() user: any, @Body() dto: CreateCareerPlanDto) {
+  createPlan(@CurrentUser() user: CurrentUserData, @Body() dto: CreateCareerPlanDto) {
     return this.svc.createCareerPlan(user.id, dto);
   }
 
   @Put('me/plan/:planId')
   @ApiOperation({ summary: 'Actualizar plano de carreira' })
   updatePlan(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Param('planId', ParseIntPipe) planId: number,
     @Body() dto: UpdateCareerPlanDto,
   ) {
@@ -183,7 +183,7 @@ export class CareerController {
   @Post('me/plan/:planId/goals')
   @ApiOperation({ summary: 'Adicionar objetivo ao plano' })
   addGoal(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Param('planId', ParseIntPipe) planId: number,
     @Body() dto: AddCareerGoalDto,
   ) {
@@ -194,7 +194,7 @@ export class CareerController {
   @ApiOperation({ summary: 'Atualizar progresso de um objetivo (0-100)' })
   @HttpCode(HttpStatus.OK)
   updateGoal(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Param('goalId', ParseIntPipe) goalId: number,
     @Body('progress', ParseIntPipe) progress: number,
   ) {
@@ -205,14 +205,14 @@ export class CareerController {
 
   @Get('vacancies')
   @ApiOperation({ summary: 'Listar vagas internas (com match score se autenticado)' })
-  findVacancies(@Query() filters: VacancyFilterDto, @CurrentUser() user: any) {
+  findVacancies(@Query() filters: VacancyFilterDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.findAllVacancies(filters, user.id);
   }
 
   @Post('vacancies')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar vaga interna' })
-  createVacancy(@CurrentUser() user: any, @Body() dto: CreateInternalVacancyDto) {
+  createVacancy(@CurrentUser() user: CurrentUserData, @Body() dto: CreateInternalVacancyDto) {
     return this.svc.createVacancy(user.id, dto);
   }
 
@@ -228,7 +228,7 @@ export class CareerController {
   @ApiOperation({ summary: 'Candidatar-se a uma vaga interna' })
   apply(
     @Param('id', ParseIntPipe) vacancyId: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: ApplyToVacancyDto,
   ) {
     return this.svc.applyToVacancy(vacancyId, user.id, dto);
@@ -236,7 +236,7 @@ export class CareerController {
 
   @Get('me/applications')
   @ApiOperation({ summary: 'As minhas candidaturas' })
-  myApplications(@CurrentUser() user: any) {
+  myApplications(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyApplications(user.id);
   }
 

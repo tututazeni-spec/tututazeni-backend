@@ -28,7 +28,7 @@ import {
 } from './assessments.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Assessments')
@@ -56,7 +56,7 @@ export class AssessmentsController {
   @Get('my/attempts')
   @ApiOperation({ summary: 'As minhas tentativas' })
   @ApiQuery({ name: 'assessmentId', required: false })
-  myAttempts(@CurrentUser() user: any, @Query('assessmentId') assessmentId?: string) {
+  myAttempts(@CurrentUser() user: CurrentUserData, @Query('assessmentId') assessmentId?: string) {
     return this.svc.getUserAttempts(user.id, assessmentId ? parseInt(assessmentId) : undefined);
   }
 
@@ -75,7 +75,10 @@ export class AssessmentsController {
 
   @Get('attempts/:attemptId')
   @ApiOperation({ summary: 'Detalhe de uma tentativa (para revisão)' })
-  attemptDetail(@Param('attemptId', ParseIntPipe) attemptId: number, @CurrentUser() user: any) {
+  attemptDetail(
+    @Param('attemptId', ParseIntPipe) attemptId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.svc.getAttemptDetail(attemptId, user.id);
   }
 
@@ -145,21 +148,21 @@ export class AssessmentsController {
 
   @Post('attempts/start')
   @ApiOperation({ summary: 'Iniciar ou retomar tentativa' })
-  startAttempt(@CurrentUser() user: any, @Body() dto: StartAttemptDto) {
+  startAttempt(@CurrentUser() user: CurrentUserData, @Body() dto: StartAttemptDto) {
     return this.svc.startAttempt(user.id, dto);
   }
 
   @Post('attempts/save')
   @ApiOperation({ summary: 'Auto-save das respostas (durante tentativa)' })
   @HttpCode(HttpStatus.OK)
-  autoSave(@CurrentUser() user: any, @Body() dto: AutoSaveDto) {
+  autoSave(@CurrentUser() user: CurrentUserData, @Body() dto: AutoSaveDto) {
     return this.svc.autoSave(user.id, dto);
   }
 
   @Post('attempts/submit')
   @ApiOperation({ summary: 'Submeter tentativa e calcular score' })
   @HttpCode(HttpStatus.OK)
-  submitAttempt(@CurrentUser() user: any, @Body() dto: SubmitAttemptDto) {
+  submitAttempt(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitAttemptDto) {
     return this.svc.submitAttempt(user.id, dto);
   }
 
@@ -168,7 +171,7 @@ export class AssessmentsController {
   @Post('review')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Avaliar resposta aberta manualmente' })
-  reviewAnswer(@CurrentUser() reviewer: any, @Body() dto: ReviewAnswerDto) {
+  reviewAnswer(@CurrentUser() reviewer: CurrentUserData, @Body() dto: ReviewAnswerDto) {
     return this.svc.reviewAnswer(dto, reviewer.id);
   }
 

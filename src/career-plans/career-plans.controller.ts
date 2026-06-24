@@ -31,7 +31,7 @@ import {
 } from './career-plans.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Career Plans')
@@ -123,7 +123,10 @@ export class CareerPlansController {
   @Post('paths')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar trilha de carreira (linear, Y, W, horizontal)' })
-  createCareerPath(@Body() dto: CareerPlansCreateCareerPathDto, @CurrentUser() user: any) {
+  createCareerPath(
+    @Body() dto: CareerPlansCreateCareerPathDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.svc.createCareerPath(dto, user.id);
   }
 
@@ -165,7 +168,7 @@ export class CareerPlansController {
 
   @Get('my')
   @ApiOperation({ summary: 'Meu plano de carreira activo com readiness e metas' })
-  myPlan(@CurrentUser() user: any) {
+  myPlan(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyPlan(user.id);
   }
 
@@ -193,7 +196,7 @@ export class CareerPlansController {
   @Post()
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar plano (auto-gera metas com base no gap de skills)' })
-  create(@Body() dto: CareerPlansCreateCareerPlanDto, @CurrentUser() user: any) {
+  create(@Body() dto: CareerPlansCreateCareerPlanDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.create(dto, user.id);
   }
 
@@ -203,7 +206,7 @@ export class CareerPlansController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CareerPlansUpdateCareerPlanDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.update(id, dto, user.id);
   }
@@ -211,7 +214,7 @@ export class CareerPlansController {
   @Patch(':id/activate')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Activar plano de carreira' })
-  activate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  activate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.activate(id, user.id);
   }
 
@@ -228,7 +231,7 @@ export class CareerPlansController {
   updateGoalProgress(
     @Param('goalId', ParseIntPipe) goalId: number,
     @Body() dto: UpdateGoalProgressDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.updateGoalProgress(goalId, dto, user.id);
   }
@@ -244,7 +247,7 @@ export class CareerPlansController {
 
   @Post('promotions')
   @ApiOperation({ summary: 'Solicitar promoção (valida regras + calcula readiness)' })
-  requestPromotion(@Body() dto: CreatePromotionRequestDto, @CurrentUser() user: any) {
+  requestPromotion(@Body() dto: CreatePromotionRequestDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.requestPromotion(dto, user.id);
   }
 
@@ -254,8 +257,8 @@ export class CareerPlansController {
   reviewPromotion(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ReviewPromotionDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.reviewPromotion(id, dto, user.id, user.role);
+    return this.svc.reviewPromotion(id, dto, user.id, user.role?.name);
   }
 }

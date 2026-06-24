@@ -14,7 +14,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EngagementService } from './engagement.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   CreateSurveyDto,
   UpdateSurveyDto,
@@ -71,14 +71,14 @@ export class EngagementController {
   @Get('surveys/:id/results')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Resultados do survey (respeitando threshold de anonimato)' })
-  getResults(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  getResults(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getSurveyResults(id, user.id);
   }
 
   @Post('surveys')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Criar survey (clima, pulse, eNPS, onboarding…)' })
-  createSurvey(@Body() dto: CreateSurveyDto, @CurrentUser() user: any) {
+  createSurvey(@Body() dto: CreateSurveyDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createSurvey(dto, user.id);
   }
 
@@ -106,7 +106,7 @@ export class EngagementController {
   @Post('surveys/respond')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Submeter respostas a um survey' })
-  respond(@CurrentUser() user: any, @Body() dto: SubmitSurveyDto) {
+  respond(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitSurveyDto) {
     return this.svc.submitSurvey(user.id, dto);
   }
 
@@ -115,7 +115,7 @@ export class EngagementController {
   @Post('enps/submit')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Submeter eNPS (0-10 + motivo)' })
-  submitENPS(@CurrentUser() user: any, @Body() dto: SubmitENPSDto) {
+  submitENPS(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitENPSDto) {
     return this.svc.submitENPS(user.id, dto);
   }
 
@@ -131,14 +131,14 @@ export class EngagementController {
   @Post('mood/checkin')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Check-in de humor diário (1–5 + nota)' })
-  submitMood(@CurrentUser() user: any, @Body() dto: SubmitMoodDto) {
+  submitMood(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitMoodDto) {
     return this.svc.submitMood(user.id, dto);
   }
 
   @Get('mood/my-trend')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Tendência do meu humor (últimos N dias)' })
-  myMoodTrend(@CurrentUser() user: any, @Query('days') days?: string) {
+  myMoodTrend(@CurrentUser() user: CurrentUserData, @Query('days') days?: string) {
     return this.svc.getMoodTrend(user.id, days ? +days : 14);
   }
 
@@ -154,7 +154,7 @@ export class EngagementController {
   @Post('feedback')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Criar feedback (aberto, anónimo, peer, para gestor)' })
-  createFeedback(@CurrentUser() user: any, @Body() dto: CreateFeedbackDto) {
+  createFeedback(@CurrentUser() user: CurrentUserData, @Body() dto: CreateFeedbackDto) {
     return this.svc.createFeedback(user.id, dto);
   }
 
@@ -170,7 +170,7 @@ export class EngagementController {
   @ApiOperation({ summary: 'Responder a feedback' })
   replyFeedback(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: FeedbackReplyDto,
   ) {
     return this.svc.replyToFeedback(id, user.id, dto);
@@ -181,7 +181,7 @@ export class EngagementController {
   @Post('recognition')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Dar reconhecimento/kudos a um colega (+XP automático)' })
-  giveRecognition(@CurrentUser() user: any, @Body() dto: CreateRecognitionDto) {
+  giveRecognition(@CurrentUser() user: CurrentUserData, @Body() dto: CreateRecognitionDto) {
     return this.svc.giveRecognition(user.id, dto);
   }
 
@@ -212,14 +212,14 @@ export class EngagementController {
   @Post('one-on-one')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Agendar 1:1 (com pauta e opção de recorrência)' })
-  createOneOnOne(@CurrentUser() user: any, @Body() dto: CreateOneOnOneDto) {
+  createOneOnOne(@CurrentUser() user: CurrentUserData, @Body() dto: CreateOneOnOneDto) {
     return this.svc.createOneOnOne(user.id, dto);
   }
 
   @Get('one-on-one/my')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Os meus 1:1 (como host ou participante)' })
-  myOneOnOnes(@CurrentUser() user: any) {
+  myOneOnOnes(@CurrentUser() user: CurrentUserData) {
     return this.svc.getOneOnOnes(user.id);
   }
 
@@ -228,7 +228,7 @@ export class EngagementController {
   @ApiOperation({ summary: 'Actualizar 1:1 (notas, conclusão, reagendamento)' })
   updateOneOnOne(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: EngagementUpdateOneOnOneDto,
   ) {
     return this.svc.updateOneOnOne(id, user.id, dto);
@@ -239,7 +239,7 @@ export class EngagementController {
   @Post('action-plans')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Criar plano de acção baseado em resultados de survey' })
-  createActionPlan(@CurrentUser() user: any, @Body() dto: CreateActionPlanDto) {
+  createActionPlan(@CurrentUser() user: CurrentUserData, @Body() dto: CreateActionPlanDto) {
     return this.svc.createActionPlan(user.id, dto);
   }
 
@@ -311,7 +311,7 @@ export class EngagementController {
   @Get('my-summary')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Resumo do colaborador (surveys pendentes, reconhecimentos, XP, HSS)' })
-  mySummary(@CurrentUser() user: any) {
+  mySummary(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyEngagementSummary(user.id);
   }
 }

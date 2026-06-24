@@ -25,7 +25,7 @@ import {
 } from './ai-tutor.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('AI Tutor — NOVA (Groq / Gemini / Ollama)')
@@ -57,13 +57,13 @@ export class AiTutorController {
 
   @Get('sessions')
   @ApiOperation({ summary: 'As minhas sessões com o tutor' })
-  mySessions(@CurrentUser() user: any, @Query() filters: AiSessionFilterDto) {
+  mySessions(@CurrentUser() user: CurrentUserData, @Query() filters: AiSessionFilterDto) {
     return this.svc.getMySessions(user.id, filters);
   }
 
   @Get('sessions/:id')
   @ApiOperation({ summary: 'Detalhe da sessão com histórico de mensagens' })
-  getSession(@CurrentUser() user: any, @Param('id', ParseIntPipe) id: number) {
+  getSession(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
     return this.svc.getSession(user.id, id);
   }
 
@@ -71,20 +71,20 @@ export class AiTutorController {
   @ApiOperation({
     summary: 'Iniciar sessão com NOVA (contexto de curso, lição, PDI, personalidade)',
   })
-  startSession(@CurrentUser() user: any, @Body() dto: StartAiSessionDto) {
+  startSession(@CurrentUser() user: CurrentUserData, @Body() dto: StartAiSessionDto) {
     return this.svc.startSession(user.id, dto);
   }
 
   @Post('sessions/message')
   @ApiOperation({ summary: 'Enviar mensagem ao tutor e receber resposta contextualizada' })
-  sendMessage(@CurrentUser() user: any, @Body() dto: SendAiMessageDto) {
+  sendMessage(@CurrentUser() user: CurrentUserData, @Body() dto: SendAiMessageDto) {
     return this.svc.sendMessage(user.id, dto);
   }
 
   @Patch('sessions/:id/end')
   @ApiOperation({ summary: 'Encerrar sessão' })
   @HttpCode(HttpStatus.OK)
-  endSession(@CurrentUser() user: any, @Param('id', ParseIntPipe) id: number) {
+  endSession(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
     return this.svc.endSession(user.id, id);
   }
 
@@ -93,7 +93,7 @@ export class AiTutorController {
   @Patch('messages/rate')
   @ApiOperation({ summary: 'Avaliar qualidade de uma resposta do tutor (1-5)' })
   @HttpCode(HttpStatus.OK)
-  rateMessage(@CurrentUser() user: any, @Body() dto: RateMessageDto) {
+  rateMessage(@CurrentUser() user: CurrentUserData, @Body() dto: RateMessageDto) {
     return this.svc.rateMessage(user.id, dto);
   }
 
@@ -103,7 +103,7 @@ export class AiTutorController {
   @ApiOperation({
     summary: 'Executar acção agentic (inscrever curso, actualizar PDI, notificar gestor)',
   })
-  executeAction(@CurrentUser() user: any, @Body() dto: ExecuteAgentActionDto) {
+  executeAction(@CurrentUser() user: CurrentUserData, @Body() dto: ExecuteAgentActionDto) {
     return this.svc.executeAgentAction(user.id, dto);
   }
 
@@ -111,7 +111,7 @@ export class AiTutorController {
 
   @Post('generate')
   @ApiOperation({ summary: 'Gerar quiz, flashcards, resumo ou plano de estudo com IA' })
-  generateContent(@CurrentUser() user: any, @Body() dto: GenerateContentDto) {
+  generateContent(@CurrentUser() user: CurrentUserData, @Body() dto: GenerateContentDto) {
     return this.svc.generateContent(user.id, dto);
   }
 
@@ -119,7 +119,7 @@ export class AiTutorController {
 
   @Get('recommendations')
   @ApiOperation({ summary: 'Recomendações personalizadas de aprendizagem com insight IA' })
-  recommendations(@CurrentUser() user: any) {
+  recommendations(@CurrentUser() user: CurrentUserData) {
     return this.svc.getRecommendations(user.id);
   }
 }

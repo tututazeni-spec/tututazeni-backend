@@ -32,7 +32,7 @@ import {
 } from './leadership.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Leadership')
@@ -46,14 +46,14 @@ export class LeadershipController {
 
   @Get('my/dashboard')
   @ApiOperation({ summary: 'Dashboard pessoal do líder (score, programas, mentoring, 1:1s)' })
-  myDashboard(@CurrentUser() user: any) {
+  myDashboard(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyLeaderDashboard(user.id);
   }
 
   @Get('team/dashboard')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Team Dashboard — saúde, semáforo, alertas da equipa' })
-  teamDashboard(@CurrentUser() user: any) {
+  teamDashboard(@CurrentUser() user: CurrentUserData) {
     return this.svc.getTeamDashboard(user.id);
   }
 
@@ -67,7 +67,7 @@ export class LeadershipController {
 
   @Get('programs/my')
   @ApiOperation({ summary: 'Os meus programas de liderança' })
-  myPrograms(@CurrentUser() user: any) {
+  myPrograms(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyPrograms(user.id);
   }
 
@@ -114,7 +114,10 @@ export class LeadershipController {
 
   @Post('programs/:programId/self-enroll')
   @ApiOperation({ summary: 'Auto-inscrição num programa' })
-  selfEnroll(@CurrentUser() user: any, @Param('programId', ParseIntPipe) programId: number) {
+  selfEnroll(
+    @CurrentUser() user: CurrentUserData,
+    @Param('programId', ParseIntPipe) programId: number,
+  ) {
     return this.svc.enroll({ userId: user.id, programId });
   }
 
@@ -133,7 +136,10 @@ export class LeadershipController {
   @Patch('programs/:programId/withdraw')
   @ApiOperation({ summary: 'Abandonar programa' })
   @HttpCode(HttpStatus.OK)
-  withdraw(@CurrentUser() user: any, @Param('programId', ParseIntPipe) programId: number) {
+  withdraw(
+    @CurrentUser() user: CurrentUserData,
+    @Param('programId', ParseIntPipe) programId: number,
+  ) {
     return this.svc.withdraw(user.id, programId);
   }
 
@@ -142,7 +148,7 @@ export class LeadershipController {
   @Get('team/health')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Métricas de saúde da equipa do gestor autenticado' })
-  teamHealth(@CurrentUser() user: any) {
+  teamHealth(@CurrentUser() user: CurrentUserData) {
     return this.svc.getTeamHealth(user.id);
   }
 
@@ -150,7 +156,7 @@ export class LeadershipController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar métricas de saúde da equipa' })
   @HttpCode(HttpStatus.OK)
-  upsertTeamHealth(@CurrentUser() user: any, @Body() dto: UpsertTeamHealthDto) {
+  upsertTeamHealth(@CurrentUser() user: CurrentUserData, @Body() dto: UpsertTeamHealthDto) {
     return this.svc.upsertTeamHealth(user.id, dto);
   }
 
@@ -160,14 +166,17 @@ export class LeadershipController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar 1:1s agendados / realizados' })
   @ApiQuery({ name: 'subordinateId', required: false })
-  getOneOnOnes(@CurrentUser() user: any, @Query('subordinateId') subordinateId?: string) {
+  getOneOnOnes(
+    @CurrentUser() user: CurrentUserData,
+    @Query('subordinateId') subordinateId?: string,
+  ) {
     return this.svc.getOneOnOnes(user.id, subordinateId ? parseInt(subordinateId) : undefined);
   }
 
   @Post('1on1')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Agendar 1:1 com liderado' })
-  createOneOnOne(@CurrentUser() user: any, @Body() dto: LeadershipCreateOneOnOneDto) {
+  createOneOnOne(@CurrentUser() user: CurrentUserData, @Body() dto: LeadershipCreateOneOnOneDto) {
     return this.svc.createOneOnOne(user.id, dto);
   }
 
@@ -175,7 +184,7 @@ export class LeadershipController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Concluir 1:1 e registar ata' })
   @HttpCode(HttpStatus.OK)
-  completeOneOnOne(@CurrentUser() user: any, @Body() dto: CompleteOneOnOneDto) {
+  completeOneOnOne(@CurrentUser() user: CurrentUserData, @Body() dto: CompleteOneOnOneDto) {
     return this.svc.completeOneOnOne(user.id, dto);
   }
 
@@ -183,7 +192,7 @@ export class LeadershipController {
 
   @Post('feedback-360')
   @ApiOperation({ summary: 'Submeter feedback 360° de liderança (anonimizável)' })
-  submit360(@CurrentUser() user: any, @Body() dto: Submit360FeedbackDto) {
+  submit360(@CurrentUser() user: CurrentUserData, @Body() dto: Submit360FeedbackDto) {
     return this.svc.submit360Feedback(user.id, dto);
   }
 
@@ -196,7 +205,7 @@ export class LeadershipController {
 
   @Get('feedback-360/my/summary')
   @ApiOperation({ summary: 'O meu sumário de feedback 360°' })
-  my360Summary(@CurrentUser() user: any) {
+  my360Summary(@CurrentUser() user: CurrentUserData) {
     return this.svc.get360Summary(user.id);
   }
 
@@ -204,7 +213,7 @@ export class LeadershipController {
 
   @Post('pulse')
   @ApiOperation({ summary: 'Submeter pulse survey mensal sobre o líder' })
-  submitPulse(@CurrentUser() user: any, @Body() dto: SubmitPulseDto) {
+  submitPulse(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitPulseDto) {
     return this.svc.submitPulse(user.id, dto);
   }
 
@@ -219,13 +228,13 @@ export class LeadershipController {
 
   @Post('mentoring/session')
   @ApiOperation({ summary: 'Registar sessão de mentoring' })
-  logSession(@CurrentUser() user: any, @Body() dto: LogMentoringSessionDto) {
+  logSession(@CurrentUser() user: CurrentUserData, @Body() dto: LogMentoringSessionDto) {
     return this.svc.logMentoringSession(user.id, dto);
   }
 
   @Get('mentoring/my')
   @ApiOperation({ summary: 'As minhas relações de mentoring (como mentor e mentorado)' })
-  myMentoring(@CurrentUser() user: any) {
+  myMentoring(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyMentoring(user.id);
   }
 
@@ -233,7 +242,7 @@ export class LeadershipController {
 
   @Post('kudos')
   @ApiOperation({ summary: 'Dar kudos / reconhecimento a um colega' })
-  sendKudos(@CurrentUser() user: any, @Body() dto: SendKudosDto) {
+  sendKudos(@CurrentUser() user: CurrentUserData, @Body() dto: SendKudosDto) {
     return this.svc.sendKudos(user.id, dto);
   }
 
@@ -248,7 +257,7 @@ export class LeadershipController {
 
   @Get('score/my')
   @ApiOperation({ summary: 'O meu Leadership Score' })
-  myScore(@CurrentUser() user: any) {
+  myScore(@CurrentUser() user: CurrentUserData) {
     return this.svc.getLeadershipScore(user.id);
   }
 

@@ -26,7 +26,7 @@ import {
 } from './events.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Events')
@@ -59,14 +59,14 @@ export class EventsController {
 
   @Get('my')
   @ApiOperation({ summary: 'Os meus eventos (inscrições futuras e passadas)' })
-  myEvents(@CurrentUser() user: any) {
+  myEvents(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyEvents(user.id);
   }
 
   @Get('organizer/dashboard')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard do organizador (métricas, NPS, ocupação)' })
-  organizerDashboard(@CurrentUser() user: any) {
+  organizerDashboard(@CurrentUser() user: CurrentUserData) {
     return this.svc.getOrganizerDashboard(user.id);
   }
 
@@ -81,7 +81,7 @@ export class EventsController {
   @Post()
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar evento (fica como DRAFT)' })
-  create(@CurrentUser() user: any, @Body() dto: CreateEventDto) {
+  create(@CurrentUser() user: CurrentUserData, @Body() dto: CreateEventDto) {
     return this.svc.create(user.id, dto);
   }
 
@@ -119,14 +119,14 @@ export class EventsController {
 
   @Post(':id/join')
   @ApiOperation({ summary: 'Inscrever-se (entra em lista de espera se lotado)' })
-  join(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  join(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.join(id, user.id);
   }
 
   @Post(':id/leave')
   @ApiOperation({ summary: 'Cancelar inscrição (promove próximo da lista de espera)' })
   @HttpCode(HttpStatus.OK)
-  leave(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  leave(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.leave(id, user.id);
   }
 
@@ -146,7 +146,7 @@ export class EventsController {
   @Post('checkin')
   @ApiOperation({ summary: 'Fazer check-in num evento (presencial ou virtual)' })
   @HttpCode(HttpStatus.OK)
-  checkIn(@CurrentUser() user: any, @Body() dto: CheckInDto) {
+  checkIn(@CurrentUser() user: CurrentUserData, @Body() dto: CheckInDto) {
     return this.svc.checkIn(user.id, dto);
   }
 
@@ -156,7 +156,7 @@ export class EventsController {
   @ApiOperation({ summary: 'Submeter feedback e NPS do evento (emite certificado se elegível)' })
   feedback(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: SubmitFeedbackDto,
   ) {
     return this.svc.submitFeedback(id, user.id, dto);

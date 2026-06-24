@@ -15,7 +15,7 @@ import { AuditService } from './audit.service';
 import { AuditFilterDto } from './audit.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Audit Logs')
@@ -86,7 +86,7 @@ export class AuditController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Exportar logs (regista a própria exportação como evento auditável)' })
   @HttpCode(HttpStatus.OK)
-  export(@CurrentUser() user: any, @Query() filters: AuditFilterDto) {
+  export(@CurrentUser() user: CurrentUserData, @Query() filters: AuditFilterDto) {
     return this.svc.exportLogs(filters, user.id);
   }
 }

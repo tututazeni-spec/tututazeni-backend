@@ -31,7 +31,7 @@ import {
 } from './onboarding.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Onboarding')
@@ -121,7 +121,7 @@ export class OnboardingController {
 
   @Get('my')
   @ApiOperation({ summary: 'O meu plano de onboarding' })
-  my(@CurrentUser() user: any) {
+  my(@CurrentUser() user: CurrentUserData) {
     return this.svc.findByUser(user.id);
   }
 
@@ -174,7 +174,7 @@ export class OnboardingController {
   @Post('tasks/complete')
   @ApiOperation({ summary: 'Concluir tarefa (com evidência opcional)' })
   @HttpCode(HttpStatus.OK)
-  completeTask(@CurrentUser() user: any, @Body() dto: CompleteTaskDto) {
+  completeTask(@CurrentUser() user: CurrentUserData, @Body() dto: CompleteTaskDto) {
     return this.svc.completeTask(dto, user.id);
   }
 
@@ -182,7 +182,7 @@ export class OnboardingController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Saltar tarefa (com motivo)' })
   @HttpCode(HttpStatus.OK)
-  skipTask(@CurrentUser() user: any, @Body() dto: SkipTaskDto) {
+  skipTask(@CurrentUser() user: CurrentUserData, @Body() dto: SkipTaskDto) {
     return this.svc.skipTask(dto, user.id);
   }
 
@@ -190,7 +190,7 @@ export class OnboardingController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Aprovar ou rejeitar tarefa que requer aprovação' })
   @HttpCode(HttpStatus.OK)
-  approveTask(@CurrentUser() user: any, @Body() dto: ApproveTaskDto) {
+  approveTask(@CurrentUser() user: CurrentUserData, @Body() dto: ApproveTaskDto) {
     return this.svc.approveTask(dto, user.id);
   }
 
@@ -198,7 +198,7 @@ export class OnboardingController {
 
   @Post('documents')
   @ApiOperation({ summary: 'Submeter documento do onboarding' })
-  uploadDocument(@CurrentUser() user: any, @Body() dto: UploadDocumentDto) {
+  uploadDocument(@CurrentUser() user: CurrentUserData, @Body() dto: UploadDocumentDto) {
     return this.svc.uploadDocument(user.id, dto);
   }
 
@@ -206,7 +206,7 @@ export class OnboardingController {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Validar ou rejeitar documento' })
   @HttpCode(HttpStatus.OK)
-  validateDocument(@CurrentUser() user: any, @Body() dto: ValidateDocumentDto) {
+  validateDocument(@CurrentUser() user: CurrentUserData, @Body() dto: ValidateDocumentDto) {
     return this.svc.validateDocument(dto, user.id);
   }
 
@@ -214,7 +214,7 @@ export class OnboardingController {
 
   @Post('surveys')
   @ApiOperation({ summary: 'Submeter pesquisa de satisfação (Dia 1, 7, 30, 90)' })
-  submitSurvey(@CurrentUser() user: any, @Body() dto: SubmitOnboardingSurveyDto) {
+  submitSurvey(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitOnboardingSurveyDto) {
     return this.svc.submitSurvey(user.id, dto);
   }
 }

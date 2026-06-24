@@ -31,7 +31,7 @@ import {
 } from './development-plans.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Development Plans (PDI)')
@@ -45,20 +45,20 @@ export class DevelopmentPlansController {
 
   @Get('my')
   @ApiOperation({ summary: 'Os meus planos de desenvolvimento' })
-  myPlans(@CurrentUser() user: any) {
+  myPlans(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyPlans(user.id);
   }
 
   @Get('my/stats')
   @ApiOperation({ summary: 'As minhas estatísticas de PDI (planos, acções, XP)' })
-  myStats(@CurrentUser() user: any) {
+  myStats(@CurrentUser() user: CurrentUserData) {
     return this.svc.getStats(user.id);
   }
 
   @Get('team/dashboard')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard da equipa (gestor vê progresso de todos os PDIs)' })
-  teamDashboard(@CurrentUser() user: any) {
+  teamDashboard(@CurrentUser() user: CurrentUserData) {
     return this.svc.getTeamDashboard(user.id);
   }
 
@@ -104,7 +104,7 @@ export class DevelopmentPlansController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Aprovar ou rejeitar plano (gestor/RH)' })
   @HttpCode(HttpStatus.OK)
-  approve(@CurrentUser() user: any, @Body() dto: ApprovePlanDto) {
+  approve(@CurrentUser() user: CurrentUserData, @Body() dto: ApprovePlanDto) {
     return this.svc.approvePlan(dto, user.id);
   }
 
@@ -144,7 +144,7 @@ export class DevelopmentPlansController {
   @ApiOperation({ summary: 'Actualizar acção (status, progresso, notas)' })
   updateAction(
     @Param('actionId', ParseIntPipe) actionId: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: UpdatePlanActionDto,
   ) {
     return this.svc.updateAction(actionId, dto, user.id);
@@ -160,7 +160,7 @@ export class DevelopmentPlansController {
 
   @Post('evidence')
   @ApiOperation({ summary: 'Registar evidência de uma acção (upload, link ou nota)' })
-  addEvidence(@CurrentUser() user: any, @Body() dto: AddEvidenceDto) {
+  addEvidence(@CurrentUser() user: CurrentUserData, @Body() dto: AddEvidenceDto) {
     return this.svc.addEvidence(user.id, dto);
   }
 
@@ -175,7 +175,7 @@ export class DevelopmentPlansController {
   @Patch('goals/progress')
   @ApiOperation({ summary: 'Actualizar progresso de uma meta' })
   @HttpCode(HttpStatus.OK)
-  updateGoalProgress(@CurrentUser() user: any, @Body() dto: UpdatePlanGoalProgressDto) {
+  updateGoalProgress(@CurrentUser() user: CurrentUserData, @Body() dto: UpdatePlanGoalProgressDto) {
     return this.svc.updateGoalProgress(user.id, dto);
   }
 

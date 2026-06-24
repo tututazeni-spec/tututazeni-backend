@@ -10,7 +10,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { CurrentUser, Roles, Public } from '../common/decorators';
+import { CurrentUser, Roles, Public, CurrentUserData } from '../common/decorators';
 import { CertificationService } from './certification.service';
 import {
   CreateTemplateDto,
@@ -42,7 +42,7 @@ export class CertificationController {
   @Post('templates')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar template de certificado' })
-  createTemplate(@Body() dto: CreateTemplateDto, @CurrentUser() user: any) {
+  createTemplate(@Body() dto: CreateTemplateDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createTemplate(dto, user.id);
   }
 
@@ -66,7 +66,7 @@ export class CertificationController {
   @Post('certificates')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Emitir certificado' })
-  issueCertificate(@Body() dto: IssueCertificateDto, @CurrentUser() user: any) {
+  issueCertificate(@Body() dto: IssueCertificateDto, @CurrentUser() user: CurrentUserData) {
     return this.service.issueCertificate(dto, user.id);
   }
 
@@ -80,7 +80,7 @@ export class CertificationController {
   @Get('my-certificates')
   @ApiOperation({ summary: 'Meus certificados' })
   getMyCertificates(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
   ) {
@@ -95,14 +95,14 @@ export class CertificationController {
 
   @Post('certificates/:id/download')
   @ApiOperation({ summary: 'Download de certificado' })
-  download(@Param('id') id: string, @CurrentUser() user: any) {
+  download(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.downloadCertificate(id, user.id);
   }
 
   @Put('certificates/:id/revoke')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Revogar certificado' })
-  revoke(@Param('id') id: string, @Body() dto: RevokeDto, @CurrentUser() user: any) {
+  revoke(@Param('id') id: string, @Body() dto: RevokeDto, @CurrentUser() user: CurrentUserData) {
     return this.service.revokeCertificate(id, dto, user.id);
   }
 
@@ -111,7 +111,7 @@ export class CertificationController {
   @Post('badges')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar badge digital' })
-  createBadge(@Body() dto: CreateBadgeDto, @CurrentUser() user: any) {
+  createBadge(@Body() dto: CreateBadgeDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createBadge(dto, user.id);
   }
 
@@ -124,13 +124,13 @@ export class CertificationController {
   @Post('badges/issue')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Atribuir badge a utilizador' })
-  issueBadge(@Body() dto: IssueBadgeDto, @CurrentUser() user: any) {
+  issueBadge(@Body() dto: IssueBadgeDto, @CurrentUser() user: CurrentUserData) {
     return this.service.issueBadge(dto, user.id);
   }
 
   @Get('my-badges')
   @ApiOperation({ summary: 'Meus badges' })
-  getMyBadges(@CurrentUser() user: any) {
+  getMyBadges(@CurrentUser() user: CurrentUserData) {
     return this.service.getMyBadges(user.id);
   }
 }

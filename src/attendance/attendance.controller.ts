@@ -34,7 +34,7 @@ import {
 } from './attendance.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -101,13 +101,13 @@ export class AttendanceController {
 
   @Post('clock-in')
   @ApiOperation({ summary: 'Check-in (entrada) — suporta QR, GPS, selfie, token' })
-  clockIn(@CurrentUser() user: any, @Body() dto: ClockInDto) {
+  clockIn(@CurrentUser() user: CurrentUserData, @Body() dto: ClockInDto) {
     return this.svc.clockIn(user.id, dto);
   }
 
   @Post('clock-out')
   @ApiOperation({ summary: 'Check-out (saída) com cálculo automático de horas' })
-  clockOut(@CurrentUser() user: any, @Body() dto: ClockOutDto) {
+  clockOut(@CurrentUser() user: CurrentUserData, @Body() dto: ClockOutDto) {
     return this.svc.clockOut(user.id, dto);
   }
 
@@ -119,19 +119,23 @@ export class AttendanceController {
   @ApiOperation({ summary: 'Minhas presenças com resumo' })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
-  myAttendance(@CurrentUser() user: any, @Query('from') from?: string, @Query('to') to?: string) {
+  myAttendance(
+    @CurrentUser() user: CurrentUserData,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
     return this.svc.findByUser(user.id, from, to);
   }
 
   @Get('my/leave-balance')
   @ApiOperation({ summary: 'Saldo de licenças e férias' })
-  myLeaveBalance(@CurrentUser() user: any) {
+  myLeaveBalance(@CurrentUser() user: CurrentUserData) {
     return this.svc.getLeaveBalance(user.id);
   }
 
   @Get('my/overtime')
   @ApiOperation({ summary: 'Banco de horas (saldo de horas extras)' })
-  myOvertimeBalance(@CurrentUser() user: any) {
+  myOvertimeBalance(@CurrentUser() user: CurrentUserData) {
     return this.svc.getOvertimeBalance(user.id);
   }
 
@@ -179,7 +183,7 @@ export class AttendanceController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateAttendanceDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.update(id, dto, user.id);
   }
@@ -211,7 +215,7 @@ export class AttendanceController {
 
   @Post('leaves')
   @ApiOperation({ summary: 'Solicitar licença ou férias' })
-  createLeave(@CurrentUser() user: any, @Body() dto: CreateLeaveRequestDto) {
+  createLeave(@CurrentUser() user: CurrentUserData, @Body() dto: CreateLeaveRequestDto) {
     return this.svc.createLeaveRequest(user.id, dto);
   }
 
@@ -221,7 +225,7 @@ export class AttendanceController {
   reviewLeave(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ReviewLeaveDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.reviewLeave(id, dto, user.id);
   }
@@ -264,7 +268,7 @@ export class AttendanceController {
 
   @Post('overtime')
   @ApiOperation({ summary: 'Registar hora extra' })
-  createOvertime(@CurrentUser() user: any, @Body() dto: CreateOvertimeDto) {
+  createOvertime(@CurrentUser() user: CurrentUserData, @Body() dto: CreateOvertimeDto) {
     return this.svc.createOvertime(user.id, dto);
   }
 
@@ -274,7 +278,7 @@ export class AttendanceController {
   reviewOvertime(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ReviewOvertimeDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.reviewOvertime(id, dto, user.id);
   }
@@ -286,13 +290,13 @@ export class AttendanceController {
   @Get('justifications/pending')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Justificativas pendentes de aprovação' })
-  getPendingJustifications(@CurrentUser() user: any) {
+  getPendingJustifications(@CurrentUser() user: CurrentUserData) {
     return this.svc.getPendingJustifications(user.id);
   }
 
   @Post('justifications')
   @ApiOperation({ summary: 'Enviar justificativa de ausência' })
-  createJustification(@CurrentUser() user: any, @Body() dto: CreateJustificationDto) {
+  createJustification(@CurrentUser() user: CurrentUserData, @Body() dto: CreateJustificationDto) {
     return this.svc.createJustification(user.id, dto);
   }
 
@@ -302,7 +306,7 @@ export class AttendanceController {
   reviewJustification(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ReviewJustificationDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.reviewJustification(id, dto, user.id);
   }
@@ -314,13 +318,13 @@ export class AttendanceController {
   @Post('qr/generate')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Gerar QR code de check-in (dinâmico com TTL)' })
-  generateQr(@CurrentUser() user: any, @Body() dto: GenerateQrDto) {
+  generateQr(@CurrentUser() user: CurrentUserData, @Body() dto: GenerateQrDto) {
     return this.svc.generateQrCode(user.id, dto);
   }
 
   @Post('qr/validate')
   @ApiOperation({ summary: 'Validar QR code e efectuar check-in' })
-  validateQr(@CurrentUser() user: any, @Body() dto: ValidateQrDto) {
+  validateQr(@CurrentUser() user: CurrentUserData, @Body() dto: ValidateQrDto) {
     return this.svc.clockIn(user.id, {
       method: 'QR_DYNAMIC' as any,
       qrToken: dto.token,
@@ -336,7 +340,7 @@ export class AttendanceController {
   @Post('events/:eventId/check-in')
   @ApiOperation({ summary: 'Check-in em evento presencial/virtual' })
   checkInEvent(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Param('eventId', ParseIntPipe) eventId: number,
     @Body() dto: ClockInDto,
   ) {
@@ -346,7 +350,7 @@ export class AttendanceController {
   @Post('sessions/:sessionId/check-in')
   @ApiOperation({ summary: 'Check-in em sessão de webinar/LMS' })
   checkInSession(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Param('sessionId', ParseIntPipe) sessionId: number,
     @Body() dto: ClockInDto,
   ) {

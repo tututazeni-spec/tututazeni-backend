@@ -26,7 +26,7 @@ import {
 } from './leave-management.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Leave Management')
@@ -125,7 +125,7 @@ export class LeaveManagementController {
   @Get('pending-approvals')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Pedidos pendentes de aprovação do utilizador actual' })
-  getPendingApprovals(@CurrentUser() user: any) {
+  getPendingApprovals(@CurrentUser() user: CurrentUserData) {
     return this.svc.getPendingApprovals(user.id);
   }
 
@@ -133,19 +133,19 @@ export class LeaveManagementController {
 
   @Get('my')
   @ApiOperation({ summary: 'Meus pedidos de licença' })
-  myRequests(@CurrentUser() user: any, @Query() filters: LeaveFilterDto) {
+  myRequests(@CurrentUser() user: CurrentUserData, @Query() filters: LeaveFilterDto) {
     return this.svc.findAll({ ...filters, userId: user.id });
   }
 
   @Get('my/balance')
   @ApiOperation({ summary: 'Meu saldo de dias por tipo de licença' })
-  myBalance(@CurrentUser() user: any) {
+  myBalance(@CurrentUser() user: CurrentUserData) {
     return this.svc.getBalance(user.id);
   }
 
   @Get('my/balance/history')
   @ApiOperation({ summary: 'Histórico de movimentos do meu saldo' })
-  myBalanceHistory(@CurrentUser() user: any, @Query('leaveTypeCode') code?: string) {
+  myBalanceHistory(@CurrentUser() user: CurrentUserData, @Query('leaveTypeCode') code?: string) {
     return this.svc.getBalanceHistory(user.id, code);
   }
 
@@ -166,7 +166,7 @@ export class LeaveManagementController {
 
   @Post()
   @ApiOperation({ summary: 'Submeter pedido de licença (suporta rascunho, meios dias, horas)' })
-  create(@Body() dto: CreateLeaveManagementRequestDto, @CurrentUser() user: any) {
+  create(@Body() dto: CreateLeaveManagementRequestDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.create(dto, user.id);
   }
 
@@ -175,7 +175,7 @@ export class LeaveManagementController {
   @ApiOperation({ summary: 'Aprovar, rejeitar, escalar ou delegar pedido' })
   approve(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: ApproveLeaveDto,
   ) {
     return this.svc.processApproval(id, user.id, dto);
@@ -184,13 +184,13 @@ export class LeaveManagementController {
   @Post('bulk-approve')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Aprovação em lote' })
-  bulkApprove(@Body() dto: BulkApproveDto, @CurrentUser() user: any) {
+  bulkApprove(@Body() dto: BulkApproveDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.bulkApprove(dto, user.id);
   }
 
   @Patch(':id/cancel')
   @ApiOperation({ summary: 'Cancelar pedido (devolve saldo se aprovado)' })
-  cancel(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  cancel(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.cancel(id, user.id);
   }
 
@@ -209,7 +209,7 @@ export class LeaveManagementController {
   updateBalance(
     @Param('userId', ParseIntPipe) userId: number,
     @Body() dto: UpdateBalanceDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.updateBalance(userId, dto, user.id);
   }
@@ -219,7 +219,7 @@ export class LeaveManagementController {
   @ApiOperation({
     summary: 'Acumular saldo para vários colaboradores (processamento mensal/anual)',
   })
-  accrueBalance(@Body() dto: AccrueBalanceDto, @CurrentUser() user: any) {
+  accrueBalance(@Body() dto: AccrueBalanceDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.accrueBalance(dto, user.id);
   }
 

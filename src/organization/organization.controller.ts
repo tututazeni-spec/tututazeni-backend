@@ -26,7 +26,7 @@ import {
 } from './organization.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Organization')
@@ -82,7 +82,7 @@ export class OrganizationController {
   @Post('changes')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Registar mudança organizacional (promoção, transferência, etc.)' })
-  recordChange(@CurrentUser() user: any, @Body() dto: RecordOrgChangeDto) {
+  recordChange(@CurrentUser() user: CurrentUserData, @Body() dto: RecordOrgChangeDto) {
     return this.svc.recordOrgChange(dto, user.id);
   }
 

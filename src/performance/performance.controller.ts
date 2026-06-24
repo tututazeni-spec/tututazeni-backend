@@ -30,7 +30,7 @@ import {
 } from './performance.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Performance')
@@ -80,21 +80,21 @@ export class PerformanceController {
 
   @Get('my')
   @ApiOperation({ summary: 'O meu histórico de performance (reviews, goals, feedback)' })
-  myHistory(@CurrentUser() user: any) {
+  myHistory(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserHistory(user.id);
   }
 
   @Get('my/goals')
   @ApiOperation({ summary: 'Os meus goals activos' })
   @ApiQuery({ name: 'cycleId', required: false })
-  myGoals(@CurrentUser() user: any, @Query('cycleId') cycleId?: string) {
+  myGoals(@CurrentUser() user: CurrentUserData, @Query('cycleId') cycleId?: string) {
     return this.svc.getUserGoals(user.id, cycleId ? parseInt(cycleId) : undefined);
   }
 
   @Get('my/feedback')
   @ApiOperation({ summary: 'O meu feedback contínuo recebido' })
   @ApiQuery({ name: 'cycleId', required: false })
-  myFeedback(@CurrentUser() user: any, @Query('cycleId') cycleId?: string) {
+  myFeedback(@CurrentUser() user: CurrentUserData, @Query('cycleId') cycleId?: string) {
     return this.svc.getUserFeedback(user.id, cycleId ? parseInt(cycleId) : undefined);
   }
 
@@ -122,7 +122,7 @@ export class PerformanceController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Performance da minha equipa' })
   @ApiQuery({ name: 'cycleId', required: false })
-  teamPerformance(@CurrentUser() user: any, @Query('cycleId') cycleId?: string) {
+  teamPerformance(@CurrentUser() user: CurrentUserData, @Query('cycleId') cycleId?: string) {
     return this.svc.getTeamPerformance(user.id, cycleId ? parseInt(cycleId) : undefined);
   }
 
@@ -166,7 +166,7 @@ export class PerformanceController {
   @Post('submit')
   @ApiOperation({ summary: 'Submeter avaliação (self ou manager) com scores ponderados' })
   @HttpCode(HttpStatus.OK)
-  submit(@CurrentUser() user: any, @Body() dto: SubmitReviewDto) {
+  submit(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitReviewDto) {
     return this.svc.submitReview(user.id, dto);
   }
 
@@ -197,7 +197,7 @@ export class PerformanceController {
   @HttpCode(HttpStatus.OK)
   updateGoalProgress(
     @Param('goalId', ParseIntPipe) goalId: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: UpdatePerformanceGoalProgressDto,
   ) {
     return this.svc.updateGoalProgress(goalId, user.id, dto);
@@ -215,7 +215,7 @@ export class PerformanceController {
 
   @Post('feedback')
   @ApiOperation({ summary: 'Dar feedback contínuo a um colega' })
-  createFeedback(@CurrentUser() user: any, @Body() dto: PerformanceCreateFeedbackDto) {
+  createFeedback(@CurrentUser() user: CurrentUserData, @Body() dto: PerformanceCreateFeedbackDto) {
     return this.svc.createFeedback(user.id, dto);
   }
 
@@ -232,7 +232,7 @@ export class PerformanceController {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Calibrar score de uma avaliação' })
   @HttpCode(HttpStatus.OK)
-  calibrate(@CurrentUser() user: any, @Body() dto: CalibrateReviewDto) {
+  calibrate(@CurrentUser() user: CurrentUserData, @Body() dto: CalibrateReviewDto) {
     return this.svc.calibrateReview(user.id, dto);
   }
 
@@ -240,7 +240,7 @@ export class PerformanceController {
 
   @Post('dispute')
   @ApiOperation({ summary: 'Contestar avaliação publicada' })
-  dispute(@CurrentUser() user: any, @Body() dto: PerformanceCreateDisputeDto) {
+  dispute(@CurrentUser() user: CurrentUserData, @Body() dto: PerformanceCreateDisputeDto) {
     return this.svc.createDispute(user.id, dto);
   }
 
@@ -249,7 +249,7 @@ export class PerformanceController {
   @Put('9box')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Posicionar/mover colaborador na 9-box (drag & drop)' })
-  update9Box(@CurrentUser() user: any, @Body() dto: Update9BoxDto) {
+  update9Box(@CurrentUser() user: CurrentUserData, @Body() dto: Update9BoxDto) {
     return this.svc.update9Box(user.id, dto);
   }
 }

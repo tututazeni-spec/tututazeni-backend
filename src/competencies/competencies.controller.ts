@@ -30,7 +30,7 @@ import {
 } from './competencies.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Competencies')
@@ -162,26 +162,29 @@ export class CompetenciesController {
 
   @Get('my/profile')
   @ApiOperation({ summary: 'O meu perfil de competências' })
-  myCompetencies(@CurrentUser() user: any) {
+  myCompetencies(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserCompetencies(user.id);
   }
 
   @Get('my/gap/:positionId')
   @ApiOperation({ summary: 'O meu gap para um cargo' })
-  myGap(@CurrentUser() user: any, @Param('positionId', ParseIntPipe) positionId: number) {
+  myGap(
+    @CurrentUser() user: CurrentUserData,
+    @Param('positionId', ParseIntPipe) positionId: number,
+  ) {
     return this.svc.getCompetencyGap(user.id, positionId);
   }
 
   @Get('my/recommendations')
   @ApiOperation({ summary: 'Recomendações baseadas nos meus gaps' })
-  myRecommendations(@CurrentUser() user: any) {
+  myRecommendations(@CurrentUser() user: CurrentUserData) {
     return this.svc.getRecommendations(user.id);
   }
 
   @Get('my/evolution')
   @ApiOperation({ summary: 'Histórico de evolução das minhas competências' })
   @ApiQuery({ name: 'competencyId', required: false })
-  myEvolution(@CurrentUser() user: any, @Query('competencyId') competencyId?: string) {
+  myEvolution(@CurrentUser() user: CurrentUserData, @Query('competencyId') competencyId?: string) {
     return this.svc.getCompetencyEvolution(
       user.id,
       competencyId ? parseInt(competencyId) : undefined,
@@ -191,13 +194,13 @@ export class CompetenciesController {
   @Post('my/self-assess')
   @ApiOperation({ summary: 'Autoavaliação de competência' })
   @HttpCode(HttpStatus.OK)
-  selfAssess(@CurrentUser() user: any, @Body() dto: SelfAssessmentDto) {
+  selfAssess(@CurrentUser() user: CurrentUserData, @Body() dto: SelfAssessmentDto) {
     return this.svc.selfAssess(user.id, dto);
   }
 
   @Get('my/endorsements')
   @ApiOperation({ summary: 'Os meus endorsements recebidos' })
-  myEndorsements(@CurrentUser() user: any) {
+  myEndorsements(@CurrentUser() user: CurrentUserData) {
     return this.svc.getEndorsements(user.id);
   }
 
@@ -242,14 +245,14 @@ export class CompetenciesController {
   @Post('user/upsert')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Atribuir/actualizar competência de utilizador (Admin/RH/Gestor)' })
-  upsertUser(@CurrentUser() updater: any, @Body() dto: UpsertUserCompetencyDto) {
+  upsertUser(@CurrentUser() updater: CurrentUserData, @Body() dto: UpsertUserCompetencyDto) {
     return this.svc.upsertUserCompetency(dto, updater.id);
   }
 
   @Post('user/manager-assess')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Avaliação de competência pelo gestor' })
-  managerAssess(@CurrentUser() manager: any, @Body() dto: ManagerAssessmentDto) {
+  managerAssess(@CurrentUser() manager: CurrentUserData, @Body() dto: ManagerAssessmentDto) {
     return this.svc.managerAssess(manager.id, dto);
   }
 
@@ -257,7 +260,7 @@ export class CompetenciesController {
 
   @Post('endorse')
   @ApiOperation({ summary: 'Endorsar competência de um colega' })
-  endorse(@CurrentUser() user: any, @Body() dto: CreateEndorsementDto) {
+  endorse(@CurrentUser() user: CurrentUserData, @Body() dto: CreateEndorsementDto) {
     return this.svc.addEndorsement(user.id, dto);
   }
 }

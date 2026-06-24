@@ -21,7 +21,7 @@ import {
 } from './live-classes.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Live Classes')
@@ -75,13 +75,13 @@ export class LiveClassesController {
 
   @Post(':id/join')
   @ApiOperation({ summary: 'Entrar na aula' })
-  join(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  join(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.joinClass(id, user.id);
   }
 
   @Post(':id/leave')
   @ApiOperation({ summary: 'Sair da aula' })
-  leave(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  leave(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.leaveClass(id, user.id);
   }
 
@@ -89,7 +89,7 @@ export class LiveClassesController {
   @ApiOperation({ summary: 'Enviar mensagem no chat' })
   sendMessage(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: LiveChatMessageDto,
   ) {
     return this.svc.sendMessage(id, user.id, dto);
@@ -104,7 +104,7 @@ export class LiveClassesController {
 
   @Post('post-evaluation/respond')
   @ApiOperation({ summary: 'Submeter resposta à avaliação pós-aula' })
-  postResponse(@CurrentUser() user: any, @Body() dto: PostClassResponseDto) {
+  postResponse(@CurrentUser() user: CurrentUserData, @Body() dto: PostClassResponseDto) {
     return this.svc.submitPostResponse(user.id, dto);
   }
 

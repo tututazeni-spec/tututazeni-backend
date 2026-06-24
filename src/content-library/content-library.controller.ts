@@ -15,7 +15,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ContentLibraryService } from './content-library.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   CreateContentDto,
   UpdateContentDto,
@@ -66,28 +66,28 @@ export class ContentLibraryController {
   @Get('recommended')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Conteúdos recomendados para mim (baseado em perfil + histórico)' })
-  recommended(@CurrentUser() user: any, @Query('limit') limit?: string) {
+  recommended(@CurrentUser() user: CurrentUserData, @Query('limit') limit?: string) {
     return this.svc.getRecommended(user.id, limit ? +limit : 10);
   }
 
   @Get('mandatory')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Conteúdos obrigatórios com o meu progresso' })
-  mandatory(@CurrentUser() user: any) {
+  mandatory(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMandatory(user.id);
   }
 
   @Get('bookmarks')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Os meus conteúdos guardados' })
-  bookmarks(@CurrentUser() user: any) {
+  bookmarks(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyBookmarks(user.id);
   }
 
   @Get('continue-watching')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Continuar a ver — conteúdos em progresso' })
-  continueWatching(@CurrentUser() user: any, @Query('limit') limit?: string) {
+  continueWatching(@CurrentUser() user: CurrentUserData, @Query('limit') limit?: string) {
     return this.svc.getContinueWatching(user.id, limit ? +limit : 5);
   }
 
@@ -110,14 +110,14 @@ export class ContentLibraryController {
   @Get(':id')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Detalhe do conteúdo (com rating, progresso do utilizador)' })
-  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user.id);
   }
 
   @Post()
   @Roles(...AUTHOR_ROLES)
   @ApiOperation({ summary: 'Criar novo conteúdo (vai para DRAFT, precisa de publicação)' })
-  create(@CurrentUser() user: any, @Body() dto: CreateContentDto) {
+  create(@CurrentUser() user: CurrentUserData, @Body() dto: CreateContentDto) {
     return this.svc.create(user.id, dto);
   }
 
@@ -127,7 +127,7 @@ export class ContentLibraryController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateContentDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.update(id, dto, user.id);
   }
@@ -135,7 +135,7 @@ export class ContentLibraryController {
   @Post(':id/publish')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Publicar conteúdo (DRAFT → ACTIVE + bump version)' })
-  publish(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  publish(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.publish(id, user.id);
   }
 
@@ -151,14 +151,14 @@ export class ContentLibraryController {
   @Patch(':id/view')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Registar visualização (deduplicado por dia)' })
-  view(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  view(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.view(id, user.id);
   }
 
   @Patch(':id/bookmark')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Guardar / remover dos guardados (toggle)' })
-  bookmark(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  bookmark(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.bookmark(id, user.id);
   }
 
@@ -170,7 +170,7 @@ export class ContentLibraryController {
   updateProgress(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateProgressDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.updateProgress(id, user.id, dto);
   }
@@ -178,7 +178,7 @@ export class ContentLibraryController {
   @Get('my/progress')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Histórico de progresso pessoal + estatísticas' })
-  myProgress(@CurrentUser() user: any) {
+  myProgress(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyProgress(user.id);
   }
 
@@ -190,7 +190,7 @@ export class ContentLibraryController {
   rate(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: RateContentDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.rateContent(id, user.id, dto);
   }
@@ -210,7 +210,7 @@ export class ContentLibraryController {
   saveNote(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SaveNoteDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.saveNote(id, user.id, dto);
   }
@@ -218,7 +218,7 @@ export class ContentLibraryController {
   @Get(':id/note')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Obter a minha nota num conteúdo' })
-  getNote(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  getNote(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getMyNote(id, user.id);
   }
 
@@ -234,21 +234,21 @@ export class ContentLibraryController {
   @Get('paths/:id')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Detalhe de learning path com progresso do utilizador' })
-  getLearningPath(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  getLearningPath(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getLearningPath(id, user.id);
   }
 
   @Post('paths')
   @Roles(...AUTHOR_ROLES)
   @ApiOperation({ summary: 'Criar learning path com sequência de conteúdos' })
-  createLearningPath(@Body() dto: CreateLearningPathDto, @CurrentUser() user: any) {
+  createLearningPath(@Body() dto: CreateLearningPathDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createLearningPath(dto, user.id);
   }
 
   @Post('paths/:id/enroll')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Inscrever-se numa learning path' })
-  enrollPath(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  enrollPath(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.enrollLearningPath(id, user.id);
   }
 
@@ -264,7 +264,7 @@ export class ContentLibraryController {
   @Get('analytics/my-stats')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'As minhas estatísticas pessoais de consumo' })
-  myStats(@CurrentUser() user: any) {
+  myStats(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserAnalytics(user.id);
   }
 }

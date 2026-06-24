@@ -16,7 +16,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { DashboardInstitutionalService } from './dashboard-institutional.service';
 import { CreateSnapshotDto, CreateWidgetDto, UpdateWidgetDto, FilterSnapshotDto } from './dto';
 import { Role } from '../auth/enums/role.enum';
@@ -63,7 +63,7 @@ export class DashboardInstitutionalController {
   @Post('snapshots')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar snapshot de KPIs do período' })
-  createSnapshot(@Body() dto: CreateSnapshotDto, @CurrentUser() user: any) {
+  createSnapshot(@Body() dto: CreateSnapshotDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createSnapshot(dto, user.id);
   }
 
@@ -89,26 +89,30 @@ export class DashboardInstitutionalController {
 
   @Post('widgets')
   @ApiOperation({ summary: 'Criar widget personalizado' })
-  createWidget(@Body() dto: CreateWidgetDto, @CurrentUser() user: any) {
+  createWidget(@Body() dto: CreateWidgetDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createWidget(dto, user.id);
   }
 
   @Get('widgets')
   @ApiOperation({ summary: 'Meus widgets' })
-  getMyWidgets(@CurrentUser() user: any) {
+  getMyWidgets(@CurrentUser() user: CurrentUserData) {
     return this.service.getMyWidgets(user.id);
   }
 
   @Put('widgets/:id')
   @ApiOperation({ summary: 'Actualizar widget' })
-  updateWidget(@Param('id') id: string, @Body() dto: UpdateWidgetDto, @CurrentUser() user: any) {
+  updateWidget(
+    @Param('id') id: string,
+    @Body() dto: UpdateWidgetDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.service.updateWidget(id, dto, user.id);
   }
 
   @Delete('widgets/:id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remover widget' })
-  deleteWidget(@Param('id') id: string, @CurrentUser() user: any) {
+  deleteWidget(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.deleteWidget(id, user.id);
   }
 }

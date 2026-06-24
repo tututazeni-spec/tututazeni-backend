@@ -28,7 +28,7 @@ import {
 } from './payslips.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Payslips')
@@ -42,14 +42,14 @@ export class PayslipsController {
 
   @Get('my')
   @ApiOperation({ summary: 'Os meus recibos (colaborador autenticado)' })
-  myPayslips(@CurrentUser() user: any, @Query() filters: PayslipFilterDto) {
+  myPayslips(@CurrentUser() user: CurrentUserData, @Query() filters: PayslipFilterDto) {
     return this.svc.getMyPayslips(user.id, filters);
   }
 
   @Get('my/annual-summary')
   @ApiOperation({ summary: 'Resumo anual dos meus recibos' })
   @ApiQuery({ name: 'year', example: '2026' })
-  myAnnualSummary(@CurrentUser() user: any, @Query('year') year: string) {
+  myAnnualSummary(@CurrentUser() user: CurrentUserData, @Query('year') year: string) {
     return this.svc.annualSummary(user.id, year ?? new Date().getFullYear().toString());
   }
 
@@ -58,7 +58,7 @@ export class PayslipsController {
   @ApiQuery({ name: 'periodA', example: '2026-03' })
   @ApiQuery({ name: 'periodB', example: '2026-04' })
   myCompare(
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Query('periodA') periodA: string,
     @Query('periodB') periodB: string,
   ) {
@@ -69,10 +69,10 @@ export class PayslipsController {
   @ApiOperation({ summary: 'Detalhe do meu recibo' })
   async myPayslip(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Req() req: Request,
   ) {
-    const payslip = await this.svc.findOne(id, user.id, user.role);
+    const payslip = await this.svc.findOne(id, user.id, user.role?.name);
     await this.svc.logAccess(id, user.id, 'VIEW', req.ip);
     return payslip;
   }
@@ -80,7 +80,7 @@ export class PayslipsController {
   @Patch('my/:id/acknowledge')
   @ApiOperation({ summary: 'Confirmar recepção do recibo' })
   @HttpCode(HttpStatus.OK)
-  acknowledge(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  acknowledge(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.acknowledge(id, user.id);
   }
 
@@ -88,7 +88,7 @@ export class PayslipsController {
   @ApiOperation({ summary: 'Abrir disputa sobre um recibo' })
   createDispute(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: CreateDisputeDto,
   ) {
     return this.svc.createDispute(id, user.id, dto);
@@ -125,7 +125,7 @@ export class PayslipsController {
   @ApiOperation({ summary: 'Detalhe de qualquer recibo (Admin/RH)' })
   async findOne(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Req() req: Request,
   ) {
     const payslip = await this.svc.findOne(id);

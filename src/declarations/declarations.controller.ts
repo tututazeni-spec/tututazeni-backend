@@ -30,7 +30,7 @@ import {
 } from './declarations.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 // ─── MODULE 1 — DOCUMENT DECLARATIONS ────────────────────────────────────────
@@ -100,14 +100,14 @@ export class DocumentDeclarationsController {
 
   @Get('templates/:id/preview')
   @ApiOperation({ summary: 'Preview do template com dados do colaborador' })
-  previewTemplate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  previewTemplate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.previewTemplate(id, user.id);
   }
 
   @Post('templates')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar template (HTML com {{variáveis}})' })
-  createTemplate(@Body() dto: DeclarationsCreateTemplateDto, @CurrentUser() user: any) {
+  createTemplate(@Body() dto: DeclarationsCreateTemplateDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createTemplate(dto, user.id);
   }
 
@@ -117,7 +117,7 @@ export class DocumentDeclarationsController {
   updateTemplate(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: DeclarationsUpdateTemplateDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.updateTemplate(id, dto, user.id);
   }
@@ -132,19 +132,19 @@ export class DocumentDeclarationsController {
 
   @Get('my')
   @ApiOperation({ summary: 'Meus pedidos de declaração' })
-  myRequests(@CurrentUser() user: any) {
+  myRequests(@CurrentUser() user: CurrentUserData) {
     return this.svc.findAll({ userId: user.id });
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe de um pedido' })
-  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user.id);
   }
 
   @Post()
   @ApiOperation({ summary: 'Solicitar declaração (self-service)' })
-  request(@CurrentUser() user: any, @Body() dto: CreateDocumentRequestDto) {
+  request(@CurrentUser() user: CurrentUserData, @Body() dto: CreateDocumentRequestDto) {
     return this.svc.request(user.id, dto);
   }
 
@@ -153,7 +153,7 @@ export class DocumentDeclarationsController {
   @ApiOperation({ summary: 'Aprovar ou rejeitar pedido' })
   approve(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: ApproveDocumentRequestDto,
   ) {
     return this.svc.approve(id, user.id, dto);
@@ -162,14 +162,14 @@ export class DocumentDeclarationsController {
   @Patch(':id/generate')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Gerar documento com resolução de variáveis' })
-  generate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  generate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.generate(id, user.id);
   }
 
   @Patch(':id/issue')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Marcar declaração como emitida' })
-  issue(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  issue(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.issue(id, user.id);
   }
 
@@ -224,7 +224,7 @@ export class WorkDeclarationsController {
   @Post('forms')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar formulário dinâmico (form builder)' })
-  createForm(@Body() dto: CreateWorkDeclFormDto, @CurrentUser() user: any) {
+  createForm(@Body() dto: CreateWorkDeclFormDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createForm(dto, user.id);
   }
 
@@ -234,7 +234,7 @@ export class WorkDeclarationsController {
   updateForm(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateWorkDeclFormDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.updateForm(id, dto, user.id);
   }
@@ -249,13 +249,13 @@ export class WorkDeclarationsController {
   // My pending (Employee)
   @Get('my/pending')
   @ApiOperation({ summary: 'Formulários pendentes para o utilizador actual' })
-  getPending(@CurrentUser() user: any) {
+  getPending(@CurrentUser() user: CurrentUserData) {
     return this.svc.getPendingForUser(user.id);
   }
 
   @Get('my/submissions')
   @ApiOperation({ summary: 'Minhas submissões' })
-  mySubmissions(@CurrentUser() user: any) {
+  mySubmissions(@CurrentUser() user: CurrentUserData) {
     return this.svc.findSubmissions({ userId: user.id });
   }
 
@@ -275,7 +275,7 @@ export class WorkDeclarationsController {
 
   @Post('submit')
   @ApiOperation({ summary: 'Submeter declaração (suporta rascunho, assinatura digital)' })
-  submit(@CurrentUser() user: any, @Body() dto: SubmitWorkDeclDto) {
+  submit(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitWorkDeclDto) {
     return this.svc.submit(user.id, dto);
   }
 
@@ -285,7 +285,7 @@ export class WorkDeclarationsController {
   review(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ReviewWorkDeclDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.review(id, dto, user.id);
   }
@@ -293,7 +293,7 @@ export class WorkDeclarationsController {
   @Post('submissions/bulk-approve')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Aprovação em lote' })
-  bulkApprove(@Body() dto: BulkApproveWorkDeclDto, @CurrentUser() user: any) {
+  bulkApprove(@Body() dto: BulkApproveWorkDeclDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.bulkApprove(dto, user.id);
   }
 
@@ -303,7 +303,7 @@ export class WorkDeclarationsController {
   exempt(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { reason: string },
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.exemptUser(id, body.reason, user.id);
   }

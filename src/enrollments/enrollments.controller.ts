@@ -24,7 +24,7 @@ import {
 } from './enrollments.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Enrollments')
@@ -38,13 +38,16 @@ export class EnrollmentsController {
 
   @Get('my')
   @ApiOperation({ summary: 'As minhas matrículas (agrupadas por estado)' })
-  myEnrollments(@CurrentUser() user: any, @Query() filters: EnrollmentFilterDto) {
+  myEnrollments(@CurrentUser() user: CurrentUserData, @Query() filters: EnrollmentFilterDto) {
     return this.svc.getUserEnrollments(user.id, filters);
   }
 
   @Post('self-enroll/:courseId')
   @ApiOperation({ summary: 'Auto-matrícula num curso' })
-  selfEnroll(@Param('courseId', ParseIntPipe) courseId: number, @CurrentUser() user: any) {
+  selfEnroll(
+    @Param('courseId', ParseIntPipe) courseId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.svc.enroll({
       userId: user.id,
       courseId,
@@ -57,7 +60,7 @@ export class EnrollmentsController {
   @HttpCode(HttpStatus.OK)
   cancelMy(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: CancelEnrollmentDto,
   ) {
     return this.svc.cancel(id, dto, user.id);
@@ -98,7 +101,7 @@ export class EnrollmentsController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Progresso da equipa (para gestores)' })
   @ApiQuery({ name: 'courseId', required: false })
-  teamProgress(@CurrentUser() user: any, @Query('courseId') courseId?: string) {
+  teamProgress(@CurrentUser() user: CurrentUserData, @Query('courseId') courseId?: string) {
     return this.svc.getTeamProgress(user.id, courseId ? parseInt(courseId) : undefined);
   }
 
@@ -121,7 +124,7 @@ export class EnrollmentsController {
   @Post()
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Matricular utilizador num curso' })
-  enroll(@CurrentUser() admin: any, @Body() dto: EnrollmentsCreateEnrollmentDto) {
+  enroll(@CurrentUser() admin: CurrentUserData, @Body() dto: EnrollmentsCreateEnrollmentDto) {
     return this.svc.enroll({ ...dto, assignedById: admin.id });
   }
 
@@ -153,7 +156,7 @@ export class EnrollmentsController {
   @HttpCode(HttpStatus.OK)
   cancel(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() admin: any,
+    @CurrentUser() admin: CurrentUserData,
     @Body() dto: CancelEnrollmentDto,
   ) {
     // Admin ignora a verificação de mandatory

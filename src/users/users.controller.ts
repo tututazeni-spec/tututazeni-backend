@@ -26,7 +26,7 @@ import {
 } from './users.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Users')
@@ -40,38 +40,38 @@ export class UsersController {
 
   @Get('me')
   @ApiOperation({ summary: 'Perfil do utilizador autenticado' })
-  me(@CurrentUser() user: any) {
+  me(@CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(user.id);
   }
 
   @Get('me/stats')
   @ApiOperation({ summary: 'Estatísticas de aprendizagem (utilizador autenticado)' })
-  myStats(@CurrentUser() user: any) {
+  myStats(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserStats(user.id);
   }
 
   @Get('me/team')
   @ApiOperation({ summary: 'Equipa do utilizador autenticado (se for gestor)' })
-  myTeam(@CurrentUser() user: any) {
+  myTeam(@CurrentUser() user: CurrentUserData) {
     return this.svc.getTeam(user.id);
   }
 
   @Get('me/audit-logs')
   @ApiOperation({ summary: 'Logs de auditoria do utilizador autenticado' })
-  myAuditLogs(@CurrentUser() user: any, @Query('page') page?: string) {
+  myAuditLogs(@CurrentUser() user: CurrentUserData, @Query('page') page?: string) {
     return this.svc.getAuditLogs(user.id, page ? parseInt(page) : 1);
   }
 
   @Put('me/profile')
   @ApiOperation({ summary: 'Actualizar perfil do utilizador autenticado' })
-  updateMyProfile(@CurrentUser() user: any, @Body() dto: UpdateProfileDto) {
+  updateMyProfile(@CurrentUser() user: CurrentUserData, @Body() dto: UpdateProfileDto) {
     return this.svc.upsertProfile(user.id, dto);
   }
 
   @Patch('me/password')
   @ApiOperation({ summary: 'Alterar password' })
   @HttpCode(HttpStatus.OK)
-  changePassword(@CurrentUser() user: any, @Body() dto: UserChangePasswordDto) {
+  changePassword(@CurrentUser() user: CurrentUserData, @Body() dto: UserChangePasswordDto) {
     return this.svc.changePassword(user.id, dto);
   }
 
@@ -131,7 +131,7 @@ export class UsersController {
   @Post()
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar utilizador' })
-  create(@CurrentUser() admin: any, @Body() dto: CreateUserDto) {
+  create(@CurrentUser() admin: CurrentUserData, @Body() dto: CreateUserDto) {
     return this.svc.create(dto);
   }
 
@@ -162,7 +162,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Actualizar dados de um utilizador' })
   update(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() admin: any,
+    @CurrentUser() admin: CurrentUserData,
     @Body() dto: UpdateUserDto,
   ) {
     return this.svc.update(id, dto, admin.id);

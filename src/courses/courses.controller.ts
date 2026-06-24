@@ -32,7 +32,7 @@ import {
 } from './courses.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Courses')
@@ -65,13 +65,13 @@ export class CoursesController {
 
   @Get('my/enrollments')
   @ApiOperation({ summary: 'As minhas matrículas e progresso' })
-  myEnrollments(@CurrentUser() user: any) {
+  myEnrollments(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyEnrollments(user.id);
   }
 
   @Get('my/certificates')
   @ApiOperation({ summary: 'Os meus certificados' })
-  myCertificates(@CurrentUser() user: any) {
+  myCertificates(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyCertificates(user.id);
   }
 
@@ -96,7 +96,7 @@ export class CoursesController {
 
   @Get(':id/progress')
   @ApiOperation({ summary: 'Progresso do utilizador autenticado num curso' })
-  progress(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  progress(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getCourseProgress(id, user.id);
   }
 
@@ -245,7 +245,7 @@ export class CoursesController {
   @HttpCode(HttpStatus.OK)
   markComplete(
     @Param('lessonId', ParseIntPipe) lessonId: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: MarkLessonCompleteDto,
   ) {
     return this.svc.markLessonComplete(lessonId, user.id, dto);
@@ -255,7 +255,11 @@ export class CoursesController {
 
   @Post(':id/enroll')
   @ApiOperation({ summary: 'Matricular utilizador autenticado' })
-  enroll(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any, @Body() dto: EnrollDto) {
+  enroll(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: EnrollDto,
+  ) {
     return this.svc.enroll(id, user.id, dto);
   }
 
@@ -264,7 +268,7 @@ export class CoursesController {
   @ApiOperation({ summary: 'Atribuir curso a utilizador, departamento ou cargo' })
   assign(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: AssignCourseDto,
   ) {
     return this.svc.assignCourse(id, dto, user.id);
@@ -284,7 +288,7 @@ export class CoursesController {
   @HttpCode(HttpStatus.OK)
   submitQuiz(
     @Param('quizId', ParseIntPipe) quizId: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: SubmitQuizDto,
   ) {
     return this.svc.submitQuiz(quizId, user.id, dto);
@@ -296,7 +300,7 @@ export class CoursesController {
   @ApiOperation({ summary: 'Submeter ou actualizar feedback do curso' })
   feedback(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: CourseFeedbackDto,
   ) {
     return this.svc.addFeedback(id, user.id, dto);

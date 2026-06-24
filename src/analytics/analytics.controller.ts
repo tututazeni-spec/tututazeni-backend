@@ -5,7 +5,7 @@ import { AnalyticsService } from './analytics.service';
 import { AnalyticsFilterDto } from './analytics.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Analytics & Intelligence')
@@ -28,14 +28,14 @@ export class AnalyticsController {
 
   @Get('me')
   @ApiOperation({ summary: 'Dashboard pessoal do colaborador autenticado' })
-  myDashboard(@CurrentUser() user: any) {
+  myDashboard(@CurrentUser() user: CurrentUserData) {
     return this.svc.getCollaboratorDashboard(user.id);
   }
 
   @Get('manager')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard do gestor (equipa, 9-box, alertas, gaps)' })
-  managerDashboard(@CurrentUser() user: any) {
+  managerDashboard(@CurrentUser() user: CurrentUserData) {
     return this.svc.getManagerDashboard(user.id);
   }
 

@@ -27,7 +27,7 @@ import {
 } from './course-modules.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Course Modules & Lessons')
@@ -162,19 +162,22 @@ export class CourseModulesController {
   @Post('lessons/progress')
   @ApiOperation({ summary: 'Marcar aula como concluída (com validação de acesso)' })
   @HttpCode(HttpStatus.OK)
-  markComplete(@CurrentUser() user: any, @Body() dto: MarkModuleLessonCompleteDto) {
+  markComplete(@CurrentUser() user: CurrentUserData, @Body() dto: MarkModuleLessonCompleteDto) {
     return this.svc.markLessonComplete(user.id, dto);
   }
 
   @Get('courses/:courseId/progress')
   @ApiOperation({ summary: 'Progresso completo do utilizador num curso (módulos + aulas)' })
-  getCourseProgress(@Param('courseId', ParseIntPipe) courseId: number, @CurrentUser() user: any) {
+  getCourseProgress(
+    @Param('courseId', ParseIntPipe) courseId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.svc.getLessonProgress(user.id, courseId);
   }
 
   @Get('modules/:id/completed')
   @ApiOperation({ summary: 'Verificar se módulo está concluído pelo utilizador' })
-  isModuleCompleted(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  isModuleCompleted(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.isModuleCompleted(id, user.id);
   }
 }

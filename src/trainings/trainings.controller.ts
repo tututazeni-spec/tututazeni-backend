@@ -29,7 +29,7 @@ import {
 } from './trainings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Trainings')
@@ -58,7 +58,7 @@ export class TrainingController {
 
   @Get('my')
   @ApiOperation({ summary: 'Os meus treinamentos (inscrições e histórico)' })
-  myTrainings(@CurrentUser() user: any) {
+  myTrainings(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyTrainings(user.id);
   }
 
@@ -155,7 +155,10 @@ export class TrainingController {
 
   @Post('sessions/:sessionId/self-register')
   @ApiOperation({ summary: 'Auto-inscrição numa sessão' })
-  selfRegister(@CurrentUser() user: any, @Param('sessionId', ParseIntPipe) sessionId: number) {
+  selfRegister(
+    @CurrentUser() user: CurrentUserData,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+  ) {
     return this.svc.registerParticipant({ sessionId, userId: user.id, allowWaitlist: true });
   }
 
@@ -164,7 +167,7 @@ export class TrainingController {
   @ApiQuery({ name: 'reason', required: false })
   cancelParticipant(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
     @Query('reason') reason?: string,
   ) {
     return this.svc.cancelParticipant(id, user.id, reason);
@@ -185,7 +188,7 @@ export class TrainingController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Registar presença em massa (lista de presentes)' })
   @HttpCode(HttpStatus.OK)
-  bulkAttendance(@CurrentUser() user: any, @Body() dto: BulkAttendanceDto) {
+  bulkAttendance(@CurrentUser() user: CurrentUserData, @Body() dto: BulkAttendanceDto) {
     return this.svc.bulkAttendance(dto, user.id);
   }
 
@@ -194,7 +197,7 @@ export class TrainingController {
   @Post('rate')
   @ApiOperation({ summary: 'Avaliar treinamento (1-5 estrelas)' })
   @HttpCode(HttpStatus.OK)
-  rate(@CurrentUser() user: any, @Body() dto: RateTrainingDto) {
+  rate(@CurrentUser() user: CurrentUserData, @Body() dto: RateTrainingDto) {
     return this.svc.rateTraining(user.id, dto);
   }
 }

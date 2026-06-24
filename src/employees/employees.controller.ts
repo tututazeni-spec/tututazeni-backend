@@ -35,7 +35,7 @@ import {
 } from './employees.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators';
+import { Roles, CurrentUserData } from '../common/decorators';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Role } from '../auth/enums/role.enum';
 
@@ -86,7 +86,7 @@ export class EmployeesController {
   @Get(':id')
   @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'Detalhe completo do colaborador' })
-  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user?.id);
   }
 
@@ -101,7 +101,7 @@ export class EmployeesController {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar colaborador' })
   @ApiResponse({ status: 201, description: 'Colaborador criado com sucesso' })
-  create(@Body() dto: CreateEmployeeDto, @CurrentUser() user: any) {
+  create(@Body() dto: CreateEmployeeDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.create(dto, user.id);
   }
 
@@ -111,7 +111,7 @@ export class EmployeesController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateEmployeeDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.update(id, dto, user.id);
   }
@@ -119,7 +119,7 @@ export class EmployeesController {
   @Delete(':id')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Desligar colaborador (soft delete → status TERMINATED)' })
-  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.remove(id, user.id);
   }
 
@@ -230,7 +230,7 @@ export class EmployeesController {
   @Post('pdis')
   @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Criar PDI' })
-  createPdi(@Body() dto: CreatePdiDto, @CurrentUser() user: any) {
+  createPdi(@Body() dto: CreatePdiDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createPdi(dto, user.id);
   }
 
@@ -258,7 +258,7 @@ export class EmployeesController {
   assignSkill(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: AssignSkillDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.assignSkill({ ...dto, employeeId: id }, user.id);
   }
@@ -301,7 +301,7 @@ export class EmployeesController {
   createDocument(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: EmployeesCreateDocumentDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.createDocument({ ...dto, employeeId: id }, user.id);
   }
@@ -309,7 +309,7 @@ export class EmployeesController {
   @Delete('documents/:id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover documento (soft delete)' })
-  deleteDocument(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  deleteDocument(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.deleteDocument(id, user.id);
   }
 
@@ -370,14 +370,14 @@ export class EmployeesController {
   @Post('bulk/courses')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atribuir cursos em massa' })
-  bulkAssignCourses(@Body() dto: BulkAssignCourseDto, @CurrentUser() user: any) {
+  bulkAssignCourses(@Body() dto: BulkAssignCourseDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.bulkAssignCourses(dto, user.id);
   }
 
   @Patch('bulk/status')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atualizar status de múltiplos colaboradores' })
-  bulkUpdateStatus(@Body() dto: BulkUpdateStatusDto, @CurrentUser() user: any) {
+  bulkUpdateStatus(@Body() dto: BulkUpdateStatusDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.bulkUpdateStatus(dto, user.id);
   }
 

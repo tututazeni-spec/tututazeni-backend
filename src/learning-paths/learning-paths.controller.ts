@@ -25,7 +25,7 @@ import {
 } from './learning-paths.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Learning Paths')
@@ -52,7 +52,7 @@ export class LearningPathsController {
 
   @Get('my/enrollments')
   @ApiOperation({ summary: 'As minhas trilhas de aprendizagem' })
-  myEnrollments(@CurrentUser() user: any) {
+  myEnrollments(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyEnrollments(user.id);
   }
 
@@ -78,7 +78,7 @@ export class LearningPathsController {
 
   @Get(':id/progress')
   @ApiOperation({ summary: 'Progresso do utilizador autenticado na trilha' })
-  progress(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  progress(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getMyProgress(id, user.id);
   }
 
@@ -178,7 +178,7 @@ export class LearningPathsController {
 
   @Post(':id/enroll')
   @ApiOperation({ summary: 'Auto-matrícula do utilizador autenticado' })
-  selfEnroll(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+  selfEnroll(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.selfEnroll(id, user.id);
   }
 

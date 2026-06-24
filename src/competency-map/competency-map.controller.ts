@@ -25,7 +25,7 @@ import {
 } from './competency-map.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Competency Map')
@@ -86,7 +86,7 @@ export class CompetencyMapController {
   @Post('skills')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar skill/competência' })
-  createSkill(@Body() dto: CreateSkillMapDto, @CurrentUser() user: any) {
+  createSkill(@Body() dto: CreateSkillMapDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.createSkill(dto, user.id);
   }
 
@@ -139,26 +139,29 @@ export class CompetencyMapController {
 
   @Get('my')
   @ApiOperation({ summary: 'Meu mapa de competências (skills + gap analysis + recomendações)' })
-  myMap(@CurrentUser() user: any) {
+  myMap(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMap(user.id);
   }
 
   @Get('my/radar')
   @ApiOperation({ summary: 'Dados de radar chart do colaborador actual' })
-  myRadar(@CurrentUser() user: any) {
+  myRadar(@CurrentUser() user: CurrentUserData) {
     return this.svc.getRadarData(user.id);
   }
 
   @Get('my/gap')
   @ApiOperation({ summary: 'Gap analysis pessoal (vs cargo actual ou especificado)' })
   @ApiQuery({ name: 'roleCode', required: false })
-  myGap(@CurrentUser() user: any, @Query('roleCode') roleCode?: string) {
+  myGap(@CurrentUser() user: CurrentUserData, @Query('roleCode') roleCode?: string) {
     return this.svc.getUserGapAnalysis(user.id, roleCode);
   }
 
   @Get('my/history/:skillId')
   @ApiOperation({ summary: 'Histórico de evolução de uma skill' })
-  mySkillHistory(@CurrentUser() user: any, @Param('skillId', ParseIntPipe) skillId: number) {
+  mySkillHistory(
+    @CurrentUser() user: CurrentUserData,
+    @Param('skillId', ParseIntPipe) skillId: number,
+  ) {
     return this.svc.getSkillHistory(user.id, skillId);
   }
 
@@ -198,7 +201,7 @@ export class CompetencyMapController {
   @Get('team')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Mapa da equipa do gestor actual (readiness + top gaps por pessoa)' })
-  teamMap(@CurrentUser() user: any) {
+  teamMap(@CurrentUser() user: CurrentUserData) {
     return this.svc.getTeamMap(user.id);
   }
 
@@ -206,14 +209,14 @@ export class CompetencyMapController {
 
   @Post('assess')
   @ApiOperation({ summary: 'Registar avaliação de skill (autoavaliação, gestor, 360°, etc.)' })
-  assess(@Body() dto: UpsertEmployeeSkillDto, @CurrentUser() user: any) {
+  assess(@Body() dto: UpsertEmployeeSkillDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.upsertEmployeeSkill(dto, user.id);
   }
 
   @Post('assess/batch')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Avaliação em lote (múltiplas skills de um colaborador)' })
-  batchAssess(@Body() dto: BatchAssessmentDto, @CurrentUser() user: any) {
+  batchAssess(@Body() dto: BatchAssessmentDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.batchAssessment(dto, user.id);
   }
 }

@@ -14,7 +14,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { LeaderService } from './leader.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   CreateLeaderProfileDto,
   GiveFeedbackDto,
@@ -47,42 +47,42 @@ export class LeaderController {
   @Get('my-dashboard')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Dashboard pessoal do líder — KPIs, alertas, recomendações IA' })
-  myDashboard(@CurrentUser() user: any) {
+  myDashboard(@CurrentUser() user: CurrentUserData) {
     return this.svc.getLeaderDashboard(user.id);
   }
 
   @Get('my-team')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'A minha equipa com scores, PDI, risco e alertas' })
-  myTeam(@CurrentUser() user: any, @Query() filters: TeamFilterDto) {
+  myTeam(@CurrentUser() user: CurrentUserData, @Query() filters: TeamFilterDto) {
     return this.svc.getTeam(user.id, filters);
   }
 
   @Get('my-team-plans')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'PDIs da minha equipa (saúde, progresso, health indicator)' })
-  myTeamPlans(@CurrentUser() user: any) {
+  myTeamPlans(@CurrentUser() user: CurrentUserData) {
     return this.svc.getTeamPlans(user.id);
   }
 
   @Get('my-talent-pipeline')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Talent pipeline — HiPos, prontos para promoção, em risco' })
-  myTalentPipeline(@CurrentUser() user: any) {
+  myTalentPipeline(@CurrentUser() user: CurrentUserData) {
     return this.svc.getTalentPipeline(user.id);
   }
 
   @Get('my-alerts')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Alertas inteligentes da minha equipa' })
-  myAlerts(@CurrentUser() user: any) {
+  myAlerts(@CurrentUser() user: CurrentUserData) {
     return this.svc.getLeaderAlerts(user.id);
   }
 
   @Get('my-recommendations')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Recomendações IA — acções prioritárias para o líder' })
-  myRecommendations(@CurrentUser() user: any) {
+  myRecommendations(@CurrentUser() user: CurrentUserData) {
     return this.svc.getAiRecommendations(user.id);
   }
 
@@ -91,7 +91,10 @@ export class LeaderController {
   @Get('my-team/member/:memberId')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Perfil completo de um membro da equipa' })
-  memberProfile(@CurrentUser() user: any, @Param('memberId', ParseIntPipe) memberId: number) {
+  memberProfile(
+    @CurrentUser() user: CurrentUserData,
+    @Param('memberId', ParseIntPipe) memberId: number,
+  ) {
     return this.svc.getMemberProfile(user.id, memberId);
   }
 
@@ -116,14 +119,14 @@ export class LeaderController {
   @Post('feedback')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Dar feedback a um membro da equipa (suporte a formato SBI)' })
-  giveFeedback(@CurrentUser() user: any, @Body() dto: GiveFeedbackDto) {
+  giveFeedback(@CurrentUser() user: CurrentUserData, @Body() dto: GiveFeedbackDto) {
     return this.svc.giveFeedback(user.id, dto);
   }
 
   @Get('feedback/team')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Feedbacks dados à equipa' })
-  teamFeedbacks(@CurrentUser() user: any, @Query('userId') userId?: string) {
+  teamFeedbacks(@CurrentUser() user: CurrentUserData, @Query('userId') userId?: string) {
     return this.svc.getTeamFeedbacks(user.id, userId ? +userId : undefined);
   }
 
@@ -132,14 +135,14 @@ export class LeaderController {
   @Post('1on1')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Agendar reunião 1:1' })
-  create1on1(@CurrentUser() user: any, @Body() dto: LeaderCreateOneOnOneDto) {
+  create1on1(@CurrentUser() user: CurrentUserData, @Body() dto: LeaderCreateOneOnOneDto) {
     return this.svc.createOneOnOne(user.id, dto);
   }
 
   @Get('1on1')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Listar reuniões 1:1 (filtrar por membro)' })
-  list1on1(@CurrentUser() user: any, @Query('memberId') memberId?: string) {
+  list1on1(@CurrentUser() user: CurrentUserData, @Query('memberId') memberId?: string) {
     return this.svc.getOneOnOnes(user.id, memberId ? +memberId : undefined);
   }
 
@@ -155,7 +158,7 @@ export class LeaderController {
   @Patch('plans/:planId/approve')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Aprovar PDI de um membro da equipa' })
-  approvePlan(@Param('planId', ParseIntPipe) planId: number, @CurrentUser() user: any) {
+  approvePlan(@Param('planId', ParseIntPipe) planId: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.approvePlan(planId, user.id);
   }
 
