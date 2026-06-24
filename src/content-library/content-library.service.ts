@@ -79,14 +79,6 @@ function buildOrderBy(sortBy?: string): any {
 
 @Injectable()
 export class ContentLibraryService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -100,8 +92,8 @@ export class ContentLibraryService {
     const orderBy = buildOrderBy(filters.sortBy);
 
     const [data, total] = await Promise.all([
-      this.prismaRead.contentAsset.findMany({ where, skip, take: limit, orderBy }),
-      this.prismaRead.contentAsset.count({ where }),
+      this.prisma.read.contentAsset.findMany({ where, skip, take: limit, orderBy }),
+      this.prisma.read.contentAsset.count({ where }),
     ]);
 
     // Enrich with view counts from AuditLog
@@ -123,7 +115,7 @@ export class ContentLibraryService {
   }
 
   async findOne(id: number, userId?: number) {
-    const c = await this.prismaRead.contentAsset.findUnique({ where: { id } });
+    const c = await this.prisma.read.contentAsset.findUnique({ where: { id } });
     if (!c) throw new NotFoundException('Conteúdo não encontrado');
 
     const [viewCount, avgRating, ratingCount, userProgress, isBookmarked] = await Promise.all([
@@ -285,14 +277,14 @@ export class ContentLibraryService {
   }
 
   async getMyBookmarks(userId: number) {
-    const logs = await this.prismaRead.auditLog.findMany({
+    const logs = await this.prisma.read.auditLog.findMany({
       where: { userId, action: 'CONTENT_BOOKMARK', entity: 'ContentAsset' },
       orderBy: { timestamp: 'desc' },
     });
     const ids = logs.map(l => l.entityId).filter((id): id is number => id !== null);
     if (!ids.length) return [];
 
-    return this.prismaRead.contentAsset.findMany({
+    return this.prisma.read.contentAsset.findMany({
       where: { id: { in: ids }, active: true },
     });
   }
@@ -388,7 +380,7 @@ export class ContentLibraryService {
       return { data: [], stats: { total: 0, completed: 0, inProgress: 0 } };
 
     const ids = (progresses as any[]).map((p: any) => p.contentId);
-    const contents = await this.prismaRead.contentAsset.findMany({ where: { id: { in: ids } } });
+    const contents = await this.prisma.read.contentAsset.findMany({ where: { id: { in: ids } } });
     const cMap = new Map(contents.map(c => [c.id, c]));
 
     const enriched = (progresses as any[]).map((p: any) => ({
@@ -417,7 +409,7 @@ export class ContentLibraryService {
     const ids = (progresses as any[]).map((p: any) => p.contentId);
     if (!ids.length) return [];
 
-    const contents = await this.prismaRead.contentAsset.findMany({ where: { id: { in: ids } } });
+    const contents = await this.prisma.read.contentAsset.findMany({ where: { id: { in: ids } } });
     const cMap = new Map(contents.map(c => [c.id, c]));
 
     return (progresses as any[]).map((p: any) => ({
@@ -503,7 +495,7 @@ export class ContentLibraryService {
   // ══════════════════════════════════════════════════════
 
   async getRecommended(userId: number, limit = 10) {
-    const user = await this.prismaRead.user.findUnique({
+    const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -518,7 +510,7 @@ export class ContentLibraryService {
     if (!user) return [];
 
     // 1. Content already consumed
-    const viewed = await this.prismaRead.auditLog.findMany({
+    const viewed = await this.prisma.read.auditLog.findMany({
       where: { userId, action: 'CONTENT_VIEW', entity: 'ContentAsset' },
       select: { entityId: true },
     });
@@ -535,7 +527,7 @@ export class ContentLibraryService {
     const inProgressIds = (inProgress as any[]).map((p: any) => p.contentId);
 
     // 3. Recommend content not yet viewed
-    const fresh = await this.prismaRead.contentAsset.findMany({
+    const fresh = await this.prisma.read.contentAsset.findMany({
       where: {
         active: true,
         id: { notIn: [...viewedIds, ...inProgressIds] },
@@ -583,14 +575,14 @@ export class ContentLibraryService {
 
     const ids = (topViews as any[]).map((v: any) => v.entityId).filter(Boolean) as number[];
     if (!ids.length) {
-      return this.prismaRead.contentAsset.findMany({
+      return this.prisma.read.contentAsset.findMany({
         where: { active: true },
         orderBy: { createdAt: 'desc' },
         take: limit,
       });
     }
 
-    const contents = await this.prismaRead.contentAsset.findMany({ where: { id: { in: ids } } });
+    const contents = await this.prisma.read.contentAsset.findMany({ where: { id: { in: ids } } });
     const vcMap = new Map((topViews as any[]).map((v: any) => [v.entityId, v._count.id]));
 
     return contents
@@ -599,7 +591,7 @@ export class ContentLibraryService {
   }
 
   async getNewContent(limit = 10) {
-    return this.prismaRead.contentAsset.findMany({
+    return this.prisma.read.contentAsset.findMany({
       where: { active: true },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -607,7 +599,7 @@ export class ContentLibraryService {
   }
 
   async getMandatory(userId: number) {
-    const mandatory = await this.prismaRead.contentAsset.findMany({
+    const mandatory = await this.prisma.read.contentAsset.findMany({
       where: { active: true, ...({ mandatory: true } as any) },
     });
 
@@ -751,9 +743,11 @@ export class ContentLibraryService {
       formatBreakdown,
       recentlyAdded,
     ] = await Promise.all([
-      this.prismaRead.contentAsset.count(),
-      this.prismaRead.contentAsset.count({ where: { active: true } }),
-      this.prismaRead.auditLog.count({ where: { action: 'CONTENT_VIEW', entity: 'ContentAsset' } }),
+      this.prisma.read.contentAsset.count(),
+      this.prisma.read.contentAsset.count({ where: { active: true } }),
+      this.prisma.read.auditLog.count({
+        where: { action: 'CONTENT_VIEW', entity: 'ContentAsset' },
+      }),
       safeModel(this.prisma, 'contentProgress')
         .count({ where: { progress: 100 } })
         .catch(() => 0),
@@ -789,7 +783,7 @@ export class ContentLibraryService {
           _count: { id: true },
         })
         .catch(() => [] as any[]),
-      this.prismaRead.contentAsset.findMany({
+      this.prisma.read.contentAsset.findMany({
         where: { active: true },
         orderBy: { createdAt: 'desc' },
         take: 6,
@@ -803,7 +797,7 @@ export class ContentLibraryService {
     const allIds = [...new Set([...mvIds, ...mcIds])];
 
     const contents = allIds.length
-      ? await this.prismaRead.contentAsset.findMany({
+      ? await this.prisma.read.contentAsset.findMany({
           where: { id: { in: allIds } },
           select: { id: true, title: true, type: true },
         })
@@ -839,13 +833,13 @@ export class ContentLibraryService {
 
   async getUserAnalytics(userId: number) {
     const [viewCount, completions, bookmarkCount, totalTimeSpent] = await Promise.all([
-      this.prismaRead.auditLog.count({
+      this.prisma.read.auditLog.count({
         where: { userId, action: 'CONTENT_VIEW', entity: 'ContentAsset' },
       }),
       safeModel(this.prisma, 'contentProgress')
         .count({ where: { userId, progress: 100 } })
         .catch(() => 0),
-      this.prismaRead.auditLog.count({
+      this.prisma.read.auditLog.count({
         where: { userId, action: 'CONTENT_BOOKMARK', entity: 'ContentAsset' },
       }),
       safeModel(this.prisma, 'contentProgress')

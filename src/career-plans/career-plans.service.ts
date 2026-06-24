@@ -35,14 +35,6 @@ function readinessEmoji(level: ReadinessLevel): string {
 
 @Injectable()
 export class CareerPlansService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -53,7 +45,7 @@ export class CareerPlansService {
   }
 
   async getRoles(department?: string) {
-    return this.prismaRead.careerRole.findMany({
+    return this.prisma.read.careerRole.findMany({
       where: {
         active: true,
         ...(department ? { department: { contains: department, mode: 'insensitive' } } : {}),
@@ -67,7 +59,7 @@ export class CareerPlansService {
   }
 
   async getRole(id: number) {
-    const r = await this.prismaRead.careerRole.findUnique({
+    const r = await this.prisma.read.careerRole.findUnique({
       where: { id },
       include: {
         skillRequirements: { include: { skill: true }, orderBy: { weight: 'desc' } },
@@ -108,7 +100,7 @@ export class CareerPlansService {
   }
 
   async getSkills(type?: string) {
-    return this.prismaRead.careerSkill.findMany({
+    return this.prisma.read.careerSkill.findMany({
       where: { active: true, ...(type ? { type: type as any } : {}) },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     });
@@ -155,7 +147,7 @@ export class CareerPlansService {
   }
 
   async getProgressionRules(fromRoleId?: number) {
-    return this.prismaRead.progressionRule.findMany({
+    return this.prisma.read.progressionRule.findMany({
       where: { active: true, ...(fromRoleId ? { fromRoleId } : {}) },
       include: { fromRole: true, toRole: true },
     });
@@ -164,7 +156,7 @@ export class CareerPlansService {
   async calculateReadiness(userId: number, targetRoleId: number) {
     const [targetRole, userSkills] = await Promise.all([
       this.getRole(targetRoleId),
-      this.prismaRead.legacyEmployeeSkill.findMany({
+      this.prisma.read.legacyEmployeeSkill.findMany({
         where: { userId },
         include: { skill: true },
       }),
@@ -250,7 +242,7 @@ export class CareerPlansService {
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const [data, total] = await Promise.all([
-      this.prismaRead.userCareerPlan.findMany({
+      this.prisma.read.userCareerPlan.findMany({
         where,
         skip,
         take: limit,
@@ -266,7 +258,7 @@ export class CareerPlansService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.userCareerPlan.count({ where }),
+      this.prisma.read.userCareerPlan.count({ where }),
     ]);
 
     const enriched = await Promise.all(
@@ -287,7 +279,7 @@ export class CareerPlansService {
   }
 
   async findOne(id: number) {
-    const plan = await this.prismaRead.userCareerPlan.findUnique({
+    const plan = await this.prisma.read.userCareerPlan.findUnique({
       where: { id },
       include: {
         // FIX: removed employee sub-select
@@ -312,7 +304,7 @@ export class CareerPlansService {
   }
 
   async getMyPlan(userId: number) {
-    const plan = await this.prismaRead.userCareerPlan.findFirst({
+    const plan = await this.prisma.read.userCareerPlan.findFirst({
       where: { userId, status: { in: [CareerPlanStatus.ACTIVE, CareerPlanStatus.DRAFT] } },
       include: {
         mentor: { select: { id: true, fullName: true } },
@@ -396,7 +388,7 @@ export class CareerPlansService {
   }
 
   async updateGoalProgress(goalId: number, dto: UpdateGoalProgressDto, userId: number) {
-    const goal = await this.prismaRead.careerGoal.findUnique({ where: { id: goalId } });
+    const goal = await this.prisma.read.careerGoal.findUnique({ where: { id: goalId } });
     if (!goal) throw new NotFoundException('Meta não encontrada');
 
     const status =
@@ -440,15 +432,15 @@ export class CareerPlansService {
 
   async requestPromotion(dto: CreatePromotionRequestDto, requestedById: number) {
     const [user, targetRole] = await Promise.all([
-      this.prismaRead.user.findUnique({ where: { id: dto.userId } }),
-      this.prismaRead.careerRole.findUnique({ where: { id: dto.targetRoleId } }),
+      this.prisma.read.user.findUnique({ where: { id: dto.userId } }),
+      this.prisma.read.careerRole.findUnique({ where: { id: dto.targetRoleId } }),
     ]);
     if (!user) throw new NotFoundException('Colaborador não encontrado');
     if (!targetRole) throw new NotFoundException('Cargo alvo não encontrado');
 
     const currentRoleId = (user as any).employee?.currentRoleId;
     if (currentRoleId) {
-      const rule = await this.prismaRead.progressionRule.findFirst({
+      const rule = await this.prisma.read.progressionRule.findFirst({
         where: { fromRoleId: currentRoleId, toRoleId: dto.targetRoleId, active: true },
       });
       if (!rule)
@@ -487,7 +479,7 @@ export class CareerPlansService {
   }
 
   async reviewPromotion(id: number, dto: ReviewPromotionDto, reviewerId: number, role: string) {
-    const promotion = await this.prismaRead.promotionRequest.findUnique({
+    const promotion = await this.prisma.read.promotionRequest.findUnique({
       where: { id },
       include: { user: true, targetRole: true },
     });
@@ -553,7 +545,7 @@ export class CareerPlansService {
       entityId: String(id),
       userId: reviewerId,
     });
-    return this.prismaRead.promotionRequest.findUnique({
+    return this.prisma.read.promotionRequest.findUnique({
       where: { id },
       include: { targetRole: true },
     });
@@ -570,7 +562,7 @@ export class CareerPlansService {
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const [data, total] = await Promise.all([
-      this.prismaRead.promotionRequest.findMany({
+      this.prisma.read.promotionRequest.findMany({
         where,
         skip,
         take: limit,
@@ -582,7 +574,7 @@ export class CareerPlansService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.promotionRequest.count({ where }),
+      this.prisma.read.promotionRequest.count({ where }),
     ]);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
@@ -590,9 +582,9 @@ export class CareerPlansService {
 
   async simulateCareer(dto: SimulateCareerDto) {
     const [user, targetRole, paths] = await Promise.all([
-      this.prismaRead.user.findUnique({ where: { id: dto.userId } }),
+      this.prisma.read.user.findUnique({ where: { id: dto.userId } }),
       this.getRole(dto.targetRoleId),
-      this.prismaRead.careerPath.findMany({
+      this.prisma.read.careerPath.findMany({
         where: { active: true },
         include: { steps: { orderBy: { order: 'asc' }, include: { role: true } } },
       }),
@@ -622,7 +614,7 @@ export class CareerPlansService {
   async getSuccessionPipeline(roleId: number) {
     const role = await this.getRole(roleId);
 
-    const candidates = await this.prismaRead.userCareerPlan.findMany({
+    const candidates = await this.prisma.read.userCareerPlan.findMany({
       where: { targetRoleId: roleId, status: CareerPlanStatus.ACTIVE },
       include: {
         // FIX: removed employee sub-select
@@ -659,7 +651,7 @@ export class CareerPlansService {
   }
 
   async getSuccessionDashboard(department?: string) {
-    const roles = await this.prismaRead.careerRole.findMany({
+    const roles = await this.prisma.read.careerRole.findMany({
       where: {
         active: true,
         ...(department ? { department: { contains: department, mode: 'insensitive' } } : {}),
@@ -671,7 +663,7 @@ export class CareerPlansService {
       roles
         .filter(r => r.level >= 4)
         .map(async role => {
-          const candidateCount = await this.prismaRead.userCareerPlan.count({
+          const candidateCount = await this.prisma.read.userCareerPlan.count({
             where: { targetRoleId: role.id, status: CareerPlanStatus.ACTIVE },
           });
           return {
@@ -706,19 +698,19 @@ export class CareerPlansService {
       approvedPromotions,
       plansByStatus,
     ] = await Promise.all([
-      this.prismaRead.userCareerPlan.count({ where }),
-      this.prismaRead.userCareerPlan.count({
+      this.prisma.read.userCareerPlan.count({ where }),
+      this.prisma.read.userCareerPlan.count({
         where: { ...where, status: CareerPlanStatus.ACTIVE },
       }),
-      this.prismaRead.userCareerPlan.count({
+      this.prisma.read.userCareerPlan.count({
         where: { ...where, status: CareerPlanStatus.COMPLETED },
       }),
-      this.prismaRead.promotionRequest.count(),
-      this.prismaRead.promotionRequest.count({ where: { status: PromotionStatus.APPROVED } }),
-      this.prismaRead.userCareerPlan.groupBy({ by: ['status'], _count: true }),
+      this.prisma.read.promotionRequest.count(),
+      this.prisma.read.promotionRequest.count({ where: { status: PromotionStatus.APPROVED } }),
+      this.prisma.read.userCareerPlan.groupBy({ by: ['status'], _count: true }),
     ]);
 
-    const promotions = await this.prismaRead.promotionRequest.findMany({
+    const promotions = await this.prisma.read.promotionRequest.findMany({
       where: { status: PromotionStatus.APPROVED, reviewedAt: { not: null } },
       select: { createdAt: true, reviewedAt: true },
     });

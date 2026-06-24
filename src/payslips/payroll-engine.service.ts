@@ -60,14 +60,6 @@ export interface PayrollResult {
 
 @Injectable()
 export class PayrollEngineService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════════════════
@@ -340,7 +332,7 @@ export class PayrollEngineService {
   // ══════════════════════════════════════════════════════════════════
 
   async loadCountryConfig(countryCode: string, taxYear: number) {
-    const config = await this.prismaRead.countryConfig.findFirst({
+    const config = await this.prisma.read.countryConfig.findFirst({
       where: { countryCode, taxYear, active: true },
       include: { irtBrackets: { orderBy: { min: 'asc' } } },
     });
@@ -357,7 +349,7 @@ export class PayrollEngineService {
   }
 
   async loadEmployeeCompensation(userId: number) {
-    return this.prismaRead.employeeCompensation.findFirst({
+    return this.prisma.read.employeeCompensation.findFirst({
       where: {
         userId,
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],

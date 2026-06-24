@@ -14,18 +14,14 @@ import {
   GradeEnrollmentDto,
   FilterProgramDto,
 } from './dto';
+import { AuditService } from '../common/services/audit.service';
 
 @Injectable()
 export class AcademicService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ─── ANOS LECTIVOS ───────────────────────────────────
 
@@ -45,21 +41,21 @@ export class AcademicService {
         createdById: userId,
       },
     });
-    await this.audit(userId, 'CREATE', 'AcademicYear', year.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'AcademicYear', year.id, {
       name: dto.name,
     });
     return year;
   }
 
   async getCurrentYear() {
-    return this.prismaRead.academicYear.findFirst({
+    return this.prisma.read.academicYear.findFirst({
       where: { isCurrent: true, deletedAt: null },
       include: { periods: { where: { deletedAt: null } } },
     });
   }
 
   async findAllYears() {
-    return this.prismaRead.academicYear.findMany({
+    return this.prisma.read.academicYear.findMany({
       where: { deletedAt: null },
       orderBy: { startDate: 'desc' },
       include: {
@@ -71,7 +67,7 @@ export class AcademicService {
   // ─── PERÍODOS ────────────────────────────────────────
 
   async createPeriod(dto: CreatePeriodDto, userId: number) {
-    const year = await this.prismaRead.academicYear.findUnique({
+    const year = await this.prisma.read.academicYear.findUnique({
       where: { id: dto.yearId },
     });
     if (!year) throw new NotFoundException('Ano lectivo não encontrado');
@@ -85,7 +81,7 @@ export class AcademicService {
         ...(enrollmentEnd && { enrollmentEnd: new Date(enrollmentEnd) }),
       },
     });
-    await this.audit(userId, 'CREATE', 'AcademicPeriod', period.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'AcademicPeriod', period.id, {
       name: dto.name,
     });
     return period;
@@ -103,7 +99,7 @@ export class AcademicService {
     const program = await this.prisma.academicProgram.create({
       data: { ...dto, createdById: userId },
     });
-    await this.audit(userId, 'CREATE', 'AcademicProgram', program.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'AcademicProgram', program.id, {
       code: dto.code,
     });
     return program;
@@ -125,7 +121,7 @@ export class AcademicService {
       }),
     };
     const [data, total] = await Promise.all([
-      this.prismaRead.academicProgram.findMany({
+      this.prisma.read.academicProgram.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -135,13 +131,13 @@ export class AcademicService {
           _count: { select: { enrollments: true, classes: true } },
         },
       }),
-      this.prismaRead.academicProgram.count({ where }),
+      this.prisma.read.academicProgram.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findProgramById(id: string) {
-    const program = await this.prismaRead.academicProgram.findUnique({
+    const program = await this.prisma.read.academicProgram.findUnique({
       where: { id },
       include: {
         createdBy: { select: { fullName: true } },
@@ -162,7 +158,7 @@ export class AcademicService {
   // ─── TURMAS ──────────────────────────────────────────
 
   async createClass(dto: CreateClassDto, userId: number) {
-    const program = await this.prismaRead.academicProgram.findUnique({
+    const program = await this.prisma.read.academicProgram.findUnique({
       where: { id: dto.programId },
     });
     if (!program) throw new NotFoundException('Programa não encontrado');
@@ -174,7 +170,7 @@ export class AcademicService {
         endDate: new Date(endDate),
       },
     });
-    await this.audit(userId, 'CREATE', 'AcademicClass', academicClass.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'AcademicClass', academicClass.id, {
       name: dto.name,
     });
     return academicClass;
@@ -192,14 +188,14 @@ export class AcademicService {
   }
 
   async enroll(dto: CreateEnrollmentDto, userId: number) {
-    const program = await this.prismaRead.academicProgram.findUnique({
+    const program = await this.prisma.read.academicProgram.findUnique({
       where: { id: dto.programId },
     });
     if (!program) throw new NotFoundException('Programa não encontrado');
 
     // Verifica pré-requisitos
     if (program.prerequisites?.length) {
-      const completed = await this.prismaRead.academicEnrollment.count({
+      const completed = await this.prisma.read.academicEnrollment.count({
         where: {
           userId: dto.userId,
           programId: { in: program.prerequisites },
@@ -224,7 +220,7 @@ export class AcademicService {
 
     // Verifica vagas na turma
     if (dto.classId) {
-      const cls = await this.prismaRead.academicClass.findUnique({
+      const cls = await this.prisma.read.academicClass.findUnique({
         where: { id: dto.classId },
         include: { _count: { select: { enrollments: true } } },
       });
@@ -245,7 +241,7 @@ export class AcademicService {
         startDate: new Date(),
       },
     });
-    await this.audit(userId, 'CREATE', 'AcademicEnrollment', enrollment.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'AcademicEnrollment', enrollment.id, {
       code,
     });
     await this.prisma.notificationLog.create({
@@ -266,7 +262,7 @@ export class AcademicService {
   }
 
   async approveEnrollment(id: string, approverId: number) {
-    const enrollment = await this.prismaRead.academicEnrollment.findUnique({
+    const enrollment = await this.prisma.read.academicEnrollment.findUnique({
       where: { id },
       include: { program: true },
     });
@@ -282,7 +278,7 @@ export class AcademicService {
         approvedAt: new Date(),
       },
     });
-    await this.audit(approverId, 'UPDATE', 'AcademicEnrollment', id, {
+    await this.audit.logEntity(approverId, 'UPDATE', 'AcademicEnrollment', id, {
       status: 'APPROVED',
     });
     await this.prisma.notificationLog.create({
@@ -300,7 +296,7 @@ export class AcademicService {
   async getMyEnrollments(userId: number, page = 1, limit = 20) {
     const where = { userId, deletedAt: null };
     const [data, total] = await Promise.all([
-      this.prismaRead.academicEnrollment.findMany({
+      this.prisma.read.academicEnrollment.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -317,7 +313,7 @@ export class AcademicService {
           class: { select: { name: true, modality: true } },
         },
       }),
-      this.prismaRead.academicEnrollment.count({ where }),
+      this.prisma.read.academicEnrollment.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -325,7 +321,7 @@ export class AcademicService {
   // ─── NOTAS ───────────────────────────────────────────
 
   async gradeEnrollment(dto: GradeEnrollmentDto, graderId: number) {
-    const enrollment = await this.prismaRead.academicEnrollment.findUnique({
+    const enrollment = await this.prisma.read.academicEnrollment.findUnique({
       where: { id: dto.enrollmentId },
       include: { program: true },
     });
@@ -345,7 +341,7 @@ export class AcademicService {
     });
 
     // Recalcula nota final ponderada
-    const allGrades = await this.prismaRead.academicGrade.findMany({
+    const allGrades = await this.prisma.read.academicGrade.findMany({
       where: { enrollmentId: dto.enrollmentId },
     });
     const totalWeight = allGrades.reduce((s, g) => s + g.weight, 0);
@@ -364,7 +360,7 @@ export class AcademicService {
     });
 
     await this.updateTranscript(enrollment.userId);
-    await this.audit(graderId, 'CREATE', 'AcademicGrade', grade.id, {
+    await this.audit.logEntity(graderId, 'CREATE', 'AcademicGrade', grade.id, {
       enrollmentId: dto.enrollmentId,
       score: dto.score,
     });
@@ -372,7 +368,7 @@ export class AcademicService {
   }
 
   async getEnrollmentGrades(enrollmentId: string) {
-    return this.prismaRead.academicGrade.findMany({
+    return this.prisma.read.academicGrade.findMany({
       where: { enrollmentId },
       orderBy: { gradedAt: 'desc' },
       include: { gradedBy: { select: { fullName: true } } },
@@ -383,8 +379,8 @@ export class AcademicService {
 
   async getTranscript(userId: number) {
     const [transcript, enrollments] = await Promise.all([
-      this.prismaRead.academicTranscript.findUnique({ where: { userId } }),
-      this.prismaRead.academicEnrollment.findMany({
+      this.prisma.read.academicTranscript.findUnique({ where: { userId } }),
+      this.prisma.read.academicEnrollment.findMany({
         where: { userId, deletedAt: null },
         orderBy: { createdAt: 'desc' },
         include: {
@@ -408,18 +404,18 @@ export class AcademicService {
   async getAcademicReport() {
     const [totalPrograms, totalEnrollments, completed, inProgress, pending, avgScore, byLevel] =
       await Promise.all([
-        this.prismaRead.academicProgram.count({
+        this.prisma.read.academicProgram.count({
           where: { deletedAt: null, isActive: true },
         }),
-        this.prismaRead.academicEnrollment.count({ where: { deletedAt: null } }),
-        this.prismaRead.academicEnrollment.count({ where: { status: 'COMPLETED' } }),
-        this.prismaRead.academicEnrollment.count({ where: { status: 'IN_PROGRESS' } }),
-        this.prismaRead.academicEnrollment.count({ where: { status: 'PENDING' } }),
-        this.prismaRead.academicEnrollment.aggregate({
+        this.prisma.read.academicEnrollment.count({ where: { deletedAt: null } }),
+        this.prisma.read.academicEnrollment.count({ where: { status: 'COMPLETED' } }),
+        this.prisma.read.academicEnrollment.count({ where: { status: 'IN_PROGRESS' } }),
+        this.prisma.read.academicEnrollment.count({ where: { status: 'PENDING' } }),
+        this.prisma.read.academicEnrollment.aggregate({
           _avg: { finalScore: true },
           where: { finalScore: { not: null } },
         }),
-        (this.prismaRead.academicProgram.groupBy as any)({
+        (this.prisma.read.academicProgram.groupBy as any)({
           by: ['level'],
           where: { deletedAt: null },
           _count: { id: true },
@@ -440,7 +436,7 @@ export class AcademicService {
   // ─── HELPERS ─────────────────────────────────────────
 
   private async updateTranscript(userId: number) {
-    const enrollments = await this.prismaRead.academicEnrollment.findMany({
+    const enrollments = await this.prisma.read.academicEnrollment.findMany({
       where: { userId, deletedAt: null },
       include: { program: { select: { durationHours: true } } },
     });
@@ -467,19 +463,6 @@ export class AcademicService {
         totalHours,
         completedPrograms: completed.length,
         inProgressPrograms: inProgress.length,
-      },
-    });
-  }
-
-  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
-    // AuditLog.entityId é Int? no schema; os IDs deste módulo são cuid (String),
-    // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
-    await this.prisma.auditLog.create({
-      data: {
-        userId,
-        action,
-        entity,
-        metadata: JSON.stringify({ ...meta, entityId }),
       },
     });
   }

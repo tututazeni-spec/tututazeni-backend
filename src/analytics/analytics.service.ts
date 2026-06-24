@@ -7,14 +7,6 @@ import { AnalyticsFilterDto, AnalyticsPeriod } from './analytics.dto';
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
 
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private prisma: PrismaService) {}
 
   private getDateRange(
@@ -66,18 +58,18 @@ export class AnalyticsService {
       activePDIs,
       avgPerformance,
     ] = await Promise.all([
-      this.prismaRead.user.count(),
-      this.prismaRead.user.count({ where: { active: true } }),
-      this.prismaRead.course.count(),
-      this.prismaRead.course.count({ where: { status: 'PUBLISHED' } }),
-      this.prismaRead.enrollment.count(),
-      this.prismaRead.enrollment.count({ where: { status: 'COMPLETED' } }),
-      this.prismaRead.userPoints.aggregate({ _sum: { points: true } }),
-      this.prismaRead.badgeAward.count(),
-      this.prismaRead.learningPath.count(),
-      this.prismaRead.developmentPlan.count(),
-      this.prismaRead.developmentPlan.count({ where: { status: 'ACTIVE' } }),
-      this.prismaRead.performanceReview.aggregate({ _avg: { score: true } }),
+      this.prisma.read.user.count(),
+      this.prisma.read.user.count({ where: { active: true } }),
+      this.prisma.read.course.count(),
+      this.prisma.read.course.count({ where: { status: 'PUBLISHED' } }),
+      this.prisma.read.enrollment.count(),
+      this.prisma.read.enrollment.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.read.userPoints.aggregate({ _sum: { points: true } }),
+      this.prisma.read.badgeAward.count(),
+      this.prisma.read.learningPath.count(),
+      this.prisma.read.developmentPlan.count(),
+      this.prisma.read.developmentPlan.count({ where: { status: 'ACTIVE' } }),
+      this.prisma.read.performanceReview.aggregate({ _avg: { score: true } }),
     ]);
 
     const completionRate =
@@ -104,28 +96,28 @@ export class AnalyticsService {
   async getCollaboratorDashboard(userId: number) {
     const [myEnrollments, myPDI, myPoints, myBadges, myStreak, myCompetencies, myAssessments] =
       await Promise.all([
-        this.prismaRead.enrollment.findMany({
+        this.prisma.read.enrollment.findMany({
           where: { userId },
           include: { course: { select: { id: true, title: true, workloadHours: true } } },
           orderBy: { enrolledAt: 'desc' },
         }),
-        this.prismaRead.developmentPlan.findMany({
+        this.prisma.read.developmentPlan.findMany({
           where: { userId, status: { in: ['ACTIVE', 'PENDING_APPROVAL'] } },
           include: {
             actions: { select: { status: true, dueDate: true } },
             goals: { select: { progress: true } },
           },
         }),
-        this.prismaRead.userPoints.findUnique({ where: { userId } }),
-        this.prismaRead.badgeAward.count({ where: { userId } }),
-        this.prismaRead.learningStreak.findUnique({ where: { userId } }),
-        this.prismaRead.userCompetency.findMany({
+        this.prisma.read.userPoints.findUnique({ where: { userId } }),
+        this.prisma.read.badgeAward.count({ where: { userId } }),
+        this.prisma.read.learningStreak.findUnique({ where: { userId } }),
+        this.prisma.read.userCompetency.findMany({
           where: { userId },
           include: { competency: { select: { name: true, category: true } } },
           orderBy: { currentLevel: 'desc' },
           take: 8,
         }),
-        this.prismaRead.assessmentAttempt.findMany({
+        this.prisma.read.assessmentAttempt.findMany({
           where: { userId, status: { in: ['PASSED', 'FAILED'] } },
           include: { assessment: { select: { title: true } } },
           orderBy: { startedAt: 'desc' },
@@ -182,7 +174,7 @@ export class AnalyticsService {
   }
 
   async getManagerDashboard(managerId: number) {
-    const team = await this.prismaRead.user.findMany({
+    const team = await this.prisma.read.user.findMany({
       where: { managerId, active: true },
       select: {
         id: true,
@@ -204,27 +196,29 @@ export class AnalyticsService {
       competencyGaps,
       nineBoxData,
     ] = await Promise.all([
-      this.prismaRead.enrollment.count({ where: { userId: { in: teamIds } } }),
-      this.prismaRead.enrollment.count({ where: { userId: { in: teamIds }, status: 'COMPLETED' } }),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.enrollment.count({ where: { userId: { in: teamIds } } }),
+      this.prisma.read.enrollment.count({
+        where: { userId: { in: teamIds }, status: 'COMPLETED' },
+      }),
+      this.prisma.read.developmentPlan.count({
         where: { userId: { in: teamIds }, status: 'ACTIVE' },
       }),
-      this.prismaRead.performanceReview.aggregate({
+      this.prisma.read.performanceReview.aggregate({
         where: { userId: { in: teamIds } },
         _avg: { score: true },
       }),
-      this.prismaRead.developmentPlanAction.count({
+      this.prisma.read.developmentPlanAction.count({
         where: {
           plan: { userId: { in: teamIds } },
           status: { not: 'COMPLETED' },
           dueDate: { lt: new Date() },
         },
       }),
-      this.prismaRead.userCompetency.findMany({
+      this.prisma.read.userCompetency.findMany({
         where: { userId: { in: teamIds }, targetLevel: { not: null } },
         include: { competency: { select: { name: true } } },
       }),
-      this.prismaRead.nineBoxPlacement.findMany({
+      this.prisma.read.nineBoxPlacement.findMany({
         where: { userId: { in: teamIds } },
         include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
       }),
@@ -299,36 +293,36 @@ export class AnalyticsService {
       topDepts,
       learningPathStats,
     ] = await Promise.all([
-      this.prismaRead.user.count({ where: userWhere }),
-      this.prismaRead.user.count({ where: { ...userWhere, hireDate: { gte: from, lte: to } } }),
-      this.prismaRead.user.count({ where: { active: false, exitDate: { gte: from, lte: to } } }),
-      this.prismaRead.enrollment.count({
+      this.prisma.read.user.count({ where: userWhere }),
+      this.prisma.read.user.count({ where: { ...userWhere, hireDate: { gte: from, lte: to } } }),
+      this.prisma.read.user.count({ where: { active: false, exitDate: { gte: from, lte: to } } }),
+      this.prisma.read.enrollment.count({
         where: { user: userWhere, enrolledAt: { gte: from, lte: to } },
       }),
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({
         where: { user: userWhere, status: 'COMPLETED', completedAt: { gte: from, lte: to } },
       }),
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({
         where: { user: userWhere, status: 'CANCELLED', cancelledAt: { gte: from, lte: to } },
       }),
-      this.prismaRead.developmentPlan.count({ where: { user: userWhere, status: 'ACTIVE' } }),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.developmentPlan.count({ where: { user: userWhere, status: 'ACTIVE' } }),
+      this.prisma.read.developmentPlan.count({
         where: { user: userWhere, status: 'COMPLETED', completedAt: { gte: from, lte: to } },
       }),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.developmentPlan.count({
         where: { user: userWhere, status: 'PENDING_APPROVAL' },
       }),
-      this.prismaRead.performanceReview.aggregate({
+      this.prisma.read.performanceReview.aggregate({
         where: { user: userWhere },
         _avg: { score: true },
       }),
-      this.prismaRead.department.findMany({
+      this.prisma.read.department.findMany({
         where: { status: 'ACTIVE' },
         include: { _count: { select: { users: true } } },
         orderBy: { users: { _count: 'desc' } },
         take: 8,
       }),
-      this.prismaRead.learningPathEnrollment.groupBy({
+      this.prisma.read.learningPathEnrollment.groupBy({
         by: ['status'],
         _count: true,
       }),
@@ -340,7 +334,7 @@ export class AnalyticsService {
       totalEnrollments > 0 ? Math.round((completed / totalEnrollments) * 100) : 0;
     const abandonRate = totalEnrollments > 0 ? Math.round((abandoned / totalEnrollments) * 100) : 0;
 
-    const monthlyData = await this.prismaRead.$queryRaw<{ month: string; count: bigint }[]>`
+    const monthlyData = await this.prisma.read.$queryRaw<{ month: string; count: bigint }[]>`
       SELECT TO_CHAR("enrolledAt", 'YYYY-MM') as month, COUNT(*) as count
       FROM "Enrollment"
       WHERE "enrolledAt" >= NOW() - INTERVAL '6 months'
@@ -390,32 +384,32 @@ export class AnalyticsService {
       certificationCount,
       monthlyEnrollments,
     ] = await Promise.all([
-      this.prismaRead.enrollment.groupBy({
+      this.prisma.read.enrollment.groupBy({
         by: ['status'],
         where: enrollWhere,
         _count: true,
       }),
-      this.prismaRead.courseAnalytics.findMany({
+      this.prisma.read.courseAnalytics.findMany({
         include: {
           course: { select: { id: true, title: true, category: true, workloadHours: true } },
         },
         orderBy: { totalCompleted: 'desc' },
         take: 10,
       }),
-      this.prismaRead.enrollment.groupBy({
+      this.prisma.read.enrollment.groupBy({
         by: ['courseId'],
         where: { status: 'COMPLETED' },
         _count: true,
         orderBy: { _count: { courseId: 'desc' } },
         take: 5,
       }),
-      this.prismaRead.assessmentAttempt.aggregate({
+      this.prisma.read.assessmentAttempt.aggregate({
         where: { status: 'PASSED' },
         _avg: { score: true },
         _count: true,
       }),
-      this.prismaRead.certificate.count({ where: { issuedAt: { gte: from, lte: to } } }),
-      this.prismaRead.$queryRaw<{ month: string; count: bigint }[]>`
+      this.prisma.read.certificate.count({ where: { issuedAt: { gte: from, lte: to } } }),
+      this.prisma.read.$queryRaw<{ month: string; count: bigint }[]>`
         SELECT TO_CHAR("enrolledAt", 'YYYY-MM') as month, COUNT(*) as count
         FROM "Enrollment"
         WHERE "enrolledAt" >= NOW() - INTERVAL '12 months'
@@ -423,7 +417,7 @@ export class AnalyticsService {
       `,
     ]);
 
-    const completedEnrollments = await this.prismaRead.enrollment.findMany({
+    const completedEnrollments = await this.prisma.read.enrollment.findMany({
       where: { status: 'COMPLETED' },
       include: { course: { select: { workloadHours: true } } },
     });
@@ -446,27 +440,27 @@ export class AnalyticsService {
     const { from, to } = this.getDateRange(filters.period, filters.fromDate, filters.toDate);
 
     const [byDepartment, byPosition, hired, terminated, onLeave, genderDist] = await Promise.all([
-      this.prismaRead.department.findMany({
+      this.prisma.read.department.findMany({
         where: { status: 'ACTIVE' },
         include: { _count: { select: { users: true } } },
         orderBy: { users: { _count: 'desc' } },
       }),
-      this.prismaRead.position.findMany({
+      this.prisma.read.position.findMany({
         include: { _count: { select: { users: true } } },
         orderBy: { users: { _count: 'desc' } },
         take: 10,
       }),
-      this.prismaRead.user.count({ where: { hireDate: { gte: from, lte: to } } }),
-      this.prismaRead.user.count({ where: { active: false, exitDate: { gte: from, lte: to } } }),
-      this.prismaRead.user.count({ where: { hrStatus: 'ON_LEAVE' } }),
-      this.prismaRead.user.groupBy({
+      this.prisma.read.user.count({ where: { hireDate: { gte: from, lte: to } } }),
+      this.prisma.read.user.count({ where: { active: false, exitDate: { gte: from, lte: to } } }),
+      this.prisma.read.user.count({ where: { hrStatus: 'ON_LEAVE' } }),
+      this.prisma.read.user.groupBy({
         by: ['gender'],
         where: { active: true },
         _count: true,
       }),
     ]);
 
-    const totalActive = await this.prismaRead.user.count({ where: { active: true } });
+    const totalActive = await this.prisma.read.user.count({ where: { active: true } });
     const turnoverRate =
       totalActive > 0 ? Math.round((terminated / totalActive) * 100 * 10) / 10 : 0;
 
@@ -482,7 +476,7 @@ export class AnalyticsService {
     const userWhere: any = {};
     if (filters.departmentId) userWhere.departmentId = filters.departmentId;
 
-    const competencies = await this.prismaRead.userCompetency.findMany({
+    const competencies = await this.prisma.read.userCompetency.findMany({
       where: {
         user: Object.keys(userWhere).length ? userWhere : undefined,
         targetLevel: { not: null },
@@ -527,24 +521,24 @@ export class AnalyticsService {
     if (filters.departmentId) planWhere.user = { departmentId: filters.departmentId };
 
     const [byStatus, avgProgress, overdueCount, completedThisMonth] = await Promise.all([
-      this.prismaRead.developmentPlan.groupBy({
+      this.prisma.read.developmentPlan.groupBy({
         by: ['status'],
         where: planWhere,
         _count: true,
       }),
-      this.prismaRead.developmentPlan.aggregate({
+      this.prisma.read.developmentPlan.aggregate({
         where: { ...planWhere, status: 'ACTIVE' },
         _avg: { overallProgress: true },
       }),
       // FIX: pdiAction → developmentPlanAction
-      this.prismaRead.developmentPlanAction.count({
+      this.prisma.read.developmentPlanAction.count({
         where: {
           plan: planWhere,
           status: { not: 'COMPLETED' },
           dueDate: { lt: new Date() },
         },
       }),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.developmentPlan.count({
         where: {
           ...planWhere,
           status: 'COMPLETED',
@@ -554,7 +548,7 @@ export class AnalyticsService {
     ]);
 
     // FIX: pdiAction → developmentPlanAction; add explicit types
-    const actionStats = await this.prismaRead.developmentPlanAction.groupBy({
+    const actionStats = await this.prisma.read.developmentPlanAction.groupBy({
       by: ['type'],
       where: { plan: planWhere },
       _count: true,
@@ -575,13 +569,13 @@ export class AnalyticsService {
     const userWhere: any = { active: true };
     if (filters.departmentId) userWhere.departmentId = filters.departmentId;
 
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where: userWhere,
       select: { id: true, fullName: true, avatarUrl: true, department: { select: { name: true } } },
     });
     const userIds = users.map(u => u.id);
 
-    const recentEnrollments = await this.prismaRead.enrollment.findMany({
+    const recentEnrollments = await this.prisma.read.enrollment.findMany({
       where: {
         userId: { in: userIds },
         enrolledAt: { gte: new Date(Date.now() - 60 * 24 * 3600 * 1000) },
@@ -592,14 +586,14 @@ export class AnalyticsService {
     const recentIds = new Set(recentEnrollments.map(e => e.userId));
     const inactiveUsers = users.filter(u => !recentIds.has(u.id));
 
-    const overduePDIs = await this.prismaRead.developmentPlan.findMany({
+    const overduePDIs = await this.prisma.read.developmentPlan.findMany({
       where: { userId: { in: userIds }, status: 'ACTIVE', endDate: { lt: new Date() } },
       include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
       take: 20,
     });
 
     // FIX: pdiAction → developmentPlanAction; explicit type in map
-    const criticalActions = await this.prismaRead.developmentPlanAction.findMany({
+    const criticalActions = await this.prisma.read.developmentPlanAction.findMany({
       where: {
         plan: { userId: { in: userIds }, status: 'ACTIVE' },
         status: { not: 'COMPLETED' },
@@ -643,7 +637,7 @@ export class AnalyticsService {
     if (courseId) where.courseId = courseId;
 
     const [analytics, feedbackStats, assessmentStats] = await Promise.all([
-      this.prismaRead.courseAnalytics.findMany({
+      this.prisma.read.courseAnalytics.findMany({
         where,
         include: {
           course: {
@@ -654,14 +648,14 @@ export class AnalyticsService {
         take: courseId ? 1 : 20,
       }),
       courseId
-        ? this.prismaRead.courseFeedback.aggregate({
+        ? this.prisma.read.courseFeedback.aggregate({
             where: { courseId },
             _avg: { rating: true },
             _count: true,
           })
         : null,
       courseId
-        ? this.prismaRead.assessmentAttempt.aggregate({
+        ? this.prisma.read.assessmentAttempt.aggregate({
             where: { assessment: { courseId } },
             _avg: { score: true },
             _count: true,
@@ -674,17 +668,17 @@ export class AnalyticsService {
 
   async getDepartmentAnalytics(departmentId: number) {
     const [users, completions, avgPerf, competencies, activePDIs] = await Promise.all([
-      this.prismaRead.user.count({ where: { departmentId, active: true } }),
-      this.prismaRead.enrollment.count({ where: { status: 'COMPLETED', user: { departmentId } } }),
-      this.prismaRead.performanceReview.aggregate({
+      this.prisma.read.user.count({ where: { departmentId, active: true } }),
+      this.prisma.read.enrollment.count({ where: { status: 'COMPLETED', user: { departmentId } } }),
+      this.prisma.read.performanceReview.aggregate({
         where: { user: { departmentId } },
         _avg: { score: true },
       }),
-      this.prismaRead.userCompetency.findMany({
+      this.prisma.read.userCompetency.findMany({
         where: { user: { departmentId } },
         include: { competency: { select: { name: true, category: true } } },
       }),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.developmentPlan.count({
         where: { user: { departmentId }, status: 'ACTIVE' },
       }),
     ]);
@@ -725,12 +719,12 @@ export class AnalyticsService {
     const userWhere: any = { active: true };
     if (filters.departmentId) userWhere.departmentId = filters.departmentId;
 
-    const users = await this.prismaRead.user.findMany({ where: userWhere, select: { id: true } });
+    const users = await this.prisma.read.user.findMany({ where: userWhere, select: { id: true } });
     const userIds = users.map(u => u.id);
 
     const [activeIn30d, knowledgeInteractions, aiSessions, microProgress, leaderboard] =
       await Promise.all([
-        this.prismaRead.enrollment.findMany({
+        this.prisma.read.enrollment.findMany({
           where: {
             userId: { in: userIds },
             enrolledAt: { gte: new Date(Date.now() - 30 * 24 * 3600 * 1000) },
@@ -738,12 +732,12 @@ export class AnalyticsService {
           select: { userId: true },
           distinct: ['userId'],
         }),
-        this.prismaRead.knowledgeInteraction.count({ where: { userId: { in: userIds } } }),
-        this.prismaRead.aiTutorSession.count({ where: { userId: { in: userIds } } }),
-        this.prismaRead.microLearningProgress.count({
+        this.prisma.read.knowledgeInteraction.count({ where: { userId: { in: userIds } } }),
+        this.prisma.read.aiTutorSession.count({ where: { userId: { in: userIds } } }),
+        this.prisma.read.microLearningProgress.count({
           where: { userId: { in: userIds }, progress: { gte: 1 } },
         }),
-        this.prismaRead.userPoints.findMany({
+        this.prisma.read.userPoints.findMany({
           where: { userId: { in: userIds } },
           orderBy: { points: 'desc' },
           take: 10,
@@ -770,11 +764,11 @@ export class AnalyticsService {
 
   async getTrainingROI() {
     const [impacts, courseAnalytics, totalCerts] = await Promise.all([
-      this.prismaRead.trainingImpact.findMany({ orderBy: { calculatedAt: 'desc' }, take: 20 }),
-      this.prismaRead.courseAnalytics.findMany({
+      this.prisma.read.trainingImpact.findMany({ orderBy: { calculatedAt: 'desc' }, take: 20 }),
+      this.prisma.read.courseAnalytics.findMany({
         include: { course: { select: { id: true, title: true, workloadHours: true } } },
       }),
-      this.prismaRead.certificate.count(),
+      this.prisma.read.certificate.count(),
     ]);
 
     const totalHours = courseAnalytics.reduce(
@@ -815,7 +809,7 @@ export class AnalyticsService {
   }
 
   async getSnapshots(departmentId?: number) {
-    return this.prismaRead.dashboardSnapshot.findMany({
+    return this.prisma.read.dashboardSnapshot.findMany({
       where: departmentId ? { departmentId } : {},
       include: { department: { select: { id: true, name: true } } },
       orderBy: { generatedAt: 'desc' },

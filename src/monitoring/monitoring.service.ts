@@ -10,18 +10,14 @@ import {
   CreateEvalCycleDto,
   MonitoringSubmitEvaluationDto,
 } from './dto';
+import { AuditService } from '../common/services/audit.service';
 
 @Injectable()
 export class MonitoringService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ════════════════════════════════════════════════════
   // OKRs
@@ -37,12 +33,12 @@ export class MonitoringService {
         createdById: userId,
       },
     });
-    await this.audit(userId, 'CREATE', 'OkrCycle', cycle.id, { name: dto.name });
+    await this.audit.logEntity(userId, 'CREATE', 'OkrCycle', cycle.id, { name: dto.name });
     return cycle;
   }
 
   async findAllCycles() {
-    return this.prismaRead.okrCycle.findMany({
+    return this.prisma.read.okrCycle.findMany({
       where: { deletedAt: null },
       orderBy: { startDate: 'desc' },
       include: { _count: { select: { objectives: true } } },
@@ -50,19 +46,19 @@ export class MonitoringService {
   }
 
   async createObjective(dto: CreateObjectiveDto, userId: number) {
-    const cycle = await this.prismaRead.okrCycle.findUnique({
+    const cycle = await this.prisma.read.okrCycle.findUnique({
       where: { id: dto.cycleId },
     });
     if (!cycle) throw new NotFoundException('Ciclo OKR não encontrado');
     const objective = await this.prisma.objective.create({ data: dto });
-    await this.audit(userId, 'CREATE', 'Objective', objective.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'Objective', objective.id, {
       title: dto.title,
     });
     return objective;
   }
 
   async findObjectives(cycleId: string, ownerId?: number) {
-    return this.prismaRead.objective.findMany({
+    return this.prisma.read.objective.findMany({
       where: { cycleId, deletedAt: null, ...(ownerId && { ownerId }) },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -73,7 +69,7 @@ export class MonitoringService {
   }
 
   async createKeyResult(dto: CreateKeyResultDto, userId: number) {
-    const objective = await this.prismaRead.objective.findUnique({
+    const objective = await this.prisma.read.objective.findUnique({
       where: { id: dto.objectiveId },
     });
     if (!objective) throw new NotFoundException('Objectivo não encontrado');
@@ -85,12 +81,12 @@ export class MonitoringService {
         currentValue: dto.startValue || 0,
       },
     });
-    await this.audit(userId, 'CREATE', 'KeyResult', kr.id, { title: dto.title });
+    await this.audit.logEntity(userId, 'CREATE', 'KeyResult', kr.id, { title: dto.title });
     return kr;
   }
 
   async updateKeyResult(id: string, dto: UpdateKeyResultDto, userId: number) {
-    const kr = await this.prismaRead.keyResult.findUnique({ where: { id } });
+    const kr = await this.prisma.read.keyResult.findUnique({ where: { id } });
     if (!kr) throw new NotFoundException('Key Result não encontrado');
 
     const range = kr.targetValue - kr.startValue;
@@ -125,7 +121,7 @@ export class MonitoringService {
 
     // Recalcula progresso do objectivo (média dos KRs)
     await this.recalcObjectiveProgress(kr.objectiveId);
-    await this.audit(userId, 'UPDATE', 'KeyResult', id, {
+    await this.audit.logEntity(userId, 'UPDATE', 'KeyResult', id, {
       newValue: dto.newValue,
       progress,
     });
@@ -133,7 +129,7 @@ export class MonitoringService {
   }
 
   private async recalcObjectiveProgress(objectiveId: string) {
-    const krs = await this.prismaRead.keyResult.findMany({
+    const krs = await this.prisma.read.keyResult.findMany({
       where: { objectiveId, deletedAt: null },
       select: { progress: true },
     });
@@ -162,7 +158,9 @@ export class MonitoringService {
     const indicator = await this.prisma.monitoringIndicator.create({
       data: { ...dto, createdById: userId },
     });
-    await this.audit(userId, 'CREATE', 'MonitoringIndicator', indicator.id, { code: dto.code });
+    await this.audit.logEntity(userId, 'CREATE', 'MonitoringIndicator', indicator.id, {
+      code: dto.code,
+    });
     return indicator;
   }
 
@@ -173,20 +171,20 @@ export class MonitoringService {
       ...(category && { category }),
     };
     const [data, total] = await Promise.all([
-      this.prismaRead.monitoringIndicator.findMany({
+      this.prisma.read.monitoringIndicator.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: { _count: { select: { records: true } } },
       }),
-      this.prismaRead.monitoringIndicator.count({ where }),
+      this.prisma.read.monitoringIndicator.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async addRecord(indicatorId: string, dto: CreateRecordDto, userId: number) {
-    const indicator = await this.prismaRead.monitoringIndicator.findUnique({
+    const indicator = await this.prisma.read.monitoringIndicator.findUnique({
       where: { id: indicatorId },
     });
     if (!indicator) throw new NotFoundException('Indicador não encontrado');
@@ -211,7 +209,7 @@ export class MonitoringService {
         recordedById: userId,
       },
     });
-    await this.audit(userId, 'CREATE', 'MonitoringRecord', record.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'MonitoringRecord', record.id, {
       indicatorId,
       value: dto.value,
       period: dto.period,
@@ -221,10 +219,10 @@ export class MonitoringService {
 
   async getIndicatorHistory(indicatorId: string) {
     const [indicator, records] = await Promise.all([
-      this.prismaRead.monitoringIndicator.findUnique({
+      this.prisma.read.monitoringIndicator.findUnique({
         where: { id: indicatorId },
       }),
-      this.prismaRead.monitoringRecord.findMany({
+      this.prisma.read.monitoringRecord.findMany({
         where: { indicatorId, deletedAt: null },
         orderBy: { date: 'asc' },
         include: { recordedBy: { select: { fullName: true } } },
@@ -248,7 +246,7 @@ export class MonitoringService {
         createdById: userId,
       },
     });
-    await this.audit(userId, 'CREATE', 'EvaluationCycle', cycle.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'EvaluationCycle', cycle.id, {
       name: dto.name,
     });
     return cycle;
@@ -285,7 +283,7 @@ export class MonitoringService {
         metadata: JSON.stringify({ evaluationId: evaluation.id, cycleId }),
       },
     });
-    await this.audit(assignedBy, 'CREATE', 'UserEvaluation', evaluation.id, {
+    await this.audit.logEntity(assignedBy, 'CREATE', 'UserEvaluation', evaluation.id, {
       cycleId,
       userId,
     });
@@ -293,7 +291,7 @@ export class MonitoringService {
   }
 
   async submitEvaluation(id: string, dto: MonitoringSubmitEvaluationDto, evaluatorId: number) {
-    const evaluation = await this.prismaRead.userEvaluation.findUnique({
+    const evaluation = await this.prisma.read.userEvaluation.findUnique({
       where: { id },
     });
     if (!evaluation) throw new NotFoundException('Avaliação não encontrada');
@@ -313,7 +311,7 @@ export class MonitoringService {
         submittedAt: new Date(),
       },
     });
-    await this.audit(evaluatorId, 'UPDATE', 'UserEvaluation', id, {
+    await this.audit.logEntity(evaluatorId, 'UPDATE', 'UserEvaluation', id, {
       status: 'CLOSED',
       score: dto.score,
     });
@@ -330,7 +328,7 @@ export class MonitoringService {
   }
 
   async getMyEvaluations(userId: number) {
-    return this.prismaRead.userEvaluation.findMany({
+    return this.prisma.read.userEvaluation.findMany({
       where: { userId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -341,7 +339,7 @@ export class MonitoringService {
   }
 
   async getEvaluationsToComplete(evaluatorId: number) {
-    return this.prismaRead.userEvaluation.findMany({
+    return this.prisma.read.userEvaluation.findMany({
       where: {
         evaluatorId,
         status: { in: ['PENDING', 'OPEN'] },
@@ -371,29 +369,29 @@ export class MonitoringService {
       pendingEvaluations,
       completedEvaluations,
     ] = await Promise.all([
-      this.prismaRead.okrCycle.count({
+      this.prisma.read.okrCycle.count({
         where: { status: 'ACTIVE', deletedAt: null },
       }),
-      this.prismaRead.objective.count({ where: { deletedAt: null } }),
-      this.prismaRead.objective.count({
+      this.prisma.read.objective.count({ where: { deletedAt: null } }),
+      this.prisma.read.objective.count({
         where: { status: 'COMPLETED', deletedAt: null },
       }),
-      this.prismaRead.monitoringIndicator.count({
+      this.prisma.read.monitoringIndicator.count({
         where: { isActive: true, deletedAt: null },
       }),
-      this.prismaRead.monitoringRecord.count({
+      this.prisma.read.monitoringRecord.count({
         where: { createdAt: { gte: startOfMonth } },
       }),
-      this.prismaRead.evaluationCycle.count({
+      this.prisma.read.evaluationCycle.count({
         where: {
           status: { in: ['OPEN', 'SELF_EVAL', 'MANAGER_EVAL'] },
           deletedAt: null,
         },
       }),
-      this.prismaRead.userEvaluation.count({
+      this.prisma.read.userEvaluation.count({
         where: { status: { in: ['PENDING', 'OPEN'] }, deletedAt: null },
       }),
-      this.prismaRead.userEvaluation.count({
+      this.prisma.read.userEvaluation.count({
         where: { status: 'CLOSED', deletedAt: null },
       }),
     ]);
@@ -419,17 +417,4 @@ export class MonitoringService {
   }
 
   // ─── HELPER ──────────────────────────────────────────
-
-  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
-    // AuditLog.entityId é Int? no schema; os IDs deste módulo são cuid (String),
-    // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
-    await this.prisma.auditLog.create({
-      data: {
-        userId,
-        action,
-        entity,
-        metadata: JSON.stringify({ ...meta, entityId }),
-      },
-    });
-  }
 }

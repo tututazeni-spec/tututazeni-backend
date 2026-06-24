@@ -26,14 +26,6 @@ import {
 export class PerformanceService {
   private readonly logger = new Logger(PerformanceService.name);
 
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private prisma: PrismaService) {}
 
   // ─── CICLOS ───────────────────────────────────────────────────────────────
@@ -66,7 +58,7 @@ export class PerformanceService {
   }
 
   async getCycles() {
-    return this.prismaRead.performanceCycle.findMany({
+    return this.prisma.read.performanceCycle.findMany({
       include: { _count: { select: { reviews: true } } },
       orderBy: { startDate: 'desc' },
     });
@@ -74,7 +66,7 @@ export class PerformanceService {
 
   async getCurrentCycle() {
     const now = new Date();
-    return this.prismaRead.performanceCycle.findFirst({
+    return this.prisma.read.performanceCycle.findFirst({
       where: {
         status: 'ACTIVE',
         startDate: { lte: now },
@@ -133,7 +125,7 @@ export class PerformanceService {
     if (type) where.type = type;
 
     const [data, total] = await Promise.all([
-      this.prismaRead.performanceReview.findMany({
+      this.prisma.read.performanceReview.findMany({
         where,
         skip,
         take: limit,
@@ -146,14 +138,14 @@ export class PerformanceService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.performanceReview.count({ where }),
+      this.prisma.read.performanceReview.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const r = await this.prismaRead.performanceReview.findUnique({
+    const r = await this.prisma.read.performanceReview.findUnique({
       where: { id },
       include: {
         user: {
@@ -385,7 +377,7 @@ export class PerformanceService {
   async getUserGoals(userId: number, cycleId?: number) {
     const where: any = { userId };
     if (cycleId) where.cycleId = cycleId;
-    return this.prismaRead.performanceGoal.findMany({
+    return this.prisma.read.performanceGoal.findMany({
       where,
       orderBy: { createdAt: 'desc' },
     });
@@ -424,7 +416,7 @@ export class PerformanceService {
   async getUserFeedback(userId: number, cycleId?: number) {
     const where: any = { userId, visibleToUser: true };
     if (cycleId) where.cycleId = cycleId;
-    return this.prismaRead.continuousFeedback.findMany({
+    return this.prisma.read.continuousFeedback.findMany({
       where,
       include: {
         giver: {
@@ -531,18 +523,18 @@ export class PerformanceService {
 
   async getUserHistory(userId: number) {
     const [reviews, goals, feedback] = await Promise.all([
-      this.prismaRead.performanceReview.findMany({
+      this.prisma.read.performanceReview.findMany({
         where: { userId },
         include: { cycle: { select: { id: true, name: true, type: true, startDate: true } } },
         orderBy: { createdAt: 'desc' },
         take: 10,
       }),
-      this.prismaRead.performanceGoal.findMany({
+      this.prisma.read.performanceGoal.findMany({
         where: { userId, status: { not: 'COMPLETED' } },
         orderBy: { dueDate: 'asc' },
         take: 5,
       }),
-      this.prismaRead.continuousFeedback.findMany({
+      this.prisma.read.continuousFeedback.findMany({
         where: { userId, visibleToUser: true },
         include: { giver: { select: { id: true, fullName: true, avatarUrl: true } } },
         orderBy: { createdAt: 'desc' },
@@ -558,7 +550,7 @@ export class PerformanceService {
   }
 
   async getTeamPerformance(managerId: number, cycleId?: number) {
-    const team = await this.prismaRead.user.findMany({
+    const team = await this.prisma.read.user.findMany({
       where: { managerId, active: true },
       select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } },
     });
@@ -569,21 +561,21 @@ export class PerformanceService {
         if (cycleId) where.cycleId = cycleId;
 
         const [latestReview, goals, feedbackCount] = await Promise.all([
-          this.prismaRead.performanceReview.findFirst({
+          this.prisma.read.performanceReview.findFirst({
             where: { ...where, type: 'MANAGER' },
             orderBy: { createdAt: 'desc' },
           }),
-          this.prismaRead.performanceGoal.findMany({
+          this.prisma.read.performanceGoal.findMany({
             where: { userId: member.id, ...(cycleId ? { cycleId } : {}) },
           }),
-          this.prismaRead.continuousFeedback.count({ where: { userId: member.id } }),
+          this.prisma.read.continuousFeedback.count({ where: { userId: member.id } }),
         ]);
 
         const avgGoalProgress = goals.length
           ? goals.reduce((s, g) => s + ((g as any).progress ?? 0), 0) / goals.length
           : 0;
 
-        const pendingSelfReview = await this.prismaRead.performanceReview.findFirst({
+        const pendingSelfReview = await this.prisma.read.performanceReview.findFirst({
           where: { ...where, type: 'SELF', status: { in: ['PENDING_SELF'] } },
         });
 
@@ -603,7 +595,7 @@ export class PerformanceService {
   }
 
   async getDepartmentStats(departmentId: number, cycleId?: number) {
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where: { departmentId, active: true },
       select: { id: true },
     });
@@ -613,19 +605,19 @@ export class PerformanceService {
     if (cycleId) where.cycleId = cycleId;
 
     const [stats, categoryDist, avgScore] = await Promise.all([
-      this.prismaRead.performanceReview.aggregate({
+      this.prisma.read.performanceReview.aggregate({
         where,
         _avg: { score: true },
         _min: { score: true },
         _max: { score: true },
         _count: true,
       }),
-      this.prismaRead.performanceReview.groupBy({
+      this.prisma.read.performanceReview.groupBy({
         by: ['category'],
         where: { ...where, category: { not: null } },
         _count: true,
       }),
-      this.prismaRead.performanceGoal.aggregate({
+      this.prisma.read.performanceGoal.aggregate({
         where: { userId: { in: userIds }, ...(cycleId ? { cycleId } : {}) },
         _avg: { progress: true },
       }),
@@ -670,7 +662,7 @@ export class PerformanceService {
   }
 
   async get9Box(cycleId?: number, departmentId?: number) {
-    const placements = await this.prismaRead.nineBoxPlacement.findMany({
+    const placements = await this.prisma.read.nineBoxPlacement.findMany({
       where: { ...(cycleId ? { cycleId } : {}) },
       include: {
         user: {
@@ -710,14 +702,14 @@ export class PerformanceService {
     if (cycleId) where.cycleId = cycleId;
 
     const [totalReviews, byStatus, byCategory, avgScores] = await Promise.all([
-      this.prismaRead.performanceReview.count({ where }),
-      this.prismaRead.performanceReview.groupBy({ by: ['status'], where, _count: true }),
-      this.prismaRead.performanceReview.groupBy({
+      this.prisma.read.performanceReview.count({ where }),
+      this.prisma.read.performanceReview.groupBy({ by: ['status'], where, _count: true }),
+      this.prisma.read.performanceReview.groupBy({
         by: ['category'],
         where: { ...where, category: { not: null } },
         _count: true,
       }),
-      this.prismaRead.performanceReview.aggregate({
+      this.prisma.read.performanceReview.aggregate({
         where,
         _avg: { score: true },
         _min: { score: true },
@@ -725,7 +717,7 @@ export class PerformanceService {
       }),
     ]);
 
-    const topPerformers = await this.prismaRead.performanceReview.findMany({
+    const topPerformers = await this.prisma.read.performanceReview.findMany({
       where: { ...where, score: { not: null } },
       include: {
         user: { select: { id: true, fullName: true, position: { select: { name: true } } } },
@@ -734,11 +726,11 @@ export class PerformanceService {
       take: 5,
     });
 
-    const selfReviews = await this.prismaRead.performanceReview.findMany({
+    const selfReviews = await this.prisma.read.performanceReview.findMany({
       where: { ...where, type: 'SELF', score: { not: null } },
       select: { userId: true, score: true },
     });
-    const mgRviews = await this.prismaRead.performanceReview.findMany({
+    const mgRviews = await this.prisma.read.performanceReview.findMany({
       where: { ...where, type: 'MANAGER', score: { not: null } },
       select: { userId: true, score: true },
     });
@@ -768,7 +760,7 @@ export class PerformanceService {
   }
 
   async getPeriods() {
-    return this.prismaRead.performanceCycle.findMany({
+    return this.prisma.read.performanceCycle.findMany({
       orderBy: { startDate: 'desc' },
       select: { id: true, name: true, type: true, status: true, startDate: true, endDate: true },
     });

@@ -25,14 +25,6 @@ import {
 export class DevelopmentPlansService {
   private readonly logger = new Logger(DevelopmentPlansService.name);
 
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private prisma: PrismaService) {}
 
   // ─── PLANOS ───────────────────────────────────────────────────────────────
@@ -50,7 +42,7 @@ export class DevelopmentPlansService {
     if (overdue) where.endDate = { lt: new Date() };
 
     const [data, total] = await Promise.all([
-      this.prismaRead.developmentPlan.findMany({
+      this.prisma.read.developmentPlan.findMany({
         where,
         skip,
         take: limit,
@@ -70,7 +62,7 @@ export class DevelopmentPlansService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.developmentPlan.count({ where }),
+      this.prisma.read.developmentPlan.count({ where }),
     ]);
 
     const enriched = data.map(p => {
@@ -93,7 +85,7 @@ export class DevelopmentPlansService {
   }
 
   async findOne(id: number) {
-    const plan = await this.prismaRead.developmentPlan.findUnique({
+    const plan = await this.prisma.read.developmentPlan.findUnique({
       where: { id },
       include: {
         user: {
@@ -500,7 +492,7 @@ export class DevelopmentPlansService {
   // ─── DASHBOARD & ANALYTICS ────────────────────────────────────────────────
 
   async getMyPlans(userId: number) {
-    const plans = await this.prismaRead.developmentPlan.findMany({
+    const plans = await this.prisma.read.developmentPlan.findMany({
       where: { userId },
       include: {
         actions: { select: { status: true, dueDate: true } },
@@ -537,19 +529,19 @@ export class DevelopmentPlansService {
 
   async getStats(userId: number) {
     const [total, active, completed, cancelled] = await Promise.all([
-      this.prismaRead.developmentPlan.count({ where: { userId } }),
-      this.prismaRead.developmentPlan.count({ where: { userId, status: 'ACTIVE' } }),
-      this.prismaRead.developmentPlan.count({ where: { userId, status: 'COMPLETED' } }),
-      this.prismaRead.developmentPlan.count({ where: { userId, status: 'CANCELLED' } }),
+      this.prisma.read.developmentPlan.count({ where: { userId } }),
+      this.prisma.read.developmentPlan.count({ where: { userId, status: 'ACTIVE' } }),
+      this.prisma.read.developmentPlan.count({ where: { userId, status: 'COMPLETED' } }),
+      this.prisma.read.developmentPlan.count({ where: { userId, status: 'CANCELLED' } }),
     ]);
 
-    const actionStats = await this.prismaRead.developmentPlanAction.groupBy({
+    const actionStats = await this.prisma.read.developmentPlanAction.groupBy({
       by: ['status'],
       where: { plan: { userId } },
       _count: true,
     });
 
-    const totalXp = await this.prismaRead.userPoints.findUnique({
+    const totalXp = await this.prisma.read.userPoints.findUnique({
       where: { userId },
       select: { points: true },
     });
@@ -563,7 +555,7 @@ export class DevelopmentPlansService {
   }
 
   async getTeamDashboard(managerId: number) {
-    const plans = await this.prismaRead.developmentPlan.findMany({
+    const plans = await this.prisma.read.developmentPlan.findMany({
       where: { managerId, status: { in: ['ACTIVE', 'PENDING_APPROVAL'] } },
       include: {
         user: {

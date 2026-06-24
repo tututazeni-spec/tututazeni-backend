@@ -17,14 +17,6 @@ import {
 
 @Injectable()
 export class AuthService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -67,7 +59,7 @@ export class AuthService {
 
     const hashed = await bcrypt.hash(dto.password, 12);
 
-    const collaboratorRole = await this.prismaRead.role.findFirst({
+    const collaboratorRole = await this.prisma.read.role.findFirst({
       where: { name: 'COLABORADOR' },
     });
 
@@ -126,7 +118,7 @@ export class AuthService {
   }
 
   async me(userId: number) {
-    const user = await this.prismaRead.user.findUnique({
+    const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
       include: {
         role: { include: { permissions: true } },

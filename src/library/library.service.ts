@@ -8,18 +8,14 @@ import {
   CreateRatingDto,
   LibraryCreateCommentDto,
 } from './dto';
+import { AuditService } from '../common/services/audit.service';
 
 @Injectable()
 export class LibraryService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ─── CÓDIGO AUTO-GERADO ──────────────────────────────
 
@@ -38,12 +34,12 @@ export class LibraryService {
     const collection = await this.prisma.libraryCollection.create({
       data: { ...dto, createdById: userId },
     });
-    await this.audit(userId, 'CREATE', 'LibraryCollection', collection.id, dto);
+    await this.audit.logEntity(userId, 'CREATE', 'LibraryCollection', collection.id, dto);
     return collection;
   }
 
   async findAllCollections() {
-    return this.prismaRead.libraryCollection.findMany({
+    return this.prisma.read.libraryCollection.findMany({
       where: { deletedAt: null },
       orderBy: { order: 'asc' },
       include: {
@@ -69,7 +65,7 @@ export class LibraryService {
         uploadedBy: { select: { fullName: true } },
       },
     });
-    await this.audit(userId, 'CREATE', 'LibraryItem', item.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'LibraryItem', item.id, {
       code,
       type: dto.type,
     });
@@ -94,7 +90,7 @@ export class LibraryService {
       }),
     };
     const [data, total] = await Promise.all([
-      this.prismaRead.libraryItem.findMany({
+      this.prisma.read.libraryItem.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -105,13 +101,13 @@ export class LibraryService {
           _count: { select: { comments: true, ratings: true } },
         },
       }),
-      this.prismaRead.libraryItem.count({ where }),
+      this.prisma.read.libraryItem.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findItemById(id: string) {
-    const item = await this.prismaRead.libraryItem.findUnique({
+    const item = await this.prisma.read.libraryItem.findUnique({
       where: { id },
       include: {
         collection: { select: { name: true } },
@@ -144,7 +140,7 @@ export class LibraryService {
         ...(expiresAt && { expiresAt: new Date(expiresAt) }),
       },
     });
-    await this.audit(userId, 'UPDATE', 'LibraryItem', id, dto);
+    await this.audit.logEntity(userId, 'UPDATE', 'LibraryItem', id, dto);
     return updated;
   }
 
@@ -154,7 +150,7 @@ export class LibraryService {
       where: { id },
       data: { deletedAt: new Date() },
     });
-    await this.audit(userId, 'DELETE', 'LibraryItem', id, {
+    await this.audit.logEntity(userId, 'DELETE', 'LibraryItem', id, {
       deletedAt: new Date(),
     });
     return { message: 'Item removido com sucesso' };
@@ -168,7 +164,7 @@ export class LibraryService {
       where: { id },
       data: { isApproved: true, approvedAt: new Date(), reviewedById: userId },
     });
-    await this.audit(userId, 'UPDATE', 'LibraryItem', id, { isApproved: true });
+    await this.audit.logEntity(userId, 'UPDATE', 'LibraryItem', id, { isApproved: true });
     return updated;
   }
 
@@ -199,7 +195,7 @@ export class LibraryService {
         data: { itemId: id, userId, action: 'DOWNLOAD', ipAddress },
       }),
     ]);
-    await this.audit(userId, 'DOWNLOAD', 'LibraryItem', id, { code: item.code });
+    await this.audit.logEntity(userId, 'DOWNLOAD', 'LibraryItem', id, { code: item.code });
     return { fileUrl: item.fileUrl, fileName: item.title };
   }
 
@@ -215,7 +211,7 @@ export class LibraryService {
     });
 
     // Recalcula média de avaliações
-    const ratings = await this.prismaRead.libraryRating.findMany({
+    const ratings = await this.prisma.read.libraryRating.findMany({
       where: { itemId },
       select: { score: true },
     });
@@ -240,7 +236,7 @@ export class LibraryService {
   }
 
   async deleteComment(commentId: string, userId: number) {
-    const comment = await this.prismaRead.libraryComment.findUnique({
+    const comment = await this.prisma.read.libraryComment.findUnique({
       where: { id: commentId },
     });
     if (!comment) throw new NotFoundException('Comentário não encontrado');
@@ -248,7 +244,7 @@ export class LibraryService {
       where: { id: commentId },
       data: { deletedAt: new Date() },
     });
-    await this.audit(userId, 'DELETE', 'LibraryComment', commentId, {});
+    await this.audit.logEntity(userId, 'DELETE', 'LibraryComment', commentId, {});
     return { message: 'Comentário removido' };
   }
 
@@ -270,26 +266,26 @@ export class LibraryService {
       totalViews,
       totalDownloads,
     ] = await Promise.all([
-      this.prismaRead.libraryItem.count({ where: { deletedAt: null } }),
-      this.prismaRead.libraryItem.count({
+      this.prisma.read.libraryItem.count({ where: { deletedAt: null } }),
+      this.prisma.read.libraryItem.count({
         where: { createdAt: { gte: startOfMonth } },
       }),
-      this.prismaRead.libraryCollection.count({ where: { deletedAt: null } }),
-      (this.prismaRead.libraryItem.groupBy as any)({
+      this.prisma.read.libraryCollection.count({ where: { deletedAt: null } }),
+      (this.prisma.read.libraryItem.groupBy as any)({
         by: ['type'],
         where: { deletedAt: null },
         _count: { id: true },
       }),
-      this.prismaRead.libraryItem.count({
+      this.prisma.read.libraryItem.count({
         where: { isApproved: false, deletedAt: null },
       }),
-      this.prismaRead.libraryItem.findMany({
+      this.prisma.read.libraryItem.findMany({
         where: { deletedAt: null },
         orderBy: { views: 'desc' },
         take: 5,
         select: { id: true, code: true, title: true, views: true, type: true },
       }),
-      this.prismaRead.libraryItem.findMany({
+      this.prisma.read.libraryItem.findMany({
         where: { deletedAt: null },
         orderBy: { downloads: 'desc' },
         take: 5,
@@ -301,7 +297,7 @@ export class LibraryService {
           type: true,
         },
       }),
-      this.prismaRead.libraryItem.findMany({
+      this.prisma.read.libraryItem.findMany({
         where: { deletedAt: null, ratingCount: { gt: 0 } },
         orderBy: { rating: 'desc' },
         take: 5,
@@ -313,8 +309,8 @@ export class LibraryService {
           ratingCount: true,
         },
       }),
-      this.prismaRead.libraryAccess.count({ where: { action: 'VIEW' } }),
-      this.prismaRead.libraryAccess.count({ where: { action: 'DOWNLOAD' } }),
+      this.prisma.read.libraryAccess.count({ where: { action: 'VIEW' } }),
+      this.prisma.read.libraryAccess.count({ where: { action: 'DOWNLOAD' } }),
     ]);
 
     return {
@@ -332,17 +328,4 @@ export class LibraryService {
   }
 
   // ─── HELPER ──────────────────────────────────────────
-
-  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
-    // AuditLog.entityId é Int? no schema; os IDs da biblioteca são cuid (String),
-    // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
-    await this.prisma.auditLog.create({
-      data: {
-        userId,
-        action,
-        entity,
-        metadata: JSON.stringify({ ...meta, entityId }),
-      },
-    });
-  }
 }

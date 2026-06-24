@@ -34,14 +34,6 @@ const COURSE_BASE_INCLUDE = {
 export class CoursesService {
   private readonly logger = new Logger(CoursesService.name);
 
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private prisma: PrismaService) {}
 
   // ─── Catálogo ─────────────────────────────────────────────────────────────
@@ -75,21 +67,21 @@ export class CoursesService {
     }
 
     const [data, total] = await Promise.all([
-      this.prismaRead.course.findMany({
+      this.prisma.read.course.findMany({
         where,
         skip,
         take: limit,
         include: COURSE_BASE_INCLUDE,
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.course.count({ where }),
+      this.prisma.read.course.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const course = await this.prismaRead.course.findUnique({
+    const course = await this.prisma.read.course.findUnique({
       where: { id },
       include: {
         ...COURSE_BASE_INCLUDE,
@@ -110,7 +102,7 @@ export class CoursesService {
   }
 
   async getCategories() {
-    const cats = await this.prismaRead.course.groupBy({
+    const cats = await this.prisma.read.course.groupBy({
       by: ['category'],
       where: { category: { not: null }, status: 'PUBLISHED' },
       _count: { id: true },
@@ -351,13 +343,13 @@ export class CoursesService {
     if (dto.targetType === AssignmentTarget.USER) {
       userIds = [dto.targetId];
     } else if (dto.targetType === AssignmentTarget.DEPARTMENT) {
-      const users = await this.prismaRead.user.findMany({
+      const users = await this.prisma.read.user.findMany({
         where: { departmentId: dto.targetId, active: true },
         select: { id: true },
       });
       userIds = users.map(u => u.id);
     } else if (dto.targetType === AssignmentTarget.POSITION) {
-      const users = await this.prismaRead.user.findMany({
+      const users = await this.prisma.read.user.findMany({
         where: { positionId: dto.targetId, active: true },
         select: { id: true },
       });
@@ -408,7 +400,7 @@ export class CoursesService {
   }
 
   async getMyEnrollments(userId: number) {
-    return this.prismaRead.enrollment.findMany({
+    return this.prisma.read.enrollment.findMany({
       where: { userId },
       include: {
         course: {
@@ -431,7 +423,7 @@ export class CoursesService {
   // ─── Progresso ────────────────────────────────────────────────────────────
 
   async markLessonComplete(lessonId: number, userId: number, dto: MarkLessonCompleteDto) {
-    const lesson = await this.prismaRead.lesson.findUnique({
+    const lesson = await this.prisma.read.lesson.findUnique({
       where: { id: lessonId },
       include: { module: { include: { course: true } } },
     });
@@ -506,11 +498,11 @@ export class CoursesService {
   }
 
   async getCourseProgress(courseId: number, userId: number) {
-    const enrollment = await this.prismaRead.enrollment.findFirst({ where: { userId, courseId } });
+    const enrollment = await this.prisma.read.enrollment.findFirst({ where: { userId, courseId } });
     if (!enrollment) return null;
 
     const courseProgress = await this.calculateCourseProgress(courseId, userId);
-    const moduleProgress = await this.prismaRead.courseModule.findMany({
+    const moduleProgress = await this.prisma.read.courseModule.findMany({
       where: { courseId },
       orderBy: { seq: 'asc' },
       include: { lessons: { include: { progress: { where: { userId } } } } },
@@ -571,7 +563,7 @@ export class CoursesService {
   }
 
   async getMyCertificates(userId: number) {
-    return this.prismaRead.certificate.findMany({
+    return this.prisma.read.certificate.findMany({
       where: { userId },
       include: {
         course: { select: { id: true, title: true, thumbnailUrl: true, category: true } },
@@ -581,7 +573,7 @@ export class CoursesService {
   }
 
   async verifyCertificate(validationCode: string) {
-    const cert = await this.prismaRead.certificate.findFirst({
+    const cert = await this.prisma.read.certificate.findFirst({
       where: { validationCode },
       include: {
         course: { select: { id: true, title: true } },
@@ -629,7 +621,7 @@ export class CoursesService {
   }
 
   async submitQuiz(quizId: number, userId: number, dto: SubmitQuizDto) {
-    const quiz = await this.prismaRead.quiz.findUnique({
+    const quiz = await this.prisma.read.quiz.findUnique({
       where: { id: quizId },
       include: { questions: true },
     });
@@ -728,20 +720,20 @@ export class CoursesService {
 
     const [analytics, enrollmentsByStatus, feedbackStats, recentActivity, lessonCompletion] =
       await Promise.all([
-        this.prismaRead.courseAnalytics.findFirst({ where: { courseId } }),
-        this.prismaRead.enrollment.groupBy({ by: ['status'], where: { courseId }, _count: true }),
-        this.prismaRead.courseFeedback.aggregate({
+        this.prisma.read.courseAnalytics.findFirst({ where: { courseId } }),
+        this.prisma.read.enrollment.groupBy({ by: ['status'], where: { courseId }, _count: true }),
+        this.prisma.read.courseFeedback.aggregate({
           where: { courseId },
           _avg: { rating: true },
           _count: true,
         }),
-        this.prismaRead.enrollment.findMany({
+        this.prisma.read.enrollment.findMany({
           where: { courseId },
           include: { user: { select: { id: true, fullName: true } } },
           orderBy: { enrolledAt: 'desc' },
           take: 10,
         }),
-        this.prismaRead.lesson.findMany({
+        this.prisma.read.lesson.findMany({
           where: { module: { courseId } },
           include: {
             progress: { where: { completed: true }, select: { id: true } },
@@ -767,16 +759,16 @@ export class CoursesService {
   async getAdminDashboard() {
     const [totalCourses, published, totalEnrollments, completedEnrollments, overdueEnrollments] =
       await Promise.all([
-        this.prismaRead.course.count(),
-        this.prismaRead.course.count({ where: { status: 'PUBLISHED' } }),
-        this.prismaRead.enrollment.count(),
-        this.prismaRead.enrollment.count({ where: { status: 'COMPLETED' } }),
-        this.prismaRead.enrollment.count({
+        this.prisma.read.course.count(),
+        this.prisma.read.course.count({ where: { status: 'PUBLISHED' } }),
+        this.prisma.read.enrollment.count(),
+        this.prisma.read.enrollment.count({ where: { status: 'COMPLETED' } }),
+        this.prisma.read.enrollment.count({
           where: { deadline: { lt: new Date() }, status: { notIn: ['COMPLETED', 'EXPIRED'] } },
         }),
       ]);
 
-    const topCourses = await this.prismaRead.course.findMany({
+    const topCourses = await this.prisma.read.course.findMany({
       where: { status: 'PUBLISHED' },
       include: { _count: { select: { enrollments: true } } },
       orderBy: { enrollments: { _count: 'desc' } },

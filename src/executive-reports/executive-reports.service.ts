@@ -20,14 +20,6 @@ import {
 export class ExecutiveReportsService {
   private readonly logger = new Logger(ExecutiveReportsService.name);
 
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private prisma: PrismaService) {}
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
@@ -42,7 +34,7 @@ export class ExecutiveReportsService {
     if (period) where.period = period;
 
     const [data, total] = await Promise.all([
-      this.prismaRead.executiveReport.findMany({
+      this.prisma.read.executiveReport.findMany({
         where,
         skip,
         take: limit,
@@ -55,14 +47,14 @@ export class ExecutiveReportsService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.executiveReport.count({ where }),
+      this.prisma.read.executiveReport.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number, userId?: number) {
-    const r = await this.prismaRead.executiveReport.findUnique({
+    const r = await this.prisma.read.executiveReport.findUnique({
       where: { id },
       include: {
         generatedBy: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -501,7 +493,7 @@ export class ExecutiveReportsService {
   // ─── SNAPSHOTS ────────────────────────────────────────────────────────────
 
   async getExecutiveSnapshot(organizationId: number) {
-    return this.prismaRead.executiveSnapshot.findMany({
+    return this.prisma.read.executiveSnapshot.findMany({
       where: { organizationId },
       orderBy: { createdAt: 'desc' },
       take: 12,
@@ -512,12 +504,12 @@ export class ExecutiveReportsService {
 
   async getReportStats() {
     const [total, byStatus, byType] = await Promise.all([
-      this.prismaRead.executiveReport.count(),
-      this.prismaRead.executiveReport.groupBy({ by: ['status'], _count: true }),
-      this.prismaRead.executiveReport.groupBy({ by: ['type'], _count: true }),
+      this.prisma.read.executiveReport.count(),
+      this.prisma.read.executiveReport.groupBy({ by: ['status'], _count: true }),
+      this.prisma.read.executiveReport.groupBy({ by: ['type'], _count: true }),
     ]);
 
-    const recentReports = await this.prismaRead.executiveReport.findMany({
+    const recentReports = await this.prisma.read.executiveReport.findMany({
       where: { status: 'PUBLISHED' },
       include: { generatedBy: { select: { fullName: true } }, metrics: { take: 3 } },
       orderBy: { publishedAt: 'desc' },

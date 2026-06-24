@@ -25,14 +25,6 @@ import {
 export class CompetenciesService {
   private readonly logger = new Logger(CompetenciesService.name);
 
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private prisma: PrismaService) {}
 
   // ─── CATÁLOGO ─────────────────────────────────────────────────────────────
@@ -52,7 +44,7 @@ export class CompetenciesService {
     if (tag) where.tags = { has: tag };
 
     const [data, total] = await Promise.all([
-      this.prismaRead.competency.findMany({
+      this.prisma.read.competency.findMany({
         where,
         skip,
         take: limit,
@@ -61,14 +53,14 @@ export class CompetenciesService {
         },
         orderBy: [{ category: 'asc' }, { name: 'asc' }],
       }),
-      this.prismaRead.competency.count({ where }),
+      this.prisma.read.competency.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const c = await this.prismaRead.competency.findUnique({
+    const c = await this.prisma.read.competency.findUnique({
       where: { id },
       include: {
         courses: { include: { course: { select: { id: true, title: true, status: true } } } },
@@ -102,7 +94,7 @@ export class CompetenciesService {
     await this.findOne(id);
 
     if (dto.name) {
-      const nameConflict = await this.prismaRead.competency.findFirst({
+      const nameConflict = await this.prisma.read.competency.findFirst({
         where: { name: { equals: dto.name, mode: 'insensitive' }, id: { not: id } },
       });
       if (nameConflict) throw new ConflictException(`Nome "${dto.name}" já existe`);
@@ -285,7 +277,7 @@ export class CompetenciesService {
   }
 
   async getUserCompetencies(userId: number) {
-    const competencies = await this.prismaRead.userCompetency.findMany({
+    const competencies = await this.prisma.read.userCompetency.findMany({
       where: { userId },
       include: {
         competency: {
@@ -315,7 +307,7 @@ export class CompetenciesService {
     const where: any = { userId };
     if (competencyId) where.competencyId = competencyId;
 
-    return this.prismaRead.competencyEvolutionLog.findMany({
+    return this.prisma.read.competencyEvolutionLog.findMany({
       where,
       include: { competency: { select: { id: true, name: true, category: true } } },
       orderBy: { createdAt: 'desc' },
@@ -327,11 +319,11 @@ export class CompetenciesService {
 
   async getCompetencyGap(userId: number, positionId: number) {
     const [userComps, required] = await Promise.all([
-      this.prismaRead.userCompetency.findMany({
+      this.prisma.read.userCompetency.findMany({
         where: { userId },
         include: { competency: true },
       }),
-      this.prismaRead.positionCompetency.findMany({
+      this.prisma.read.positionCompetency.findMany({
         where: { positionId },
         include: {
           competency: {
@@ -446,7 +438,7 @@ export class CompetenciesService {
   }
 
   async getEndorsements(userId: number) {
-    return this.prismaRead.competencyEndorsement.findMany({
+    return this.prisma.read.competencyEndorsement.findMany({
       where: { userId },
       include: {
         competency: { select: { id: true, name: true, category: true } },
@@ -471,7 +463,7 @@ export class CompetenciesService {
     if (positionId) userWhere.positionId = positionId;
 
     const [users, competencies] = await Promise.all([
-      this.prismaRead.user.findMany({
+      this.prisma.read.user.findMany({
         where: userWhere,
         select: {
           id: true,
@@ -482,7 +474,7 @@ export class CompetenciesService {
         },
         take: 50,
       }),
-      this.prismaRead.competency.findMany({
+      this.prisma.read.competency.findMany({
         where: { status: 'ACTIVE' },
         select: { id: true, name: true, category: true },
         orderBy: [{ category: 'asc' }, { name: 'asc' }],
@@ -490,7 +482,7 @@ export class CompetenciesService {
     ]);
 
     const userIds = users.map(u => u.id);
-    const allUC = await this.prismaRead.userCompetency.findMany({
+    const allUC = await this.prisma.read.userCompetency.findMany({
       where: { userId: { in: userIds } },
     });
 
@@ -510,7 +502,7 @@ export class CompetenciesService {
   // ─── ANALYTICS & DASHBOARD ───────────────────────────────────────────────
 
   async getTopCompetencies(limit = 10) {
-    const grouped = await this.prismaRead.userCompetency.groupBy({
+    const grouped = await this.prisma.read.userCompetency.groupBy({
       by: ['competencyId'],
       _count: { competencyId: true },
       _avg: { currentLevel: true },
@@ -520,7 +512,7 @@ export class CompetenciesService {
 
     // Enriquecer com nomes
     const ids = grouped.map(g => g.competencyId);
-    const comps = await this.prismaRead.competency.findMany({
+    const comps = await this.prisma.read.competency.findMany({
       where: { id: { in: ids } },
       select: { id: true, name: true, category: true },
     });
@@ -537,13 +529,13 @@ export class CompetenciesService {
     const userWhere: any = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;
 
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where: userWhere,
       select: { id: true, positionId: true },
     });
 
     const totalUsers = users.length;
-    const usersWithComps = await this.prismaRead.userCompetency.findMany({
+    const usersWithComps = await this.prisma.read.userCompetency.findMany({
       where: { userId: { in: users.map(u => u.id) } },
       select: { userId: true, competencyId: true, currentLevel: true, targetLevel: true },
     });
@@ -566,7 +558,7 @@ export class CompetenciesService {
       .slice(0, 5)
       .map(([id]) => parseInt(id));
 
-    const criticalComps = await this.prismaRead.competency.findMany({
+    const criticalComps = await this.prisma.read.competency.findMany({
       where: { id: { in: criticalCompetencyIds } },
       select: { id: true, name: true, category: true },
     });
@@ -583,7 +575,7 @@ export class CompetenciesService {
   }
 
   async getRecommendations(userId: number) {
-    const user = await this.prismaRead.user.findUnique({
+    const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
       select: { positionId: true, departmentId: true },
     });
@@ -600,7 +592,7 @@ export class CompetenciesService {
 
   // Atualização automática após conclusão de curso
   async updateFromCourse(userId: number, courseId: number) {
-    const courseComps = await this.prismaRead.courseCompetency.findMany({
+    const courseComps = await this.prisma.read.courseCompetency.findMany({
       where: { courseId },
     });
 

@@ -63,14 +63,6 @@ function safeM(prisma: any, name: string) {
 
 @Injectable()
 export class LeaderService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -79,7 +71,7 @@ export class LeaderService {
 
   async getLeaders() {
     // role is a RELATION — filter by role.code, not role string
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where: {
         active: true,
         role: { code: { in: ['LIDER', 'DIRECTOR', 'ADMIN', 'RH', 'GESTOR'] } },
@@ -110,7 +102,7 @@ export class LeaderService {
   // ══════════════════════════════════════════════════════
 
   async getLeaderDashboard(leaderId: number) {
-    const leader = await this.prismaRead.user.findUnique({
+    const leader = await this.prisma.read.user.findUnique({
       where: { id: leaderId },
       select: {
         id: true,
@@ -133,12 +125,12 @@ export class LeaderService {
       atRiskCount,
       recentBadges,
     ] = await Promise.all([
-      this.prismaRead.user.count({ where: { managerId: leaderId, active: true } }),
+      this.prisma.read.user.count({ where: { managerId: leaderId, active: true } }),
       // FIX: EM_ANDAMENTO not IN_PROGRESS
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({
         where: { user: { managerId: leaderId }, status: 'EM_ANDAMENTO' },
       }),
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({
         where: {
           user: { managerId: leaderId },
           status: 'CONCLUIDO',
@@ -152,7 +144,7 @@ export class LeaderService {
           _avg: { score: true },
         })
         .catch(() => ({ _avg: { score: null } })),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.developmentPlan.count({
         where: { user: { managerId: leaderId }, status: 'ACTIVE', isTemplate: false },
       }),
       // FIX: leaveRequest doesn't exist → HistoryRecord fallback
@@ -165,7 +157,7 @@ export class LeaderService {
           },
         })
         .catch(() => 0),
-      this.prismaRead.surveyResponse.count({
+      this.prisma.read.surveyResponse.count({
         where: {
           user: { managerId: leaderId },
           createdAt: { gte: new Date(Date.now() - 30 * 86400000) },
@@ -180,7 +172,7 @@ export class LeaderService {
         })
         .then(r => r.length)
         .catch(() => 0),
-      this.prismaRead.badgeAward.findMany({
+      this.prisma.read.badgeAward.findMany({
         where: {
           user: { managerId: leaderId },
           awardedAt: { gte: new Date(Date.now() - 7 * 86400000) },
@@ -227,7 +219,7 @@ export class LeaderService {
       ];
 
     const [members, total] = await Promise.all([
-      this.prismaRead.user.findMany({
+      this.prisma.read.user.findMany({
         where,
         skip,
         take: limit,
@@ -251,7 +243,7 @@ export class LeaderService {
         },
         orderBy: { fullName: 'asc' },
       }),
-      this.prismaRead.user.count({ where }),
+      this.prisma.read.user.count({ where }),
     ]);
 
     const enriched = members.map(u => {
@@ -341,7 +333,7 @@ export class LeaderService {
     if (!member) throw new NotFoundException('Membro não encontrado');
 
     // Verify this member belongs to the leader's team
-    const isTeamMember = await this.prismaRead.user.count({
+    const isTeamMember = await this.prisma.read.user.count({
       where: { id: memberId, managerId: leaderId },
     });
     if (!isTeamMember && leaderId !== memberId) {
@@ -376,7 +368,7 @@ export class LeaderService {
     const where: any = { user: { managerId: leaderId } };
     if (period) where.period = { contains: period };
 
-    const reviews = await this.prismaRead.performanceReview.findMany({
+    const reviews = await this.prisma.read.performanceReview.findMany({
       where,
       // FIX: score not overallScore
       include: {
@@ -601,7 +593,7 @@ export class LeaderService {
   // ══════════════════════════════════════════════════════
 
   async getTalentPipeline(leaderId: number) {
-    const team = await this.prismaRead.user.findMany({
+    const team = await this.prisma.read.user.findMany({
       where: { managerId: leaderId, active: true },
       select: {
         id: true,
@@ -735,7 +727,7 @@ export class LeaderService {
   // ══════════════════════════════════════════════════════
 
   async getLeaderAlerts(leaderId: number) {
-    const team = await this.prismaRead.user.findMany({
+    const team = await this.prisma.read.user.findMany({
       where: { managerId: leaderId, active: true },
       select: { id: true, fullName: true },
     });

@@ -8,14 +8,6 @@ import * as crypto from 'crypto';
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
 
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private prisma: PrismaService) {}
 
   // ─── HASH CHAIN ───────────────────────────────────────────────────────────
@@ -205,7 +197,7 @@ export class AuditService {
 
     // Regra 1: Múltiplos logins falhados (>5 em 5 min)
     if (entry.action === 'FAILED') {
-      const failCount = await this.prismaRead.auditLog.count({
+      const failCount = await this.prisma.read.auditLog.count({
         where: { userId, action: 'FAILED', timestamp: { gte: window5min } },
       });
       if (failCount >= 5) {
@@ -226,7 +218,7 @@ export class AuditService {
 
     // Regra 2: Exportações em massa (>3 em 1h)
     if (entry.action === 'EXPORT') {
-      const exportCount = await this.prismaRead.auditLog.count({
+      const exportCount = await this.prisma.read.auditLog.count({
         where: { userId, action: 'EXPORT', timestamp: { gte: window1h } },
       });
       if (exportCount >= 3) {
@@ -236,7 +228,7 @@ export class AuditService {
 
     // Regra 3: Deleção em massa (>10 em 1h)
     if (entry.action === 'DELETE') {
-      const deleteCount = await this.prismaRead.auditLog.count({
+      const deleteCount = await this.prisma.read.auditLog.count({
         where: { userId, action: 'DELETE', timestamp: { gte: window1h } },
       });
       if (deleteCount >= 10) {
@@ -282,21 +274,21 @@ export class AuditService {
     }
 
     const [data, total] = await Promise.all([
-      this.prismaRead.auditLog.findMany({
+      this.prisma.read.auditLog.findMany({
         where,
         skip,
         take: limit,
         include: { user: { select: { id: true, fullName: true, email: true, avatarUrl: true } } },
         orderBy: { timestamp: 'desc' },
       }),
-      this.prismaRead.auditLog.count({ where }),
+      this.prisma.read.auditLog.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    return this.prismaRead.auditLog.findUnique({
+    return this.prisma.read.auditLog.findUnique({
       where: { id },
       include: { user: { select: { id: true, fullName: true, email: true } } },
     });
@@ -305,7 +297,7 @@ export class AuditService {
   // ─── TIMELINE POR RECURSO ─────────────────────────────────────────────────
 
   async getTimeline(entity: string, entityId: number) {
-    const logs = await this.prismaRead.auditLog.findMany({
+    const logs = await this.prisma.read.auditLog.findMany({
       where: { entity: { contains: entity, mode: 'insensitive' }, entityId },
       include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
       orderBy: { timestamp: 'asc' },
@@ -333,12 +325,12 @@ export class AuditService {
 
   async getUserHistory(userId: number) {
     const [auditLogs, historyRecords] = await Promise.all([
-      this.prismaRead.auditLog.findMany({
+      this.prisma.read.auditLog.findMany({
         where: { userId },
         orderBy: { timestamp: 'desc' },
         take: 100,
       }),
-      this.prismaRead.historyRecord.findMany({
+      this.prisma.read.historyRecord.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
         take: 50,
@@ -369,32 +361,32 @@ export class AuditService {
       failedLogins,
       recentCritical,
     ] = await Promise.all([
-      this.prismaRead.auditLog.count(),
-      this.prismaRead.auditLog.count({ where: { timestamp: { gte: today } } }),
-      this.prismaRead.auditLog.count({ where: { severity: { in: ['CRITICAL', 'HIGH'] } } }),
-      this.prismaRead.auditLog.groupBy({
+      this.prisma.read.auditLog.count(),
+      this.prisma.read.auditLog.count({ where: { timestamp: { gte: today } } }),
+      this.prisma.read.auditLog.count({ where: { severity: { in: ['CRITICAL', 'HIGH'] } } }),
+      this.prisma.read.auditLog.groupBy({
         by: ['action'],
         _count: true,
         orderBy: { _count: { action: 'desc' } },
         take: 10,
       }),
-      this.prismaRead.auditLog.groupBy({
+      this.prisma.read.auditLog.groupBy({
         by: ['entity'],
         _count: true,
         orderBy: { _count: { entity: 'desc' } },
         take: 10,
       }),
-      this.prismaRead.auditLog.groupBy({ by: ['severity'], _count: true }),
-      this.prismaRead.auditLog.groupBy({ by: ['status'], _count: true }),
-      this.prismaRead.auditLog.groupBy({
+      this.prisma.read.auditLog.groupBy({ by: ['severity'], _count: true }),
+      this.prisma.read.auditLog.groupBy({ by: ['status'], _count: true }),
+      this.prisma.read.auditLog.groupBy({
         by: ['userId'],
         where: { userId: { not: null } },
         _count: true,
         orderBy: { _count: { userId: 'desc' } },
         take: 5,
       }),
-      this.prismaRead.auditLog.count({ where: { action: 'FAILED', timestamp: { gte: today } } }),
-      this.prismaRead.auditLog.findMany({
+      this.prisma.read.auditLog.count({ where: { action: 'FAILED', timestamp: { gte: today } } }),
+      this.prisma.read.auditLog.findMany({
         where: { severity: { in: ['CRITICAL', 'HIGH'] }, timestamp: { gte: weekAgo } },
         include: { user: { select: { id: true, fullName: true } } },
         orderBy: { timestamp: 'desc' },
@@ -423,7 +415,7 @@ export class AuditService {
   async verifyIntegrity(
     limit = 100,
   ): Promise<{ valid: boolean; broken: number[]; checked: number }> {
-    const logs = await this.prismaRead.auditLog.findMany({
+    const logs = await this.prisma.read.auditLog.findMany({
       orderBy: { timestamp: 'asc' },
       take: limit,
       select: {
@@ -498,20 +490,20 @@ export class AuditService {
     const hour24 = new Date(Date.now() - 24 * 3600 * 1000);
 
     const [failedLogins, massExports, massDeletes] = await Promise.all([
-      this.prismaRead.auditLog.groupBy({
+      this.prisma.read.auditLog.groupBy({
         by: ['userId'],
         where: { action: 'FAILED', timestamp: { gte: hour1 } },
         _count: true,
         having: { userId: { _count: { gte: 3 } } },
         orderBy: { _count: { userId: 'desc' } },
       }),
-      this.prismaRead.auditLog.groupBy({
+      this.prisma.read.auditLog.groupBy({
         by: ['userId'],
         where: { action: 'EXPORT', timestamp: { gte: hour1 } },
         _count: true,
         having: { userId: { _count: { gte: 3 } } },
       }),
-      this.prismaRead.auditLog.groupBy({
+      this.prisma.read.auditLog.groupBy({
         by: ['userId'],
         where: { action: 'DELETE', timestamp: { gte: hour24 } },
         _count: true,

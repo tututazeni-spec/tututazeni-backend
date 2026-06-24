@@ -9,18 +9,14 @@ import {
   RevokeDto,
   FilterCertificateDto,
 } from './dto';
+import { AuditService } from '../common/services/audit.service';
 
 @Injectable()
 export class CertificationService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ─── GERAÇÃO DE CÓDIGOS ──────────────────────────────
 
@@ -54,14 +50,14 @@ export class CertificationService {
     const template = await this.prisma.certificateTemplate.create({
       data: { ...dto, createdById: userId },
     });
-    await this.audit(userId, 'CREATE', 'CertificateTemplate', template.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'CertificateTemplate', template.id, {
       name: dto.name,
     });
     return template;
   }
 
   async findAllTemplates() {
-    return this.prismaRead.certificateTemplate.findMany({
+    return this.prisma.read.certificateTemplate.findMany({
       where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { certificates: true } } },
@@ -117,7 +113,7 @@ export class CertificationService {
       },
     });
 
-    await this.audit(issuerId, 'CREATE', 'IssuedCertificate', certificate.id, {
+    await this.audit.logEntity(issuerId, 'CREATE', 'IssuedCertificate', certificate.id, {
       code,
       userId: dto.userId,
     });
@@ -153,7 +149,7 @@ export class CertificationService {
       }),
     };
     const [data, total] = await this.prisma.$transaction([
-      this.prismaRead.issuedCertificate.findMany({
+      this.prisma.read.issuedCertificate.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
@@ -163,13 +159,13 @@ export class CertificationService {
           issuedBy: { select: { fullName: true } },
         },
       }),
-      this.prismaRead.issuedCertificate.count({ where }),
+      this.prisma.read.issuedCertificate.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findCertificateById(id: string) {
-    const cert = await this.prismaRead.issuedCertificate.findUnique({
+    const cert = await this.prisma.read.issuedCertificate.findUnique({
       where: { id },
       include: {
         user: { select: { fullName: true, email: true } },
@@ -184,7 +180,7 @@ export class CertificationService {
   // ─── VERIFICAÇÃO PÚBLICA ─────────────────────────────
 
   async verify(verificationCode: string): Promise<any> {
-    const cert = await this.prismaRead.issuedCertificate.findUnique({
+    const cert = await this.prisma.read.issuedCertificate.findUnique({
       where: { verificationCode },
       include: {
         user: { select: { fullName: true } },
@@ -247,7 +243,7 @@ export class CertificationService {
         revokedById: userId,
       },
     });
-    await this.audit(userId, 'UPDATE', 'IssuedCertificate', id, {
+    await this.audit.logEntity(userId, 'UPDATE', 'IssuedCertificate', id, {
       action: 'REVOKE',
       reason: dto.reason,
     });
@@ -269,7 +265,7 @@ export class CertificationService {
       where: { id },
       data: { downloadCount: { increment: 1 } },
     });
-    await this.audit(userId, 'DOWNLOAD', 'IssuedCertificate', id, {
+    await this.audit.logEntity(userId, 'DOWNLOAD', 'IssuedCertificate', id, {
       code: cert.code,
     });
     return { pdfUrl: cert.pdfUrl, publicUrl: cert.publicUrl, title: cert.title };
@@ -292,7 +288,7 @@ export class CertificationService {
     const badge = await this.prisma.digitalBadge.create({
       data: { ...dto, code, createdById: userId },
     });
-    await this.audit(userId, 'CREATE', 'DigitalBadge', badge.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'DigitalBadge', badge.id, {
       code,
       name: dto.name,
     });
@@ -300,7 +296,7 @@ export class CertificationService {
   }
 
   async findAllBadges() {
-    return this.prismaRead.digitalBadge.findMany({
+    return this.prisma.read.digitalBadge.findMany({
       where: { deletedAt: null, isActive: true },
       orderBy: { level: 'asc' },
       include: { _count: { select: { issuances: true } } },
@@ -337,7 +333,7 @@ export class CertificationService {
         issuedById: issuerId,
       },
     });
-    await this.audit(issuerId, 'CREATE', 'BadgeIssuance', issuance.id, {
+    await this.audit.logEntity(issuerId, 'CREATE', 'BadgeIssuance', issuance.id, {
       badgeId: dto.badgeId,
       userId: dto.userId,
     });
@@ -354,7 +350,7 @@ export class CertificationService {
   }
 
   async getMyBadges(userId: number) {
-    return this.prismaRead.badgeIssuance.findMany({
+    return this.prisma.read.badgeIssuance.findMany({
       where: { userId, deletedAt: null, isRevoked: false },
       orderBy: { issuedAt: 'desc' },
       include: { badge: true },
@@ -364,13 +360,13 @@ export class CertificationService {
   async getMyCertificates(userId: number, page = 1, limit = 20) {
     const where = { userId, deletedAt: null };
     const [data, total] = await this.prisma.$transaction([
-      this.prismaRead.issuedCertificate.findMany({
+      this.prisma.read.issuedCertificate.findMany({
         where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { issuedAt: 'desc' },
       }),
-      this.prismaRead.issuedCertificate.count({ where }),
+      this.prisma.read.issuedCertificate.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -393,35 +389,35 @@ export class CertificationService {
       totalVerifications,
       recentCerts,
     ] = await this.prisma.$transaction([
-      this.prismaRead.issuedCertificate.count({ where: { deletedAt: null } }),
-      this.prismaRead.issuedCertificate.count({
+      this.prisma.read.issuedCertificate.count({ where: { deletedAt: null } }),
+      this.prisma.read.issuedCertificate.count({
         where: { issuedAt: { gte: startOfMonth } },
       }),
-      this.prismaRead.issuedCertificate.count({
+      this.prisma.read.issuedCertificate.count({
         where: { isRevoked: true, deletedAt: null },
       }),
-      this.prismaRead.issuedCertificate.count({
+      this.prisma.read.issuedCertificate.count({
         where: { expiresAt: { lt: now }, isRevoked: false, deletedAt: null },
       }),
-      (this.prismaRead.issuedCertificate.groupBy as any)({
+      (this.prisma.read.issuedCertificate.groupBy as any)({
         by: ['type'],
         where: { deletedAt: null },
         _count: { id: true },
       }),
-      this.prismaRead.digitalBadge.count({
+      this.prisma.read.digitalBadge.count({
         where: { deletedAt: null, isActive: true },
       }),
-      this.prismaRead.badgeIssuance.count({
+      this.prisma.read.badgeIssuance.count({
         where: { deletedAt: null, isRevoked: false },
       }),
-      this.prismaRead.certificateTemplate.count({
+      this.prisma.read.certificateTemplate.count({
         where: { deletedAt: null, isActive: true },
       }),
-      this.prismaRead.issuedCertificate.aggregate({
+      this.prisma.read.issuedCertificate.aggregate({
         _sum: { verifyCount: true },
         where: { deletedAt: null },
       }),
-      this.prismaRead.issuedCertificate.findMany({
+      this.prisma.read.issuedCertificate.findMany({
         where: { deletedAt: null },
         orderBy: { issuedAt: 'desc' },
         take: 5,
@@ -447,17 +443,4 @@ export class CertificationService {
   }
 
   // ─── HELPER ──────────────────────────────────────────
-
-  private async audit(userId: number, action: string, entity: string, entityId: string, meta: any) {
-    // AuditLog.entityId é Int? no schema; os IDs deste módulo são cuid (String),
-    // por isso guardamos o id real dentro de metadata (sempre JSON.stringify).
-    await this.prisma.auditLog.create({
-      data: {
-        userId,
-        action,
-        entity,
-        metadata: JSON.stringify({ ...meta, entityId }),
-      },
-    });
-  }
 }

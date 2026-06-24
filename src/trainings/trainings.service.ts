@@ -24,13 +24,6 @@ import {
 @Injectable()
 export class TrainingService {
   private readonly logger = new Logger(TrainingService.name);
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
 
   constructor(private prisma: PrismaService) {}
 
@@ -67,7 +60,7 @@ export class TrainingService {
     }
 
     const [data, total] = await Promise.all([
-      this.prismaRead.training.findMany({
+      this.prisma.read.training.findMany({
         where,
         skip,
         take: limit,
@@ -84,14 +77,14 @@ export class TrainingService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prismaRead.training.count({ where }),
+      this.prisma.read.training.count({ where }),
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number) {
-    const t = await this.prismaRead.training.findUnique({
+    const t = await this.prisma.read.training.findUnique({
       where: { id },
       include: {
         instructor: {
@@ -120,7 +113,7 @@ export class TrainingService {
     if (!t) throw new NotFoundException('Treinamento não encontrado');
 
     // Calcular rating médio
-    const avgRating = await this.prismaRead.trainingRating.aggregate({
+    const avgRating = await this.prisma.read.trainingRating.aggregate({
       where: { trainingId: id },
       _avg: { rating: true },
     });
@@ -220,13 +213,13 @@ export class TrainingService {
   }
 
   async updateSession(id: number, dto: UpdateTrainingSessionDto) {
-    const session = await this.prismaRead.trainingSession.findUnique({ where: { id } });
+    const session = await this.prisma.read.trainingSession.findUnique({ where: { id } });
     if (!session) throw new NotFoundException('Sessão não encontrada');
     return this.prisma.trainingSession.update({ where: { id }, data: dto });
   }
 
   async removeSession(id: number) {
-    const session = await this.prismaRead.trainingSession.findUnique({
+    const session = await this.prisma.read.trainingSession.findUnique({
       where: { id },
       include: { _count: { select: { participants: true } } },
     });
@@ -247,7 +240,7 @@ export class TrainingService {
     });
     if (existing) throw new ConflictException('Utilizador já inscrito nesta sessão');
 
-    const session = await this.prismaRead.trainingSession.findUnique({
+    const session = await this.prisma.read.trainingSession.findUnique({
       where: { id: dto.sessionId },
       include: { _count: { select: { participants: true } } },
     });
@@ -291,7 +284,7 @@ export class TrainingService {
   }
 
   async cancelParticipant(participantId: number, userId: number, reason?: string) {
-    const p = await this.prismaRead.trainingParticipant.findUnique({
+    const p = await this.prisma.read.trainingParticipant.findUnique({
       where: { id: participantId },
     });
     if (!p) throw new NotFoundException('Inscrição não encontrada');
@@ -303,7 +296,7 @@ export class TrainingService {
     });
 
     // Promover o primeiro da lista de espera
-    const nextWaitlist = await this.prismaRead.trainingParticipant.findFirst({
+    const nextWaitlist = await this.prisma.read.trainingParticipant.findFirst({
       where: { sessionId: (p as any).sessionId, status: 'WAITLIST' },
       orderBy: { createdAt: 'asc' },
     });
@@ -328,7 +321,7 @@ export class TrainingService {
   }
 
   async updateParticipantStatus(id: number, dto: TrainingsUpdateParticipantStatusDto) {
-    const p = await this.prismaRead.trainingParticipant.findUnique({ where: { id } });
+    const p = await this.prisma.read.trainingParticipant.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('Participante não encontrado');
 
     const updated = await this.prisma.trainingParticipant.update({
@@ -344,7 +337,7 @@ export class TrainingService {
 
     // Emitir certificado automaticamente se COMPLETED e passou
     if (dto.status === 'COMPLETED') {
-      const session = await this.prismaRead.trainingSession.findUnique({
+      const session = await this.prisma.read.trainingSession.findUnique({
         where: { id: (p as any).sessionId },
         include: { training: true },
       });
@@ -373,12 +366,12 @@ export class TrainingService {
   // ─── PRESENÇA EM MASSA ────────────────────────────────────────────────────
 
   async bulkAttendance(dto: BulkAttendanceDto, registrarId: number) {
-    const session = await this.prismaRead.trainingSession.findUnique({
+    const session = await this.prisma.read.trainingSession.findUnique({
       where: { id: dto.sessionId },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
 
-    const participants = await this.prismaRead.trainingParticipant.findMany({
+    const participants = await this.prisma.read.trainingParticipant.findMany({
       where: { sessionId: dto.sessionId, status: 'REGISTERED' },
     });
 
@@ -452,7 +445,7 @@ export class TrainingService {
   // ─── HISTÓRICO DO UTILIZADOR ──────────────────────────────────────────────
 
   async getMyTrainings(userId: number) {
-    return this.prismaRead.trainingParticipant.findMany({
+    return this.prisma.read.trainingParticipant.findMany({
       where: { userId },
       include: {
         session: {
@@ -479,7 +472,7 @@ export class TrainingService {
   // ─── PARTICIPANTES DE UMA SESSÃO ──────────────────────────────────────────
 
   async getSessionParticipants(sessionId: number) {
-    return this.prismaRead.trainingParticipant.findMany({
+    return this.prisma.read.trainingParticipant.findMany({
       where: { sessionId },
       include: {
         user: {
@@ -502,7 +495,7 @@ export class TrainingService {
   async getAttendanceReport(trainingId: number) {
     const training = (await this.findOne(trainingId)) as any;
 
-    const sessions = await this.prismaRead.trainingSession.findMany({
+    const sessions = await this.prisma.read.trainingSession.findMany({
       where: { trainingId },
       include: {
         participants: {
@@ -564,21 +557,21 @@ export class TrainingService {
 
   async getAdminDashboard() {
     const [total, published, totalParticipants, completed, avgRating] = await Promise.all([
-      this.prismaRead.training.count(),
-      this.prismaRead.training.count({ where: { status: 'PUBLISHED' } }),
-      this.prismaRead.trainingParticipant.count({ where: { status: { not: 'WAITLIST' } } }),
-      this.prismaRead.trainingParticipant.count({ where: { status: 'COMPLETED' } }),
-      this.prismaRead.trainingRating.aggregate({ _avg: { rating: true } }),
+      this.prisma.read.training.count(),
+      this.prisma.read.training.count({ where: { status: 'PUBLISHED' } }),
+      this.prisma.read.trainingParticipant.count({ where: { status: { not: 'WAITLIST' } } }),
+      this.prisma.read.trainingParticipant.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.read.trainingRating.aggregate({ _avg: { rating: true } }),
     ]);
 
-    const topTrainings = await this.prismaRead.training.findMany({
+    const topTrainings = await this.prisma.read.training.findMany({
       where: { status: 'PUBLISHED' },
       include: { _count: { select: { participants: true, ratings: true } } },
       orderBy: { participants: { _count: 'desc' } },
       take: 5,
     });
 
-    const mandatory = await this.prismaRead.training.count({
+    const mandatory = await this.prisma.read.training.count({
       where: { status: 'PUBLISHED', mandatory: true },
     });
 

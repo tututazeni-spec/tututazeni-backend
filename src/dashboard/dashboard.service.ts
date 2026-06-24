@@ -56,14 +56,6 @@ function safeM(prisma: any, name: string) {
 
 @Injectable()
 export class DashboardService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -86,7 +78,7 @@ export class DashboardService {
       competencies,
       notifications,
     ] = await Promise.all([
-      this.prismaRead.user.findUnique({
+      this.prisma.read.user.findUnique({
         where: { id: userId },
         select: {
           id: true,
@@ -98,18 +90,18 @@ export class DashboardService {
           createdAt: true,
         },
       }),
-      this.prismaRead.enrollment.count({ where: { userId, status: 'EM_ANDAMENTO' } }),
-      this.prismaRead.enrollment.count({ where: { userId, status: 'CONCLUIDO' } }),
-      this.prismaRead.enrollment.count({ where: { userId } }),
-      this.prismaRead.userPoints.findUnique({ where: { userId } }),
-      this.prismaRead.badgeAward.findMany({
+      this.prisma.read.enrollment.count({ where: { userId, status: 'EM_ANDAMENTO' } }),
+      this.prisma.read.enrollment.count({ where: { userId, status: 'CONCLUIDO' } }),
+      this.prisma.read.enrollment.count({ where: { userId } }),
+      this.prisma.read.userPoints.findUnique({ where: { userId } }),
+      this.prisma.read.badgeAward.findMany({
         where: { userId },
         include: { badge: true },
         orderBy: { awardedAt: 'desc' },
         take: 3,
       }),
-      this.prismaRead.assessmentAttempt.count({ where: { userId, passed: false } }),
-      this.prismaRead.developmentPlan.findFirst({
+      this.prisma.read.assessmentAttempt.count({ where: { userId, passed: false } }),
+      this.prisma.read.developmentPlan.findFirst({
         where: { userId, status: { in: ['ACTIVE', 'DRAFT'] }, isTemplate: false },
         include: {
           actions: { select: { status: true, progress: true }, take: 20 },
@@ -125,8 +117,8 @@ export class DashboardService {
       this.prisma.evaluationRequest
         .count({ where: { evaluatorId: userId, status: 'PENDING' } })
         .catch(() => 0),
-      this.prismaRead.avatarSession.count({ where: { userId, status: 'COMPLETED' } }),
-      this.prismaRead.userCompetency.findMany({
+      this.prisma.read.avatarSession.count({ where: { userId, status: 'COMPLETED' } }),
+      this.prisma.read.userCompetency.findMany({
         where: { userId },
         include: { competency: { select: { name: true } } },
         take: 5,
@@ -225,14 +217,14 @@ export class DashboardService {
     const since = periodStart(filters.period);
     const prev = prevPeriodStart(filters.period);
 
-    const user = await this.prismaRead.user.findUnique({
+    const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
       select: { departmentId: true, fullName: true },
     });
     const deptId = filters.departmentId ?? user?.departmentId;
     const teamWhere: any = { managerId: userId, active: true };
 
-    const team = await this.prismaRead.user.findMany({
+    const team = await this.prisma.read.user.findMany({
       where: teamWhere,
       select: {
         id: true,
@@ -260,16 +252,16 @@ export class DashboardService {
       avgPerf,
       prevAvgPerf,
     ] = await Promise.all([
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.developmentPlan.count({
         where: { userId: { in: teamIds }, status: 'ACTIVE', isTemplate: false },
       }),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.developmentPlan.count({
         where: { userId: { in: teamIds }, status: 'COMPLETED', isTemplate: false },
       }),
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({
         where: { userId: { in: teamIds }, status: 'EM_ANDAMENTO' },
       }),
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({
         where: { userId: { in: teamIds }, status: 'CONCLUIDO', enrolledAt: { gte: since } },
       }),
       this.prisma.enrollment
@@ -283,10 +275,10 @@ export class DashboardService {
       this.prisma.evaluationRequest
         .count({ where: { evaluatorId: userId, status: 'PENDING' } })
         .catch(() => 0),
-      this.prismaRead.surveyResponse.count({
+      this.prisma.read.surveyResponse.count({
         where: { userId: { in: teamIds }, createdAt: { gte: since } },
       }),
-      this.prismaRead.avatarSession.count({
+      this.prisma.read.avatarSession.count({
         where: { userId: { in: teamIds }, status: 'COMPLETED' },
       }),
       this.prisma.performanceReview
@@ -310,15 +302,15 @@ export class DashboardService {
     const mandatoryRate = mandatory > 0 ? +((mandatoryComplete / mandatory) * 100).toFixed(1) : 100;
 
     // Per-team-member enrichment
-    const memberEnrollments = await this.prismaRead.enrollment.findMany({
+    const memberEnrollments = await this.prisma.read.enrollment.findMany({
       where: { userId: { in: teamIds } },
       select: { userId: true, status: true },
     });
-    const memberPlans = await this.prismaRead.developmentPlan.findMany({
+    const memberPlans = await this.prisma.read.developmentPlan.findMany({
       where: { userId: { in: teamIds }, isTemplate: false, status: { in: ['ACTIVE', 'DRAFT'] } },
       select: { userId: true, status: true, overallProgress: true },
     });
-    const memberPerfReviews = await this.prismaRead.performanceReview.findMany({
+    const memberPerfReviews = await this.prisma.read.performanceReview.findMany({
       where: { userId: { in: teamIds } },
       select: { userId: true, score: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
@@ -402,10 +394,12 @@ export class DashboardService {
       topContentViews,
       trainingHours,
     ] = await Promise.all([
-      this.prismaRead.user.count({ where: { ...deptFilter } }),
-      this.prismaRead.user.count({ where: { active: true, ...deptFilter } }),
-      this.prismaRead.user.count({ where: { createdAt: { gte: since }, ...deptFilter } }),
-      this.prismaRead.user.count({ where: { createdAt: { gte: prev, lt: since }, ...deptFilter } }),
+      this.prisma.read.user.count({ where: { ...deptFilter } }),
+      this.prisma.read.user.count({ where: { active: true, ...deptFilter } }),
+      this.prisma.read.user.count({ where: { createdAt: { gte: since }, ...deptFilter } }),
+      this.prisma.read.user.count({
+        where: { createdAt: { gte: prev, lt: since }, ...deptFilter },
+      }),
       // Course não tem campo `active` — usa `status` (causava 500 em /dashboard/organization)
       (this.prisma as any).course.count({ where: { status: 'PUBLISHED' } }),
       (this.prisma as any).enrollment.count({
@@ -415,10 +409,10 @@ export class DashboardService {
       (this.prisma as any).enrollment.count({
         where: { enrolledAt: { gte: prev, lt: since }, user: deptFilter },
       }),
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({
         where: { status: 'CONCLUIDO', enrolledAt: { gte: since }, user: deptFilter },
       }),
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({
         where: { status: 'CONCLUIDO', enrolledAt: { gte: prev, lt: since }, user: deptFilter },
       }),
       this.prisma.performanceReview
@@ -427,19 +421,19 @@ export class DashboardService {
           _avg: { score: true },
         })
         .catch(() => ({ _avg: { score: null } })),
-      this.prismaRead.engagementSurvey.count({ where: { status: 'ACTIVE' } }),
-      this.prismaRead.surveyResponse.count({
+      this.prisma.read.engagementSurvey.count({ where: { status: 'ACTIVE' } }),
+      this.prisma.read.surveyResponse.count({
         where: { createdAt: { gte: since }, user: deptFilter },
       }),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.developmentPlan.count({
         where: { status: 'ACTIVE', isTemplate: false, user: deptFilter },
       }),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.developmentPlan.count({
         where: { status: 'COMPLETED', isTemplate: false, user: deptFilter },
       }),
-      this.prismaRead.evaluationRequest.count({ where: { status: 'PENDING' } }).catch(() => 0),
+      this.prisma.read.evaluationRequest.count({ where: { status: 'PENDING' } }).catch(() => 0),
       // Dept breakdown
-      this.prismaRead.department.findMany({
+      this.prisma.read.department.findMany({
         select: { id: true, name: true, _count: { select: { users: true } } },
         take: 10,
       }),
@@ -459,7 +453,7 @@ export class DashboardService {
       this.prisma.successionPlan
         .count()
         .then(async count => {
-          const positions = await this.prismaRead.position.count();
+          const positions = await this.prisma.read.position.count();
           return positions > 0 ? +((count / positions) * 100).toFixed(1) : 0;
         })
         .catch(() => 0),
@@ -483,7 +477,7 @@ export class DashboardService {
     // Enrich top content
     const contentIds = (topContentViews as any[]).map((v: any) => v.entityId).filter(Boolean);
     const contents = contentIds.length
-      ? await this.prismaRead.contentAsset.findMany({
+      ? await this.prisma.read.contentAsset.findMany({
           where: { id: { in: contentIds } },
           select: { id: true, title: true, type: true },
         })
@@ -572,11 +566,11 @@ export class DashboardService {
 
     const [users, enrollments, completions, avgScore, prevAvgScore, activePlans] =
       await Promise.all([
-        this.prismaRead.user.count({ where: { departmentId, active: true } }),
-        this.prismaRead.enrollment.count({
+        this.prisma.read.user.count({ where: { departmentId, active: true } }),
+        this.prisma.read.enrollment.count({
           where: { user: { departmentId }, status: 'EM_ANDAMENTO' },
         }),
-        this.prismaRead.enrollment.count({
+        this.prisma.read.enrollment.count({
           where: { user: { departmentId }, status: 'CONCLUIDO', enrolledAt: { gte: since } },
         }),
         this.prisma.performanceReview
@@ -591,7 +585,7 @@ export class DashboardService {
             _avg: { score: true },
           })
           .catch(() => ({ _avg: { score: null } })),
-        this.prismaRead.developmentPlan.count({
+        this.prisma.read.developmentPlan.count({
           where: { status: 'ACTIVE', isTemplate: false, user: { departmentId } },
         }),
       ]);
@@ -628,7 +622,7 @@ export class DashboardService {
       [];
 
     // Personal pending surveys
-    const pendingSurveys = await this.prismaRead.engagementSurvey.count({
+    const pendingSurveys = await this.prisma.read.engagementSurvey.count({
       where: { status: 'ACTIVE', responses: { none: { userId } } },
     });
     if (pendingSurveys > 0)
@@ -688,7 +682,7 @@ export class DashboardService {
 
     // Manager alerts
     if (roleCode && ['ADMIN', 'RH', 'LIDER'].includes(roleCode)) {
-      const teamAtRisk = await this.prismaRead.user.count({
+      const teamAtRisk = await this.prisma.read.user.count({
         where: {
           managerId: userId,
           active: true,
@@ -718,7 +712,7 @@ export class DashboardService {
     const where: any = { active: true };
     if (departmentId) where.departmentId = departmentId;
 
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where,
       include: {
         points: { select: { points: true } },
@@ -743,7 +737,7 @@ export class DashboardService {
   // ══════════════════════════════════════════════════════
 
   async listSnapshots() {
-    return this.prismaRead.dashboardSnapshot.findMany({
+    return this.prisma.read.dashboardSnapshot.findMany({
       orderBy: { generatedAt: 'desc' },
       take: 12,
     });
@@ -769,7 +763,7 @@ export class DashboardService {
     if (!query || query.length < 2) return { users: [], courses: [], skills: [] };
 
     const [users, courses, competencies] = await Promise.all([
-      this.prismaRead.user.findMany({
+      this.prisma.read.user.findMany({
         where: {
           OR: [
             { fullName: { contains: query, mode: 'insensitive' } },
@@ -885,8 +879,8 @@ export class DashboardService {
 
   private async getTalentHealthScore() {
     const [total, withPlan, withSkills, withReview] = await Promise.all([
-      this.prismaRead.user.count({ where: { active: true } }),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({ where: { active: true } }),
+      this.prisma.read.user.count({
         where: {
           active: true,
           developmentPlans: { some: { status: 'ACTIVE', isTemplate: false } },
@@ -895,7 +889,7 @@ export class DashboardService {
       this.prisma.user
         .count({ where: { active: true, legacySkills: { some: {} } } })
         .catch(() => 0),
-      this.prismaRead.user.count({ where: { active: true, performanceReviews: { some: {} } } }),
+      this.prisma.read.user.count({ where: { active: true, performanceReviews: { some: {} } } }),
     ]);
     const pdpCoverage = total > 0 ? (withPlan / total) * 100 : 0;
     const skillRate = total > 0 ? (withSkills / total) * 100 : 0;
@@ -930,7 +924,7 @@ export class DashboardService {
   }
 
   private async getTopTalent(limit = 5) {
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where: { active: true },
       include: {
         points: { select: { points: true } },

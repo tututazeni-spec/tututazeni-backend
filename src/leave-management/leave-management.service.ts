@@ -73,14 +73,6 @@ function addWorkDays(start: Date, days: number, holidays: string[] = ANGOLA_HOLI
 
 @Injectable()
 export class LeaveManagementService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -129,7 +121,7 @@ export class LeaveManagementService {
   }
 
   private async getApplicablePolicy(userId: number): Promise<any | null> {
-    const user = await this.prismaRead.user.findUnique({
+    const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
     });
     if (!user) return null;
@@ -176,7 +168,7 @@ export class LeaveManagementService {
     }
 
     const [data, total] = await Promise.all([
-      this.prismaRead.leaveRequest.findMany({
+      this.prisma.read.leaveRequest.findMany({
         where,
         skip,
         take: limit,
@@ -190,14 +182,14 @@ export class LeaveManagementService {
           documents: true,
         },
       }),
-      this.prismaRead.leaveRequest.count({ where }),
+      this.prisma.read.leaveRequest.count({ where }),
     ]);
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async findOne(id: number) {
-    const r = await this.prismaRead.leaveRequest.findUnique({
+    const r = await this.prisma.read.leaveRequest.findUnique({
       where: { id },
       include: {
         user: { select: { id: true, fullName: true, email: true } },
@@ -214,7 +206,7 @@ export class LeaveManagementService {
   }
 
   async getPendingApprovals(approverId: number) {
-    return this.prismaRead.leaveRequest.findMany({
+    return this.prisma.read.leaveRequest.findMany({
       where: {
         status: LeaveStatus.PENDING,
         approvals: { some: { approverId, decidedAt: null } },
@@ -338,7 +330,7 @@ export class LeaveManagementService {
     }
 
     // Verificar se este aprovador tem uma aprovação pendente
-    const approval = await this.prismaRead.leaveApproval.findFirst({
+    const approval = await this.prisma.read.leaveApproval.findFirst({
       where: { requestId, approverId, decidedAt: null },
     });
     if (!approval) throw new ForbiddenException('Não tem permissão para aprovar este pedido');
@@ -386,7 +378,7 @@ export class LeaveManagementService {
     }
 
     // APPROVE — verificar se todos os níveis aprovaram
-    const remainingApprovals = await this.prismaRead.leaveApproval.count({
+    const remainingApprovals = await this.prisma.read.leaveApproval.count({
       where: { requestId, decidedAt: null },
     });
 
@@ -483,12 +475,12 @@ export class LeaveManagementService {
   // ══════════════════════════════════════════════════════════════════
 
   async getBalance(userId: number) {
-    const balances = await this.prismaRead.leaveBalance.findMany({
+    const balances = await this.prisma.read.leaveBalance.findMany({
       where: { userId },
     });
 
     // Saldo futuro: incluir pedidos pendentes/aprovados futuros
-    const future = await this.prismaRead.leaveRequest.findMany({
+    const future = await this.prisma.read.leaveRequest.findMany({
       where: {
         userId,
         status: { in: [LeaveStatus.PENDING, LeaveStatus.APPROVED] },
@@ -580,7 +572,7 @@ export class LeaveManagementService {
     const results: any[] = [];
 
     for (const lt of leaveTypes) {
-      const balances = await this.prismaRead.leaveBalance.findMany({
+      const balances = await this.prisma.read.leaveBalance.findMany({
         where: { leaveType: lt.code },
       });
       for (const b of balances) {
@@ -602,7 +594,7 @@ export class LeaveManagementService {
   async getBalanceHistory(userId: number, leaveTypeCode?: string) {
     const where: any = { userId };
     if (leaveTypeCode) where.leaveTypeCode = leaveTypeCode;
-    return this.prismaRead.leaveBalanceHistory.findMany({
+    return this.prisma.read.leaveBalanceHistory.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       take: 50,
@@ -635,7 +627,7 @@ export class LeaveManagementService {
       };
     if (filters.leaveTypeCode) where.leaveTypeCode = filters.leaveTypeCode;
 
-    const requests = await this.prismaRead.leaveRequest.findMany({
+    const requests = await this.prisma.read.leaveRequest.findMany({
       where,
       include: {
         user: { select: { id: true, fullName: true } },
@@ -662,14 +654,14 @@ export class LeaveManagementService {
     const end = new Date(endDate);
 
     // FIX: buscar departamento do user antes do Promise.all (User não tem relação employee)
-    const currentUser = await this.prismaRead.user.findUnique({
+    const currentUser = await this.prisma.read.user.findUnique({
       where: { id: userId },
       select: { departmentId: true },
     });
     const userDeptId = currentUser?.departmentId;
 
     const [teamConflicts, userConflicts] = await Promise.all([
-      this.prismaRead.leaveRequest.findMany({
+      this.prisma.read.leaveRequest.findMany({
         where: {
           status: { in: [LeaveStatus.APPROVED, LeaveStatus.PENDING] },
           user: userDeptId ? { departmentId: userDeptId } : {},
@@ -678,7 +670,7 @@ export class LeaveManagementService {
         },
         include: { user: { select: { id: true, fullName: true } } },
       }),
-      this.prismaRead.leaveRequest.findMany({
+      this.prisma.read.leaveRequest.findMany({
         where: {
           userId,
           status: { in: [LeaveStatus.APPROVED, LeaveStatus.PENDING] },
@@ -714,10 +706,10 @@ export class LeaveManagementService {
       where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
 
     const [allRequests, pending, approved, activeNow] = await Promise.all([
-      this.prismaRead.leaveRequest.findMany({ where }),
-      this.prismaRead.leaveRequest.count({ where: { ...where, status: LeaveStatus.PENDING } }),
-      this.prismaRead.leaveRequest.count({ where: { ...where, status: LeaveStatus.APPROVED } }),
-      this.prismaRead.leaveRequest.count({
+      this.prisma.read.leaveRequest.findMany({ where }),
+      this.prisma.read.leaveRequest.count({ where: { ...where, status: LeaveStatus.PENDING } }),
+      this.prisma.read.leaveRequest.count({ where: { ...where, status: LeaveStatus.APPROVED } }),
+      this.prisma.read.leaveRequest.count({
         where: { status: LeaveStatus.APPROVED, startDate: { lte: now }, endDate: { gte: now } },
       }),
     ]);
@@ -761,7 +753,7 @@ export class LeaveManagementService {
     if (department)
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
-    const records = await this.prismaRead.leaveRequest.findMany({
+    const records = await this.prisma.read.leaveRequest.findMany({
       where,
       include: {
         user: { select: { id: true, fullName: true } },
@@ -835,7 +827,7 @@ export class LeaveManagementService {
 
     // 3. Saldo disponível
     if (leaveType.annualLimit) {
-      const balance = await this.prismaRead.leaveBalance.findUnique({
+      const balance = await this.prisma.read.leaveBalance.findUnique({
         where: { userId_leaveType: { userId, leaveType: leaveType } },
       });
       const available = balance?.balance ?? 0;
@@ -863,7 +855,7 @@ export class LeaveManagementService {
     }
 
     // 5. Conflito próprio
-    const selfConflict = await this.prismaRead.leaveRequest.findFirst({
+    const selfConflict = await this.prisma.read.leaveRequest.findFirst({
       where: {
         userId,
         status: { in: [LeaveStatus.PENDING, LeaveStatus.APPROVED] },
@@ -883,7 +875,7 @@ export class LeaveManagementService {
 
   private async createApprovalFlow(requestId: number, userId: number, policy: any) {
     const levels = policy?.approvalLevels ?? 1;
-    const user = await this.prismaRead.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.read.user.findUnique({ where: { id: userId } });
     const managerId = (user as any)?.employee?.managerId;
 
     const approvals: any[] = [];
@@ -893,7 +885,7 @@ export class LeaveManagementService {
 
     // Nível 2+: RH (buscar por role)
     if (levels >= 2) {
-      const hr = await this.prismaRead.user.findFirst({ where: { roleCode: 'RH' } as any });
+      const hr = await this.prisma.read.user.findFirst({ where: { roleCode: 'RH' } as any });
       if (hr) approvals.push({ requestId, approverId: hr.id, level: 2 });
     }
 
@@ -915,7 +907,7 @@ export class LeaveManagementService {
   }
 
   private async escalateApproval(requestId: number, currentLevel: number) {
-    const nextApproval = await this.prismaRead.leaveApproval.findFirst({
+    const nextApproval = await this.prisma.read.leaveApproval.findFirst({
       where: { requestId, level: { gt: currentLevel }, decidedAt: null },
     });
     if (nextApproval) {

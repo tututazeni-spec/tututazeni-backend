@@ -31,14 +31,6 @@ export {
 
 @Injectable()
 export class RolesPermissionsService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -46,7 +38,7 @@ export class RolesPermissionsService {
   // ══════════════════════════════════════════════════════
 
   async findAll() {
-    const roles = await this.prismaRead.role.findMany({
+    const roles = await this.prisma.read.role.findMany({
       include: {
         permissions: { select: { id: true, name: true, action: true, subject: true } },
         _count: { select: { users: true } },
@@ -64,7 +56,7 @@ export class RolesPermissionsService {
   }
 
   async findOne(id: number) {
-    const r = await this.prismaRead.role.findUnique({
+    const r = await this.prisma.read.role.findUnique({
       where: { id },
       include: {
         permissions: true,
@@ -281,10 +273,10 @@ export class RolesPermissionsService {
 
   async getPermissionMatrix() {
     const [roles, permissions] = await Promise.all([
-      this.prismaRead.role.findMany({
+      this.prisma.read.role.findMany({
         include: { permissions: { select: { id: true, name: true } } },
       }),
-      this.prismaRead.permission.findMany({ orderBy: [{ subject: 'asc' }, { action: 'asc' }] }),
+      this.prisma.read.permission.findMany({ orderBy: [{ subject: 'asc' }, { action: 'asc' }] }),
     ]);
 
     // Group permissions by subject
@@ -338,7 +330,7 @@ export class RolesPermissionsService {
   // ══════════════════════════════════════════════════════
 
   async simulatePermission(dto: SimulatePermissionDto) {
-    const user = await this.prismaRead.user.findUnique({
+    const user = await this.prisma.read.user.findUnique({
       where: { id: dto.userId },
       include: { role: { include: { permissions: true } } },
     });
@@ -435,7 +427,7 @@ export class RolesPermissionsService {
     if (!template) return { applied: 0, message: 'Sem template para esta posição' };
 
     // Apply role to all users in this position
-    const users = await this.prismaRead.user.findMany({
+    const users = await this.prisma.read.user.findMany({
       where: { positionId, active: true },
       select: { id: true },
     });
@@ -455,10 +447,10 @@ export class RolesPermissionsService {
 
   async getGovernanceStats() {
     const [roles, permissions, usersWithoutRole, deniedLogs, usersPerRole] = await Promise.all([
-      this.prismaRead.role.count(),
-      this.prismaRead.permission.count(),
-      this.prismaRead.user.count({ where: { active: true, roleId: null } }),
-      this.prismaRead.auditLog.count({ where: { action: 'ACCESS_DENIED' } }).catch(() => 0),
+      this.prisma.read.role.count(),
+      this.prisma.read.permission.count(),
+      this.prisma.read.user.count({ where: { active: true, roleId: null } }),
+      this.prisma.read.auditLog.count({ where: { action: 'ACCESS_DENIED' } }).catch(() => 0),
       this.prisma.user
         .groupBy({
           by: ['roleId'],
@@ -467,7 +459,7 @@ export class RolesPermissionsService {
         })
         .then(async rows => {
           const ids = rows.map(r => r.roleId).filter(Boolean);
-          const rols = await this.prismaRead.role.findMany({
+          const rols = await this.prisma.read.role.findMany({
             where: { id: { in: ids } },
             select: { id: true, name: true, code: true },
           });
@@ -479,7 +471,7 @@ export class RolesPermissionsService {
     ]);
 
     // Roles with no users (unused)
-    const unusedRoles = await this.prismaRead.role.findMany({
+    const unusedRoles = await this.prisma.read.role.findMany({
       where: { users: { none: {} } },
       select: { id: true, name: true, code: true },
     });
@@ -511,7 +503,7 @@ export class RolesPermissionsService {
 
   async getUsersWithRole(roleId: number) {
     await this.findOne(roleId);
-    return this.prismaRead.user.findMany({
+    return this.prisma.read.user.findMany({
       where: { roleId, active: true },
       select: {
         id: true,
@@ -526,7 +518,7 @@ export class RolesPermissionsService {
   }
 
   async getUsersWithoutRole() {
-    return this.prismaRead.user.findMany({
+    return this.prisma.read.user.findMany({
       where: { active: true, roleId: null },
       select: {
         id: true,

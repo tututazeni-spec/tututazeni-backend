@@ -62,14 +62,6 @@ function buildNarrative(roi: number, benefit: number, cost: number, completions:
 
 @Injectable()
 export class RoiImpactService {
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   */
-  private get prismaRead(): PrismaService {
-    return (this.prisma as any).db ?? this.prisma;
-  }
-
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -101,9 +93,9 @@ export class RoiImpactService {
       turnoverAfter,
       competencyEvolution,
     ] = await Promise.all([
-      this.prismaRead.enrollment.count({ where }),
-      this.prismaRead.enrollment.count({ where: { ...where, status: 'CONCLUIDO' } }),
-      this.prismaRead.enrollment.count({ where: { ...where, status: 'EM_ANDAMENTO' } }),
+      this.prisma.read.enrollment.count({ where }),
+      this.prisma.read.enrollment.count({ where: { ...where, status: 'CONCLUIDO' } }),
+      this.prisma.read.enrollment.count({ where: { ...where, status: 'EM_ANDAMENTO' } }),
       (this.prisma as any).assessmentAttempt
         .aggregate({
           where: { createdAt: { gte: range.gte, lte: range.lte } },
@@ -136,8 +128,8 @@ export class RoiImpactService {
         })
         .catch(() => ({ _avg: { score: null } })),
       // Turnover proxy: inactive users created before period
-      this.prismaRead.user.count({ where: { active: false, createdAt: { lt: range.gte } } }),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({ where: { active: false, createdAt: { lt: range.gte } } }),
+      this.prisma.read.user.count({
         where: { active: false, updatedAt: { gte: range.gte, lte: range.lte } },
       }),
       // Competency evolution
@@ -255,12 +247,14 @@ export class RoiImpactService {
       totalEnroll,
     ] = await Promise.all([
       // L1
-      this.prismaRead.surveyResponse.count({ where: { createdAt: { gte: range.gte }, ...uWhere } }),
+      this.prisma.read.surveyResponse.count({
+        where: { createdAt: { gte: range.gte }, ...uWhere },
+      }),
       this.prisma.surveyResponse
         .aggregate({ where: { createdAt: { gte: range.gte }, ...uWhere }, _avg: { score: true } })
         .catch(() => ({ _avg: { score: null } })),
       // L2
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({
         where: { status: 'CONCLUIDO', enrolledAt: { gte: range.gte, lte: range.lte }, ...uWhere },
       }),
       (this.prisma as any).assessmentAttempt
@@ -292,13 +286,13 @@ export class RoiImpactService {
       this.prisma.performanceReview
         .aggregate({ where: { createdAt: { lt: range.gte }, ...uWhere }, _avg: { score: true } })
         .catch(() => ({ _avg: { score: null } })),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({
         where: {
           active: true,
           ...(filter.departmentId ? { departmentId: filter.departmentId } : {}),
         },
       }),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({
         where: {
           active: false,
           updatedAt: { gte: range.gte },
@@ -306,7 +300,7 @@ export class RoiImpactService {
         },
       }),
       // L5
-      this.prismaRead.enrollment.count({
+      this.prisma.read.enrollment.count({
         where: { enrolledAt: { gte: range.gte, lte: range.lte }, ...uWhere },
       }),
     ]);
@@ -370,7 +364,7 @@ export class RoiImpactService {
         totalCompletions: completions,
         totalHours: Math.round((lessonHours * 15) / 60),
         highPotentials: 0,
-        newHiresThisYear: await this.prismaRead.user.count({
+        newHiresThisYear: await this.prisma.read.user.count({
           where: { createdAt: { gte: new Date(new Date().getFullYear(), 0, 1) }, active: true },
         }),
       },
@@ -386,12 +380,12 @@ export class RoiImpactService {
     const uWhere = filter.departmentId ? { departmentId: filter.departmentId } : {};
 
     const [total, active, leftInPeriod, prevLeft] = await Promise.all([
-      this.prismaRead.user.count({ where: uWhere }),
-      this.prismaRead.user.count({ where: { ...uWhere, active: true } }),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({ where: uWhere }),
+      this.prisma.read.user.count({ where: { ...uWhere, active: true } }),
+      this.prisma.read.user.count({
         where: { ...uWhere, active: false, updatedAt: { gte: range.gte, lte: range.lte } },
       }),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({
         where: {
           ...uWhere,
           active: false,
@@ -453,8 +447,8 @@ export class RoiImpactService {
           _avg: { score: true },
         })
         .catch(() => ({ _avg: { score: null } })),
-      this.prismaRead.performanceReview.count({ where: { score: { gte: 4 }, ...uWhere } }),
-      this.prismaRead.performanceReview.count({ where: { score: { lt: 2.5 }, ...uWhere } }),
+      this.prisma.read.performanceReview.count({ where: { score: { gte: 4 }, ...uWhere } }),
+      this.prisma.read.performanceReview.count({ where: { score: { lt: 2.5 }, ...uWhere } }),
     ]);
 
     const perfBefore = before._avg.score ?? 0;
@@ -463,7 +457,7 @@ export class RoiImpactService {
     const liftPct = perfBefore > 0 && lift !== null ? pct(lift, perfBefore) : null;
 
     // Monetise lift: each 1pt lift ≈ 2% productivity gain × avg daily value × 250 workdays
-    const totalUsers = await this.prismaRead.user.count({
+    const totalUsers = await this.prisma.read.user.count({
       where: {
         active: true,
         ...(filter.departmentId ? { departmentId: filter.departmentId } : {}),
@@ -514,10 +508,10 @@ export class RoiImpactService {
       avgCompetencyBefore,
       avgCompetencyAfter,
     ] = await Promise.all([
-      this.prismaRead.enrollment.count({ where }),
-      this.prismaRead.enrollment.count({ where: { ...where, status: 'CONCLUIDO' } }),
-      this.prismaRead.enrollment.count({ where: { ...where, status: 'EM_ANDAMENTO' } }),
-      this.prismaRead.enrollment.count({ where: { ...where, status: 'CANCELADO' } }),
+      this.prisma.read.enrollment.count({ where }),
+      this.prisma.read.enrollment.count({ where: { ...where, status: 'CONCLUIDO' } }),
+      this.prisma.read.enrollment.count({ where: { ...where, status: 'EM_ANDAMENTO' } }),
+      this.prisma.read.enrollment.count({ where: { ...where, status: 'CANCELADO' } }),
       // Top courses by completions
       this.prisma.enrollment
         .groupBy({
@@ -529,7 +523,7 @@ export class RoiImpactService {
         })
         .then(async rows => {
           const ids = rows.map(r => r.courseId);
-          const courses = await this.prismaRead.course.findMany({
+          const courses = await this.prisma.read.course.findMany({
             where: { id: { in: ids } },
             select: { id: true, title: true, category: true },
           });
@@ -586,8 +580,8 @@ export class RoiImpactService {
   // ══════════════════════════════════════════════════════
 
   async simulateWhatIf(dto: WhatIfDto) {
-    const currentEnrollments = await this.prismaRead.enrollment.count();
-    const currentCompleted = await this.prismaRead.enrollment.count({
+    const currentEnrollments = await this.prisma.read.enrollment.count();
+    const currentCompleted = await this.prisma.read.enrollment.count({
       where: { status: 'CONCLUIDO' },
     });
 
@@ -704,20 +698,20 @@ export class RoiImpactService {
   async getProgramLibrary(filter: RoiFilterDto = {}) {
     const range = dateRange(filter);
 
-    const courseStats = await this.prismaRead.enrollment.groupBy({
+    const courseStats = await this.prisma.read.enrollment.groupBy({
       by: ['courseId'],
       where: { enrolledAt: { gte: range.gte, lte: range.lte } },
       _count: { id: true },
     });
 
-    const completedStats = await this.prismaRead.enrollment.groupBy({
+    const completedStats = await this.prisma.read.enrollment.groupBy({
       by: ['courseId'],
       where: { status: 'CONCLUIDO', enrolledAt: { gte: range.gte, lte: range.lte } },
       _count: { id: true },
     });
 
     const courseIds = courseStats.map(c => c.courseId);
-    const courses = await this.prismaRead.course.findMany({
+    const courses = await this.prisma.read.course.findMany({
       where: { id: { in: courseIds } },
       select: { id: true, title: true, category: true, workloadHours: true, mandatory: true },
     });
