@@ -488,12 +488,14 @@ export class CrmFundersService {
   // ─── HELPER PRIVADO ──────────────────────────────────
 
   private async updateFunderTotals(funderId: string) {
-    const grants = await this.prisma.fundingGrant.findMany({
+    // A base de dados soma as colunas (aggregate) em vez de trazer todas as
+    // linhas para memória só para somar — custo constante, não O(nº grants).
+    const { _sum } = await this.prisma.fundingGrant.aggregate({
       where: { funderId, deletedAt: null },
-      select: { amount: true, disbursed: true, status: true },
+      _sum: { amount: true, disbursed: true },
     });
-    const totalCommitted = grants.reduce((s, g) => s + g.amount, 0);
-    const totalReceived = grants.reduce((s, g) => s + g.disbursed, 0);
+    const totalCommitted = _sum.amount ?? 0;
+    const totalReceived = _sum.disbursed ?? 0;
     await this.prisma.funder.update({
       where: { id: funderId },
       data: {
