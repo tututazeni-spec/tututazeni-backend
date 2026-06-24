@@ -74,6 +74,8 @@ const mockPrisma = {
   auditLog: { create: jest.fn() },
   notificationLog: { create: jest.fn() },
   $transaction: jest.fn(),
+  // generateCode usa nextval() de uma sequência Postgres via raw query
+  $queryRawUnsafe: jest.fn().mockResolvedValue([{ nextval: 1n }]),
 };
 
 const mockAudit = {
@@ -117,6 +119,10 @@ describe('CrmFundersService', () => {
 
       const result = await service.create({ name: 'União Europeia', type: 'BILATERAL' as any }, 1);
       expect(result.code).toBe('FIN-00001');
+      // código gerado via sequência atómica (nextval), não via "ler último +1"
+      expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledWith(
+        expect.stringContaining("nextval('funder_code_seq')"),
+      );
       expect(mockPrisma.auditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ entity: 'Funder', action: 'CREATE' }),
@@ -378,10 +384,22 @@ describe('CrmFundersService', () => {
   });
 
   describe('getOverdueReports', () => {
-    it('deve retornar relatórios em atraso', async () => {
+    it('deve retornar relatórios em atraso paginados', async () => {
       mockPrisma.funderReport.findMany.mockResolvedValue([{ id: 'rep-1' }]);
+      mockPrisma.funderReport.count.mockResolvedValue(1);
       const result = await service.getOverdueReports();
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
+      expect(result).toMatchObject({ total: 1, page: 1, limit: 20, totalPages: 1 });
+    });
+
+    it('deve aplicar o tecto de paginação (limit máximo 100)', async () => {
+      mockPrisma.funderReport.findMany.mockResolvedValue([]);
+      mockPrisma.funderReport.count.mockResolvedValue(0);
+      const result = await service.getOverdueReports(1, 5000);
+      expect(result.limit).toBe(100);
+      expect(mockPrisma.funderReport.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 100, skip: 0 }),
+      );
     });
   });
 
