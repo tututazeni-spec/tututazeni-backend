@@ -36,7 +36,7 @@ export class CrmBeneficiariesController {
   // ─── CRUD ────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar beneficiário' })
   create(@Body() dto: CreateBeneficiaryDto, @CurrentUser() user: any) {
     return this.service.create(dto, user.id);
@@ -49,7 +49,7 @@ export class CrmBeneficiariesController {
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Dashboard do CRM de beneficiários' })
   getDashboard() {
     return this.service.getDashboard();
@@ -78,7 +78,7 @@ export class CrmBeneficiariesController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Actualizar beneficiário' })
   update(@Param('id') id: string, @Body() dto: UpdateBeneficiaryDto, @CurrentUser() user: any) {
     return this.service.update(id, dto, user.id);

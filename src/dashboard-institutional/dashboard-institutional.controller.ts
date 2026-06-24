@@ -30,28 +30,28 @@ export class DashboardInstitutionalController {
   // ─── LEITURA / AGREGAÇÃO ─────────────────────────────
 
   @Get('summary')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Resumo executivo (KPIs globais)' })
   getExecutiveSummary() {
     return this.service.getExecutiveSummary();
   }
 
   @Get('growth-trend')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Tendência de crescimento (N meses)' })
   getGrowthTrend(@Query('months', new DefaultValuePipe(12), ParseIntPipe) months: number) {
     return this.service.getGrowthTrend(months);
   }
 
   @Get('geographic')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Distribuição geográfica' })
   getGeographicDistribution() {
     return this.service.getGeographicDistribution();
   }
 
   @Get('alerts')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Alertas institucionais' })
   getAlerts() {
     return this.service.getAlerts();
@@ -67,14 +67,14 @@ export class DashboardInstitutionalController {
   }
 
   @Get('snapshots')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Listar snapshots (histórico de KPIs)' })
   findAllSnapshots(@Query() filters: FilterSnapshotDto) {
     return this.service.findAllSnapshots(filters);
   }
 
   @Get('snapshots/compare')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Comparar dois períodos' })
   compareSnapshots(
     @Query('period1') period1: string,

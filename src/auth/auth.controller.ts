@@ -1,5 +1,7 @@
 import { Controller, Post, Get, Body, Patch, UseGuards, Req, Res, HttpCode } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from './enums/role.enum';
 import { AuthService } from './auth.service';
 import {
   LoginDto,
@@ -42,11 +44,13 @@ export class AuthController {
     return result;
   }
 
+  // Criação de contas é uma operação administrativa: apenas ADMIN e RH.
+  // NÃO define o cookie de sessão — quem cria a conta não deve ficar autenticado
+  // como o novo utilizador. Os tokens devolvidos servem só para entrega segura.
   @Post('register')
-  async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.register(dto);
-    res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
-    return result;
+  @Roles(Role.ADMIN, Role.RH)
+  register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
   }
 
   @Post('refresh')
@@ -71,11 +75,14 @@ export class AuthController {
     return this.authService.changePassword(req.user.id, dto);
   }
 
+  // Recuperação de password: quem a usa NÃO está autenticado — tem de ser pública.
+  @Public()
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
 
+  @Public()
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);

@@ -54,7 +54,7 @@ export class CertificationController {
   // ─── DASHBOARD ───────────────────────────────────────
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Dashboard de Certificação' })
   getDashboard() {
     return this.service.getDashboard();
@@ -63,14 +63,14 @@ export class CertificationController {
   // ─── CERTIFICADOS ────────────────────────────────────
 
   @Post('certificates')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Emitir certificado' })
   issueCertificate(@Body() dto: IssueCertificateDto, @CurrentUser() user: any) {
     return this.service.issueCertificate(dto, user.id);
   }
 
   @Get('certificates')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Listar certificados (paginado)' })
   findAllCertificates(@Query() filters: FilterCertificateDto) {
     return this.service.findAllCertificates(filters);
@@ -121,7 +121,7 @@ export class CertificationController {
   }
 
   @Post('badges/issue')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Atribuir badge a utilizador' })
   issueBadge(@Body() dto: IssueBadgeDto, @CurrentUser() user: any) {
     return this.service.issueBadge(dto, user.id);

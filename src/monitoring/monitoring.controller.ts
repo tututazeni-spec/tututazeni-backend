@@ -36,7 +36,7 @@ export class MonitoringController {
   // ─── DASHBOARD ───────────────────────────────────────
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Dashboard de Monitoria e Avaliação' })
   getDashboard() {
     return this.service.getDashboard();
@@ -45,7 +45,7 @@ export class MonitoringController {
   // ─── OKRs ────────────────────────────────────────────
 
   @Post('okr/cycles')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar ciclo OKR' })
   createOkrCycle(@Body() dto: CreateOkrCycleDto, @CurrentUser() user: any) {
     return this.service.createOkrCycle(dto, user.id);
@@ -88,7 +88,7 @@ export class MonitoringController {
   // ─── INDICADORES ─────────────────────────────────────
 
   @Post('indicators')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar indicador de monitoria' })
   createIndicator(@Body() dto: CreateIndicatorDto, @CurrentUser() user: any) {
     return this.service.createIndicator(dto, user.id);
@@ -105,7 +105,7 @@ export class MonitoringController {
   }
 
   @Post('indicators/:id/records')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Registar valor do indicador' })
   addRecord(@Param('id') id: string, @Body() dto: CreateRecordDto, @CurrentUser() user: any) {
     return this.service.addRecord(id, dto, user.id);
@@ -127,7 +127,7 @@ export class MonitoringController {
   }
 
   @Post('evaluation/cycles/:cycleId/assign')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Atribuir avaliação' })
   assignEvaluation(
     @Param('cycleId') cycleId: string,

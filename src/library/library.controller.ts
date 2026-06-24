@@ -35,7 +35,7 @@ export class LibraryController {
   // ─── COLECÇÕES ───────────────────────────────────────
 
   @Post('collections')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar colecção' })
   createCollection(@Body() dto: CreateCollectionDto, @CurrentUser() user: any) {
     return this.service.createCollection(dto, user.id);
@@ -50,7 +50,7 @@ export class LibraryController {
   // ─── DASHBOARD ───────────────────────────────────────
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Dashboard da Biblioteca' })
   getDashboard() {
     return this.service.getDashboard();
@@ -59,7 +59,7 @@ export class LibraryController {
   // ─── ITENS ───────────────────────────────────────────
 
   @Post('items')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Adicionar item à biblioteca' })
   createItem(@Body() dto: CreateItemDto, @CurrentUser() user: any) {
     return this.service.createItem(dto, user.id);
@@ -78,7 +78,7 @@ export class LibraryController {
   }
 
   @Put('items/:id')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Actualizar item' })
   updateItem(@Param('id') id: string, @Body() dto: UpdateItemDto, @CurrentUser() user: any) {
     return this.service.updateItem(id, dto, user.id);

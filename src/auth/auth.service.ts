@@ -34,7 +34,9 @@ export class AuthService {
     // Apenas role+permissions — unit/department/position não são necessários
     // para autenticar e custavam 3 queries extra por login. O perfil completo
     // vem de GET /auth/me ou do JwtStrategy nos pedidos seguintes.
-    const user = await this.prismaRead.user.findUnique({
+    // NOTA: lê do PRIMARY (this.prisma), nunca da réplica — a validação de
+    // credenciais tem de ver sempre a password mais recente (read-after-write).
+    const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: {
         role: { include: { permissions: true } },
@@ -94,7 +96,9 @@ export class AuthService {
   }
 
   async changePassword(userId: number, dto: ChangePasswordDto) {
-    const user = await this.prismaRead.user.findUnique({ where: { id: userId } });
+    // PRIMARY: comparamos a password atual antes de escrever a nova; a réplica
+    // poderia devolver um hash desatualizado durante o replication lag.
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException();
 
     if (!user.password) throw new UnauthorizedException('Sem password definida');
@@ -140,12 +144,21 @@ export class AuthService {
   }
 
   private async generateTokens(userId: number, email: string) {
+    // Segredo do refresh obrigatório: sem fallback inseguro. Um valor por defeito
+    // conhecido (ex.: 'refresh-secret') permitiria forjar refresh tokens válidos.
+    const refreshSecret = process.env.JWT_REFRESH_SECRET;
+    if (!refreshSecret) {
+      throw new Error(
+        'JWT_REFRESH_SECRET não está definido — recusado por segurança. Configure a variável de ambiente.',
+      );
+    }
+
     const payload = { sub: userId, email };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, { expiresIn: '15m' }),
       this.jwtService.signAsync(payload, {
         expiresIn: '7d',
-        secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret',
+        secret: refreshSecret,
       }),
     ]);
     return { accessToken, refreshToken };

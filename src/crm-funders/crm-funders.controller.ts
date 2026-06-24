@@ -38,7 +38,7 @@ export class CrmFundersController {
   // ─── CRUD FINANCIADORES ──────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar financiador' })
   create(@Body() dto: CreateFunderDto, @CurrentUser() user: any) {
     return this.service.create(dto, user.id);
@@ -51,14 +51,14 @@ export class CrmFundersController {
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Dashboard CRM Financiadores' })
   getDashboard() {
     return this.service.getDashboard();
   }
 
   @Get('overdue-reports')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Relatórios em atraso' })
   getOverdueReports() {
     return this.service.getOverdueReports();
@@ -78,7 +78,7 @@ export class CrmFundersController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Actualizar financiador' })
   update(@Param('id') id: string, @Body() dto: UpdateFunderDto, @CurrentUser() user: any) {
     return this.service.update(id, dto, user.id);
@@ -95,7 +95,7 @@ export class CrmFundersController {
   // ─── GRANTS ──────────────────────────────────────────
 
   @Post(':id/grants')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar grant (financiamento)' })
   createGrant(@Param('id') id: string, @Body() dto: CreateGrantDto, @CurrentUser() user: any) {
     return this.service.createGrant(id, dto, user.id);
@@ -125,7 +125,7 @@ export class CrmFundersController {
   // ─── DESEMBOLSOS ─────────────────────────────────────
 
   @Post('grants/:grantId/disbursements')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Registar desembolso' })
   addDisbursement(
     @Param('grantId') grantId: string,
@@ -160,7 +160,7 @@ export class CrmFundersController {
   // ─── RELATÓRIOS ──────────────────────────────────────
 
   @Post(':id/reports')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar relatório para financiador' })
   createReport(
     @Param('id') id: string,

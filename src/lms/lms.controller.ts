@@ -36,7 +36,7 @@ export class LmsController {
   // ─── PERCURSOS ───────────────────────────────────────
 
   @Post('paths')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar percurso de aprendizagem' })
   createPath(@Body() dto: LmsCreateLearningPathDto, @CurrentUser() user: any) {
     return this.service.createPath(dto, user.id);
@@ -49,7 +49,7 @@ export class LmsController {
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Dashboard do LMS' })
   getDashboard() {
     return this.service.getLmsDashboard();
@@ -80,7 +80,7 @@ export class LmsController {
   }
 
   @Put('paths/:id')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Actualizar percurso' })
   updatePath(
     @Param('id') id: string,
@@ -117,7 +117,7 @@ export class LmsController {
   // ─── SESSÕES AO VIVO ─────────────────────────────────
 
   @Post('sessions')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar sessão ao vivo' })
   createSession(@Body() dto: CreateLiveSessionDto, @CurrentUser() user: any) {
     return this.service.createSession(dto, user.id);

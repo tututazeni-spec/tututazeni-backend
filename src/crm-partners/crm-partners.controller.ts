@@ -36,7 +36,7 @@ export class CrmPartnersController {
   // ─── CRUD ────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar parceiro' })
   create(@Body() dto: CreatePartnerDto, @CurrentUser() user: any) {
     return this.service.create(dto, user.id);
@@ -49,21 +49,21 @@ export class CrmPartnersController {
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Dashboard CRM Parceiros' })
   getDashboard() {
     return this.service.getDashboard();
   }
 
   @Get('expiring-contracts')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Contratos a expirar nos próximos N dias' })
   getExpiringContracts(@Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number) {
     return this.service.getExpiringContracts(days);
   }
 
   @Get('overdue-milestones')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Milestones em atraso' })
   getOverdueMilestones() {
     return this.service.getOverdueMilestones();
@@ -83,7 +83,7 @@ export class CrmPartnersController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Actualizar parceiro' })
   update(@Param('id') id: string, @Body() dto: UpdatePartnerDto, @CurrentUser() user: any) {
     return this.service.update(id, dto, user.id);
@@ -122,7 +122,7 @@ export class CrmPartnersController {
   // ─── MILESTONES ──────────────────────────────────────
 
   @Post(':id/milestones')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar milestone do parceiro' })
   addMilestone(@Param('id') id: string, @Body() dto: CreateMilestoneDto, @CurrentUser() user: any) {
     return this.service.addMilestone(id, dto, user.id);

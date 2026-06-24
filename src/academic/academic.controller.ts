@@ -65,7 +65,7 @@ export class AcademicController {
   // ─── PROGRAMAS ───────────────────────────────────────
 
   @Post('programs')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar programa académico' })
   createProgram(@Body() dto: CreateProgramDto, @CurrentUser() user: any) {
     return this.service.createProgram(dto, user.id);
@@ -78,7 +78,7 @@ export class AcademicController {
   }
 
   @Get('report')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Relatório académico' })
   getReport() {
     return this.service.getAcademicReport();
@@ -93,7 +93,7 @@ export class AcademicController {
   // ─── TURMAS ──────────────────────────────────────────
 
   @Post('classes')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Criar turma' })
   createClass(@Body() dto: CreateClassDto, @CurrentUser() user: any) {
     return this.service.createClass(dto, user.id);
@@ -108,7 +108,7 @@ export class AcademicController {
   }
 
   @Put('enrollments/:id/approve')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Aprovar matrícula' })
   approveEnrollment(@Param('id') id: string, @CurrentUser() user: any) {
     return this.service.approveEnrollment(id, user.id);
@@ -127,7 +127,7 @@ export class AcademicController {
   // ─── NOTAS ───────────────────────────────────────────
 
   @Post('grades')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Lançar nota' })
   gradeEnrollment(@Body() dto: GradeEnrollmentDto, @CurrentUser() user: any) {
     return this.service.gradeEnrollment(dto, user.id);
@@ -148,7 +148,7 @@ export class AcademicController {
   }
 
   @Get('transcript/:userId')
-  @Roles('ADMIN', 'RH', 'MANAGER')
+  @Roles('ADMIN', 'RH', 'GESTOR')
   @ApiOperation({ summary: 'Transcrição de um aluno' })
   getTranscript(@Param('userId', ParseIntPipe) userId: number) {
     return this.service.getTranscript(userId);
