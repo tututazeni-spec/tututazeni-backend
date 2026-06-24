@@ -20,6 +20,7 @@ import {
   RevokeDto,
   FilterCertificateDto,
 } from './dto';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Certificação Digital')
 @ApiBearerAuth()
@@ -39,7 +40,7 @@ export class CertificationController {
   // ─── TEMPLATES ───────────────────────────────────────
 
   @Post('templates')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar template de certificado' })
   createTemplate(@Body() dto: CreateTemplateDto, @CurrentUser() user: any) {
     return this.service.createTemplate(dto, user.id);
@@ -54,7 +55,7 @@ export class CertificationController {
   // ─── DASHBOARD ───────────────────────────────────────
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard de Certificação' })
   getDashboard() {
     return this.service.getDashboard();
@@ -63,14 +64,14 @@ export class CertificationController {
   // ─── CERTIFICADOS ────────────────────────────────────
 
   @Post('certificates')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Emitir certificado' })
   issueCertificate(@Body() dto: IssueCertificateDto, @CurrentUser() user: any) {
     return this.service.issueCertificate(dto, user.id);
   }
 
   @Get('certificates')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar certificados (paginado)' })
   findAllCertificates(@Query() filters: FilterCertificateDto) {
     return this.service.findAllCertificates(filters);
@@ -99,7 +100,7 @@ export class CertificationController {
   }
 
   @Put('certificates/:id/revoke')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Revogar certificado' })
   revoke(@Param('id') id: string, @Body() dto: RevokeDto, @CurrentUser() user: any) {
     return this.service.revokeCertificate(id, dto, user.id);
@@ -108,7 +109,7 @@ export class CertificationController {
   // ─── BADGES ──────────────────────────────────────────
 
   @Post('badges')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar badge digital' })
   createBadge(@Body() dto: CreateBadgeDto, @CurrentUser() user: any) {
     return this.service.createBadge(dto, user.id);
@@ -121,7 +122,7 @@ export class CertificationController {
   }
 
   @Post('badges/issue')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Atribuir badge a utilizador' })
   issueBadge(@Body() dto: IssueBadgeDto, @CurrentUser() user: any) {
     return this.service.issueBadge(dto, user.id);

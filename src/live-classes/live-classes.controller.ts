@@ -22,6 +22,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Live Classes')
 @ApiBearerAuth()
@@ -59,14 +60,14 @@ export class LiveClassesController {
   }
 
   @Get(':id/attendance-report')
-  @Roles('ADMIN', 'RH', 'LIDER')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Relatório de presença' })
   attendanceReport(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAttendanceReport(id);
   }
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar aula ao vivo' })
   create(@Body() dto: CreateLiveClassDto) {
     return this.svc.create(dto);
@@ -95,7 +96,7 @@ export class LiveClassesController {
   }
 
   @Post(':id/post-evaluation')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar avaliação pós-aula' })
   createPostEval(@Param('id', ParseIntPipe) id: number) {
     return this.svc.createPostEvaluation(id);
@@ -108,14 +109,14 @@ export class LiveClassesController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atualizar aula' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLiveClassDto) {
     return this.svc.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover aula' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);

@@ -6,6 +6,7 @@ import { AnalyticsFilterDto } from './analytics.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Analytics & Intelligence')
 @ApiBearerAuth()
@@ -17,7 +18,7 @@ export class AnalyticsController {
   // ── Overview (C-Level) ────────────────────────────────────────────────────
 
   @Get('overview')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'KPIs globais da organização (C-Level / Board)' })
   overview() {
     return this.svc.getOrganizationOverview();
@@ -32,14 +33,14 @@ export class AnalyticsController {
   }
 
   @Get('manager')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard do gestor (equipa, 9-box, alertas, gaps)' })
   managerDashboard(@CurrentUser() user: any) {
     return this.svc.getManagerDashboard(user.id);
   }
 
   @Get('hr')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Dashboard RH (people analytics, PDI, turnover, learning)' })
   hrDashboard(@Query() filters: AnalyticsFilterDto) {
     return this.svc.getHRDashboard(filters);
@@ -48,49 +49,49 @@ export class AnalyticsController {
   // ── Módulos específicos ───────────────────────────────────────────────────
 
   @Get('learning')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Analytics de aprendizagem (cursos, conclusões, certificados)' })
   learning(@Query() filters: AnalyticsFilterDto) {
     return this.svc.getLearningAnalytics(filters);
   }
 
   @Get('people')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'People analytics (headcount, turnover, diversidade)' })
   people(@Query() filters: AnalyticsFilterDto) {
     return this.svc.getPeopleAnalytics(filters);
   }
 
   @Get('pdi')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Analytics de PDIs (adopção, progresso, acções, tipos)' })
   pdi(@Query() filters: AnalyticsFilterDto) {
     return this.svc.getPDIAnalytics(filters);
   }
 
   @Get('competency-gaps')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Mapa de gaps de competências (actual vs desejado)' })
   competencyGaps(@Query() filters: AnalyticsFilterDto) {
     return this.svc.getCompetencyGapAnalytics(filters);
   }
 
   @Get('engagement')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Métricas de engagement (activos 30d, leaderboard, AI, knowledge)' })
   engagement(@Query() filters: AnalyticsFilterDto) {
     return this.svc.getEngagementMetrics(filters);
   }
 
   @Get('risks')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Alertas de risco (inactivos, PDIs atrasados, acções críticas)' })
   risks(@Query() filters: AnalyticsFilterDto) {
     return this.svc.getRiskAlerts(filters);
   }
 
   @Get('roi')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'ROI de treinamento (horas investidas, impacto, certificados)' })
   roi() {
     return this.svc.getTrainingROI();
@@ -99,14 +100,14 @@ export class AnalyticsController {
   // ── Curso específico ──────────────────────────────────────────────────────
 
   @Get('courses')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Performance de todos os cursos' })
   courses() {
     return this.svc.getCoursePerformance();
   }
 
   @Get('courses/:courseId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Performance de um curso específico (feedback, assessment)' })
   courseDetail(@Param('courseId', ParseIntPipe) courseId: number) {
     return this.svc.getCoursePerformance(courseId);
@@ -115,7 +116,7 @@ export class AnalyticsController {
   // ── Departamento ──────────────────────────────────────────────────────────
 
   @Get('departments/:departmentId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Analytics de departamento específico' })
   department(@Param('departmentId', ParseIntPipe) departmentId: number) {
     return this.svc.getDepartmentAnalytics(departmentId);
@@ -124,7 +125,7 @@ export class AnalyticsController {
   // ── Snapshots ─────────────────────────────────────────────────────────────
 
   @Get('snapshots')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Histórico de snapshots executivos' })
   @ApiQuery({ name: 'departmentId', required: false })
   snapshots(@Query('departmentId') departmentId?: string) {
@@ -132,7 +133,7 @@ export class AnalyticsController {
   }
 
   @Post('snapshots/generate')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Gerar snapshot executivo agora' })
   @ApiQuery({ name: 'departmentId', required: false })
   generateSnapshot(@Query('departmentId') departmentId?: string) {

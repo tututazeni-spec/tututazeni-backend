@@ -37,6 +37,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Role } from '../auth/enums/role.enum';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get()
-  @Roles('ADMIN', 'RH', 'LIDER')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Listar colaboradores com filtros avançados' })
   @ApiResponse({ status: 200, description: 'Lista paginada de colaboradores' })
   findAll(@Query() filters: EmployeeFilterDto) {
@@ -60,14 +61,14 @@ export class EmployeesController {
   }
 
   @Get('headcount')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Estatísticas de headcount (dashboard)' })
   getHeadcount() {
     return this.svc.getHeadcountStats();
   }
 
   @Get('export')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Exportar colaboradores (CSV/JSON)' })
   async exportAll(@Query() filters: EmployeeFilterDto) {
     const data = await this.svc.exportEmployees(filters);
@@ -75,7 +76,7 @@ export class EmployeesController {
   }
 
   @Get('org-chart')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'Organograma hierárquico' })
   @ApiQuery({ name: 'rootId', required: false, type: Number })
   getOrgChart(@Query('rootId') rootId?: string) {
@@ -83,21 +84,21 @@ export class EmployeesController {
   }
 
   @Get(':id')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'Detalhe completo do colaborador' })
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
     return this.svc.findOne(id, user?.id);
   }
 
   @Get(':id/stats')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'KPIs e estatísticas do colaborador' })
   getStats(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getEmployeeStats(id);
   }
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar colaborador' })
   @ApiResponse({ status: 201, description: 'Colaborador criado com sucesso' })
   create(@Body() dto: CreateEmployeeDto, @CurrentUser() user: any) {
@@ -105,7 +106,7 @@ export class EmployeesController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atualizar dados do colaborador' })
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -116,7 +117,7 @@ export class EmployeesController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Desligar colaborador (soft delete → status TERMINATED)' })
   remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
     return this.svc.remove(id, user.id);
@@ -127,21 +128,21 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/contracts')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Contratos do colaborador' })
   getContracts(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getContracts(id);
   }
 
   @Post('contracts')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar contrato' })
   createContract(@Body() dto: CreateContractDto) {
     return this.svc.createContract(dto);
   }
 
   @Patch('contracts/:id/status')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atualizar status do contrato' })
   updateContractStatus(@Param('id', ParseIntPipe) id: number, @Body() body: { status: string }) {
     return this.svc.updateContractStatus(id, body.status);
@@ -152,7 +153,7 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/attendance')
-  @Roles('ADMIN', 'RH', 'LIDER')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Histórico de presenças' })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
@@ -165,7 +166,7 @@ export class EmployeesController {
   }
 
   @Post('attendance')
-  @Roles('ADMIN', 'RH', 'LIDER')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Registar presença' })
   logAttendance(@Body() dto: CreateEmployeeAttendanceDto) {
     return this.svc.logAttendance(dto);
@@ -176,7 +177,7 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/feedback360')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'Histórico de Feedback 360 com média e agrupamento por ciclo' })
   @ApiQuery({ name: 'cycle', required: false })
   getFeedback360(@Param('id', ParseIntPipe) id: number, @Query('cycle') cycle?: string) {
@@ -184,7 +185,7 @@ export class EmployeesController {
   }
 
   @Post('feedback360')
-  @Roles('ADMIN', 'RH', 'LIDER')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Adicionar Feedback 360' })
   addFeedback(@Body() dto: CreateFeedback360Dto) {
     return this.svc.addFeedback360(dto);
@@ -195,21 +196,21 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/career-plans')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'Planos de carreira' })
   getCareerPlans(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getCareerPlans(id);
   }
 
   @Post('career-plans')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar plano de carreira' })
   createCareerPlan(@Body() dto: CreateEmployeeCareerPlanDto) {
     return this.svc.createCareerPlan(dto);
   }
 
   @Patch('career-plans/:id/status')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atualizar status do plano de carreira' })
   updateCareerPlanStatus(@Param('id', ParseIntPipe) id: number, @Body() body: { status: string }) {
     return this.svc.updateCareerPlanStatus(id, body.status);
@@ -220,21 +221,21 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/pdis')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'PDIs do colaborador' })
   getPdis(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getPdis(id);
   }
 
   @Post('pdis')
-  @Roles('ADMIN', 'RH', 'LIDER')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Criar PDI' })
   createPdi(@Body() dto: CreatePdiDto, @CurrentUser() user: any) {
     return this.svc.createPdi(dto, user.id);
   }
 
   @Patch('pdis/:id/progress')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'Atualizar progresso do PDI' })
   updatePdiProgress(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePdiProgressDto) {
     return this.svc.updatePdiProgress(id, dto);
@@ -245,14 +246,14 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/skills')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'Skills e competências com gap analysis' })
   getSkills(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getEmployeeSkills(id);
   }
 
   @Post(':id/skills')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'Atribuir skill ao colaborador' })
   assignSkill(
     @Param('id', ParseIntPipe) id: number,
@@ -263,7 +264,7 @@ export class EmployeesController {
   }
 
   @Patch(':id/skills/:skillId')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'Atualizar nível da skill' })
   updateSkillLevel(
     @Param('id', ParseIntPipe) id: number,
@@ -274,7 +275,7 @@ export class EmployeesController {
   }
 
   @Delete(':id/skills/:skillId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover skill do colaborador' })
   removeSkill(
     @Param('id', ParseIntPipe) id: number,
@@ -288,14 +289,14 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/documents')
-  @Roles('ADMIN', 'RH', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.COLABORADOR)
   @ApiOperation({ summary: 'Documentos do colaborador (com alertas de vencimento)' })
   getDocuments(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getDocuments(id);
   }
 
   @Post(':id/documents')
-  @Roles('ADMIN', 'RH', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.COLABORADOR)
   @ApiOperation({ summary: 'Adicionar documento' })
   createDocument(
     @Param('id', ParseIntPipe) id: number,
@@ -306,7 +307,7 @@ export class EmployeesController {
   }
 
   @Delete('documents/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover documento (soft delete)' })
   deleteDocument(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
     return this.svc.deleteDocument(id, user.id);
@@ -317,7 +318,7 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/timeline')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'Timeline de eventos do colaborador' })
   @ApiQuery({ name: 'type', required: false })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -330,7 +331,7 @@ export class EmployeesController {
   }
 
   @Post(':id/timeline')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Adicionar evento manual à timeline' })
   addTimelineEvent(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateTimelineEventDto) {
     return this.svc.addTimelineEvent({ ...dto, employeeId: id });
@@ -341,7 +342,7 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/requests')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'Solicitações de autoatendimento' })
   @ApiQuery({ name: 'status', required: false })
   getRequests(@Param('id', ParseIntPipe) id: number, @Query('status') status?: string) {
@@ -349,14 +350,14 @@ export class EmployeesController {
   }
 
   @Post(':id/requests')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
   @ApiOperation({ summary: 'Criar solicitação de autoatendimento' })
   createRequest(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateSelfServiceRequestDto) {
     return this.svc.createRequest({ ...dto, employeeId: id });
   }
 
   @Patch('requests/:id/review')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Aprovar ou rejeitar solicitação' })
   reviewRequest(@Param('id', ParseIntPipe) id: number, @Body() dto: ReviewRequestDto) {
     return this.svc.reviewRequest(id, dto);
@@ -367,14 +368,14 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Post('bulk/courses')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atribuir cursos em massa' })
   bulkAssignCourses(@Body() dto: BulkAssignCourseDto, @CurrentUser() user: any) {
     return this.svc.bulkAssignCourses(dto, user.id);
   }
 
   @Patch('bulk/status')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atualizar status de múltiplos colaboradores' })
   bulkUpdateStatus(@Body() dto: BulkUpdateStatusDto, @CurrentUser() user: any) {
     return this.svc.bulkUpdateStatus(dto, user.id);
@@ -385,7 +386,7 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/audit-log')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Log de auditoria do perfil do colaborador' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   getAuditLog(@Param('id', ParseIntPipe) id: number, @Query('limit') limit?: string) {

@@ -32,6 +32,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Development Plans (PDI)')
 @ApiBearerAuth()
@@ -55,7 +56,7 @@ export class DevelopmentPlansController {
   }
 
   @Get('team/dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard da equipa (gestor vê progresso de todos os PDIs)' })
   teamDashboard(@CurrentUser() user: any) {
     return this.svc.getTeamDashboard(user.id);
@@ -64,7 +65,7 @@ export class DevelopmentPlansController {
   // ── Catálogo ──────────────────────────────────────────────────────────────
 
   @Get()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar planos com filtros e paginação' })
   findAll(@Query() filters: DevelopmentPlanFilterDto) {
     return this.svc.findAll(filters);
@@ -79,14 +80,14 @@ export class DevelopmentPlansController {
   // ── Gestão do Plano ───────────────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar plano de desenvolvimento' })
   create(@Body() dto: CreateDevelopmentPlanDto) {
     return this.svc.create(dto);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar plano' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDevelopmentPlanDto) {
     return this.svc.update(id, dto);
@@ -100,7 +101,7 @@ export class DevelopmentPlansController {
   }
 
   @Post('approve')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Aprovar ou rejeitar plano (gestor/RH)' })
   @HttpCode(HttpStatus.OK)
   approve(@CurrentUser() user: any, @Body() dto: ApprovePlanDto) {
@@ -108,7 +109,7 @@ export class DevelopmentPlansController {
   }
 
   @Patch(':id/complete')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Concluir plano (emite certificado + XP)' })
   @HttpCode(HttpStatus.OK)
   complete(@Param('id', ParseIntPipe) id: number) {
@@ -116,7 +117,7 @@ export class DevelopmentPlansController {
   }
 
   @Patch(':id/cancel')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Cancelar plano' })
   @HttpCode(HttpStatus.OK)
   @ApiQuery({ name: 'reason', required: false })
@@ -125,7 +126,7 @@ export class DevelopmentPlansController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar plano (apenas DRAFT)' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);

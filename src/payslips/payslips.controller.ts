@@ -29,6 +29,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Payslips')
 @ApiBearerAuth()
@@ -105,14 +106,14 @@ export class PayslipsController {
   // ── Admin / RH ─────────────────────────────────────────────────────────────
 
   @Get()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Listar todos os recibos' })
   findAll(@Query() filters: PayslipFilterDto) {
     return this.svc.findAll(filters);
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Dashboard RH — métricas de compliance e financeiras' })
   @ApiQuery({ name: 'period', example: '2026-04', required: false })
   hrDashboard(@Query('period') period?: string) {
@@ -120,7 +121,7 @@ export class PayslipsController {
   }
 
   @Get(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Detalhe de qualquer recibo (Admin/RH)' })
   async findOne(
     @Param('id', ParseIntPipe) id: number,
@@ -133,28 +134,28 @@ export class PayslipsController {
   }
 
   @Get(':id/access-logs')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Logs de acesso a um recibo' })
   accessLogs(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAccessLogs(id);
   }
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar recibo individual' })
   create(@Body() dto: CreatePayslipDto) {
     return this.svc.create(dto);
   }
 
   @Post('bulk-create')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Gerar recibos em massa para um período' })
   bulkCreate(@Body() dto: BulkCreatePayslipDto) {
     return this.svc.bulkCreate(dto);
   }
 
   @Patch(':id/issue')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Emitir recibo (publica e notifica colaborador)' })
   @HttpCode(HttpStatus.OK)
   issue(@Param('id', ParseIntPipe) id: number) {
@@ -162,7 +163,7 @@ export class PayslipsController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar recibo (volta a DRAFT)' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePayslipDto) {
     return this.svc.update(id, dto);

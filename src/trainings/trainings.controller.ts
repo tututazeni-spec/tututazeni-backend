@@ -30,6 +30,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Trainings')
 @ApiBearerAuth()
@@ -41,7 +42,7 @@ export class TrainingController {
   // ── Dashboard ─────────────────────────────────────────────────────────────
 
   @Get('admin/dashboard')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Dashboard admin (KPIs, top treinamentos)' })
   dashboard() {
     return this.svc.getAdminDashboard();
@@ -68,7 +69,7 @@ export class TrainingController {
   }
 
   @Get(':id/attendance-report')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Relatório de presença e conclusão' })
   attendanceReport(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAttendanceReport(id);
@@ -77,21 +78,21 @@ export class TrainingController {
   // ── Gestão (Admin/RH) ────────────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar treinamento' })
   create(@Body() dto: CreateTrainingDto) {
     return this.svc.create(dto);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar treinamento' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTrainingDto) {
     return this.svc.update(id, dto);
   }
 
   @Patch(':id/publish')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Publicar treinamento (DRAFT → PUBLISHED)' })
   @HttpCode(HttpStatus.OK)
   publish(@Param('id', ParseIntPipe) id: number) {
@@ -99,7 +100,7 @@ export class TrainingController {
   }
 
   @Patch(':id/archive')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Arquivar treinamento' })
   @HttpCode(HttpStatus.OK)
   archive(@Param('id', ParseIntPipe) id: number) {
@@ -107,7 +108,7 @@ export class TrainingController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Eliminar treinamento' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -116,28 +117,28 @@ export class TrainingController {
   // ── Sessões ───────────────────────────────────────────────────────────────
 
   @Post('sessions')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar sessão de treinamento' })
   createSession(@Body() dto: CreateTrainingSessionDto) {
     return this.svc.createSession(dto);
   }
 
   @Put('sessions/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar sessão' })
   updateSession(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTrainingSessionDto) {
     return this.svc.updateSession(id, dto);
   }
 
   @Delete('sessions/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Eliminar sessão (sem participantes)' })
   removeSession(@Param('id', ParseIntPipe) id: number) {
     return this.svc.removeSession(id);
   }
 
   @Get('sessions/:sessionId/participants')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Lista de participantes de uma sessão' })
   sessionParticipants(@Param('sessionId', ParseIntPipe) id: number) {
     return this.svc.getSessionParticipants(id);
@@ -146,7 +147,7 @@ export class TrainingController {
   // ── Inscrições ────────────────────────────────────────────────────────────
 
   @Post('sessions/register')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Inscrever colaborador numa sessão (com controlo de vagas)' })
   register(@Body() dto: RegisterParticipantDto) {
     return this.svc.registerParticipant(dto);
@@ -170,7 +171,7 @@ export class TrainingController {
   }
 
   @Patch('participants/:id/status')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar status de participante (presente, concluído, etc.)' })
   @HttpCode(HttpStatus.OK)
   updateParticipantStatus(
@@ -181,7 +182,7 @@ export class TrainingController {
   }
 
   @Post('sessions/attendance/bulk')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Registar presença em massa (lista de presentes)' })
   @HttpCode(HttpStatus.OK)
   bulkAttendance(@CurrentUser() user: any, @Body() dto: BulkAttendanceDto) {

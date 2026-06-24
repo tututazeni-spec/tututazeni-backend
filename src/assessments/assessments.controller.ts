@@ -29,6 +29,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Assessments')
 @ApiBearerAuth()
@@ -46,7 +47,7 @@ export class AssessmentsController {
   }
 
   @Get('pending-reviews')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Respostas abertas aguardando revisão manual' })
   pendingReviews() {
     return this.svc.getPendingReviews();
@@ -66,7 +67,7 @@ export class AssessmentsController {
   }
 
   @Get(':id/analytics')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Analytics da avaliação (taxa aprovação, perguntas difíceis)' })
   analytics(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAnalytics(id);
@@ -81,21 +82,21 @@ export class AssessmentsController {
   // ── Gestão (Admin/RH) ────────────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar avaliação' })
   create(@Body() dto: CreateAssessmentDto) {
     return this.svc.create(dto);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar avaliação' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateAssessmentDto) {
     return this.svc.update(id, dto);
   }
 
   @Patch(':id/publish')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Publicar avaliação (DRAFT → PUBLISHED)' })
   @HttpCode(HttpStatus.OK)
   publish(@Param('id', ParseIntPipe) id: number) {
@@ -103,7 +104,7 @@ export class AssessmentsController {
   }
 
   @Patch(':id/archive')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Arquivar avaliação' })
   @HttpCode(HttpStatus.OK)
   archive(@Param('id', ParseIntPipe) id: number) {
@@ -111,14 +112,14 @@ export class AssessmentsController {
   }
 
   @Post(':id/duplicate')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Duplicar avaliação' })
   duplicate(@Param('id', ParseIntPipe) id: number) {
     return this.svc.duplicate(id);
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Eliminar avaliação' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -127,14 +128,14 @@ export class AssessmentsController {
   // ── Perguntas ─────────────────────────────────────────────────────────────
 
   @Post(':id/questions')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Adicionar pergunta à avaliação' })
   addQuestion(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateQuestionDto) {
     return this.svc.addQuestion(id, dto);
   }
 
   @Delete('questions/:questionId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover pergunta' })
   removeQuestion(@Param('questionId', ParseIntPipe) questionId: number) {
     return this.svc.removeQuestion(questionId);
@@ -165,7 +166,7 @@ export class AssessmentsController {
   // ── Revisão Manual ────────────────────────────────────────────────────────
 
   @Post('review')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Avaliar resposta aberta manualmente' })
   reviewAnswer(@CurrentUser() reviewer: any, @Body() dto: ReviewAnswerDto) {
     return this.svc.reviewAnswer(dto, reviewer.id);
@@ -180,7 +181,7 @@ export class AssessmentsController {
   }
 
   @Get('attempts/user/:userId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Tentativas de um utilizador (Admin/RH)' })
   userAttempts(
     @Param('userId', ParseIntPipe) userId: number,

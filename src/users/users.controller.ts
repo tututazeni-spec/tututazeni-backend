@@ -27,6 +27,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -77,7 +78,7 @@ export class UsersController {
   // ── Listagem e directório ────────────────────────────────────────────────
 
   @Get()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar utilizadores com filtros e paginação' })
   findAll(@Query() filters: UserFilterDto) {
     return this.svc.findAll(filters);
@@ -92,7 +93,7 @@ export class UsersController {
   }
 
   @Get('admin/dashboard')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Dashboard administrativo de utilizadores' })
   adminDashboard() {
     return this.svc.getAdminDashboard();
@@ -105,21 +106,21 @@ export class UsersController {
   }
 
   @Get(':id/stats')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Estatísticas de aprendizagem de um utilizador' })
   stats(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getUserStats(id);
   }
 
   @Get(':id/team')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Equipa de um gestor com progresso de aprendizagem' })
   team(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getTeam(id);
   }
 
   @Get(':id/audit-logs')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Logs de auditoria de um utilizador' })
   auditLogs(@Param('id', ParseIntPipe) id: number, @Query('page') page?: string) {
     return this.svc.getAuditLogs(id, page ? parseInt(page) : 1);
@@ -128,28 +129,28 @@ export class UsersController {
   // ── Gestão (Admin/RH) ────────────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar utilizador' })
   create(@CurrentUser() admin: any, @Body() dto: CreateUserDto) {
     return this.svc.create(dto);
   }
 
   @Post('invite')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Convidar utilizador por email' })
   invite(@Body() dto: InviteUserDto) {
     return this.svc.invite(dto);
   }
 
   @Post('bulk-import')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Importação em massa (com relatório de erros por linha)' })
   bulkImport(@Body() dto: CreateUserDto[]) {
     return this.svc.bulkImport(dto);
   }
 
   @Post('bulk-action')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Acção em massa (activate, deactivate, suspend, assign_course)' })
   @HttpCode(HttpStatus.OK)
   bulkAction(@Body() dto: BulkActionDto) {
@@ -157,7 +158,7 @@ export class UsersController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar dados de um utilizador' })
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -168,7 +169,7 @@ export class UsersController {
   }
 
   @Patch(':id/activate')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Activar conta de utilizador' })
   @HttpCode(HttpStatus.OK)
   activate(@Param('id', ParseIntPipe) id: number) {
@@ -176,7 +177,7 @@ export class UsersController {
   }
 
   @Patch(':id/deactivate')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Desactivar conta (soft — preserva dados)' })
   @HttpCode(HttpStatus.OK)
   deactivate(@Param('id', ParseIntPipe) id: number, @Body('reason') reason?: string) {
@@ -184,7 +185,7 @@ export class UsersController {
   }
 
   @Patch(':id/suspend')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Suspender conta de utilizador' })
   @HttpCode(HttpStatus.OK)
   suspend(@Param('id', ParseIntPipe) id: number, @Body('reason') reason: string) {
@@ -192,7 +193,7 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Soft delete — desactiva e marca como saído' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);

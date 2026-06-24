@@ -25,6 +25,7 @@ import {
   AttendanceFeedbackDto,
   FilterPathDto,
 } from './dto';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('LMS — Aprendizagem')
 @ApiBearerAuth()
@@ -36,7 +37,7 @@ export class LmsController {
   // ─── PERCURSOS ───────────────────────────────────────
 
   @Post('paths')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar percurso de aprendizagem' })
   createPath(@Body() dto: LmsCreateLearningPathDto, @CurrentUser() user: any) {
     return this.service.createPath(dto, user.id);
@@ -49,7 +50,7 @@ export class LmsController {
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard do LMS' })
   getDashboard() {
     return this.service.getLmsDashboard();
@@ -80,7 +81,7 @@ export class LmsController {
   }
 
   @Put('paths/:id')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar percurso' })
   updatePath(
     @Param('id') id: string,
@@ -91,7 +92,7 @@ export class LmsController {
   }
 
   @Delete('paths/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remover percurso' })
   removePath(@Param('id') id: string, @CurrentUser() user: any) {
@@ -117,7 +118,7 @@ export class LmsController {
   // ─── SESSÕES AO VIVO ─────────────────────────────────
 
   @Post('sessions')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar sessão ao vivo' })
   createSession(@Body() dto: CreateLiveSessionDto, @CurrentUser() user: any) {
     return this.service.createSession(dto, user.id);

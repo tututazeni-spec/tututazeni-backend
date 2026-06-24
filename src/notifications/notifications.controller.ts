@@ -26,6 +26,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Notifications')
 @ApiBearerAuth()
@@ -95,21 +96,21 @@ export class NotificationsController {
   // ── Templates ─────────────────────────────────────────────────────────────
 
   @Get('templates')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Listar templates de notificação' })
   getTemplates() {
     return this.svc.getTemplates();
   }
 
   @Post('templates')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar template' })
   createTemplate(@Body() dto: NotificationsCreateTemplateDto) {
     return this.svc.createTemplate(dto);
   }
 
   @Patch('templates/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar template' })
   updateTemplate(
     @Param('id', ParseIntPipe) id: number,
@@ -119,7 +120,7 @@ export class NotificationsController {
   }
 
   @Delete('templates/:id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar template' })
   deleteTemplate(@Param('id', ParseIntPipe) id: number) {
     return this.svc.deleteTemplate(id);
@@ -128,21 +129,21 @@ export class NotificationsController {
   // ── Envio (Admin/RH) ──────────────────────────────────────────────────────
 
   @Post('send')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Enviar notificação a um utilizador' })
   send(@Body() dto: CreateNotificationDto) {
     return this.svc.send(dto);
   }
 
   @Post('send-bulk')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Envio em massa (lista de userIds)' })
   sendBulk(@Body() dto: BulkNotificationDto) {
     return this.svc.sendBulk(dto);
   }
 
   @Post('send-all')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Enviar a todos os colaboradores activos' })
   @ApiBody({
     schema: {
@@ -160,14 +161,14 @@ export class NotificationsController {
   // ── Logs / Stats (Admin) ──────────────────────────────────────────────────
 
   @Get()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Todos os logs de notificações' })
   all(@Query() filters: NotificationFilterDto) {
     return this.svc.getAllLogs(filters);
   }
 
   @Get('stats')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Estatísticas (taxa leitura, por tipo, por categoria)' })
   stats() {
     return this.svc.getStats();
@@ -176,21 +177,21 @@ export class NotificationsController {
   // ── Automation Rules ──────────────────────────────────────────────────────
 
   @Get('automation-rules')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Regras de automação' })
   rules() {
     return this.svc.getAutomationRules();
   }
 
   @Post('automation-rules')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Criar regra de automação' })
   createRule(@Body() body: { name: string; trigger: string; action: string; condition: string }) {
     return this.svc.createAutomationRule(body);
   }
 
   @Patch('automation-rules/:id/toggle')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Activar/desactivar regra de automação' })
   @HttpCode(HttpStatus.OK)
   toggleRule(@Param('id', ParseIntPipe) id: number) {

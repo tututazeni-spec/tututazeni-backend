@@ -25,6 +25,7 @@ import {
   CreateEvalCycleDto,
   MonitoringSubmitEvaluationDto,
 } from './dto';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Monitoria e Avaliação')
 @ApiBearerAuth()
@@ -36,7 +37,7 @@ export class MonitoringController {
   // ─── DASHBOARD ───────────────────────────────────────
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard de Monitoria e Avaliação' })
   getDashboard() {
     return this.service.getDashboard();
@@ -45,7 +46,7 @@ export class MonitoringController {
   // ─── OKRs ────────────────────────────────────────────
 
   @Post('okr/cycles')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar ciclo OKR' })
   createOkrCycle(@Body() dto: CreateOkrCycleDto, @CurrentUser() user: any) {
     return this.service.createOkrCycle(dto, user.id);
@@ -88,7 +89,7 @@ export class MonitoringController {
   // ─── INDICADORES ─────────────────────────────────────
 
   @Post('indicators')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar indicador de monitoria' })
   createIndicator(@Body() dto: CreateIndicatorDto, @CurrentUser() user: any) {
     return this.service.createIndicator(dto, user.id);
@@ -105,7 +106,7 @@ export class MonitoringController {
   }
 
   @Post('indicators/:id/records')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Registar valor do indicador' })
   addRecord(@Param('id') id: string, @Body() dto: CreateRecordDto, @CurrentUser() user: any) {
     return this.service.addRecord(id, dto, user.id);
@@ -120,14 +121,14 @@ export class MonitoringController {
   // ─── AVALIAÇÃO ───────────────────────────────────────
 
   @Post('evaluation/cycles')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar ciclo de avaliação' })
   createEvalCycle(@Body() dto: CreateEvalCycleDto, @CurrentUser() user: any) {
     return this.service.createEvalCycle(dto, user.id);
   }
 
   @Post('evaluation/cycles/:cycleId/assign')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Atribuir avaliação' })
   assignEvaluation(
     @Param('cycleId') cycleId: string,

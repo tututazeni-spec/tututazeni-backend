@@ -1,4 +1,4 @@
-import { IsString, IsInt, IsOptional, IsDateString } from 'class-validator';
+import { Max, IsString, IsInt, IsOptional, IsDateString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -25,5 +25,5 @@ export class PostClassResponseDto {
 export class LiveClassFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) courseId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Max(100) @Type(() => Number) limit?: number;
 }

@@ -26,6 +26,7 @@ import {
   ExecutionFilterDto,
   AutomationCategory,
 } from './automation.dto';
+import { Role } from '../auth/enums/role.enum';
 
 const ADMIN = ['ADMIN', 'RH'] as const;
 
@@ -79,7 +80,7 @@ export class AutomationController {
   // ─── Execution ────────────────────────────────────────────────
 
   @Post('run')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Executar manualmente todas as regras activas' })
   runAll() {
     return this.svc.runAllActiveRules();

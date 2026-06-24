@@ -26,11 +26,12 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Executive Reports')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN', 'RH')
+@Roles(Role.ADMIN, Role.RH)
 @Controller('executive-reports')
 export class ExecutiveReportsController {
   constructor(private readonly svc: ExecutiveReportsService) {}

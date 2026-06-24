@@ -26,6 +26,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('AI Tutor — NOVA (Groq / Gemini / Ollama)')
 @ApiBearerAuth()
@@ -46,7 +47,7 @@ export class AiTutorController {
   }
 
   @Get('stats')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Estatísticas de uso (sessões, mensagens, rating, tokens)' })
   stats() {
     return this.svc.getUsageStats();

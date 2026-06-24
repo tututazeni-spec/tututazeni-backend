@@ -29,6 +29,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Micro-Learning')
 @ApiBearerAuth()
@@ -40,7 +41,7 @@ export class MicroLearningController {
   // ── Admin Dashboard ───────────────────────────────────────────────────────
 
   @Get('admin/dashboard')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Dashboard admin (métricas, top conteúdo, streaks)' })
   adminDashboard() {
     return this.svc.getAdminDashboard();
@@ -49,7 +50,7 @@ export class MicroLearningController {
   // ── Catálogo (Admin) ──────────────────────────────────────────────────────
 
   @Get()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Listar todo o conteúdo com filtros (admin)' })
   findAll(@Query() filters: MicroLearningFilterDto) {
     return this.svc.findAll(filters);
@@ -62,28 +63,28 @@ export class MicroLearningController {
   }
 
   @Get(':id/stats')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Analytics do conteúdo (conclusão, quiz, likes)' })
   stats(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getContentStats(id);
   }
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar micro-learning' })
   create(@CurrentUser() user: any, @Body() dto: CreateMicroLearningDto) {
     return this.svc.create(dto, user.id);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar micro-learning' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateMicroLearningDto) {
     return this.svc.update(id, dto);
   }
 
   @Patch(':id/publish')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Publicar conteúdo (DRAFT → PUBLISHED)' })
   @HttpCode(HttpStatus.OK)
   publish(@Param('id', ParseIntPipe) id: number) {
@@ -91,7 +92,7 @@ export class MicroLearningController {
   }
 
   @Patch(':id/archive')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Arquivar conteúdo' })
   @HttpCode(HttpStatus.OK)
   archive(@Param('id', ParseIntPipe) id: number) {
@@ -99,7 +100,7 @@ export class MicroLearningController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar conteúdo (só DRAFT)' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -167,7 +168,7 @@ export class MicroLearningController {
   }
 
   @Post('playlists')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar playlist de micro-learning' })
   createPlaylist(@CurrentUser() user: any, @Body() dto: CreatePlaylistDto) {
     return this.svc.createPlaylist(dto, user.id);
@@ -176,14 +177,14 @@ export class MicroLearningController {
   // ── Dispatch ──────────────────────────────────────────────────────────────
 
   @Post('dispatch')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Distribuir conteúdo a utilizadores específicos' })
   dispatch(@Body() dto: DispatchMicroLearningDto) {
     return this.svc.dispatch(dto);
   }
 
   @Post(':id/dispatch-all')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Distribuir a todos os utilizadores activos' })
   dispatchAll(@Param('id', ParseIntPipe) id: number) {
     return this.svc.dispatchToAll(id);

@@ -25,6 +25,7 @@ import {
   CreatePartnerInteractionDto,
   CreateMilestoneDto,
 } from './dto';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('CRM — Parceiros')
 @ApiBearerAuth()
@@ -36,7 +37,7 @@ export class CrmPartnersController {
   // ─── CRUD ────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar parceiro' })
   create(@Body() dto: CreatePartnerDto, @CurrentUser() user: any) {
     return this.service.create(dto, user.id);
@@ -49,28 +50,28 @@ export class CrmPartnersController {
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard CRM Parceiros' })
   getDashboard() {
     return this.service.getDashboard();
   }
 
   @Get('expiring-contracts')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Contratos a expirar nos próximos N dias' })
   getExpiringContracts(@Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number) {
     return this.service.getExpiringContracts(days);
   }
 
   @Get('overdue-milestones')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Milestones em atraso' })
   getOverdueMilestones() {
     return this.service.getOverdueMilestones();
   }
 
   @Get('report')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório por período' })
   getReport(@Query('start') start: string, @Query('end') end: string) {
     return this.service.getReport(new Date(start), new Date(end));
@@ -83,14 +84,14 @@ export class CrmPartnersController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar parceiro' })
   update(@Param('id') id: string, @Body() dto: UpdatePartnerDto, @CurrentUser() user: any) {
     return this.service.update(id, dto, user.id);
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remover parceiro (soft delete)' })
   remove(@Param('id') id: string, @CurrentUser() user: any) {
@@ -122,7 +123,7 @@ export class CrmPartnersController {
   // ─── MILESTONES ──────────────────────────────────────
 
   @Post(':id/milestones')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar milestone do parceiro' })
   addMilestone(@Param('id') id: string, @Body() dto: CreateMilestoneDto, @CurrentUser() user: any) {
     return this.service.addMilestone(id, dto, user.id);

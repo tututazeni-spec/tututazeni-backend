@@ -24,6 +24,7 @@ import {
   CreateRatingDto,
   LibraryCreateCommentDto,
 } from './dto';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Biblioteca Digital')
 @ApiBearerAuth()
@@ -35,7 +36,7 @@ export class LibraryController {
   // ─── COLECÇÕES ───────────────────────────────────────
 
   @Post('collections')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar colecção' })
   createCollection(@Body() dto: CreateCollectionDto, @CurrentUser() user: any) {
     return this.service.createCollection(dto, user.id);
@@ -50,7 +51,7 @@ export class LibraryController {
   // ─── DASHBOARD ───────────────────────────────────────
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard da Biblioteca' })
   getDashboard() {
     return this.service.getDashboard();
@@ -59,7 +60,7 @@ export class LibraryController {
   // ─── ITENS ───────────────────────────────────────────
 
   @Post('items')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Adicionar item à biblioteca' })
   createItem(@Body() dto: CreateItemDto, @CurrentUser() user: any) {
     return this.service.createItem(dto, user.id);
@@ -78,14 +79,14 @@ export class LibraryController {
   }
 
   @Put('items/:id')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar item' })
   updateItem(@Param('id') id: string, @Body() dto: UpdateItemDto, @CurrentUser() user: any) {
     return this.service.updateItem(id, dto, user.id);
   }
 
   @Delete('items/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remover item (soft delete)' })
   removeItem(@Param('id') id: string, @CurrentUser() user: any) {
@@ -93,7 +94,7 @@ export class LibraryController {
   }
 
   @Put('items/:id/approve')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Aprovar item' })
   approveItem(@Param('id') id: string, @CurrentUser() user: any) {
     return this.service.approveItem(id, user.id);

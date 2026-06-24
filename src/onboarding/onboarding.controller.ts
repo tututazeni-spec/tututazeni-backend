@@ -32,6 +32,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Onboarding')
 @ApiBearerAuth()
@@ -43,7 +44,7 @@ export class OnboardingController {
   // ── Dashboard ─────────────────────────────────────────────────────────────
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard de onboarding (progresso, atrasos, satisfação)' })
   @ApiQuery({ name: 'managerId', required: false })
   dashboard(@Query('managerId') managerId?: string) {
@@ -65,35 +66,35 @@ export class OnboardingController {
   }
 
   @Post('templates')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar template de onboarding' })
   createTemplate(@Body() dto: CreateOnboardingTemplateDto) {
     return this.svc.createTemplate(dto);
   }
 
   @Put('templates/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar template' })
   updateTemplate(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOnboardingTemplateDto) {
     return this.svc.updateTemplate(id, dto);
   }
 
   @Delete('templates/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Eliminar template (apenas sem planos activos)' })
   deleteTemplate(@Param('id', ParseIntPipe) id: number) {
     return this.svc.deleteTemplate(id);
   }
 
   @Post('templates/tasks')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Adicionar tarefa a um template' })
   addTemplateTask(@Body() dto: CreateTemplateTaskDto) {
     return this.svc.addTemplateTask(dto);
   }
 
   @Put('templates/tasks/:taskId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar tarefa do template' })
   updateTemplateTask(
     @Param('taskId', ParseIntPipe) taskId: number,
@@ -103,7 +104,7 @@ export class OnboardingController {
   }
 
   @Delete('templates/tasks/:taskId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover tarefa do template' })
   deleteTemplateTask(@Param('taskId', ParseIntPipe) taskId: number) {
     return this.svc.deleteTemplateTask(taskId);
@@ -112,7 +113,7 @@ export class OnboardingController {
   // ── Planos ────────────────────────────────────────────────────────────────
 
   @Get()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar planos de onboarding com filtros' })
   findAll(@Query() filters: OnboardingFilterDto) {
     return this.svc.findAll(filters);
@@ -125,7 +126,7 @@ export class OnboardingController {
   }
 
   @Get('user/:userId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Plano de onboarding de um colaborador' })
   byUser(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.findByUser(userId);
@@ -138,14 +139,14 @@ export class OnboardingController {
   }
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar plano de onboarding para colaborador' })
   create(@Body() dto: CreateOnboardingPlanDto) {
     return this.svc.create(dto);
   }
 
   @Post('auto-assign/:userId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atribuir automaticamente o template mais adequado' })
   @ApiQuery({ name: 'positionId', required: false })
   @ApiQuery({ name: 'departmentId', required: false })
@@ -162,7 +163,7 @@ export class OnboardingController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover plano de onboarding' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -178,7 +179,7 @@ export class OnboardingController {
   }
 
   @Post('tasks/skip')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Saltar tarefa (com motivo)' })
   @HttpCode(HttpStatus.OK)
   skipTask(@CurrentUser() user: any, @Body() dto: SkipTaskDto) {
@@ -186,7 +187,7 @@ export class OnboardingController {
   }
 
   @Post('tasks/approve')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Aprovar ou rejeitar tarefa que requer aprovação' })
   @HttpCode(HttpStatus.OK)
   approveTask(@CurrentUser() user: any, @Body() dto: ApproveTaskDto) {
@@ -202,7 +203,7 @@ export class OnboardingController {
   }
 
   @Patch('documents/validate')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Validar ou rejeitar documento' })
   @HttpCode(HttpStatus.OK)
   validateDocument(@CurrentUser() user: any, @Body() dto: ValidateDocumentDto) {

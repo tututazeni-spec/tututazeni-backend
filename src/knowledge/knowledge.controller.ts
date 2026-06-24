@@ -31,6 +31,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Knowledge Base')
 @ApiBearerAuth()
@@ -42,7 +43,7 @@ export class KnowledgeController {
   // ── Dashboard ─────────────────────────────────────────────────────────────
 
   @Get('admin/dashboard')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Dashboard admin (métricas, gaps, artigos desactualizados)' })
   dashboard() {
     return this.svc.getDashboard();
@@ -57,14 +58,14 @@ export class KnowledgeController {
   }
 
   @Post('categories')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar categoria' })
   createCategory(@Body() dto: CreateKnowledgeCategoryDto) {
     return this.svc.createCategory(dto);
   }
 
   @Put('categories/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar categoria' })
   updateCategory(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateKnowledgeCategoryDto) {
     return this.svc.updateCategory(id, dto);
@@ -105,14 +106,14 @@ export class KnowledgeController {
   }
 
   @Get(':id/versions')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Histórico de versões do artigo' })
   versions(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getVersions(id);
   }
 
   @Get(':id/acknowledgements')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório de confirmação de leitura (leu / não leu)' })
   acknowledgements(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAcknowledgementReport(id);
@@ -137,7 +138,7 @@ export class KnowledgeController {
   }
 
   @Patch(':id/publish')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Publicar artigo (DRAFT → PUBLISHED)' })
   @HttpCode(HttpStatus.OK)
   publish(@Param('id', ParseIntPipe) id: number) {
@@ -145,7 +146,7 @@ export class KnowledgeController {
   }
 
   @Patch(':id/archive')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Arquivar artigo' })
   @HttpCode(HttpStatus.OK)
   archive(@Param('id', ParseIntPipe) id: number) {
@@ -153,7 +154,7 @@ export class KnowledgeController {
   }
 
   @Post(':id/versions/:versionId/restore')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Restaurar versão anterior do artigo' })
   restoreVersion(
     @Param('id', ParseIntPipe) id: number,
@@ -164,7 +165,7 @@ export class KnowledgeController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Eliminar artigo (não permitido se obrigatório com confirmações)' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);

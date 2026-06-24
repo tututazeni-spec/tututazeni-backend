@@ -27,6 +27,7 @@ import {
   CreateFunderInteractionDto,
   CreateFunderReportDto,
 } from './dto';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('CRM — Financiadores')
 @ApiBearerAuth()
@@ -38,7 +39,7 @@ export class CrmFundersController {
   // ─── CRUD FINANCIADORES ──────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar financiador' })
   create(@Body() dto: CreateFunderDto, @CurrentUser() user: any) {
     return this.service.create(dto, user.id);
@@ -51,21 +52,21 @@ export class CrmFundersController {
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard CRM Financiadores' })
   getDashboard() {
     return this.service.getDashboard();
   }
 
   @Get('overdue-reports')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Relatórios em atraso' })
   getOverdueReports() {
     return this.service.getOverdueReports();
   }
 
   @Get('report')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório por período' })
   getReport(@Query('start') start: string, @Query('end') end: string) {
     return this.service.getReport(new Date(start), new Date(end));
@@ -78,14 +79,14 @@ export class CrmFundersController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar financiador' })
   update(@Param('id') id: string, @Body() dto: UpdateFunderDto, @CurrentUser() user: any) {
     return this.service.update(id, dto, user.id);
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remover financiador (soft delete)' })
   remove(@Param('id') id: string, @CurrentUser() user: any) {
@@ -95,7 +96,7 @@ export class CrmFundersController {
   // ─── GRANTS ──────────────────────────────────────────
 
   @Post(':id/grants')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar grant (financiamento)' })
   createGrant(@Param('id') id: string, @Body() dto: CreateGrantDto, @CurrentUser() user: any) {
     return this.service.createGrant(id, dto, user.id);
@@ -112,7 +113,7 @@ export class CrmFundersController {
   }
 
   @Put('grants/:grantId/status')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar estado do grant' })
   updateGrantStatus(
     @Param('grantId') grantId: string,
@@ -125,7 +126,7 @@ export class CrmFundersController {
   // ─── DESEMBOLSOS ─────────────────────────────────────
 
   @Post('grants/:grantId/disbursements')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Registar desembolso' })
   addDisbursement(
     @Param('grantId') grantId: string,
@@ -160,7 +161,7 @@ export class CrmFundersController {
   // ─── RELATÓRIOS ──────────────────────────────────────
 
   @Post(':id/reports')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar relatório para financiador' })
   createReport(
     @Param('id') id: string,

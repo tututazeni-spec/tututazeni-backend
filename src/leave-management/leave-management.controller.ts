@@ -27,6 +27,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Leave Management')
 @ApiBearerAuth()
@@ -45,14 +46,14 @@ export class LeaveManagementController {
   }
 
   @Post('types')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar tipo de licença (configurável)' })
   createType(@Body() dto: CreateLeaveTypeDto) {
     return this.svc.createLeaveType(dto);
   }
 
   @Patch('types/:code')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar tipo de licença' })
   updateType(@Param('code') code: string, @Body() dto: UpdateLeaveTypeDto) {
     return this.svc.updateLeaveType(code, dto);
@@ -61,14 +62,14 @@ export class LeaveManagementController {
   // ── Policies ──────────────────────────────────────────────────────
 
   @Get('policies')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Listar políticas de licença' })
   getPolicies() {
     return this.svc.getPolicies();
   }
 
   @Post('policies')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar política de licença (regras, blackout, SLA)' })
   createPolicy(@Body() dto: CreateLeavePolicyDto) {
     return this.svc.createPolicy(dto);
@@ -77,7 +78,7 @@ export class LeaveManagementController {
   // ── Dashboard & Analytics ─────────────────────────────────────────
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard RH — KPIs, distribuição por tipo e tendência mensal' })
   @ApiQuery({ name: 'department', required: false })
   getDashboard(@Query('department') department?: string) {
@@ -85,7 +86,7 @@ export class LeaveManagementController {
   }
 
   @Get('analytics/absenteeism')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório de absenteísmo por período' })
   @ApiQuery({ name: 'from' })
   @ApiQuery({ name: 'to' })
@@ -122,7 +123,7 @@ export class LeaveManagementController {
   // ── Pending Approvals ─────────────────────────────────────────────
 
   @Get('pending-approvals')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Pedidos pendentes de aprovação do utilizador actual' })
   getPendingApprovals(@CurrentUser() user: any) {
     return this.svc.getPendingApprovals(user.id);
@@ -151,7 +152,7 @@ export class LeaveManagementController {
   // ── Admin — All Requests ──────────────────────────────────────────
 
   @Get()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar todos os pedidos com filtros' })
   findAll(@Query() filters: LeaveFilterDto) {
     return this.svc.findAll(filters);
@@ -170,7 +171,7 @@ export class LeaveManagementController {
   }
 
   @Patch(':id/approve')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Aprovar, rejeitar, escalar ou delegar pedido' })
   approve(
     @Param('id', ParseIntPipe) id: number,
@@ -181,7 +182,7 @@ export class LeaveManagementController {
   }
 
   @Post('bulk-approve')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Aprovação em lote' })
   bulkApprove(@Body() dto: BulkApproveDto, @CurrentUser() user: any) {
     return this.svc.bulkApprove(dto, user.id);
@@ -196,14 +197,14 @@ export class LeaveManagementController {
   // ── Balance Management ────────────────────────────────────────────
 
   @Get('balance/:userId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Saldo de licenças de um colaborador' })
   getBalance(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.getBalance(userId);
   }
 
   @Patch('balance/:userId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar saldo de um tipo de licença' })
   updateBalance(
     @Param('userId', ParseIntPipe) userId: number,
@@ -214,7 +215,7 @@ export class LeaveManagementController {
   }
 
   @Post('balance/accrue')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({
     summary: 'Acumular saldo para vários colaboradores (processamento mensal/anual)',
   })
@@ -223,14 +224,14 @@ export class LeaveManagementController {
   }
 
   @Post('balance/initialize/:userId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Inicializar saldos para novo colaborador' })
   initBalance(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.initializeUserBalances(userId);
   }
 
   @Post('balance/carry-over')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Processar carry-over de fim de ano' })
   @ApiQuery({ name: 'year', type: Number })
   processCarryOver(@Query('year') year: string) {

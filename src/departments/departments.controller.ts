@@ -40,6 +40,7 @@ import {
   UpdatePositionDto,
   CreateCareerPositionDto,
 } from './departments.dto';
+import { Role } from '../auth/enums/role.enum';
 
 // ─── DEPARTMENTS ──────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ export class DepartmentsController {
   }
 
   @Get('dashboard/comparative')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard comparativo de departamentos' })
   comparativeDashboard() {
     return this.svc.getComparativeDashboard();
@@ -82,7 +83,7 @@ export class DepartmentsController {
   }
 
   @Get(':id/transfer-history')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Histórico de transferências do departamento' })
   @ApiQuery({ name: 'page', required: false })
   transferHistory(@Param('id', ParseIntPipe) id: number, @Query('page') page?: string) {
@@ -90,21 +91,21 @@ export class DepartmentsController {
   }
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar departamento' })
   create(@Body() dto: CreateDepartmentDto) {
     return this.svc.create(dto);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar departamento' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDepartmentDto) {
     return this.svc.update(id, dto);
   }
 
   @Patch(':id/deactivate')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Desactivar departamento (soft — preserva histórico)' })
   @HttpCode(HttpStatus.OK)
   deactivate(@Param('id', ParseIntPipe) id: number) {
@@ -112,7 +113,7 @@ export class DepartmentsController {
   }
 
   @Patch(':id/activate')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Reactivar departamento' })
   @HttpCode(HttpStatus.OK)
   activate(@Param('id', ParseIntPipe) id: number) {
@@ -120,14 +121,14 @@ export class DepartmentsController {
   }
 
   @Post('members/transfer')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Transferir colaborador entre departamentos' })
   transferMember(@Body() dto: TransferMemberDto) {
     return this.svc.transferMember(dto);
   }
 
   @Post('members/bulk-transfer')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Transferência em massa de colaboradores' })
   bulkTransfer(@Body() dto: BulkTransferDto) {
     return this.svc.bulkTransfer(dto);
@@ -156,21 +157,21 @@ export class UnitsController {
   }
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar unidade' })
   create(@Body() dto: CreateUnitDto) {
     return this.svc.create(dto);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar unidade' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUnitDto) {
     return this.svc.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Remover unidade' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -199,28 +200,28 @@ export class RolesController {
   }
 
   @Post()
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Criar role' })
   create(@Body() dto: DepartmentsCreateRoleDto) {
     return this.svc.create(dto);
   }
 
   @Post('init-defaults')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Inicializar roles padrão' })
   initDefaults() {
     return this.svc.initDefaultRoles();
   }
 
   @Post('permissions')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Criar permissão' })
   addPermission(@Body() dto: DepartmentsCreatePermissionDto) {
     return this.svc.addPermission(dto);
   }
 
   @Post(':id/permissions/:permissionId/assign')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Atribuir permissão a role' })
   assignPermission(
     @Param('id', ParseIntPipe) roleId: number,
@@ -230,7 +231,7 @@ export class RolesController {
   }
 
   @Delete(':id/permissions/:permissionId')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Revogar permissão de role' })
   revokePermission(
     @Param('id', ParseIntPipe) roleId: number,
@@ -240,21 +241,21 @@ export class RolesController {
   }
 
   @Put(':id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Actualizar role' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRoleDto) {
     return this.svc.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Remover role' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
   }
 
   @Delete('permissions/:permissionId')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Remover permissão global' })
   removePermission(@Param('permissionId', ParseIntPipe) id: number) {
     return this.svc.removePermission(id);
@@ -283,21 +284,21 @@ export class PositionsController {
   }
 
   @Post()
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar posição' })
   create(@Body() dto: CreatePositionDto) {
     return this.svc.create(dto);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar posição' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePositionDto) {
     return this.svc.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Remover posição' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -338,21 +339,21 @@ export class CareersController {
   }
 
   @Get('users/:userId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Histórico de carreira de um colaborador' })
   userHistory(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.getUserCareerHistory(userId);
   }
 
   @Post('positions')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar posição de carreira' })
   createPosition(@Body() dto: CreateCareerPositionDto) {
     return this.svc.createPosition(dto);
   }
 
   @Post('users/:userId/assign/:positionId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atribuir posição de carreira' })
   assign(
     @Param('userId', ParseIntPipe) userId: number,

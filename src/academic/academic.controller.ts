@@ -24,6 +24,7 @@ import {
   GradeEnrollmentDto,
   FilterProgramDto,
 } from './dto';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Gestão Académica')
 @ApiBearerAuth()
@@ -35,7 +36,7 @@ export class AcademicController {
   // ─── ANOS ────────────────────────────────────────────
 
   @Post('years')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar ano lectivo' })
   createYear(@Body() dto: CreateYearDto, @CurrentUser() user: any) {
     return this.service.createYear(dto, user.id);
@@ -56,7 +57,7 @@ export class AcademicController {
   // ─── PERÍODOS ────────────────────────────────────────
 
   @Post('periods')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar período' })
   createPeriod(@Body() dto: CreatePeriodDto, @CurrentUser() user: any) {
     return this.service.createPeriod(dto, user.id);
@@ -65,7 +66,7 @@ export class AcademicController {
   // ─── PROGRAMAS ───────────────────────────────────────
 
   @Post('programs')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar programa académico' })
   createProgram(@Body() dto: CreateProgramDto, @CurrentUser() user: any) {
     return this.service.createProgram(dto, user.id);
@@ -78,7 +79,7 @@ export class AcademicController {
   }
 
   @Get('report')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Relatório académico' })
   getReport() {
     return this.service.getAcademicReport();
@@ -93,7 +94,7 @@ export class AcademicController {
   // ─── TURMAS ──────────────────────────────────────────
 
   @Post('classes')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar turma' })
   createClass(@Body() dto: CreateClassDto, @CurrentUser() user: any) {
     return this.service.createClass(dto, user.id);
@@ -108,7 +109,7 @@ export class AcademicController {
   }
 
   @Put('enrollments/:id/approve')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Aprovar matrícula' })
   approveEnrollment(@Param('id') id: string, @CurrentUser() user: any) {
     return this.service.approveEnrollment(id, user.id);
@@ -127,7 +128,7 @@ export class AcademicController {
   // ─── NOTAS ───────────────────────────────────────────
 
   @Post('grades')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Lançar nota' })
   gradeEnrollment(@Body() dto: GradeEnrollmentDto, @CurrentUser() user: any) {
     return this.service.gradeEnrollment(dto, user.id);
@@ -148,7 +149,7 @@ export class AcademicController {
   }
 
   @Get('transcript/:userId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Transcrição de um aluno' })
   getTranscript(@Param('userId', ParseIntPipe) userId: number) {
     return this.service.getTranscript(userId);

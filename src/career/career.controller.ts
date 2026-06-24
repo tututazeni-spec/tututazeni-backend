@@ -34,6 +34,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Career')
 @ApiBearerAuth()
@@ -89,21 +90,21 @@ export class CareerController {
   }
 
   @Get('users/:userId/profile')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard de carreira de um colaborador específico (RH/Gestor)' })
   userProfile(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.getCareerProfile(userId);
   }
 
   @Get('users/:userId/gap-analysis')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Gap analysis de um colaborador' })
   userGapAnalysis(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.getCompetencyGapsForUser(userId);
   }
 
   @Get('users/:userId/simulate/:targetPositionId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Simular carreira de um colaborador' })
   simulateUser(
     @Param('userId', ParseIntPipe) userId: number,
@@ -128,28 +129,28 @@ export class CareerController {
   }
 
   @Post('paths')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar trilha de carreira' })
   createPath(@Body() dto: CreateCareerPathDto) {
     return this.svc.createCareerPath(dto);
   }
 
   @Put('paths/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar trilha' })
   updatePath(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCareerPathDto) {
     return this.svc.updateCareerPath(id, dto);
   }
 
   @Post('paths/:id/steps')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Adicionar cargo à trilha' })
   addStep(@Param('id', ParseIntPipe) id: number, @Body() dto: AddCareerPathStepDto) {
     return this.svc.addCareerPathStep(id, dto);
   }
 
   @Delete('paths/steps/:stepId')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover passo da trilha' })
   removeStep(@Param('stepId', ParseIntPipe) stepId: number) {
     return this.svc.removeCareerPathStep(stepId);
@@ -209,14 +210,14 @@ export class CareerController {
   }
 
   @Post('vacancies')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar vaga interna' })
   createVacancy(@CurrentUser() user: any, @Body() dto: CreateInternalVacancyDto) {
     return this.svc.createVacancy(user.id, dto);
   }
 
   @Patch('vacancies/:id/publish')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Publicar vaga (notifica colaboradores com match)' })
   @HttpCode(HttpStatus.OK)
   publishVacancy(@Param('id', ParseIntPipe) id: number) {
@@ -240,7 +241,7 @@ export class CareerController {
   }
 
   @Patch('vacancies/applications/:appId/status')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Atualizar status de candidatura' })
   @HttpCode(HttpStatus.OK)
   updateAppStatus(
@@ -253,7 +254,7 @@ export class CareerController {
   // ── Planeamento de Sucessão ───────────────────────────────────────────────
 
   @Get('succession')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Listar planos de sucessão' })
   @ApiQuery({ name: 'positionId', required: false })
   getSuccession(@Query('positionId') posId?: string) {
@@ -261,14 +262,14 @@ export class CareerController {
   }
 
   @Post('succession')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar plano de sucessão' })
   createSuccession(@Body() dto: CreateSuccessionPlanDto) {
     return this.svc.createSuccessionPlan(dto);
   }
 
   @Patch('succession/:id/readiness')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar nível de prontidão de um sucessor' })
   @HttpCode(HttpStatus.OK)
   updateReadiness(
@@ -282,14 +283,14 @@ export class CareerController {
   // ── Analytics ─────────────────────────────────────────────────────────────
 
   @Get('analytics')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Analytics de carreira (promoções, vagas, PDI, risco)' })
   analytics(@Query() filters: CareerAnalyticsFilterDto) {
     return this.svc.getCareerAnalytics(filters);
   }
 
   @Get('analytics/talent-heatmap')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Heatmap de talentos (9-box)' })
   @ApiQuery({ name: 'departmentId', required: false })
   heatmap(@Query('departmentId') deptId?: string) {

@@ -28,6 +28,7 @@ import {
   AssignRoleToUserDto,
   AclAuditFilterDto,
 } from './acl.dto';
+import { Role } from '../auth/enums/role.enum';
 
 const ADMIN = ['ADMIN', 'RH'] as const;
 
@@ -41,7 +42,15 @@ export class AclController {
   // ─── My permissions ───────────────────────────────────────────
 
   @Get('my-permissions')
-  @Roles('ADMIN', 'RH', 'LIDER', 'COLABORADOR', 'INSTRUCTOR', 'AUDITOR', 'DIRECTOR')
+  @Roles(
+    Role.ADMIN,
+    Role.RH,
+    Role.LIDER,
+    Role.COLABORADOR,
+    Role.INSTRUCTOR,
+    Role.AUDITOR,
+    Role.DIRECTOR,
+  )
   @ApiOperation({ summary: 'As minhas permissões actuais (cached)' })
   myPermissions(@CurrentUser() user: any) {
     return this.svc.getUserPermissions(user.id);
@@ -147,7 +156,7 @@ export class AclController {
   // ─── Permission check ─────────────────────────────────────────
 
   @Post('check')
-  @Roles(...ADMIN, 'LIDER', 'COLABORADOR', 'INSTRUCTOR', 'AUDITOR', 'DIRECTOR')
+  @Roles(...ADMIN, Role.LIDER, Role.COLABORADOR, Role.INSTRUCTOR, Role.AUDITOR, Role.DIRECTOR)
   @ApiOperation({ summary: 'Verificar se utilizador tem permissão para acção+subject' })
   check(@Body() dto: CheckPermissionDto) {
     return this.svc.checkPermission(dto);
@@ -206,7 +215,7 @@ export class AclController {
   // ─── Seed ────────────────────────────────────────────────────
 
   @Post('seed-permissions')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: '[ADMIN] Criar permissões built-in (35+) se não existirem' })
   seedPermissions() {
     return this.svc.seedBuiltinPermissions();

@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsString, IsInt, IsBoolean, Min } from 'class-validator';
+import { Max, IsOptional, IsEnum, IsString, IsInt, IsBoolean, Min } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { CertificateTemplateType } from '@prisma/client';
@@ -38,5 +38,6 @@ export class FilterCertificateDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100)
   limit?: number = 20;
 }

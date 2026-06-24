@@ -25,6 +25,7 @@ import {
   CreateInteractionDto,
   CreateNeedDto,
 } from './dto';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('CRM — Beneficiários')
 @ApiBearerAuth()
@@ -36,7 +37,7 @@ export class CrmBeneficiariesController {
   // ─── CRUD ────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar beneficiário' })
   create(@Body() dto: CreateBeneficiaryDto, @CurrentUser() user: any) {
     return this.service.create(dto, user.id);
@@ -49,7 +50,7 @@ export class CrmBeneficiariesController {
   }
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard do CRM de beneficiários' })
   getDashboard() {
     return this.service.getDashboard();
@@ -65,7 +66,7 @@ export class CrmBeneficiariesController {
   }
 
   @Get('report')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório por período' })
   getReport(@Query('start') start: string, @Query('end') end: string) {
     return this.service.getReport(new Date(start), new Date(end));
@@ -78,14 +79,14 @@ export class CrmBeneficiariesController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar beneficiário' })
   update(@Param('id') id: string, @Body() dto: UpdateBeneficiaryDto, @CurrentUser() user: any) {
     return this.service.update(id, dto, user.id);
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remover beneficiário (soft delete)' })
   remove(@Param('id') id: string, @CurrentUser() user: any) {

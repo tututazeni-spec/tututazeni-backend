@@ -30,6 +30,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Instructors')
 @ApiBearerAuth()
@@ -173,7 +174,7 @@ export class InstructorController {
   // ── Admin ─────────────────────────────────────────────────────────────────
 
   @Patch(':id/approve')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Aprovar instrutor' })
   @HttpCode(HttpStatus.OK)
   approve(@Param('id', ParseIntPipe) id: number) {
@@ -181,7 +182,7 @@ export class InstructorController {
   }
 
   @Patch(':id/revoke')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Revogar aprovação de instrutor' })
   @HttpCode(HttpStatus.OK)
   revoke(@Param('id', ParseIntPipe) id: number) {
@@ -189,7 +190,7 @@ export class InstructorController {
   }
 
   @Post(':id/payout')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Registar pagamento ao instrutor' })
   payout(@Param('id', ParseIntPipe) id: number, @Body() body: { amount: number }) {
     return this.svc.createPayout(id, body.amount);

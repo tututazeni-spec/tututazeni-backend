@@ -1,5 +1,6 @@
 // ─── src/attendance/attendance.dto.ts ────────────────────────────────────────
 import {
+  Max,
   IsInt,
   IsOptional,
   IsString,
@@ -265,7 +266,7 @@ export class AttendanceFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) eventId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) courseId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Max(100) @Type(() => Number) limit?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortOrder?: 'asc' | 'desc';
 }
@@ -277,5 +278,5 @@ export class AttendanceLeaveFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Max(100) @Type(() => Number) limit?: number;
 }

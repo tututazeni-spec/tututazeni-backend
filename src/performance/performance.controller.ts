@@ -31,6 +31,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Performance')
 @ApiBearerAuth()
@@ -54,14 +55,14 @@ export class PerformanceController {
   }
 
   @Post('cycles')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar ciclo de avaliação' })
   createCycle(@Body() dto: PerformanceCreateCycleDto) {
     return this.svc.createCycle(dto);
   }
 
   @Patch('cycles/:id/activate')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Activar ciclo (notifica todos os colaboradores)' })
   @HttpCode(HttpStatus.OK)
   activateCycle(@Param('id', ParseIntPipe) id: number) {
@@ -71,7 +72,7 @@ export class PerformanceController {
   // ── Reviews ────────────────────────────────────────────────────────────────
 
   @Get()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar avaliações com filtros' })
   findAll(@Query() filters: PerformanceFilterDto) {
     return this.svc.findAll(filters);
@@ -98,7 +99,7 @@ export class PerformanceController {
   }
 
   @Get('analytics')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Analytics globais (distribuição, divergências, top performers)' })
   @ApiQuery({ name: 'cycleId', required: false })
   analytics(@Query('cycleId') cycleId?: string) {
@@ -106,7 +107,7 @@ export class PerformanceController {
   }
 
   @Get('9box')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: '9-Box Matrix (Performance vs Potencial)' })
   @ApiQuery({ name: 'cycleId', required: false })
   @ApiQuery({ name: 'departmentId', required: false })
@@ -118,7 +119,7 @@ export class PerformanceController {
   }
 
   @Get('team')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Performance da minha equipa' })
   @ApiQuery({ name: 'cycleId', required: false })
   teamPerformance(@CurrentUser() user: any, @Query('cycleId') cycleId?: string) {
@@ -132,7 +133,7 @@ export class PerformanceController {
   }
 
   @Get('department/:departmentId/stats')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Estatísticas de performance por departamento' })
   @ApiQuery({ name: 'cycleId', required: false })
   departmentStats(
@@ -143,7 +144,7 @@ export class PerformanceController {
   }
 
   @Get('user/:userId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Histórico de performance de um colaborador' })
   userHistory(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.getUserHistory(userId);
@@ -156,7 +157,7 @@ export class PerformanceController {
   }
 
   @Post()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar avaliação de desempenho' })
   create(@Body() dto: CreatePerformanceReviewDto) {
     return this.svc.create(dto);
@@ -170,14 +171,14 @@ export class PerformanceController {
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar avaliação' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePerformanceReviewDto) {
     return this.svc.update(id, dto);
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover avaliação' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -203,7 +204,7 @@ export class PerformanceController {
   }
 
   @Get('goals/user/:userId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Goals de um utilizador' })
   @ApiQuery({ name: 'cycleId', required: false })
   userGoals(@Param('userId', ParseIntPipe) userId: number, @Query('cycleId') cycleId?: string) {
@@ -219,7 +220,7 @@ export class PerformanceController {
   }
 
   @Get('feedback/user/:userId')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Feedback de um colaborador' })
   userFeedback(@Param('userId', ParseIntPipe) userId: number, @Query('cycleId') cycleId?: string) {
     return this.svc.getUserFeedback(userId, cycleId ? parseInt(cycleId) : undefined);
@@ -228,7 +229,7 @@ export class PerformanceController {
   // ── Calibração ─────────────────────────────────────────────────────────────
 
   @Post('calibrate')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Calibrar score de uma avaliação' })
   @HttpCode(HttpStatus.OK)
   calibrate(@CurrentUser() user: any, @Body() dto: CalibrateReviewDto) {
@@ -246,7 +247,7 @@ export class PerformanceController {
   // ── 9-Box ──────────────────────────────────────────────────────────────────
 
   @Put('9box')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Posicionar/mover colaborador na 9-box (drag & drop)' })
   update9Box(@CurrentUser() user: any, @Body() dto: Update9BoxDto) {
     return this.svc.update9Box(user.id, dto);

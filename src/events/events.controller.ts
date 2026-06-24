@@ -27,6 +27,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Events')
 @ApiBearerAuth()
@@ -50,7 +51,7 @@ export class EventsController {
   }
 
   @Get('stats')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Estatísticas globais de eventos' })
   stats() {
     return this.svc.getStats();
@@ -63,7 +64,7 @@ export class EventsController {
   }
 
   @Get('organizer/dashboard')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard do organizador (métricas, NPS, ocupação)' })
   organizerDashboard(@CurrentUser() user: any) {
     return this.svc.getOrganizerDashboard(user.id);
@@ -78,21 +79,21 @@ export class EventsController {
   // ── Gestão ────────────────────────────────────────────────────────────────
 
   @Post()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar evento (fica como DRAFT)' })
   create(@CurrentUser() user: any, @Body() dto: CreateEventDto) {
     return this.svc.create(user.id, dto);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Actualizar evento' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEventDto) {
     return this.svc.update(id, dto);
   }
 
   @Patch(':id/publish')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Publicar evento (DRAFT → PUBLISHED)' })
   @HttpCode(HttpStatus.OK)
   publish(@Param('id', ParseIntPipe) id: number) {
@@ -100,7 +101,7 @@ export class EventsController {
   }
 
   @Patch(':id/cancel')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Cancelar evento (notifica participantes)' })
   @HttpCode(HttpStatus.OK)
   cancel(@Param('id', ParseIntPipe) id: number) {
@@ -108,7 +109,7 @@ export class EventsController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Eliminar evento (apenas DRAFT)' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -130,7 +131,7 @@ export class EventsController {
   }
 
   @Patch(':id/participants/:userId/status')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Atualizar status de participante (CONFIRMED, PRESENT, NO_SHOW…)' })
   participantStatus(
     @Param('id', ParseIntPipe) eventId: number,

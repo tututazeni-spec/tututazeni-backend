@@ -44,6 +44,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Avaliação 360°')
 @ApiBearerAuth()
@@ -57,14 +58,14 @@ export class Evaluation360Controller {
   // ============================================================
 
   @Post('competencies')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar competência no banco de competências' })
   async createCompetency(@Body() dto: Evaluation360CreateCompetencyDto, @Request() req: any) {
     return this.service.createCompetency(dto, req.user.id);
   }
 
   @Patch('competencies/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar competência' })
   async updateCompetency(
     @Param('id') id: string,
@@ -89,14 +90,14 @@ export class Evaluation360Controller {
   // ============================================================
 
   @Post('cycles')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar ciclo de avaliação 360°' })
   async createCycle(@Body() dto: CreateEvaluationCycleDto, @Request() req: any) {
     return this.service.createCycle(dto, req.user.id);
   }
 
   @Patch('cycles/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar ciclo (apenas em DRAFT)' })
   async updateCycle(
     @Param('id') id: string,
@@ -107,7 +108,7 @@ export class Evaluation360Controller {
   }
 
   @Post('cycles/:id/publish')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Publicar ciclo (DRAFT → PUBLISHED)' })
   async publishCycle(@Param('id') id: string, @Body() dto: PublishCycleDto, @Request() req: any) {
@@ -115,7 +116,7 @@ export class Evaluation360Controller {
   }
 
   @Get('cycles')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar ciclos de avaliação' })
   @ApiQuery({ name: 'tenantId', required: true })
   async listCycles(
@@ -126,14 +127,14 @@ export class Evaluation360Controller {
   }
 
   @Get('cycles/:id')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Detalhe completo do ciclo (competências, questões, stats)' })
   async getCycleDetail(@Param('id') id: string) {
     return this.service.getCycleDetail(id);
   }
 
   @Post('cycles/:id/calculate')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Calcular resultados do ciclo' })
   async calculateResults(@Param('id') id: string, @Request() req: any) {
@@ -145,14 +146,14 @@ export class Evaluation360Controller {
   // ============================================================
 
   @Post('questions')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar questão (global ou vinculada a ciclo/competência)' })
   async createQuestion(@Body() dto: Evaluation360CreateQuestionDto, @Request() req: any) {
     return this.service.createQuestion(dto, req.user.id);
   }
 
   @Get('questions')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar questões' })
   @ApiQuery({ name: 'cycleId', required: false })
   @ApiQuery({ name: 'competencyId', required: false })
@@ -168,7 +169,7 @@ export class Evaluation360Controller {
   // ============================================================
 
   @Post('cycles/:id/participants')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Adicionar participantes (avaliados) ao ciclo' })
   async addParticipants(
     @Param('id') id: string,
@@ -199,14 +200,14 @@ export class Evaluation360Controller {
   // ============================================================
 
   @Post('cycles/:id/evaluators/suggest')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Sugestão automática de avaliadores baseada em hierarquia' })
   async suggestEvaluators(@Param('id') id: string, @Body() dto: SuggestEvaluatorsDto) {
     return this.service.suggestEvaluators(id, dto);
   }
 
   @Post('cycles/:id/evaluators')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Atribuir avaliadores (bulk)' })
   async assignEvaluators(
     @Param('id') id: string,
@@ -217,7 +218,7 @@ export class Evaluation360Controller {
   }
 
   @Post('cycles/:id/evaluators/approve')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Aprovar avaliadores e enviar convites' })
   async approveEvaluators(
@@ -229,7 +230,7 @@ export class Evaluation360Controller {
   }
 
   @Post('cycles/:id/invites/send')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Enviar convites para todos os avaliadores pendentes' })
   async sendInvites(@Param('id') id: string, @Request() req: any) {
@@ -237,7 +238,7 @@ export class Evaluation360Controller {
   }
 
   @Post('cycles/:id/reminders')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Enviar lembretes para avaliadores pendentes' })
   async sendReminders(@Param('id') id: string, @Body() dto: SendRemindersDto, @Request() req: any) {
@@ -292,21 +293,21 @@ export class Evaluation360Controller {
   }
 
   @Get('cycles/:cycleId/analytics/team')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Analytics da equipa (heatmap de competências)' })
   async getTeamAnalytics(@Param('cycleId') cycleId: string, @Request() req: any) {
     return this.service.getTeamAnalytics(cycleId, req.user.id);
   }
 
   @Get('analytics/organizational')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Analytics organizacional (benchmark, gaps globais)' })
   async getOrgAnalytics(@Query() query: AnalyticsQueryDto) {
     return this.service.getOrganizationalAnalytics(query);
   }
 
   @Get('analytics/nine-box')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Matriz Nine Box (Performance vs Potencial)' })
   async getNineBox(@Query() query: NineBoxQueryDto) {
     return this.service.getNineBox(query);
@@ -317,7 +318,7 @@ export class Evaluation360Controller {
   // ============================================================
 
   @Post('reports/generate')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Gerar relatório (individual, equipa ou organizacional)' })
   async generateReport(@Body() dto: GenerateReportDto, @Request() req: any) {
@@ -329,7 +330,7 @@ export class Evaluation360Controller {
   // ============================================================
 
   @Post('cycles/:cycleId/calibrate')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Calibrar score de participante (matriz de calibração RH)' })
   async calibrateScore(
     @Param('cycleId') cycleId: string,
@@ -360,7 +361,7 @@ export class Evaluation360Controller {
   // ============================================================
 
   @Post('pulse-surveys')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar pulse survey' })
   async createPulseSurvey(@Body() dto: CreatePulseSurveyDto, @Request() req: any) {
     return this.service.createPulseSurvey(dto, req.user.id);

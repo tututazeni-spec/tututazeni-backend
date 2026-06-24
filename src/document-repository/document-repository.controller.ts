@@ -26,6 +26,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Document Repository')
 @ApiBearerAuth()
@@ -37,14 +38,14 @@ export class DocumentRepositoryController {
   // ── Dashboard & Analytics ─────────────────────────────────────────
 
   @Get('dashboard')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Dashboard — KPIs, documentos, tamanho, expiração' })
   getDashboard() {
     return this.svc.getDashboard();
   }
 
   @Get('stats')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Estatísticas por categoria, sensibilidade, top downloads' })
   @ApiQuery({ name: 'department', required: false })
   getStats(@Query('department') department?: string) {
@@ -58,7 +59,7 @@ export class DocumentRepositoryController {
   }
 
   @Get('expiring-soon')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Documentos a expirar nos próximos N dias' })
   @ApiQuery({ name: 'days', required: false, type: Number })
   getExpiringSoon(@Query('days') days?: string) {
@@ -74,7 +75,7 @@ export class DocumentRepositoryController {
   }
 
   @Post('categories')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar categoria de documento com regra de retenção' })
   createCategory(@Body() dto: CreateDocCategoryDto) {
     return this.svc.createCategory(dto);
@@ -109,28 +110,28 @@ export class DocumentRepositoryController {
   }
 
   @Get(':id/audit')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Log de auditoria do documento' })
   getAuditLog(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAuditLog(id);
   }
 
   @Get(':id/access-log')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Histórico de downloads por utilizador' })
   getAccessLog(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAccessLog(id);
   }
 
   @Post()
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Publicar documento (cria v1.0, calcula retenção legal automática)' })
   create(@CurrentUser() user: any, @Body() dto: CreateDocumentDto) {
     return this.svc.create(user.id, dto);
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar metadados do documento' })
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -143,7 +144,7 @@ export class DocumentRepositoryController {
   // ── Versioning ────────────────────────────────────────────────────
 
   @Post(':id/versions')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Carregar nova versão do documento' })
   newVersion(
     @Param('id', ParseIntPipe) id: number,
@@ -154,7 +155,7 @@ export class DocumentRepositoryController {
   }
 
   @Patch(':id/versions/:versionId/restore')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Restaurar versão anterior' })
   restoreVersion(
     @Param('id', ParseIntPipe) id: number,
@@ -167,7 +168,7 @@ export class DocumentRepositoryController {
   // ── Archive / Delete ──────────────────────────────────────────────
 
   @Patch(':id/archive')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Arquivar documento (verifica retenção legal)' })
   archive(
     @Param('id', ParseIntPipe) id: number,
@@ -178,7 +179,7 @@ export class DocumentRepositoryController {
   }
 
   @Patch(':id/renew')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Renovar data de validade do documento' })
   renew(
     @Param('id', ParseIntPipe) id: number,
@@ -189,7 +190,7 @@ export class DocumentRepositoryController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar (soft delete — verifica retenção legal)' })
   remove(
     @Param('id', ParseIntPipe) id: number,
@@ -202,14 +203,14 @@ export class DocumentRepositoryController {
   // ── Permissions ───────────────────────────────────────────────────
 
   @Post('permissions')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Conceder permissão a utilizador ou departamento' })
   grantPermission(@Body() dto: GrantPermissionDto, @CurrentUser() user: any) {
     return this.svc.grantPermission(dto, user.id);
   }
 
   @Delete('permissions/:id')
-  @Roles('ADMIN', 'RH')
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Revogar permissão' })
   revokePermission(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
     return this.svc.revokePermission(id, user.id);
@@ -218,7 +219,7 @@ export class DocumentRepositoryController {
   // ── Share Links ───────────────────────────────────────────────────
 
   @Post('share')
-  @Roles('ADMIN', 'RH', 'GESTOR')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar link de partilha externo (com expiração e password)' })
   createShareLink(@Body() dto: CreateShareLinkDto, @CurrentUser() user: any) {
     return this.svc.createShareLink(dto, user.id);
@@ -227,7 +228,7 @@ export class DocumentRepositoryController {
   // ── Cron / Admin triggers ─────────────────────────────────────────
 
   @Post('process-expired')
-  @Roles('ADMIN')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Processar documentos expirados (chamar via cron job)' })
   processExpired() {
     return this.svc.processExpiredDocuments();
