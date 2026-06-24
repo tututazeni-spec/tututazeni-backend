@@ -11,6 +11,9 @@ import {
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
 
+const MS_PER_DAY = 86_400_000;
+const DEFAULT_CURRENCY = 'AOA'; // moeda oficial: Kwanza angolano
+
 @Injectable()
 export class CrmFundersService {
   constructor(
@@ -166,17 +169,26 @@ export class CrmFundersService {
       funderId,
       code,
     });
-    const currency = dto.currency || 'AOA';
-    await this.prisma.notificationLog.create({
+    await this.notifyGrantCreated(grant, dto, userId);
+    return grant;
+  }
+
+  /** Notificação de grant criado — efeito secundário separado de createGrant. */
+  private notifyGrantCreated(
+    grant: { id: string; title: string; funderId: string },
+    dto: CreateGrantDto,
+    userId: number,
+  ) {
+    const currency = dto.currency || DEFAULT_CURRENCY;
+    return this.prisma.notificationLog.create({
       data: {
         userId,
         type: 'GRANT_CREATED',
         title: 'Novo financiamento registado',
         message: `Grant "${grant.title}" no valor de ${currency} ${dto.amount.toLocaleString('pt-AO')} criado.`,
-        metadata: JSON.stringify({ grantId: grant.id, funderId }),
+        metadata: JSON.stringify({ grantId: grant.id, funderId: grant.funderId }),
       },
     });
-    return grant;
   }
 
   async findGrants(funderId: string, page = 1, limit = 20) {
@@ -358,7 +370,7 @@ export class CrmFundersService {
   async getDashboard() {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const in30Days = new Date(now.getTime() + 30 * 86400000);
+    const in30Days = new Date(now.getTime() + 30 * MS_PER_DAY);
 
     const [
       total,
