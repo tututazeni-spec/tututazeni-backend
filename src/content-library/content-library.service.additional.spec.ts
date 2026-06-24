@@ -50,6 +50,12 @@ describe('ContentLibraryService (additional)', () => {
   beforeEach(async () => {
     mockPrisma = buildMockPrisma();
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [ContentLibraryService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();

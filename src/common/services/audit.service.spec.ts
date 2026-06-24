@@ -15,6 +15,12 @@ describe('AuditService (common)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [AuditService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();

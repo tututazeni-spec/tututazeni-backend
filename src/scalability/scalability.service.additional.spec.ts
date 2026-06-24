@@ -134,6 +134,12 @@ describe('ScalabilityService (additional)', () => {
       email: 'test@innova.com',
     });
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ScalabilityService,

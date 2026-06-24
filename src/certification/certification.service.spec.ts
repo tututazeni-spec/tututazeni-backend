@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CertificationService } from './certification.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException, ConflictException } from '@nestjs/common';
+import { AuditService } from '../common/services/audit.service';
 
 const mockUser = { fullName: 'João Teste', email: 'joao@teste.com' };
 const mockCert = {
@@ -59,12 +60,30 @@ const mockPrisma = {
   $transaction: jest.fn(),
 };
 
+const mockAudit = {
+  logEntity: jest.fn((userId, action, entity, entityId, meta = {}) =>
+    mockPrisma.auditLog.create({
+      data: { userId, action, entity, metadata: JSON.stringify({ ...meta, entityId }) },
+    }),
+  ),
+};
+
 describe('CertificationService', () => {
   let service: CertificationService;
 
   beforeEach(async () => {
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CertificationService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        CertificationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAudit },
+      ],
     }).compile();
     service = module.get<CertificationService>(CertificationService);
     jest.clearAllMocks();

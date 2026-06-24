@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CrmFundersService } from './crm-funders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { AuditService } from '../common/services/audit.service';
 
 const mockFunder = {
   id: 'fun-1',
@@ -75,15 +76,37 @@ const mockPrisma = {
   $transaction: jest.fn(),
 };
 
+const mockAudit = {
+  logEntity: jest.fn((userId, action, entity, entityId, meta = {}) =>
+    mockPrisma.auditLog.create({
+      data: { userId, action, entity, metadata: JSON.stringify({ ...meta, entityId }) },
+    }),
+  ),
+};
+
 describe('CrmFundersService', () => {
   let service: CrmFundersService;
 
   beforeEach(async () => {
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CrmFundersService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        CrmFundersService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAudit },
+      ],
     }).compile();
     service = module.get<CrmFundersService>(CrmFundersService);
     jest.clearAllMocks();
+    // updateFunderTotals usa agora aggregate (somar na BD) em vez de findMany
+    mockPrisma.fundingGrant.aggregate.mockResolvedValue({
+      _sum: { amount: 5000000, disbursed: 1000000 },
+    });
   });
 
   describe('create', () => {

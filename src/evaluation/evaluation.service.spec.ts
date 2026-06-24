@@ -55,6 +55,12 @@ describe('EvaluationService', () => {
     mockPrisma.user.findUnique.mockResolvedValue({ id: 1, fullName: 'Test User', managerId: 2 });
     mockPrisma.user.findMany.mockResolvedValue([]);
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [EvaluationService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();

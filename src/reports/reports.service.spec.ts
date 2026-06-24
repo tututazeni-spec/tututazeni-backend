@@ -112,6 +112,12 @@ describe('ReportsService', () => {
     mockPrisma.competency.count.mockResolvedValue(15);
     positionMock.findMany.mockResolvedValue([]);
 
+    Object.defineProperty(mockPrismaProxy, 'read', {
+      get() {
+        return mockPrismaProxy;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [ReportsService, { provide: PrismaService, useValue: mockPrismaProxy }],
     }).compile();

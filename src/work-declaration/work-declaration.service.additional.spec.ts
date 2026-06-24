@@ -69,6 +69,12 @@ describe('WorkDeclarationService — additional coverage', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkDeclarationService,

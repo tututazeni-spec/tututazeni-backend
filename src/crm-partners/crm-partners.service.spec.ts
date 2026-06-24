@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CrmPartnersService } from './crm-partners.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException } from '@nestjs/common';
+import { AuditService } from '../common/services/audit.service';
 
 const mockPartner = {
   id: 'par-1',
@@ -45,12 +46,30 @@ const mockPrisma = {
   $transaction: jest.fn(),
 };
 
+const mockAudit = {
+  logEntity: jest.fn((userId, action, entity, entityId, meta = {}) =>
+    mockPrisma.auditLog.create({
+      data: { userId, action, entity, metadata: JSON.stringify({ ...meta, entityId }) },
+    }),
+  ),
+};
+
 describe('CrmPartnersService', () => {
   let service: CrmPartnersService;
 
   beforeEach(async () => {
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CrmPartnersService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        CrmPartnersService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAudit },
+      ],
     }).compile();
     service = module.get<CrmPartnersService>(CrmPartnersService);
     jest.clearAllMocks();

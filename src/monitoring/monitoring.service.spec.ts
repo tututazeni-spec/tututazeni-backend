@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MonitoringService } from './monitoring.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException, ConflictException } from '@nestjs/common';
+import { AuditService } from '../common/services/audit.service';
 
 const mockPrisma = {
   okrCycle: {
@@ -44,12 +45,30 @@ const mockPrisma = {
   $transaction: jest.fn(),
 };
 
+const mockAudit = {
+  logEntity: jest.fn((userId, action, entity, entityId, meta = {}) =>
+    mockPrisma.auditLog.create({
+      data: { userId, action, entity, metadata: JSON.stringify({ ...meta, entityId }) },
+    }),
+  ),
+};
+
 describe('MonitoringService', () => {
   let service: MonitoringService;
 
   beforeEach(async () => {
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [MonitoringService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        MonitoringService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAudit },
+      ],
     }).compile();
     service = module.get<MonitoringService>(MonitoringService);
     jest.clearAllMocks();

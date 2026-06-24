@@ -33,6 +33,7 @@ const mockPrisma: any = new Proxy(
   {
     get(_t, prop) {
       if (prop === 'db') return mockPrisma;
+      if (prop === 'read') return mockPrisma;
       if (prop === 'tenantConfig') return tenantMock;
       if (prop === 'integrationConfig') return integrationMock;
       if (prop === 'automationRule') return automationMock;

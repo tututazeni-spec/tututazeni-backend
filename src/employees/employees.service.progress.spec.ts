@@ -67,6 +67,12 @@ describe('EmployeesService (progress)', () => {
     jest.clearAllMocks();
     mockPrisma = buildMockPrisma();
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EmployeesService,

@@ -67,6 +67,12 @@ describe('LearningPathsService', () => {
     mockPrisma.learningPathCourse.aggregate.mockResolvedValue({ _sum: { durationMinutes: 0 } });
     mockPrisma.learningPathCourse.findMany.mockResolvedValue([]);
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [LearningPathsService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();

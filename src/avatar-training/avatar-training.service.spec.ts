@@ -76,6 +76,12 @@ describe('AvatarTrainingService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    Object.defineProperty(proxyPrisma, 'read', {
+      get() {
+        return proxyPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [AvatarTrainingService, { provide: PrismaService, useValue: proxyPrisma }],
     }).compile();

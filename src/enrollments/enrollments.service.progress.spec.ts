@@ -78,6 +78,12 @@ describe('EnrollmentsService (progress)', () => {
     jest.clearAllMocks();
     mockPrisma = buildMockPrisma();
 
+    Object.defineProperty(mockPrisma, 'read', {
+      get() {
+        return mockPrisma;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [EnrollmentsService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();

@@ -136,6 +136,12 @@ describe('CareerService', () => {
     mockPrisma.internalVacancy.findMany.mockResolvedValue([]);
     mockPrisma.internalVacancy.count.mockResolvedValue(0);
 
+    Object.defineProperty(mockPrismaProxy, 'read', {
+      get() {
+        return mockPrismaProxy;
+      },
+      configurable: true,
+    });
     const module: TestingModule = await Test.createTestingModule({
       providers: [CareerService, { provide: PrismaService, useValue: mockPrismaProxy }],
     }).compile();
