@@ -17,7 +17,18 @@ async function main() {
   console.log('🌱 A iniciar seed...');
 
   // 1. Criar roles necessárias
-  const roleNames = ['ADMIN', 'RH', 'GESTOR', 'COLABORADOR'];
+  // Todos os papéis referenciados em @Roles(...) têm de existir aqui, senão os
+  // endpoints protegidos por eles ficam inacessíveis (ninguém os tem na BD).
+  const roleNames = [
+    'ADMIN',
+    'RH',
+    'GESTOR',
+    'COLABORADOR',
+    'LIDER',
+    'DIRECTOR',
+    'AUDITOR',
+    'INSTRUCTOR',
+  ];
   const roleMap: Record<string, any> = {};
 
   for (const name of roleNames) {

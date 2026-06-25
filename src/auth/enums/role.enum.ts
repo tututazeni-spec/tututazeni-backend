@@ -1,14 +1,14 @@
 /**
  * Fonte única de verdade para os papéis usados em @Roles(...).
- * Os valores têm de coincidir exactamente com Role.name na base de dados.
+ * Os valores têm de coincidir exactamente com Role.name na base de dados,
+ * e todos os papéis aqui usados em @Roles são criados pelos seeds
+ * (prisma/seed.ts e prisma/seed-e2e.ts) para que os endpoints fiquem acessíveis.
  *
- * ⚠️ A REVER (não alterar comportamento sem decisão de produto):
- *  - INSTRUTOR ('INSTRUTOR', PT) vs INSTRUCTOR ('INSTRUCTOR', EN): há controllers
- *    a usar 'INSTRUCTOR'. Mantêm-se os dois para preservar o comportamento actual,
- *    mas devem ser unificados num só valor.
- *  - Os seeds só criam ADMIN, RH, GESTOR, COLABORADOR. Os papéis DIRECTOR, LIDER,
- *    AUDITOR, INSTRUTOR/INSTRUCTOR não estão seedados → endpoints protegidos por
- *    eles podem ficar inacessíveis. Confirmar se esses papéis devem existir.
+ * Notas:
+ *  - INSTRUCTOR ('INSTRUCTOR') é o valor único do papel de instrutor. O antigo
+ *    alias PT 'INSTRUTOR' não era usado em nenhum @Roles e foi removido.
+ *  - HR e EMPLOYEE são apenas aliases convenientes que mapeiam para os valores
+ *    reais 'RH' e 'COLABORADOR'.
  */
 export enum Role {
   ADMIN = 'ADMIN',
@@ -17,7 +17,6 @@ export enum Role {
   GESTOR = 'GESTOR',
   COLABORADOR = 'COLABORADOR',
   EMPLOYEE = 'COLABORADOR',
-  INSTRUTOR = 'INSTRUTOR',
   INSTRUCTOR = 'INSTRUCTOR',
   DIRECTOR = 'DIRECTOR',
   LIDER = 'LIDER',
