@@ -46,11 +46,10 @@ export class ReportsService {
    * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
    * caindo para o primary quando .db não existe (ex.: mocks de teste).
    *
-   * NOTA: este serviço NÃO usa o `this.prisma.read` centralizado de propósito.
-   * Mantém o getter local tipado `any` porque acede a modelos/propriedades que
-   * não existem no tipo gerado do Prisma (recognition, savedReport,
-   * reportSchedule, _count em select, etc.) e que só compilam com `any`. São
-   * problemas latentes A REVER — até lá, preservamos o comportamento original.
+   * NOTA: mantém-se tipado `any` porque ainda acede a modelos do Grupo A que
+   * não existem no schema (recognition, feedback, moodCheckin) e a `_count`
+   * em select — só compilam com `any`. SavedReport e ReportSchedule já foram
+   * migrados e são tipados normalmente via this.prisma.
    */
   private get prismaRead(): any {
     return (this.prisma as any).db ?? this.prisma;
@@ -839,38 +838,33 @@ export class ReportsService {
   // ══════════════════════════════════════════════════════
 
   async createSchedule(userId: number, dto: CreateScheduleDto) {
-    return (this.prisma as any).reportSchedule
-      ?.create({
-        data: {
-          savedReportId: dto.savedReportId,
-          frequency: dto.frequency,
-          startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
-          endDate: dto.endDate ? new Date(dto.endDate) : null,
-          recipients: dto.recipients ?? [],
-          formats: dto.formats ?? ['PDF'],
-          createdById: userId,
-          active: true,
-        },
-      })
-      .catch(() => ({
-        message: 'Agendamento registado (modelo reportSchedule ausente — execute migration)',
-        ...dto,
-      }));
+    return this.prisma.reportSchedule.create({
+      data: {
+        savedReportId: dto.savedReportId,
+        frequency: dto.frequency,
+        startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
+        endDate: dto.endDate ? new Date(dto.endDate) : null,
+        recipients: dto.recipients ?? [],
+        formats: dto.formats ?? ['PDF'],
+        createdById: userId,
+        active: true,
+      },
+    });
   }
 
   async listSchedules(userId: number) {
-    return this.prismaRead.reportSchedule
-      ?.findMany({
-        where: { createdById: userId, active: true },
-        orderBy: { createdAt: 'desc' },
-      })
-      .catch(() => []);
+    return this.prismaRead.reportSchedule.findMany({
+      where: { createdById: userId, active: true },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async deleteSchedule(scheduleId: number) {
-    await (this.prisma as any).reportSchedule
-      ?.update({ where: { id: scheduleId }, data: { active: false } })
-      .catch(() => null);
+    // updateMany é idempotente: não lança P2025 se o id não existir.
+    await this.prisma.reportSchedule.updateMany({
+      where: { id: scheduleId },
+      data: { active: false },
+    });
     return { message: 'Agendamento cancelado' };
   }
 

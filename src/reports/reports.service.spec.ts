@@ -65,6 +65,7 @@ const mockPrisma = {
   reportSchedule: {
     create: jest.fn().mockResolvedValue({ id: 1 }),
     findMany: jest.fn().mockResolvedValue([]),
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   },
 };
 
@@ -279,6 +280,37 @@ describe('ReportsService', () => {
       mockPrisma.savedReport.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
       const result = await service.listSavedReports(7);
       expect(result).toHaveLength(2);
+    });
+  });
+
+  describe('createSchedule', () => {
+    it('devolve o agendamento criado (sem mensagem "execute migration")', async () => {
+      mockPrisma.reportSchedule.create.mockResolvedValue({ id: 99, frequency: 'WEEKLY' });
+      const result = await service.createSchedule(7, {
+        savedReportId: 1,
+        frequency: 'WEEKLY' as any,
+      } as any);
+      expect(mockPrisma.reportSchedule.create).toHaveBeenCalled();
+      expect(result).toEqual({ id: 99, frequency: 'WEEKLY' });
+    });
+  });
+
+  describe('listSchedules', () => {
+    it('devolve agendamentos activos da BD', async () => {
+      mockPrisma.reportSchedule.findMany.mockResolvedValue([{ id: 1 }]);
+      const result = await service.listSchedules(7);
+      expect(result).toHaveLength(1);
+    });
+  });
+
+  describe('deleteSchedule', () => {
+    it('marca como inactivo e devolve mensagem', async () => {
+      const result = await service.deleteSchedule(99);
+      expect(mockPrisma.reportSchedule.updateMany).toHaveBeenCalledWith({
+        where: { id: 99 },
+        data: { active: false },
+      });
+      expect(result).toEqual({ message: 'Agendamento cancelado' });
     });
   });
 });
