@@ -58,8 +58,9 @@ const mockPrisma = {
     aggregate: jest.fn().mockResolvedValue({ _avg: {} }),
   },
   savedReport: {
-    create: jest.fn().mockResolvedValue({ id: 1 }),
+    create: jest.fn().mockResolvedValue({ id: 1, name: 'R' }),
     findMany: jest.fn().mockResolvedValue([]),
+    deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
   },
   reportSchedule: {
     create: jest.fn().mockResolvedValue({ id: 1 }),
@@ -248,6 +249,36 @@ describe('ReportsService', () => {
     it('deve retornar relatório de gap de competências', async () => {
       const result = await service.competencyGapReport();
       expect(result).toBeDefined();
+    });
+  });
+
+  describe('saveReport', () => {
+    it('devolve o registo criado (sem mensagem "execute migration")', async () => {
+      mockPrisma.savedReport.create.mockResolvedValue({ id: 42, name: 'Meu Relatório' });
+      const result = await service.saveReport(7, {
+        name: 'Meu Relatório',
+        category: 'HR' as any,
+        reportKey: 'headcount',
+        params: '{}',
+      } as any);
+      expect(mockPrisma.savedReport.create).toHaveBeenCalled();
+      expect(result).toEqual({ id: 42, name: 'Meu Relatório' });
+    });
+  });
+
+  describe('deleteReport', () => {
+    it('apaga por id e devolve mensagem', async () => {
+      const result = await service.deleteReport(42);
+      expect(mockPrisma.savedReport.deleteMany).toHaveBeenCalledWith({ where: { id: 42 } });
+      expect(result).toEqual({ message: 'Relatório removido' });
+    });
+  });
+
+  describe('listSavedReports', () => {
+    it('devolve as linhas da BD', async () => {
+      mockPrisma.savedReport.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+      const result = await service.listSavedReports(7);
+      expect(result).toHaveLength(2);
     });
   });
 });

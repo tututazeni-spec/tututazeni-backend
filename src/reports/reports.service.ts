@@ -792,61 +792,45 @@ export class ReportsService {
   // ══════════════════════════════════════════════════════
 
   async saveReport(userId: number, dto: SaveReportDto) {
-    return (this.prisma as any).savedReport
-      ?.create({
-        data: {
-          name: dto.name,
-          description: dto.description,
-          category: dto.category,
-          reportKey: dto.reportKey,
-          params: dto.params,
-          isTemplate: dto.isTemplate ?? false,
-          favourite: dto.favourite ?? false,
-          createdById: userId,
-        },
-      })
-      .catch(async () => {
-        // Fallback: log to AuditLog
-        await this.prisma.auditLog
-          .create({
-            data: { userId, action: 'REPORT_SAVED', entity: 'SavedReport', entityId: null },
-          })
-          .catch(() => {});
-        return {
-          id: null,
-          message: 'Relatório guardado (modelo savedReport ausente — execute migration)',
-          ...dto,
-        };
-      });
+    return this.prisma.savedReport.create({
+      data: {
+        name: dto.name,
+        description: dto.description,
+        category: dto.category,
+        reportKey: dto.reportKey,
+        params: dto.params,
+        isTemplate: dto.isTemplate ?? false,
+        favourite: dto.favourite ?? false,
+        createdById: userId,
+      },
+    });
   }
 
   async listSavedReports(userId: number, category?: ReportCategory) {
     const where: any = { OR: [{ createdById: userId }, { isTemplate: true }] };
     if (category) where.category = category;
-    return this.prismaRead.savedReport
-      ?.findMany({
-        where,
-        orderBy: { updatedAt: 'desc' },
-      })
-      .catch(() => []);
+    return this.prismaRead.savedReport.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+    });
   }
 
   async getTemplates() {
-    const templates = await this.prismaRead.savedReport
-      ?.findMany({
-        where: { isTemplate: true },
-        orderBy: { category: 'asc' },
-      })
-      .catch(() => [] as any[]);
+    const templates = await this.prismaRead.savedReport.findMany({
+      where: { isTemplate: true },
+      orderBy: { category: 'asc' },
+    });
 
-    if ((templates as any[]).length) return templates;
+    if (templates.length) return templates;
 
-    // Built-in templates
+    // Built-in templates quando ainda não há nenhum guardado (regra de negócio)
     return this.getBuiltInTemplates();
   }
 
   async deleteReport(reportId: number) {
-    await (this.prisma as any).savedReport?.delete({ where: { id: reportId } }).catch(() => null);
+    // deleteMany é idempotente: não lança P2025 se o id não existir,
+    // preservando o "sempre devolve mensagem" do comportamento anterior.
+    await this.prisma.savedReport.deleteMany({ where: { id: reportId } });
     return { message: 'Relatório removido' };
   }
 
