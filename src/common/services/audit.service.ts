@@ -1,5 +1,8 @@
 // src/common/services/audit.service.ts
 import { Injectable } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 
 interface AuditLogInput {
@@ -14,20 +17,23 @@ interface AuditLogInput {
 
 @Injectable()
 export class AuditService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue('audit') private readonly auditQueue: Queue,
+    private readonly config: ConfigService,
+  ) {}
 
-  async log(input: AuditLogInput) {
-    return this.prisma.auditLog.create({
-      data: {
-        action: input.action,
-        entity: input.entity ?? input.entityType ?? 'Unknown',
-        entityId: input.entityId !== undefined ? Number(input.entityId) : undefined,
-        userId: Number(input.userId),
-        metadata:
-          (input.metadata ?? input.details)
-            ? ((input.metadata ?? input.details) as any)
-            : undefined,
-      },
+  private get queueEnabled(): boolean {
+    return this.config.get<string>('QUEUE_ENABLED', 'true') !== 'false';
+  }
+
+  async log(input: AuditLogInput): Promise<void> {
+    await this.enqueueOrWrite({
+      action: input.action,
+      entity: input.entity ?? input.entityType ?? 'Unknown',
+      entityId: input.entityId !== undefined ? Number(input.entityId) : undefined,
+      userId: Number(input.userId),
+      metadata: (input.metadata ?? input.details) as any,
     });
   }
 
@@ -42,9 +48,30 @@ export class AuditService {
     entity: string,
     entityId: string,
     meta: Record<string, any> = {},
-  ) {
-    return this.prisma.auditLog.create({
-      data: { userId, action, entity, metadata: JSON.stringify({ ...meta, entityId }) },
+  ): Promise<void> {
+    await this.enqueueOrWrite({
+      userId,
+      action,
+      entity,
+      metadata: JSON.stringify({ ...meta, entityId }),
     });
+  }
+
+  /** Enfileira o write de auditoria; cai para escrita síncrona se a fila estiver
+   *  desligada (QUEUE_ENABLED=false) ou se falhar a enfileirar (Redis em baixo). */
+  private async enqueueOrWrite(data: any): Promise<void> {
+    if (!this.queueEnabled) {
+      await this.prisma.auditLog.create({ data });
+      return;
+    }
+    try {
+      await this.auditQueue.add('write', data, {
+        removeOnComplete: true,
+        attempts: 3,
+        backoff: 5000,
+      });
+    } catch {
+      await this.prisma.auditLog.create({ data }); // não perder compliance
+    }
   }
 }
