@@ -10,6 +10,7 @@ import {
   CreateFunderReportDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const MS_PER_DAY = 86_400_000;
 const DEFAULT_CURRENCY = 'AOA'; // moeda oficial: Kwanza angolano
@@ -21,6 +22,7 @@ export class CrmFundersService {
   constructor(
     private prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ─── CÓDIGO AUTO-GERADO ──────────────────────────────
@@ -186,21 +188,19 @@ export class CrmFundersService {
     return grant;
   }
 
-  /** Notificação de grant criado — efeito secundário separado de createGrant. */
+  /** Notificação de grant criado — efeito secundário enfileirado (fire-and-forget). */
   private notifyGrantCreated(
     grant: { id: string; title: string; funderId: string },
     dto: CreateGrantDto,
     userId: number,
   ) {
     const currency = dto.currency || DEFAULT_CURRENCY;
-    return this.prisma.notificationLog.create({
-      data: {
-        userId,
-        type: 'GRANT_CREATED',
-        title: 'Novo financiamento registado',
-        message: `Grant "${grant.title}" no valor de ${currency} ${dto.amount.toLocaleString('pt-AO')} criado.`,
-        metadata: JSON.stringify({ grantId: grant.id, funderId: grant.funderId }),
-      },
+    return this.notifications.enqueueSend({
+      userId,
+      type: 'GRANT_CREATED',
+      title: 'Novo financiamento registado',
+      message: `Grant "${grant.title}" no valor de ${currency} ${dto.amount.toLocaleString('pt-AO')} criado.`,
+      metadata: { grantId: grant.id, funderId: grant.funderId },
     });
   }
 

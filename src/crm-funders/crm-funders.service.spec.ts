@@ -3,6 +3,7 @@ import { CrmFundersService } from './crm-funders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { AuditService } from '../common/services/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const mockFunder = {
   id: 'fun-1',
@@ -88,6 +89,7 @@ const mockAudit = {
 
 describe('CrmFundersService', () => {
   let service: CrmFundersService;
+  let module: TestingModule;
 
   beforeEach(async () => {
     Object.defineProperty(mockPrisma, 'read', {
@@ -96,11 +98,15 @@ describe('CrmFundersService', () => {
       },
       configurable: true,
     });
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         CrmFundersService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AuditService, useValue: mockAudit },
+        {
+          provide: NotificationsService,
+          useValue: { enqueueSend: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
     service = module.get<CrmFundersService>(CrmFundersService);
@@ -217,7 +223,6 @@ describe('CrmFundersService', () => {
       mockPrisma.fundingGrant.findMany.mockResolvedValue([mockGrant]);
       mockPrisma.funder.update.mockResolvedValue({});
       mockPrisma.auditLog.create.mockResolvedValue({});
-      mockPrisma.notificationLog.create.mockResolvedValue({});
 
       const result = await service.createGrant(
         'fun-1',
@@ -229,10 +234,9 @@ describe('CrmFundersService', () => {
         1,
       );
       expect(result.code).toBe('GRT-00001');
-      expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ type: 'GRANT_CREATED' }),
-        }),
+      const notifications = module.get(NotificationsService) as any;
+      expect(notifications.enqueueSend).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'GRANT_CREATED', userId: expect.any(Number) }),
       );
     });
   });
