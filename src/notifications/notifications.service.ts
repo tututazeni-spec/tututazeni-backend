@@ -41,7 +41,10 @@ export class NotificationsService {
         attempts: 3,
         backoff: 5000,
       });
-    } catch {
+    } catch (queueErr) {
+      this.logger.warn(
+        `Falha ao enfileirar notificação, a enviar diretamente: ${queueErr instanceof Error ? queueErr.message : String(queueErr)}`,
+      );
       await this.send(dto).catch(e => this.logger.warn(e?.message));
     }
   }

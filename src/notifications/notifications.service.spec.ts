@@ -35,6 +35,11 @@ const mockPrisma = {
   },
 };
 
+let queueEnabledValue = 'true';
+const mockConfig = {
+  get: jest.fn((key: string, d?: any) => (key === 'QUEUE_ENABLED' ? queueEnabledValue : d)),
+};
+
 const baseNotification = {
   id: 1,
   userId: 1,
@@ -52,6 +57,7 @@ describe('NotificationsService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    queueEnabledValue = 'true';
     Object.defineProperty(mockPrisma, 'read', {
       get() {
         return mockPrisma;
@@ -68,7 +74,7 @@ describe('NotificationsService', () => {
         },
         {
           provide: ConfigService,
-          useValue: { get: jest.fn((k: string, d?: any) => (k === 'QUEUE_ENABLED' ? 'true' : d)) },
+          useValue: mockConfig,
         },
       ],
     }).compile();
@@ -281,6 +287,23 @@ describe('NotificationsService', () => {
         expect.objectContaining({ userId: 1, type: 'X' }),
         expect.any(Object),
       );
+    });
+
+    it('cai para send() directo quando QUEUE_ENABLED=false', async () => {
+      queueEnabledValue = 'false';
+      const queue = (service as any).notificationsQueue;
+      const sendSpy = jest.spyOn(service, 'send').mockResolvedValue({ id: 1 } as any);
+      await service.enqueueSend({ userId: 1, type: 'X', title: 't', message: 'm' } as any);
+      expect(queue.add).not.toHaveBeenCalled();
+      expect(sendSpy).toHaveBeenCalled();
+    });
+
+    it('cai para send() se queue.add falhar (Redis em baixo)', async () => {
+      const queue = (service as any).notificationsQueue;
+      queue.add.mockRejectedValueOnce(new Error('redis down'));
+      const sendSpy = jest.spyOn(service, 'send').mockResolvedValue({ id: 1 } as any);
+      await service.enqueueSend({ userId: 1, type: 'X', title: 't', message: 'm' } as any);
+      expect(sendSpy).toHaveBeenCalled();
     });
   });
 });
