@@ -1,6 +1,8 @@
 // src/dashboard/dashboard.service.ts
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
+import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
 import { DashboardFilterDto, OrgFilterDto, DashboardPeriod, AlertPriority } from './dashboard.dto';
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -56,7 +58,10 @@ function safeM(prisma: any, name: string) {
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   // ══════════════════════════════════════════════════════
   // COLABORADOR — personal dashboard
@@ -538,22 +543,24 @@ export class DashboardService {
   // ══════════════════════════════════════════════════════
 
   async getExecutiveDashboard() {
-    const [org, talentHealth, enps, topTalent] = await Promise.all([
-      this.getOrganizationSummary({ period: DashboardPeriod.MONTH }),
-      this.getTalentHealthScore(),
-      this.getENPS(),
-      this.getTopTalent(5),
-    ]);
+    return this.cache.getOrSet('dashboard:executive', DASHBOARD_CACHE_TTL, async () => {
+      const [org, talentHealth, enps, topTalent] = await Promise.all([
+        this.getOrganizationSummary({ period: DashboardPeriod.MONTH }),
+        this.getTalentHealthScore(),
+        this.getENPS(),
+        this.getTopTalent(5),
+      ]);
 
-    const risks = this.buildExecutiveRisks(org, talentHealth);
+      const risks = this.buildExecutiveRisks(org, talentHealth);
 
-    return {
-      ...org,
-      talentHealth,
-      enps,
-      topTalent,
-      risks,
-    };
+      return {
+        ...org,
+        talentHealth,
+        enps,
+        topTalent,
+        risks,
+      };
+    });
   }
 
   // ══════════════════════════════════════════════════════
