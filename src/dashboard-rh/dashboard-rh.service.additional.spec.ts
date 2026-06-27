@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardRhService } from './dashboard-rh.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
 
 const fallbackModel = () => ({
   findMany: jest.fn().mockResolvedValue([]),
@@ -75,7 +76,14 @@ describe('DashboardRhService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [DashboardRhService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        DashboardRhService,
+        { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: CacheService,
+          useValue: { getOrSet: jest.fn((_k: string, _ttl: number, fn: () => any) => fn()) },
+        },
+      ],
     }).compile();
     service = module.get<DashboardRhService>(DashboardRhService);
   });
