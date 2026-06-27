@@ -1,5 +1,5 @@
 // src/common/services/audit.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { ConfigService } from '@nestjs/config';
@@ -17,6 +17,8 @@ interface AuditLogInput {
 
 @Injectable()
 export class AuditService {
+  private readonly logger = new Logger(AuditService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue('audit') private readonly auditQueue: Queue,
@@ -70,7 +72,10 @@ export class AuditService {
         attempts: 3,
         backoff: 5000,
       });
-    } catch {
+    } catch (queueErr) {
+      this.logger.warn(
+        `Falha ao enfileirar auditoria, a escrever diretamente: ${queueErr instanceof Error ? queueErr.message : String(queueErr)}`,
+      );
       await this.prisma.auditLog.create({ data }); // não perder compliance
     }
   }
