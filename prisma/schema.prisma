@@ -578,6 +578,8 @@ model User {
   pdiApprovals            PdiApproval[]
   reportApprovals         ReportApproval[]
   reportAccessLogs        ReportAccessLog[]
+  savedReports            SavedReport[]           @relation("UserSavedReports")
+  reportSchedules         ReportSchedule[]        @relation("UserReportSchedules")
   notificationPreference  NotificationPreference?
   aiTutorMemory           AiTutorMemory?
   cohortParticipations    CohortParticipant[]
@@ -6974,4 +6976,38 @@ enum EvaluationStatus {
   ARCHIVED
 }
 
+model SavedReport {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  category    String   // ReportCategory — validado no DTO
+  reportKey   String
+  params      String   // JSON string dos filtros guardados
+  isTemplate  Boolean  @default(false)
+  favourite   Boolean  @default(false)
+  createdById Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   User             @relation("UserSavedReports", fields: [createdById], references: [id], onDelete: Cascade)
+  schedules   ReportSchedule[]
+  @@index([createdById])
+  @@index([isTemplate])
+}
 
+model ReportSchedule {
+  id            Int       @id @default(autoincrement())
+  savedReportId Int
+  frequency     String    // ScheduleFrequency — validado no DTO
+  startDate     DateTime  @default(now())
+  endDate       DateTime?
+  recipients    String[]  @default([])
+  formats       String[]  @default([])
+  createdById   Int
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  savedReport   SavedReport @relation(fields: [savedReportId], references: [id], onDelete: Cascade)
+  createdBy     User        @relation("UserReportSchedules", fields: [createdById], references: [id], onDelete: Cascade)
+  @@index([createdById])
+  @@index([savedReportId])
+}

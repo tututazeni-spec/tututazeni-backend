@@ -3,6 +3,7 @@ import { CrmFundersService } from './crm-funders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { AuditService } from '../common/services/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const mockFunder = {
   id: 'fun-1',
@@ -74,6 +75,8 @@ const mockPrisma = {
   auditLog: { create: jest.fn() },
   notificationLog: { create: jest.fn() },
   $transaction: jest.fn(),
+  // generateCode usa nextval() de uma sequência Postgres via raw query
+  $queryRawUnsafe: jest.fn().mockResolvedValue([{ nextval: 1n }]),
 };
 
 const mockAudit = {
@@ -86,6 +89,7 @@ const mockAudit = {
 
 describe('CrmFundersService', () => {
   let service: CrmFundersService;
+  let module: TestingModule;
 
   beforeEach(async () => {
     Object.defineProperty(mockPrisma, 'read', {
@@ -94,11 +98,15 @@ describe('CrmFundersService', () => {
       },
       configurable: true,
     });
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         CrmFundersService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AuditService, useValue: mockAudit },
+        {
+          provide: NotificationsService,
+          useValue: { enqueueSend: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
     service = module.get<CrmFundersService>(CrmFundersService);
@@ -117,6 +125,10 @@ describe('CrmFundersService', () => {
 
       const result = await service.create({ name: 'União Europeia', type: 'BILATERAL' as any }, 1);
       expect(result.code).toBe('FIN-00001');
+      // código gerado via sequência atómica (nextval), não via "ler último +1"
+      expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledWith(
+        expect.stringContaining("nextval('funder_code_seq')"),
+      );
       expect(mockPrisma.auditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ entity: 'Funder', action: 'CREATE' }),
@@ -211,7 +223,6 @@ describe('CrmFundersService', () => {
       mockPrisma.fundingGrant.findMany.mockResolvedValue([mockGrant]);
       mockPrisma.funder.update.mockResolvedValue({});
       mockPrisma.auditLog.create.mockResolvedValue({});
-      mockPrisma.notificationLog.create.mockResolvedValue({});
 
       const result = await service.createGrant(
         'fun-1',
@@ -223,10 +234,9 @@ describe('CrmFundersService', () => {
         1,
       );
       expect(result.code).toBe('GRT-00001');
-      expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ type: 'GRANT_CREATED' }),
-        }),
+      const notifications = module.get(NotificationsService) as any;
+      expect(notifications.enqueueSend).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'GRANT_CREATED', userId: expect.any(Number) }),
       );
     });
   });
@@ -378,10 +388,22 @@ describe('CrmFundersService', () => {
   });
 
   describe('getOverdueReports', () => {
-    it('deve retornar relatórios em atraso', async () => {
+    it('deve retornar relatórios em atraso paginados', async () => {
       mockPrisma.funderReport.findMany.mockResolvedValue([{ id: 'rep-1' }]);
+      mockPrisma.funderReport.count.mockResolvedValue(1);
       const result = await service.getOverdueReports();
-      expect(result).toHaveLength(1);
+      expect(result.data).toHaveLength(1);
+      expect(result).toMatchObject({ total: 1, page: 1, limit: 20, totalPages: 1 });
+    });
+
+    it('deve aplicar o tecto de paginação (limit máximo 100)', async () => {
+      mockPrisma.funderReport.findMany.mockResolvedValue([]);
+      mockPrisma.funderReport.count.mockResolvedValue(0);
+      const result = await service.getOverdueReports(1, 5000);
+      expect(result.limit).toBe(100);
+      expect(mockPrisma.funderReport.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 100, skip: 0 }),
+      );
     });
   });
 

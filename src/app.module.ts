@@ -79,6 +79,7 @@ import { LmsModule } from './lms/lms.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 
 // INFRA
+import { QueueModule } from './queue/queue.module';
 import { LearningPathsController } from './learning-paths/learning-paths.controller';
 import { LearningPathsService } from './learning-paths/learning-paths.service';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -89,6 +90,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    QueueModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: process.env.NODE_ENV === 'test' ? 10000 : 100 }]),
     PrismaModule,
     AuthModule,

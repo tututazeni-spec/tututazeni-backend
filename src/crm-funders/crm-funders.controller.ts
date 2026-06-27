@@ -60,9 +60,12 @@ export class CrmFundersController {
 
   @Get('overdue-reports')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Relatórios em atraso' })
-  getOverdueReports() {
-    return this.service.getOverdueReports();
+  @ApiOperation({ summary: 'Relatórios em atraso (paginado)' })
+  getOverdueReports(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
+    return this.service.getOverdueReports(page, limit);
   }
 
   @Get('report')

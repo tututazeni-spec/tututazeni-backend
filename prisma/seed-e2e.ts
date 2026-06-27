@@ -23,6 +23,10 @@ async function main() {
     { code: 'RH', name: 'RH' },
     { code: 'GESTOR', name: 'GESTOR' },
     { code: 'COLABORADOR', name: 'COLABORADOR' },
+    { code: 'LIDER', name: 'LIDER' },
+    { code: 'DIRECTOR', name: 'DIRECTOR' },
+    { code: 'AUDITOR', name: 'AUDITOR' },
+    { code: 'INSTRUCTOR', name: 'INSTRUCTOR' },
   ];
   const roleRecords: Record<string, any> = {};
 
