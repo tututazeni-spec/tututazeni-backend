@@ -3,6 +3,8 @@ import { NotFoundException } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationCategory } from './notifications.dto';
+import { getQueueToken } from '@nestjs/bull';
+import { ConfigService } from '@nestjs/config';
 
 const mockPrisma = {
   notificationLog: {
@@ -57,7 +59,18 @@ describe('NotificationsService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [NotificationsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        NotificationsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: getQueueToken('notifications'),
+          useValue: { add: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn((k: string, d?: any) => (k === 'QUEUE_ENABLED' ? 'true' : d)) },
+        },
+      ],
     }).compile();
     service = module.get<NotificationsService>(NotificationsService);
   });
@@ -254,6 +267,20 @@ describe('NotificationsService', () => {
       const result = await service.sendToAll('INFO', 'Mensagem global');
 
       expect(result.sent).toBe(2);
+    });
+  });
+
+  // ─── enqueueSend ──────────────────────────────────────────────────────────
+
+  describe('enqueueSend', () => {
+    it('enfileira o envio quando a fila está activa', async () => {
+      const queue = (service as any).notificationsQueue;
+      await service.enqueueSend({ userId: 1, type: 'X', title: 't', message: 'm' } as any);
+      expect(queue.add).toHaveBeenCalledWith(
+        'send',
+        expect.objectContaining({ userId: 1, type: 'X' }),
+        expect.any(Object),
+      );
     });
   });
 });

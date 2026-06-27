@@ -1,5 +1,8 @@
 // src/notifications/notifications.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateNotificationDto,
@@ -15,7 +18,33 @@ import {
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @InjectQueue('notifications') private readonly notificationsQueue: Queue,
+    private readonly config: ConfigService,
+  ) {}
+
+  private get queueEnabled(): boolean {
+    return this.config.get<string>('QUEUE_ENABLED', 'true') !== 'false';
+  }
+
+  /** Fire-and-forget: enfileira o envio. A validação (404) e a criação acontecem
+   *  no worker. Para quem precisa do resultado/404 imediato, usar send(). */
+  async enqueueSend(dto: CreateNotificationDto): Promise<void> {
+    if (!this.queueEnabled) {
+      await this.send(dto).catch(e => this.logger.warn(e?.message));
+      return;
+    }
+    try {
+      await this.notificationsQueue.add('send', dto, {
+        removeOnComplete: true,
+        attempts: 3,
+        backoff: 5000,
+      });
+    } catch {
+      await this.send(dto).catch(e => this.logger.warn(e?.message));
+    }
+  }
 
   // ─── ENVIO ────────────────────────────────────────────────────────────────
 
