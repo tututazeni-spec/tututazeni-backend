@@ -80,6 +80,7 @@ import { MonitoringModule } from './monitoring/monitoring.module';
 
 // INFRA
 import { QueueModule } from './queue/queue.module';
+import { CacheModule } from './cache/cache.module';
 import { LearningPathsController } from './learning-paths/learning-paths.controller';
 import { LearningPathsService } from './learning-paths/learning-paths.service';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -91,6 +92,7 @@ import { RolesGuard } from './common/guards/roles.guard';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     QueueModule,
+    CacheModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: process.env.NODE_ENV === 'test' ? 10000 : 100 }]),
     PrismaModule,
     AuthModule,
