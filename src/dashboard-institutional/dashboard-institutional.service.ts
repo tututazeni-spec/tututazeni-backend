@@ -2,81 +2,90 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSnapshotDto, CreateWidgetDto, UpdateWidgetDto, FilterSnapshotDto } from './dto';
 import { AuditService } from '../common/services/audit.service';
+import { CacheService } from '../cache/cache.service';
+import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
 
 @Injectable()
 export class DashboardInstitutionalService {
   constructor(
     private prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly cache: CacheService,
   ) {}
 
   // ─── RESUMO EXECUTIVO ────────────────────────────────
 
   async getExecutiveSummary() {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    return this.cache.getOrSet(
+      'dashboard:institutional:executive-summary',
+      DASHBOARD_CACHE_TTL,
+      async () => {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
 
-    const [
-      users,
-      newUsersMonth,
-      courses,
-      activeEnrollments,
-      completedThisYear,
-      beneficiaries,
-      partners,
-      funders,
-      totalFundingAgg,
-      libraryItems,
-      certificates,
-      badgesIssued,
-    ] = await this.prisma.$transaction([
-      this.prisma.read.user.count({ where: { active: true } }),
-      this.prisma.read.user.count({ where: { createdAt: { gte: startOfMonth } } }),
-      this.prisma.read.course.count({ where: { status: 'PUBLISHED' } }),
-      this.prisma.read.enrollment.count({ where: { status: 'IN_PROGRESS' } }),
-      this.prisma.read.enrollment.count({
-        where: { status: 'COMPLETED', completedAt: { gte: startOfYear } },
-      }),
-      this.prisma.read.beneficiary.count({
-        where: { status: 'ACTIVE', deletedAt: null },
-      }),
-      this.prisma.read.partner.count({
-        where: { status: 'ACTIVE', deletedAt: null },
-      }),
-      this.prisma.read.funder.count({
-        where: { status: 'ACTIVE', deletedAt: null },
-      }),
-      this.prisma.read.fundingGrant.aggregate({
-        _sum: { amount: true },
-        where: { status: 'ACTIVE', deletedAt: null },
-      }),
-      this.prisma.read.libraryItem.count({ where: { deletedAt: null } }),
-      this.prisma.read.issuedCertificate.count({ where: { deletedAt: null } }),
-      this.prisma.read.badgeIssuance.count({
-        where: { deletedAt: null, isRevoked: false },
-      }),
-    ]);
+        const [
+          users,
+          newUsersMonth,
+          courses,
+          activeEnrollments,
+          completedThisYear,
+          beneficiaries,
+          partners,
+          funders,
+          totalFundingAgg,
+          libraryItems,
+          certificates,
+          badgesIssued,
+        ] = await this.prisma.$transaction([
+          this.prisma.read.user.count({ where: { active: true } }),
+          this.prisma.read.user.count({ where: { createdAt: { gte: startOfMonth } } }),
+          this.prisma.read.course.count({ where: { status: 'PUBLISHED' } }),
+          this.prisma.read.enrollment.count({ where: { status: 'IN_PROGRESS' } }),
+          this.prisma.read.enrollment.count({
+            where: { status: 'COMPLETED', completedAt: { gte: startOfYear } },
+          }),
+          this.prisma.read.beneficiary.count({
+            where: { status: 'ACTIVE', deletedAt: null },
+          }),
+          this.prisma.read.partner.count({
+            where: { status: 'ACTIVE', deletedAt: null },
+          }),
+          this.prisma.read.funder.count({
+            where: { status: 'ACTIVE', deletedAt: null },
+          }),
+          this.prisma.read.fundingGrant.aggregate({
+            _sum: { amount: true },
+            where: { status: 'ACTIVE', deletedAt: null },
+          }),
+          this.prisma.read.libraryItem.count({ where: { deletedAt: null } }),
+          this.prisma.read.issuedCertificate.count({ where: { deletedAt: null } }),
+          this.prisma.read.badgeIssuance.count({
+            where: { deletedAt: null, isRevoked: false },
+          }),
+        ]);
 
-    const totalFunding = (totalFundingAgg as any)?._sum?.amount || 0;
-    const completionRate = users > 0 ? (completedThisYear / users) * 100 : 0;
+        const totalFunding = (totalFundingAgg as any)?._sum?.amount || 0;
+        const completionRate = users > 0 ? (completedThisYear / users) * 100 : 0;
 
-    return {
-      people: { total: users, newThisMonth: newUsersMonth },
-      learning: {
-        courses,
-        activeEnrollments,
-        completedThisYear,
-        completionRate: Math.round(completionRate * 10) / 10,
+        return {
+          people: { total: users, newThisMonth: newUsersMonth },
+          learning: {
+            courses,
+            activeEnrollments,
+            completedThisYear,
+            completionRate: Math.round(completionRate * 10) / 10,
+          },
+          crm: {
+            beneficiaries,
+            partners,
+            funders,
+            totalFunding,
+          },
+          knowledge: { libraryItems, certificates, badgesIssued },
+        };
       },
-      crm: {
-        beneficiaries,
-        partners,
-        funders,
-        totalFunding,
-      },
-      knowledge: { libraryItems, certificates, badgesIssued },
-    };
+    );
   }
 
   // ─── TENDÊNCIA DE CRESCIMENTO ────────────────────────

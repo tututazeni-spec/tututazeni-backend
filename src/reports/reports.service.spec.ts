@@ -57,13 +57,18 @@ const mockPrisma = {
     groupBy: jest.fn().mockResolvedValue([]),
     aggregate: jest.fn().mockResolvedValue({ _avg: {} }),
   },
+  kudos: { count: jest.fn().mockResolvedValue(3) },
+  continuousFeedback: { count: jest.fn().mockResolvedValue(5) },
+  leadershipPulse: { aggregate: jest.fn().mockResolvedValue({ _avg: { overallScore: 4.2 } }) },
   savedReport: {
-    create: jest.fn().mockResolvedValue({ id: 1 }),
+    create: jest.fn().mockResolvedValue({ id: 1, name: 'R' }),
     findMany: jest.fn().mockResolvedValue([]),
+    deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
   },
   reportSchedule: {
     create: jest.fn().mockResolvedValue({ id: 1 }),
     findMany: jest.fn().mockResolvedValue([]),
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   },
 };
 
@@ -204,6 +209,16 @@ describe('ReportsService', () => {
       const result = await service.engagementReport({});
       expect(result).toBeDefined();
     });
+
+    it('usa kudos/continuousFeedback/leadershipPulse e avgMood do overallScore', async () => {
+      const result = await service.engagementReport({});
+      expect(mockPrisma.kudos.count).toHaveBeenCalled();
+      expect(mockPrisma.continuousFeedback.count).toHaveBeenCalled();
+      expect(mockPrisma.leadershipPulse.aggregate).toHaveBeenCalled();
+      expect(result.summary.recognitions).toBe(3);
+      expect(result.summary.feedbackCount).toBe(5);
+      expect(result.avgMood).toBe(4.2);
+    });
   });
 
   // ─── talentReport ─────────────────────────────────────────────────────────
@@ -248,6 +263,67 @@ describe('ReportsService', () => {
     it('deve retornar relatório de gap de competências', async () => {
       const result = await service.competencyGapReport();
       expect(result).toBeDefined();
+    });
+  });
+
+  describe('saveReport', () => {
+    it('devolve o registo criado (sem mensagem "execute migration")', async () => {
+      mockPrisma.savedReport.create.mockResolvedValue({ id: 42, name: 'Meu Relatório' });
+      const result = await service.saveReport(7, {
+        name: 'Meu Relatório',
+        category: 'HR' as any,
+        reportKey: 'headcount',
+        params: '{}',
+      } as any);
+      expect(mockPrisma.savedReport.create).toHaveBeenCalled();
+      expect(result).toEqual({ id: 42, name: 'Meu Relatório' });
+    });
+  });
+
+  describe('deleteReport', () => {
+    it('apaga por id e devolve mensagem', async () => {
+      const result = await service.deleteReport(42);
+      expect(mockPrisma.savedReport.deleteMany).toHaveBeenCalledWith({ where: { id: 42 } });
+      expect(result).toEqual({ message: 'Relatório removido' });
+    });
+  });
+
+  describe('listSavedReports', () => {
+    it('devolve as linhas da BD', async () => {
+      mockPrisma.savedReport.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+      const result = await service.listSavedReports(7);
+      expect(result).toHaveLength(2);
+    });
+  });
+
+  describe('createSchedule', () => {
+    it('devolve o agendamento criado (sem mensagem "execute migration")', async () => {
+      mockPrisma.reportSchedule.create.mockResolvedValue({ id: 99, frequency: 'WEEKLY' });
+      const result = await service.createSchedule(7, {
+        savedReportId: 1,
+        frequency: 'WEEKLY' as any,
+      } as any);
+      expect(mockPrisma.reportSchedule.create).toHaveBeenCalled();
+      expect(result).toEqual({ id: 99, frequency: 'WEEKLY' });
+    });
+  });
+
+  describe('listSchedules', () => {
+    it('devolve agendamentos activos da BD', async () => {
+      mockPrisma.reportSchedule.findMany.mockResolvedValue([{ id: 1 }]);
+      const result = await service.listSchedules(7);
+      expect(result).toHaveLength(1);
+    });
+  });
+
+  describe('deleteSchedule', () => {
+    it('marca como inactivo e devolve mensagem', async () => {
+      const result = await service.deleteSchedule(99);
+      expect(mockPrisma.reportSchedule.updateMany).toHaveBeenCalledWith({
+        where: { id: 99 },
+        data: { active: false },
+      });
+      expect(result).toEqual({ message: 'Agendamento cancelado' });
     });
   });
 });

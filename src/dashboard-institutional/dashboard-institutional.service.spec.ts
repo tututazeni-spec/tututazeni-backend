@@ -3,6 +3,7 @@ import { DashboardInstitutionalService } from './dashboard-institutional.service
 import { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import { AuditService } from '../common/services/audit.service';
+import { CacheService } from '../cache/cache.service';
 
 const mockPrisma = {
   user: { count: jest.fn() },
@@ -41,6 +42,9 @@ const mockAudit = {
   ),
 };
 
+const cacheGetOrSet = jest.fn((_k: string, _ttl: number, fn: () => any) => fn());
+const cacheMock = { getOrSet: cacheGetOrSet } as any;
+
 describe('DashboardInstitutionalService', () => {
   let service: DashboardInstitutionalService;
 
@@ -56,6 +60,7 @@ describe('DashboardInstitutionalService', () => {
         DashboardInstitutionalService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AuditService, useValue: mockAudit },
+        { provide: CacheService, useValue: cacheMock },
       ],
     }).compile();
     service = module.get<DashboardInstitutionalService>(DashboardInstitutionalService);
@@ -85,6 +90,15 @@ describe('DashboardInstitutionalService', () => {
       expect(result).toHaveProperty('knowledge');
       expect(result.people.total).toBe(100);
       expect(result.crm.totalFunding).toBe(5000000);
+    });
+
+    it('getExecutiveSummary usa cache com chave e TTL certos', async () => {
+      await service.getExecutiveSummary();
+      expect(cacheGetOrSet).toHaveBeenCalledWith(
+        'dashboard:institutional:executive-summary',
+        90,
+        expect.any(Function),
+      );
     });
 
     it('deve calcular completionRate correctamente', async () => {

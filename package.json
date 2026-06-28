@@ -122,6 +122,7 @@
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.3.1",
     "helmet": "^8.0.0",
+    "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.7.0",
     "multer": "^2.1.1",

@@ -1,6 +1,8 @@
 // src/dashboard-rh/dashboard-rh.service.ts
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
+import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -60,144 +62,151 @@ function healthStatusInverse(
 
 @Injectable()
 export class DashboardRhService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   // ══════════════════════════════════════════════════════
   // FULL DASHBOARD — aggregates all domains
   // ══════════════════════════════════════════════════════
 
   async getFullRhDashboard() {
-    const now = new Date();
-    const mS = monthStart();
-    const mS1 = monthStart(1);
-    const mEnd1 = monthEnd(1);
+    return this.cache.getOrSet('dashboard:rh:full', DASHBOARD_CACHE_TTL, async () => {
+      const now = new Date();
+      const mS = monthStart();
+      const mS1 = monthStart(1);
+      const mEnd1 = monthEnd(1);
 
-    const [
-      totalActive,
-      totalInactive,
-      newHires,
-      prevHires,
-      deptBreakdown,
-      posBreakdown,
-      avgPerfScore,
-      activePlans,
-      completionRate,
-      mandatoryCompliance,
-      surveyParticipation,
-      avatarSessions,
-      topBadgeAwardees,
-      recentActivity,
-    ] = await Promise.all([
-      this.prisma.read.user.count({ where: { active: true } }),
-      this.prisma.read.user.count({ where: { active: false } }),
-      this.prisma.read.user.count({ where: { createdAt: { gte: mS } } }),
-      this.prisma.read.user.count({ where: { createdAt: { gte: mS1, lt: mS } } }),
-      this.prisma.read.user.groupBy({
-        by: ['departmentId'],
-        where: { active: true },
-        _count: { id: true },
-      }),
-      this.prisma.read.user.groupBy({
-        by: ['positionId'],
-        where: { active: true },
-        _count: { id: true },
-      }),
-      this.prisma.performanceReview
-        .aggregate({
-          where: { createdAt: { gte: mS1 } },
-          _avg: { score: true },
-        })
-        .catch(() => ({ _avg: { score: null } })),
-      this.prisma.read.developmentPlan.count({ where: { status: 'ACTIVE', isTemplate: false } }),
-      this.prisma.read.enrollment.count({
-        where: { status: 'CONCLUIDO', enrolledAt: { gte: mS } },
-      }),
-      this.prisma.enrollment
-        .count({
-          where: { course: { mandatory: true } as any, status: 'CONCLUIDO' },
-        })
-        .catch(() => 0),
-      this.prisma.read.surveyResponse.count({ where: { createdAt: { gte: mS } } }),
-      this.prisma.read.avatarSession.count({
-        where: { status: 'COMPLETED', startedAt: { gte: mS } },
-      }),
-      this.prisma.badgeAward
-        .groupBy({
-          by: ['userId'],
-          _count: { id: true },
-          orderBy: { _count: { id: 'desc' } },
-          take: 5,
-        })
-        .catch(() => [] as any[]),
-      this.prisma.auditLog
-        .findMany({
-          where: { timestamp: { gte: mS } },
-          select: { id: true, action: true, entity: true, timestamp: true, userId: true },
-          orderBy: { timestamp: 'desc' },
-          take: 10,
-        })
-        .catch(() => [] as any[]),
-    ]);
-
-    const total = totalActive + totalInactive;
-    const turnoverRate = pct(totalInactive, total);
-    const hiringTrend = trend(newHires, prevHires);
-    const pdpCoverage = pct(activePlans, totalActive);
-
-    // Enrich dept breakdown with names
-    const deptIds = deptBreakdown.map(d => d.departmentId).filter(Boolean);
-    const departments = deptIds.length
-      ? await this.prisma.read.department.findMany({
-          where: { id: { in: deptIds } },
-          select: { id: true, name: true },
-        })
-      : [];
-    const deptMap = new Map(departments.map(d => [d.id, d.name]));
-
-    const posIds = posBreakdown.map(p => p.positionId).filter(Boolean);
-    const positions = posIds.length
-      ? await this.prisma.read.position.findMany({
-          where: { id: { in: posIds } },
-          select: { id: true, name: true, level: true },
-        })
-      : [];
-    const posMap = new Map(positions.map(p => [p.id, p]));
-
-    // Alerts
-    const alerts = await this.getAlerts();
-
-    return {
-      generatedAt: now,
-      kpis: {
-        headcount: { total: totalActive, status: '🟢' },
-        turnover: { rate: turnoverRate, status: healthStatusInverse(turnoverRate, 10, 20) },
-        newHires: { count: newHires, trend: hiringTrend },
-        performance: { avg: avgPerfScore._avg.score ? +avgPerfScore._avg.score.toFixed(2) : null },
-        pdpCoverage: { pct: pdpCoverage, status: healthStatus(pdpCoverage, 70, 40) },
-        completions: { count: completionRate },
-        engagement: { surveyResponses: surveyParticipation },
-        avatarSessions,
+      const [
+        totalActive,
+        totalInactive,
+        newHires,
+        prevHires,
+        deptBreakdown,
+        posBreakdown,
+        avgPerfScore,
+        activePlans,
+        completionRate,
         mandatoryCompliance,
-      },
-      distribution: {
-        byDepartment: deptBreakdown
-          .map(d => ({
-            id: d.departmentId,
-            name: deptMap.get(d.departmentId) ?? 'N/A',
-            count: d._count.id,
-          }))
-          .sort((a, b) => b.count - a.count),
-        byPosition: posBreakdown
-          .map(p => ({
-            ...((posMap.get(p.positionId) ?? {}) as Record<string, any>),
-            count: p._count.id,
-          }))
-          .sort((a: any, b: any) => b.count - a.count),
-      },
-      alerts,
-      topBadgeAwardees: (topBadgeAwardees as any[]).slice(0, 5),
-      recentActivity,
-    };
+        surveyParticipation,
+        avatarSessions,
+        topBadgeAwardees,
+        recentActivity,
+      ] = await Promise.all([
+        this.prisma.read.user.count({ where: { active: true } }),
+        this.prisma.read.user.count({ where: { active: false } }),
+        this.prisma.read.user.count({ where: { createdAt: { gte: mS } } }),
+        this.prisma.read.user.count({ where: { createdAt: { gte: mS1, lt: mS } } }),
+        this.prisma.read.user.groupBy({
+          by: ['departmentId'],
+          where: { active: true },
+          _count: { id: true },
+        }),
+        this.prisma.read.user.groupBy({
+          by: ['positionId'],
+          where: { active: true },
+          _count: { id: true },
+        }),
+        this.prisma.performanceReview
+          .aggregate({
+            where: { createdAt: { gte: mS1 } },
+            _avg: { score: true },
+          })
+          .catch(() => ({ _avg: { score: null } })),
+        this.prisma.read.developmentPlan.count({ where: { status: 'ACTIVE', isTemplate: false } }),
+        this.prisma.read.enrollment.count({
+          where: { status: 'CONCLUIDO', enrolledAt: { gte: mS } },
+        }),
+        this.prisma.enrollment
+          .count({
+            where: { course: { mandatory: true } as any, status: 'CONCLUIDO' },
+          })
+          .catch(() => 0),
+        this.prisma.read.surveyResponse.count({ where: { createdAt: { gte: mS } } }),
+        this.prisma.read.avatarSession.count({
+          where: { status: 'COMPLETED', startedAt: { gte: mS } },
+        }),
+        this.prisma.badgeAward
+          .groupBy({
+            by: ['userId'],
+            _count: { id: true },
+            orderBy: { _count: { id: 'desc' } },
+            take: 5,
+          })
+          .catch(() => [] as any[]),
+        this.prisma.auditLog
+          .findMany({
+            where: { timestamp: { gte: mS } },
+            select: { id: true, action: true, entity: true, timestamp: true, userId: true },
+            orderBy: { timestamp: 'desc' },
+            take: 10,
+          })
+          .catch(() => [] as any[]),
+      ]);
+
+      const total = totalActive + totalInactive;
+      const turnoverRate = pct(totalInactive, total);
+      const hiringTrend = trend(newHires, prevHires);
+      const pdpCoverage = pct(activePlans, totalActive);
+
+      // Enrich dept breakdown with names
+      const deptIds = deptBreakdown.map(d => d.departmentId).filter(Boolean);
+      const departments = deptIds.length
+        ? await this.prisma.read.department.findMany({
+            where: { id: { in: deptIds } },
+            select: { id: true, name: true },
+          })
+        : [];
+      const deptMap = new Map(departments.map(d => [d.id, d.name]));
+
+      const posIds = posBreakdown.map(p => p.positionId).filter(Boolean);
+      const positions = posIds.length
+        ? await this.prisma.read.position.findMany({
+            where: { id: { in: posIds } },
+            select: { id: true, name: true, level: true },
+          })
+        : [];
+      const posMap = new Map(positions.map(p => [p.id, p]));
+
+      // Alerts
+      const alerts = await this.getAlerts();
+
+      return {
+        generatedAt: now,
+        kpis: {
+          headcount: { total: totalActive, status: '🟢' },
+          turnover: { rate: turnoverRate, status: healthStatusInverse(turnoverRate, 10, 20) },
+          newHires: { count: newHires, trend: hiringTrend },
+          performance: {
+            avg: avgPerfScore._avg.score ? +avgPerfScore._avg.score.toFixed(2) : null,
+          },
+          pdpCoverage: { pct: pdpCoverage, status: healthStatus(pdpCoverage, 70, 40) },
+          completions: { count: completionRate },
+          engagement: { surveyResponses: surveyParticipation },
+          avatarSessions,
+          mandatoryCompliance,
+        },
+        distribution: {
+          byDepartment: deptBreakdown
+            .map(d => ({
+              id: d.departmentId,
+              name: deptMap.get(d.departmentId) ?? 'N/A',
+              count: d._count.id,
+            }))
+            .sort((a, b) => b.count - a.count),
+          byPosition: posBreakdown
+            .map(p => ({
+              ...((posMap.get(p.positionId) ?? {}) as Record<string, any>),
+              count: p._count.id,
+            }))
+            .sort((a: any, b: any) => b.count - a.count),
+        },
+        alerts,
+        topBadgeAwardees: (topBadgeAwardees as any[]).slice(0, 5),
+        recentActivity,
+      };
+    });
   }
 
   // ══════════════════════════════════════════════════════

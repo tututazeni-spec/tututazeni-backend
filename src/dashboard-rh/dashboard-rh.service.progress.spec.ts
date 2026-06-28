@@ -8,6 +8,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardRhService } from './dashboard-rh.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
 
 function buildMockPrisma() {
   const crud = () => ({
@@ -65,7 +66,14 @@ describe('DashboardRhService (progress)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [DashboardRhService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        DashboardRhService,
+        { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: CacheService,
+          useValue: { getOrSet: jest.fn((_k: string, _ttl: number, fn: () => any) => fn()) },
+        },
+      ],
     }).compile();
 
     service = module.get<DashboardRhService>(DashboardRhService);

@@ -46,11 +46,10 @@ export class ReportsService {
    * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
    * caindo para o primary quando .db não existe (ex.: mocks de teste).
    *
-   * NOTA: este serviço NÃO usa o `this.prisma.read` centralizado de propósito.
-   * Mantém o getter local tipado `any` porque acede a modelos/propriedades que
-   * não existem no tipo gerado do Prisma (recognition, savedReport,
-   * reportSchedule, _count em select, etc.) e que só compilam com `any`. São
-   * problemas latentes A REVER — até lá, preservamos o comportamento original.
+   * NOTA: mantém-se tipado `any` porque ainda usa `_count` em select e vários
+   * `where: any` que só compilam com `any`. Os modelos do antigo "Grupo A"
+   * (recognition→Kudos, feedback→ContinuousFeedback, moodCheckin→LeadershipPulse)
+   * já estão remapeados para os modelos reais.
    */
   private get prismaRead(): any {
     return (this.prisma as any).db ?? this.prisma;
@@ -424,15 +423,16 @@ export class ReportsService {
           orderBy: { createdAt: 'desc' },
           take: 6,
         }),
-        this.prismaRead.recognition
-          ?.count({ where: { createdAt: { gte: range.gte, lte: range.lte } } })
-          .catch(() => 0),
-        this.prismaRead.feedback
-          ?.count({ where: { createdAt: { gte: range.gte, lte: range.lte } } })
-          .catch(() => 0),
-        this.prismaRead.moodCheckin
-          ?.aggregate({ _avg: { mood: true }, where: { createdAt: { gte: range.gte } } })
-          .catch(() => null),
+        this.prismaRead.kudos.count({
+          where: { createdAt: { gte: range.gte, lte: range.lte } },
+        }),
+        this.prismaRead.continuousFeedback.count({
+          where: { createdAt: { gte: range.gte, lte: range.lte } },
+        }),
+        this.prismaRead.leadershipPulse.aggregate({
+          _avg: { overallScore: true },
+          where: { createdAt: { gte: range.gte } },
+        }),
       ]);
 
     const totalUsers = await this.prismaRead.user.count({
@@ -465,7 +465,9 @@ export class ReportsService {
         recognitions,
         feedbackCount,
       },
-      avgMood: avgMoodRecent?._avg?.mood ? +avgMoodRecent._avg.mood.toFixed(1) : null,
+      avgMood: avgMoodRecent?._avg?.overallScore
+        ? +avgMoodRecent._avg.overallScore.toFixed(1)
+        : null,
       surveys: surveyData,
       insights:
         participationRate < 50
@@ -792,61 +794,45 @@ export class ReportsService {
   // ══════════════════════════════════════════════════════
 
   async saveReport(userId: number, dto: SaveReportDto) {
-    return (this.prisma as any).savedReport
-      ?.create({
-        data: {
-          name: dto.name,
-          description: dto.description,
-          category: dto.category,
-          reportKey: dto.reportKey,
-          params: dto.params,
-          isTemplate: dto.isTemplate ?? false,
-          favourite: dto.favourite ?? false,
-          createdById: userId,
-        },
-      })
-      .catch(async () => {
-        // Fallback: log to AuditLog
-        await this.prisma.auditLog
-          .create({
-            data: { userId, action: 'REPORT_SAVED', entity: 'SavedReport', entityId: null },
-          })
-          .catch(() => {});
-        return {
-          id: null,
-          message: 'Relatório guardado (modelo savedReport ausente — execute migration)',
-          ...dto,
-        };
-      });
+    return this.prisma.savedReport.create({
+      data: {
+        name: dto.name,
+        description: dto.description,
+        category: dto.category,
+        reportKey: dto.reportKey,
+        params: dto.params,
+        isTemplate: dto.isTemplate ?? false,
+        favourite: dto.favourite ?? false,
+        createdById: userId,
+      },
+    });
   }
 
   async listSavedReports(userId: number, category?: ReportCategory) {
     const where: any = { OR: [{ createdById: userId }, { isTemplate: true }] };
     if (category) where.category = category;
-    return this.prismaRead.savedReport
-      ?.findMany({
-        where,
-        orderBy: { updatedAt: 'desc' },
-      })
-      .catch(() => []);
+    return this.prismaRead.savedReport.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+    });
   }
 
   async getTemplates() {
-    const templates = await this.prismaRead.savedReport
-      ?.findMany({
-        where: { isTemplate: true },
-        orderBy: { category: 'asc' },
-      })
-      .catch(() => [] as any[]);
+    const templates = await this.prismaRead.savedReport.findMany({
+      where: { isTemplate: true },
+      orderBy: { category: 'asc' },
+    });
 
-    if ((templates as any[]).length) return templates;
+    if (templates.length) return templates;
 
-    // Built-in templates
+    // Built-in templates quando ainda não há nenhum guardado (regra de negócio)
     return this.getBuiltInTemplates();
   }
 
   async deleteReport(reportId: number) {
-    await (this.prisma as any).savedReport?.delete({ where: { id: reportId } }).catch(() => null);
+    // deleteMany é idempotente: não lança P2025 se o id não existir,
+    // preservando o "sempre devolve mensagem" do comportamento anterior.
+    await this.prisma.savedReport.deleteMany({ where: { id: reportId } });
     return { message: 'Relatório removido' };
   }
 
@@ -855,38 +841,33 @@ export class ReportsService {
   // ══════════════════════════════════════════════════════
 
   async createSchedule(userId: number, dto: CreateScheduleDto) {
-    return (this.prisma as any).reportSchedule
-      ?.create({
-        data: {
-          savedReportId: dto.savedReportId,
-          frequency: dto.frequency,
-          startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
-          endDate: dto.endDate ? new Date(dto.endDate) : null,
-          recipients: dto.recipients ?? [],
-          formats: dto.formats ?? ['PDF'],
-          createdById: userId,
-          active: true,
-        },
-      })
-      .catch(() => ({
-        message: 'Agendamento registado (modelo reportSchedule ausente — execute migration)',
-        ...dto,
-      }));
+    return this.prisma.reportSchedule.create({
+      data: {
+        savedReportId: dto.savedReportId,
+        frequency: dto.frequency,
+        startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
+        endDate: dto.endDate ? new Date(dto.endDate) : null,
+        recipients: dto.recipients ?? [],
+        formats: dto.formats ?? ['PDF'],
+        createdById: userId,
+        active: true,
+      },
+    });
   }
 
   async listSchedules(userId: number) {
-    return this.prismaRead.reportSchedule
-      ?.findMany({
-        where: { createdById: userId, active: true },
-        orderBy: { createdAt: 'desc' },
-      })
-      .catch(() => []);
+    return this.prismaRead.reportSchedule.findMany({
+      where: { createdById: userId, active: true },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async deleteSchedule(scheduleId: number) {
-    await (this.prisma as any).reportSchedule
-      ?.update({ where: { id: scheduleId }, data: { active: false } })
-      .catch(() => null);
+    // updateMany é idempotente: não lança P2025 se o id não existir.
+    await this.prisma.reportSchedule.updateMany({
+      where: { id: scheduleId },
+      data: { active: false },
+    });
     return { message: 'Agendamento cancelado' };
   }
 

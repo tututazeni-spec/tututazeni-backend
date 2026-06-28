@@ -10,26 +10,41 @@ import {
   CreateFunderReportDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const MS_PER_DAY = 86_400_000;
 const DEFAULT_CURRENCY = 'AOA'; // moeda oficial: Kwanza angolano
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100; // tecto de paginação (alinhado com @Max(100) nos DTOs de filtro)
 
 @Injectable()
 export class CrmFundersService {
   constructor(
     private prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ─── CÓDIGO AUTO-GERADO ──────────────────────────────
 
+  /**
+   * Sequências Postgres dedicadas (migração `add_funder_code_sequences`).
+   * `nextval` é atómico, por isso elimina a corrida do antigo "ler último +1"
+   * sob concorrência (ex.: vários financiadores criados em simultâneo).
+   * Os nomes são constantes internas — nunca vêm de input do utilizador.
+   */
+  private static readonly CODE_SEQUENCES: Record<'funder' | 'fundingGrant', string> = {
+    funder: 'funder_code_seq',
+    fundingGrant: 'funding_grant_code_seq',
+  };
+
   private async generateCode(prefix: string, model: 'funder' | 'fundingGrant'): Promise<string> {
-    const last = await (this.prisma[model] as any).findFirst({
-      orderBy: { code: 'desc' },
-      select: { code: true },
-    });
-    const num = last ? parseInt(last.code.replace(`${prefix}-`, ''), 10) + 1 : 1;
-    return `${prefix}-${String(num).padStart(5, '0')}`;
+    const sequence = CrmFundersService.CODE_SEQUENCES[model];
+    // Escrita (avança o contador) → tem de ir ao primary, nunca à réplica.
+    const rows = await this.prisma.$queryRawUnsafe<{ nextval: bigint }[]>(
+      `SELECT nextval('${sequence}') AS nextval`,
+    );
+    return `${prefix}-${String(Number(rows[0].nextval)).padStart(5, '0')}`;
   }
 
   // ─── CRUD FINANCIADORES ──────────────────────────────
@@ -173,21 +188,19 @@ export class CrmFundersService {
     return grant;
   }
 
-  /** Notificação de grant criado — efeito secundário separado de createGrant. */
+  /** Notificação de grant criado — efeito secundário enfileirado (fire-and-forget). */
   private notifyGrantCreated(
     grant: { id: string; title: string; funderId: string },
     dto: CreateGrantDto,
     userId: number,
   ) {
     const currency = dto.currency || DEFAULT_CURRENCY;
-    return this.prisma.notificationLog.create({
-      data: {
-        userId,
-        type: 'GRANT_CREATED',
-        title: 'Novo financiamento registado',
-        message: `Grant "${grant.title}" no valor de ${currency} ${dto.amount.toLocaleString('pt-AO')} criado.`,
-        metadata: JSON.stringify({ grantId: grant.id, funderId: grant.funderId }),
-      },
+    return this.notifications.enqueueSend({
+      userId,
+      type: 'GRANT_CREATED',
+      title: 'Novo financiamento registado',
+      message: `Grant "${grant.title}" no valor de ${currency} ${dto.amount.toLocaleString('pt-AO')} criado.`,
+      metadata: { grantId: grant.id, funderId: grant.funderId },
     });
   }
 
@@ -350,19 +363,34 @@ export class CrmFundersService {
     return updated;
   }
 
-  async getOverdueReports() {
-    return this.prisma.read.funderReport.findMany({
-      where: {
-        status: { in: ['PENDING', 'REJECTED'] },
-        dueDate: { lt: new Date() },
-        deletedAt: null,
-      },
-      include: {
-        funder: { select: { name: true, code: true, email: true } },
-        grant: { select: { title: true, code: true } },
-      },
-      orderBy: { dueDate: 'asc' },
-    });
+  async getOverdueReports(page = 1, limit = DEFAULT_PAGE_SIZE) {
+    const safePage = Math.max(page, 1);
+    const safeLimit = Math.min(Math.max(limit, 1), MAX_PAGE_SIZE);
+    const where: any = {
+      status: { in: ['PENDING', 'REJECTED'] },
+      dueDate: { lt: new Date() },
+      deletedAt: null,
+    };
+    const [data, total] = await Promise.all([
+      this.prisma.read.funderReport.findMany({
+        where,
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
+        include: {
+          funder: { select: { name: true, code: true, email: true } },
+          grant: { select: { title: true, code: true } },
+        },
+        orderBy: { dueDate: 'asc' },
+      }),
+      this.prisma.read.funderReport.count({ where }),
+    ]);
+    return {
+      data,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+    };
   }
 
   // ─── DASHBOARD ───────────────────────────────────────

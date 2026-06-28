@@ -18,6 +18,8 @@ function buildMockPrisma() {
     create: jest.fn().mockResolvedValue({}),
     update: jest.fn().mockResolvedValue({}),
     delete: jest.fn().mockResolvedValue({}),
+    deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     count: jest.fn().mockResolvedValue(0),
     groupBy: jest.fn().mockResolvedValue([]),
     aggregate: jest.fn().mockResolvedValue({ _avg: { score: null }, _sum: {} }),
@@ -46,6 +48,9 @@ function buildMockPrisma() {
     certificate: crud(),
     savedReport: crud(),
     reportSchedule: crud(),
+    kudos: crud(),
+    continuousFeedback: crud(),
+    leadershipPulse: crud(),
   };
 }
 
@@ -264,8 +269,7 @@ describe('ReportsService (progress)', () => {
   // ─── listSavedReports ───────────────────────────────────────────
 
   describe('listSavedReports', () => {
-    it('deve retornar lista vazia (modelo opcional via ?.)', async () => {
-      // savedReport não existe no mock → ?.findMany retorna undefined → .catch retorna []
+    it('deve retornar lista vazia quando não há relatórios guardados', async () => {
       const result = (await service.listSavedReports(1)) as any[];
       expect(Array.isArray(result)).toBe(true);
     });
@@ -289,7 +293,7 @@ describe('ReportsService (progress)', () => {
   // ─── deleteReport ───────────────────────────────────────────────
 
   describe('deleteReport', () => {
-    it('deve remover relatório (modelo opcional graceful)', async () => {
+    it('deve remover relatório persistido com deleteMany', async () => {
       const result = (await service.deleteReport(1)) as any;
       expect(result.message).toContain('removido');
     });
@@ -298,7 +302,7 @@ describe('ReportsService (progress)', () => {
   // ─── listSchedules ──────────────────────────────────────────────
 
   describe('listSchedules', () => {
-    it('deve retornar lista de agendamentos (modelo opcional)', async () => {
+    it('deve retornar lista de agendamentos', async () => {
       const result = (await service.listSchedules(1)) as any[];
       expect(Array.isArray(result)).toBe(true);
     });
@@ -307,7 +311,7 @@ describe('ReportsService (progress)', () => {
   // ─── deleteSchedule ─────────────────────────────────────────────
 
   describe('deleteSchedule', () => {
-    it('deve cancelar agendamento (modelo opcional)', async () => {
+    it('deve cancelar agendamento com updateMany', async () => {
       const result = (await service.deleteSchedule(1)) as any;
       expect(result.message).toContain('cancelado');
     });

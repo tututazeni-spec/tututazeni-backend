@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardService } from './dashboard.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
 
 const mockPrisma: any = {
   user: {
@@ -119,7 +120,14 @@ describe('DashboardService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [DashboardService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        DashboardService,
+        { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: CacheService,
+          useValue: { getOrSet: jest.fn((_k: string, _ttl: number, fn: () => any) => fn()) },
+        },
+      ],
     }).compile();
     service = module.get<DashboardService>(DashboardService);
   });

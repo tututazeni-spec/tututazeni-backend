@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardRhService } from './dashboard-rh.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
 
 const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
 const makeFind = (data: any[] = []) => jest.fn().mockResolvedValue(data);
@@ -68,9 +69,11 @@ const mockPrismaProxy = new Proxy(mockPrisma, {
 
 describe('DashboardRhService', () => {
   let service: DashboardRhService;
+  let cacheGetOrSet: jest.Mock;
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    cacheGetOrSet = jest.fn((_k: string, _ttl: number, fn: () => any) => fn());
     Object.defineProperty(mockPrismaProxy, 'read', {
       get() {
         return mockPrismaProxy;
@@ -78,7 +81,11 @@ describe('DashboardRhService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [DashboardRhService, { provide: PrismaService, useValue: mockPrismaProxy }],
+      providers: [
+        DashboardRhService,
+        { provide: PrismaService, useValue: mockPrismaProxy },
+        { provide: CacheService, useValue: { getOrSet: cacheGetOrSet } },
+      ],
     }).compile();
     service = module.get<DashboardRhService>(DashboardRhService);
   });
@@ -92,6 +99,11 @@ describe('DashboardRhService', () => {
         .mockResolvedValueOnce(3);
       const result = await service.getFullRhDashboard();
       expect(result).toBeDefined();
+    });
+
+    it('getFullRhDashboard usa cache com chave e TTL certos', async () => {
+      await service.getFullRhDashboard();
+      expect(cacheGetOrSet).toHaveBeenCalledWith('dashboard:rh:full', 90, expect.any(Function));
     });
   });
 

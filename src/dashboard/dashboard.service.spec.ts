@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardService } from './dashboard.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
 
 const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
 const makeFind = (data: any[] = []) => jest.fn().mockResolvedValue(data);
@@ -32,7 +33,11 @@ const mockPrisma = {
     create: jest.fn().mockResolvedValue({}),
   },
   auditLog: { findMany: makeFind(), count: makeCount(), groupBy: makeGroupBy() },
-  engagementSurvey: { findMany: makeFind(), count: makeCount() },
+  engagementSurvey: {
+    findMany: makeFind(),
+    count: makeCount(),
+    findFirst: jest.fn().mockResolvedValue(null),
+  },
   surveyResponse: { count: makeCount(), findMany: makeFind() },
   userCompetency: {
     findMany: makeFind(),
@@ -66,6 +71,8 @@ const baseUser = {
   _count: { subordinates: 0 },
 };
 
+const cacheGetOrSet = jest.fn((_k: string, _ttl: number, fn: () => any) => fn());
+
 describe('DashboardService', () => {
   let service: DashboardService;
 
@@ -83,7 +90,11 @@ describe('DashboardService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [DashboardService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        DashboardService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CacheService, useValue: { getOrSet: cacheGetOrSet } },
+      ],
     }).compile();
     service = module.get<DashboardService>(DashboardService);
   });
@@ -111,6 +122,13 @@ describe('DashboardService', () => {
         .mockResolvedValueOnce(5);
       const result = await service.getOrganizationSummary({});
       expect(result).toBeDefined();
+    });
+  });
+
+  describe('getExecutiveDashboard (cache)', () => {
+    it('getExecutiveDashboard usa cache com chave e TTL certos', async () => {
+      await service.getExecutiveDashboard();
+      expect(cacheGetOrSet).toHaveBeenCalledWith('dashboard:executive', 90, expect.any(Function));
     });
   });
 });
