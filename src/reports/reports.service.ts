@@ -46,10 +46,10 @@ export class ReportsService {
    * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
    * caindo para o primary quando .db não existe (ex.: mocks de teste).
    *
-   * NOTA: mantém-se tipado `any` porque ainda acede a modelos do Grupo A que
-   * não existem no schema (recognition, feedback, moodCheckin) e a `_count`
-   * em select — só compilam com `any`. SavedReport e ReportSchedule já foram
-   * migrados e são tipados normalmente via this.prisma.
+   * NOTA: mantém-se tipado `any` porque ainda usa `_count` em select e vários
+   * `where: any` que só compilam com `any`. Os modelos do antigo "Grupo A"
+   * (recognition→Kudos, feedback→ContinuousFeedback, moodCheckin→LeadershipPulse)
+   * já estão remapeados para os modelos reais.
    */
   private get prismaRead(): any {
     return (this.prisma as any).db ?? this.prisma;
@@ -423,15 +423,16 @@ export class ReportsService {
           orderBy: { createdAt: 'desc' },
           take: 6,
         }),
-        this.prismaRead.recognition
-          ?.count({ where: { createdAt: { gte: range.gte, lte: range.lte } } })
-          .catch(() => 0),
-        this.prismaRead.feedback
-          ?.count({ where: { createdAt: { gte: range.gte, lte: range.lte } } })
-          .catch(() => 0),
-        this.prismaRead.moodCheckin
-          ?.aggregate({ _avg: { mood: true }, where: { createdAt: { gte: range.gte } } })
-          .catch(() => null),
+        this.prismaRead.kudos.count({
+          where: { createdAt: { gte: range.gte, lte: range.lte } },
+        }),
+        this.prismaRead.continuousFeedback.count({
+          where: { createdAt: { gte: range.gte, lte: range.lte } },
+        }),
+        this.prismaRead.leadershipPulse.aggregate({
+          _avg: { overallScore: true },
+          where: { createdAt: { gte: range.gte } },
+        }),
       ]);
 
     const totalUsers = await this.prismaRead.user.count({
@@ -464,7 +465,9 @@ export class ReportsService {
         recognitions,
         feedbackCount,
       },
-      avgMood: avgMoodRecent?._avg?.mood ? +avgMoodRecent._avg.mood.toFixed(1) : null,
+      avgMood: avgMoodRecent?._avg?.overallScore
+        ? +avgMoodRecent._avg.overallScore.toFixed(1)
+        : null,
       surveys: surveyData,
       insights:
         participationRate < 50

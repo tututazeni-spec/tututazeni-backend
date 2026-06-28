@@ -57,6 +57,9 @@ const mockPrisma = {
     groupBy: jest.fn().mockResolvedValue([]),
     aggregate: jest.fn().mockResolvedValue({ _avg: {} }),
   },
+  kudos: { count: jest.fn().mockResolvedValue(3) },
+  continuousFeedback: { count: jest.fn().mockResolvedValue(5) },
+  leadershipPulse: { aggregate: jest.fn().mockResolvedValue({ _avg: { overallScore: 4.2 } }) },
   savedReport: {
     create: jest.fn().mockResolvedValue({ id: 1, name: 'R' }),
     findMany: jest.fn().mockResolvedValue([]),
@@ -205,6 +208,16 @@ describe('ReportsService', () => {
     it('deve retornar relatório de engagement', async () => {
       const result = await service.engagementReport({});
       expect(result).toBeDefined();
+    });
+
+    it('usa kudos/continuousFeedback/leadershipPulse e avgMood do overallScore', async () => {
+      const result = await service.engagementReport({});
+      expect(mockPrisma.kudos.count).toHaveBeenCalled();
+      expect(mockPrisma.continuousFeedback.count).toHaveBeenCalled();
+      expect(mockPrisma.leadershipPulse.aggregate).toHaveBeenCalled();
+      expect(result.summary.recognitions).toBe(3);
+      expect(result.summary.feedbackCount).toBe(5);
+      expect(result.avgMood).toBe(4.2);
     });
   });
 
