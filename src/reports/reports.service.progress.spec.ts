@@ -48,6 +48,9 @@ function buildMockPrisma() {
     certificate: crud(),
     savedReport: crud(),
     reportSchedule: crud(),
+    kudos: crud(),
+    continuousFeedback: crud(),
+    leadershipPulse: crud(),
   };
 }
 
