@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { LoggerModule } from 'nestjs-pino';
+import { randomUUID } from 'node:crypto';
 
 // MÓDULOS ORIGINAIS
 import { PrismaModule } from './prisma/prisma.module';
@@ -91,6 +93,33 @@ import { RolesGuard } from './common/guards/roles.guard';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    LoggerModule.forRoot({
+      pinoHttp: {
+        level: process.env.LOG_LEVEL ?? 'info',
+        autoLogging: true,
+        genReqId: (req, res) => {
+          const incoming = req.headers['x-request-id'];
+          const id =
+            (Array.isArray(incoming) ? incoming[0] : incoming) || randomUUID();
+          res.setHeader('x-request-id', id);
+          return id;
+        },
+        customProps: (req) => ({ reqId: (req as { id?: string }).id }),
+        redact: {
+          paths: [
+            'req.headers.authorization',
+            'req.headers.cookie',
+            'req.body.password',
+            'res.headers["set-cookie"]',
+          ],
+          remove: true,
+        },
+        transport:
+          process.env.NODE_ENV !== 'production'
+            ? { target: 'pino-pretty', options: { singleLine: true } }
+            : undefined,
+      },
+    }),
     QueueModule,
     CacheModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: process.env.NODE_ENV === 'test' ? 10000 : 100 }]),
