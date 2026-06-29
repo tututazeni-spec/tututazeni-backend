@@ -99,12 +99,11 @@ import { RolesGuard } from './common/guards/roles.guard';
         autoLogging: true,
         genReqId: (req, res) => {
           const incoming = req.headers['x-request-id'];
-          const id =
-            (Array.isArray(incoming) ? incoming[0] : incoming) || randomUUID();
+          const id = (Array.isArray(incoming) ? incoming[0] : incoming) || randomUUID();
           res.setHeader('x-request-id', id);
           return id;
         },
-        customProps: (req) => ({ reqId: (req as { id?: string }).id }),
+        customProps: req => ({ reqId: (req as { id?: string }).id }),
         redact: {
           paths: [
             'req.headers.authorization',
