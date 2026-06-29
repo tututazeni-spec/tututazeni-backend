@@ -1,38 +1,49 @@
 import {
-  ExceptionFilter,
-  Catch,
   ArgumentsHost,
+  Catch,
+  ExceptionFilter,
   HttpException,
   HttpStatus,
-  Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { PinoLogger } from 'nestjs-pino';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
-  private readonly logger = new Logger(AllExceptionsFilter.name);
+  constructor(private readonly logger: PinoLogger) {
+    this.logger.setContext('AllExceptionsFilter');
+  }
 
-  catch(exception: unknown, host: ArgumentsHost) {
+  catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
+    const res = ctx.getResponse<Response>();
+    const req = ctx.getRequest<Request & { id?: string }>();
 
     const status =
-      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
-
+      exception instanceof HttpException
+        ? exception.getStatus()
+        : HttpStatus.INTERNAL_SERVER_ERROR;
     const message =
-      exception instanceof HttpException ? exception.getResponse() : 'Erro interno do servidor';
+      exception instanceof HttpException ? exception.message : 'Internal server error';
 
-    this.logger.error(
-      `${request.method} ${request.url}`,
-      exception instanceof Error ? exception.stack : '',
-    );
-
-    response.status(status).json({
+    const logPayload = {
       statusCode: status,
-      timestamp: new Date().toISOString(),
-      path: request.url,
+      method: req.method,
+      path: req.url,
+      err:
+        exception instanceof Error
+          ? { message: exception.message, stack: exception.stack }
+          : { value: exception },
+    };
+    if (status >= 500) this.logger.error(logPayload, message);
+    else this.logger.warn(logPayload, message);
+
+    res.status(status).json({
+      statusCode: status,
       message,
+      requestId: req.id,
+      path: req.url,
+      timestamp: new Date().toISOString(),
     });
   }
 }
