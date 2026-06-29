@@ -114,7 +114,7 @@ import { RolesGuard } from './common/guards/roles.guard';
           remove: true,
         },
         transport:
-          process.env.NODE_ENV !== 'production'
+          process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test'
             ? { target: 'pino-pretty', options: { singleLine: true } }
             : undefined,
       },
