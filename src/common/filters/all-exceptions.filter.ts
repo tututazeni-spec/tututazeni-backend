@@ -1,4 +1,5 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Request, Response } from 'express';
 import { PinoLogger } from 'nestjs-pino';
 
@@ -12,6 +13,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const res = ctx.getResponse<Response>();
     const req = ctx.getRequest<Request & { id?: string }>();
+
+    // Normalmente o pino-http já preencheu req.id. Mas para exceções lançadas
+    // antes desse middleware correr, req.id fica indefinido — nesse caso honramos
+    // o header x-request-id recebido ou geramos um, garantindo sempre o id na
+    // resposta (corpo + header).
+    const incoming = req.headers?.['x-request-id'];
+    const requestId = req.id ?? (Array.isArray(incoming) ? incoming[0] : incoming) ?? randomUUID();
+    if (!res.getHeader('x-request-id')) {
+      res.setHeader('x-request-id', requestId);
+    }
 
     const status =
       exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
@@ -44,7 +55,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     res.status(status).json({
       statusCode: status,
       message,
-      requestId: req.id,
+      requestId,
       path: req.url,
       timestamp: new Date().toISOString(),
     });
