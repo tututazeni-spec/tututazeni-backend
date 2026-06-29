@@ -1,38 +1,52 @@
-import {
-  ExceptionFilter,
-  Catch,
-  ArgumentsHost,
-  HttpException,
-  HttpStatus,
-  Logger,
-} from '@nestjs/common';
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { PinoLogger } from 'nestjs-pino';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
-  private readonly logger = new Logger(AllExceptionsFilter.name);
+  constructor(private readonly logger: PinoLogger) {
+    this.logger.setContext('AllExceptionsFilter');
+  }
 
-  catch(exception: unknown, host: ArgumentsHost) {
+  catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
+    const res = ctx.getResponse<Response>();
+    const req = ctx.getRequest<Request & { id?: string }>();
 
     const status =
       exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message =
-      exception instanceof HttpException ? exception.getResponse() : 'Erro interno do servidor';
+    // Preserva o payload estruturado das HttpException (ex.: o array de mensagens
+    // do ValidationPipe). Usar exception.message colapsaria isso para a string
+    // genérica "Bad Request Exception" e perderia os detalhes por campo.
+    let message: unknown = 'Internal server error';
+    if (exception instanceof HttpException) {
+      const response = exception.getResponse();
+      message =
+        typeof response === 'string'
+          ? response
+          : ((response as Record<string, unknown>).message ?? exception.message);
+    }
 
-    this.logger.error(
-      `${request.method} ${request.url}`,
-      exception instanceof Error ? exception.stack : '',
-    );
+    const isServerError = status >= 500;
+    // Stack trace só em 5xx. Erros de cliente (401/403/404) são rotineiros e,
+    // sob carga, gerariam ruído e custo de serialização desnecessários.
+    const err =
+      exception instanceof Error
+        ? { message: exception.message, ...(isServerError ? { stack: exception.stack } : {}) }
+        : { value: exception };
 
-    response.status(status).json({
+    const logPayload = { statusCode: status, method: req.method, path: req.url, err };
+    const logMessage = exception instanceof Error ? exception.message : 'Unknown exception';
+    if (isServerError) this.logger.error(logPayload, logMessage);
+    else this.logger.warn(logPayload, logMessage);
+
+    res.status(status).json({
       statusCode: status,
-      timestamp: new Date().toISOString(),
-      path: request.url,
       message,
+      requestId: req.id,
+      path: req.url,
+      timestamp: new Date().toISOString(),
     });
   }
 }
