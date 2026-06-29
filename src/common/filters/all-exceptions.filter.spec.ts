@@ -5,6 +5,8 @@ function makeRes() {
   const r: any = {};
   r.status = jest.fn(() => r);
   r.json = jest.fn(() => r);
+  r.getHeader = jest.fn(() => undefined);
+  r.setHeader = jest.fn(() => r);
   return r;
 }
 function makeHost(req: any, res: any): any {
@@ -73,5 +75,39 @@ describe('AllExceptionsFilter', () => {
     expect(logger.warn).toHaveBeenCalled();
     expect(logger.warn.mock.calls[0][0].err.stack).toBeUndefined();
     expect(logger.warn.mock.calls[0][0].err.message).toBe('x');
+  });
+
+  it('exceção não-Error (500): responde genérico e loga err.value', () => {
+    const res = makeRes();
+    new AllExceptionsFilter(logger).catch(
+      'string exception',
+      makeHost({ method: 'GET', url: '/w', id: 'req-5' }, res),
+    );
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json.mock.calls[0][0].message).toBe('Internal server error');
+    expect(logger.error).toHaveBeenCalled();
+    expect(logger.error.mock.calls[0][0].err).toEqual({ value: 'string exception' });
+  });
+
+  it('sem req.id: usa o header x-request-id recebido e define-o na resposta', () => {
+    const res = makeRes();
+    new AllExceptionsFilter(logger).catch(
+      new Error('boom'),
+      makeHost({ method: 'GET', url: '/x', headers: { 'x-request-id': 'hdr-123' } }, res),
+    );
+    expect(res.json.mock.calls[0][0].requestId).toBe('hdr-123');
+    expect(res.setHeader).toHaveBeenCalledWith('x-request-id', 'hdr-123');
+  });
+
+  it('sem req.id e sem header: gera um requestId não vazio', () => {
+    const res = makeRes();
+    new AllExceptionsFilter(logger).catch(
+      new Error('boom'),
+      makeHost({ method: 'GET', url: '/x', headers: {} }, res),
+    );
+    const requestId = res.json.mock.calls[0][0].requestId;
+    expect(typeof requestId).toBe('string');
+    expect(requestId.length).toBeGreaterThan(0);
+    expect(res.setHeader).toHaveBeenCalledWith('x-request-id', requestId);
   });
 });
