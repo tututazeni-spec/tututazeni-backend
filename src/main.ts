@@ -108,10 +108,6 @@ async function bootstrap() {
     });
   });
 
-  app.getHttpAdapter().get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', uptime: process.uptime() });
-  });
-
   const port = process.env.PORT ?? 4000;
   await app.listen(port);
 
