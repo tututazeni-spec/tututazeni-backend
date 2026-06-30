@@ -3,7 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { readReplicas } from '@prisma/extension-read-replicas';
 import { Pool } from 'pg';
-import * as fs from 'fs';
+import { PinoLogger } from 'nestjs-pino';
+import { logQueryEvent, PrismaQueryEvent } from './query-logging';
 
 function makePool(connectionString: string | undefined, max: number): Pool {
   return new Pool({
@@ -45,7 +46,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     return ((this as unknown as { db?: PrismaService }).db ?? this) as PrismaService;
   }
 
-  constructor() {
+  private readonly slowQueryMs = parseInt(process.env.SLOW_QUERY_MS || '500', 10);
+
+  constructor(private readonly pino: PinoLogger) {
     // ─── Primary (escrita) — mantém o comportamento e o pool actuais ───
     const writePool = makePool(
       process.env.DATABASE_URL,
@@ -53,7 +56,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     );
     super({
       adapter: new PrismaPg(writePool),
-      log: process.env.SLOW_QUERY_LOG ? [{ emit: 'event', level: 'query' }] : [],
+      log: [{ emit: 'event', level: 'query' }],
     });
 
     // ─── Réplica (leitura) — opcional, controlada por feature flag ───
@@ -62,12 +65,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
     if (useReplicas) {
       const readPool = makePool(replicaUrl, parseInt(process.env.DB_REPLICA_POOL_MAX || '10', 10));
-      this.replicaClient = new PrismaClient({ adapter: new PrismaPg(readPool) });
+      this.replicaClient = new PrismaClient({
+        adapter: new PrismaPg(readPool),
+        log: [{ emit: 'event', level: 'query' }],
+      });
     } else {
       this.replicaClient = null;
     }
 
     this.db = this.buildDbClient();
+    this.pino.setContext('PrismaService');
   }
 
   private buildDbClient() {
@@ -90,17 +97,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       await this.replicaClient.$connect();
     }
 
-    if (process.env.SLOW_QUERY_LOG) {
-      const thresholdMs = parseInt(process.env.SLOW_QUERY_MS || '500', 10);
-      const stream = fs.createWriteStream(
-        process.env.SLOW_QUERY_LOG_FILE || 'load-tests/reports/slow-queries.log',
-        { flags: 'a' },
-      );
-      (this as any).$on('query', (e: { query: string; params: string; duration: number }) => {
-        if (e.duration >= thresholdMs) {
-          stream.write(`${e.duration}ms | ${e.query} | params=${e.params}\n`);
+    (this as { $on: (e: 'query', cb: (e: PrismaQueryEvent) => void) => void }).$on('query', e =>
+      logQueryEvent(this.pino, e, this.slowQueryMs),
+    );
+    if (this.replicaClient) {
+      (
+        this.replicaClient as unknown as {
+          $on: (e: 'query', cb: (e: PrismaQueryEvent) => void) => void;
         }
-      });
+      ).$on('query', e => logQueryEvent(this.pino, e, this.slowQueryMs));
     }
   }
 
