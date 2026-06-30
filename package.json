@@ -106,6 +106,7 @@
     "@nestjs/platform-express": "^11.1.19",
     "@nestjs/schedule": "^5.0.1",
     "@nestjs/swagger": "^11.2.7",
+    "@nestjs/terminus": "^11.1.1",
     "@nestjs/throttler": "^6.0.0",
     "@nestjs/typeorm": "^11.0.0",
     "@prisma/adapter-pg": "^7.1.0",
