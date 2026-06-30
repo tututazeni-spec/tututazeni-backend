@@ -46,3 +46,21 @@ describe('CacheService', () => {
     expect(r).toEqual({ a: 4 });
   });
 });
+
+function makeService(ping: jest.Mock) {
+  const redis = { ping, quit: jest.fn().mockResolvedValue(undefined) } as any;
+  const config = { get: jest.fn((_k: string, d?: string) => d) } as any;
+  return new CacheService(redis, config);
+}
+
+describe('CacheService.ping', () => {
+  it('resolve quando o Redis responde', async () => {
+    const svc = makeService(jest.fn().mockResolvedValue('PONG'));
+    await expect(svc.ping()).resolves.toBeUndefined();
+  });
+
+  it('rejeita quando o Redis está em baixo', async () => {
+    const svc = makeService(jest.fn().mockRejectedValue(new Error('down')));
+    await expect(svc.ping()).rejects.toThrow('down');
+  });
+});

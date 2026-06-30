@@ -35,6 +35,11 @@ export class CacheService implements OnModuleDestroy {
     return value;
   }
 
+  /** Verifica conectividade do Redis (health check). Rejeita se inacessível. */
+  async ping(): Promise<void> {
+    await this.redis.ping();
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.redis.quit().catch(() => undefined);
   }
