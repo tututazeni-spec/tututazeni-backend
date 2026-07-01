@@ -39,6 +39,7 @@ describe('CacheService', () => {
     expect(r).toEqual({ a: 3 });
     expect(redis.get).not.toHaveBeenCalled();
     expect(redis.set).not.toHaveBeenCalled();
+    expect(counter.inc).not.toHaveBeenCalled();
   });
 
   it('Redis em baixo (get/set lançam) calcula na mesma', async () => {
@@ -50,12 +51,13 @@ describe('CacheService', () => {
     const svc = new CacheService(redis, makeConfig(), counter);
     const r = await svc.getOrSet('k', 90, async () => ({ a: 4 }));
     expect(r).toEqual({ a: 4 });
+    expect(counter.inc).toHaveBeenCalledTimes(1);
+    expect(counter.inc).toHaveBeenCalledWith({ result: 'miss' });
   });
 
   it('cache hit incrementa o counter com result=hit', async () => {
     const redis = {
       get: jest.fn().mockResolvedValue(JSON.stringify({ a: 1 })),
-      set: jest.fn(),
     } as any;
     const counter = makeCounter();
     const svc = new CacheService(redis, makeConfig(), counter);
