@@ -1,6 +1,8 @@
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import type { Redis } from 'ioredis';
+import { Counter } from 'prom-client';
 import { CACHE_REDIS } from './cache.constants';
 
 @Injectable()
@@ -10,6 +12,7 @@ export class CacheService implements OnModuleDestroy {
   constructor(
     @Inject(CACHE_REDIS) private readonly redis: Redis,
     private readonly config: ConfigService,
+    @InjectMetric('cache_requests_total') private readonly cacheCounter: Counter<string>,
   ) {}
 
   private get cacheEnabled(): boolean {
@@ -22,10 +25,14 @@ export class CacheService implements OnModuleDestroy {
     if (!this.cacheEnabled) return compute();
     try {
       const hit = await this.redis.get(key);
-      if (hit) return JSON.parse(hit) as T;
+      if (hit) {
+        this.cacheCounter.inc({ result: 'hit' });
+        return JSON.parse(hit) as T;
+      }
     } catch (e) {
       this.logger.warn(`cache get falhou (${key}): ${e instanceof Error ? e.message : String(e)}`);
     }
+    this.cacheCounter.inc({ result: 'miss' });
     const value = await compute();
     try {
       await this.redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
