@@ -80,6 +80,7 @@ import { AcademicModule } from './academic/academic.module';
 import { LmsModule } from './lms/lms.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { HealthModule } from './health/health.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 // INFRA
 import { QueueModule } from './queue/queue.module';
@@ -187,6 +188,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     LmsModule,
     MonitoringModule,
     HealthModule,
+    MetricsModule,
   ],
   controllers: [LearningPathsController],
   providers: [
