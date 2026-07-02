@@ -1,4 +1,4 @@
-import { logQueryEvent } from './query-logging';
+import { logQueryEvent, observeQueryDuration } from './query-logging';
 
 function makeLogger() {
   return { warn: jest.fn(), debug: jest.fn() };
@@ -25,5 +25,18 @@ describe('logQueryEvent', () => {
       'db query',
     );
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('observeQueryDuration', () => {
+  it('observa a duração em segundos com label target', () => {
+    const histogram = { observe: jest.fn() };
+    observeQueryDuration(histogram as any, {
+      query: 'SELECT 1',
+      params: '[]',
+      duration: 250,
+      target: 'User.findMany',
+    });
+    expect(histogram.observe).toHaveBeenCalledWith({ target: 'User.findMany' }, 0.25);
   });
 });

@@ -4,7 +4,9 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { readReplicas } from '@prisma/extension-read-replicas';
 import { Pool } from 'pg';
 import { PinoLogger } from 'nestjs-pino';
-import { logQueryEvent, PrismaQueryEvent } from './query-logging';
+import { InjectMetric } from '@willsoto/nestjs-prometheus';
+import { Histogram } from 'prom-client';
+import { logQueryEvent, observeQueryDuration, PrismaQueryEvent } from './query-logging';
 
 function makePool(connectionString: string | undefined, max: number): Pool {
   return new Pool({
@@ -48,7 +50,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   private readonly slowQueryMs = parseInt(process.env.SLOW_QUERY_MS || '500', 10);
 
-  constructor(private readonly pino: PinoLogger) {
+  constructor(
+    private readonly pino: PinoLogger,
+    @InjectMetric('prisma_query_duration_seconds')
+    private readonly queryHistogram: Histogram<string>,
+  ) {
     // ─── Primary (escrita) — mantém o comportamento e o pool actuais ───
     const writePool = makePool(
       process.env.DATABASE_URL,
@@ -97,15 +103,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       await this.replicaClient.$connect();
     }
 
-    (this as { $on: (e: 'query', cb: (e: PrismaQueryEvent) => void) => void }).$on('query', e =>
-      logQueryEvent(this.pino, e, this.slowQueryMs),
-    );
+    (this as { $on: (e: 'query', cb: (e: PrismaQueryEvent) => void) => void }).$on('query', e => {
+      logQueryEvent(this.pino, e, this.slowQueryMs);
+      observeQueryDuration(this.queryHistogram, e);
+    });
     if (this.replicaClient) {
       (
         this.replicaClient as unknown as {
           $on: (e: 'query', cb: (e: PrismaQueryEvent) => void) => void;
         }
-      ).$on('query', e => logQueryEvent(this.pino, e, this.slowQueryMs));
+      ).$on('query', e => {
+        logQueryEvent(this.pino, e, this.slowQueryMs);
+        observeQueryDuration(this.queryHistogram, e);
+      });
     }
   }
 

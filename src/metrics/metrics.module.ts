@@ -30,8 +30,13 @@ import { MetricsInterceptor } from './metrics.interceptor';
       help: 'Duração dos pedidos HTTP em segundos',
       labelNames: ['method', 'route', 'status_code'],
     }),
+    makeHistogramProvider({
+      name: 'prisma_query_duration_seconds',
+      help: 'Duração das queries Prisma em segundos',
+      labelNames: ['target'],
+    }),
     { provide: APP_INTERCEPTOR, useClass: MetricsInterceptor },
   ],
-  exports: [getToken('cache_requests_total')],
+  exports: [getToken('cache_requests_total'), getToken('prisma_query_duration_seconds')],
 })
 export class MetricsModule {}
