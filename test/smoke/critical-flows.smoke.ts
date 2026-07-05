@@ -83,3 +83,33 @@ describe('Fluxos críticos — Academia (cursos + inscrições)', () => {
     });
   });
 });
+
+describe('Fluxos críticos — RH / RBAC', () => {
+  let rhToken: string;
+  let employeeToken: string;
+
+  beforeAll(async () => {
+    rhToken = await login(RH_EMAIL, RH_PASSWORD);
+    employeeToken = await login(EMPLOYEE_EMAIL, EMPLOYEE_PASSWORD);
+  });
+
+  it('GET /users como RH → 200', async () => {
+    const res = await get('/users', rhToken);
+    expect(res.status).toBe(200);
+  });
+
+  it('GET /users como COLABORADOR → 403 (RBAC)', async () => {
+    const res = await get('/users', employeeToken);
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /development-plans/my → 200', async () => {
+    const res = await get('/development-plans/my', employeeToken);
+    expect(res.status).toBe(200);
+  });
+
+  it('GET /attendance/my → 200', async () => {
+    const res = await get('/attendance/my', employeeToken);
+    expect(res.status).toBe(200);
+  });
+});
