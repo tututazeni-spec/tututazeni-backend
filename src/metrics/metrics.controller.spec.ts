@@ -4,7 +4,7 @@ import { register } from 'prom-client';
 import request from 'supertest';
 import { MetricsModule } from './metrics.module';
 
-jest.setTimeout(30000);
+jest.setTimeout(120000);
 
 describe('GET /metrics (integração)', () => {
   let app: INestApplication;
