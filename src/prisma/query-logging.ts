@@ -1,4 +1,5 @@
 import { PinoLogger } from 'nestjs-pino';
+import { Histogram } from 'prom-client';
 
 export interface PrismaQueryEvent {
   query: string;
@@ -35,4 +36,11 @@ export function logQueryEvent(
       'db query',
     );
   }
+}
+
+type QueryHistogram = Pick<Histogram<string>, 'observe'>;
+
+/** Observa a duração de uma query (segundos) no histograma, com label do target. */
+export function observeQueryDuration(histogram: QueryHistogram, event: PrismaQueryEvent): void {
+  histogram.observe({ target: event.target }, event.duration / 1000);
 }
