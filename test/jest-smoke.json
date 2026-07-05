@@ -1,0 +1,13 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testRegex": "test/smoke/.*\\.smoke\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "testTimeout": 30000,
+  "verbose": true,
+  "forceExit": true,
+  "globalSetup": "<rootDir>/test/smoke/setup.ts"
+}

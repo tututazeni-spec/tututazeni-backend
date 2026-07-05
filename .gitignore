@@ -88,3 +88,6 @@ build-*.txt
 diff-*.txt
 tc-result.txt
 *-out.txt
+
+# Estado do seed da suite de regressão (regra 8)
+test/smoke/.seed-state.json
