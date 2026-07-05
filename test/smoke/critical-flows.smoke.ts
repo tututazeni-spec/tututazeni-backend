@@ -44,3 +44,42 @@ describe('Fluxos críticos — Auth + Health', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('Fluxos críticos — Academia (cursos + inscrições)', () => {
+  let token: string;
+  let courseId: number;
+
+  beforeAll(async () => {
+    token = await login(EMPLOYEE_EMAIL, EMPLOYEE_PASSWORD);
+    courseId = readSeededCourseId();
+  });
+
+  it('GET /courses → 200', async () => {
+    const res = await get('/courses', token);
+    expect(res.status).toBe(200);
+  });
+
+  it('GET /courses/:id → 200 com o curso do seed', async () => {
+    const res = await get(`/courses/${courseId}`, token);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('id', courseId);
+  });
+
+  it('GET /courses/my/enrollments → 200', async () => {
+    const res = await get('/courses/my/enrollments', token);
+    expect(res.status).toBe(200);
+  });
+
+  // Escritas: desligadas em produção com SMOKE_ALLOW_WRITES=false
+  const writes = process.env.SMOKE_ALLOW_WRITES !== 'false' ? describe : describe.skip;
+
+  writes('escritas (SMOKE_ALLOW_WRITES)', () => {
+    it('POST /courses/:id/enroll → 201; repetida → 409', async () => {
+      const first = await post(`/courses/${courseId}/enroll`, {}, token);
+      expect(first.status).toBe(201);
+
+      const dup = await post(`/courses/${courseId}/enroll`, {}, token);
+      expect(dup.status).toBe(409);
+    });
+  });
+});
