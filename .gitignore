@@ -91,3 +91,7 @@ tc-result.txt
 
 # Estado do seed da suite de regressão (regra 8)
 test/smoke/.seed-state.json
+
+# Arranque local da app de smoke (contém credenciais locais — não versionar)
+start-smoke-app.bat
+app-pid.txt
