@@ -45,7 +45,7 @@
   - Credenciais seed: `smoke.employee@innova-test.com` / `smoke.rh@innova-test.com`, password `Test@1234`.
   - Helper exportado pela suite: `readSeededCourseId(): number` (lê env `SMOKE_COURSE_ID` ou o `.seed-state.json`).
 
-- [ ] **Step 1: Criar `test/jest-smoke.json`**
+- [x] **Step 1: Criar `test/jest-smoke.json`**
 
 ```json
 {
@@ -63,7 +63,7 @@
 }
 ```
 
-- [ ] **Step 2: Criar `test/smoke/smoke-client.ts`**
+- [x] **Step 2: Criar `test/smoke/smoke-client.ts`**
 
 ```ts
 // Cliente HTTP mínimo da suite de regressão (regra 8).
@@ -118,7 +118,7 @@ export async function login(email: string, password: string): Promise<string> {
 }
 ```
 
-- [ ] **Step 3: Criar `test/smoke/setup.ts`**
+- [x] **Step 3: Criar `test/smoke/setup.ts`**
 
 Segue o padrão de `test/integration/setup.ts` (upserts idempotentes, campos `fullName`/`active`, curso único por `internalCode`). Diferenças: corre só se `SMOKE_SEED !== 'false'`, semeia utilizadores/curso próprios da suite, limpa a matrícula do par employee×curso (para o `POST /enroll` dar 201 determinístico) e grava o `courseId` em `.seed-state.json`.
 
@@ -223,7 +223,7 @@ export default async function globalSetup() {
 }
 ```
 
-- [ ] **Step 4: Criar `test/smoke/critical-flows.smoke.ts` com o grupo Auth+Health**
+- [x] **Step 4: Criar `test/smoke/critical-flows.smoke.ts` com o grupo Auth+Health**
 
 ```ts
 // Regra 8 — fluxos críticos contra uma app REAL a correr (SMOKE_BASE_URL).
@@ -274,7 +274,7 @@ describe('Fluxos críticos — Auth + Health', () => {
 });
 ```
 
-- [ ] **Step 5: Adicionar o script ao `package.json`**
+- [x] **Step 5: Adicionar o script ao `package.json`**
 
 Run (Bash tool):
 ```bash
@@ -286,7 +286,7 @@ console.log('ok');
 "
 ```
 
-- [ ] **Step 6: Ignorar o estado do seed no git**
+- [x] **Step 6: Ignorar o estado do seed no git**
 
 Acrescentar ao `.gitignore` (no fim do ficheiro):
 ```
@@ -294,12 +294,12 @@ Acrescentar ao `.gitignore` (no fim do ficheiro):
 test/smoke/.seed-state.json
 ```
 
-- [ ] **Step 7: Correr SEM a app a correr — deve falhar com erro de ligação**
+- [x] **Step 7: Correr SEM a app a correr — deve falhar com erro de ligação**
 
 Run (Bash tool): `npx jest --config test/jest-smoke.json --runInBand --forceExit -t "health"`
 Expected: FAIL — `fetch failed`/`ECONNREFUSED` (prova que a suite deteta app em baixo).
 
-- [ ] **Step 8: Arrancar a app localmente (background)**
+- [x] **Step 8: Arrancar a app localmente (background)**
 
 Pré-requisito: Postgres local com a BD `innova_test` e Redis a correr (Memurai ou `docker-compose up -d redis`).
 
@@ -317,12 +317,12 @@ for i in $(seq 1 60); do curl -sf http://localhost:4000/health/ready >/dev/null 
 ```
 Expected: `pronta`.
 
-- [ ] **Step 9: Correr a suite — deve passar**
+- [x] **Step 9: Correr a suite — deve passar**
 
 Run (Bash tool): `npm run test:regression`
 Expected: PASS (5 testes do grupo Auth+Health).
 
-- [ ] **Step 10: Formatar + Commit**
+- [x] **Step 10: Formatar + Commit**
 
 Run (Bash tool): `npx prettier --write test/smoke/smoke-client.ts test/smoke/setup.ts test/smoke/critical-flows.smoke.ts`
 ```bash
@@ -343,7 +343,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes (Task 1): `get`, `post`, `login` de `./smoke-client`; `readSeededCourseId()`; credenciais `EMPLOYEE_EMAIL`/`EMPLOYEE_PASSWORD` (constantes no topo do ficheiro).
 - Produces: nada novo para tasks seguintes.
 
-- [ ] **Step 1: Acrescentar o describe da Academia ao `critical-flows.smoke.ts`**
+- [x] **Step 1: Acrescentar o describe da Academia ao `critical-flows.smoke.ts`**
 
 Acrescentar no fim do ficheiro:
 
@@ -388,17 +388,17 @@ describe('Fluxos críticos — Academia (cursos + inscrições)', () => {
 });
 ```
 
-- [ ] **Step 2: Correr a suite (app da Task 1 ainda a correr) — deve passar**
+- [x] **Step 2: Correr a suite (app da Task 1 ainda a correr) — deve passar**
 
 Run (Bash tool): `npm run test:regression`
 Expected: PASS (5 auth+health + 4 academia). Se a app já não estiver a correr, rearrancar como no Task 1 Step 8.
 
-- [ ] **Step 3: Confirmar que a repetição é idempotente**
+- [x] **Step 3: Confirmar que a repetição é idempotente**
 
 Run (Bash tool): `npm run test:regression`
 Expected: PASS de novo — o setup limpa a matrícula employee×curso antes de cada corrida.
 
-- [ ] **Step 4: Formatar + Commit**
+- [x] **Step 4: Formatar + Commit**
 
 Run (Bash tool): `npx prettier --write test/smoke/critical-flows.smoke.ts`
 ```bash
@@ -419,7 +419,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes (Task 1): `get`, `login`; constantes `EMPLOYEE_*` e `RH_*` do topo do ficheiro.
 - Produces: nada novo.
 
-- [ ] **Step 1: Acrescentar o describe RH/RBAC ao `critical-flows.smoke.ts`**
+- [x] **Step 1: Acrescentar o describe RH/RBAC ao `critical-flows.smoke.ts`**
 
 Acrescentar no fim do ficheiro:
 
@@ -455,18 +455,18 @@ describe('Fluxos críticos — RH / RBAC', () => {
 });
 ```
 
-- [ ] **Step 2: Correr a suite completa — deve passar**
+- [x] **Step 2: Correr a suite completa — deve passar**
 
 Run (Bash tool): `npm run test:regression`
 Expected: PASS (13 testes no total: 5 + 4 + 4).
 
-- [ ] **Step 3: Prova de que a suite apanha regressões de RBAC**
+- [x] **Step 3: Prova de que a suite apanha regressões de RBAC**
 
 Verificação manual (critério de sucesso 3 da spec): correr com credenciais RH erradas e ver a suite falhar.
 Run (Bash tool): `cross-env SMOKE_RH_PASSWORD=errada npm run test:regression`
 Expected: FAIL no `beforeAll` do grupo RH (login falha com contexto claro). Depois correr `npm run test:regression` normal → PASS.
 
-- [ ] **Step 4: Formatar + Commit**
+- [x] **Step 4: Formatar + Commit**
 
 Run (Bash tool): `npx prettier --write test/smoke/critical-flows.smoke.ts`
 ```bash
@@ -487,7 +487,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: script `test:regression` (Task 1); build e migrations já existentes no workflow; services Postgres/Redis já configurados.
 - Produces: gate por PR — job `quality` falha se um fluxo crítico partir.
 
-- [ ] **Step 1: Acrescentar os passos ao `quality.yml`**
+- [x] **Step 1: Acrescentar os passos ao `quality.yml`**
 
 Inserir entre o passo "Testes de integração" e "Análise SonarCloud":
 
@@ -522,12 +522,12 @@ Notas:
 - O `DATABASE_URL` no passo de regressão é para o **seed** do globalSetup (a app tem o seu no passo de arranque).
 - Os segredos JWT são os mesmos dos testes de integração — valores de teste, já visíveis no repo.
 
-- [ ] **Step 2: Validar o YAML localmente**
+- [x] **Step 2: Validar o YAML localmente**
 
 Run (Bash tool): `node -e "const yaml=require('js-yaml'); yaml.load(require('fs').readFileSync('.github/workflows/quality.yml','utf8')); console.log('YAML ok')"`
 Expected: `YAML ok` (js-yaml já é dependência transitiva; se faltar, `npx js-yaml .github/workflows/quality.yml > /dev/null && echo ok`).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add .github/workflows/quality.yml
@@ -542,34 +542,34 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Files:** nenhum (validação).
 
-- [ ] **Step 1: Suite completa local uma última vez**
+- [x] **Step 1: Suite completa local uma última vez**
 
 Com a app a correr (Task 1 Step 8 se necessário):
 Run (Bash tool): `npm run test:regression`
 Expected: 13 testes PASS.
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run (Bash tool): `node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit`
 Expected: sem erros. (Os ficheiros de `test/` não entram no build de produção, mas o typecheck global tem de continuar limpo.)
 
-- [ ] **Step 3: Parar a app local de teste**
+- [x] **Step 3: Parar a app local de teste**
 
 Matar o processo em background do Task 1 Step 8 (via o id da task em background do harness).
 
-- [ ] **Step 4: Push (espera pelo pre-push `npm run build`)**
+- [x] **Step 4: Push (espera pelo pre-push `npm run build`)**
 
 ```bash
 git push -u origin feat/observability-regression-suite
 ```
 
-- [ ] **Step 5: Abrir PR para `main`**
+- [x] **Step 5: Abrir PR para `main`**
 
 Corpo num ficheiro temporário e `gh pr create --base main --body-file <ficheiro>` (evita quoting no PowerShell). Título:
 `test(observability): suite de regressão de fluxos críticos (regra 8)`
 Corpo: resumo da suite (3 grupos, 13 testes), os dois modos (CI gate / pós-deploy via `SMOKE_BASE_URL`+`SMOKE_SEED=false`+`SMOKE_ALLOW_WRITES=false`), o passo novo no CI, e nota de que o wiring pós-deploy real chega com a regra 10. Remover o ficheiro temporário. Terminar o corpo com o footer standard do Claude Code.
 
-- [ ] **Step 6: Confirmar CI verde**
+- [x] **Step 6: Confirmar CI verde**
 
 Run (Bash tool): `gh pr checks <n>` até `quality` passar (o job agora inclui o gate de regressão — é a prova em CI). Reportar o link do PR.
 
