@@ -13,6 +13,7 @@
   },
   "scripts": {
     "postinstall": "prisma generate",
+    "precheck": "powershell -File scripts/precheck.ps1",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 tsc",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
@@ -85,7 +86,8 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report test/e2e/reports",
-    "db:verify-replica": "node scripts/verify-replica.cjs"
+    "db:verify-replica": "node scripts/verify-replica.cjs",
+    "test:regression": "cross-env NODE_ENV=test jest --config test/jest-smoke.json --runInBand --forceExit"
   },
   "lint-staged": {
     "src/**/*.ts": [

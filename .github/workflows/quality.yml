@@ -82,6 +82,30 @@ jobs:
         env:
           DATABASE_URL: 'postgresql://postgres:Placido*7@localhost:5432/innova_test'
 
+      - name: Arrancar app para regressão
+        run: node dist/main.js &
+        env:
+          NODE_ENV: test
+          DATABASE_URL: 'postgresql://postgres:Placido*7@localhost:5432/innova_test'
+          JWT_SECRET: 'test-secret-key-innova-2024'
+          JWT_REFRESH_SECRET: 'test-refresh-secret-innova-2024'
+          PORT: '4000'
+
+      - name: Esperar pela app (health/ready)
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:4000/health/ready > /dev/null; then
+              echo "✅ app pronta"; exit 0
+            fi
+            sleep 1
+          done
+          echo "❌ app não ficou pronta em 60s"; exit 1
+
+      - name: Regressão de fluxos críticos
+        run: npm run test:regression
+        env:
+          DATABASE_URL: 'postgresql://postgres:Placido*7@localhost:5432/innova_test'
+
       - name: Análise SonarCloud
         # Só corre se o segredo SONAR_TOKEN estiver configurado no repositório.
         # Sem isto, o passo falharia em repositórios sem SonarCloud ligado.
