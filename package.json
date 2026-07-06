@@ -13,6 +13,7 @@
   },
   "scripts": {
     "postinstall": "prisma generate",
+    "precheck": "powershell -File scripts/precheck.ps1",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 tsc",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
