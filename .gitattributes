@@ -1,0 +1,2 @@
+# Scripts shell correm em containers/VPS Linux — nunca CRLF, mesmo em checkouts Windows
+*.sh text eol=lf
