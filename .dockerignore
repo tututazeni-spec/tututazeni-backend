@@ -1,0 +1,27 @@
+# Build context mínimo — só o que o Dockerfile copia importa (src, prisma,
+# tsconfig.json, package*.json, ops/deploy/docker-entrypoint.sh)
+node_modules
+dist
+coverage
+test-results
+logs
+load-tests
+frontend
+ad-innova-api
+ad-innova-web
+bruno
+docs
+test
+types
+scripts
+.git
+.github
+.husky
+.claude
+.superpowers
+.vscode
+.idea
+*.md
+.env
+.env.*
+.eslintcache
