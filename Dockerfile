@@ -25,9 +25,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
-# prisma é dependency de produção → postinstall (prisma generate) funciona aqui;
+# --ignore-scripts: o `prepare` (husky) é devDependency e rebentaria com exit 127;
+# por isso o prisma generate (postinstall) corre explicitamente a seguir.
 # bcrypt/better-sqlite3/sqlite3 usam prebuilds linux-x64 glibc (sem toolchain).
-RUN npm ci --omit=dev --no-audit --no-fund
+RUN npm ci --omit=dev --no-audit --no-fund --ignore-scripts \
+  && npx prisma generate
 
 COPY --from=build /app/dist ./dist
 COPY ops/deploy/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
