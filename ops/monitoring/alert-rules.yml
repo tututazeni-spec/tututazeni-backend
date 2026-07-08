@@ -1,0 +1,89 @@
+# Regras de alerta (regra 9) — config-as-code.
+# Mudar um threshold = editar este ficheiro + `docker compose restart prometheus`
+# (sem redeploy da app). Ver docs/deploy/alerting.md.
+groups:
+  - name: innova-app
+    rules:
+      - alert: AppDown
+        expr: up{job="innova-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'App INNOVA em baixo'
+          description: 'O scrape de app:4000/metrics falha há mais de 1 minuto.'
+
+      - alert: HighErrorRate
+        expr: >
+          sum(rate(http_request_duration_seconds_count{status_code=~"5.."}[5m]))
+            / sum(rate(http_request_duration_seconds_count[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Taxa de erros 5xx acima de 5%'
+          description: 'Rácio de respostas 5xx superior a 5% nos últimos 5 minutos.'
+
+      - alert: HighLatencyP95
+        expr: >
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Latência HTTP p95 acima de 1s'
+          description: 'p95 dos pedidos HTTP acima de 1s há 10 minutos.'
+
+      - alert: SlowDbQueries
+        expr: >
+          histogram_quantile(0.95,
+            sum by (le) (rate(prisma_query_duration_seconds_bucket[5m]))) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Queries Prisma lentas (p95 > 500ms)'
+          description: 'p95 das queries Prisma acima de 500ms há 10 minutos.'
+
+      - alert: EventLoopLag
+        expr: nodejs_eventloop_lag_p90_seconds > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Event loop com lag elevado'
+          description: 'Lag p90 do event loop acima de 0.5s há 5 minutos.'
+
+      - alert: HighMemory
+        expr: nodejs_heap_size_used_bytes / nodejs_heap_size_total_bytes > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Heap acima de 90%'
+          description: 'Heap V8 usado acima de 90% do total há 10 minutos.'
+
+      - alert: LowCacheHitRate
+        expr: >
+          (
+            sum(rate(cache_requests_total{result="hit"}[30m]))
+              / sum(rate(cache_requests_total[30m])) < 0.5
+          )
+          and sum(rate(cache_requests_total[30m])) > 0.05
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: 'Hit rate do cache abaixo de 50%'
+          description: 'Com tráfego mínimo, o hit rate do cache está abaixo de 50% há 30 minutos.'
+
+      # Dead-man's switch: dispara SEMPRE. O Alertmanager encaminha-o como
+      # heartbeat para o healthchecks.io — se os pings pararem, o alerta vem de fora.
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: none
+        annotations:
+          summary: 'Watchdog (dead-man) — deve estar sempre a disparar'
+          description: 'Se o healthchecks.io deixar de receber isto, o stack de monitorização morreu.'
