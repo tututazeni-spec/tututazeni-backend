@@ -1,0 +1,63 @@
+# Compose de produção — corre no VPS em /opt/innova (ver docs/deploy/runbook.md).
+# Postgres NÃO está aqui: é gerido/externo (decisão em docs/db-architecture/).
+# IMAGE_TAG vem do ambiente (deploy.sh exporta-o a partir de current_tag).
+name: innova
+
+services:
+  app:
+    image: ghcr.io/tututazeni-spec/tututazeni-backend:${IMAGE_TAG:-latest}
+    container_name: innova-app
+    env_file: .env.production
+    ports:
+      - '4000:4000'
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    # healthcheck herdado do HEALTHCHECK da imagem (GET /health/ready)
+
+  redis:
+    image: redis:7-alpine
+    container_name: innova-redis-prod
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Monitorização (regra 9) — sem portas públicas; UI só via túnel SSH ───
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: innova-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - ./monitoring/metrics_token:/etc/prometheus/secrets/metrics_token:ro
+      - prometheus-data:/prometheus
+    ports:
+      - '127.0.0.1:9090:9090'
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: innova-alertmanager
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - '127.0.0.1:9093:9093'
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  prometheus-data:
+  alertmanager-data:
