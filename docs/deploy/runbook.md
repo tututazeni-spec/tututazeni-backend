@@ -3,6 +3,7 @@
 > Pipeline: GitHub Actions → GHCR → SSH → `deploy.sh` (health gate) → smoke
 > pós-deploy → rollback automático em falha. Workflow: `.github/workflows/deploy.yml`.
 > Enquanto os secrets `DEPLOY_*` não existirem no repo, o workflow é um no-op.
+> Alertas e monitorização (regra 9): ver `docs/deploy/alerting.md`.
 
 ## 1. Provisionar o VPS (uma vez)
 
