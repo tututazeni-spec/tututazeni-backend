@@ -64,6 +64,26 @@ jobs:
       - name: Verificar formatação
         run: npm run format:check
 
+      - name: Validar configuração de monitorização (regra 9)
+        # Barato (~segundos). promtool valida config+regras; amtool valida o
+        # template renderizado com valores dummy (envsubst existe no runner).
+        run: |
+          docker run --rm -v "$PWD/ops/monitoring/alert-rules.yml:/cfg/alert-rules.yml:ro" \
+            --entrypoint promtool prom/prometheus:v2.53.0 check rules /cfg/alert-rules.yml
+          echo dummy > /tmp/metrics_token
+          docker run --rm \
+            -v "$PWD/ops/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+            -v "$PWD/ops/monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro" \
+            -v /tmp/metrics_token:/etc/prometheus/secrets/metrics_token:ro \
+            --entrypoint promtool prom/prometheus:v2.53.0 check config /etc/prometheus/prometheus.yml
+          SMTP_HOST=smtp.example.com SMTP_PORT=587 SMTP_USER=alerts@example.com \
+          SMTP_PASSWORD=dummy ALERT_EMAIL_TO=ops@example.com \
+          TELEGRAM_BOT_TOKEN=123456:dummy TELEGRAM_CHAT_ID=123456 \
+          HEALTHCHECKS_PING_URL=https://hc-ping.com/dummy \
+            envsubst < ops/monitoring/alertmanager.yml.tpl > /tmp/alertmanager.yml
+          docker run --rm -v /tmp/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro \
+            --entrypoint amtool prom/alertmanager:v0.27.0 check-config /etc/alertmanager/alertmanager.yml
+
       - name: Build
         run: npm run build
 

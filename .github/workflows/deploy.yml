@@ -90,7 +90,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: 'ops/docker-compose.prod.yml,ops/deploy/deploy.sh,ops/deploy/rollback.sh'
+          source: 'ops/docker-compose.prod.yml,ops/deploy/deploy.sh,ops/deploy/rollback.sh,ops/monitoring/prometheus.yml,ops/monitoring/alert-rules.yml,ops/monitoring/alertmanager.yml.tpl'
           target: /opt/innova
           strip_components: 1
           overwrite: true
