@@ -95,3 +95,8 @@ test/smoke/.seed-state.json
 # Arranque local da app de smoke (contém credenciais locais — não versionar)
 start-smoke-app.bat
 app-pid.txt
+
+# Deploy (regra 10) — artefactos locais/do VPS, nunca commitados
+ops/.env.production
+ops/current_tag
+ops/previous_tag

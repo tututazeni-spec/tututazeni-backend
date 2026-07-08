@@ -1,0 +1,33 @@
+# Compose de produção — corre no VPS em /opt/innova (ver docs/deploy/runbook.md).
+# Postgres NÃO está aqui: é gerido/externo (decisão em docs/db-architecture/).
+# IMAGE_TAG vem do ambiente (deploy.sh exporta-o a partir de current_tag).
+name: innova
+
+services:
+  app:
+    image: ghcr.io/tututazeni-spec/tututazeni-backend:${IMAGE_TAG:-latest}
+    container_name: innova-app
+    env_file: .env.production
+    ports:
+      - '4000:4000'
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    # healthcheck herdado do HEALTHCHECK da imagem (GET /health/ready)
+
+  redis:
+    image: redis:7-alpine
+    container_name: innova-redis-prod
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis-data:
