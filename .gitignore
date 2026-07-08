@@ -100,3 +100,7 @@ app-pid.txt
 ops/.env.production
 ops/current_tag
 ops/previous_tag
+
+# Alertas (regra 9) — renderizados pelo deploy.sh, nunca commitados
+ops/monitoring/alertmanager.yml
+ops/monitoring/metrics_token
