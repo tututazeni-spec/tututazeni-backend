@@ -7,19 +7,32 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { Request, Response } from 'express';
 import { AppModule } from './app.module';
+import { enforceHttpsMiddleware } from './common/security/enforce-https';
+import { parseAllowedOrigins } from './common/security/allowed-origins';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
 
   // ─── Security ────────────────────────────────────────────────────────────
-  app.use(helmet());
+  const isProd = process.env.NODE_ENV === 'production';
+
+  // Atrás da borda Caddy: X-Forwarded-* passam a alimentar req.secure/req.ip.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
+  app.use(
+    helmet({
+      // Coerente com o HSTS emitido pela borda (auditoria A-1, achado B5).
+      hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    }),
+  );
+  app.use(enforceHttpsMiddleware(isProd));
   app.use(compression());
   app.use(cookieParser());
 
   // ─── CORS ────────────────────────────────────────────────────────────────
   app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:3000'],
+    origin: parseAllowedOrigins(process.env.ALLOWED_ORIGINS, isProd),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
@@ -98,12 +111,12 @@ async function bootstrap() {
     },
   });
 
-  app.getHttpAdapter().get('/', (_req: Request, res: Response) => {
+  app.getHttpAdapter().get('/', (req: Request, res: Response) => {
     res.json({
       name: 'INNOVA API',
       version: '1.0',
       status: 'running',
-      docs: `http://localhost:${port}/docs`,
+      docs: `${req.protocol}://${req.get('host')}/docs`,
       timestamp: new Date().toISOString(),
     });
   });
