@@ -14,7 +14,12 @@ import {
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RefreshTokenGuard } from './refresh-token.guard';
 import { Request, Response } from 'express';
-import { TOKEN_COOKIE, buildTokenCookieOptions, REFRESH_COOKIE, buildRefreshCookieOptions } from './token-cookie';
+import {
+  TOKEN_COOKIE,
+  buildTokenCookieOptions,
+  REFRESH_COOKIE,
+  buildRefreshCookieOptions,
+} from './token-cookie';
 
 // JwtStrategy.validate() devolve a entidade User (tem `id`, não `sub`).
 interface AuthenticatedRequest extends Request {
@@ -57,7 +62,9 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.rotateRefreshToken(
-      req.user.id, req.user.email, req.user.refreshToken,
+      req.user.id,
+      req.user.email,
+      req.user.refreshToken,
     );
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
     res.cookie(REFRESH_COOKIE, result.refreshToken, refreshCookieOptions);

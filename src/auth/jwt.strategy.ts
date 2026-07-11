@@ -46,13 +46,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: { sub: number; email: string; iat?: number }) {
     const cached = this.userCache.get(payload.sub);
-    const user = cached && cached.expiresAt > Date.now()
-      ? cached.user
-      : await this.loadUser(payload.sub);
+    const user =
+      cached && cached.expiresAt > Date.now() ? cached.user : await this.loadUser(payload.sub);
 
     // Access token emitido antes de uma alteração de senha é inválido.
-    if (user.passwordChangedAt && payload.iat &&
-        payload.iat * 1000 < new Date(user.passwordChangedAt).getTime()) {
+    if (
+      user.passwordChangedAt &&
+      payload.iat &&
+      payload.iat * 1000 < new Date(user.passwordChangedAt).getTime()
+    ) {
       this.userCache.delete(payload.sub);
       throw new UnauthorizedException('Sessão expirada por alteração de senha');
     }
