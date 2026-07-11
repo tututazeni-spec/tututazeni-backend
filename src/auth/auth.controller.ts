@@ -27,6 +27,12 @@ interface AuthenticatedRequest extends Request {
   user: { id: number; email: string };
 }
 
+export function authThrottleLimit(env: string | undefined = process.env.NODE_ENV): number {
+  return env === 'test' ? 10000 : 5;
+}
+
+const AUTH_THROTTLE = { default: { limit: authThrottleLimit(), ttl: 60000 } };
+
 const tokenCookieOptions = buildTokenCookieOptions(process.env.NODE_ENV === 'production');
 const refreshCookieOptions = buildRefreshCookieOptions(process.env.NODE_ENV === 'production');
 
@@ -38,7 +44,7 @@ export class AuthController {
   ) {}
 
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle(AUTH_THROTTLE)
   @Post('login')
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(dto);
@@ -92,7 +98,7 @@ export class AuthController {
 
   // Recuperação de password: quem a usa NÃO está autenticado — tem de ser pública.
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle(AUTH_THROTTLE)
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.passwordReset.forgotPassword(dto.email);

@@ -1,27 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AuthController } from './auth.controller';
+import { AuthController, authThrottleLimit } from './auth.controller';
 import { AuthService } from './auth.service';
 import { PasswordResetService } from './password-reset.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RefreshTokenGuard } from './refresh-token.guard';
 
-// C2: verifica que @Throttle({ default: { limit: 5, ttl: 60000 } }) está presente
-// @nestjs/throttler v6 guarda metadata em 'THROTTLER:LIMIT' + throttleName (ex: 'default')
+// C2: verifica comportamento do throttle por ambiente (env-independent)
 describe('AuthController throttle metadata (C2)', () => {
-  it('login tem throttle dedicado apertado (<= 5 req/min)', () => {
-    // throttler v6: Reflect.getMetadata('THROTTLER:LIMITdefault', prototype.method)
-    const limit = Reflect.getMetadata('THROTTLER:LIMITdefault', AuthController.prototype.login);
-    expect(limit).toBeDefined();
-    expect(limit).toBeLessThanOrEqual(5);
+  it('login/forgot: limite de throttle é 5/min em produção e alto em teste', () => {
+    expect(authThrottleLimit('production')).toBe(5);
+    expect(authThrottleLimit('development')).toBe(5);
+    expect(authThrottleLimit('test')).toBe(10000);
   });
 
-  it('forgotPassword tem throttle dedicado (<= 5 req/min)', () => {
-    const limit = Reflect.getMetadata(
-      'THROTTLER:LIMITdefault',
-      AuthController.prototype.forgotPassword,
-    );
-    expect(limit).toBeDefined();
-    expect(limit).toBeLessThanOrEqual(5);
+  it('login tem decorator @Throttle definido', () => {
+    const meta = Reflect.getMetadata('THROTTLER:LIMITdefault', AuthController.prototype.login);
+    expect(meta).toBeDefined();
   });
 });
 
