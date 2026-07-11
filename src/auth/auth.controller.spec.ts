@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { PasswordResetService } from './password-reset.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 const mockSvc = {
@@ -8,9 +9,12 @@ const mockSvc = {
   register: jest.fn().mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref', user: {} }),
   refreshToken: jest.fn().mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref' }),
   changePassword: jest.fn().mockResolvedValue({ message: 'ok' }),
+  me: jest.fn().mockResolvedValue({ id: 1, email: 'test@innova.com', fullName: 'Test' }),
+};
+
+const mockPasswordReset = {
   forgotPassword: jest.fn().mockResolvedValue({ message: 'ok' }),
   resetPassword: jest.fn().mockResolvedValue({ message: 'ok' }),
-  me: jest.fn().mockResolvedValue({ id: 1, email: 'test@innova.com', fullName: 'Test' }),
 };
 
 describe('AuthController', () => {
@@ -20,7 +24,10 @@ describe('AuthController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
-      providers: [{ provide: AuthService, useValue: mockSvc }],
+      providers: [
+        { provide: AuthService, useValue: mockSvc },
+        { provide: PasswordResetService, useValue: mockPasswordReset },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -60,16 +67,16 @@ describe('AuthController', () => {
     expect(mockSvc.changePassword).toHaveBeenCalledWith(1, dto);
   });
 
-  it('forgotPassword → chama authService.forgotPassword', async () => {
+  it('forgotPassword → chama passwordReset.forgotPassword com email', async () => {
     const dto = { email: 'a@b.com' };
     await controller.forgotPassword(dto as any);
-    expect(mockSvc.forgotPassword).toHaveBeenCalledWith(dto);
+    expect(mockPasswordReset.forgotPassword).toHaveBeenCalledWith('a@b.com');
   });
 
-  it('resetPassword → chama authService.resetPassword', async () => {
+  it('resetPassword → chama passwordReset.resetPassword com token e newPassword', async () => {
     const dto = { token: 'tok', newPassword: 'new' };
     await controller.resetPassword(dto as any);
-    expect(mockSvc.resetPassword).toHaveBeenCalledWith(dto);
+    expect(mockPasswordReset.resetPassword).toHaveBeenCalledWith('tok', 'new');
   });
 
   it('me → chama authService.me', async () => {
