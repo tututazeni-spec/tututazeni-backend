@@ -3,11 +3,13 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { PasswordResetService } from './password-reset.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { RefreshTokenGuard } from './refresh-token.guard';
 
 const mockSvc = {
   login: jest.fn().mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref', user: {} }),
   register: jest.fn().mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref', user: {} }),
-  refreshToken: jest.fn().mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref' }),
+  rotateRefreshToken: jest.fn().mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref' }),
+  revokeRefreshToken: jest.fn().mockResolvedValue(undefined),
   changePassword: jest.fn().mockResolvedValue({ message: 'ok' }),
   me: jest.fn().mockResolvedValue({ id: 1, email: 'test@innova.com', fullName: 'Test' }),
 };
@@ -30,6 +32,8 @@ describe('AuthController', () => {
       ],
     })
       .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RefreshTokenGuard)
       .useValue({ canActivate: () => true })
       .compile();
     controller = module.get<AuthController>(AuthController);
@@ -54,10 +58,10 @@ describe('AuthController', () => {
     expect(mockRes.cookie).not.toHaveBeenCalled();
   });
 
-  it('refresh → chama authService.refreshToken', async () => {
-    const req = { user: { id: 1, email: 'a@b.com' } };
+  it('refresh → chama authService.rotateRefreshToken', async () => {
+    const req = { user: { id: 1, email: 'a@b.com', refreshToken: 'ref-tok' } };
     await controller.refresh(req as any, mockRes as any);
-    expect(mockSvc.refreshToken).toHaveBeenCalledWith(1, 'a@b.com');
+    expect(mockSvc.rotateRefreshToken).toHaveBeenCalledWith(1, 'a@b.com', 'ref-tok');
   });
 
   it('changePassword → chama authService.changePassword', async () => {

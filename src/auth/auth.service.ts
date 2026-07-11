@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto, RegisterDto, ChangePasswordDto } from './auth.dto';
 
@@ -37,6 +38,7 @@ export class AuthService {
     if (!valid) throw new UnauthorizedException('Credenciais inválidas');
 
     const tokens = await this.generateTokens(user.id, user.email);
+    await this.persistRefreshToken(user.id, tokens.refreshToken);
 
     // fire-and-forget — não bloqueia a resposta de login
     this.prisma.auditLog
@@ -73,12 +75,9 @@ export class AuthService {
     await this.prisma.userPoints.create({ data: { userId: user.id, points: 0 } });
 
     const tokens = await this.generateTokens(user.id, user.email);
+    await this.persistRefreshToken(user.id, tokens.refreshToken);
     const { password: _, ...safeUser } = user;
     return { user: safeUser, ...tokens };
-  }
-
-  async refreshToken(userId: number, email: string) {
-    return this.generateTokens(userId, email);
   }
 
   async changePassword(userId: number, dto: ChangePasswordDto) {
@@ -119,6 +118,83 @@ export class AuthService {
     return safeUser;
   }
 
+  private async persistRefreshToken(userId: number, refreshToken: string): Promise<void> {
+    await this.prisma.refreshToken.create({
+      data: {
+        userId,
+        tokenHash: crypto.createHash('sha256').update(refreshToken).digest('hex'),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+  }
+
+  async rotateRefreshToken(userId: number, email: string, presented: string) {
+    const hash = crypto.createHash('sha256').update(presented).digest('hex');
+    const record = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hash } });
+
+    // Token desconhecido => possível reutilização de token roubado.
+    // Sem registo não temos userId armazenado, usamos o userId do payload.
+    if (!record) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Refresh token inválido');
+    }
+
+    // Finding 2: userId autoritativo vem do registo, não do payload.
+    // Se diferirem é sinal de adulteração — revoga a cadeia do dono real.
+    const authorizedUserId = record.userId;
+    if (authorizedUserId !== userId) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: authorizedUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Refresh token inválido');
+    }
+
+    // Token já revogado => reutilização detectada, revoga a cadeia completa.
+    if (record.revokedAt) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: authorizedUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Refresh token inválido');
+    }
+
+    if (record.expiresAt < new Date()) {
+      throw new UnauthorizedException('Refresh token expirado');
+    }
+
+    // Finding 1: revogação atómica e condicional — apenas revoga se ainda não
+    // foi revogado. Se count === 0, outra requisição ganhou a corrida (double-spend).
+    const { count } = await this.prisma.refreshToken.updateMany({
+      where: { id: record.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    if (count === 0) {
+      // Corrida de reutilização: outra requisição já revogou este token.
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: authorizedUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Refresh token inválido');
+    }
+
+    const tokens = await this.generateTokens(authorizedUserId, email);
+    await this.persistRefreshToken(authorizedUserId, tokens.refreshToken);
+    return tokens;
+  }
+
+  async revokeRefreshToken(presented: string): Promise<void> {
+    const hash = crypto.createHash('sha256').update(presented).digest('hex');
+    await this.prisma.refreshToken.updateMany({
+      where: { tokenHash: hash, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
   private async generateTokens(userId: number, email: string) {
     // Segredo do refresh obrigatório: sem fallback inseguro. Um valor por defeito
     // conhecido (ex.: 'refresh-secret') permitiria forjar refresh tokens válidos.
@@ -132,10 +208,10 @@ export class AuthService {
     const payload = { sub: userId, email };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, { expiresIn: '15m' }),
-      this.jwtService.signAsync(payload, {
-        expiresIn: '7d',
-        secret: refreshSecret,
-      }),
+      this.jwtService.signAsync(
+        { ...payload, jti: crypto.randomUUID() },
+        { expiresIn: '7d', secret: refreshSecret },
+      ),
     ]);
     return { accessToken, refreshToken };
   }

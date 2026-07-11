@@ -22,6 +22,12 @@ const mockPrisma = {
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { create: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
+  refreshToken: {
+    create: jest.fn().mockResolvedValue({}),
+    findUnique: jest.fn(),
+    update: jest.fn().mockResolvedValue({}),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
 };
 
 const mockJwt = {
@@ -200,6 +206,135 @@ describe('AuthService', () => {
     it('deve lançar UnauthorizedException se não encontrado', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
       await expect(service.me(99)).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  // ─── generateTokens — jti único por emissão ───────────────────────────────
+
+  describe('generateTokens (via login)', () => {
+    it('cada emissão de refresh token contém um jti único e distinto', async () => {
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+
+      const signCalls: Array<[unknown, unknown]> = [];
+      mockJwt.signAsync.mockImplementation((payload: unknown, options: unknown) => {
+        signCalls.push([payload, options]);
+        return Promise.resolve('mock-token-' + signCalls.length);
+      });
+
+      // Dois logins do mesmo utilizador
+      await service.login({ email: 'test@innova.com', password: 'pass' });
+      await service.login({ email: 'test@innova.com', password: 'pass' });
+
+      // Filtra apenas as chamadas de assinatura do refresh token (têm `secret`)
+      const refreshCalls = signCalls.filter(
+        ([, opts]) => (opts as Record<string, unknown>)?.secret !== undefined,
+      );
+      expect(refreshCalls.length).toBe(2);
+
+      const jti1 = (refreshCalls[0][0] as Record<string, unknown>).jti;
+      const jti2 = (refreshCalls[1][0] as Record<string, unknown>).jti;
+
+      expect(jti1).toBeDefined();
+      expect(jti2).toBeDefined();
+      expect(jti1).not.toBe(jti2);
+    });
+  });
+
+  // ─── rotateRefreshToken ───────────────────────────────────────────────────
+
+  describe('rotateRefreshToken', () => {
+    it('roda: revoga o token apresentado de forma atómica e emite um novo par', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        id: 3,
+        userId: 1,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 1e6),
+      });
+      // Simula revogação condicional bem-sucedida (count: 1)
+      mockPrisma.refreshToken.updateMany.mockResolvedValueOnce({ count: 1 });
+
+      const out = await service.rotateRefreshToken(1, 'test@innova.com', 'present');
+
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 3, revokedAt: null },
+          data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+        }),
+      );
+      expect(mockPrisma.refreshToken.create).toHaveBeenCalled();
+      expect(out.accessToken).toBeDefined();
+      expect(out.refreshToken).toBeDefined();
+    });
+
+    it('token desconhecido revoga a cadeia do utilizador (payload userId) e lança', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue(null);
+      await expect(
+        service.rotateRefreshToken(1, 'test@innova.com', 'roubado'),
+      ).rejects.toBeDefined();
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 1, revokedAt: null } }),
+      );
+    });
+
+    it('token já revogado (reutilização explícita) revoga a cadeia e lança', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        id: 4,
+        userId: 1,
+        revokedAt: new Date(),
+        expiresAt: new Date(Date.now() + 1e6),
+      });
+      await expect(service.rotateRefreshToken(1, 'test@innova.com', 'reuse')).rejects.toBeDefined();
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 1, revokedAt: null } }),
+      );
+    });
+
+    it('corrida de reutilização (updateMany count 0) revoga a cadeia e lança', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        id: 5,
+        userId: 1,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 1e6),
+      });
+      // Primeira chamada updateMany (revogação condicional do token apresentado) devolve count: 0
+      mockPrisma.refreshToken.updateMany
+        .mockResolvedValueOnce({ count: 0 }) // revogação condicional — outra req ganhou
+        .mockResolvedValueOnce({ count: 2 }); // revogação da cadeia completa
+
+      await expect(service.rotateRefreshToken(1, 'test@innova.com', 'race')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      // Deve ter tentado a revogação condicional do token apresentado
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 5, revokedAt: null } }),
+      );
+      // Deve ter revogado a cadeia completa do userId do registo
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 1, revokedAt: null } }),
+      );
+      // Não deve ter emitido novos tokens
+      expect(mockPrisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('userId do registo difere do payload (adulteração) revoga a cadeia do dono real e lança', async () => {
+      // Registo pertence ao userId 99, mas o payload afirma userId 1
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        id: 6,
+        userId: 99,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 1e6),
+      });
+
+      await expect(service.rotateRefreshToken(1, 'test@innova.com', 'tampered')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      // Deve revogar a cadeia do userId 99 (dono real do registo)
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 99, revokedAt: null } }),
+      );
+      // Não deve ter emitido novos tokens
+      expect(mockPrisma.refreshToken.create).not.toHaveBeenCalled();
     });
   });
 });

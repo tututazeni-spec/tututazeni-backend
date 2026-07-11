@@ -17,7 +17,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   // Cache por utilizador para evitar ~6 queries (user + 4 relações) em cada
   // pedido autenticado. Staleness máximo = TTL (inferior ao tempo de vida do JWT).
   private readonly userCache = new Map<number, { user: any; expiresAt: number }>();
-  private readonly cacheTtlMs = parseInt(process.env.JWT_USER_CACHE_TTL_MS || '60000', 10);
+  private readonly cacheTtlMs = parseInt(process.env.JWT_USER_CACHE_TTL_MS || '30000', 10);
 
   constructor(
     private prisma: PrismaService,
@@ -44,12 +44,26 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: number; email: string }) {
+  async validate(payload: { sub: number; email: string; iat?: number }) {
     const cached = this.userCache.get(payload.sub);
-    if (cached && cached.expiresAt > Date.now()) return cached.user;
+    const user =
+      cached && cached.expiresAt > Date.now() ? cached.user : await this.loadUser(payload.sub);
 
+    // Access token emitido antes de uma alteração de senha é inválido.
+    if (
+      user.passwordChangedAt &&
+      payload.iat &&
+      payload.iat * 1000 < new Date(user.passwordChangedAt).getTime()
+    ) {
+      this.userCache.delete(payload.sub);
+      throw new UnauthorizedException('Sessão expirada por alteração de senha');
+    }
+    return user;
+  }
+
+  private async loadUser(sub: number) {
     const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
+      where: { id: sub },
       include: {
         role: { include: { permissions: true } },
         unit: true,
@@ -58,10 +72,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       },
     });
     if (!user || !user.active) {
-      this.userCache.delete(payload.sub);
+      this.userCache.delete(sub);
       throw new UnauthorizedException('Utilizador inativo ou não encontrado');
     }
-    this.userCache.set(payload.sub, { user, expiresAt: Date.now() + this.cacheTtlMs });
+    this.userCache.set(sub, { user, expiresAt: Date.now() + this.cacheTtlMs });
     return user;
   }
 }
