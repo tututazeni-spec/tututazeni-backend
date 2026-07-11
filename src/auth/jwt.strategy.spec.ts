@@ -101,8 +101,13 @@ describe('JwtStrategy', () => {
       // passwordChangedAt no futuro face ao iat do token.
       const iatSeconds = Math.floor(Date.now() / 1000) - 100;
       mockPrisma.user.findUnique.mockResolvedValue({
-        id: 1, active: true, passwordChangedAt: new Date(Date.now()), // depois do iat
-        role: { permissions: [] }, unit: null, department: null, position: null,
+        id: 1,
+        active: true,
+        passwordChangedAt: new Date(Date.now()), // depois do iat
+        role: { permissions: [] },
+        unit: null,
+        department: null,
+        position: null,
       });
       await expect(
         strategy.validate({ sub: 1, email: 'u@i.com', iat: iatSeconds } as any),
@@ -112,8 +117,13 @@ describe('JwtStrategy', () => {
     it('aceita access token emitido depois de passwordChangedAt', async () => {
       const iatSeconds = Math.floor(Date.now() / 1000);
       mockPrisma.user.findUnique.mockResolvedValue({
-        id: 1, active: true, passwordChangedAt: new Date(Date.now() - 60000),
-        role: { permissions: [] }, unit: null, department: null, position: null,
+        id: 1,
+        active: true,
+        passwordChangedAt: new Date(Date.now() - 60000),
+        role: { permissions: [] },
+        unit: null,
+        department: null,
+        position: null,
       });
       const out = await strategy.validate({ sub: 1, email: 'u@i.com', iat: iatSeconds } as any);
       expect(out).toBeDefined();

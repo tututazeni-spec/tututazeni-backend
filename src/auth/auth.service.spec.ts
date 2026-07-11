@@ -214,7 +214,10 @@ describe('AuthService', () => {
   describe('rotateRefreshToken', () => {
     it('roda: revoga o token apresentado de forma atómica e emite um novo par', async () => {
       mockPrisma.refreshToken.findUnique.mockResolvedValue({
-        id: 3, userId: 1, revokedAt: null, expiresAt: new Date(Date.now() + 1e6),
+        id: 3,
+        userId: 1,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 1e6),
       });
       // Simula revogação condicional bem-sucedida (count: 1)
       mockPrisma.refreshToken.updateMany.mockResolvedValueOnce({ count: 1 });
@@ -222,7 +225,10 @@ describe('AuthService', () => {
       const out = await service.rotateRefreshToken(1, 'test@innova.com', 'present');
 
       expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 3, revokedAt: null }, data: expect.objectContaining({ revokedAt: expect.any(Date) }) }),
+        expect.objectContaining({
+          where: { id: 3, revokedAt: null },
+          data: expect.objectContaining({ revokedAt: expect.any(Date) }),
+        }),
       );
       expect(mockPrisma.refreshToken.create).toHaveBeenCalled();
       expect(out.accessToken).toBeDefined();
@@ -231,7 +237,9 @@ describe('AuthService', () => {
 
     it('token desconhecido revoga a cadeia do utilizador (payload userId) e lança', async () => {
       mockPrisma.refreshToken.findUnique.mockResolvedValue(null);
-      await expect(service.rotateRefreshToken(1, 'test@innova.com', 'roubado')).rejects.toBeDefined();
+      await expect(
+        service.rotateRefreshToken(1, 'test@innova.com', 'roubado'),
+      ).rejects.toBeDefined();
       expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { userId: 1, revokedAt: null } }),
       );
@@ -239,7 +247,10 @@ describe('AuthService', () => {
 
     it('token já revogado (reutilização explícita) revoga a cadeia e lança', async () => {
       mockPrisma.refreshToken.findUnique.mockResolvedValue({
-        id: 4, userId: 1, revokedAt: new Date(), expiresAt: new Date(Date.now() + 1e6),
+        id: 4,
+        userId: 1,
+        revokedAt: new Date(),
+        expiresAt: new Date(Date.now() + 1e6),
       });
       await expect(service.rotateRefreshToken(1, 'test@innova.com', 'reuse')).rejects.toBeDefined();
       expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
@@ -249,12 +260,15 @@ describe('AuthService', () => {
 
     it('corrida de reutilização (updateMany count 0) revoga a cadeia e lança', async () => {
       mockPrisma.refreshToken.findUnique.mockResolvedValue({
-        id: 5, userId: 1, revokedAt: null, expiresAt: new Date(Date.now() + 1e6),
+        id: 5,
+        userId: 1,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 1e6),
       });
       // Primeira chamada updateMany (revogação condicional do token apresentado) devolve count: 0
       mockPrisma.refreshToken.updateMany
-        .mockResolvedValueOnce({ count: 0 })  // revogação condicional — outra req ganhou
-        .mockResolvedValueOnce({ count: 2 });  // revogação da cadeia completa
+        .mockResolvedValueOnce({ count: 0 }) // revogação condicional — outra req ganhou
+        .mockResolvedValueOnce({ count: 2 }); // revogação da cadeia completa
 
       await expect(service.rotateRefreshToken(1, 'test@innova.com', 'race')).rejects.toThrow(
         UnauthorizedException,
@@ -274,7 +288,10 @@ describe('AuthService', () => {
     it('userId do registo difere do payload (adulteração) revoga a cadeia do dono real e lança', async () => {
       // Registo pertence ao userId 99, mas o payload afirma userId 1
       mockPrisma.refreshToken.findUnique.mockResolvedValue({
-        id: 6, userId: 99, revokedAt: null, expiresAt: new Date(Date.now() + 1e6),
+        id: 6,
+        userId: 99,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 1e6),
       });
 
       await expect(service.rotateRefreshToken(1, 'test@innova.com', 'tampered')).rejects.toThrow(
