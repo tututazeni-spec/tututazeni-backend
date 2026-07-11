@@ -5,6 +5,26 @@ import { PasswordResetService } from './password-reset.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RefreshTokenGuard } from './refresh-token.guard';
 
+// C2: verifica que @Throttle({ default: { limit: 5, ttl: 60000 } }) está presente
+// @nestjs/throttler v6 guarda metadata em 'THROTTLER:LIMIT' + throttleName (ex: 'default')
+describe('AuthController throttle metadata (C2)', () => {
+  it('login tem throttle dedicado apertado (<= 5 req/min)', () => {
+    // throttler v6: Reflect.getMetadata('THROTTLER:LIMITdefault', prototype.method)
+    const limit = Reflect.getMetadata('THROTTLER:LIMITdefault', AuthController.prototype.login);
+    expect(limit).toBeDefined();
+    expect(limit).toBeLessThanOrEqual(5);
+  });
+
+  it('forgotPassword tem throttle dedicado (<= 5 req/min)', () => {
+    const limit = Reflect.getMetadata(
+      'THROTTLER:LIMITdefault',
+      AuthController.prototype.forgotPassword,
+    );
+    expect(limit).toBeDefined();
+    expect(limit).toBeLessThanOrEqual(5);
+  });
+});
+
 const mockSvc = {
   login: jest.fn().mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref', user: {} }),
   register: jest.fn().mockResolvedValue({ accessToken: 'tok', refreshToken: 'ref', user: {} }),
