@@ -9,7 +9,8 @@
 
 Requisitos: Ubuntu 22.04+ (ou equivalente), 2 vCPU / 4 GB RAM (app + redis;
 reservar ~400 MB extra para o stack de monitorização da regra 9), Docker Engine
-com o plugin compose.
+com o plugin compose. Pré-requisito: DNS do DOMAIN a apontar ao IP do VPS antes
+do primeiro arranque do Caddy (emissão Let's Encrypt).
 
 ```bash
 # como root ou sudoer
@@ -18,7 +19,8 @@ useradd -m -s /bin/bash deploy && usermod -aG docker deploy
 mkdir -p /opt/innova && chown deploy:deploy /opt/innova
 
 # firewall mínimo (ufw): SSH + porta pública da app (ou 80/443 se houver proxy)
-ufw allow OpenSSH && ufw allow 4000/tcp && ufw enable
+ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw enable
+# A porta 4000 NÃO se abre: a app está presa a 127.0.0.1; público é só o Caddy.
 ```
 
 Chave SSH dedicada ao deploy (no teu PC):
@@ -50,7 +52,7 @@ deploy (`ops/` → `/opt/innova/`).
 | `DEPLOY_HOST` | IP/hostname do VPS |
 | `DEPLOY_USER` | `deploy` |
 | `DEPLOY_SSH_KEY` | chave privada ed25519 (bloco completo) |
-| `SMOKE_BASE_URL` | URL pública da app, ex. `http://<HOST>:4000` |
+| `SMOKE_BASE_URL` | URL pública da app, ex. `https://<DOMAIN>/api` |
 | `SMOKE_EMPLOYEE_EMAIL` / `SMOKE_EMPLOYEE_PASSWORD` | utilizador COLABORADOR real de smoke em produção |
 | `SMOKE_RH_EMAIL` / `SMOKE_RH_PASSWORD` | utilizador RH real de smoke em produção |
 | `SMOKE_COURSE_ID` | id de um curso publicado usado pela suite |
@@ -64,7 +66,8 @@ não cria nada).
 
 1. Merge a `main` (ou Actions → Deploy → Run workflow).
 2. Acompanhar os jobs: `build` → `deploy` → `verify` → (`rollback` só se falhar) → `notify`.
-3. Confirmar: `curl http://<HOST>:4000/health/ready` → 200.
+3. Confirmar: `curl https://<DOMAIN>/api/health/ready` → 200.
+   `curl -I http://<DOMAIN>  # deve responder 308 https`
 
 ## 5. Operação corrente
 
