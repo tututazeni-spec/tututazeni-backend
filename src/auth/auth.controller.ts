@@ -11,26 +11,15 @@ import {
   ResetPasswordDto,
 } from './auth.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { Request, Response, CookieOptions } from 'express';
+import { Request, Response } from 'express';
+import { TOKEN_COOKIE, buildTokenCookieOptions } from './token-cookie';
 
 // JwtStrategy.validate() devolve a entidade User (tem `id`, não `sub`).
 interface AuthenticatedRequest extends Request {
   user: { id: number; email: string };
 }
 
-const isProd = process.env.NODE_ENV === 'production';
-
-// Cookie httpOnly que transporta o access token. JS no browser nunca lê este
-// valor (mitiga XSS). Em produção exige cross-site seguro (none+secure); em dev
-// (localhost:3000 -> localhost:4000, mesmo site) basta 'lax'.
-const TOKEN_COOKIE = 'token';
-const tokenCookieOptions: CookieOptions = {
-  httpOnly: true,
-  secure: isProd,
-  sameSite: isProd ? 'none' : 'lax',
-  path: '/',
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias (sessão); o JWT em si expira antes
-};
+const tokenCookieOptions = buildTokenCookieOptions(process.env.NODE_ENV === 'production');
 
 @Controller('auth')
 export class AuthController {
