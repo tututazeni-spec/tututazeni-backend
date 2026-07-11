@@ -17,3 +17,15 @@ export function buildTokenCookieOptions(isProd: boolean): CookieOptions {
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias (sessão); o JWT em si expira antes
   };
 }
+
+export const REFRESH_COOKIE = 'refresh_token';
+
+export function buildRefreshCookieOptions(isProd: boolean): CookieOptions {
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: 'lax',
+    path: '/auth/refresh', // só viaja no endpoint de refresh
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
+}
