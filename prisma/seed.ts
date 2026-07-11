@@ -52,6 +52,7 @@ async function main() {
       password: adminPassword,
       active: true,
       roleId: roleMap['ADMIN'].id,
+      accountStatus: 'PENDING', // A2-8: força troca de senha no 1º login
     },
   });
   console.log('✅ Admin criado/actualizado:', admin.email, '→ role ADMIN');
@@ -67,6 +68,7 @@ async function main() {
       password: employeePassword,
       active: true,
       roleId: roleMap['COLABORADOR'].id,
+      accountStatus: 'PENDING', // A2-8: força troca de senha no 1º login
     },
   });
   console.log('✅ Employee criado/actualizado:', employee.email, '→ role COLABORADOR');
