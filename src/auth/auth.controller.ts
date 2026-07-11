@@ -12,8 +12,9 @@ import {
   ResetPasswordDto,
 } from './auth.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { RefreshTokenGuard } from './refresh-token.guard';
 import { Request, Response } from 'express';
-import { TOKEN_COOKIE, buildTokenCookieOptions } from './token-cookie';
+import { TOKEN_COOKIE, buildTokenCookieOptions, REFRESH_COOKIE, buildRefreshCookieOptions } from './token-cookie';
 
 // JwtStrategy.validate() devolve a entidade User (tem `id`, não `sub`).
 interface AuthenticatedRequest extends Request {
@@ -21,6 +22,7 @@ interface AuthenticatedRequest extends Request {
 }
 
 const tokenCookieOptions = buildTokenCookieOptions(process.env.NODE_ENV === 'production');
+const refreshCookieOptions = buildRefreshCookieOptions(process.env.NODE_ENV === 'production');
 
 @Controller('auth')
 export class AuthController {
@@ -34,6 +36,7 @@ export class AuthController {
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(dto);
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
+    res.cookie(REFRESH_COOKIE, result.refreshToken, refreshCookieOptions);
     return result;
   }
 
@@ -46,19 +49,29 @@ export class AuthController {
     return this.authService.register(dto);
   }
 
+  @Public()
   @Post('refresh')
-  @UseGuards(JwtAuthGuard)
-  async refresh(@Req() req: AuthenticatedRequest, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.refreshToken(req.user.id, req.user.email);
+  @UseGuards(RefreshTokenGuard)
+  async refresh(
+    @Req() req: Request & { user: { id: number; email: string; refreshToken: string } },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.rotateRefreshToken(
+      req.user.id, req.user.email, req.user.refreshToken,
+    );
     res.cookie(TOKEN_COOKIE, result.accessToken, tokenCookieOptions);
+    res.cookie(REFRESH_COOKIE, result.refreshToken, refreshCookieOptions);
     return result;
   }
 
   @Public()
   @Post('logout')
   @HttpCode(200)
-  logout(@Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const presented = (req.cookies ?? {}).refresh_token;
+    if (presented) await this.authService.revokeRefreshToken(presented);
     res.clearCookie(TOKEN_COOKIE, { ...tokenCookieOptions, maxAge: undefined });
+    res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions, maxAge: undefined });
     return { message: 'Sessão terminada' };
   }
 

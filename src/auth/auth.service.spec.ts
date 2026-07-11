@@ -22,6 +22,12 @@ const mockPrisma = {
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { create: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
+  refreshToken: {
+    create: jest.fn().mockResolvedValue({}),
+    findUnique: jest.fn(),
+    update: jest.fn().mockResolvedValue({}),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
 };
 
 const mockJwt = {
@@ -200,6 +206,42 @@ describe('AuthService', () => {
     it('deve lançar UnauthorizedException se não encontrado', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
       await expect(service.me(99)).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  // ─── rotateRefreshToken ───────────────────────────────────────────────────
+
+  describe('rotateRefreshToken', () => {
+    const crypto = require('crypto');
+    const sha = (v: string) => crypto.createHash('sha256').update(v).digest('hex');
+
+    it('roda: revoga o token apresentado e emite um novo par', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        id: 3, userId: 1, revokedAt: null, expiresAt: new Date(Date.now() + 1e6),
+      });
+      const out = await service.rotateRefreshToken(1, 'test@innova.com', 'present');
+      expect(mockPrisma.refreshToken.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 3 }, data: expect.objectContaining({ revokedAt: expect.any(Date) }) }),
+      );
+      expect(mockPrisma.refreshToken.create).toHaveBeenCalled();
+      expect(out.accessToken).toBeDefined();
+      expect(out.refreshToken).toBeDefined();
+    });
+
+    it('token desconhecido revoga a cadeia do utilizador e lança', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue(null);
+      await expect(service.rotateRefreshToken(1, 'test@innova.com', 'roubado')).rejects.toBeDefined();
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 1, revokedAt: null } }),
+      );
+    });
+
+    it('token já revogado (reutilização) revoga a cadeia e lança', async () => {
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        id: 4, userId: 1, revokedAt: new Date(), expiresAt: new Date(Date.now() + 1e6),
+      });
+      await expect(service.rotateRefreshToken(1, 'test@innova.com', 'reuse')).rejects.toBeDefined();
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalled();
     });
   });
 });
