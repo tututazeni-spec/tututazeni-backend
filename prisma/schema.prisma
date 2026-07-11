@@ -836,6 +836,12 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   createdEvalCycles        EvaluationCycle[]     @relation("EvalCycleCreator")
   evaluationsAsUser        UserEvaluation[]      @relation("EvalUser")
   evaluationsAsEvaluator   UserEvaluation[]      @relation("EvalEvaluator")
+
+  // ─── Auth Tokens ──────────────────────────────────────────────
+  passwordChangedAt   DateTime?
+  passwordResetTokens PasswordResetToken[]
+  refreshTokens       RefreshToken[]
+
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -7010,4 +7016,29 @@ model ReportSchedule {
   createdBy     User        @relation("UserReportSchedules", fields: [createdById], references: [id], onDelete: Cascade)
   @@index([createdById])
   @@index([savedReportId])
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model RefreshToken {
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById Int?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
 }
