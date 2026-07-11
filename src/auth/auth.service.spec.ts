@@ -202,20 +202,5 @@ describe('AuthService', () => {
       await expect(service.me(99)).rejects.toThrow(UnauthorizedException);
     });
   });
-
-  // ─── forgotPassword / resetPassword ───────────────────────────────────────
-
-  describe('forgotPassword', () => {
-    it('deve retornar mensagem genérica', () => {
-      const result = service.forgotPassword({ email: 'test@innova.com' });
-      expect(result).toHaveProperty('message');
-    });
-  });
-
-  describe('resetPassword', () => {
-    it('deve retornar mensagem de sucesso', () => {
-      const result = service.resetPassword({ token: 'tok', newPassword: 'new' });
-      expect(result).toHaveProperty('message');
-    });
-  });
 });
+// forgotPassword / resetPassword foram movidos para PasswordResetService (password-reset.service.spec.ts)

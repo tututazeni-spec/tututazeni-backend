@@ -7,13 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  LoginDto,
-  RegisterDto,
-  ChangePasswordDto,
-  ForgotPasswordDto,
-  ResetPasswordDto,
-} from './auth.dto';
+import { LoginDto, RegisterDto, ChangePasswordDto } from './auth.dto';
 
 @Injectable()
 export class AuthService {
@@ -105,16 +99,6 @@ export class AuthService {
     });
 
     return { message: 'Senha alterada com sucesso' };
-  }
-
-  forgotPassword(_dto: ForgotPasswordDto) {
-    // Em produção: gerar token, salvar no DB e enviar email
-    return { message: 'Se o email existir, receberás instruções de recuperação' };
-  }
-
-  resetPassword(_dto: ResetPasswordDto) {
-    // Em produção: validar token e atualizar senha
-    return { message: 'Senha redefinida com sucesso' };
   }
 
   async me(userId: number) {

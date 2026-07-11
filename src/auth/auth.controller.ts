@@ -3,6 +3,7 @@ import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from './enums/role.enum';
 import { AuthService } from './auth.service';
+import { PasswordResetService } from './password-reset.service';
 import {
   LoginDto,
   RegisterDto,
@@ -23,7 +24,10 @@ const tokenCookieOptions = buildTokenCookieOptions(process.env.NODE_ENV === 'pro
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly passwordReset: PasswordResetService,
+  ) {}
 
   @Public()
   @Post('login')
@@ -68,13 +72,13 @@ export class AuthController {
   @Public()
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto);
+    return this.passwordReset.forgotPassword(dto.email);
   }
 
   @Public()
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto);
+    return this.passwordReset.resetPassword(dto.token, dto.newPassword);
   }
 
   @Get('me')
