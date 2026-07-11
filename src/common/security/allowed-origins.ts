@@ -4,7 +4,7 @@
 export function parseAllowedOrigins(raw: string | undefined, isProd: boolean): string[] {
   const origins = (raw ?? '')
     .split(',')
-    .map((o) => o.trim())
+    .map(o => o.trim())
     .filter(Boolean);
 
   if (!isProd) {
@@ -17,7 +17,7 @@ export function parseAllowedOrigins(raw: string | undefined, isProd: boolean): s
     );
   }
 
-  const insecure = origins.filter((o) => !o.startsWith('https://'));
+  const insecure = origins.filter(o => !o.startsWith('https://'));
   if (insecure.length) {
     throw new Error(
       `ALLOWED_ORIGINS em produção só aceita origens https:// — inválidas: ${insecure.join(', ')}`,

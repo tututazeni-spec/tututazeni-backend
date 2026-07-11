@@ -19,9 +19,9 @@ describe('parseAllowedOrigins', () => {
   });
 
   it('em produção rejeita origens http://', () => {
-    expect(() => parseAllowedOrigins('https://ok.example.com,http://mau.example.com', true)).toThrow(
-      /http:\/\/mau\.example\.com/,
-    );
+    expect(() =>
+      parseAllowedOrigins('https://ok.example.com,http://mau.example.com', true),
+    ).toThrow(/http:\/\/mau\.example\.com/);
   });
 
   it('em produção aceita lista https válida', () => {
