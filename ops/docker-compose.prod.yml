@@ -9,12 +9,29 @@ services:
     container_name: innova-app
     env_file: .env.production
     ports:
-      - '4000:4000'
+      - '127.0.0.1:4000:4000' # debug só via túnel SSH; público é o Caddy
     depends_on:
       redis:
         condition: service_healthy
     restart: unless-stopped
     # healthcheck herdado do HEALTHCHECK da imagem (GET /health/ready)
+
+  # ─── Borda TLS (auditoria A-1) — única porta pública do VPS ───
+  caddy:
+    image: caddy:2-alpine
+    container_name: innova-caddy
+    env_file: .env.production # DOMAIN e ACME_EMAIL para o Caddyfile
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp' # HTTP/3
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # certificados ACME — persistir entre deploys
+      - caddy-config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -61,3 +78,5 @@ volumes:
   redis-data:
   prometheus-data:
   alertmanager-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,25 @@
+# Borda TLS do INNOVA (auditoria A-1). Única porta pública do VPS.
+# {$DOMAIN} e {$ACME_EMAIL} vêm do ambiente do container (env_file .env.production).
+# Redirect HTTP→HTTPS: automático do Caddy — nunca serve conteúdo em :80.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	# HSTS emitido na borda; CSP/XFO/nosniff são responsabilidade das apps.
+	# preload: submeter a hstspreload.org só depois do TLS estabilizar.
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+	# API: strip do prefixo /api → Nest (Swagger fica em /api/docs).
+	handle_path /api/* {
+		reverse_proxy app:4000
+	}
+
+	# Frontend ainda não deployado (fica para a Faixa H). Quando existir:
+	# handle {
+	# 	reverse_proxy frontend:3000
+	# }
+	handle {
+		respond "Not Found" 404
+	}
+}
