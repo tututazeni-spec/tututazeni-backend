@@ -209,6 +209,38 @@ describe('AuthService', () => {
     });
   });
 
+  // ─── generateTokens — jti único por emissão ───────────────────────────────
+
+  describe('generateTokens (via login)', () => {
+    it('cada emissão de refresh token contém um jti único e distinto', async () => {
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      mockPrisma.user.findUnique.mockResolvedValue(baseUser);
+
+      const signCalls: Array<[unknown, unknown]> = [];
+      mockJwt.signAsync.mockImplementation((payload: unknown, options: unknown) => {
+        signCalls.push([payload, options]);
+        return Promise.resolve('mock-token-' + signCalls.length);
+      });
+
+      // Dois logins do mesmo utilizador
+      await service.login({ email: 'test@innova.com', password: 'pass' });
+      await service.login({ email: 'test@innova.com', password: 'pass' });
+
+      // Filtra apenas as chamadas de assinatura do refresh token (têm `secret`)
+      const refreshCalls = signCalls.filter(
+        ([, opts]) => (opts as Record<string, unknown>)?.secret !== undefined,
+      );
+      expect(refreshCalls.length).toBe(2);
+
+      const jti1 = (refreshCalls[0][0] as Record<string, unknown>).jti;
+      const jti2 = (refreshCalls[1][0] as Record<string, unknown>).jti;
+
+      expect(jti1).toBeDefined();
+      expect(jti2).toBeDefined();
+      expect(jti1).not.toBe(jti2);
+    });
+  });
+
   // ─── rotateRefreshToken ───────────────────────────────────────────────────
 
   describe('rotateRefreshToken', () => {
