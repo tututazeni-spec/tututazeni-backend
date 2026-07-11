@@ -1,8 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
-import { JwtStrategy } from './jwt.strategy';
+import { JwtStrategy, buildJwtExtractors } from './jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
+
+// C4: buildJwtExtractors respeita a flag AUTH_ALLOW_BEARER
+describe('buildJwtExtractors', () => {
+  it('inclui o fallback Bearer quando AUTH_ALLOW_BEARER != false', () => {
+    expect(buildJwtExtractors(true)).toHaveLength(2);
+  });
+  it('só o cookie quando AUTH_ALLOW_BEARER=false', () => {
+    expect(buildJwtExtractors(false)).toHaveLength(1);
+  });
+});
 
 const mockPrisma = {
   user: {

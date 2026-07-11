@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -12,6 +13,8 @@ import { LoginDto, RegisterDto, ChangePasswordDto } from './auth.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -43,7 +46,11 @@ export class AuthService {
     // fire-and-forget — não bloqueia a resposta de login
     this.prisma.auditLog
       .create({ data: { userId: user.id, action: 'LOGIN', entity: 'User', entityId: user.id } })
-      .catch(() => undefined);
+      .catch((err: unknown) =>
+        this.logger.warn(
+          `Falha ao registar audit log de login: ${err instanceof Error ? err.message : err}`,
+        ),
+      );
 
     const { password: _, ...safeUser } = user;
     return { user: safeUser, ...tokens };
