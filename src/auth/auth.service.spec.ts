@@ -202,6 +202,5 @@ describe('AuthService', () => {
       await expect(service.me(99)).rejects.toThrow(UnauthorizedException);
     });
   });
-
 });
 // forgotPassword / resetPassword foram movidos para PasswordResetService (password-reset.service.spec.ts)

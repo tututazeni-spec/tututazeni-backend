@@ -11,6 +11,8 @@ export class MailService {
 
   async sendPasswordReset(email: string, token: string): Promise<void> {
     void token; // entregue ao utilizador, nunca logado
-    this.logger.log(`Password reset solicitado para ${email} (token gerado, entrega pendente de SMTP)`);
+    this.logger.log(
+      `Password reset solicitado para ${email} (token gerado, entrega pendente de SMTP)`,
+    );
   }
 }

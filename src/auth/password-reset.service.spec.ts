@@ -57,33 +57,48 @@ describe('PasswordResetService', () => {
     prisma.passwordResetToken.findUnique.mockResolvedValue(null);
     const svc = new PasswordResetService(prisma as any, mail as any);
 
-    await expect(svc.resetPassword('mau', 'NovaSenha123')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.resetPassword('mau', 'NovaSenha123')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('resetPassword rejeita token já usado', async () => {
     const prisma = makePrisma();
     prisma.passwordResetToken.findUnique.mockResolvedValue({
-      id: 1, userId: 1, usedAt: new Date(), expiresAt: new Date(Date.now() + 1e6),
+      id: 1,
+      userId: 1,
+      usedAt: new Date(),
+      expiresAt: new Date(Date.now() + 1e6),
     });
     const svc = new PasswordResetService(prisma as any, mail as any);
 
-    await expect(svc.resetPassword('tok', 'NovaSenha123')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.resetPassword('tok', 'NovaSenha123')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('resetPassword rejeita token expirado', async () => {
     const prisma = makePrisma();
     prisma.passwordResetToken.findUnique.mockResolvedValue({
-      id: 1, userId: 1, usedAt: null, expiresAt: new Date(Date.now() - 1000),
+      id: 1,
+      userId: 1,
+      usedAt: null,
+      expiresAt: new Date(Date.now() - 1000),
     });
     const svc = new PasswordResetService(prisma as any, mail as any);
 
-    await expect(svc.resetPassword('tok', 'NovaSenha123')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.resetPassword('tok', 'NovaSenha123')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('resetPassword válido actualiza senha, passwordChangedAt, marca usedAt e revoga refresh', async () => {
     const prisma = makePrisma();
     prisma.passwordResetToken.findUnique.mockResolvedValue({
-      id: 5, userId: 7, usedAt: null, expiresAt: new Date(Date.now() + 1e6),
+      id: 5,
+      userId: 7,
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 1e6),
     });
     const svc = new PasswordResetService(prisma as any, mail as any);
 
@@ -92,11 +107,17 @@ describe('PasswordResetService', () => {
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 7 },
-        data: expect.objectContaining({ password: 'bcrypt-hash', passwordChangedAt: expect.any(Date) }),
+        data: expect.objectContaining({
+          password: 'bcrypt-hash',
+          passwordChangedAt: expect.any(Date),
+        }),
       }),
     );
     expect(prisma.passwordResetToken.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 5 }, data: expect.objectContaining({ usedAt: expect.any(Date) }) }),
+      expect.objectContaining({
+        where: { id: 5 },
+        data: expect.objectContaining({ usedAt: expect.any(Date) }),
+      }),
     );
     expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { userId: 7, revokedAt: null } }),
