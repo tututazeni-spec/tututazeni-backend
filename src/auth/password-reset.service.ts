@@ -22,7 +22,13 @@ export class PasswordResetService {
   async forgotPassword(email: string): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({ where: { email } });
     // Resposta genérica sempre — não revela se a conta existe (anti-enumeração).
-    if (!user || !user.active) return { message: GENERIC_MESSAGE };
+    // F2: executa um bcrypt.hash dummy para nivelar o tempo de resposta com o
+    // ramo real (que também chama bcrypt). Sem isto, a diferença de latência
+    // permite distinguir contas existentes de inexistentes por timing.
+    if (!user || !user.active) {
+      await bcrypt.hash('dummy-timing-equalizer', 12);
+      return { message: GENERIC_MESSAGE };
+    }
 
     const token = crypto.randomBytes(32).toString('hex');
     await this.prisma.passwordResetToken.create({
@@ -45,19 +51,24 @@ export class PasswordResetService {
     }
 
     const hashed = await bcrypt.hash(newPassword, 12);
-    await this.prisma.user.update({
-      where: { id: record.userId },
-      data: { password: hashed, passwordChangedAt: new Date() },
-    });
-    await this.prisma.passwordResetToken.update({
-      where: { id: record.id },
-      data: { usedAt: new Date() },
-    });
-    // Reset invalida sessões: revoga refresh tokens activos do utilizador.
-    await this.prisma.refreshToken.updateMany({
-      where: { userId: record.userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+    const now = new Date();
+    // F1: as três escritas correm de forma atómica — um crash a meio não deixa
+    // a senha alterada mas o token reutilizável (ou as sessões activas).
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: { password: hashed, passwordChangedAt: now },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: record.id },
+        data: { usedAt: now },
+      }),
+      // Reset invalida sessões: revoga refresh tokens activos do utilizador.
+      this.prisma.refreshToken.updateMany({
+        where: { userId: record.userId, revokedAt: null },
+        data: { revokedAt: now },
+      }),
+    ]);
 
     return { message: 'Senha redefinida com sucesso' };
   }

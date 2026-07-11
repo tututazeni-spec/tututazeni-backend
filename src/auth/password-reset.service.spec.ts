@@ -20,6 +20,8 @@ function makePrisma() {
     refreshToken: {
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
+    // F1: $transaction executes all ops atomically
+    $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
   };
 }
 
@@ -50,6 +52,19 @@ describe('PasswordResetService', () => {
     expect(res.message).toBe(GENERIC);
     expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
     expect(mail.sendPasswordReset).not.toHaveBeenCalled();
+  });
+
+  it('forgotPassword chama bcrypt.hash no ramo not-found (tempo constante, F2)', async () => {
+    const bcrypt = require('bcrypt') as { hash: jest.Mock };
+    bcrypt.hash.mockClear();
+    const prisma = makePrisma();
+    prisma.user.findUnique.mockResolvedValue(null);
+    const svc = new PasswordResetService(prisma as any, mail as any);
+
+    await svc.forgotPassword('nao@existe.com');
+
+    // O ramo not-found deve executar um bcrypt.hash dummy para nivelar o tempo de resposta.
+    expect(bcrypt.hash).toHaveBeenCalledWith('dummy-timing-equalizer', 12);
   });
 
   it('resetPassword rejeita token inexistente', async () => {
@@ -104,6 +119,8 @@ describe('PasswordResetService', () => {
 
     const res = await svc.resetPassword('tok', 'NovaSenha123');
 
+    // F1: as três escritas devem correr dentro de $transaction
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 7 },
