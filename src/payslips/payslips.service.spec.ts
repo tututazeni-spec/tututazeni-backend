@@ -3,6 +3,45 @@ import { NotFoundException } from '@nestjs/common';
 import { PayslipsService } from './payslips.service';
 import { PrismaService } from '../prisma/prisma.service';
 
+// ─── Ownership tests (A3-1) ────────────────────────────────────────────────
+
+const employeeA = { id: 7, role: { name: 'COLABORADOR' } } as any;
+const employeeB = { id: 8, role: { name: 'COLABORADOR' } } as any;
+const rh = { id: 1, role: { name: 'RH' } } as any;
+
+function makePrisma(payslip: any) {
+  return {
+    payslip: {
+      findUnique: jest.fn().mockResolvedValue(payslip),
+      update: jest.fn().mockResolvedValue(payslip),
+    },
+  } as any;
+}
+
+describe('PayslipsService.findOne ownership (A3-1)', () => {
+  const payslipOfA = { id: 5, userId: 7, period: '2026-04' };
+
+  it('o dono lê o próprio recibo', async () => {
+    const svc = new PayslipsService(makePrisma(payslipOfA));
+    await expect(svc.findOne(5, employeeA)).resolves.toMatchObject({ id: 5 });
+  });
+
+  it('outro colaborador recebe 404 (não revela existência)', async () => {
+    const svc = new PayslipsService(makePrisma(payslipOfA));
+    await expect(svc.findOne(5, employeeB)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('RH lê qualquer recibo (papel privilegiado)', async () => {
+    const svc = new PayslipsService(makePrisma(payslipOfA));
+    await expect(svc.findOne(5, rh)).resolves.toMatchObject({ id: 5 });
+  });
+
+  it('recibo inexistente → 404', async () => {
+    const svc = new PayslipsService(makePrisma(null));
+    await expect(svc.findOne(5, employeeA)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
 const mockPrisma = {
   payslip: {
     findUnique: jest.fn(),
@@ -62,12 +101,12 @@ describe('PayslipsService', () => {
   describe('findOne', () => {
     it('deve retornar holerite por id', async () => {
       mockPrisma.payslip.findUnique.mockResolvedValue(basePayslip);
-      const result = await service.findOne(1, 1);
+      const result = await service.findOne(1, { id: 1, role: { name: 'RH' } } as any);
       expect(result).toBeDefined();
     });
     it('deve lançar NotFoundException', async () => {
       mockPrisma.payslip.findUnique.mockResolvedValue(null);
-      await expect(service.findOne(99, 1)).rejects.toThrow(NotFoundException);
+      await expect(service.findOne(99, { id: 1, role: { name: 'RH' } } as any)).rejects.toThrow(NotFoundException);
     });
   });
 

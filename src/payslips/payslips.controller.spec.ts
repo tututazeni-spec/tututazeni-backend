@@ -60,19 +60,19 @@ describe('PayslipsController', () => {
 
   it('myPayslip → findOne + logAccess', async () => {
     await controller.myPayslip(3, mockUser as any, mockReq);
-    expect(mockSvc.findOne).toHaveBeenCalledWith(3, 1, mockUser.role.name);
+    expect(mockSvc.findOne).toHaveBeenCalledWith(3, mockUser);
     expect(mockSvc.logAccess).toHaveBeenCalledWith(3, 1, 'VIEW', '127.0.0.1');
   });
 
-  it('acknowledge → acknowledge(id, userId)', async () => {
+  it('acknowledge → acknowledge(id, user)', async () => {
     await controller.acknowledge(5, mockUser as any);
-    expect(mockSvc.acknowledge).toHaveBeenCalledWith(5, 1);
+    expect(mockSvc.acknowledge).toHaveBeenCalledWith(5, mockUser);
   });
 
-  it('createDispute → createDispute(id, userId, dto)', async () => {
+  it('createDispute → createDispute(id, user, dto)', async () => {
     const dto = {} as any;
     await controller.createDispute(4, mockUser as any, dto);
-    expect(mockSvc.createDispute).toHaveBeenCalledWith(4, 1, dto);
+    expect(mockSvc.createDispute).toHaveBeenCalledWith(4, mockUser, dto);
   });
 
   it('simulate → simulate(dto)', async () => {
@@ -94,7 +94,7 @@ describe('PayslipsController', () => {
 
   it('findOne (admin) → findOne + logAccess(ADMIN_VIEW)', async () => {
     await controller.findOne(2, mockUser as any, mockReq);
-    expect(mockSvc.findOne).toHaveBeenCalledWith(2);
+    expect(mockSvc.findOne).toHaveBeenCalledWith(2, mockUser);
     expect(mockSvc.logAccess).toHaveBeenCalledWith(2, 1, 'ADMIN_VIEW', '127.0.0.1');
   });
 

@@ -2,8 +2,8 @@
 import {
   Injectable,
   NotFoundException,
-  ConflictException,
   ForbiddenException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,6 +16,9 @@ import {
   CreateDisputeDto,
 } from './payslips.dto';
 import { randomBytes } from 'crypto';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/types/current-user';
 
 // ─── Tabela IRT Angola 2026 (Lei nº 26/2020 + actualização 2026) ─────────────
 // Isenção até 150.000 Kz/mês (Portaria 2026)
@@ -147,7 +150,7 @@ export class PayslipsService {
   }
 
   // ─── DETALHE ───────────────────────────────────────────────────────────────
-  async findOne(id: number, requestingUserId?: number, requestingRole?: string) {
+  async findOne(id: number, user?: CurrentUserData) {
     const p = await (this.prisma as any).payslip.findUnique({
       where: { id },
       include: {
@@ -165,12 +168,10 @@ export class PayslipsService {
       },
     });
 
-    if (!p) throw new NotFoundException('Recibo não encontrado');
-
-    // Colaborador só vê os seus próprios recibos
-    if (requestingRole === 'EMPLOYEE' && p.userId !== requestingUserId) {
-      throw new ForbiddenException('Acesso não autorizado a este recibo');
-    }
+    // Ownership ao nível do dado (A3-1): dono OU ADMIN/RH; senão 404.
+    // Quando chamado sem user (contexto interno de confiança), não filtra.
+    if (user) assertCanAccess(p, p?.userId, user, [Role.ADMIN, Role.RH]);
+    else if (!p) throw new NotFoundException('Recibo não encontrado');
 
     return p;
   }
@@ -298,8 +299,8 @@ export class PayslipsService {
   }
 
   // ─── RECONHECER ────────────────────────────────────────────────────────────
-  async acknowledge(id: number, userId: number) {
-    const p = await this.findOne(id, userId, 'EMPLOYEE');
+  async acknowledge(id: number, user: CurrentUserData) {
+    const p = await this.findOne(id, user);
     if (p.status === 'ACKNOWLEDGED') return p;
 
     return this.prisma.payslip.update({
@@ -474,11 +475,11 @@ export class PayslipsService {
   }
 
   // ─── ABRIR DISPUTA ─────────────────────────────────────────────────────────
-  async createDispute(payslipId: number, userId: number, dto: CreateDisputeDto) {
-    const p = await this.findOne(payslipId, userId, 'EMPLOYEE');
+  async createDispute(payslipId: number, user: CurrentUserData, dto: CreateDisputeDto) {
+    const p = await this.findOne(payslipId, user);
 
     const dispute = await this.prisma.payslipDispute.create({
-      data: { payslipId, userId, reason: dto.reason, details: dto.details, status: 'OPEN' },
+      data: { payslipId, userId: user.id, reason: dto.reason, details: dto.details, status: 'OPEN' },
     });
 
     await this.prisma.payslip.update({
