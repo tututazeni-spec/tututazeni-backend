@@ -1,4 +1,5 @@
 import { Controller, Post, Get, Body, Patch, UseGuards, Req, Res, HttpCode } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from './enums/role.enum';
@@ -26,6 +27,12 @@ interface AuthenticatedRequest extends Request {
   user: { id: number; email: string };
 }
 
+export function authThrottleLimit(env: string | undefined = process.env.NODE_ENV): number {
+  return env === 'test' ? 10000 : 5;
+}
+
+const AUTH_THROTTLE = { default: { limit: authThrottleLimit(), ttl: 60000 } };
+
 const tokenCookieOptions = buildTokenCookieOptions(process.env.NODE_ENV === 'production');
 const refreshCookieOptions = buildRefreshCookieOptions(process.env.NODE_ENV === 'production');
 
@@ -37,6 +44,7 @@ export class AuthController {
   ) {}
 
   @Public()
+  @Throttle(AUTH_THROTTLE)
   @Post('login')
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(dto);
@@ -90,6 +98,7 @@ export class AuthController {
 
   // Recuperação de password: quem a usa NÃO está autenticado — tem de ser pública.
   @Public()
+  @Throttle(AUTH_THROTTLE)
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.passwordReset.forgotPassword(dto.email);

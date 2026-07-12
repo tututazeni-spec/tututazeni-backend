@@ -1,5 +1,6 @@
 import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsStrongPassword } from '../common/validators/strong-password.decorator';
 
 export class LoginDto {
   @ApiProperty({ example: 'user@empresa.com' })
@@ -21,9 +22,9 @@ export class RegisterDto {
   @IsEmail()
   email!: string;
 
-  @ApiProperty({ minLength: 6 })
+  @ApiProperty({ minLength: 10 })
   @IsString()
-  @MinLength(6)
+  @IsStrongPassword()
   password!: string;
 
   @ApiPropertyOptional()
@@ -50,9 +51,9 @@ export class ChangePasswordDto {
   @IsString()
   currentPassword!: string;
 
-  @ApiProperty({ minLength: 6 })
+  @ApiProperty({ minLength: 10 })
   @IsString()
-  @MinLength(6)
+  @IsStrongPassword()
   newPassword!: string;
 }
 
@@ -67,8 +68,8 @@ export class ResetPasswordDto {
   @IsString()
   token!: string;
 
-  @ApiProperty({ minLength: 6 })
+  @ApiProperty({ minLength: 10 })
   @IsString()
-  @MinLength(6)
+  @IsStrongPassword()
   newPassword!: string;
 }

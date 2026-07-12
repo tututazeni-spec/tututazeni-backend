@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import * as crypto from 'crypto';
+import { hashSharePassword, verifySharePassword } from './share-password';
 import {
   DocumentFilterDto,
   CreateDocumentDto,
@@ -420,9 +421,7 @@ export class DocumentRepositoryService {
 
     const token = crypto.randomBytes(32).toString('hex');
     const expiry = dto.expiresAt ? new Date(dto.expiresAt) : new Date(Date.now() + 7 * 86400000);
-    const hashedPass = dto.password
-      ? crypto.createHash('sha256').update(dto.password).digest('hex')
-      : null;
+    const hashedPass = dto.password ? await hashSharePassword(dto.password) : null;
 
     const link = await this.prisma.docShareLink.create({
       data: {
@@ -457,11 +456,8 @@ export class DocumentRepositoryService {
     }
 
     if (link.passwordHash) {
-      const hash = crypto
-        .createHash('sha256')
-        .update(password ?? '')
-        .digest('hex');
-      if (hash !== link.passwordHash) throw new ForbiddenException('Password incorrecta');
+      const ok = await verifySharePassword(password ?? '', link.passwordHash);
+      if (!ok) throw new ForbiddenException('Password incorrecta');
     }
 
     await this.prisma.docShareLink.update({

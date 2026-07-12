@@ -5,9 +5,7 @@ import * as bcrypt from 'bcrypt';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production'
-    ? { rejectUnauthorized: false }
-    : false,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
 const adapter = new PrismaPg(pool);
@@ -52,6 +50,7 @@ async function main() {
       password: adminPassword,
       active: true,
       roleId: roleMap['ADMIN'].id,
+      accountStatus: 'PENDING', // A2-8: força troca de senha no 1º login
     },
   });
   console.log('✅ Admin criado/actualizado:', admin.email, '→ role ADMIN');
@@ -67,6 +66,7 @@ async function main() {
       password: employeePassword,
       active: true,
       roleId: roleMap['COLABORADOR'].id,
+      accountStatus: 'PENDING', // A2-8: força troca de senha no 1º login
     },
   });
   console.log('✅ Employee criado/actualizado:', employee.email, '→ role COLABORADOR');
@@ -75,7 +75,7 @@ async function main() {
 }
 
 main()
-  .catch((e) => {
+  .catch(e => {
     console.error('❌ Erro:', e);
     process.exit(1);
   })

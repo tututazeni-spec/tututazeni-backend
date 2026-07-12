@@ -6,11 +6,21 @@ import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 
 // Extrai o JWT do cookie httpOnly 'token' (definido pelo backend no login).
-// Mantém-se o fallback para o header Authorization: Bearer (compatibilidade).
 const cookieExtractor: JwtFromRequestFunction = (req: Request) => {
   const cookies = (req?.cookies ?? {}) as Record<string, string | undefined>;
   return cookies.token ?? null;
 };
+
+/**
+ * Constrói a lista de extractors JWT conforme a flag AUTH_ALLOW_BEARER (C4/A2-7).
+ * - allowBearer=true  → cookie + Bearer header (default: Swagger e clientes legados)
+ * - allowBearer=false → só cookie httpOnly (modo estrito de produção)
+ */
+export function buildJwtExtractors(allowBearer: boolean): JwtFromRequestFunction[] {
+  const extractors: JwtFromRequestFunction[] = [cookieExtractor];
+  if (allowBearer) extractors.push(ExtractJwt.fromAuthHeaderAsBearerToken());
+  return extractors;
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -33,12 +43,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     super({
-      // Cookie httpOnly tem prioridade; header Bearer mantém-se como fallback
-      // (compatibilidade com Swagger e clientes que ainda enviam o header).
-      jwtFromRequest: ExtractJwt.fromExtractors([
-        cookieExtractor,
-        ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ]),
+      // Cookie httpOnly tem prioridade; Bearer desligável via AUTH_ALLOW_BEARER=false (A2-7).
+      jwtFromRequest: ExtractJwt.fromExtractors(
+        buildJwtExtractors(process.env.AUTH_ALLOW_BEARER !== 'false'),
+      ),
       ignoreExpiration: false,
       secretOrKey: jwtSecret,
     });
