@@ -479,7 +479,13 @@ export class PayslipsService {
     const p = await this.findOne(payslipId, user);
 
     const dispute = await this.prisma.payslipDispute.create({
-      data: { payslipId, userId: user.id, reason: dto.reason, details: dto.details, status: 'OPEN' },
+      data: {
+        payslipId,
+        userId: user.id,
+        reason: dto.reason,
+        details: dto.details,
+        status: 'OPEN',
+      },
     });
 
     await this.prisma.payslip.update({

@@ -106,7 +106,9 @@ describe('PayslipsService', () => {
     });
     it('deve lançar NotFoundException', async () => {
       mockPrisma.payslip.findUnique.mockResolvedValue(null);
-      await expect(service.findOne(99, { id: 1, role: { name: 'RH' } } as any)).rejects.toThrow(NotFoundException);
+      await expect(service.findOne(99, { id: 1, role: { name: 'RH' } } as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
