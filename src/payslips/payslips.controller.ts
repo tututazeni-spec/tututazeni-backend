@@ -72,7 +72,7 @@ export class PayslipsController {
     @CurrentUser() user: CurrentUserData,
     @Req() req: Request,
   ) {
-    const payslip = await this.svc.findOne(id, user.id, user.role?.name);
+    const payslip = await this.svc.findOne(id, user);
     await this.svc.logAccess(id, user.id, 'VIEW', req.ip);
     return payslip;
   }
@@ -81,7 +81,7 @@ export class PayslipsController {
   @ApiOperation({ summary: 'Confirmar recepção do recibo' })
   @HttpCode(HttpStatus.OK)
   acknowledge(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
-    return this.svc.acknowledge(id, user.id);
+    return this.svc.acknowledge(id, user);
   }
 
   @Post('my/:id/dispute')
@@ -91,7 +91,7 @@ export class PayslipsController {
     @CurrentUser() user: CurrentUserData,
     @Body() dto: CreateDisputeDto,
   ) {
-    return this.svc.createDispute(id, user.id, dto);
+    return this.svc.createDispute(id, user, dto);
   }
 
   // ── Simulação (aberta a todos) ─────────────────────────────────────────────
@@ -128,7 +128,7 @@ export class PayslipsController {
     @CurrentUser() user: CurrentUserData,
     @Req() req: Request,
   ) {
-    const payslip = await this.svc.findOne(id);
+    const payslip = await this.svc.findOne(id, user);
     await this.svc.logAccess(id, user.id, 'ADMIN_VIEW', req.ip);
     return payslip;
   }
