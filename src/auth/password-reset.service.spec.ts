@@ -4,6 +4,9 @@ import { PasswordResetService } from './password-reset.service';
 
 jest.mock('bcrypt', () => ({ hash: jest.fn().mockResolvedValue('bcrypt-hash') }));
 
+import * as bcrypt from 'bcrypt';
+const bcryptHash = bcrypt.hash as unknown as jest.Mock;
+
 const GENERIC = 'Se o email existir, receberás instruções de recuperação';
 
 function makePrisma() {
@@ -55,8 +58,7 @@ describe('PasswordResetService', () => {
   });
 
   it('forgotPassword chama bcrypt.hash no ramo not-found (tempo constante, F2)', async () => {
-    const bcrypt = require('bcrypt') as { hash: jest.Mock };
-    bcrypt.hash.mockClear();
+    bcryptHash.mockClear();
     const prisma = makePrisma();
     prisma.user.findUnique.mockResolvedValue(null);
     const svc = new PasswordResetService(prisma as any, mail as any);
@@ -64,7 +66,7 @@ describe('PasswordResetService', () => {
     await svc.forgotPassword('nao@existe.com');
 
     // O ramo not-found deve executar um bcrypt.hash dummy para nivelar o tempo de resposta.
-    expect(bcrypt.hash).toHaveBeenCalledWith('dummy-timing-equalizer', 12);
+    expect(bcryptHash).toHaveBeenCalledWith('dummy-timing-equalizer', 12);
   });
 
   it('resetPassword rejeita token inexistente', async () => {
