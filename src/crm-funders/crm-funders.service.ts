@@ -41,9 +41,9 @@ export class CrmFundersService {
   private async generateCode(prefix: string, model: 'funder' | 'fundingGrant'): Promise<string> {
     const sequence = CrmFundersService.CODE_SEQUENCES[model];
     // Escrita (avança o contador) → tem de ir ao primary, nunca à réplica.
-    const rows = await this.prisma.$queryRawUnsafe<{ nextval: bigint }[]>(
-      `SELECT nextval('${sequence}') AS nextval`,
-    );
+    const rows = await this.prisma.$queryRaw<{ nextval: bigint }[]>`
+      SELECT nextval(${sequence}::regclass) AS nextval
+    `;
     return `${prefix}-${String(Number(rows[0].nextval)).padStart(5, '0')}`;
   }
 

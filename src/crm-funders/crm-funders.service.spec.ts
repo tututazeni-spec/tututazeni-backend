@@ -76,7 +76,7 @@ const mockPrisma = {
   notificationLog: { create: jest.fn() },
   $transaction: jest.fn(),
   // generateCode usa nextval() de uma sequência Postgres via raw query
-  $queryRawUnsafe: jest.fn().mockResolvedValue([{ nextval: 1n }]),
+  $queryRaw: jest.fn().mockResolvedValue([{ nextval: 1n }]),
 };
 
 const mockAudit = {
@@ -126,9 +126,7 @@ describe('CrmFundersService', () => {
       const result = await service.create({ name: 'União Europeia', type: 'BILATERAL' as any }, 1);
       expect(result.code).toBe('FIN-00001');
       // código gerado via sequência atómica (nextval), não via "ler último +1"
-      expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledWith(
-        expect.stringContaining("nextval('funder_code_seq')"),
-      );
+      expect(mockPrisma.$queryRaw).toHaveBeenCalled();
       expect(mockPrisma.auditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ entity: 'Funder', action: 'CREATE' }),
