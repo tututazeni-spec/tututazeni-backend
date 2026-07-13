@@ -335,9 +335,13 @@ describe('CareerPlansService (progress)', () => {
   describe('updateGoalProgress', () => {
     it('deve lançar NotFoundException se meta não encontrada', async () => {
       mockPrisma.careerGoal.findUnique.mockResolvedValue(null);
-      await expect(service.updateGoalProgress(99, { progress: 50 } as any, { id: 5, role: { name: 'ADMIN' } } as any)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.updateGoalProgress(
+          99,
+          { progress: 50 } as any,
+          { id: 5, role: { name: 'ADMIN' } } as any,
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('deve marcar meta como COMPLETED quando progresso = 100', async () => {
@@ -348,7 +352,11 @@ describe('CareerPlansService (progress)', () => {
       });
       mockPrisma.careerGoal.update.mockResolvedValue({ id: 1, progress: 100, status: 'COMPLETED' });
 
-      await service.updateGoalProgress(1, { progress: 100 } as any, { id: 5, role: { name: 'ADMIN' } } as any);
+      await service.updateGoalProgress(
+        1,
+        { progress: 100 } as any,
+        { id: 5, role: { name: 'ADMIN' } } as any,
+      );
 
       expect(mockPrisma.careerGoal.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -365,7 +373,11 @@ describe('CareerPlansService (progress)', () => {
         status: 'IN_PROGRESS',
       });
 
-      await service.updateGoalProgress(1, { progress: 50 } as any, { id: 5, role: { name: 'ADMIN' } } as any);
+      await service.updateGoalProgress(
+        1,
+        { progress: 50 } as any,
+        { id: 5, role: { name: 'ADMIN' } } as any,
+      );
 
       expect(mockPrisma.careerGoal.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -378,7 +390,11 @@ describe('CareerPlansService (progress)', () => {
       mockPrisma.careerGoal.findUnique.mockResolvedValue({ id: 1, planId: 1, status: 'PENDING' });
       mockPrisma.careerGoal.update.mockResolvedValue({ id: 1, progress: 0, status: 'PENDING' });
 
-      await service.updateGoalProgress(1, { progress: 0 } as any, { id: 5, role: { name: 'ADMIN' } } as any);
+      await service.updateGoalProgress(
+        1,
+        { progress: 0 } as any,
+        { id: 5, role: { name: 'ADMIN' } } as any,
+      );
 
       expect(mockPrisma.careerGoal.update).toHaveBeenCalledWith(
         expect.objectContaining({
