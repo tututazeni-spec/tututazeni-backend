@@ -22,6 +22,7 @@ import {
   NotificationsCreateTemplateDto,
   NotificationsUpdateTemplateDto,
   UpdatePreferencesDto,
+  ReadBulkDto,
 } from './notifications.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -66,9 +67,8 @@ export class NotificationsController {
   @Patch('my/read-bulk')
   @ApiOperation({ summary: 'Marcar lista de IDs como lidas' })
   @HttpCode(HttpStatus.OK)
-  @ApiBody({ schema: { properties: { ids: { type: 'array', items: { type: 'number' } } } } })
-  readBulk(@CurrentUser() user: CurrentUserData, @Body() body: { ids: number[] }) {
-    return this.svc.markBulkAsRead(user.id, body.ids);
+  readBulk(@CurrentUser() user: CurrentUserData, @Body() dto: ReadBulkDto) {
+    return this.svc.markBulkAsRead(user.id, dto.ids);
   }
 
   @Patch('my/:id/archive')
