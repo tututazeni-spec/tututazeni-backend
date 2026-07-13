@@ -188,10 +188,10 @@ describe('CareerPlansController', () => {
     expect(mockSvc.addGoal).toHaveBeenCalledWith(dto);
   });
 
-  it('updateGoalProgress → updateGoalProgress(goalId, dto, userId)', async () => {
+  it('updateGoalProgress → updateGoalProgress(goalId, dto, user)', async () => {
     const dto = {} as any;
     await controller.updateGoalProgress(5, dto, mockUser as any);
-    expect(mockSvc.updateGoalProgress).toHaveBeenCalledWith(5, dto, 1);
+    expect(mockSvc.updateGoalProgress).toHaveBeenCalledWith(5, dto, mockUser as any);
   });
 
   it('getPromotions → getPromotions(filters)', async () => {
