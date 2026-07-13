@@ -60,9 +60,13 @@ const baseDeclaration = {
   id: 'decl-1',
   tenantId: 'innova',
   requestedById: 'user-1',
+  employeeId: 'user-1',
   templateId: 'tmpl-1',
   status: 'DRAFT',
 };
+
+const employeeUser = { id: 'user-1', role: { name: 'COLABORADOR' } } as any;
+const rhUser = { id: 'user-1', role: { name: 'RH' } } as any;
 
 describe('WorkDeclarationService — additional coverage', () => {
   let service: WorkDeclarationService;
@@ -142,7 +146,7 @@ describe('WorkDeclarationService — additional coverage', () => {
       declarationMock.findMany.mockResolvedValue([baseDeclaration]);
       declarationMock.count.mockResolvedValue(1);
 
-      const result = await service.listDeclarations('innova', 'user-1', 'EMPLOYEE', {});
+      const result = await service.listDeclarations('innova', employeeUser, {});
       expect(result).toBeDefined();
     });
 
@@ -150,7 +154,7 @@ describe('WorkDeclarationService — additional coverage', () => {
       declarationMock.findMany.mockResolvedValue([]);
       declarationMock.count.mockResolvedValue(0);
 
-      await service.listDeclarations('innova', 'user-1', 'RH', {
+      await service.listDeclarations('innova', rhUser, {
         status: 'DRAFT' as any,
         type: 'WORK_CERTIFICATE' as any,
       });
@@ -168,16 +172,16 @@ describe('WorkDeclarationService — additional coverage', () => {
         template: baseTemplate,
       });
 
-      const result = await service.getDeclaration('innova', 'user-1', 'EMPLOYEE', 'decl-1');
+      const result = await service.getDeclaration('innova', employeeUser, 'decl-1');
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se não encontrada', async () => {
       declarationMock.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.getDeclaration('innova', 'user-1', 'EMPLOYEE', 'invalid'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getDeclaration('innova', employeeUser, 'invalid')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

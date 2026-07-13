@@ -96,3 +96,60 @@ describe('WorkDeclarationService', () => {
     });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ownership tests (A3-2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const employeeA = { id: 7, role: { name: 'COLABORADOR' } } as any;
+const employeeB = { id: 8, role: { name: 'COLABORADOR' } } as any;
+const rh = { id: 1, role: { name: 'RH' } } as any;
+
+function makeService(declaration: any, findManyResult: any[] = []) {
+  const prisma = {
+    declaration: {
+      findMany: jest.fn().mockResolvedValue(findManyResult),
+      count: jest.fn().mockResolvedValue(findManyResult.length),
+      findUnique: jest.fn().mockResolvedValue(declaration),
+      findFirst: jest.fn().mockResolvedValue(declaration),
+    },
+  } as any;
+  return new WorkDeclarationService(prisma, {} as any);
+}
+
+describe('WorkDeclarationService ownership (A3-2)', () => {
+  const declOfA = { id: 'd1', employeeId: '7', tenantId: 't1' };
+
+  it('getDeclaration: outro colaborador recebe 404', async () => {
+    const svc = makeService(declOfA);
+    await expect(svc.getDeclaration('t1', employeeB, 'd1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('getDeclaration: o dono acede', async () => {
+    const svc = makeService(declOfA);
+    await expect(svc.getDeclaration('t1', employeeA, 'd1')).resolves.toMatchObject({ id: 'd1' });
+  });
+
+  it('getDeclaration: RH acede a qualquer', async () => {
+    const svc = makeService(declOfA);
+    await expect(svc.getDeclaration('t1', rh, 'd1')).resolves.toMatchObject({ id: 'd1' });
+  });
+
+  it('listDeclarations: colaborador força employeeId próprio no where', async () => {
+    const svc = makeService(null, []);
+    await svc.listDeclarations('t1', employeeA, {} as any);
+    const prisma: any = (svc as any).prisma;
+    const whereArg = prisma.declaration.findMany.mock.calls[0][0].where;
+    expect(whereArg.employeeId).toBe('7');
+  });
+
+  it('listDeclarations: RH não é forçado ao próprio (sem employeeId no where quando não filtra)', async () => {
+    const svc = makeService(null, []);
+    await svc.listDeclarations('t1', rh, {} as any);
+    const prisma: any = (svc as any).prisma;
+    const whereArg = prisma.declaration.findMany.mock.calls[0][0].where;
+    expect(whereArg.employeeId).toBeUndefined();
+  });
+});

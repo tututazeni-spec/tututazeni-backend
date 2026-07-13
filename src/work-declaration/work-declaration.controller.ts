@@ -84,8 +84,7 @@ export class WorkDeclarationController {
   async findAll(@Query() filters: DeclarationFilterDto, @CurrentUser() user: IAuthUser) {
     return this.workDeclarationService.listDeclarations(
       (user as any).tenantId,
-      String(user.id),
-      (user as any).role,
+      user as any,
       filters,
     );
   }
@@ -101,12 +100,7 @@ export class WorkDeclarationController {
   @ApiOperation({ summary: 'Get a single declaration by ID' })
   @ApiParam({ name: 'id', description: 'Declaration UUID' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.getDeclaration(
-      (user as any).tenantId,
-      String(user.id),
-      (user as any).role,
-      id,
-    );
+    return this.workDeclarationService.getDeclaration((user as any).tenantId, user as any, id);
   }
 
   @Patch(':id')
@@ -157,8 +151,7 @@ export class WorkDeclarationController {
   async getMyDeclarations(@CurrentUser() user: IAuthUser) {
     return this.workDeclarationService.listDeclarations(
       (user as any).tenantId,
-      String(user.id),
-      'EMPLOYEE',
+      user as any,
       {} as any,
     );
   }
