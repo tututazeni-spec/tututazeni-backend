@@ -11,7 +11,6 @@ import {
   MaxLength,
   Min,
   IsIn,
-  IsNotEmpty,
   ArrayMaxSize,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
@@ -233,17 +232,6 @@ export class UpdatePreferencesDto {
   disabledCategories?: string[];
 }
 
-// ─── ReadBulkDto ─────────────────────────────────────────────────────────────
-
-export class ReadBulkDto {
-  @IsArray()
-  @IsNotEmpty()
-  @ArrayMaxSize(100)
-  @IsInt({ each: true })
-  @Min(1, { each: true })
-  ids!: number[];
-}
-
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
 export class NotificationFilterDto {
@@ -287,7 +275,6 @@ export class NotificationFilterDto {
 
 export class ReadBulkDto {
   @IsArray()
-  @IsNotEmpty()
   @ArrayMaxSize(100)
   @IsInt({ each: true })
   @Min(1, { each: true })
