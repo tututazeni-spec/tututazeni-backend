@@ -322,3 +322,48 @@ describe('LeaveManagementService', () => {
     });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ownership tests (A3 varredura)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const lmOwnerUser = { id: 7, role: { name: 'COLABORADOR' } } as any;
+const lmOtherUser = { id: 8, role: { name: 'COLABORADOR' } } as any;
+const lmRhUser = { id: 1, role: { name: 'RH' } } as any;
+
+function makeLeaveService(leaveRequest: any) {
+  const prismaLocal: any = {
+    leaveRequest: { findUnique: jest.fn().mockResolvedValue(leaveRequest) },
+    notificationLog: { create: jest.fn().mockResolvedValue({}) },
+    auditLog: { create: jest.fn().mockResolvedValue({}) },
+  };
+  Object.defineProperty(prismaLocal, 'read', { get: () => prismaLocal, configurable: true });
+  return new LeaveManagementService(prismaLocal, { log: jest.fn() } as any);
+}
+
+describe('LeaveManagementService ownership (A3)', () => {
+  const leaveOfA = {
+    id: 1,
+    userId: 7,
+    status: 'PENDING',
+    approvals: [],
+    documents: [],
+    impactPreview: null,
+    user: { id: 7, fullName: 'A', email: 'a@test.com' },
+  };
+
+  it('o dono lê o próprio pedido', async () => {
+    const svc = makeLeaveService(leaveOfA);
+    await expect(svc.findOne(1, lmOwnerUser)).resolves.toMatchObject({ id: 1 });
+  });
+
+  it('outro colaborador recebe 404', async () => {
+    const svc = makeLeaveService(leaveOfA);
+    await expect(svc.findOne(1, lmOtherUser)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('RH lê qualquer pedido', async () => {
+    const svc = makeLeaveService(leaveOfA);
+    await expect(svc.findOne(1, lmRhUser)).resolves.toMatchObject({ id: 1 });
+  });
+});

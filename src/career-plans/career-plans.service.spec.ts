@@ -146,3 +146,68 @@ describe('CareerPlansService', () => {
     });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ownership tests (A3 varredura)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const cpOwnerUser = { id: 7, role: { name: 'COLABORADOR' } } as any;
+const cpOtherUser = { id: 8, role: { name: 'COLABORADOR' } } as any;
+const cpRhUser = { id: 1, role: { name: 'RH' } } as any;
+
+function makeCareerPlansService(plan: any, goal: any = null) {
+  const prisma: any = {
+    userCareerPlan: { findUnique: jest.fn().mockResolvedValue(plan) },
+    careerGoal: {
+      findUnique: jest.fn().mockResolvedValue(goal),
+      update: jest.fn().mockResolvedValue({ ...(goal ?? {}), progress: 50 }),
+    },
+  };
+  Object.defineProperty(prisma, 'read', { get: () => prisma, configurable: true });
+  return new CareerPlansService(prisma, { log: jest.fn() } as any);
+}
+
+describe('CareerPlansService ownership (A3)', () => {
+  const planOfA = { id: 1, userId: 7, targetRoleId: null, status: 'ACTIVE', goals: [] };
+  const goalOfA = { id: 10, careerPlan: { userId: 7 }, progress: 0, notes: null };
+
+  describe('findOne', () => {
+    it('o dono acede ao próprio plano', async () => {
+      const svc = makeCareerPlansService(planOfA);
+      await expect(svc.findOne(1, cpOwnerUser)).resolves.toMatchObject({ id: 1 });
+    });
+
+    it('outro colaborador recebe 404', async () => {
+      const svc = makeCareerPlansService(planOfA);
+      await expect(svc.findOne(1, cpOtherUser)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('RH acede a qualquer plano', async () => {
+      const svc = makeCareerPlansService(planOfA);
+      await expect(svc.findOne(1, cpRhUser)).resolves.toMatchObject({ id: 1 });
+    });
+  });
+
+  describe('updateGoalProgress', () => {
+    it('o dono actualiza o próprio progresso', async () => {
+      const svc = makeCareerPlansService(null, goalOfA);
+      await expect(
+        svc.updateGoalProgress(10, { progress: 50 } as any, cpOwnerUser),
+      ).resolves.toBeDefined();
+    });
+
+    it('outro colaborador recebe 404', async () => {
+      const svc = makeCareerPlansService(null, goalOfA);
+      await expect(
+        svc.updateGoalProgress(10, { progress: 50 } as any, cpOtherUser),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('RH actualiza qualquer meta', async () => {
+      const svc = makeCareerPlansService(null, goalOfA);
+      await expect(
+        svc.updateGoalProgress(10, { progress: 50 } as any, cpRhUser),
+      ).resolves.toBeDefined();
+    });
+  });
+});

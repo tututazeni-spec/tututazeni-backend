@@ -2,6 +2,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/types/current-user';
 import {
   CareerPlanFilterDto,
   PromotionFilterDto,
@@ -278,7 +281,7 @@ export class CareerPlansService {
     return { data: enriched, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, user?: CurrentUserData) {
     const plan = await this.prisma.read.userCareerPlan.findUnique({
       where: { id },
       include: {
@@ -291,7 +294,9 @@ export class CareerPlansService {
         goals: { orderBy: [{ status: 'asc' }, { dueDate: 'asc' }] },
       },
     });
-    if (!plan) throw new NotFoundException('Plano de carreira não encontrado');
+    // Ownership (A3): dono OU ADMIN/RH/GESTOR; senão 404.
+    if (user) assertCanAccess(plan, plan?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    else if (!plan) throw new NotFoundException('Plano de carreira não encontrado');
 
     let readiness = null;
     if (plan.targetRoleId) {
@@ -387,9 +392,13 @@ export class CareerPlansService {
     });
   }
 
-  async updateGoalProgress(goalId: number, dto: UpdateGoalProgressDto, userId: number) {
-    const goal = await this.prisma.read.careerGoal.findUnique({ where: { id: goalId } });
-    if (!goal) throw new NotFoundException('Meta não encontrada');
+  async updateGoalProgress(goalId: number, dto: UpdateGoalProgressDto, user: CurrentUserData) {
+    const goal = await this.prisma.read.careerGoal.findUnique({
+      where: { id: goalId },
+      include: { careerPlan: { select: { userId: true } } },
+    });
+    // Ownership (A3): dono OU ADMIN/RH/GESTOR; senão 404.
+    assertCanAccess(goal, goal?.careerPlan?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
 
     const status =
       dto.progress === 100
@@ -409,8 +418,8 @@ export class CareerPlansService {
     });
   }
 
-  async getProgress(planId: number) {
-    const plan = await this.findOne(planId);
+  async getProgress(planId: number, user?: CurrentUserData) {
+    const plan = await this.findOne(planId, user);
     const goals = ((plan as any).goals as any[]) ?? [];
     const total = goals.length;
     const completed = goals.filter(g => g.status === GoalStatus.COMPLETED).length;
