@@ -2,16 +2,13 @@
 // src/modules/work-declaration/work-declaration.service.ts
 // ============================================================
 
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfService } from '../pdf/pdf.service';
 import * as crypto from 'crypto';
+import { isPrivileged, assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/types/current-user';
 import {
   ChangeDeclarationStatusDto,
   CreateDeclarationDto,
@@ -278,20 +275,17 @@ export class WorkDeclarationService {
     return updated;
   }
 
-  async listDeclarations(
-    tenantId: string,
-    userId: string,
-    role: string,
-    query: DeclarationQueryDto,
-  ) {
+  async listDeclarations(tenantId: string, user: CurrentUserData, query: DeclarationQueryDto) {
+    const privileged = isPrivileged(user, [Role.ADMIN, Role.RH]);
     const where: any = { tenantId };
 
-    // Colaborador vê apenas as suas
-    if (role === 'EMPLOYEE') where.employeeId = userId;
+    // Colaborador vê apenas as suas (employeeId é string na BD).
+    if (!privileged) where.employeeId = String(user.id);
 
     if (query.status) where.status = query.status;
     if (query.type) where.type = query.type;
-    if (query.employeeId && role !== 'EMPLOYEE') where.employeeId = query.employeeId;
+    // Filtro por employeeId só é honrado para papéis privilegiados.
+    if (query.employeeId && privileged) where.employeeId = query.employeeId;
     if (query.assignedToId) where.assignedToId = query.assignedToId;
     if (query.fromDate || query.toDate) {
       where.createdAt = {};
@@ -327,13 +321,11 @@ export class WorkDeclarationService {
     };
   }
 
-  async getDeclaration(tenantId: string, userId: string, role: string, declarationId: string) {
+  async getDeclaration(tenantId: string, user: CurrentUserData, declarationId: string) {
     const declaration = await this.findDeclarationOrThrow(tenantId, declarationId);
-
-    if (role === 'EMPLOYEE' && declaration.employeeId !== userId) {
-      throw new ForbiddenException('Sem permissão para aceder a esta declaração.');
-    }
-
+    // Ownership (A3-2): dono OU ADMIN/RH; senão 404. employeeId é string — o
+    // helper coage ambos os lados.
+    assertCanAccess(declaration, declaration.employeeId, user, [Role.ADMIN, Role.RH]);
     return declaration;
   }
 

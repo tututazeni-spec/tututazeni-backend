@@ -54,10 +54,10 @@ describe('WorkDeclarationController', () => {
     expect(mockSvc.createDeclaration).toHaveBeenCalledWith('tenant-1', '1', dto);
   });
 
-  it('findAll → listDeclarations(tenantId, userId, role, filters)', async () => {
+  it('findAll → listDeclarations(tenantId, user, filters)', async () => {
     const filters = {} as any;
     await controller.findAll(filters, mockUser as any);
-    expect(mockSvc.listDeclarations).toHaveBeenCalledWith('tenant-1', '1', 'ADMIN', filters);
+    expect(mockSvc.listDeclarations).toHaveBeenCalledWith('tenant-1', mockUser, filters);
   });
 
   it('getDashboardStats → getStats(tenantId)', async () => {
@@ -65,9 +65,9 @@ describe('WorkDeclarationController', () => {
     expect(mockSvc.getStats).toHaveBeenCalledWith('tenant-1');
   });
 
-  it('findOne → getDeclaration(tenantId, userId, role, id)', async () => {
+  it('findOne → getDeclaration(tenantId, user, id)', async () => {
     await controller.findOne('uuid-1', mockUser as any);
-    expect(mockSvc.getDeclaration).toHaveBeenCalledWith('tenant-1', '1', 'ADMIN', 'uuid-1');
+    expect(mockSvc.getDeclaration).toHaveBeenCalledWith('tenant-1', mockUser, 'uuid-1');
   });
 
   it('update → updateDeclaration(tenantId, userId, id, dto)', async () => {
@@ -92,14 +92,9 @@ describe('WorkDeclarationController', () => {
     expect(mockSvc.requestDeclaration).toHaveBeenCalledWith('tenant-1', '1', dto);
   });
 
-  it('getMyDeclarations → listDeclarations(tenantId, userId, EMPLOYEE)', async () => {
+  it('getMyDeclarations → listDeclarations(tenantId, user, query)', async () => {
     await controller.getMyDeclarations(mockUser as any);
-    expect(mockSvc.listDeclarations).toHaveBeenCalledWith(
-      'tenant-1',
-      '1',
-      'EMPLOYEE',
-      expect.anything(),
-    );
+    expect(mockSvc.listDeclarations).toHaveBeenCalledWith('tenant-1', mockUser, expect.anything());
   });
 
   it('issueDeclaration → changeStatus(ISSUED)', async () => {
