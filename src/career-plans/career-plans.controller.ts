@@ -183,14 +183,14 @@ export class CareerPlansController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do plano (roles, path, goals, readiness)' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.findOne(id);
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.findOne(id, user);
   }
 
   @Get(':id/progress')
   @ApiOperation({ summary: 'Progresso do plano (goals + readiness)' })
-  getProgress(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.getProgress(id);
+  getProgress(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getProgress(id, user);
   }
 
   @Post()
@@ -233,7 +233,7 @@ export class CareerPlansController {
     @Body() dto: UpdateGoalProgressDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.updateGoalProgress(goalId, dto, user.id);
+    return this.svc.updateGoalProgress(goalId, dto, user);
   }
 
   // ── Promotions ────────────────────────────────────────────────────

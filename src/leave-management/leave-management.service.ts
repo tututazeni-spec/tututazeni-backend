@@ -8,6 +8,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/types/current-user';
 import {
   LeaveFilterDto,
   CalendarFilterDto,
@@ -188,7 +191,7 @@ export class LeaveManagementService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, user?: CurrentUserData) {
     const r = await this.prisma.read.leaveRequest.findUnique({
       where: { id },
       include: {
@@ -201,7 +204,9 @@ export class LeaveManagementService {
         impactPreview: true,
       },
     });
-    if (!r) throw new NotFoundException('Pedido não encontrado');
+    // Ownership (A3): dono OU ADMIN/RH/GESTOR; senão 404.
+    if (user) assertCanAccess(r, r?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    else if (!r) throw new NotFoundException('Pedido não encontrado');
     return r;
   }
 

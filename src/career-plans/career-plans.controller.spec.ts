@@ -155,14 +155,14 @@ describe('CareerPlansController', () => {
     expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
   });
 
-  it('findOne → findOne(id)', async () => {
-    await controller.findOne(3);
-    expect(mockSvc.findOne).toHaveBeenCalledWith(3);
+  it('findOne → findOne(id, user)', async () => {
+    await controller.findOne(3, mockUser as any);
+    expect(mockSvc.findOne).toHaveBeenCalledWith(3, mockUser as any);
   });
 
-  it('getProgress → getProgress(id)', async () => {
-    await controller.getProgress(3);
-    expect(mockSvc.getProgress).toHaveBeenCalledWith(3);
+  it('getProgress → getProgress(id, user)', async () => {
+    await controller.getProgress(3, mockUser as any);
+    expect(mockSvc.getProgress).toHaveBeenCalledWith(3, mockUser as any);
   });
 
   it('create → create(dto, userId)', async () => {
@@ -188,10 +188,10 @@ describe('CareerPlansController', () => {
     expect(mockSvc.addGoal).toHaveBeenCalledWith(dto);
   });
 
-  it('updateGoalProgress → updateGoalProgress(goalId, dto, userId)', async () => {
+  it('updateGoalProgress → updateGoalProgress(goalId, dto, user)', async () => {
     const dto = {} as any;
     await controller.updateGoalProgress(5, dto, mockUser as any);
-    expect(mockSvc.updateGoalProgress).toHaveBeenCalledWith(5, dto, 1);
+    expect(mockSvc.updateGoalProgress).toHaveBeenCalledWith(5, dto, mockUser as any);
   });
 
   it('getPromotions → getPromotions(filters)', async () => {
