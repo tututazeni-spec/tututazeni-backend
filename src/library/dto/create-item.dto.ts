@@ -12,6 +12,7 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { LibraryItemType } from '@prisma/client';
+import { IsAllowedFileUrl } from '../../common/validators/is-allowed-file-url.validator';
 
 export class CreateItemDto {
   @ApiProperty({ enum: LibraryItemType })
@@ -34,7 +35,7 @@ export class CreateItemDto {
   description?: string;
 
   @ApiProperty({ example: 'https://storage.innova.ao/docs/manual.pdf' })
-  @IsString()
+  @IsAllowedFileUrl()
   fileUrl: string;
 
   @ApiPropertyOptional()
