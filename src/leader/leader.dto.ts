@@ -9,6 +9,7 @@ import {
   IsDateString,
   MaxLength,
   Min,
+  IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -102,4 +103,13 @@ export class AlertFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
   @ApiPropertyOptional({ default: 1 }) @IsOptional() @IsInt() @Type(() => Number) page?: number;
   @ApiPropertyOptional({ default: 20 }) @IsOptional() @IsInt() @Type(() => Number) limit?: number;
+}
+
+// ─── Complete1on1Dto ──────────────────────────────────────────────────────────
+
+export class Complete1on1Dto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(5000)
+  notes!: string;
 }
