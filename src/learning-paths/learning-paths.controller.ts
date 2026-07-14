@@ -22,6 +22,7 @@ import {
   AssignLearningPathDto,
   LearningPathStepDto,
   ReorderStepsDto,
+  CreateMilestoneDto,
 } from './learning-paths.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -160,10 +161,7 @@ export class LearningPathsController {
   @Post(':id/milestones')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar milestone na trilha' })
-  createMilestone(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: { title: string; description?: string; seq: number },
-  ) {
+  createMilestone(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateMilestoneDto) {
     return this.svc.createMilestone(id, dto);
   }
 

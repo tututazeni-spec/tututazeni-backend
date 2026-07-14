@@ -9,6 +9,7 @@ import {
   Min,
   Max,
   MaxLength,
+  IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -240,4 +241,22 @@ export class ReorderStepsDto {
   @ApiProperty({ type: [Object] })
   @IsArray()
   order!: Array<{ courseId: number; seq: number }>;
+}
+
+// ─── CreateMilestoneDto ───────────────────────────────────────────────────────
+
+export class CreateMilestoneDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
+  @IsInt()
+  @Min(1)
+  seq!: number;
 }
