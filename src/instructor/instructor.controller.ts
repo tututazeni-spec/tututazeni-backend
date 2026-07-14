@@ -26,6 +26,7 @@ import {
   UpdateCohortDto,
   InstructorAddParticipantsDto,
   CohortFilterDto,
+  PayoutDto,
 } from './instructor.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -192,7 +193,7 @@ export class InstructorController {
   @Post(':id/payout')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Registar pagamento ao instrutor' })
-  payout(@Param('id', ParseIntPipe) id: number, @Body() body: { amount: number }) {
-    return this.svc.createPayout(id, body.amount);
+  payout(@Param('id', ParseIntPipe) id: number, @Body() dto: PayoutDto) {
+    return this.svc.createPayout(id, dto.amount);
   }
 }

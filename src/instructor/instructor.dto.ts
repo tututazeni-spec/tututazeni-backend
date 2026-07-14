@@ -261,3 +261,11 @@ export class CohortFilterDto {
   @Type(() => Number)
   limit?: number;
 }
+
+// ─── PayoutDto ────────────────────────────────────────────────────────────────
+
+export class PayoutDto {
+  @IsNumber()
+  @Min(0.01)
+  amount!: number;
+}
