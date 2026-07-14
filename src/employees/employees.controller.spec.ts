@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EmployeesController } from './employees.controller';
 import { EmployeesService } from './employees.service';
+import { EmployeeStatus } from './employees.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -125,7 +126,7 @@ describe('EmployeesController', () => {
   });
 
   it('updateContractStatus → updateContractStatus', async () => {
-    await controller.updateContractStatus(1, { status: 'ACTIVE' });
+    await controller.updateContractStatus(1, { status: EmployeeStatus.ACTIVE });
     expect(mockSvc.updateContractStatus).toHaveBeenCalledWith(1, 'ACTIVE');
   });
 
