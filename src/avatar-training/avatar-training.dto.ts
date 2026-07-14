@@ -11,6 +11,8 @@ import {
   Max,
   MaxLength,
   ValidateNested,
+  IsUrl,
+  IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -235,4 +237,16 @@ export class AvatarTrainingAnalyticsFilterDto {
   @IsOptional()
   @IsEnum(ScenarioCategory)
   category?: ScenarioCategory;
+}
+
+// ─── UploadKnowledgeDto ───────────────────────────────────────────────────────
+
+export class UploadKnowledgeDto {
+  @IsUrl()
+  fileUrl!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  title!: string;
 }

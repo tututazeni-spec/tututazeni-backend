@@ -28,6 +28,7 @@ import {
   SendMessageDto,
   CompleteSessionDto,
   AvatarTrainingAnalyticsFilterDto,
+  UploadKnowledgeDto,
 } from './avatar-training.dto';
 
 const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
@@ -82,11 +83,8 @@ export class AvatarTrainingController {
   @Post('avatars/:id/knowledge')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Adicionar documento à base de conhecimento do avatar (RAG)' })
-  uploadKnowledge(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: { fileUrl: string; title: string },
-  ) {
-    return this.svc.uploadKnowledge(id, body.fileUrl, body.title);
+  uploadKnowledge(@Param('id', ParseIntPipe) id: number, @Body() dto: UploadKnowledgeDto) {
+    return this.svc.uploadKnowledge(id, dto.fileUrl, dto.title);
   }
 
   // ─── Scenarios ───────────────────────────────────────────────
