@@ -12,6 +12,7 @@ import {
   Min,
   IsIn,
   ArrayMaxSize,
+  IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -279,4 +280,47 @@ export class ReadBulkDto {
   @IsInt({ each: true })
   @Min(1, { each: true })
   ids!: number[];
+}
+
+// ─── SendAllNotificationDto ──────────────────────────────────────────────────
+
+export class SendAllNotificationDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  type!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2000)
+  message!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  title?: string;
+}
+
+// ─── CreateAutomationRuleBodyDto ─────────────────────────────────────────────
+
+export class CreateAutomationRuleBodyDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  name!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  trigger!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  action!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  condition!: string;
 }

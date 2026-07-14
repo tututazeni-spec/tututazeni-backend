@@ -13,7 +13,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import {
   CreateNotificationDto,
@@ -23,6 +23,8 @@ import {
   NotificationsUpdateTemplateDto,
   UpdatePreferencesDto,
   ReadBulkDto,
+  SendAllNotificationDto,
+  CreateAutomationRuleBodyDto,
 } from './notifications.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -145,17 +147,8 @@ export class NotificationsController {
   @Post('send-all')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Enviar a todos os colaboradores activos' })
-  @ApiBody({
-    schema: {
-      properties: {
-        type: { type: 'string' },
-        message: { type: 'string' },
-        title: { type: 'string' },
-      },
-    },
-  })
-  sendAll(@Body() body: { type: string; message: string; title?: string }) {
-    return this.svc.sendToAll(body.type, body.message, body.title);
+  sendAll(@Body() dto: SendAllNotificationDto) {
+    return this.svc.sendToAll(dto.type, dto.message, dto.title);
   }
 
   // ── Logs / Stats (Admin) ──────────────────────────────────────────────────
@@ -186,8 +179,8 @@ export class NotificationsController {
   @Post('automation-rules')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Criar regra de automação' })
-  createRule(@Body() body: { name: string; trigger: string; action: string; condition: string }) {
-    return this.svc.createAutomationRule(body);
+  createRule(@Body() dto: CreateAutomationRuleBodyDto) {
+    return this.svc.createAutomationRule(dto);
   }
 
   @Patch('automation-rules/:id/toggle')
