@@ -10,6 +10,8 @@ import {
   IsObject,
   ValidateNested,
   IsDateString,
+  IsNotEmpty,
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -240,4 +242,13 @@ export class WorkDeclFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Max(100) @Type(() => Number) limit?: number;
+}
+
+// ─── ReasonDto ────────────────────────────────────────────────────────────────
+
+export class ReasonDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1000)
+  reason!: string;
 }

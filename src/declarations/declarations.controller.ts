@@ -27,6 +27,7 @@ import {
   ReviewWorkDeclDto,
   BulkApproveWorkDeclDto,
   WorkDeclType,
+  ReasonDto,
 } from './declarations.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -302,10 +303,10 @@ export class WorkDeclarationsController {
   @ApiOperation({ summary: 'Marcar como isento' })
   exempt(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { reason: string },
+    @Body() dto: ReasonDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.exemptUser(id, body.reason, user.id);
+    return this.svc.exemptUser(id, dto.reason, user.id);
   }
 
   // Auto-triggers
