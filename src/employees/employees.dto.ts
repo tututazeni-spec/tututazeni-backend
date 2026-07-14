@@ -18,6 +18,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -297,7 +298,7 @@ export class EmployeesCreateDocumentDto {
   @ApiProperty() @IsInt() employeeId!: number;
   @ApiProperty() @IsString() name!: string;
   @ApiProperty() @IsString() type!: string;
-  @ApiProperty() @IsString() fileUrl!: string;
+  @ApiProperty() @IsAllowedFileUrl() fileUrl!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() mimeType?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() fileSize?: number;
   @ApiPropertyOptional() @IsOptional() @IsDateString() expiresAt?: string;
