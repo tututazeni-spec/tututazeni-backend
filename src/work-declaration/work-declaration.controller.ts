@@ -11,17 +11,13 @@ import {
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
-  UploadedFile,
-  UseInterceptors,
   Response,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
-  ApiConsumes,
   ApiQuery,
   ApiParam,
 } from '@nestjs/swagger';
@@ -39,6 +35,7 @@ import {
   ChangeDeclarationStatusDto,
   ExportDeclarationDto,
   UpsertTenantConfigDto,
+  UploadLogoDto,
 } from './work-declaration.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -173,12 +170,9 @@ export class WorkDeclarationController {
   @Post(':id/sign')
   @Roles(Role.HR, Role.ADMIN)
   @ApiOperation({ summary: 'Sign a declaration (upload signature image or apply digital sig)' })
-  @UseInterceptors(FileInterceptor('signatureFile'))
-  @ApiConsumes('multipart/form-data')
   async signDeclaration(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SignDeclarationDto,
-    @UploadedFile() signatureFile: Express.Multer.File,
     @CurrentUser() user: IAuthUser,
   ) {
     return this.workDeclarationService.signDeclaration(
@@ -367,12 +361,10 @@ export class WorkDeclarationController {
 
   @Post('branding/logo')
   @Roles(Role.ADMIN)
-  @UseInterceptors(FileInterceptor('logo'))
-  @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload company logo used in declaration header' })
-  async uploadLogo(@UploadedFile() logo: Express.Multer.File, @CurrentUser() user: IAuthUser) {
+  @ApiOperation({ summary: 'Set company logo URL used in declaration header' })
+  async uploadLogo(@Body() dto: UploadLogoDto, @CurrentUser() user: IAuthUser) {
     return this.workDeclarationService.upsertTenantConfig((user as any).tenantId, {
-      logoUrl: logo?.originalname,
+      logoUrl: dto.fileUrl,
     } as any);
   }
 

@@ -3,7 +3,7 @@
 // DTOs — Work Declaration Module (INNOVA)
 // ============================================================
 
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
@@ -19,6 +19,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 
 // ─── Enums espelhados do Prisma ──────────────────────────────
 export enum DeclarationStatus {
@@ -493,4 +494,12 @@ export class VerifyDeclarationDto {
   @IsString()
   @IsNotEmpty()
   code: string; // código único da declaração
+}
+
+// ─── UploadLogoDto ────────────────────────────────────────────────────────────
+
+export class UploadLogoDto {
+  @ApiProperty({ description: 'URL do logo já carregado para storage externo' })
+  @IsAllowedFileUrl()
+  fileUrl!: string;
 }

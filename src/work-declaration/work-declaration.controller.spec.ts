@@ -154,4 +154,18 @@ describe('WorkDeclarationController', () => {
     await controller.updateBrandingSettings(settings, mockUser as any);
     expect(mockSvc.upsertTenantConfig).toHaveBeenCalledWith('tenant-1', settings);
   });
+
+  it('uploadLogo → upsertTenantConfig(tenantId, { logoUrl: dto.fileUrl })', async () => {
+    const dto = { fileUrl: 'https://storage.innova.ao/logo.png' };
+    await controller.uploadLogo(dto as any, mockUser as any);
+    expect(mockSvc.upsertTenantConfig).toHaveBeenCalledWith('tenant-1', {
+      logoUrl: 'https://storage.innova.ao/logo.png',
+    });
+  });
+
+  it('signDeclaration → signDeclaration(tenantId, userId, id, dto) sem signatureFile', async () => {
+    const dto = { type: 'DIGITAL', signatureUrl: undefined } as any;
+    await controller.signDeclaration('uuid-1', dto, mockUser as any);
+    expect(mockSvc.signDeclaration).toHaveBeenCalledWith('tenant-1', '1', 'uuid-1', dto);
+  });
 });
