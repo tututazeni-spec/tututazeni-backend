@@ -26,6 +26,7 @@ import {
   CreateApiKeyDto,
   CreateWebhookDto,
   TriggerWebhookDto,
+  ValidateApiKeyBodyDto,
 } from './api-integration.dto';
 
 const ADMIN = ['ADMIN', 'RH'] as const;
@@ -129,8 +130,8 @@ export class ApiIntegrationController {
 
   @Post('api-keys/validate')
   @ApiOperation({ summary: 'Validar uma API Key (para middleware de autenticação)' })
-  validateApiKey(@Body() body: { key: string }) {
-    return this.svc.validateApiKey(body.key);
+  validateApiKey(@Body() dto: ValidateApiKeyBodyDto) {
+    return this.svc.validateApiKey(dto.key);
   }
 
   // ─── Webhooks ────────────────────────────────────────────────

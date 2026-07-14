@@ -1,2 +1,2 @@
 #!/usr/bin/env sh
-npm run build
+# build desactivado no pre-push — qualidade só no deploy ou quando pedido manualmente

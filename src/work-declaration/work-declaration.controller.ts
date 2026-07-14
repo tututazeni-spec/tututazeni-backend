@@ -38,6 +38,7 @@ import {
   UpdateDeclarationTemplateDto,
   ChangeDeclarationStatusDto,
   ExportDeclarationDto,
+  UpsertTenantConfigDto,
 } from './work-declaration.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -385,10 +386,7 @@ export class WorkDeclarationController {
   @Patch('branding/settings')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Update company branding settings (header, footer, layout)' })
-  async updateBrandingSettings(
-    @Body() settings: Record<string, unknown>,
-    @CurrentUser() user: IAuthUser,
-  ) {
-    return this.workDeclarationService.upsertTenantConfig((user as any).tenantId, settings as any);
+  async updateBrandingSettings(@Body() dto: UpsertTenantConfigDto, @CurrentUser() user: IAuthUser) {
+    return this.workDeclarationService.upsertTenantConfig((user as any).tenantId, dto);
   }
 }

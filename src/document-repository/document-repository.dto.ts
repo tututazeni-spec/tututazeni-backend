@@ -8,6 +8,8 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsNotEmpty,
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -153,4 +155,29 @@ export class DocumentFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Max(100) @Type(() => Number) limit?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortOrder?: 'asc' | 'desc';
+}
+
+// ─── OptionalReasonDto ────────────────────────────────────────────────────────
+
+export class OptionalReasonDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  reason?: string;
+}
+
+// ─── UpdateExpiresAtDto ───────────────────────────────────────────────────────
+
+export class UpdateExpiresAtDto {
+  @IsDateString()
+  newExpiresAt!: string;
+}
+
+// ─── ReasonDto ────────────────────────────────────────────────────────────────
+
+export class ReasonDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1000)
+  reason!: string;
 }

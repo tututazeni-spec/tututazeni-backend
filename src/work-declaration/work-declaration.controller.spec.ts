@@ -150,7 +150,7 @@ describe('WorkDeclarationController', () => {
   });
 
   it('updateBrandingSettings → upsertTenantConfig(tenantId, settings)', async () => {
-    const settings = { color: '#fff' };
+    const settings = { companyName: 'Test' };
     await controller.updateBrandingSettings(settings, mockUser as any);
     expect(mockSvc.upsertTenantConfig).toHaveBeenCalledWith('tenant-1', settings);
   });

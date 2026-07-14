@@ -21,6 +21,8 @@ import {
   BulkAssignRoleDto,
   SimulatePermissionDto,
   RoleTemplateDto,
+  CloneRoleDto,
+  PermissionIdsDto,
 } from './roles-permissions.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -88,8 +90,8 @@ export class RolesPermissionsController {
 
   @Post(':id/clone')
   @ApiOperation({ summary: 'Clonar role (duplica permissões)' })
-  clone(@Param('id', ParseIntPipe) id: number, @Body() body: { newName: string }) {
-    return this.svc.cloneRole(id, body.newName);
+  clone(@Param('id', ParseIntPipe) id: number, @Body() dto: CloneRoleDto) {
+    return this.svc.cloneRole(id, dto.newName);
   }
 
   @Delete(':id')
@@ -120,29 +122,20 @@ export class RolesPermissionsController {
 
   @Patch(':roleId/permissions/add')
   @ApiOperation({ summary: 'Adicionar permissões a um role (sem apagar as existentes)' })
-  addPermissions(
-    @Param('roleId', ParseIntPipe) roleId: number,
-    @Body() body: { permissionIds: number[] },
-  ) {
-    return this.svc.addPermissionsToRole(roleId, body.permissionIds);
+  addPermissions(@Param('roleId', ParseIntPipe) roleId: number, @Body() dto: PermissionIdsDto) {
+    return this.svc.addPermissionsToRole(roleId, dto.permissionIds);
   }
 
   @Patch(':roleId/permissions/remove')
   @ApiOperation({ summary: 'Remover permissões de um role' })
-  removePermissions(
-    @Param('roleId', ParseIntPipe) roleId: number,
-    @Body() body: { permissionIds: number[] },
-  ) {
-    return this.svc.removePermissionsFromRole(roleId, body.permissionIds);
+  removePermissions(@Param('roleId', ParseIntPipe) roleId: number, @Body() dto: PermissionIdsDto) {
+    return this.svc.removePermissionsFromRole(roleId, dto.permissionIds);
   }
 
   @Patch(':roleId/permissions/set')
   @ApiOperation({ summary: 'Definir permissões exactas de um role (substitui tudo)' })
-  setPermissions(
-    @Param('roleId', ParseIntPipe) roleId: number,
-    @Body() body: { permissionIds: number[] },
-  ) {
-    return this.svc.setRolePermissions(roleId, body.permissionIds);
+  setPermissions(@Param('roleId', ParseIntPipe) roleId: number, @Body() dto: PermissionIdsDto) {
+    return this.svc.setRolePermissions(roleId, dto.permissionIds);
   }
 
   // ─── Compare ──────────────────────────────────────────────────

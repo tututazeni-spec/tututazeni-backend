@@ -21,6 +21,7 @@ import {
   LeaderCreateOneOnOneDto,
   LeaderAssignCourseDto,
   TeamFilterDto,
+  Complete1on1Dto,
 } from './leader.dto';
 
 const ALL_MGMT = ['ADMIN', 'RH', 'LIDER', 'DIRECTOR'] as const;
@@ -149,8 +150,8 @@ export class LeaderController {
   @Patch('1on1/:id/complete')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Concluir reunião 1:1 com notas/actas' })
-  complete1on1(@Param('id', ParseIntPipe) id: number, @Body() body: { notes: string }) {
-    return this.svc.completeOneOnOne(id, body.notes);
+  complete1on1(@Param('id', ParseIntPipe) id: number, @Body() dto: Complete1on1Dto) {
+    return this.svc.completeOneOnOne(id, dto.notes);
   }
 
   // ─── PDI Approval ─────────────────────────────────────────────

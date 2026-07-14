@@ -1,5 +1,15 @@
 // src/roles-permissions/roles-permissions.dto.ts
-import { IsString, IsOptional, IsArray, IsInt, IsBoolean, Min, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  IsInt,
+  IsBoolean,
+  Min,
+  MaxLength,
+  IsNotEmpty,
+  ArrayMaxSize,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -113,4 +123,23 @@ export class RoleTemplateDto {
   @IsOptional()
   @IsInt()
   positionId?: number;
+}
+
+// ─── CloneRoleDto ────────────────────────────────────────────────────────────
+
+export class CloneRoleDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  newName!: string;
+}
+
+// ─── PermissionIdsDto ────────────────────────────────────────────────────────
+
+export class PermissionIdsDto {
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @ArrayMaxSize(200)
+  permissionIds!: number[];
 }

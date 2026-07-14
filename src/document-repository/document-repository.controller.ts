@@ -22,6 +22,9 @@ import {
   GrantPermissionDto,
   CreateShareLinkDto,
   CreateDocCategoryDto,
+  OptionalReasonDto,
+  UpdateExpiresAtDto,
+  ReasonDto,
 } from './document-repository.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -172,10 +175,10 @@ export class DocumentRepositoryController {
   @ApiOperation({ summary: 'Arquivar documento (verifica retenção legal)' })
   archive(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { reason?: string },
+    @Body() dto: OptionalReasonDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.archive(id, user.id, body.reason);
+    return this.svc.archive(id, user.id, dto.reason);
   }
 
   @Patch(':id/renew')
@@ -183,10 +186,10 @@ export class DocumentRepositoryController {
   @ApiOperation({ summary: 'Renovar data de validade do documento' })
   renew(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { newExpiresAt: string },
+    @Body() dto: UpdateExpiresAtDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.renewDocument(id, body.newExpiresAt, user.id);
+    return this.svc.renewDocument(id, dto.newExpiresAt, user.id);
   }
 
   @Delete(':id')
@@ -194,10 +197,10 @@ export class DocumentRepositoryController {
   @ApiOperation({ summary: 'Eliminar (soft delete — verifica retenção legal)' })
   remove(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { reason: string },
+    @Body() dto: ReasonDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.softDelete(id, user.id, body.reason);
+    return this.svc.softDelete(id, user.id, dto.reason);
   }
 
   // ── Permissions ───────────────────────────────────────────────────

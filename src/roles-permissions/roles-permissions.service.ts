@@ -23,6 +23,8 @@ export {
   SetPermissionsDto,
   SimulatePermissionDto,
   RoleTemplateDto,
+  CloneRoleDto,
+  PermissionIdsDto,
 } from './roles-permissions.dto';
 
 // ─────────────────────────────────────────────────────────────────

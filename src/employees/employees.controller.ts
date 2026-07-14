@@ -32,6 +32,8 @@ import {
   BulkAssignCourseDto,
   BulkUpdateStatusDto,
   EmployeeFilterDto,
+  UpdateContractStatusDto,
+  UpdateCareerPlanStatusDto,
 } from './employees.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -144,8 +146,11 @@ export class EmployeesController {
   @Patch('contracts/:id/status')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atualizar status do contrato' })
-  updateContractStatus(@Param('id', ParseIntPipe) id: number, @Body() body: { status: string }) {
-    return this.svc.updateContractStatus(id, body.status);
+  updateContractStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateContractStatusDto,
+  ) {
+    return this.svc.updateContractStatus(id, dto.status);
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -212,8 +217,11 @@ export class EmployeesController {
   @Patch('career-plans/:id/status')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atualizar status do plano de carreira' })
-  updateCareerPlanStatus(@Param('id', ParseIntPipe) id: number, @Body() body: { status: string }) {
-    return this.svc.updateCareerPlanStatus(id, body.status);
+  updateCareerPlanStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateCareerPlanStatusDto,
+  ) {
+    return this.svc.updateCareerPlanStatus(id, dto.status);
   }
 
   // ══════════════════════════════════════════════════════════════════

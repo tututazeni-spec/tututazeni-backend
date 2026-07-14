@@ -14,6 +14,7 @@ import {
   Min,
   Max,
   IsUrl,
+  IsIn,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -384,4 +385,18 @@ export class EmployeeFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortOrder?: 'asc' | 'desc';
+}
+
+// ─── UpdateContractStatusDto ──────────────────────────────────────────────────
+
+export class UpdateContractStatusDto {
+  @IsEnum(EmployeeStatus)
+  status!: EmployeeStatus;
+}
+
+// ─── UpdateCareerPlanStatusDto ────────────────────────────────────────────────
+
+export class UpdateCareerPlanStatusDto {
+  @IsIn(['ACTIVE', 'INACTIVE', 'COMPLETED', 'CANCELLED'])
+  status!: string;
 }
