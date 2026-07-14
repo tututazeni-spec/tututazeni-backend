@@ -9,6 +9,7 @@ import {
   IsDateString,
   MaxLength,
   Min,
+  IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -129,4 +130,13 @@ export class CreateWebhookDto {
 export class TriggerWebhookDto {
   @ApiProperty({ enum: WebhookEventType }) @IsEnum(WebhookEventType) event!: WebhookEventType;
   @ApiProperty() payload!: Record<string, any>;
+}
+
+// ─── ValidateApiKeyBodyDto ────────────────────────────────────────────────────
+
+export class ValidateApiKeyBodyDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(512)
+  key!: string;
 }
