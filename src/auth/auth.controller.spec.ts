@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AuthController, authThrottleLimit } from './auth.controller';
+import { AuthController, authThrottleLimit, refreshThrottleLimit } from './auth.controller';
 import { AuthService } from './auth.service';
 import { PasswordResetService } from './password-reset.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -15,6 +15,22 @@ describe('AuthController throttle metadata (C2)', () => {
 
   it('login tem decorator @Throttle definido', () => {
     const meta = Reflect.getMetadata('THROTTLER:LIMITdefault', AuthController.prototype.login);
+    expect(meta).toBeDefined();
+  });
+
+  it('refreshThrottleLimit retorna 10000 em test e 10 em produção', () => {
+    expect(refreshThrottleLimit('test')).toBe(10000);
+    expect(refreshThrottleLimit('production')).toBe(10);
+    expect(refreshThrottleLimit('development')).toBe(10);
+  });
+
+  it('refresh tem decorator @Throttle definido', () => {
+    const meta = Reflect.getMetadata('THROTTLER:LIMITdefault', AuthController.prototype.refresh);
+    expect(meta).toBeDefined();
+  });
+
+  it('resetPassword tem decorator @Throttle definido', () => {
+    const meta = Reflect.getMetadata('THROTTLER:LIMITdefault', AuthController.prototype.resetPassword);
     expect(meta).toBeDefined();
   });
 });
