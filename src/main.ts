@@ -9,6 +9,7 @@ import { Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { enforceHttpsMiddleware } from './common/security/enforce-https';
 import { parseAllowedOrigins } from './common/security/allowed-origins';
+import { createSwaggerAuthMiddleware } from './common/security/swagger-auth.middleware';
 import { validateEnv } from './common/bootstrap/validate-env';
 
 async function bootstrap() {
@@ -51,6 +52,16 @@ async function bootstrap() {
   );
 
   // ─── Swagger ─────────────────────────────────────────────────────────────
+  // Em produção, /docs e /docs-json exigem Bearer token (SWAGGER_TOKEN).
+  // Nota: NestJS guards não se aplicam a rotas do SwaggerModule (nível Express);
+  // o middleware Express é registado antes do setup do Swagger.
+  if (isProd) {
+    app.use(
+      ['/docs', '/docs-json'],
+      createSwaggerAuthMiddleware(process.env.SWAGGER_TOKEN),
+    );
+  }
+
   const config = new DocumentBuilder()
     .setTitle('INNOVA - ACADEMIA CORPORATIVA e RH')
     .setDescription('API completa para plataforma de Academia Corporativa e Recursos Humanos')
