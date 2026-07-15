@@ -9,8 +9,11 @@ import { Request, Response } from 'express';
 import { AppModule } from './app.module';
 import { enforceHttpsMiddleware } from './common/security/enforce-https';
 import { parseAllowedOrigins } from './common/security/allowed-origins';
+import { validateEnv } from './common/bootstrap/validate-env';
 
 async function bootstrap() {
+  validateEnv();
+
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
 
