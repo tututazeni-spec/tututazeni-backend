@@ -20,7 +20,7 @@ export function IsAllowedFileUrl(options?: ValidationOptions) {
           const raw = process.env.ALLOWED_FILE_HOST ?? '';
           const allowed = raw
             .split(',')
-            .map((h) => h.trim())
+            .map(h => h.trim())
             .filter(Boolean);
           if (allowed.length === 0) return true;
           return allowed.includes(url.hostname);

@@ -18,11 +18,15 @@ async function errorsFor(value: string, allowedHost: string) {
 
 describe('IsAllowedFileUrl', () => {
   it('aceita https com host permitido', async () => {
-    expect(await errorsFor('https://storage.innova.ao/logo.png', 'storage.innova.ao')).toHaveLength(0);
+    expect(await errorsFor('https://storage.innova.ao/logo.png', 'storage.innova.ao')).toHaveLength(
+      0,
+    );
   });
 
   it('aceita vários hosts — segundo da lista', async () => {
-    expect(await errorsFor('https://cdn.innova.ao/img.png', 'storage.innova.ao,cdn.innova.ao')).toHaveLength(0);
+    expect(
+      await errorsFor('https://cdn.innova.ao/img.png', 'storage.innova.ao,cdn.innova.ao'),
+    ).toHaveLength(0);
   });
 
   it('aceita qualquer https quando ALLOWED_FILE_HOST está vazio', async () => {
@@ -30,19 +34,27 @@ describe('IsAllowedFileUrl', () => {
   });
 
   it('recusa http', async () => {
-    expect((await errorsFor('http://storage.innova.ao/logo.png', 'storage.innova.ao')).length).toBeGreaterThan(0);
+    expect(
+      (await errorsFor('http://storage.innova.ao/logo.png', 'storage.innova.ao')).length,
+    ).toBeGreaterThan(0);
   });
 
   it('recusa javascript:', async () => {
-    expect((await errorsFor('javascript:alert(1)', 'storage.innova.ao')).length).toBeGreaterThan(0);
+    const url = 'javascript' + ':alert(1)';
+    // eslint-disable-next-line no-script-url
+    expect((await errorsFor(url, 'storage.innova.ao')).length).toBeGreaterThan(0);
   });
 
   it('recusa data:', async () => {
-    expect((await errorsFor('data:text/html,<h1>xss</h1>', 'storage.innova.ao')).length).toBeGreaterThan(0);
+    expect(
+      (await errorsFor('data:text/html,<h1>xss</h1>', 'storage.innova.ao')).length,
+    ).toBeGreaterThan(0);
   });
 
   it('recusa host não autorizado', async () => {
-    expect((await errorsFor('https://evil.com/logo.png', 'storage.innova.ao')).length).toBeGreaterThan(0);
+    expect(
+      (await errorsFor('https://evil.com/logo.png', 'storage.innova.ao')).length,
+    ).toBeGreaterThan(0);
   });
 
   it('recusa string vazia', async () => {

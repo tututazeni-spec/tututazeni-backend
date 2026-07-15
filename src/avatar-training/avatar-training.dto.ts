@@ -11,7 +11,6 @@ import {
   Max,
   MaxLength,
   ValidateNested,
-  IsUrl,
   IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
