@@ -16,6 +16,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 
 // ─── Enums ────────────────────────────────────────────────────────
 
@@ -242,7 +243,7 @@ export class AvatarTrainingAnalyticsFilterDto {
 // ─── UploadKnowledgeDto ───────────────────────────────────────────────────────
 
 export class UploadKnowledgeDto {
-  @IsUrl()
+  @IsAllowedFileUrl()
   fileUrl!: string;
 
   @IsString()
