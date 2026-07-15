@@ -13,6 +13,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ export class CreateDocumentDto {
   @ApiProperty() @IsEnum(DocCategory) category!: DocCategory;
   @ApiPropertyOptional() @IsOptional() @IsInt() categoryId?: number;
   @ApiProperty() @IsEnum(DocSensitivity) sensitivity!: DocSensitivity;
-  @ApiProperty() @IsString() fileUrl!: string; // URL no storage (S3/Azure)
+  @ApiProperty() @IsAllowedFileUrl() fileUrl!: string; // URL no storage (S3/Azure)
   @ApiProperty() @IsString() mimeType!: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() fileSize?: number; // bytes
   @ApiPropertyOptional() @IsOptional() @IsString() fileName?: string;
@@ -107,7 +108,7 @@ export class CreateDocumentDto {
 export class UpdateDocumentDto extends PartialType(CreateDocumentDto) {}
 
 export class NewVersionDto {
-  @ApiProperty() @IsString() fileUrl!: string;
+  @ApiProperty() @IsAllowedFileUrl() fileUrl!: string;
   @ApiProperty() @IsString() mimeType!: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() fileSize?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() fileName?: string;

@@ -14,6 +14,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -282,7 +283,7 @@ export class AssessmentsAnswerDto {
 
   @ApiPropertyOptional({ description: 'URL do ficheiro (FILE_UPLOAD)' })
   @IsOptional()
-  @IsString()
+  @IsAllowedFileUrl()
   fileUrl?: string;
 }
 
