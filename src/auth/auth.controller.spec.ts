@@ -30,7 +30,10 @@ describe('AuthController throttle metadata (C2)', () => {
   });
 
   it('resetPassword tem decorator @Throttle definido', () => {
-    const meta = Reflect.getMetadata('THROTTLER:LIMITdefault', AuthController.prototype.resetPassword);
+    const meta = Reflect.getMetadata(
+      'THROTTLER:LIMITdefault',
+      AuthController.prototype.resetPassword,
+    );
     expect(meta).toBeDefined();
   });
 });

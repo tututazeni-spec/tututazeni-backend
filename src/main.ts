@@ -56,10 +56,7 @@ async function bootstrap() {
   // Nota: NestJS guards não se aplicam a rotas do SwaggerModule (nível Express);
   // o middleware Express é registado antes do setup do Swagger.
   if (isProd) {
-    app.use(
-      ['/docs', '/docs-json'],
-      createSwaggerAuthMiddleware(process.env.SWAGGER_TOKEN),
-    );
+    app.use(['/docs', '/docs-json'], createSwaggerAuthMiddleware(process.env.SWAGGER_TOKEN));
   }
 
   const config = new DocumentBuilder()

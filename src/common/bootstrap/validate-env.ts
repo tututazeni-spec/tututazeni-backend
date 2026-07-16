@@ -4,7 +4,7 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
   if (!JWT_SECRET || JWT_SECRET === 'your_jwt_secret') {
     throw new Error(
       '[BOOT] JWT_SECRET não está definido ou ainda tem o valor placeholder. ' +
-      'Define uma chave forte (mínimo 32 caracteres) no ficheiro .env de produção.',
+        'Define uma chave forte (mínimo 32 caracteres) no ficheiro .env de produção.',
     );
   }
 
@@ -14,8 +14,7 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
 
   if (!ALLOWED_FILE_HOST) {
     throw new Error(
-      '[BOOT] ALLOWED_FILE_HOST não está definido. ' +
-      'Ex: ALLOWED_FILE_HOST=storage.innova.ao',
+      '[BOOT] ALLOWED_FILE_HOST não está definido. ' + 'Ex: ALLOWED_FILE_HOST=storage.innova.ao',
     );
   }
 

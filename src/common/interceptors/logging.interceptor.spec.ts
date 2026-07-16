@@ -43,10 +43,7 @@ describe('LoggingInterceptor', () => {
     const next: CallHandler = { handle: () => of(null) };
 
     interceptor.intercept(context, next).subscribe(() => {
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: null }),
-        'http',
-      );
+      expect(logger.info).toHaveBeenCalledWith(expect.objectContaining({ userId: null }), 'http');
       done();
     });
   });
@@ -54,7 +51,11 @@ describe('LoggingInterceptor', () => {
   it('NÃO inclui url no objecto logado (previne exposição de query params)', done => {
     const context = {
       switchToHttp: () => ({
-        getRequest: () => ({ method: 'GET', url: '/search?q=nome+apelido+secreto', user: { id: 1 } }),
+        getRequest: () => ({
+          method: 'GET',
+          url: '/search?q=nome+apelido+secreto',
+          user: { id: 1 },
+        }),
       }),
     } as unknown as ExecutionContext;
 
