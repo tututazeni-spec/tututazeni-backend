@@ -107,8 +107,12 @@ jobs:
         env:
           NODE_ENV: test
           DATABASE_URL: 'postgresql://postgres:Placido*7@localhost:5432/innova_test'
-          JWT_SECRET: 'test-secret-key-innova-2024'
-          JWT_REFRESH_SECRET: 'test-refresh-secret-innova-2024'
+          JWT_SECRET: 'test-secret-key-innova-2024-must-be-long'
+          JWT_REFRESH_SECRET: 'test-refresh-secret-innova-2024-long'
+          ALLOWED_FILE_HOST: 'ci.innova.test'
+          ALLOWED_ORIGINS: 'http://localhost:4000'
+          APP_URL: 'http://localhost:4000'
+          METRICS_TOKEN: 'ci-metrics-token'
           PORT: '4000'
 
       - name: Esperar pela app (health/ready)

@@ -98,7 +98,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.LOG_LEVEL ?? 'info',
-        autoLogging: true,
+        autoLogging: false,
         genReqId: (req, res) => {
           const incoming = req.headers['x-request-id'];
           const id = (Array.isArray(incoming) ? incoming[0] : incoming) || randomUUID();
@@ -111,6 +111,12 @@ import { RolesGuard } from './common/guards/roles.guard';
             'req.headers.authorization',
             'req.headers.cookie',
             'req.body.password',
+            'req.body.newPassword',
+            'req.body.currentPassword',
+            'req.body.oldPassword',
+            'req.body.token',
+            'req.body.nif',
+            'req.body.nib',
             'res.headers["set-cookie"]',
           ],
           remove: true,

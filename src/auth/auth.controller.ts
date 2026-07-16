@@ -31,7 +31,12 @@ export function authThrottleLimit(env: string | undefined = process.env.NODE_ENV
   return env === 'test' ? 10000 : 5;
 }
 
+export function refreshThrottleLimit(env: string | undefined = process.env.NODE_ENV): number {
+  return env === 'test' ? 10000 : 10;
+}
+
 const AUTH_THROTTLE = { default: { limit: authThrottleLimit(), ttl: 60000 } };
+const REFRESH_THROTTLE = { default: { limit: refreshThrottleLimit(), ttl: 60000 } };
 
 const tokenCookieOptions = buildTokenCookieOptions(process.env.NODE_ENV === 'production');
 const refreshCookieOptions = buildRefreshCookieOptions(process.env.NODE_ENV === 'production');
@@ -63,6 +68,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(REFRESH_THROTTLE)
   @Post('refresh')
   @UseGuards(RefreshTokenGuard)
   async refresh(
@@ -105,6 +111,7 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(AUTH_THROTTLE)
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.passwordReset.resetPassword(dto.token, dto.newPassword);
