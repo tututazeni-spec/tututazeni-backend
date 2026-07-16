@@ -74,6 +74,26 @@ services:
       - '127.0.0.1:9093:9093'
     restart: unless-stopped
 
+  # ─── Métricas do SO (disco, CPU, RAM, rede) — B3-3 ───────────────────────
+  # Expõe métricas do host para o Prometheus. Sem porta pública — só acessível
+  # internamente na rede Docker. Necessário para alertas de disco (DiskSpaceLow).
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: innova-node-exporter
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    ports:
+      - '127.0.0.1:9100:9100'
+    pid: host
+    restart: unless-stopped
+
 volumes:
   redis-data:
   prometheus-data:

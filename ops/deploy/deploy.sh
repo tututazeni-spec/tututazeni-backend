@@ -38,6 +38,15 @@ if grep -q '\${' monitoring/alertmanager.yml; then
 fi
 
 echo "▶ deploy da tag: $TAG"
+# Escreve o BUILD_SHA no .env.production para exposição no GET /health
+# (a tag é sha-<commit> quando vem do CI; caso contrário mantém o valor existente)
+BUILD_SHA="${TAG#sha-}"
+if grep -q '^BUILD_SHA=' .env.production 2>/dev/null; then
+  sed -i "s|^BUILD_SHA=.*|BUILD_SHA=${BUILD_SHA}|" .env.production
+else
+  echo "BUILD_SHA=${BUILD_SHA}" >> .env.production
+fi
+
 IMAGE_TAG="$TAG" docker compose -f "$COMPOSE_FILE" pull app \
   || echo "⚠ pull falhou — a usar imagem local se existir"
 IMAGE_TAG="$TAG" docker compose -f "$COMPOSE_FILE" up -d

@@ -17,7 +17,10 @@ export class LoggingInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(() => {
-        this.logger.info({ method, userId: user?.id ?? null, ms: Date.now() - now }, 'http');
+        this.logger.info(
+          { method, userId: user?.id ?? null, reqId: req.id ?? null, ms: Date.now() - now },
+          'http',
+        );
       }),
     );
   }

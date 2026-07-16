@@ -7,10 +7,11 @@ describe('HealthController', () => {
   const controller = new HealthController(health, prisma, redis);
   beforeEach(() => jest.clearAllMocks());
 
-  it('live: responde ok com uptime, sem tocar em dependências', () => {
+  it('live: responde ok com uptime e version, sem tocar em dependências', () => {
     const res = controller.live();
     expect(res.status).toBe('ok');
     expect(typeof res.uptime).toBe('number');
+    expect(res.version).toBeDefined();
     expect(health.check).not.toHaveBeenCalled();
   });
 

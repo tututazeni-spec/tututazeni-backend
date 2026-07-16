@@ -1,18 +1,18 @@
-import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import type { Redis } from 'ioredis';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Counter } from 'prom-client';
 import { CACHE_REDIS } from './cache.constants';
 
 @Injectable()
 export class CacheService implements OnModuleDestroy {
-  private readonly logger = new Logger(CacheService.name);
-
   constructor(
     @Inject(CACHE_REDIS) private readonly redis: Redis,
     private readonly config: ConfigService,
     @InjectMetric('cache_requests_total') private readonly cacheCounter: Counter<string>,
+    @InjectPinoLogger(CacheService.name) private readonly logger: PinoLogger,
   ) {}
 
   private get cacheEnabled(): boolean {
