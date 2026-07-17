@@ -40,6 +40,7 @@ function buildMockPrisma() {
     enrollment: crud(),
     moodCheckin: crud(),
     feedback: crud(),
+    recognition: crud(),
     oneOnOneMeeting: crud(),
     engagementAction: crud(),
   };
