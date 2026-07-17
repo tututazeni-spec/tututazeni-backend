@@ -837,6 +837,14 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   evaluationsAsUser        UserEvaluation[]      @relation("EvalUser")
   evaluationsAsEvaluator   UserEvaluation[]      @relation("EvalEvaluator")
 
+  // ─── Engagement (Grupo A) ─────────────────────────────────────
+  moodCheckins         MoodCheckin[]
+  feedbackGiven        Feedback[]     @relation("FeedbackFrom")
+  feedbackReceived     Feedback[]     @relation("FeedbackTo")
+  feedbackReplied      Feedback[]     @relation("FeedbackReplier")
+  recognitionsGiven    Recognition[]  @relation("RecognitionFrom")
+  recognitionsReceived Recognition[]  @relation("RecognitionTo")
+
   // ─── Auth Tokens ──────────────────────────────────────────────
   passwordChangedAt   DateTime?
   passwordResetTokens PasswordResetToken[]
@@ -3338,10 +3346,11 @@ model UserPoints {
 }
 
 model Badge {
-  id          Int          @id @default(autoincrement())
-  name        String       @unique
-  description String?      @db.Text
+  id          Int           @id @default(autoincrement())
+  name        String        @unique
+  description String?       @db.Text
   awards      BadgeAward[]
+  recognitions Recognition[]
 }
 
 model BadgeAward {
@@ -7041,4 +7050,66 @@ model RefreshToken {
   createdAt    DateTime  @default(now())
 
   @@index([userId])
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ENGAGEMENT — GRUPO A
+// ══════════════════════════════════════════════════════════════════
+
+model MoodCheckin {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  mood      Int
+  note      String?
+  tags      String[]
+  date      DateTime @db.Date
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Feedback {
+  id          Int       @id @default(autoincrement())
+  fromUserId  Int?
+  toUserId    Int?
+  type        String
+  message     String    @db.Text
+  anonymous   Boolean   @default(false)
+  projectRef  String?
+  status      String    @default("OPEN")
+  reply       String?   @db.Text
+  repliedAt   DateTime?
+  repliedById Int?
+  createdAt   DateTime  @default(now())
+  from        User?     @relation("FeedbackFrom",    fields: [fromUserId],  references: [id], onDelete: SetNull)
+  to          User?     @relation("FeedbackTo",      fields: [toUserId],    references: [id], onDelete: SetNull)
+  repliedBy   User?     @relation("FeedbackReplier", fields: [repliedById], references: [id], onDelete: SetNull)
+
+  @@index([toUserId])
+  @@index([fromUserId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Recognition {
+  id         Int      @id @default(autoincrement())
+  fromUserId Int
+  toUserId   Int
+  type       String
+  message    String
+  public     Boolean  @default(true)
+  value      String?
+  badgeId    Int?
+  createdAt  DateTime @default(now())
+  from       User     @relation("RecognitionFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to         User     @relation("RecognitionTo",   fields: [toUserId],   references: [id], onDelete: Cascade)
+  badge      Badge?   @relation(fields: [badgeId], references: [id], onDelete: SetNull)
+
+  @@index([toUserId])
+  @@index([fromUserId])
+  @@index([public])
+  @@index([createdAt])
 }
