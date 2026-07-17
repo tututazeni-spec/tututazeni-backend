@@ -79,10 +79,7 @@ describe('LoggingInterceptor', () => {
     const next: CallHandler = { handle: () => of(null) };
 
     interceptor.intercept(context, next).subscribe(() => {
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.objectContaining({ reqId: null }),
-        'http',
-      );
+      expect(logger.info).toHaveBeenCalledWith(expect.objectContaining({ reqId: null }), 'http');
       done();
     });
   });
