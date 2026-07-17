@@ -78,6 +78,37 @@ groups:
           summary: 'Hit rate do cache abaixo de 50%'
           description: 'Com tráfego mínimo, o hit rate do cache está abaixo de 50% há 30 minutos.'
 
+      # ── Disco (node-exporter, B3-3) ────────────────────────────────────────
+      - alert: DiskSpaceLow
+        expr: >
+          (
+            node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}
+              / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}
+          ) < 0.15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Disco com menos de 15% livre'
+          description: >
+            Espaço livre em disco abaixo de 15% no VPS.
+            Risco de backups diários ou WAL do Postgres falharem.
+
+      - alert: DiskSpaceCritical
+        expr: >
+          (
+            node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}
+              / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}
+          ) < 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Disco com menos de 5% livre — risco imediato'
+          description: >
+            Menos de 5% de espaço livre. O Postgres pode falhar a escrever WAL
+            e a app pode entrar em crash loop.
+
       # Dead-man's switch: dispara SEMPRE. O Alertmanager encaminha-o como
       # heartbeat para o healthchecks.io — se os pings pararem, o alerta vem de fora.
       - alert: Watchdog

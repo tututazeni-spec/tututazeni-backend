@@ -16,7 +16,11 @@ export class HealthController {
   @Get()
   @Public()
   live() {
-    return { status: 'ok', uptime: process.uptime() };
+    return {
+      status: 'ok',
+      uptime: process.uptime(),
+      version: process.env.BUILD_SHA ?? 'unknown',
+    };
   }
 
   @Get('live')

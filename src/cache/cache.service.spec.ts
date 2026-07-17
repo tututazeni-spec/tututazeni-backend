@@ -1,6 +1,7 @@
 import { CacheService } from './cache.service';
 
 const makeCounter = () => ({ inc: jest.fn() }) as any;
+const makeLogger = () => ({ warn: jest.fn() }) as any;
 
 const makeConfig = (enabled = 'true') =>
   ({ get: jest.fn((k: string, d?: any) => (k === 'CACHE_ENABLED' ? enabled : d)) }) as any;
@@ -12,7 +13,7 @@ describe('CacheService', () => {
       set: jest.fn(),
     } as any;
     const counter = makeCounter();
-    const svc = new CacheService(redis, makeConfig(), counter);
+    const svc = new CacheService(redis, makeConfig(), counter, makeLogger());
     const compute = jest.fn();
     const r = await svc.getOrSet('k', 90, compute);
     expect(r).toEqual({ a: 1 });
@@ -25,7 +26,7 @@ describe('CacheService', () => {
       set: jest.fn().mockResolvedValue('OK'),
     } as any;
     const counter = makeCounter();
-    const svc = new CacheService(redis, makeConfig(), counter);
+    const svc = new CacheService(redis, makeConfig(), counter, makeLogger());
     const r = await svc.getOrSet('k', 90, async () => ({ a: 2 }));
     expect(r).toEqual({ a: 2 });
     expect(redis.set).toHaveBeenCalledWith('k', JSON.stringify({ a: 2 }), 'EX', 90);
@@ -34,7 +35,7 @@ describe('CacheService', () => {
   it('CACHE_ENABLED=false calcula sem tocar no redis', async () => {
     const redis = { get: jest.fn(), set: jest.fn() } as any;
     const counter = makeCounter();
-    const svc = new CacheService(redis, makeConfig('false'), counter);
+    const svc = new CacheService(redis, makeConfig('false'), counter, makeLogger());
     const r = await svc.getOrSet('k', 90, async () => ({ a: 3 }));
     expect(r).toEqual({ a: 3 });
     expect(redis.get).not.toHaveBeenCalled();
@@ -48,7 +49,7 @@ describe('CacheService', () => {
       set: jest.fn().mockRejectedValue(new Error('down')),
     } as any;
     const counter = makeCounter();
-    const svc = new CacheService(redis, makeConfig(), counter);
+    const svc = new CacheService(redis, makeConfig(), counter, makeLogger());
     const r = await svc.getOrSet('k', 90, async () => ({ a: 4 }));
     expect(r).toEqual({ a: 4 });
     expect(counter.inc).toHaveBeenCalledTimes(1);
@@ -60,7 +61,7 @@ describe('CacheService', () => {
       get: jest.fn().mockResolvedValue(JSON.stringify({ a: 1 })),
     } as any;
     const counter = makeCounter();
-    const svc = new CacheService(redis, makeConfig(), counter);
+    const svc = new CacheService(redis, makeConfig(), counter, makeLogger());
     await svc.getOrSet('k', 90, jest.fn());
     expect(counter.inc).toHaveBeenCalledWith({ result: 'hit' });
   });
@@ -71,7 +72,7 @@ describe('CacheService', () => {
       set: jest.fn().mockResolvedValue('OK'),
     } as any;
     const counter = makeCounter();
-    const svc = new CacheService(redis, makeConfig(), counter);
+    const svc = new CacheService(redis, makeConfig(), counter, makeLogger());
     await svc.getOrSet('k', 90, async () => ({ a: 2 }));
     expect(counter.inc).toHaveBeenCalledWith({ result: 'miss' });
   });
@@ -80,7 +81,7 @@ describe('CacheService', () => {
 function makeService(ping: jest.Mock) {
   const redis = { ping, quit: jest.fn().mockResolvedValue(undefined) } as any;
   const config = { get: jest.fn((_k: string, d?: string) => d) } as any;
-  return new CacheService(redis, config, makeCounter());
+  return new CacheService(redis, config, makeCounter(), makeLogger());
 }
 
 describe('CacheService.ping', () => {

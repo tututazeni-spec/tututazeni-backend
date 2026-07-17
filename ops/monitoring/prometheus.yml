@@ -21,3 +21,8 @@ scrape_configs:
       credentials_file: /etc/prometheus/secrets/metrics_token
     static_configs:
       - targets: ['app:4000']
+
+  # Métricas do SO: disco, CPU, RAM, rede (B3-3)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
