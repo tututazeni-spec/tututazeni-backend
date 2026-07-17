@@ -338,7 +338,9 @@ describe('EngagementService', () => {
   describe('replyToFeedback', () => {
     it('deve propagar erro se update falha', async () => {
       feedbackMock.update.mockRejectedValue(new Error('DB error'));
-      await expect(service.replyToFeedback(99, 1, { reply: 'Obrigado' } as any)).rejects.toThrow('DB error');
+      await expect(service.replyToFeedback(99, 1, { reply: 'Obrigado' } as any)).rejects.toThrow(
+        'DB error',
+      );
     });
 
     it('deve adicionar resposta ao feedback', async () => {
