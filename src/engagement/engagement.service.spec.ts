@@ -33,6 +33,11 @@ const recognitionMock = {
   count: jest.fn(),
   update: jest.fn(),
 };
+const moodCheckinMock = {
+  findFirst: jest.fn().mockResolvedValue(null),
+  findMany: jest.fn().mockResolvedValue([]),
+  create: jest.fn().mockResolvedValue({ id: 1, mood: 4, userId: 1, date: new Date() }),
+};
 const oneOnOneMock = {
   create: jest.fn(),
   findUnique: jest.fn(),
@@ -46,6 +51,7 @@ const mockPrisma = {
   surveyResponse: surveyResponseMock,
   feedback: feedbackMock,
   recognition: recognitionMock,
+  moodCheckin: moodCheckinMock,
   oneOnOne: oneOnOneMock,
   user: { findMany: jest.fn(), count: jest.fn(), findUnique: jest.fn() },
   notificationLog: {
@@ -273,11 +279,11 @@ describe('EngagementService', () => {
   // ─── submitMood ───────────────────────────────────────────────────────────
 
   describe('submitMood', () => {
-    it('deve submeter mood (retorna fallback se moodCheckin não existe)', async () => {
+    it('deve submeter mood e retornar checkin', async () => {
       (mockPrisma.userPoints as any).upsert = jest.fn().mockResolvedValue({});
       const result = await service.submitMood(1, { mood: 4 } as any);
       expect(result).toBeDefined();
-      expect((result as any).mood).toBe(4);
+      expect((result as any).checkin).toBeDefined();
     });
   });
 
@@ -330,10 +336,9 @@ describe('EngagementService', () => {
   // ─── replyToFeedback ──────────────────────────────────────────────────────
 
   describe('replyToFeedback', () => {
-    it('deve retornar fallback se update falha', async () => {
+    it('deve propagar erro se update falha', async () => {
       feedbackMock.update.mockRejectedValue(new Error('DB error'));
-      const result = await service.replyToFeedback(99, 1, { reply: 'Obrigado' } as any);
-      expect((result as any).message).toBeDefined();
+      await expect(service.replyToFeedback(99, 1, { reply: 'Obrigado' } as any)).rejects.toThrow('DB error');
     });
 
     it('deve adicionar resposta ao feedback', async () => {
