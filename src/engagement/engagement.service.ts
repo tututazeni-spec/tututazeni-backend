@@ -510,30 +510,17 @@ export class EngagementService {
   // ══════════════════════════════════════════════════════
 
   async createFeedback(fromUserId: number, dto: CreateFeedbackDto) {
-    const fb = await (this.prisma as any).feedback
-      ?.create({
-        data: {
-          fromUserId: dto.anonymous ? null : fromUserId,
-          toUserId: dto.toUserId,
-          type: dto.type,
-          message: dto.message,
-          anonymous: dto.anonymous ?? false,
-          projectRef: dto.projectRef,
-          status: 'OPEN',
-        },
-      })
-      .catch(async () => {
-        // Fallback: use notificationLog to record feedback intent
-        await this.prisma.notificationLog.create({
-          data: {
-            userId: dto.toUserId ?? fromUserId,
-            type: 'FEEDBACK_RECEIVED',
-            message: dto.message.slice(0, 200),
-            metadata: JSON.stringify({}),
-          },
-        });
-        return null;
-      });
+    const fb = await this.prisma.feedback.create({
+      data: {
+        fromUserId: dto.anonymous ? null : fromUserId,
+        toUserId: dto.toUserId,
+        type: dto.type,
+        message: dto.message,
+        anonymous: dto.anonymous ?? false,
+        projectRef: dto.projectRef,
+        status: 'OPEN',
+      },
+    });
 
     // Notify recipient
     if (dto.toUserId && !dto.anonymous) {
@@ -549,7 +536,7 @@ export class EngagementService {
         .catch(() => {});
     }
 
-    return fb ?? { message: 'Feedback registado', type: dto.type };
+    return fb;
   }
 
   async getFeedback(filters: FeedbackFilterDto) {
@@ -560,23 +547,21 @@ export class EngagementService {
     if (toUserId) where.toUserId = toUserId;
     if (fromUserId) where.fromUserId = fromUserId;
 
-    const data = await (this.prisma as any).feedback
-      ?.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          from: { select: { id: true, fullName: true, avatarUrl: true } },
-          to: { select: { id: true, fullName: true, avatarUrl: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      .catch(() => [] as any[]);
+    const data = await this.prisma.feedback.findMany({
+      where,
+      skip,
+      take: limit,
+      include: {
+        from: { select: { id: true, fullName: true, avatarUrl: true } },
+        to: { select: { id: true, fullName: true, avatarUrl: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    const total = await (this.prisma as any).feedback?.count({ where }).catch(() => 0);
+    const total = await this.prisma.feedback.count({ where });
 
     // Mask anonymous authors
-    const safe = (data as any[]).map((f: any) => ({
+    const safe = data.map(f => ({
       ...f,
       from: f.anonymous ? { id: null, fullName: 'Anónimo', avatarUrl: null } : f.from,
     }));
@@ -585,12 +570,10 @@ export class EngagementService {
   }
 
   async replyToFeedback(feedbackId: number, userId: number, dto: FeedbackReplyDto) {
-    return (this.prisma as any).feedback
-      ?.update({
-        where: { id: feedbackId },
-        data: { reply: dto.message, repliedAt: new Date(), repliedById: userId, status: 'REPLIED' },
-      })
-      .catch(() => ({ message: 'Resposta registada' }));
+    return this.prisma.feedback.update({
+      where: { id: feedbackId },
+      data: { reply: dto.message, repliedAt: new Date(), repliedById: userId, status: 'REPLIED' },
+    });
   }
 
   // ══════════════════════════════════════════════════════
@@ -955,7 +938,7 @@ export class EngagementService {
       this.getEngagementIndex(departmentId),
       this.getENPSScore(departmentId),
       (this.prisma as any).recognition?.count().catch(() => 0),
-      (this.prisma as any).feedback?.count().catch(() => 0),
+      this.prisma.feedback.count(),
       (this.prisma as any).recognition
         ?.findMany({
           take: 5,
