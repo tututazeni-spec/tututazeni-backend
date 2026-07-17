@@ -590,19 +590,17 @@ export class EngagementService {
     });
     if (!to) throw new NotFoundException('Utilizador não encontrado');
 
-    const recognition = await (this.prisma as any).recognition
-      ?.create({
-        data: {
-          fromUserId,
-          toUserId: dto.toUserId,
-          type: dto.type,
-          message: dto.message,
-          public: dto.public ?? true,
-          value: dto.value,
-          badgeId: dto.badgeId,
-        },
-      })
-      .catch(() => null);
+    const recognition = await this.prisma.recognition.create({
+      data: {
+        fromUserId,
+        toUserId: dto.toUserId,
+        type: dto.type,
+        message: dto.message,
+        public: dto.public ?? true,
+        value: dto.value,
+        badgeId: dto.badgeId,
+      },
+    });
 
     // Always award XP to recipient
     const xp =
@@ -654,27 +652,25 @@ export class EngagementService {
       where.to = { departmentId };
     }
 
-    const data = await (this.prisma as any).recognition
-      ?.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          from: { select: { id: true, fullName: true, avatarUrl: true } },
-          to: {
-            select: {
-              id: true,
-              fullName: true,
-              avatarUrl: true,
-              department: { select: { name: true } },
-            },
+    const data = await this.prisma.recognition.findMany({
+      where,
+      skip,
+      take: limit,
+      include: {
+        from: { select: { id: true, fullName: true, avatarUrl: true } },
+        to: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            department: { select: { name: true } },
           },
         },
-        orderBy: { createdAt: 'desc' },
-      })
-      .catch(() => [] as any[]);
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    const total = await (this.prisma as any).recognition?.count({ where }).catch(() => 0);
+    const total = await this.prisma.recognition.count({ where });
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
@@ -702,23 +698,21 @@ export class EngagementService {
     }
 
     // Recognition-based leaderboard
-    const data = await (this.prisma as any).recognition
-      ?.groupBy({
-        by: ['toUserId'],
-        where: { ...(departmentId ? { to: { departmentId } } : {}) },
-        _count: { id: true },
-        orderBy: { _count: { id: 'desc' } },
-        take: limit,
-      })
-      .catch(() => [] as any[]);
+    const data = await this.prisma.recognition.groupBy({
+      by: ['toUserId'],
+      where: { ...(departmentId ? { to: { departmentId } } : {}) },
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: limit,
+    });
 
-    const userIds = (data as any[]).map((d: any) => d.toUserId);
+    const userIds = data.map(d => d.toUserId);
     const users = await this.prisma.read.user.findMany({
       where: { id: { in: userIds } },
       select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } },
     });
 
-    return (data as any[]).map((d: any, i: number) => ({
+    return data.map((d, i) => ({
       rank: i + 1,
       user: users.find(u => u.id === d.toUserId),
       count: d._count.id,
@@ -937,19 +931,17 @@ export class EngagementService {
       this.prisma.read.engagementSurvey.count({ where: { status: 'COMPLETED' } }),
       this.getEngagementIndex(departmentId),
       this.getENPSScore(departmentId),
-      (this.prisma as any).recognition?.count().catch(() => 0),
+      this.prisma.recognition.count(),
       this.prisma.feedback.count(),
-      (this.prisma as any).recognition
-        ?.findMany({
-          take: 5,
-          orderBy: { createdAt: 'desc' },
-          where: { public: true },
-          include: {
-            from: { select: { id: true, fullName: true, avatarUrl: true } },
-            to: { select: { id: true, fullName: true, avatarUrl: true } },
-          },
-        })
-        .catch(() => [] as any[]),
+      this.prisma.recognition.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        where: { public: true },
+        include: {
+          from: { select: { id: true, fullName: true, avatarUrl: true } },
+          to: { select: { id: true, fullName: true, avatarUrl: true } },
+        },
+      }),
       (this.prisma as any).engagementAction
         ?.count({ where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } })
         .catch(() => 0),
@@ -1046,11 +1038,9 @@ export class EngagementService {
         },
         select: { userId: true, mood: true },
       }),
-      (this.prisma as any).recognition
-        ?.count({
-          where: { toUserId: { in: userIds } },
-        })
-        .catch(() => 0),
+      this.prisma.recognition.count({
+        where: { toUserId: { in: userIds } },
+      }),
       (this.prisma as any).oneOnOneMeeting
         ?.count({
           where: {
@@ -1159,7 +1149,7 @@ export class EngagementService {
         select: { id: true, title: true, type: true, endDate: true },
         take: 5,
       }),
-      (this.prisma as any).recognition?.count({ where: { toUserId: userId } }).catch(() => 0),
+      this.prisma.recognition.count({ where: { toUserId: userId } }),
       this.prisma.read.userPoints.findUnique({ where: { userId } }),
       this.prisma.moodCheckin.findFirst({
         where: { userId },
