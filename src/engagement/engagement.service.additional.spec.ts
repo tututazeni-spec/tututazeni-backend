@@ -29,6 +29,11 @@ const mockPrisma: any = {
     findMany: jest.fn().mockResolvedValue([]),
   },
   moodLog: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
+  moodCheckin: {
+    findFirst: jest.fn().mockResolvedValue(null),
+    findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn().mockResolvedValue({ id: 1, mood: 3, userId: 2, date: new Date() }),
+  },
   employeeFeedback: {
     findMany: jest.fn().mockResolvedValue([]),
     findUnique: jest.fn().mockResolvedValue(null),

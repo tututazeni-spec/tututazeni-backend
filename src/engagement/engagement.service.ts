@@ -395,28 +395,18 @@ export class EngagementService {
   // ══════════════════════════════════════════════════════
 
   async submitMood(userId: number, dto: SubmitMoodDto) {
-    // Prevent duplicate check-in on same day
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const existing = await (this.prisma as any).moodCheckin
-      ?.findFirst({
-        where: { userId, createdAt: { gte: today } },
-      })
-      .catch(() => null);
+    const existing = await this.prisma.moodCheckin.findFirst({
+      where: { userId, date: today },
+    });
 
     if (existing) return { message: 'Já fizeste o teu check-in hoje', mood: existing.mood };
 
-    const checkin = await (this.prisma as any).moodCheckin
-      ?.create({
-        data: { userId, mood: dto.mood, note: dto.note, tags: dto.tags ?? [] },
-      })
-      .catch(() => null);
-
-    if (!checkin) {
-      // Fallback: store mood as a survey response if moodCheckin table doesn't exist
-      return { message: 'Check-in registado (modo compatibilidade)', mood: dto.mood };
-    }
+    const checkin = await this.prisma.moodCheckin.create({
+      data: { userId, mood: dto.mood, note: dto.note, tags: dto.tags ?? [], date: today },
+    });
 
     // Detect sudden mood drop — alert manager if mood ≤ 2 for 3 consecutive days
     await this.detectMoodAlert(userId, dto.mood);
@@ -428,16 +418,14 @@ export class EngagementService {
     const from = new Date();
     from.setDate(from.getDate() - days);
 
-    const checkins = await (this.prisma as any).moodCheckin
-      ?.findMany({
-        where: { userId, createdAt: { gte: from } },
-        orderBy: { createdAt: 'asc' },
-        select: { mood: true, note: true, createdAt: true, tags: true },
-      })
-      .catch(() => [] as any[]);
+    const checkins = await this.prisma.moodCheckin.findMany({
+      where: { userId, createdAt: { gte: from } },
+      orderBy: { createdAt: 'asc' },
+      select: { mood: true, note: true, createdAt: true, tags: true },
+    });
 
     const avg = checkins.length
-      ? +(checkins.reduce((s: number, c: any) => s + c.mood, 0) / checkins.length).toFixed(1)
+      ? +(checkins.reduce((s, c) => s + c.mood, 0) / checkins.length).toFixed(1)
       : null;
 
     return { trend: checkins, avgMood: avg, days };
@@ -454,16 +442,14 @@ export class EngagementService {
 
     const teamData = await Promise.all(
       team.map(async u => {
-        const checkins = await (this.prisma as any).moodCheckin
-          ?.findMany({
-            where: { userId: u.id, createdAt: { gte: from } },
-            select: { mood: true, createdAt: true },
-            orderBy: { createdAt: 'desc' },
-          })
-          .catch(() => [] as any[]);
+        const checkins = await this.prisma.moodCheckin.findMany({
+          where: { userId: u.id, createdAt: { gte: from } },
+          select: { mood: true, createdAt: true },
+          orderBy: { createdAt: 'desc' },
+        });
 
         const avg = checkins.length
-          ? +(checkins.reduce((s: number, c: any) => s + c.mood, 0) / checkins.length).toFixed(1)
+          ? +(checkins.reduce((s, c) => s + c.mood, 0) / checkins.length).toFixed(1)
           : null;
 
         return {
@@ -494,15 +480,13 @@ export class EngagementService {
 
     const from = new Date();
     from.setDate(from.getDate() - 3);
-    const recent = await (this.prisma as any).moodCheckin
-      ?.findMany({
-        where: { userId, createdAt: { gte: from } },
-        select: { mood: true },
-      })
-      .catch(() => [] as any[]);
+    const recent = await this.prisma.moodCheckin.findMany({
+      where: { userId, createdAt: { gte: from } },
+      select: { mood: true },
+    });
 
-    if (recent.length >= 2 && recent.every((c: any) => c.mood <= 2)) {
-      const user = await (this.prisma as any).user.findUnique({
+    if (recent.length >= 2 && recent.every(c => c.mood <= 2)) {
+      const user = await this.prisma.user.findUnique({
         where: { id: userId },
         select: { managerId: true, fullName: true },
       });
@@ -526,30 +510,17 @@ export class EngagementService {
   // ══════════════════════════════════════════════════════
 
   async createFeedback(fromUserId: number, dto: CreateFeedbackDto) {
-    const fb = await (this.prisma as any).feedback
-      ?.create({
-        data: {
-          fromUserId: dto.anonymous ? null : fromUserId,
-          toUserId: dto.toUserId,
-          type: dto.type,
-          message: dto.message,
-          anonymous: dto.anonymous ?? false,
-          projectRef: dto.projectRef,
-          status: 'OPEN',
-        },
-      })
-      .catch(async () => {
-        // Fallback: use notificationLog to record feedback intent
-        await this.prisma.notificationLog.create({
-          data: {
-            userId: dto.toUserId ?? fromUserId,
-            type: 'FEEDBACK_RECEIVED',
-            message: dto.message.slice(0, 200),
-            metadata: JSON.stringify({}),
-          },
-        });
-        return null;
-      });
+    const fb = await this.prisma.feedback.create({
+      data: {
+        fromUserId: dto.anonymous ? null : fromUserId,
+        toUserId: dto.toUserId,
+        type: dto.type,
+        message: dto.message,
+        anonymous: dto.anonymous ?? false,
+        projectRef: dto.projectRef,
+        status: 'OPEN',
+      },
+    });
 
     // Notify recipient
     if (dto.toUserId && !dto.anonymous) {
@@ -565,7 +536,7 @@ export class EngagementService {
         .catch(() => {});
     }
 
-    return fb ?? { message: 'Feedback registado', type: dto.type };
+    return fb;
   }
 
   async getFeedback(filters: FeedbackFilterDto) {
@@ -576,23 +547,21 @@ export class EngagementService {
     if (toUserId) where.toUserId = toUserId;
     if (fromUserId) where.fromUserId = fromUserId;
 
-    const data = await (this.prisma as any).feedback
-      ?.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          from: { select: { id: true, fullName: true, avatarUrl: true } },
-          to: { select: { id: true, fullName: true, avatarUrl: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      .catch(() => [] as any[]);
+    const data = await this.prisma.feedback.findMany({
+      where,
+      skip,
+      take: limit,
+      include: {
+        from: { select: { id: true, fullName: true, avatarUrl: true } },
+        to: { select: { id: true, fullName: true, avatarUrl: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    const total = await (this.prisma as any).feedback?.count({ where }).catch(() => 0);
+    const total = await this.prisma.feedback.count({ where });
 
     // Mask anonymous authors
-    const safe = (data as any[]).map((f: any) => ({
+    const safe = data.map(f => ({
       ...f,
       from: f.anonymous ? { id: null, fullName: 'Anónimo', avatarUrl: null } : f.from,
     }));
@@ -601,12 +570,10 @@ export class EngagementService {
   }
 
   async replyToFeedback(feedbackId: number, userId: number, dto: FeedbackReplyDto) {
-    return (this.prisma as any).feedback
-      ?.update({
-        where: { id: feedbackId },
-        data: { reply: dto.message, repliedAt: new Date(), repliedById: userId, status: 'REPLIED' },
-      })
-      .catch(() => ({ message: 'Resposta registada' }));
+    return this.prisma.feedback.update({
+      where: { id: feedbackId },
+      data: { reply: dto.message, repliedAt: new Date(), repliedById: userId, status: 'REPLIED' },
+    });
   }
 
   // ══════════════════════════════════════════════════════
@@ -623,19 +590,17 @@ export class EngagementService {
     });
     if (!to) throw new NotFoundException('Utilizador não encontrado');
 
-    const recognition = await (this.prisma as any).recognition
-      ?.create({
-        data: {
-          fromUserId,
-          toUserId: dto.toUserId,
-          type: dto.type,
-          message: dto.message,
-          public: dto.public ?? true,
-          value: dto.value,
-          badgeId: dto.badgeId,
-        },
-      })
-      .catch(() => null);
+    const recognition = await this.prisma.recognition.create({
+      data: {
+        fromUserId,
+        toUserId: dto.toUserId,
+        type: dto.type,
+        message: dto.message,
+        public: dto.public ?? true,
+        value: dto.value,
+        badgeId: dto.badgeId,
+      },
+    });
 
     // Always award XP to recipient
     const xp =
@@ -687,27 +652,25 @@ export class EngagementService {
       where.to = { departmentId };
     }
 
-    const data = await (this.prisma as any).recognition
-      ?.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          from: { select: { id: true, fullName: true, avatarUrl: true } },
-          to: {
-            select: {
-              id: true,
-              fullName: true,
-              avatarUrl: true,
-              department: { select: { name: true } },
-            },
+    const data = await this.prisma.recognition.findMany({
+      where,
+      skip,
+      take: limit,
+      include: {
+        from: { select: { id: true, fullName: true, avatarUrl: true } },
+        to: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            department: { select: { name: true } },
           },
         },
-        orderBy: { createdAt: 'desc' },
-      })
-      .catch(() => [] as any[]);
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    const total = await (this.prisma as any).recognition?.count({ where }).catch(() => 0);
+    const total = await this.prisma.recognition.count({ where });
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
@@ -735,23 +698,21 @@ export class EngagementService {
     }
 
     // Recognition-based leaderboard
-    const data = await (this.prisma as any).recognition
-      ?.groupBy({
-        by: ['toUserId'],
-        where: { ...(departmentId ? { to: { departmentId } } : {}) },
-        _count: { id: true },
-        orderBy: { _count: { id: 'desc' } },
-        take: limit,
-      })
-      .catch(() => [] as any[]);
+    const data = await this.prisma.recognition.groupBy({
+      by: ['toUserId'],
+      where: { ...(departmentId ? { to: { departmentId } } : {}) },
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: limit,
+    });
 
-    const userIds = (data as any[]).map((d: any) => d.toUserId);
+    const userIds = data.map(d => d.toUserId);
     const users = await this.prisma.read.user.findMany({
       where: { id: { in: userIds } },
       select: { id: true, fullName: true, avatarUrl: true, position: { select: { name: true } } },
     });
 
-    return (data as any[]).map((d: any, i: number) => ({
+    return data.map((d, i) => ({
       rank: i + 1,
       user: users.find(u => u.id === d.toUserId),
       count: d._count.id,
@@ -970,19 +931,17 @@ export class EngagementService {
       this.prisma.read.engagementSurvey.count({ where: { status: 'COMPLETED' } }),
       this.getEngagementIndex(departmentId),
       this.getENPSScore(departmentId),
-      (this.prisma as any).recognition?.count().catch(() => 0),
-      (this.prisma as any).feedback?.count().catch(() => 0),
-      (this.prisma as any).recognition
-        ?.findMany({
-          take: 5,
-          orderBy: { createdAt: 'desc' },
-          where: { public: true },
-          include: {
-            from: { select: { id: true, fullName: true, avatarUrl: true } },
-            to: { select: { id: true, fullName: true, avatarUrl: true } },
-          },
-        })
-        .catch(() => [] as any[]),
+      this.prisma.recognition.count(),
+      this.prisma.feedback.count(),
+      this.prisma.recognition.findMany({
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        where: { public: true },
+        include: {
+          from: { select: { id: true, fullName: true, avatarUrl: true } },
+          to: { select: { id: true, fullName: true, avatarUrl: true } },
+        },
+      }),
       (this.prisma as any).engagementAction
         ?.count({ where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } })
         .catch(() => 0),
@@ -1040,22 +999,17 @@ export class EngagementService {
         }
 
         // mood
-        const checkins = await (this.prisma as any).moodCheckin
-          ?.findMany({
-            where: {
-              userId: { in: userIds },
-              createdAt: { gte: new Date(Date.now() - 7 * 86400000) },
-            },
-            select: { mood: true },
-          })
-          .catch(() => [] as any[]);
-        const avgMood = (checkins as any[]).length
-          ? +(
-              (checkins as any[]).reduce((s: number, c: any) => s + c.mood, 0) /
-              (checkins as any[]).length
-            ).toFixed(2)
+        const checkins = await this.prisma.moodCheckin.findMany({
+          where: {
+            userId: { in: userIds },
+            createdAt: { gte: new Date(Date.now() - 7 * 86400000) },
+          },
+          select: { mood: true },
+        });
+        const avgMood = checkins.length
+          ? +(checkins.reduce((s, c) => s + c.mood, 0) / checkins.length).toFixed(2)
           : null;
-        return { department: dept.name, value: avgMood, count: (checkins as any[]).length };
+        return { department: dept.name, value: avgMood, count: checkins.length };
       }),
     );
 
@@ -1077,20 +1031,16 @@ export class EngagementService {
         orderBy: { createdAt: 'desc' },
         take: userIds.length * 5,
       }),
-      (this.prisma as any).moodCheckin
-        ?.findMany({
-          where: {
-            userId: { in: userIds },
-            createdAt: { gte: new Date(Date.now() - 7 * 86400000) },
-          },
-          select: { userId: true, mood: true },
-        })
-        .catch(() => [] as any[]),
-      (this.prisma as any).recognition
-        ?.count({
-          where: { toUserId: { in: userIds } },
-        })
-        .catch(() => 0),
+      this.prisma.moodCheckin.findMany({
+        where: {
+          userId: { in: userIds },
+          createdAt: { gte: new Date(Date.now() - 7 * 86400000) },
+        },
+        select: { userId: true, mood: true },
+      }),
+      this.prisma.recognition.count({
+        where: { toUserId: { in: userIds } },
+      }),
       (this.prisma as any).oneOnOneMeeting
         ?.count({
           where: {
@@ -1105,11 +1055,8 @@ export class EngagementService {
     const avgScore = teamResponses.length
       ? +(teamResponses.reduce((s, r) => s + (r.score ?? 0), 0) / teamResponses.length).toFixed(2)
       : null;
-    const avgMood = (teamMood as any[]).length
-      ? +(
-          (teamMood as any[]).reduce((s: number, c: any) => s + c.mood, 0) /
-          (teamMood as any[]).length
-        ).toFixed(1)
+    const avgMood = teamMood.length
+      ? +(teamMood.reduce((s, c) => s + c.mood, 0) / teamMood.length).toFixed(1)
       : null;
 
     // Identify at-risk members (no recent survey response in 30 days)
@@ -1202,15 +1149,13 @@ export class EngagementService {
         select: { id: true, title: true, type: true, endDate: true },
         take: 5,
       }),
-      (this.prisma as any).recognition?.count({ where: { toUserId: userId } }).catch(() => 0),
+      this.prisma.recognition.count({ where: { toUserId: userId } }),
       this.prisma.read.userPoints.findUnique({ where: { userId } }),
-      (this.prisma as any).moodCheckin
-        ?.findFirst({
-          where: { userId },
-          orderBy: { createdAt: 'desc' },
-          select: { mood: true, createdAt: true },
-        })
-        .catch(() => null),
+      this.prisma.moodCheckin.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: { mood: true, createdAt: true },
+      }),
       this.getHumanSuccessScore(userId),
     ]);
 
