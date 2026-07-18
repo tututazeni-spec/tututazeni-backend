@@ -3281,17 +3281,23 @@ model UserAttendance {
 // ══════════════════════════════════════════════════════════════════
 
 model EngagementSurvey {
-  id          Int              @id @default(autoincrement())
-  title       String
-  description String?          @db.Text
-  status      String           @default("ACTIVE")
-  endDate     DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  questions   SurveyQuestion[]
-  responses   SurveyResponse[]
+  id                     Int                @id @default(autoincrement())
+  title                  String
+  description            String?            @db.Text
+  type                   String             @default("PULSE")
+  isTemplate             Boolean            @default(false)
+  status                 String             @default("ACTIVE")
+  anonymous              Boolean            @default(false)
+  minResponsesForResults Int                @default(3)
+  startDate              DateTime?
+  endDate                DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  questions              SurveyQuestion[]
+  responses              SurveyResponse[]
 
   @@index([status])
+  @@index([type])
 }
 
 model SurveyQuestion {
@@ -3300,6 +3306,9 @@ model SurveyQuestion {
   text     String           @db.Text
   type     String
   order    Int
+  required Boolean          @default(true)
+  options  String[]
+  scaleMax Int              @default(5)
   survey   EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   answers  SurveyAnswer[]
 
@@ -3311,6 +3320,7 @@ model SurveyResponse {
   surveyId  Int
   userId    Int
   score     Float?
+  anonymous Boolean          @default(false)
   createdAt DateTime         @default(now())
   survey    EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
