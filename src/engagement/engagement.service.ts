@@ -930,7 +930,9 @@ export class EngagementService {
           to: { select: { id: true, fullName: true, avatarUrl: true } },
         },
       }),
-      this.prisma.engagementAction.count({ where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } }),
+      this.prisma.engagementAction.count({
+        where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+      }),
     ]);
 
     return {
