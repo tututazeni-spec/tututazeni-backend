@@ -724,20 +724,18 @@ export class EngagementService {
   // ══════════════════════════════════════════════════════
 
   async createOneOnOne(userId: number, dto: CreateOneOnOneDto) {
-    const oneOnOne = await (this.prisma as any).oneOnOneMeeting
-      ?.create({
-        data: {
-          hostId: userId,
-          participantId: dto.participantId,
-          scheduledAt: new Date(dto.scheduledAt),
-          durationMinutes: dto.durationMinutes ?? 30,
-          agenda: dto.agenda,
-          status: 'SCHEDULED',
-          recurring: dto.recurring ?? false,
-          frequency: dto.frequency,
-        },
-      })
-      .catch(() => null);
+    const oneOnOne = await this.prisma.oneOnOneMeeting.create({
+      data: {
+        hostId: userId,
+        participantId: dto.participantId,
+        scheduledAt: new Date(dto.scheduledAt),
+        durationMinutes: dto.durationMinutes ?? 30,
+        agenda: dto.agenda,
+        status: 'SCHEDULED',
+        recurring: dto.recurring ?? false,
+        frequency: dto.frequency,
+      },
+    });
 
     // Notify participant
     await this.prisma.notificationLog
@@ -751,20 +749,18 @@ export class EngagementService {
       })
       .catch(() => {});
 
-    return oneOnOne ?? { message: '1:1 agendado', scheduledAt: dto.scheduledAt };
+    return oneOnOne;
   }
 
   async getOneOnOnes(userId: number) {
-    return (this.prisma as any).oneOnOneMeeting
-      ?.findMany({
-        where: { OR: [{ hostId: userId }, { participantId: userId }] },
-        include: {
-          host: { select: { id: true, fullName: true, avatarUrl: true } },
-          participant: { select: { id: true, fullName: true, avatarUrl: true } },
-        },
-        orderBy: { scheduledAt: 'desc' },
-      })
-      .catch(() => [] as any[]);
+    return this.prisma.oneOnOneMeeting.findMany({
+      where: { OR: [{ hostId: userId }, { participantId: userId }] },
+      include: {
+        host: { select: { id: true, fullName: true, avatarUrl: true } },
+        participant: { select: { id: true, fullName: true, avatarUrl: true } },
+      },
+      orderBy: { scheduledAt: 'desc' },
+    });
   }
 
   async updateOneOnOne(id: number, userId: number, dto: EngagementUpdateOneOnOneDto) {
@@ -772,12 +768,10 @@ export class EngagementService {
     if (dto.scheduledAt) data.scheduledAt = new Date(dto.scheduledAt);
     if (dto.completed) data.status = 'COMPLETED';
 
-    return (this.prisma as any).oneOnOneMeeting
-      ?.update({
-        where: { id },
-        data,
-      })
-      .catch(() => ({ message: 'Actualizado' }));
+    return this.prisma.oneOnOneMeeting.update({
+      where: { id },
+      data,
+    });
   }
 
   // ══════════════════════════════════════════════════════
@@ -1041,15 +1035,13 @@ export class EngagementService {
       this.prisma.recognition.count({
         where: { toUserId: { in: userIds } },
       }),
-      (this.prisma as any).oneOnOneMeeting
-        ?.count({
-          where: {
-            OR: [{ hostId: managerId }, { participantId: managerId }],
-            status: 'SCHEDULED',
-            scheduledAt: { gte: new Date() },
-          },
-        })
-        .catch(() => 0),
+      this.prisma.oneOnOneMeeting.count({
+        where: {
+          OR: [{ hostId: managerId }, { participantId: managerId }],
+          status: 'SCHEDULED',
+          scheduledAt: { gte: new Date() },
+        },
+      }),
     ]);
 
     const avgScore = teamResponses.length
