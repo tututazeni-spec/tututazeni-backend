@@ -100,7 +100,7 @@ export class EngagementService {
   async createSurvey(dto: CreateSurveyDto, createdById: number) {
     const { questions, startDate, endDate, ...data } = dto;
 
-    return (this.prisma as any).engagementSurvey.create({
+    return this.prisma.engagementSurvey.create({
       data: {
         ...data,
         status: SurveyStatus.DRAFT,
@@ -165,7 +165,7 @@ export class EngagementService {
   // ─── Submit ──────────────────────────────────────────
 
   async submitSurvey(userId: number, dto: SubmitSurveyDto) {
-    const survey = await (this.prisma as any).engagementSurvey.findUnique({
+    const survey = await this.prisma.engagementSurvey.findUnique({
       where: { id: dto.surveyId },
       include: { questions: true },
     });
@@ -183,7 +183,7 @@ export class EngagementService {
       ? +(numericAnswers.reduce((s, a) => s + (a.value ?? 0), 0) / numericAnswers.length).toFixed(2)
       : 0;
 
-    const response = await (this.prisma as any).surveyResponse.create({
+    const response = await this.prisma.surveyResponse.create({
       data: {
         userId,
         surveyId: dto.surveyId,
@@ -195,7 +195,7 @@ export class EngagementService {
             value: a.value,
             comment: a.comment,
             selectedOption: a.selectedOption,
-          })),
+          })) as any,
         },
       },
     });
@@ -224,7 +224,7 @@ export class EngagementService {
   // ─── Results ─────────────────────────────────────────
 
   async getSurveyResults(surveyId: number, requesterId: number) {
-    const survey = await (this.prisma as any).engagementSurvey.findUnique({
+    const survey = await this.prisma.engagementSurvey.findUnique({
       where: { id: surveyId },
       include: {
         questions: { orderBy: { order: 'asc' } },
@@ -326,7 +326,7 @@ export class EngagementService {
   // ─── Templates ───────────────────────────────────────
 
   async getTemplates() {
-    return (this.prisma as any).engagementSurvey.findMany({
+    return this.prisma.engagementSurvey.findMany({
       where: { isTemplate: true },
       include: {
         questions: { orderBy: { order: 'asc' } },
@@ -342,7 +342,7 @@ export class EngagementService {
 
   async submitENPS(userId: number, dto: SubmitENPSDto) {
     // eNPS is stored as a special survey response
-    const survey = await (this.prisma as any).engagementSurvey.findFirst({
+    const survey = await this.prisma.engagementSurvey.findFirst({
       where: { type: SurveyType.ENPS, status: 'ACTIVE' },
       include: { questions: true },
     });
@@ -360,7 +360,7 @@ export class EngagementService {
   }
 
   async getENPSScore(departmentId?: number) {
-    const survey = await (this.prisma as any).engagementSurvey.findFirst({
+    const survey = await this.prisma.engagementSurvey.findFirst({
       where: { type: SurveyType.ENPS, status: { in: ['ACTIVE', 'COMPLETED'] } },
       include: { responses: { include: { answers: { include: { question: true } } } } },
       orderBy: { createdAt: 'desc' },
@@ -724,20 +724,18 @@ export class EngagementService {
   // ══════════════════════════════════════════════════════
 
   async createOneOnOne(userId: number, dto: CreateOneOnOneDto) {
-    const oneOnOne = await (this.prisma as any).oneOnOneMeeting
-      ?.create({
-        data: {
-          hostId: userId,
-          participantId: dto.participantId,
-          scheduledAt: new Date(dto.scheduledAt),
-          durationMinutes: dto.durationMinutes ?? 30,
-          agenda: dto.agenda,
-          status: 'SCHEDULED',
-          recurring: dto.recurring ?? false,
-          frequency: dto.frequency,
-        },
-      })
-      .catch(() => null);
+    const oneOnOne = await this.prisma.oneOnOneMeeting.create({
+      data: {
+        hostId: userId,
+        participantId: dto.participantId,
+        scheduledAt: new Date(dto.scheduledAt),
+        durationMinutes: dto.durationMinutes ?? 30,
+        agenda: dto.agenda,
+        status: 'SCHEDULED',
+        recurring: dto.recurring ?? false,
+        frequency: dto.frequency,
+      },
+    });
 
     // Notify participant
     await this.prisma.notificationLog
@@ -751,20 +749,18 @@ export class EngagementService {
       })
       .catch(() => {});
 
-    return oneOnOne ?? { message: '1:1 agendado', scheduledAt: dto.scheduledAt };
+    return oneOnOne;
   }
 
   async getOneOnOnes(userId: number) {
-    return (this.prisma as any).oneOnOneMeeting
-      ?.findMany({
-        where: { OR: [{ hostId: userId }, { participantId: userId }] },
-        include: {
-          host: { select: { id: true, fullName: true, avatarUrl: true } },
-          participant: { select: { id: true, fullName: true, avatarUrl: true } },
-        },
-        orderBy: { scheduledAt: 'desc' },
-      })
-      .catch(() => [] as any[]);
+    return this.prisma.oneOnOneMeeting.findMany({
+      where: { OR: [{ hostId: userId }, { participantId: userId }] },
+      include: {
+        host: { select: { id: true, fullName: true, avatarUrl: true } },
+        participant: { select: { id: true, fullName: true, avatarUrl: true } },
+      },
+      orderBy: { scheduledAt: 'desc' },
+    });
   }
 
   async updateOneOnOne(id: number, userId: number, dto: EngagementUpdateOneOnOneDto) {
@@ -772,12 +768,10 @@ export class EngagementService {
     if (dto.scheduledAt) data.scheduledAt = new Date(dto.scheduledAt);
     if (dto.completed) data.status = 'COMPLETED';
 
-    return (this.prisma as any).oneOnOneMeeting
-      ?.update({
-        where: { id },
-        data,
-      })
-      .catch(() => ({ message: 'Actualizado' }));
+    return this.prisma.oneOnOneMeeting.update({
+      where: { id },
+      data,
+    });
   }
 
   // ══════════════════════════════════════════════════════
@@ -785,22 +779,20 @@ export class EngagementService {
   // ══════════════════════════════════════════════════════
 
   async createActionPlan(createdById: number, dto: CreateActionPlanDto) {
-    const plan = await (this.prisma as any).engagementAction
-      ?.create({
-        data: {
-          title: dto.title,
-          description: dto.description,
-          assigneeId: dto.assigneeId,
-          dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
-          surveyId: dto.surveyId,
-          departmentId: dto.departmentId,
-          priority: dto.priority ?? 'MEDIUM',
-          status: 'OPEN',
-          progress: 0,
-          createdById,
-        },
-      })
-      .catch(() => null);
+    const plan = await this.prisma.engagementAction.create({
+      data: {
+        title: dto.title,
+        description: dto.description,
+        assigneeId: dto.assigneeId,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+        surveyId: dto.surveyId,
+        departmentId: dto.departmentId,
+        priority: dto.priority ?? 'MEDIUM',
+        status: 'OPEN',
+        progress: 0,
+        createdById,
+      },
+    });
 
     if (dto.assigneeId) {
       await this.prisma.notificationLog
@@ -815,7 +807,7 @@ export class EngagementService {
         .catch(() => {});
     }
 
-    return plan ?? { message: 'Plano de acção criado', ...dto };
+    return plan;
   }
 
   async getActionPlans(
@@ -827,20 +819,18 @@ export class EngagementService {
     if (departmentId) where.departmentId = departmentId;
     if (status) where.status = status;
 
-    const data = await (this.prisma as any).engagementAction
-      ?.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          assignee: { select: { id: true, fullName: true, avatarUrl: true } },
-          createdBy: { select: { id: true, fullName: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      .catch(() => [] as any[]);
+    const data = await this.prisma.engagementAction.findMany({
+      where,
+      skip,
+      take: limit,
+      include: {
+        assignee: { select: { id: true, fullName: true, avatarUrl: true } },
+        createdBy: { select: { id: true, fullName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    const total = await (this.prisma as any).engagementAction?.count({ where }).catch(() => 0);
+    const total = await this.prisma.engagementAction.count({ where });
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
@@ -848,9 +838,7 @@ export class EngagementService {
   async updateActionPlan(id: number, dto: UpdateActionPlanDto) {
     const data: any = { ...dto };
     if (dto.dueDate) data.dueDate = new Date(dto.dueDate);
-    return (this.prisma as any).engagementAction
-      ?.update({ where: { id }, data })
-      .catch(() => ({ message: 'Actualizado', ...dto }));
+    return this.prisma.engagementAction.update({ where: { id }, data });
   }
 
   // ══════════════════════════════════════════════════════
@@ -859,7 +847,7 @@ export class EngagementService {
 
   async getEngagementIndex(departmentId?: number) {
     // Last 5 COMPLETED surveys
-    const surveys = await (this.prisma as any).engagementSurvey.findMany({
+    const surveys = await this.prisma.engagementSurvey.findMany({
       where: { status: 'COMPLETED', type: { not: SurveyType.ENPS } },
       include: { responses: true },
       orderBy: { createdAt: 'desc' },
@@ -942,9 +930,9 @@ export class EngagementService {
           to: { select: { id: true, fullName: true, avatarUrl: true } },
         },
       }),
-      (this.prisma as any).engagementAction
-        ?.count({ where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } })
-        .catch(() => 0),
+      this.prisma.engagementAction.count({
+        where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } },
+      }),
     ]);
 
     return {
@@ -1041,15 +1029,13 @@ export class EngagementService {
       this.prisma.recognition.count({
         where: { toUserId: { in: userIds } },
       }),
-      (this.prisma as any).oneOnOneMeeting
-        ?.count({
-          where: {
-            OR: [{ hostId: managerId }, { participantId: managerId }],
-            status: 'SCHEDULED',
-            scheduledAt: { gte: new Date() },
-          },
-        })
-        .catch(() => 0),
+      this.prisma.oneOnOneMeeting.count({
+        where: {
+          OR: [{ hostId: managerId }, { participantId: managerId }],
+          status: 'SCHEDULED',
+          scheduledAt: { gte: new Date() },
+        },
+      }),
     ]);
 
     const avgScore = teamResponses.length
@@ -1141,7 +1127,7 @@ export class EngagementService {
 
   async getMyEngagementSummary(userId: number) {
     const [pendingSurveys, received, points, recentMood, hss] = await Promise.all([
-      (this.prisma as any).engagementSurvey.findMany({
+      this.prisma.engagementSurvey.findMany({
         where: {
           status: 'ACTIVE',
           responses: { none: { userId } },

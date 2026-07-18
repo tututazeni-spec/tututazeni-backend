@@ -845,6 +845,12 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   recognitionsGiven    Recognition[]  @relation("RecognitionFrom")
   recognitionsReceived Recognition[]  @relation("RecognitionTo")
 
+  // ─── Engagement (Grupo B+C) ───────────────────────────────────
+  oneOnOneMeetingsHosted       OneOnOneMeeting[]  @relation("OneOnOneMeetingHost")
+  oneOnOneMeetingsParticipated OneOnOneMeeting[]  @relation("OneOnOneMeetingParticipant")
+  engagementActionsAssigned    EngagementAction[] @relation("EngagementActionAssignee")
+  engagementActionsCreated     EngagementAction[] @relation("EngagementActionCreator")
+
   // ─── Auth Tokens ──────────────────────────────────────────────
   passwordChangedAt   DateTime?
   passwordResetTokens PasswordResetToken[]
@@ -977,7 +983,8 @@ model Department {
   orgChangesTo        OrgChangeLog[]          @relation("OrgChangeTo")
   courses             Course[]
   internalVacancies   InternalVacancy[]
-  careerPaths CareerPath[]
+  careerPaths         CareerPath[]
+  engagementActions   EngagementAction[]
   @@index([active])
   @@index([parentId])
 }
@@ -3281,17 +3288,24 @@ model UserAttendance {
 // ══════════════════════════════════════════════════════════════════
 
 model EngagementSurvey {
-  id          Int              @id @default(autoincrement())
-  title       String
-  description String?          @db.Text
-  status      String           @default("ACTIVE")
-  endDate     DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  questions   SurveyQuestion[]
-  responses   SurveyResponse[]
+  id                     Int                @id @default(autoincrement())
+  title                  String
+  description            String?            @db.Text
+  type                   String             @default("PULSE")
+  isTemplate             Boolean            @default(false)
+  status                 String             @default("ACTIVE")
+  anonymous              Boolean            @default(false)
+  minResponsesForResults Int                @default(3)
+  startDate              DateTime?
+  endDate                DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  questions              SurveyQuestion[]
+  responses              SurveyResponse[]
+  engagementActions      EngagementAction[]
 
   @@index([status])
+  @@index([type])
 }
 
 model SurveyQuestion {
@@ -3300,6 +3314,9 @@ model SurveyQuestion {
   text     String           @db.Text
   type     String
   order    Int
+  required Boolean          @default(true)
+  options  String[]
+  scaleMax Int              @default(5)
   survey   EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   answers  SurveyAnswer[]
 
@@ -3311,6 +3328,7 @@ model SurveyResponse {
   surveyId  Int
   userId    Int
   score     Float?
+  anonymous Boolean          @default(false)
   createdAt DateTime         @default(now())
   survey    EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -7112,4 +7130,58 @@ model Recognition {
   @@index([fromUserId])
   @@index([public])
   @@index([createdAt])
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ENGAGEMENT — GRUPO B+C
+// ══════════════════════════════════════════════════════════════════
+
+model OneOnOneMeeting {
+  id              Int       @id @default(autoincrement())
+  hostId          Int
+  participantId   Int
+  scheduledAt     DateTime
+  durationMinutes Int       @default(30)
+  agenda          String?   @db.Text
+  status          String    @default("SCHEDULED")
+  recurring       Boolean   @default(false)
+  frequency       String?
+  meetingUrl      String?
+  minutes         String?   @db.Text
+  actionItems     String?   @db.Text
+  nextMeetingDate DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  host            User      @relation("OneOnOneMeetingHost",        fields: [hostId],        references: [id], onDelete: Cascade)
+  participant     User      @relation("OneOnOneMeetingParticipant", fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([hostId])
+  @@index([participantId])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+model EngagementAction {
+  id           Int               @id @default(autoincrement())
+  title        String
+  description  String?           @db.Text
+  assigneeId   Int?
+  createdById  Int
+  dueDate      DateTime?
+  surveyId     Int?
+  departmentId Int?
+  priority     String            @default("MEDIUM")
+  status       String            @default("OPEN")
+  progress     Int               @default(0)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  assignee     User?             @relation("EngagementActionAssignee", fields: [assigneeId],  references: [id], onDelete: SetNull)
+  createdBy    User              @relation("EngagementActionCreator",  fields: [createdById], references: [id], onDelete: Cascade)
+  survey       EngagementSurvey? @relation(fields: [surveyId],         references: [id],      onDelete: SetNull)
+  department   Department?       @relation(fields: [departmentId],      references: [id],      onDelete: SetNull)
+
+  @@index([status])
+  @@index([assigneeId])
+  @@index([createdById])
+  @@index([surveyId])
 }

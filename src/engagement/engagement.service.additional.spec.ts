@@ -69,7 +69,12 @@ const mockPrisma: any = {
     findUnique: jest.fn().mockResolvedValue({ id: 2, fullName: 'Destinatário' }),
   },
   feedback: { count: jest.fn().mockResolvedValue(0), create: jest.fn().mockResolvedValue({}) },
-  engagementAction: { count: jest.fn().mockResolvedValue(0) },
+  engagementAction: {
+    create: jest.fn().mockResolvedValue({ id: 1 }),
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+    update: jest.fn().mockResolvedValue({ id: 1 }),
+  },
 };
 
 const baseSurvey = {

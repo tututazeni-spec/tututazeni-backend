@@ -53,6 +53,7 @@ const mockPrisma = {
   recognition: recognitionMock,
   moodCheckin: moodCheckinMock,
   oneOnOne: oneOnOneMock,
+  oneOnOneMeeting: oneOnOneMock,
   user: { findMany: jest.fn(), count: jest.fn(), findUnique: jest.fn() },
   notificationLog: {
     create: jest.fn().mockResolvedValue({}),
