@@ -845,6 +845,10 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   recognitionsGiven    Recognition[]  @relation("RecognitionFrom")
   recognitionsReceived Recognition[]  @relation("RecognitionTo")
 
+  // ─── Engagement (Grupo B+C) ───────────────────────────────────
+  oneOnOneMeetingsHosted       OneOnOneMeeting[]  @relation("OneOnOneMeetingHost")
+  oneOnOneMeetingsParticipated OneOnOneMeeting[]  @relation("OneOnOneMeetingParticipant")
+
   // ─── Auth Tokens ──────────────────────────────────────────────
   passwordChangedAt   DateTime?
   passwordResetTokens PasswordResetToken[]
@@ -7122,4 +7126,33 @@ model Recognition {
   @@index([fromUserId])
   @@index([public])
   @@index([createdAt])
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ENGAGEMENT — GRUPO B+C
+// ══════════════════════════════════════════════════════════════════
+
+model OneOnOneMeeting {
+  id              Int       @id @default(autoincrement())
+  hostId          Int
+  participantId   Int
+  scheduledAt     DateTime
+  durationMinutes Int       @default(30)
+  agenda          String?   @db.Text
+  status          String    @default("SCHEDULED")
+  recurring       Boolean   @default(false)
+  frequency       String?
+  meetingUrl      String?
+  minutes         String?   @db.Text
+  actionItems     String?   @db.Text
+  nextMeetingDate DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  host            User      @relation("OneOnOneMeetingHost",        fields: [hostId],        references: [id], onDelete: Cascade)
+  participant     User      @relation("OneOnOneMeetingParticipant", fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([hostId])
+  @@index([participantId])
+  @@index([scheduledAt])
+  @@index([status])
 }
