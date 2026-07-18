@@ -100,7 +100,7 @@ export class EngagementService {
   async createSurvey(dto: CreateSurveyDto, createdById: number) {
     const { questions, startDate, endDate, ...data } = dto;
 
-    return (this.prisma as any).engagementSurvey.create({
+    return this.prisma.engagementSurvey.create({
       data: {
         ...data,
         status: SurveyStatus.DRAFT,
@@ -165,7 +165,7 @@ export class EngagementService {
   // ─── Submit ──────────────────────────────────────────
 
   async submitSurvey(userId: number, dto: SubmitSurveyDto) {
-    const survey = await (this.prisma as any).engagementSurvey.findUnique({
+    const survey = await this.prisma.engagementSurvey.findUnique({
       where: { id: dto.surveyId },
       include: { questions: true },
     });
@@ -183,7 +183,7 @@ export class EngagementService {
       ? +(numericAnswers.reduce((s, a) => s + (a.value ?? 0), 0) / numericAnswers.length).toFixed(2)
       : 0;
 
-    const response = await (this.prisma as any).surveyResponse.create({
+    const response = await this.prisma.surveyResponse.create({
       data: {
         userId,
         surveyId: dto.surveyId,
@@ -195,7 +195,7 @@ export class EngagementService {
             value: a.value,
             comment: a.comment,
             selectedOption: a.selectedOption,
-          })),
+          })) as any,
         },
       },
     });
@@ -224,7 +224,7 @@ export class EngagementService {
   // ─── Results ─────────────────────────────────────────
 
   async getSurveyResults(surveyId: number, requesterId: number) {
-    const survey = await (this.prisma as any).engagementSurvey.findUnique({
+    const survey = await this.prisma.engagementSurvey.findUnique({
       where: { id: surveyId },
       include: {
         questions: { orderBy: { order: 'asc' } },
@@ -326,7 +326,7 @@ export class EngagementService {
   // ─── Templates ───────────────────────────────────────
 
   async getTemplates() {
-    return (this.prisma as any).engagementSurvey.findMany({
+    return this.prisma.engagementSurvey.findMany({
       where: { isTemplate: true },
       include: {
         questions: { orderBy: { order: 'asc' } },
@@ -342,7 +342,7 @@ export class EngagementService {
 
   async submitENPS(userId: number, dto: SubmitENPSDto) {
     // eNPS is stored as a special survey response
-    const survey = await (this.prisma as any).engagementSurvey.findFirst({
+    const survey = await this.prisma.engagementSurvey.findFirst({
       where: { type: SurveyType.ENPS, status: 'ACTIVE' },
       include: { questions: true },
     });
@@ -360,7 +360,7 @@ export class EngagementService {
   }
 
   async getENPSScore(departmentId?: number) {
-    const survey = await (this.prisma as any).engagementSurvey.findFirst({
+    const survey = await this.prisma.engagementSurvey.findFirst({
       where: { type: SurveyType.ENPS, status: { in: ['ACTIVE', 'COMPLETED'] } },
       include: { responses: { include: { answers: { include: { question: true } } } } },
       orderBy: { createdAt: 'desc' },
@@ -859,7 +859,7 @@ export class EngagementService {
 
   async getEngagementIndex(departmentId?: number) {
     // Last 5 COMPLETED surveys
-    const surveys = await (this.prisma as any).engagementSurvey.findMany({
+    const surveys = await this.prisma.engagementSurvey.findMany({
       where: { status: 'COMPLETED', type: { not: SurveyType.ENPS } },
       include: { responses: true },
       orderBy: { createdAt: 'desc' },
@@ -1141,7 +1141,7 @@ export class EngagementService {
 
   async getMyEngagementSummary(userId: number) {
     const [pendingSurveys, received, points, recentMood, hss] = await Promise.all([
-      (this.prisma as any).engagementSurvey.findMany({
+      this.prisma.engagementSurvey.findMany({
         where: {
           status: 'ACTIVE',
           responses: { none: { userId } },
