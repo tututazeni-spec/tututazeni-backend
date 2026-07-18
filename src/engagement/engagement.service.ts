@@ -779,22 +779,20 @@ export class EngagementService {
   // ══════════════════════════════════════════════════════
 
   async createActionPlan(createdById: number, dto: CreateActionPlanDto) {
-    const plan = await (this.prisma as any).engagementAction
-      ?.create({
-        data: {
-          title: dto.title,
-          description: dto.description,
-          assigneeId: dto.assigneeId,
-          dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
-          surveyId: dto.surveyId,
-          departmentId: dto.departmentId,
-          priority: dto.priority ?? 'MEDIUM',
-          status: 'OPEN',
-          progress: 0,
-          createdById,
-        },
-      })
-      .catch(() => null);
+    const plan = await this.prisma.engagementAction.create({
+      data: {
+        title: dto.title,
+        description: dto.description,
+        assigneeId: dto.assigneeId,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+        surveyId: dto.surveyId,
+        departmentId: dto.departmentId,
+        priority: dto.priority ?? 'MEDIUM',
+        status: 'OPEN',
+        progress: 0,
+        createdById,
+      },
+    });
 
     if (dto.assigneeId) {
       await this.prisma.notificationLog
@@ -809,7 +807,7 @@ export class EngagementService {
         .catch(() => {});
     }
 
-    return plan ?? { message: 'Plano de acção criado', ...dto };
+    return plan;
   }
 
   async getActionPlans(
@@ -821,20 +819,18 @@ export class EngagementService {
     if (departmentId) where.departmentId = departmentId;
     if (status) where.status = status;
 
-    const data = await (this.prisma as any).engagementAction
-      ?.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          assignee: { select: { id: true, fullName: true, avatarUrl: true } },
-          createdBy: { select: { id: true, fullName: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      })
-      .catch(() => [] as any[]);
+    const data = await this.prisma.engagementAction.findMany({
+      where,
+      skip,
+      take: limit,
+      include: {
+        assignee: { select: { id: true, fullName: true, avatarUrl: true } },
+        createdBy: { select: { id: true, fullName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    const total = await (this.prisma as any).engagementAction?.count({ where }).catch(() => 0);
+    const total = await this.prisma.engagementAction.count({ where });
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
@@ -842,9 +838,7 @@ export class EngagementService {
   async updateActionPlan(id: number, dto: UpdateActionPlanDto) {
     const data: any = { ...dto };
     if (dto.dueDate) data.dueDate = new Date(dto.dueDate);
-    return (this.prisma as any).engagementAction
-      ?.update({ where: { id }, data })
-      .catch(() => ({ message: 'Actualizado', ...dto }));
+    return this.prisma.engagementAction.update({ where: { id }, data });
   }
 
   // ══════════════════════════════════════════════════════
@@ -936,9 +930,7 @@ export class EngagementService {
           to: { select: { id: true, fullName: true, avatarUrl: true } },
         },
       }),
-      (this.prisma as any).engagementAction
-        ?.count({ where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } })
-        .catch(() => 0),
+      this.prisma.engagementAction.count({ where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } }),
     ]);
 
     return {
