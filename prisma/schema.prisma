@@ -1961,20 +1961,39 @@ model Competency {
   name        String   @unique
   description String?
   category    String   @default("HARD_SKILL")
+  type        String   @default("BEHAVIORAL")
   tags        String[]
   status      String   @default("ACTIVE")
+  isActive    Boolean  @default(true)
+  isGlobal    Boolean  @default(true)
+  tenantId    String?
+  scaleMin    Int      @default(1)
+  scaleMax    Int      @default(5)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  userCompetencies  UserCompetency[]
-  courses           CourseCompetency[]
-  positions         PositionCompetency[]
-  proficiencyLevels ProficiencyLevel[]
-  endorsements      CompetencyEndorsement[]
-  evolutionLogs     CompetencyEvolutionLog[]
-  competencyMaps    CompetencyMap[]
-  avatarScenarios   AvatarScenario[]
+  userCompetencies         UserCompetency[]
+  courses                  CourseCompetency[]
+  positions                PositionCompetency[]
+  proficiencyLevels        ProficiencyLevel[]
+  endorsements             CompetencyEndorsement[]
+  evolutionLogs            CompetencyEvolutionLog[]
+  competencyMaps           CompetencyMap[]
+  avatarScenarios          AvatarScenario[]
+  indicators               CompetencyIndicator[]
   @@index([category])
   @@index([status])
+  @@index([isActive])
+}
+
+model CompetencyIndicator {
+  id           String     @id @default(cuid())
+  competencyId Int
+  level        Int
+  description  String     @db.Text
+  examples     String?    @db.Text
+  competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@index([competencyId])
 }
 
 model ProficiencyLevel {
