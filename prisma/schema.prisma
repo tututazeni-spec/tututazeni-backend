@@ -1961,39 +1961,21 @@ model Competency {
   name        String   @unique
   description String?
   category    String   @default("HARD_SKILL")
-  type        String   @default("BEHAVIORAL")
   tags        String[]
   status      String   @default("ACTIVE")
-  isActive    Boolean  @default(true)
-  isGlobal    Boolean  @default(true)
-  tenantId    String?
-  scaleMin    Int      @default(1)
-  scaleMax    Int      @default(5)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  userCompetencies         UserCompetency[]
-  courses                  CourseCompetency[]
-  positions                PositionCompetency[]
-  proficiencyLevels        ProficiencyLevel[]
-  endorsements             CompetencyEndorsement[]
-  evolutionLogs            CompetencyEvolutionLog[]
-  competencyMaps           CompetencyMap[]
-  avatarScenarios          AvatarScenario[]
-  indicators               CompetencyIndicator[]
+  userCompetencies      UserCompetency[]
+  courses               CourseCompetency[]
+  positions             PositionCompetency[]
+  proficiencyLevels     ProficiencyLevel[]
+  endorsements          CompetencyEndorsement[]
+  evolutionLogs         CompetencyEvolutionLog[]
+  competencyMaps        CompetencyMap[]
+  avatarScenarios       AvatarScenario[]
+  eval360CycleCompetencies Eval360CycleCompetency[]
   @@index([category])
   @@index([status])
-  @@index([isActive])
-}
-
-model CompetencyIndicator {
-  id           String     @id @default(cuid())
-  competencyId Int
-  level        Int
-  description  String     @db.Text
-  examples     String?    @db.Text
-  competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
-
-  @@index([competencyId])
 }
 
 model ProficiencyLevel {
@@ -7203,4 +7185,61 @@ model EngagementAction {
   @@index([assigneeId])
   @@index([createdById])
   @@index([surveyId])
+}
+
+// ══════════════════════════════════════════════════════════════════
+// AVALIAÇÃO 360° — GRUPO D
+// ══════════════════════════════════════════════════════════════════
+
+model Eval360Cycle {
+  id                String   @id @default(cuid())
+  tenantId          String?
+  name              String
+  description       String?  @db.Text
+  model             String   @default("360")
+  type              String   @default("ANNUAL")
+  startDate         DateTime
+  endDate           DateTime
+  gracePeriodDays   Int      @default(3)
+  status            String   @default("DRAFT")
+  anonymityMode     String   @default("ANONYMOUS")
+  quorumMinimum     Int      @default(3)
+  weightSelf        Float    @default(10)
+  weightManager     Float    @default(40)
+  weightPeer        Float    @default(30)
+  weightSubordinate Float    @default(20)
+  weightExternal    Float    @default(0)
+  cutoffPromotion   Float?
+  cutoffBonus       Float?
+  cutoffProgram     Float?
+  linkedToPdi       Boolean  @default(true)
+  linkedToBonus     Boolean  @default(false)
+  linkedToOkrs      Boolean  @default(false)
+  createdBy         String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  competencies Eval360CycleCompetency[]
+  questions    Eval360Question[]
+  participants CycleParticipant[]
+  assignments  EvaluatorAssignment[]
+  responses    EvaluationResponse[]
+  results      EvaluationResult[]
+
+  @@index([status])
+  @@index([tenantId])
+}
+
+model Eval360CycleCompetency {
+  id           String       @id @default(cuid())
+  cycleId      String
+  competencyId Int
+  weight       Float        @default(1)
+  isRequired   Boolean      @default(true)
+  order        Int          @default(0)
+  cycle        Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  competency   Competency   @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, competencyId])
+  @@index([cycleId])
 }
