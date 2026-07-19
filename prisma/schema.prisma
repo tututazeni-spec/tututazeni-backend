@@ -7220,11 +7220,6 @@ model Eval360Cycle {
   updatedAt         DateTime @updatedAt
 
   competencies Eval360CycleCompetency[]
-  questions    Eval360Question[]
-  participants CycleParticipant[]
-  assignments  EvaluatorAssignment[]
-  responses    EvaluationResponse[]
-  results      EvaluationResult[]
 
   @@index([status])
   @@index([tenantId])
