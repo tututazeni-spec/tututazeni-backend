@@ -1981,6 +1981,7 @@ model Competency {
   avatarScenarios          AvatarScenario[]
   indicators               CompetencyIndicator[]
   eval360CycleCompetencies Eval360CycleCompetency[]
+  eval360Questions         Eval360Question[] @relation("Eval360QuestionCompetency")
   @@index([category])
   @@index([status])
   @@index([isActive])
@@ -7241,6 +7242,7 @@ model Eval360Cycle {
   competencies Eval360CycleCompetency[]
   assignments   EvaluatorAssignment[]
   participants  CycleParticipant[]
+  questions     Eval360Question[]
 
   @@index([status])
   @@index([tenantId])
@@ -7300,4 +7302,20 @@ model CycleParticipant {
   @@unique([cycleId, userId])
   @@index([cycleId])
   @@index([status])
+}
+
+model Eval360Question {
+  id           String       @id @default(cuid())
+  cycleId      String
+  competencyId Int?
+  text         String       @db.Text
+  type         String
+  isRequired   Boolean      @default(true)
+  order        Int          @default(0)
+  createdAt    DateTime     @default(now())
+  cycle        Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  competency   Competency?  @relation("Eval360QuestionCompetency", fields: [competencyId], references: [id], onDelete: SetNull)
+
+  @@index([cycleId])
+  @@index([competencyId])
 }
