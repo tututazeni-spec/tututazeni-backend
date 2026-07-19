@@ -7243,6 +7243,7 @@ model Eval360Cycle {
   assignments   EvaluatorAssignment[]
   participants  CycleParticipant[]
   questions     Eval360Question[]
+  responses     EvaluationResponse[]
 
   @@index([status])
   @@index([tenantId])
@@ -7277,6 +7278,7 @@ model EvaluatorAssignment {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   cycle       Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  responses   EvaluationResponse[]
 
   @@index([cycleId])
   @@index([evaluateeId])
@@ -7315,7 +7317,45 @@ model Eval360Question {
   createdAt    DateTime     @default(now())
   cycle        Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   competency   Competency?  @relation("Eval360QuestionCompetency", fields: [competencyId], references: [id], onDelete: SetNull)
+  answers      EvaluationAnswer[]
 
   @@index([cycleId])
   @@index([competencyId])
+}
+
+model EvaluationResponse {
+  id            String              @id @default(cuid())
+  cycleId       String
+  assignmentId  String              @unique
+  evaluateeId   String
+  evaluatorId   String
+  evaluatorRole String
+  status        String              @default("DRAFT")
+  startedAt     DateTime            @default(now())
+  submittedAt   DateTime?
+  isAnonymized  Boolean             @default(false)
+  sentimentScore Float?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  cycle         Eval360Cycle        @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  assignment    EvaluatorAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  answers       EvaluationAnswer[]
+
+  @@index([cycleId])
+  @@index([evaluateeId])
+  @@index([status])
+}
+
+model EvaluationAnswer {
+  id           String             @id @default(cuid())
+  responseId   String
+  questionId   String
+  numericValue Float?
+  textValue    String?            @db.Text
+  choiceValue  String?
+  response     EvaluationResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question     Eval360Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([responseId, questionId])
+  @@index([responseId])
 }
