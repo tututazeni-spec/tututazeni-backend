@@ -7239,6 +7239,8 @@ model Eval360Cycle {
   updatedAt         DateTime @updatedAt
 
   competencies Eval360CycleCompetency[]
+  assignments   EvaluatorAssignment[]
+  participants  CycleParticipant[]
 
   @@index([status])
   @@index([tenantId])
@@ -7256,4 +7258,46 @@ model Eval360CycleCompetency {
 
   @@unique([cycleId, competencyId])
   @@index([cycleId])
+}
+
+model EvaluatorAssignment {
+  id          String       @id @default(cuid())
+  cycleId     String
+  evaluateeId String
+  evaluatorId String
+  role        String
+  status      String       @default("PENDING")
+  suggestedBy String?
+  approvedBy  String?
+  approvedAt  DateTime?
+  invitedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  cycle       Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@index([cycleId])
+  @@index([evaluateeId])
+  @@index([evaluatorId])
+  @@index([status])
+}
+
+model CycleParticipant {
+  id                   String       @id @default(cuid())
+  cycleId              String
+  userId               String
+  status               String       @default("PENDING")
+  consentGiven         Boolean?
+  consentAt            DateTime?
+  finalScore           Float?
+  completedAt          DateTime?
+  isEligiblePromotion  Boolean?
+  isEligibleBonus      Boolean?
+  scoreByEvaluatorType String?
+  createdAt            DateTime     @default(now())
+  cycle                Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, userId])
+  @@index([cycleId])
+  @@index([status])
 }
