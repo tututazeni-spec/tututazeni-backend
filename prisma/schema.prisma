@@ -7244,6 +7244,7 @@ model Eval360Cycle {
   participants  CycleParticipant[]
   questions     Eval360Question[]
   responses     EvaluationResponse[]
+  results       EvaluationResult[]
 
   @@index([status])
   @@index([tenantId])
@@ -7358,4 +7359,67 @@ model EvaluationAnswer {
 
   @@unique([responseId, questionId])
   @@index([responseId])
+}
+
+model EvaluationResult {
+  id                  String       @id @default(cuid())
+  cycleId             String
+  participantId       String
+  overallScore        Float?
+  weightedScore       Float?
+  selfScore           Float?
+  managerScore        Float?
+  peerScore           Float?
+  subordinateScore    Float?
+  externalScore       Float?
+  scoresByCompetency  String?      @db.Text
+  gaps                String?      @db.Text
+  strengths           String?      @db.Text
+  isEligiblePromotion Boolean      @default(false)
+  isEligibleBonus     Boolean      @default(false)
+  bonusMultiplier     Float?
+  calculatedAt        DateTime     @default(now())
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  cycle               Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, participantId])
+  @@index([cycleId])
+  @@index([participantId])
+}
+
+model Eval360Feedback {
+  id         String   @id @default(cuid())
+  fromUserId String
+  toUserId   String
+  type       String
+  message    String   @db.Text
+  isPrivate  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([toUserId])
+  @@index([fromUserId])
+}
+
+model PulseSurvey {
+  id          String                @id @default(cuid())
+  title       String
+  description String?               @db.Text
+  closesAt    DateTime
+  createdBy   String
+  sentAt      DateTime              @default(now())
+  createdAt   DateTime              @default(now())
+  responses   PulseSurveyResponse[]
+}
+
+model PulseSurveyResponse {
+  id          String      @id @default(cuid())
+  surveyId    String
+  userId      String
+  answersJson Json
+  createdAt   DateTime    @default(now())
+  survey      PulseSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyId, userId])
+  @@index([surveyId])
 }
