@@ -58,7 +58,7 @@ export class Evaluation360Service {
   // ============================================================
 
   async createCompetency(dto: Evaluation360CreateCompetencyDto, actorId: string) {
-    const competency = await (this.prisma as any).competency.create({
+    const competency = await this.prisma.competency.create({
       data: {
         name: dto.name,
         description: dto.description,
@@ -91,9 +91,9 @@ export class Evaluation360Service {
   }
 
   async updateCompetency(id: string, dto: Evaluation360UpdateCompetencyDto, actorId: string) {
-    const comp = await (this.prisma as any).competency.findUnique({ where: { id } });
+    const comp = await this.prisma.competency.findUnique({ where: { id: +id } });
     if (!comp) throw new NotFoundException('Competência não encontrada.');
-    const updated = await (this.prisma as any).competency.update({ where: { id }, data: dto });
+    const updated = await this.prisma.competency.update({ where: { id: +id }, data: dto as any });
     await this.audit.log({
       entity: 'Competency',
       entityId: id,
@@ -109,7 +109,7 @@ export class Evaluation360Service {
     if (tenantId) where.OR = [{ isGlobal: true }, { tenantId }];
     else where.isGlobal = true;
     if (query?.search) where.name = { contains: query.search };
-    return (this.prisma as any).competency.findMany({
+    return this.prisma.competency.findMany({
       where,
       include: { indicators: { orderBy: { level: 'asc' } } },
       orderBy: { name: 'asc' },
@@ -126,7 +126,7 @@ export class Evaluation360Service {
     this.validateWeights(dto);
     this.validateDates(dto.startDate, dto.endDate);
 
-    const cycle = await (this.prisma as any).evaluationCycle.create({
+    const cycle = await this.prisma.eval360Cycle.create({
       data: {
         tenantId: dto.tenantId,
         name: dto.name,
@@ -153,11 +153,11 @@ export class Evaluation360Service {
         competencies: dto.competencies?.length
           ? {
               create: dto.competencies.map(c => ({
-                competencyId: c.competencyId,
+                competencyId: +c.competencyId,
                 weight: c.weight ?? 1,
                 isRequired: c.isRequired ?? true,
                 order: c.order ?? 0,
-              })),
+              })) as any,
             }
           : undefined,
       },
@@ -181,7 +181,7 @@ export class Evaluation360Service {
     }
     if (dto.weightSelf !== undefined || dto.weightManager !== undefined)
       this.validateWeights({ ...cycle, ...dto });
-    const updated = await (this.prisma as any).evaluationCycle.update({ where: { id }, data: dto });
+    const updated = await this.prisma.eval360Cycle.update({ where: { id }, data: dto as any });
     await this.audit.log({
       entity: 'EvaluationCycle',
       entityId: id,
@@ -197,7 +197,7 @@ export class Evaluation360Service {
     if (cycle.status !== CycleStatus.DRAFT)
       throw new BadRequestException('Apenas ciclos em rascunho podem ser publicados.');
 
-    const participantCount = await (this.prisma as any).cycleParticipant.count({
+    const participantCount = await this.prisma.cycleParticipant.count({
       where: { cycleId: id },
     });
     if (participantCount === 0)
@@ -205,7 +205,7 @@ export class Evaluation360Service {
         'O ciclo precisa de pelo menos 1 participante antes de ser publicado.',
       );
 
-    const questionCount = await (this.prisma as any).evaluationQuestion.count({
+    const questionCount = await this.prisma.eval360Question.count({
       where: { cycleId: id },
     });
     if (questionCount === 0)
@@ -213,7 +213,7 @@ export class Evaluation360Service {
         'O ciclo precisa de pelo menos 1 questão antes de ser publicado.',
       );
 
-    const updated = await (this.prisma as any).evaluationCycle.update({
+    const updated = await this.prisma.eval360Cycle.update({
       where: { id },
       data: { status: CycleStatus.PUBLISHED },
     });
@@ -237,22 +237,22 @@ export class Evaluation360Service {
     const where: any = { tenantId };
     if (query.search) where.name = { contains: query.search };
     const [data, total] = await Promise.all([
-      (this.prisma as any).evaluationCycle.findMany({
+      this.prisma.eval360Cycle.findMany({
         where,
         skip: query.offset ?? 0,
         take: query.limit ?? 20,
         orderBy: { createdAt: 'desc' },
         include: {
-          _count: { select: { participants: true, evaluatorAssignments: true, responses: true } },
+          _count: { select: { participants: true, assignments: true, responses: true } },
         },
       }),
-      (this.prisma as any).evaluationCycle.count({ where }),
+      this.prisma.eval360Cycle.count({ where }),
     ]);
     return { data, total };
   }
 
   async getCycleDetail(id: string) {
-    const cycle = await (this.prisma as any).evaluationCycle.findUnique({
+    const cycle = await this.prisma.eval360Cycle.findUnique({
       where: { id },
       include: {
         competencies: {
@@ -260,7 +260,7 @@ export class Evaluation360Service {
           orderBy: { order: 'asc' },
         },
         questions: { orderBy: { order: 'asc' } },
-        _count: { select: { participants: true, evaluatorAssignments: true, responses: true } },
+        _count: { select: { participants: true, assignments: true, responses: true } },
       },
     });
     if (!cycle) throw new NotFoundException('Ciclo não encontrado.');
@@ -272,7 +272,7 @@ export class Evaluation360Service {
   // ============================================================
 
   async createQuestion(dto: Evaluation360CreateQuestionDto, actorId: string) {
-    const question = await (this.prisma as any).evaluationQuestion.create({ data: dto });
+    const question = await this.prisma.eval360Question.create({ data: dto as any });
     await this.audit.log({
       entity: 'EvaluationQuestion',
       entityId: question.id,
@@ -287,7 +287,7 @@ export class Evaluation360Service {
     const where: any = {};
     if (cycleId) where.cycleId = cycleId;
     if (competencyId) where.competencyId = competencyId;
-    return (this.prisma as any).evaluationQuestion.findMany({ where, orderBy: { order: 'asc' } });
+    return this.prisma.eval360Question.findMany({ where, orderBy: { order: 'asc' } });
   }
 
   // ============================================================
@@ -300,7 +300,7 @@ export class Evaluation360Service {
 
     for (const userId of dto.userIds) {
       try {
-        await (this.prisma as any).cycleParticipant.create({
+        await this.prisma.cycleParticipant.create({
           data: { cycleId, userId, status: 'PENDING' },
         });
         results.added++;
@@ -319,18 +319,18 @@ export class Evaluation360Service {
   }
 
   async giveConsent(cycleId: string, userId: string, dto: ConsentDto) {
-    const participant = await (this.prisma as any).cycleParticipant.findUnique({
+    const participant = await this.prisma.cycleParticipant.findUnique({
       where: { cycleId_userId: { cycleId, userId } },
     });
     if (!participant) throw new NotFoundException('Participante não encontrado.');
-    return (this.prisma as any).cycleParticipant.update({
+    return this.prisma.cycleParticipant.update({
       where: { cycleId_userId: { cycleId, userId } },
       data: { consentGiven: dto.consent, consentAt: dto.consent ? new Date() : null },
     });
   }
 
   async getParticipantProgress(cycleId: string, userId: string) {
-    const assignments = await (this.prisma as any).evaluatorAssignment.findMany({
+    const assignments = await this.prisma.evaluatorAssignment.findMany({
       where: { cycleId, evaluateeId: userId },
     });
     const totalAssigned = assignments.length;
@@ -353,8 +353,8 @@ export class Evaluation360Service {
 
   async suggestEvaluators(cycleId: string, dto: SuggestEvaluatorsDto) {
     await this.findCycleOrFail(cycleId);
-    const evaluatee = await (this.prisma as any).user.findUnique({
-      where: { id: dto.evaluateeId },
+    const evaluatee = await this.prisma.user.findUnique({
+      where: { id: +dto.evaluateeId },
     });
     if (!evaluatee) throw new NotFoundException('Avaliado não encontrado.');
 
@@ -379,10 +379,10 @@ export class Evaluation360Service {
 
     // 3. Pares (mesmo departamento, não subordinados)
     if (evaluatee.departmentId) {
-      const peers = await (this.prisma as any).user.findMany({
+      const peers = await this.prisma.user.findMany({
         where: {
           departmentId: evaluatee.departmentId,
-          id: { not: dto.evaluateeId },
+          id: { not: +dto.evaluateeId },
           managerId: evaluatee.managerId ?? undefined,
         },
         take: maxPerRole,
@@ -397,8 +397,8 @@ export class Evaluation360Service {
     }
 
     // 4. Subordinados diretos
-    const subordinates = await (this.prisma as any).user.findMany({
-      where: { managerId: dto.evaluateeId },
+    const subordinates = await this.prisma.user.findMany({
+      where: { managerId: +dto.evaluateeId },
       take: maxPerRole,
     });
     subordinates.forEach(s =>
@@ -425,7 +425,7 @@ export class Evaluation360Service {
         continue;
       }
       try {
-        await (this.prisma as any).evaluatorAssignment.create({
+        await this.prisma.evaluatorAssignment.create({
           data: {
             cycleId,
             evaluateeId: assign.evaluateeId,
@@ -452,7 +452,7 @@ export class Evaluation360Service {
   }
 
   async approveEvaluators(cycleId: string, dto: ApproveEvaluatorsDto, actorId: string) {
-    const updated = await (this.prisma as any).evaluatorAssignment.updateMany({
+    const updated = await this.prisma.evaluatorAssignment.updateMany({
       where: { id: { in: dto.assignmentIds }, cycleId },
       data: {
         status: 'INVITED',
@@ -463,7 +463,7 @@ export class Evaluation360Service {
     });
     // Disparar notificações de convite
     for (const id of dto.assignmentIds) {
-      const assign = await (this.prisma as any).evaluatorAssignment.findUnique({ where: { id } });
+      const assign = await this.prisma.evaluatorAssignment.findUnique({ where: { id } });
       if (assign) this.events.emit('evaluation.invitation.send', { assignment: assign });
     }
     return { approved: updated.count };
@@ -474,11 +474,11 @@ export class Evaluation360Service {
   // ============================================================
 
   async sendCycleInvites(cycleId: string, actorId: string) {
-    const pending = await (this.prisma as any).evaluatorAssignment.findMany({
+    const pending = await this.prisma.evaluatorAssignment.findMany({
       where: { cycleId, status: 'PENDING' },
     });
     for (const assign of pending) {
-      await (this.prisma as any).evaluatorAssignment.update({
+      await this.prisma.evaluatorAssignment.update({
         where: { id: assign.id },
         data: { status: 'INVITED', invitedAt: new Date() },
       });
@@ -491,9 +491,9 @@ export class Evaluation360Service {
     const where: any = { cycleId, status: { in: ['INVITED', 'IN_PROGRESS'] } };
     if (dto.assignmentIds?.length) where.id = { in: dto.assignmentIds };
 
-    const pending = await (this.prisma as any).evaluatorAssignment.findMany({ where });
+    const pending = await this.prisma.evaluatorAssignment.findMany({ where });
     for (const assign of pending) {
-      await (this.prisma as any).evaluatorAssignment.update({
+      await this.prisma.evaluatorAssignment.update({
         where: { id: assign.id },
         data: { reminderCount: { increment: 1 }, lastReminderAt: new Date() },
       });
@@ -517,7 +517,7 @@ export class Evaluation360Service {
   // ============================================================
 
   async getEvaluationForm(cycleId: string, evaluatorId: string, evaluateeId: string) {
-    const assignment = await (this.prisma as any).evaluatorAssignment.findFirst({
+    const assignment = await this.prisma.evaluatorAssignment.findFirst({
       where: { cycleId, evaluatorId, evaluateeId },
     });
     if (!assignment) throw new NotFoundException('Atribuição de avaliação não encontrada.');
@@ -525,12 +525,12 @@ export class Evaluation360Service {
       throw new BadRequestException('Prazo de avaliação expirado.');
     if (assignment.status === 'COMPLETED') throw new BadRequestException('Avaliação já submetida.');
 
-    const cycle = await (this.prisma as any).evaluationCycle.findUnique({
+    const cycle = await this.prisma.eval360Cycle.findUnique({
       where: { id: cycleId },
       include: { competencies: { include: { competency: { include: { indicators: true } } } } },
     });
 
-    const questions = await (this.prisma as any).evaluationQuestion.findMany({
+    const questions = await this.prisma.eval360Question.findMany({
       where: {
         cycleId,
         OR: [{ applicableTo: { isEmpty: true } }, { applicableTo: { has: assignment.role } }],
@@ -539,7 +539,7 @@ export class Evaluation360Service {
     });
 
     // Verificar se há rascunho existente
-    const existingResponse = await (this.prisma as any).evaluationResponse.findFirst({
+    const existingResponse = await this.prisma.evaluationResponse.findFirst({
       where: { cycleId, evaluatorId, evaluateeId, status: 'DRAFT' },
       include: { answers: true },
     });
@@ -554,7 +554,7 @@ export class Evaluation360Service {
     dto: SubmitResponseDto,
     actorId: string,
   ) {
-    const assignment = await (this.prisma as any).evaluatorAssignment.findFirst({
+    const assignment = await this.prisma.evaluatorAssignment.findFirst({
       where: { cycleId, evaluatorId, evaluateeId },
     });
     if (!assignment) throw new NotFoundException('Atribuição não encontrada.');
@@ -568,7 +568,7 @@ export class Evaluation360Service {
     if (now > deadline) throw new BadRequestException('Prazo de avaliação encerrado.');
 
     // Validar questões obrigatórias
-    const requiredQs = await (this.prisma as any).evaluationQuestion.findMany({
+    const requiredQs = await this.prisma.eval360Question.findMany({
       where: { cycleId, isRequired: true },
     });
     for (const q of requiredQs) {
@@ -582,7 +582,7 @@ export class Evaluation360Service {
     }
 
     // Upsert response
-    const response = await (this.prisma as any).evaluationResponse.upsert({
+    const response = await this.prisma.evaluationResponse.upsert({
       where: { assignmentId: assignment.id },
       create: {
         cycleId,
@@ -603,7 +603,7 @@ export class Evaluation360Service {
 
     // Upsert answers
     for (const answer of dto.answers) {
-      await (this.prisma as any).evaluationAnswer.upsert({
+      await this.prisma.evaluationAnswer.upsert({
         where: {
           responseId_questionId: { responseId: response.id, questionId: answer.questionId },
         },
@@ -623,11 +623,11 @@ export class Evaluation360Service {
     }
 
     if (dto.submit) {
-      await (this.prisma as any).evaluatorAssignment.update({
+      await this.prisma.evaluatorAssignment.update({
         where: { id: assignment.id },
         data: { status: 'COMPLETED', completedAt: new Date() },
       });
-      await (this.prisma as any).cycleParticipant.updateMany({
+      await this.prisma.cycleParticipant.updateMany({
         where: { cycleId, userId: evaluateeId },
         data: { status: 'IN_PROGRESS' },
       });
@@ -650,18 +650,18 @@ export class Evaluation360Service {
   // ============================================================
 
   async calculateCycleResults(cycleId: string, actorId: string) {
-    const cycle = await (this.prisma as any).evaluationCycle.findUnique({
+    const cycle = await this.prisma.eval360Cycle.findUnique({
       where: { id: cycleId },
       include: { competencies: { include: { competency: true } } },
     });
     if (!cycle) throw new NotFoundException('Ciclo não encontrado.');
 
-    await (this.prisma as any).evaluationCycle.update({
+    await this.prisma.eval360Cycle.update({
       where: { id: cycleId },
       data: { status: 'PROCESSING' },
     });
 
-    const participants = await (this.prisma as any).cycleParticipant.findMany({
+    const participants = await this.prisma.cycleParticipant.findMany({
       where: { cycleId },
     });
 
@@ -669,7 +669,7 @@ export class Evaluation360Service {
       await this.calculateParticipantResult(cycle, participant.userId);
     }
 
-    await (this.prisma as any).evaluationCycle.update({
+    await this.prisma.eval360Cycle.update({
       where: { id: cycleId },
       data: { status: 'COMPLETED' },
     });
@@ -685,7 +685,7 @@ export class Evaluation360Service {
   }
 
   private async calculateParticipantResult(cycle: any, participantId: string) {
-    const responses = await (this.prisma as any).evaluationResponse.findMany({
+    const responses = await this.prisma.evaluationResponse.findMany({
       where: { cycleId: cycle.id, evaluateeId: participantId, status: 'SUBMITTED' },
       include: { answers: { include: { question: { include: { competency: true } } } } },
     });
@@ -812,7 +812,7 @@ export class Evaluation360Service {
     const bonusMultiplier = this.calculateBonusMultiplier(weightedScore, cycle);
 
     // Upsert resultado
-    const result = await (this.prisma as any).evaluationResult.upsert({
+    const result = await this.prisma.evaluationResult.upsert({
       where: { cycleId_participantId: { cycleId: cycle.id, participantId } },
       create: {
         cycleId: cycle.id,
@@ -850,7 +850,7 @@ export class Evaluation360Service {
     });
 
     // Atualizar participante
-    await (this.prisma as any).cycleParticipant.updateMany({
+    await this.prisma.cycleParticipant.updateMany({
       where: { cycleId: cycle.id, userId: participantId },
       data: {
         status: 'COMPLETED',
@@ -922,7 +922,7 @@ export class Evaluation360Service {
     requesterId: string,
     requesterRole: string,
   ) {
-    const result = await (this.prisma as any).evaluationResult.findUnique({
+    const result = await this.prisma.evaluationResult.findUnique({
       where: { cycleId_participantId: { cycleId, participantId } },
     });
     if (!result) throw new NotFoundException('Resultado não encontrado.');
@@ -945,20 +945,20 @@ export class Evaluation360Service {
   }
 
   async getTeamAnalytics(cycleId: string, managerId: string) {
-    const managedUsers = await (this.prisma as any).user.findMany({
-      where: { managerId },
+    const managedUsers = await this.prisma.user.findMany({
+      where: { managerId: +managerId },
       select: { id: true, fullName: true },
     });
     const userIds = managedUsers.map(u => u.id);
 
-    const results = await (this.prisma as any).evaluationResult.findMany({
-      where: { cycleId, participantId: { in: userIds } },
+    const results = await this.prisma.evaluationResult.findMany({
+      where: { cycleId, participantId: { in: userIds.map(String) } },
     });
 
     return results.map(r => ({
       participantId: r.participantId,
       participantName:
-        managedUsers.find(u => u.id === r.participantId)?.fullName ?? r.participantId,
+        managedUsers.find(u => String(u.id) === r.participantId)?.fullName ?? r.participantId,
       weightedScore: r.weightedScore,
       overallScore: r.overallScore,
       isEligiblePromotion: r.isEligiblePromotion,
@@ -972,7 +972,7 @@ export class Evaluation360Service {
     const where: any = {};
     if (query.cycleId) where.cycleId = query.cycleId;
 
-    const results = await (this.prisma as any).evaluationResult.findMany({
+    const results = await this.prisma.evaluationResult.findMany({
       where,
       select: {
         overallScore: true,
@@ -1014,14 +1014,14 @@ export class Evaluation360Service {
   }
 
   async getNineBox(query: NineBoxQueryDto) {
-    const results = await (this.prisma as any).evaluationResult.findMany({
+    const results = await this.prisma.evaluationResult.findMany({
       where: { cycleId: query.cycleId },
       select: { participantId: true, weightedScore: true },
     });
 
     // Nine-Box: X = Performance (weightedScore), Y = Potencial (a integrar com OKRs)
     // Por agora: usar selfScore como proxy de potencial (auto-percepção)
-    const withSelf = await (this.prisma as any).evaluationResult.findMany({
+    const withSelf = await this.prisma.evaluationResult.findMany({
       where: { cycleId: query.cycleId },
       select: { participantId: true, weightedScore: true, selfScore: true },
     });
@@ -1048,7 +1048,7 @@ export class Evaluation360Service {
   // ============================================================
 
   async createContinuousFeedback(dto: CreateContinuousFeedbackDto, actorId: string) {
-    const feedback = await (this.prisma as any).continuousFeedback.create({
+    const feedback = await this.prisma.eval360Feedback.create({
       data: { ...dto, fromUserId: actorId },
     });
     this.events.emit('feedback.continuous.created', { feedback });
@@ -1057,13 +1057,13 @@ export class Evaluation360Service {
 
   async listFeedbackForUser(userId: string, query: Evaluation360PaginationDto) {
     const [data, total] = await Promise.all([
-      (this.prisma as any).continuousFeedback.findMany({
+      this.prisma.eval360Feedback.findMany({
         where: { toUserId: userId, isPrivate: false },
         orderBy: { createdAt: 'desc' },
         skip: query.offset ?? 0,
         take: query.limit ?? 20,
       }),
-      (this.prisma as any).continuousFeedback.count({
+      this.prisma.eval360Feedback.count({
         where: { toUserId: userId, isPrivate: false },
       }),
     ]);
@@ -1075,13 +1075,13 @@ export class Evaluation360Service {
   // ============================================================
 
   async createPulseSurvey(dto: CreatePulseSurveyDto, actorId: string) {
-    return (this.prisma as any).pulseSurvey.create({
+    return this.prisma.pulseSurvey.create({
       data: { ...dto, closesAt: new Date(dto.closesAt), createdBy: actorId, sentAt: new Date() },
     });
   }
 
   async submitPulseSurveyResponse(surveyId: string, userId: string, dto: SubmitPulseSurveyDto) {
-    return (this.prisma as any).pulseSurveyResponse.upsert({
+    return this.prisma.pulseSurveyResponse.upsert({
       where: { surveyId_userId: { surveyId, userId } },
       create: { surveyId, userId, answersJson: dto.answersJson },
       update: { answersJson: dto.answersJson },
@@ -1093,12 +1093,12 @@ export class Evaluation360Service {
   // ============================================================
 
   async calibrateScore(cycleId: string, dto: Evaluation360CalibrateScoreDto, actorId: string) {
-    const result = await (this.prisma as any).evaluationResult.findFirst({
+    const result = await this.prisma.evaluationResult.findFirst({
       where: { cycleId, participantId: dto.participantId },
     });
     if (!result) throw new NotFoundException('Resultado não encontrado.');
 
-    await (this.prisma as any).evaluationResult.update({
+    await this.prisma.evaluationResult.update({
       where: { id: result.id },
       data: { weightedScore: dto.calibratedScore },
     });
@@ -1123,7 +1123,7 @@ export class Evaluation360Service {
   async generateReport(dto: GenerateReportDto, requesterId: string) {
     const cycle = await this.findCycleOrFail(dto.cycleId);
     if (dto.scope === 'INDIVIDUAL' && dto.participantId) {
-      const result = await (this.prisma as any).evaluationResult.findUnique({
+      const result = await this.prisma.evaluationResult.findUnique({
         where: {
           cycleId_participantId: { cycleId: dto.cycleId, participantId: dto.participantId },
         },
@@ -1157,7 +1157,7 @@ export class Evaluation360Service {
 
   @Cron(CronExpression.EVERY_DAY_AT_9AM)
   async processDailyReminders() {
-    const activeCycles = await (this.prisma as any).evaluationCycle.findMany({
+    const activeCycles = await this.prisma.eval360Cycle.findMany({
       where: { status: { in: ['PUBLISHED', 'IN_PROGRESS'] } },
     });
     for (const cycle of activeCycles) {
@@ -1169,7 +1169,7 @@ export class Evaluation360Service {
       }
       // Expirar assignments após prazo
       if (daysToEnd < 0 - (cycle.gracePeriodDays ?? 0)) {
-        await (this.prisma as any).evaluatorAssignment.updateMany({
+        await this.prisma.evaluatorAssignment.updateMany({
           where: { cycleId: cycle.id, status: { in: ['PENDING', 'INVITED', 'IN_PROGRESS'] } },
           data: { status: 'EXPIRED' },
         });
@@ -1182,7 +1182,7 @@ export class Evaluation360Service {
   // ============================================================
 
   private async findCycleOrFail(id: string) {
-    const cycle = await (this.prisma as any).evaluationCycle.findUnique({ where: { id } });
+    const cycle = await this.prisma.eval360Cycle.findUnique({ where: { id } });
     if (!cycle) throw new NotFoundException('Ciclo de avaliação não encontrado.');
     return cycle;
   }

@@ -1961,20 +1961,41 @@ model Competency {
   name        String   @unique
   description String?
   category    String   @default("HARD_SKILL")
+  type        String   @default("BEHAVIORAL")
   tags        String[]
   status      String   @default("ACTIVE")
+  isActive    Boolean  @default(true)
+  isGlobal    Boolean  @default(true)
+  tenantId    String?
+  scaleMin    Int      @default(1)
+  scaleMax    Int      @default(5)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  userCompetencies  UserCompetency[]
-  courses           CourseCompetency[]
-  positions         PositionCompetency[]
-  proficiencyLevels ProficiencyLevel[]
-  endorsements      CompetencyEndorsement[]
-  evolutionLogs     CompetencyEvolutionLog[]
-  competencyMaps    CompetencyMap[]
-  avatarScenarios   AvatarScenario[]
+  userCompetencies         UserCompetency[]
+  courses                  CourseCompetency[]
+  positions                PositionCompetency[]
+  proficiencyLevels        ProficiencyLevel[]
+  endorsements             CompetencyEndorsement[]
+  evolutionLogs            CompetencyEvolutionLog[]
+  competencyMaps           CompetencyMap[]
+  avatarScenarios          AvatarScenario[]
+  indicators               CompetencyIndicator[]
+  eval360CycleCompetencies Eval360CycleCompetency[]
+  eval360Questions         Eval360Question[] @relation("Eval360QuestionCompetency")
   @@index([category])
   @@index([status])
+  @@index([isActive])
+}
+
+model CompetencyIndicator {
+  id           String     @id @default(cuid())
+  competencyId Int
+  level        Int
+  description  String     @db.Text
+  examples     String?    @db.Text
+  competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@index([competencyId])
 }
 
 model ProficiencyLevel {
@@ -7183,5 +7204,225 @@ model EngagementAction {
   @@index([status])
   @@index([assigneeId])
   @@index([createdById])
+  @@index([surveyId])
+}
+
+// ══════════════════════════════════════════════════════════════════
+// AVALIAÇÃO 360° — GRUPO D
+// ══════════════════════════════════════════════════════════════════
+
+model Eval360Cycle {
+  id                String   @id @default(cuid())
+  tenantId          String?
+  name              String
+  description       String?  @db.Text
+  model             String   @default("360")
+  type              String   @default("ANNUAL")
+  startDate         DateTime
+  endDate           DateTime
+  gracePeriodDays   Int      @default(3)
+  status            String   @default("DRAFT")
+  anonymityMode     String   @default("ANONYMOUS")
+  quorumMinimum     Int      @default(3)
+  weightSelf        Float    @default(10)
+  weightManager     Float    @default(40)
+  weightPeer        Float    @default(30)
+  weightSubordinate Float    @default(20)
+  weightExternal    Float    @default(0)
+  cutoffPromotion   Float?
+  cutoffBonus       Float?
+  cutoffProgram     Float?
+  linkedToPdi       Boolean  @default(true)
+  linkedToBonus     Boolean  @default(false)
+  linkedToOkrs      Boolean  @default(false)
+  createdBy         String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  competencies Eval360CycleCompetency[]
+  assignments   EvaluatorAssignment[]
+  participants  CycleParticipant[]
+  questions     Eval360Question[]
+  responses     EvaluationResponse[]
+  results       EvaluationResult[]
+
+  @@index([status])
+  @@index([tenantId])
+}
+
+model Eval360CycleCompetency {
+  id           String       @id @default(cuid())
+  cycleId      String
+  competencyId Int
+  weight       Float        @default(1)
+  isRequired   Boolean      @default(true)
+  order        Int          @default(0)
+  cycle        Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  competency   Competency   @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, competencyId])
+  @@index([cycleId])
+}
+
+model EvaluatorAssignment {
+  id             String       @id @default(cuid())
+  cycleId        String
+  evaluateeId    String
+  evaluatorId    String
+  role           String
+  status         String       @default("PENDING")
+  suggestedBy    String?
+  approvedBy     String?
+  approvedAt     DateTime?
+  invitedAt      DateTime?
+  completedAt    DateTime?
+  reminderCount  Int          @default(0)
+  lastReminderAt DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  cycle          Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  responses      EvaluationResponse[]
+
+  @@index([cycleId])
+  @@index([evaluateeId])
+  @@index([evaluatorId])
+  @@index([status])
+}
+
+model CycleParticipant {
+  id                   String       @id @default(cuid())
+  cycleId              String
+  userId               String
+  status               String       @default("PENDING")
+  consentGiven         Boolean?
+  consentAt            DateTime?
+  finalScore           Float?
+  completedAt          DateTime?
+  isEligiblePromotion  Boolean?
+  isEligibleBonus      Boolean?
+  scoreByEvaluatorType String?
+  createdAt            DateTime     @default(now())
+  cycle                Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, userId])
+  @@index([cycleId])
+  @@index([status])
+}
+
+model Eval360Question {
+  id           String       @id @default(cuid())
+  cycleId      String
+  competencyId Int?
+  text         String       @db.Text
+  type         String
+  applicableTo String[]     @default([])
+  isRequired   Boolean      @default(true)
+  order        Int          @default(0)
+  createdAt    DateTime     @default(now())
+  cycle        Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  competency   Competency?  @relation("Eval360QuestionCompetency", fields: [competencyId], references: [id], onDelete: SetNull)
+  answers      EvaluationAnswer[]
+
+  @@index([cycleId])
+  @@index([competencyId])
+}
+
+model EvaluationResponse {
+  id            String              @id @default(cuid())
+  cycleId       String
+  assignmentId  String              @unique
+  evaluateeId   String
+  evaluatorId   String
+  evaluatorRole String
+  status        String              @default("DRAFT")
+  startedAt     DateTime            @default(now())
+  submittedAt   DateTime?
+  isAnonymized  Boolean             @default(false)
+  sentimentScore Float?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  cycle         Eval360Cycle        @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  assignment    EvaluatorAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  answers       EvaluationAnswer[]
+
+  @@index([cycleId])
+  @@index([evaluateeId])
+  @@index([status])
+}
+
+model EvaluationAnswer {
+  id           String             @id @default(cuid())
+  responseId   String
+  questionId   String
+  numericValue Float?
+  textValue    String?            @db.Text
+  choiceValue  String?
+  response     EvaluationResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question     Eval360Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([responseId, questionId])
+  @@index([responseId])
+}
+
+model EvaluationResult {
+  id                  String       @id @default(cuid())
+  cycleId             String
+  participantId       String
+  overallScore        Float?
+  weightedScore       Float?
+  selfScore           Float?
+  managerScore        Float?
+  peerScore           Float?
+  subordinateScore    Float?
+  externalScore       Float?
+  scoresByCompetency  String?      @db.Text
+  gaps                String?      @db.Text
+  strengths           String?      @db.Text
+  isEligiblePromotion Boolean      @default(false)
+  isEligibleBonus     Boolean      @default(false)
+  bonusMultiplier     Float?
+  calculatedAt        DateTime     @default(now())
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  cycle               Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, participantId])
+  @@index([cycleId])
+  @@index([participantId])
+}
+
+model Eval360Feedback {
+  id         String   @id @default(cuid())
+  fromUserId String
+  toUserId   String
+  type       String
+  message    String   @db.Text
+  isPrivate  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([toUserId])
+  @@index([fromUserId])
+}
+
+model PulseSurvey {
+  id          String                @id @default(cuid())
+  title       String
+  description String?               @db.Text
+  closesAt    DateTime
+  createdBy   String
+  sentAt      DateTime              @default(now())
+  createdAt   DateTime              @default(now())
+  responses   PulseSurveyResponse[]
+}
+
+model PulseSurveyResponse {
+  id          String      @id @default(cuid())
+  surveyId    String
+  userId      String
+  answersJson Json
+  createdAt   DateTime    @default(now())
+  survey      PulseSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyId, userId])
   @@index([surveyId])
 }

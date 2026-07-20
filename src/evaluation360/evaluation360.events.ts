@@ -17,10 +17,10 @@ export class Evaluation360EventListeners {
   async onInvitationSend(payload: { assignment: any }) {
     const { assignment } = payload;
     try {
-      const evaluator = await (this.prisma as any).user.findUnique({
+      const evaluator = await this.prisma.user.findUnique({
         where: { id: assignment.evaluatorId },
       });
-      const evaluatee = await (this.prisma as any).user.findUnique({
+      const evaluatee = await this.prisma.user.findUnique({
         where: { id: assignment.evaluateeId },
       });
       if (!evaluator || !evaluatee) return;
@@ -50,7 +50,7 @@ export class Evaluation360EventListeners {
   async onReminderSend(payload: { assignment: any; channels: string[] }) {
     const { assignment } = payload;
     try {
-      const evaluatee = await (this.prisma as any).user.findUnique({
+      const evaluatee = await this.prisma.user.findUnique({
         where: { id: assignment.evaluateeId },
       });
       this.logger.log(`[360] Lembrete: avaliador ${assignment.evaluatorId} ainda não respondeu`);
@@ -70,7 +70,7 @@ export class Evaluation360EventListeners {
   @OnEvent('response.submitted')
   async onResponseSubmitted(payload: { responseId: string; cycleId: string }) {
     try {
-      const response = await (this.prisma as any).evaluationResponse.findUnique({
+      const response = await this.prisma.evaluationResponse.findUnique({
         where: { id: payload.responseId },
         include: { answers: { include: { question: true } } },
       });
@@ -82,7 +82,7 @@ export class Evaluation360EventListeners {
 
       if (textAnswers.length > 0) {
         const sentimentScore = this.calculateSimpleSentiment(textAnswers);
-        await (this.prisma as any).evaluationResponse.update({
+        await this.prisma.evaluationResponse.update({
           where: { id: payload.responseId },
           data: { sentimentScore },
         });
@@ -118,11 +118,11 @@ export class Evaluation360EventListeners {
   @OnEvent('cycle.results.ready')
   async onResultsReady(payload: { cycleId: string }) {
     try {
-      const participants = await (this.prisma as any).cycleParticipant.findMany({
+      const participants = await this.prisma.cycleParticipant.findMany({
         where: { cycleId: payload.cycleId, status: 'COMPLETED' },
       });
       for (const p of participants) {
-        await this.notifications.sendToUser(p.userId, {
+        await this.notifications.sendToUser(+p.userId, {
           title: 'Resultados da Avaliação 360° Disponíveis',
           message:
             'Os resultados da sua avaliação 360° já estão disponíveis. Aceda ao INNOVA para ver o seu relatório.',
@@ -149,7 +149,7 @@ export class Evaluation360EventListeners {
     const { feedback } = payload;
     if (feedback.isPrivate) return;
     try {
-      const from = await (this.prisma as any).user.findUnique({
+      const from = await this.prisma.user.findUnique({
         where: { id: feedback.fromUserId },
       });
       await this.notifications.sendToUser(feedback.toUserId, {
