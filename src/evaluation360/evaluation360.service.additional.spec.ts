@@ -38,7 +38,7 @@ const cycleMock = {
 
 const mockPrisma: any = new Proxy(
   {
-    evaluationCycle: cycleMock,
+    eval360Cycle: cycleMock,
     user: {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue(null),
@@ -243,7 +243,7 @@ describe('Evaluation360Service (additional)', () => {
         updateMany: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
       };
-      mockPrisma.evaluationQuestion = {
+      mockPrisma.eval360Question = {
         count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
@@ -264,7 +264,7 @@ describe('Evaluation360Service (additional)', () => {
         updateMany: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
       };
-      mockPrisma.evaluationQuestion = {
+      mockPrisma.eval360Question = {
         count: jest.fn().mockResolvedValue(3),
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
@@ -285,7 +285,7 @@ describe('Evaluation360Service (additional)', () => {
         updateMany: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
       };
-      mockPrisma.evaluationQuestion = {
+      mockPrisma.eval360Question = {
         count: jest.fn().mockResolvedValue(2),
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
@@ -574,7 +574,7 @@ describe('Evaluation360Service (additional)', () => {
         findUnique: jest.fn().mockResolvedValue(null),
       };
       cycleMock.findUnique.mockResolvedValue({ ...baseCycle, competencies: [] });
-      mockPrisma.evaluationQuestion = {
+      mockPrisma.eval360Question = {
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue({}),
         findUnique: jest.fn().mockResolvedValue(null),
@@ -647,7 +647,7 @@ describe('Evaluation360Service (additional)', () => {
         findUnique: jest.fn().mockResolvedValue(null),
       };
       cycleMock.findUnique.mockResolvedValue({ ...baseCycle, endDate: futureDate });
-      mockPrisma.evaluationQuestion = {
+      mockPrisma.eval360Question = {
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue({}),
         findUnique: jest.fn().mockResolvedValue(null),
@@ -1013,7 +1013,7 @@ describe('Evaluation360Service (additional)', () => {
 
   describe('listFeedbackForUser', () => {
     it('deve listar feedback para utilizador', async () => {
-      mockPrisma.continuousFeedback = {
+      mockPrisma.eval360Feedback = {
         findMany: jest.fn().mockResolvedValue([{ id: 'f1', message: 'Bom trabalho' }]),
         count: jest.fn().mockResolvedValue(1),
         create: jest.fn().mockResolvedValue({}),
