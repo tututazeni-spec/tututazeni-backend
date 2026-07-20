@@ -54,7 +54,11 @@ const mockPrisma = new Proxy(
       if (prop === 'eval360Cycle') return cycleMock;
       if (prop === 'eval360Question') return questionMock;
       if (prop === 'evaluationRequest') return requestMock;
-      if (prop === 'user') return { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null) };
+      if (prop === 'user')
+        return {
+          findMany: jest.fn().mockResolvedValue([]),
+          findUnique: jest.fn().mockResolvedValue(null),
+        };
       // New models from Grupo D
       if (prop === 'eval360Feedback') return crud();
       if (prop === 'evaluatorAssignment') return crud();
