@@ -5,6 +5,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 
 const userMock = { findUnique: jest.fn() };
 const evaluationResponseMock = { findUnique: jest.fn(), update: jest.fn() };
+const cycleParticipantMock = { findMany: jest.fn().mockResolvedValue([]) };
 
 const mockPrisma = {
   user: userMock,
@@ -12,6 +13,7 @@ const mockPrisma = {
 const mockPrismaProxy = new Proxy(mockPrisma, {
   get(target, prop) {
     if (prop === 'evaluationResponse') return evaluationResponseMock;
+    if (prop === 'cycleParticipant') return cycleParticipantMock;
     return (target as any)[prop];
   },
 });

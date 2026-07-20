@@ -34,20 +34,38 @@ const requestMock = {
   count: jest.fn().mockResolvedValue(0),
 };
 
+const crud = () => ({
+  create: jest.fn().mockResolvedValue({ id: 'id-1' }),
+  findMany: jest.fn().mockResolvedValue([]),
+  findUnique: jest.fn().mockResolvedValue(null),
+  findFirst: jest.fn().mockResolvedValue(null),
+  update: jest.fn().mockResolvedValue({ id: 'id-1' }),
+  updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+  upsert: jest.fn().mockResolvedValue({ id: 'id-1' }),
+  count: jest.fn().mockResolvedValue(0),
+  delete: jest.fn().mockResolvedValue({ id: 'id-1' }),
+});
+
 const mockPrisma = new Proxy(
   {},
   {
     get(_target, prop) {
       if (prop === 'competency') return competencyMock;
-      if (prop === 'evaluationCycle') return cycleMock;
-      if (prop === 'cycleQuestion') return questionMock;
+      if (prop === 'eval360Cycle') return cycleMock;
+      if (prop === 'eval360Question') return questionMock;
       if (prop === 'evaluationRequest') return requestMock;
-      return {
-        findMany: jest.fn().mockResolvedValue([]),
-        create: jest.fn().mockResolvedValue({}),
-        count: jest.fn().mockResolvedValue(0),
-        findUnique: jest.fn(),
-      };
+      if (prop === 'user') return { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue(null) };
+      // New models from Grupo D
+      if (prop === 'eval360Feedback') return crud();
+      if (prop === 'evaluatorAssignment') return crud();
+      if (prop === 'cycleParticipant') return crud();
+      if (prop === 'evaluationResponse') return crud();
+      if (prop === 'evaluationAnswer') return crud();
+      if (prop === 'evaluationResult') return crud();
+      if (prop === 'pulseSurvey') return crud();
+      if (prop === 'pulseSurveyResponse') return crud();
+      if (prop === 'competencyIndicator') return crud();
+      return crud();
     },
   },
 );
