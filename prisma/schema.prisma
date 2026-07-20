@@ -7265,21 +7265,23 @@ model Eval360CycleCompetency {
 }
 
 model EvaluatorAssignment {
-  id          String       @id @default(cuid())
-  cycleId     String
-  evaluateeId String
-  evaluatorId String
-  role        String
-  status      String       @default("PENDING")
-  suggestedBy String?
-  approvedBy  String?
-  approvedAt  DateTime?
-  invitedAt   DateTime?
-  completedAt DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  cycle       Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  responses   EvaluationResponse[]
+  id             String       @id @default(cuid())
+  cycleId        String
+  evaluateeId    String
+  evaluatorId    String
+  role           String
+  status         String       @default("PENDING")
+  suggestedBy    String?
+  approvedBy     String?
+  approvedAt     DateTime?
+  invitedAt      DateTime?
+  completedAt    DateTime?
+  reminderCount  Int          @default(0)
+  lastReminderAt DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  cycle          Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  responses      EvaluationResponse[]
 
   @@index([cycleId])
   @@index([evaluateeId])
@@ -7313,6 +7315,7 @@ model Eval360Question {
   competencyId Int?
   text         String       @db.Text
   type         String
+  applicableTo String[]     @default([])
   isRequired   Boolean      @default(true)
   order        Int          @default(0)
   createdAt    DateTime     @default(now())

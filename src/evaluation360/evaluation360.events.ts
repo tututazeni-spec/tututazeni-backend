@@ -122,7 +122,7 @@ export class Evaluation360EventListeners {
         where: { cycleId: payload.cycleId, status: 'COMPLETED' },
       });
       for (const p of participants) {
-        await this.notifications.sendToUser(p.userId, {
+        await this.notifications.sendToUser(+p.userId, {
           title: 'Resultados da Avaliação 360° Disponíveis',
           message:
             'Os resultados da sua avaliação 360° já estão disponíveis. Aceda ao INNOVA para ver o seu relatório.',

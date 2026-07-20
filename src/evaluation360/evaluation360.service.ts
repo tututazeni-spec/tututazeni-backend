@@ -91,9 +91,9 @@ export class Evaluation360Service {
   }
 
   async updateCompetency(id: string, dto: Evaluation360UpdateCompetencyDto, actorId: string) {
-    const comp = await this.prisma.competency.findUnique({ where: { id } });
+    const comp = await this.prisma.competency.findUnique({ where: { id: +id } });
     if (!comp) throw new NotFoundException('Competência não encontrada.');
-    const updated = await this.prisma.competency.update({ where: { id }, data: dto });
+    const updated = await this.prisma.competency.update({ where: { id: +id }, data: dto as any });
     await this.audit.log({
       entity: 'Competency',
       entityId: id,
@@ -153,11 +153,11 @@ export class Evaluation360Service {
         competencies: dto.competencies?.length
           ? {
               create: dto.competencies.map(c => ({
-                competencyId: c.competencyId,
+                competencyId: +c.competencyId,
                 weight: c.weight ?? 1,
                 isRequired: c.isRequired ?? true,
                 order: c.order ?? 0,
-              })),
+              })) as any,
             }
           : undefined,
       },
@@ -181,7 +181,7 @@ export class Evaluation360Service {
     }
     if (dto.weightSelf !== undefined || dto.weightManager !== undefined)
       this.validateWeights({ ...cycle, ...dto });
-    const updated = await this.prisma.eval360Cycle.update({ where: { id }, data: dto });
+    const updated = await this.prisma.eval360Cycle.update({ where: { id }, data: dto as any });
     await this.audit.log({
       entity: 'EvaluationCycle',
       entityId: id,
@@ -243,7 +243,7 @@ export class Evaluation360Service {
         take: query.limit ?? 20,
         orderBy: { createdAt: 'desc' },
         include: {
-          _count: { select: { participants: true, evaluatorAssignments: true, responses: true } },
+          _count: { select: { participants: true, assignments: true, responses: true } },
         },
       }),
       this.prisma.eval360Cycle.count({ where }),
@@ -260,7 +260,7 @@ export class Evaluation360Service {
           orderBy: { order: 'asc' },
         },
         questions: { orderBy: { order: 'asc' } },
-        _count: { select: { participants: true, evaluatorAssignments: true, responses: true } },
+        _count: { select: { participants: true, assignments: true, responses: true } },
       },
     });
     if (!cycle) throw new NotFoundException('Ciclo não encontrado.');
@@ -272,7 +272,7 @@ export class Evaluation360Service {
   // ============================================================
 
   async createQuestion(dto: Evaluation360CreateQuestionDto, actorId: string) {
-    const question = await this.prisma.eval360Question.create({ data: dto });
+    const question = await this.prisma.eval360Question.create({ data: dto as any });
     await this.audit.log({
       entity: 'EvaluationQuestion',
       entityId: question.id,
@@ -952,13 +952,13 @@ export class Evaluation360Service {
     const userIds = managedUsers.map(u => u.id);
 
     const results = await this.prisma.evaluationResult.findMany({
-      where: { cycleId, participantId: { in: userIds } },
+      where: { cycleId, participantId: { in: userIds.map(String) } },
     });
 
     return results.map(r => ({
       participantId: r.participantId,
       participantName:
-        managedUsers.find(u => u.id === r.participantId)?.fullName ?? r.participantId,
+        managedUsers.find(u => String(u.id) === r.participantId)?.fullName ?? r.participantId,
       weightedScore: r.weightedScore,
       overallScore: r.overallScore,
       isEligiblePromotion: r.isEligiblePromotion,
