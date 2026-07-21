@@ -95,7 +95,7 @@ export class ScalabilityEventListeners {
       // Por agora: simular sucesso e actualizar log
       await new Promise(r => setTimeout(r, 1500)); // simular tempo de processamento
 
-      await (this.prisma as any).integrationSyncLog.update({
+      await this.prisma.integrationSyncLog.update({
         where: { id: payload.syncLogId },
         data: {
           status: 'SUCCESS',
@@ -104,8 +104,8 @@ export class ScalabilityEventListeners {
         },
       });
 
-      await (this.prisma as any).integrationConfig.update({
-        where: { id: payload.integrationId },
+      await this.prisma.integrationConfig.update({
+        where: { id: payload.integrationId } as any,
         data: { lastSyncAt: new Date(), lastSyncStatus: 'SUCCESS', lastSyncError: null },
       });
 
@@ -114,7 +114,7 @@ export class ScalabilityEventListeners {
       this.logger.error(
         `[IntegrationSync] Failed: ${err instanceof Error ? err.message : String(err)}`,
       );
-      await (this.prisma as any).integrationSyncLog.update({
+      await this.prisma.integrationSyncLog.update({
         where: { id: payload.syncLogId },
         data: {
           status: 'FAILED',
@@ -122,8 +122,8 @@ export class ScalabilityEventListeners {
           errorMessage: err instanceof Error ? err.message : String(err),
         },
       });
-      await (this.prisma as any).integrationConfig.update({
-        where: { id: payload.integrationId },
+      await this.prisma.integrationConfig.update({
+        where: { id: payload.integrationId } as any,
         data: { lastSyncAt: new Date(), lastSyncStatus: 'SUCCESS', lastSyncError: null },
       });
     }
@@ -143,7 +143,7 @@ export class ScalabilityEventListeners {
       `[Automation] Executing rule:${payload.rule.id}, execution:${payload.executionId}`,
     );
     try {
-      await (this.prisma as any).automationExecution.update({
+      await this.prisma.automationExecution.update({
         where: { id: payload.executionId },
         data: { status: 'RUNNING' },
       });
@@ -152,12 +152,12 @@ export class ScalabilityEventListeners {
         userId: payload.targetUserId,
       });
 
-      await (this.prisma as any).automationExecution.update({
+      await this.prisma.automationExecution.update({
         where: { id: payload.executionId },
         data: { status: 'SUCCESS', finishedAt: new Date() },
       });
     } catch (err) {
-      await (this.prisma as any).automationExecution.update({
+      await this.prisma.automationExecution.update({
         where: { id: payload.executionId },
         data: {
           status: 'FAILED',

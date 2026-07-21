@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // INNOVA PLATFORM — SCALABILITY MODULE — SERVICE
 // src/modules/scalability/scalability.service.ts
 // ============================================================
@@ -56,12 +56,12 @@ export class ScalabilityService {
   // ============================================================
 
   async createTenant(dto: CreateTenantConfigDto, actorId: string) {
-    const existing = await (this.prisma as any).tenantConfig.findUnique({
+    const existing = await this.prisma.tenantConfig.findUnique({
       where: { tenantCode: dto.tenantCode },
     });
     if (existing) throw new ConflictException(`Tenant code '${dto.tenantCode}' já existe.`);
 
-    const tenant = await (this.prisma as any).tenantConfig.create({
+    const tenant = await this.prisma.tenantConfig.create({
       data: {
         ...dto,
         trialEndsAt: dto.trialEndsAt ? new Date(dto.trialEndsAt) : undefined,
@@ -71,7 +71,7 @@ export class ScalabilityService {
     });
 
     // Criar SLA padrão
-    await (this.prisma as any).slaConfig.create({
+    await this.prisma.slaConfig.create({
       data: {
         tenantId: tenant.id,
         name: 'SLA Padrão',
@@ -83,7 +83,7 @@ export class ScalabilityService {
     });
 
     // Criar config de entrega de conteúdo padrão
-    await (this.prisma as any).contentDeliveryConfig.create({
+    await this.prisma.contentDeliveryConfig.create({
       data: {
         tenantId: tenant.id,
         adaptiveBitrate: true,
@@ -106,7 +106,7 @@ export class ScalabilityService {
 
   async updateTenant(id: string, dto: UpdateTenantConfigDto, actorId: string) {
     await this.findTenantOrFail(id);
-    const updated = await (this.prisma as any).tenantConfig.update({
+    const updated = await this.prisma.tenantConfig.update({
       where: { id },
       data: {
         ...dto,
@@ -126,7 +126,7 @@ export class ScalabilityService {
   }
 
   async findTenantOrFail(id: string) {
-    const t = await (this.prisma as any).tenantConfig.findUnique({ where: { id } });
+    const t = await this.prisma.tenantConfig.findUnique({ where: { id } });
     if (!t) throw new NotFoundException(`Tenant '${id}' não encontrado.`);
     return t;
   }
@@ -141,13 +141,13 @@ export class ScalabilityService {
         }
       : {};
     const [data, total] = await Promise.all([
-      (this.prisma as any).tenantConfig.findMany({
+      this.prisma.tenantConfig.findMany({
         where,
         skip: query.offset ?? 0,
         take: query.limit ?? 20,
         orderBy: { createdAt: 'desc' },
       }),
-      (this.prisma as any).tenantConfig.count({ where }),
+      this.prisma.tenantConfig.count({ where }),
     ]);
     return { data, total, limit: query.limit ?? 20, offset: query.offset ?? 0 };
   }
@@ -164,8 +164,8 @@ export class ScalabilityService {
       ? this.encryptSensitiveData(dto.credentialsJson)
       : undefined;
 
-    const integration = await (this.prisma as any).integrationConfig.create({
-      data: { ...dto, credentialsJson: safeCredentials },
+    const integration = await this.prisma.integrationConfig.create({
+      data: { ...dto, credentialsJson: safeCredentials } as any,
     });
     await this.audit.log({
       entity: 'IntegrationConfig',
@@ -178,15 +178,15 @@ export class ScalabilityService {
   }
 
   async updateIntegration(id: string, dto: UpdateIntegrationConfigDto, actorId: string) {
-    const existing = await (this.prisma as any).integrationConfig.findUnique({ where: { id } });
+    const existing = await this.prisma.integrationConfig.findUnique({ where: { id } as any });
     if (!existing) throw new NotFoundException(`Integração '${id}' não encontrada.`);
 
     const safeCredentials = dto.credentialsJson
       ? this.encryptSensitiveData(dto.credentialsJson)
       : undefined;
 
-    const updated = await (this.prisma as any).integrationConfig.update({
-      where: { id },
+    const updated = await this.prisma.integrationConfig.update({
+      where: { id } as any,
       data: { ...dto, credentialsJson: safeCredentials ?? existing.credentialsJson },
     });
     await this.audit.log({
@@ -216,15 +216,15 @@ export class ScalabilityService {
   }
 
   async triggerSync(integrationId: string, actorId: string) {
-    const integration = await (this.prisma as any).integrationConfig.findUnique({
-      where: { id: integrationId },
+    const integration = await this.prisma.integrationConfig.findUnique({
+      where: { id: integrationId } as any,
     });
     if (!integration) throw new NotFoundException('Integração não encontrada.');
     if (!integration.isActive) throw new BadRequestException('Integração inativa.');
 
     // Criar log de sincronização
-    const syncLog = await (this.prisma as any).integrationSyncLog.create({
-      data: { integrationId, status: 'RUNNING' },
+    const syncLog = await this.prisma.integrationSyncLog.create({
+      data: { integrationId, status: 'RUNNING' } as any,
     });
 
     // Disparar evento assíncrono para o worker
@@ -240,8 +240,8 @@ export class ScalabilityService {
   }
 
   async getIntegrationSyncLogs(integrationId: string, limit = 20) {
-    return (this.prisma as any).integrationSyncLog.findMany({
-      where: { integrationId },
+    return this.prisma.integrationSyncLog.findMany({
+      where: { integrationId } as any,
       orderBy: { startedAt: 'desc' },
       take: limit,
     });
@@ -257,8 +257,8 @@ export class ScalabilityService {
     this.validateJsonField(dto.actionsJson, 'actionsJson');
     if (dto.conditionsJson) this.validateJsonField(dto.conditionsJson, 'conditionsJson');
 
-    const rule = await (this.prisma as any).automationRule.create({
-      data: { ...dto, createdBy: actorId },
+    const rule = await this.prisma.automationRule.create({
+      data: { ...dto, createdBy: actorId } as any,
     });
     await this.audit.log({
       entity: 'AutomationRule',
@@ -271,13 +271,13 @@ export class ScalabilityService {
   }
 
   async updateAutomationRule(id: string, dto: UpdateAutomationRuleDto, actorId: string) {
-    const rule = await (this.prisma as any).automationRule.findUnique({ where: { id } });
+    const rule = await this.prisma.automationRule.findUnique({ where: { id } as any });
     if (!rule) throw new NotFoundException('Regra de automação não encontrada.');
 
     if (dto.triggerConfigJson) this.validateJsonField(dto.triggerConfigJson, 'triggerConfigJson');
     if (dto.actionsJson) this.validateJsonField(dto.actionsJson, 'actionsJson');
 
-    const updated = await (this.prisma as any).automationRule.update({ where: { id }, data: dto });
+    const updated = await this.prisma.automationRule.update({ where: { id } as any, data: dto });
     await this.audit.log({
       entity: 'AutomationRule',
       entityId: id,
@@ -305,19 +305,19 @@ export class ScalabilityService {
   }
 
   async executeAutomationRule(dto: ExecuteAutomationRuleDto, actorId: string) {
-    const rule = await (this.prisma as any).automationRule.findUnique({
-      where: { id: dto.ruleId },
+    const rule = await this.prisma.automationRule.findUnique({
+      where: { id: dto.ruleId } as any,
     });
     if (!rule) throw new NotFoundException('Regra não encontrada.');
     if (!rule.isActive) throw new BadRequestException('Regra inativa.');
 
-    const execution = await (this.prisma as any).automationExecution.create({
+    const execution = await this.prisma.automationExecution.create({
       data: {
         ruleId: dto.ruleId,
         triggeredBy: actorId,
         targetUserId: dto.targetUserId,
         status: 'PENDING',
-      },
+      } as any,
     });
 
     // Disparar execução assíncrona
@@ -349,7 +349,7 @@ export class ScalabilityService {
       const matches = this.evaluateConditions(conditions, payload);
       if (!matches) continue;
 
-      const execution = await (this.prisma as any).automationExecution.create({
+      const execution = await this.prisma.automationExecution.create({
         data: {
           ruleId: rule.id,
           triggeredBy: 'SYSTEM',
@@ -362,7 +362,7 @@ export class ScalabilityService {
         const actions = JSON.parse(rule.actionsJson);
         const actionsLog = await this.executeActions(actions, payload, rule.tenantId);
 
-        await (this.prisma as any).automationExecution.update({
+        await this.prisma.automationExecution.update({
           where: { id: execution.id },
           data: {
             status: 'SUCCESS',
@@ -378,7 +378,7 @@ export class ScalabilityService {
         this.logger.error(
           `Erro na automação ${rule.id}: ${err instanceof Error ? err.message : String(err)}`,
         );
-        await (this.prisma as any).automationExecution.update({
+        await this.prisma.automationExecution.update({
           where: { id: execution.id },
           data: {
             status: 'FAILED',
@@ -425,7 +425,7 @@ export class ScalabilityService {
           case 'ENROLL_COURSE':
             // Matricular usuário no curso
             if (payload.userId && action.payload?.courseId) {
-              await (this.prisma as any).enrollment.upsert({
+              await this.prisma.enrollment.upsert({
                 where: {
                   courseId_userId: { courseId: action.payload.courseId, userId: payload.userId },
                 },
@@ -474,7 +474,7 @@ export class ScalabilityService {
 
   async createSlaConfig(dto: CreateSlaConfigDto, actorId: string) {
     await this.findTenantOrFail(dto.tenantId);
-    const sla = await (this.prisma as any).slaConfig.create({ data: dto });
+    const sla = await this.prisma.slaConfig.create({ data: dto });
     await this.audit.log({
       entity: 'SlaConfig',
       entityId: sla.id,
@@ -486,9 +486,9 @@ export class ScalabilityService {
   }
 
   async updateSlaConfig(id: string, dto: UpdateSlaConfigDto, actorId: string) {
-    const sla = await (this.prisma as any).slaConfig.findUnique({ where: { id } });
+    const sla = await this.prisma.slaConfig.findUnique({ where: { id } });
     if (!sla) throw new NotFoundException('SLA Config não encontrada.');
-    const updated = await (this.prisma as any).slaConfig.update({ where: { id }, data: dto });
+    const updated = await this.prisma.slaConfig.update({ where: { id }, data: dto });
     await this.audit.log({
       entity: 'SlaConfig',
       entityId: id,
@@ -500,7 +500,7 @@ export class ScalabilityService {
   }
 
   async listSlaConfigs(tenantId: string) {
-    return (this.prisma as any).slaConfig.findMany({
+    return this.prisma.slaConfig.findMany({
       where: { tenantId, isActive: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -511,7 +511,7 @@ export class ScalabilityService {
   // ============================================================
 
   async getContentDeliveryConfig(tenantId: string) {
-    const config = await (this.prisma as any).contentDeliveryConfig.findUnique({
+    const config = await this.prisma.contentDeliveryConfig.findUnique({
       where: { tenantId },
     });
     if (!config) throw new NotFoundException('Configuração de entrega de conteúdo não encontrada.');
@@ -523,7 +523,7 @@ export class ScalabilityService {
     dto: UpdateContentDeliveryConfigDto,
     actorId: string,
   ) {
-    const config = await (this.prisma as any).contentDeliveryConfig.upsert({
+    const config = await this.prisma.contentDeliveryConfig.upsert({
       where: { tenantId },
       create: { tenantId, ...dto },
       update: dto,
@@ -549,7 +549,7 @@ export class ScalabilityService {
     const where: any = { capturedAt: { gte: from, lte: to } };
     if (query.tenantId) where.tenantId = query.tenantId;
 
-    const metrics = await (this.prisma as any).scalabilityMetric.findMany({
+    const metrics = await this.prisma.scalabilityMetric.findMany({
       where,
       orderBy: { capturedAt: 'asc' },
     });
@@ -574,7 +574,7 @@ export class ScalabilityService {
     const where: any = {};
     if (tenantId) where.tenantId = tenantId;
 
-    const latest = await (this.prisma as any).scalabilityMetric.findFirst({
+    const latest = await this.prisma.scalabilityMetric.findFirst({
       where,
       orderBy: { capturedAt: 'desc' },
     });
@@ -598,7 +598,7 @@ export class ScalabilityService {
       // Aqui: simular ou buscar de endpoint de health interno
       const snapshot = await this.collectSystemSnapshot();
 
-      await (this.prisma as any).scalabilityMetric.create({ data: snapshot });
+      await this.prisma.scalabilityMetric.create({ data: snapshot });
 
       // Verificar thresholds para gerar alertas
       await this.evaluateAlertThresholds(snapshot);
@@ -632,7 +632,7 @@ export class ScalabilityService {
   }
 
   private async evaluateAlertThresholds(snapshot: any) {
-    const slas = await (this.prisma as any).slaConfig.findMany({ where: { isActive: true } });
+    const slas = await this.prisma.slaConfig.findMany({ where: { isActive: true } });
     for (const sla of slas) {
       if (snapshot.avgLatencyMs > sla.maxLatencyMs) {
         await this.createAlert(
@@ -672,7 +672,7 @@ export class ScalabilityService {
   // ============================================================
 
   async createAlert(dto: CreateAlertDto, actorId: string) {
-    const alert = await (this.prisma as any).systemAlert.create({ data: dto });
+    const alert = await this.prisma.systemAlert.create({ data: dto });
 
     // Notificar canais configurados
     if (dto.notifiedVia?.includes('EMAIL')) {
@@ -689,11 +689,11 @@ export class ScalabilityService {
   }
 
   async resolveAlert(id: string, dto: ResolveAlertDto) {
-    const alert = await (this.prisma as any).systemAlert.findUnique({ where: { id } });
+    const alert = await this.prisma.systemAlert.findUnique({ where: { id } });
     if (!alert) throw new NotFoundException('Alerta não encontrado.');
     if (alert.isResolved) throw new BadRequestException('Alerta já resolvido.');
 
-    return (this.prisma as any).systemAlert.update({
+    return this.prisma.systemAlert.update({
       where: { id },
       data: { isResolved: true, resolvedAt: new Date(), resolvedBy: dto.resolvedBy },
     });
@@ -707,13 +707,13 @@ export class ScalabilityService {
     if (query.isResolved !== undefined) where.isResolved = query.isResolved;
 
     const [data, total] = await Promise.all([
-      (this.prisma as any).systemAlert.findMany({
+      this.prisma.systemAlert.findMany({
         where,
         orderBy: [{ severity: 'desc' }, { createdAt: 'desc' }],
         skip: query.offset ?? 0,
         take: query.limit ?? 20,
       }),
-      (this.prisma as any).systemAlert.count({ where }),
+      this.prisma.systemAlert.count({ where }),
     ]);
     return { data, total };
   }
@@ -833,7 +833,7 @@ export class ScalabilityService {
   async getDashboard(tenantId: string): Promise<ScalabilityDashboardDto> {
     const [tenant, latestMetric, integrations, automations, alerts, slas] = await Promise.all([
       this.findTenantOrFail(tenantId),
-      (this.prisma as any).scalabilityMetric.findFirst({
+      this.prisma.scalabilityMetric.findFirst({
         where: { tenantId },
         orderBy: { capturedAt: 'desc' },
       }),
@@ -846,12 +846,12 @@ export class ScalabilityService {
         where: { tenantId },
         _count: { id: true },
       }),
-      (this.prisma as any).systemAlert.groupBy({
+      this.prisma.systemAlert.groupBy({
         by: ['severity', 'isResolved'],
         where: { tenantId },
         _count: { id: true },
       }),
-      (this.prisma as any).slaConfig.findFirst({
+      this.prisma.slaConfig.findFirst({
         where: { tenantId, isActive: true },
       }),
     ]);
@@ -877,17 +877,17 @@ export class ScalabilityService {
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    const executionsToday = await (this.prisma as any).automationExecution.count({
+    const executionsToday = await this.prisma.automationExecution.count({
       where: { startedAt: { gte: todayStart }, rule: { tenantId } },
     });
-    const failedToday = await (this.prisma as any).automationExecution.count({
+    const failedToday = await this.prisma.automationExecution.count({
       where: { startedAt: { gte: todayStart }, status: 'FAILED', rule: { tenantId } },
     });
     const activeRules = await this.prisma.read.automationRule.count({
       where: { tenantId, isActive: true },
     });
 
-    const lastSync = await (this.prisma as any).integrationSyncLog.findFirst({
+    const lastSync = await this.prisma.integrationSyncLog.findFirst({
       where: { integration: { tenantId } },
       orderBy: { startedAt: 'desc' },
     });
