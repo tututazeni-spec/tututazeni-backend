@@ -86,24 +86,24 @@ export class LeaveManagementService {
   // ══════════════════════════════════════════════════════════════════
 
   async createLeaveType(dto: CreateLeaveTypeDto) {
-    const exists = await (this.prisma as any).leaveTypeConfig.findUnique({
+    const exists = await this.prisma.leaveTypeConfig.findUnique({
       where: { code: dto.code },
     });
     if (exists) throw new ConflictException(`Tipo de licença "${dto.code}" já existe`);
-    return (this.prisma as any).leaveTypeConfig.create({ data: dto as any });
+    return this.prisma.leaveTypeConfig.create({ data: dto as any });
   }
 
   async getLeaveTypes(activeOnly = true) {
-    return (this.prisma as any).leaveTypeConfig.findMany({
+    return this.prisma.leaveTypeConfig.findMany({
       where: activeOnly ? { active: true } : {},
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
     });
   }
 
   async updateLeaveType(code: string, dto: UpdateLeaveTypeDto) {
-    const type = await (this.prisma as any).leaveTypeConfig.findUnique({ where: { code } });
+    const type = await this.prisma.leaveTypeConfig.findUnique({ where: { code } });
     if (!type) throw new NotFoundException(`Tipo "${code}" não encontrado`);
-    return (this.prisma as any).leaveTypeConfig.update({ where: { code }, data: dto as any });
+    return this.prisma.leaveTypeConfig.update({ where: { code }, data: dto as any });
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -111,13 +111,13 @@ export class LeaveManagementService {
   // ══════════════════════════════════════════════════════════════════
 
   async createPolicy(dto: CreateLeavePolicyDto) {
-    return (this.prisma as any).leavePolicy.create({
+    return this.prisma.leavePolicy.create({
       data: { ...dto, blackoutPeriods: dto.blackoutPeriods as any },
     });
   }
 
   async getPolicies() {
-    return (this.prisma as any).leavePolicy.findMany({
+    return this.prisma.leavePolicy.findMany({
       where: { active: true },
       orderBy: { name: 'asc' },
     });
@@ -130,7 +130,7 @@ export class LeaveManagementService {
     if (!user) return null;
 
     // Match by department or seniority — fallback to global
-    return (this.prisma as any).leavePolicy.findFirst({
+    return this.prisma.leavePolicy.findFirst({
       where: {
         active: true,
         OR: [{ department: (user as any).employee?.department ?? '' }, { department: null }],
@@ -234,7 +234,7 @@ export class LeaveManagementService {
 
     if (end < start) throw new BadRequestException('A data de fim não pode ser anterior ao início');
 
-    const leaveType = await (this.prisma as any).leaveTypeConfig.findUnique({
+    const leaveType = await this.prisma.leaveTypeConfig.findUnique({
       where: { code: dto.leaveTypeCode },
     });
     if (!leaveType)
@@ -515,7 +515,7 @@ export class LeaveManagementService {
   }
 
   async updateBalance(userId: number, dto: UpdateBalanceDto, updatedById: number) {
-    const leaveType = await (this.prisma as any).leaveTypeConfig.findUnique({
+    const leaveType = await this.prisma.leaveTypeConfig.findUnique({
       where: { code: dto.leaveTypeCode },
     });
     if (!leaveType) throw new NotFoundException(`Tipo "${dto.leaveTypeCode}" não encontrado`);
@@ -555,7 +555,7 @@ export class LeaveManagementService {
   }
 
   async initializeUserBalances(userId: number) {
-    const leaveTypes = await (this.prisma as any).leaveTypeConfig.findMany({
+    const leaveTypes = await this.prisma.leaveTypeConfig.findMany({
       where: { active: true, annualLimit: { gt: 0 } },
     });
 
@@ -571,7 +571,7 @@ export class LeaveManagementService {
   }
 
   async processCarryOver(year: number) {
-    const leaveTypes = await (this.prisma as any).leaveTypeConfig.findMany({
+    const leaveTypes = await this.prisma.leaveTypeConfig.findMany({
       where: { allowCarryOver: true },
     });
     const results: any[] = [];
@@ -999,7 +999,7 @@ export class LeaveManagementService {
   private async calculateImpact(userId: number, start: Date, end: Date) {
     // Cursos activos no período
     const activeCourses =
-      (await (this.prisma as any).enrollment
+      (await this.prisma.enrollment
         ?.findMany?.({
           where: { userId, completedAt: null },
           include: { course: { select: { id: true, title: true } } },
@@ -1008,7 +1008,7 @@ export class LeaveManagementService {
 
     // Eventos no período
     const events =
-      (await (this.prisma as any).eventParticipant
+      (await this.prisma.eventParticipant
         ?.findMany?.({
           where: { userId, event: { startDate: { gte: start, lte: end } } },
           include: { event: { select: { id: true, title: true, startDate: true } } },
@@ -1026,7 +1026,7 @@ export class LeaveManagementService {
 
   private async applyModuleImpacts(request: any) {
     try {
-      await (this.prisma as any).enrollment?.updateMany?.({
+      await this.prisma.enrollment?.updateMany?.({
         where: { userId: request.userId, completedAt: null },
         data: { pausedAt: new Date() },
       });
@@ -1035,7 +1035,7 @@ export class LeaveManagementService {
 
   private async reverseModuleImpacts(request: any) {
     try {
-      await (this.prisma as any).enrollment?.updateMany?.({
+      await this.prisma.enrollment?.updateMany?.({
         where: { userId: request.userId, pausedAt: { not: null } },
         data: { pausedAt: null },
       });
