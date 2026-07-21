@@ -165,7 +165,7 @@ export class ScalabilityService {
       : undefined;
 
     const integration = await this.prisma.integrationConfig.create({
-      data: { ...dto, credentialsJson: safeCredentials },
+      data: { ...dto, credentialsJson: safeCredentials } as any,
     });
     await this.audit.log({
       entity: 'IntegrationConfig',
@@ -178,7 +178,7 @@ export class ScalabilityService {
   }
 
   async updateIntegration(id: string, dto: UpdateIntegrationConfigDto, actorId: string) {
-    const existing = await this.prisma.integrationConfig.findUnique({ where: { id } });
+    const existing = await this.prisma.integrationConfig.findUnique({ where: { id } as any });
     if (!existing) throw new NotFoundException(`Integração '${id}' não encontrada.`);
 
     const safeCredentials = dto.credentialsJson
@@ -186,7 +186,7 @@ export class ScalabilityService {
       : undefined;
 
     const updated = await this.prisma.integrationConfig.update({
-      where: { id },
+      where: { id } as any,
       data: { ...dto, credentialsJson: safeCredentials ?? existing.credentialsJson },
     });
     await this.audit.log({
@@ -217,14 +217,14 @@ export class ScalabilityService {
 
   async triggerSync(integrationId: string, actorId: string) {
     const integration = await this.prisma.integrationConfig.findUnique({
-      where: { id: integrationId },
+      where: { id: integrationId } as any,
     });
     if (!integration) throw new NotFoundException('Integração não encontrada.');
     if (!integration.isActive) throw new BadRequestException('Integração inativa.');
 
     // Criar log de sincronização
     const syncLog = await this.prisma.integrationSyncLog.create({
-      data: { integrationId, status: 'RUNNING' },
+      data: { integrationId, status: 'RUNNING' } as any,
     });
 
     // Disparar evento assíncrono para o worker
@@ -241,7 +241,7 @@ export class ScalabilityService {
 
   async getIntegrationSyncLogs(integrationId: string, limit = 20) {
     return this.prisma.integrationSyncLog.findMany({
-      where: { integrationId },
+      where: { integrationId } as any,
       orderBy: { startedAt: 'desc' },
       take: limit,
     });
@@ -258,7 +258,7 @@ export class ScalabilityService {
     if (dto.conditionsJson) this.validateJsonField(dto.conditionsJson, 'conditionsJson');
 
     const rule = await this.prisma.automationRule.create({
-      data: { ...dto, createdBy: actorId },
+      data: { ...dto, createdBy: actorId } as any,
     });
     await this.audit.log({
       entity: 'AutomationRule',
@@ -271,13 +271,13 @@ export class ScalabilityService {
   }
 
   async updateAutomationRule(id: string, dto: UpdateAutomationRuleDto, actorId: string) {
-    const rule = await this.prisma.automationRule.findUnique({ where: { id } });
+    const rule = await this.prisma.automationRule.findUnique({ where: { id } as any });
     if (!rule) throw new NotFoundException('Regra de automação não encontrada.');
 
     if (dto.triggerConfigJson) this.validateJsonField(dto.triggerConfigJson, 'triggerConfigJson');
     if (dto.actionsJson) this.validateJsonField(dto.actionsJson, 'actionsJson');
 
-    const updated = await this.prisma.automationRule.update({ where: { id }, data: dto });
+    const updated = await this.prisma.automationRule.update({ where: { id } as any, data: dto });
     await this.audit.log({
       entity: 'AutomationRule',
       entityId: id,
@@ -306,7 +306,7 @@ export class ScalabilityService {
 
   async executeAutomationRule(dto: ExecuteAutomationRuleDto, actorId: string) {
     const rule = await this.prisma.automationRule.findUnique({
-      where: { id: dto.ruleId },
+      where: { id: dto.ruleId } as any,
     });
     if (!rule) throw new NotFoundException('Regra não encontrada.');
     if (!rule.isActive) throw new BadRequestException('Regra inativa.');
@@ -317,7 +317,7 @@ export class ScalabilityService {
         triggeredBy: actorId,
         targetUserId: dto.targetUserId,
         status: 'PENDING',
-      },
+      } as any,
     });
 
     // Disparar execução assíncrona

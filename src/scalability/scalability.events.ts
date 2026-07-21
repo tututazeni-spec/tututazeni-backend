@@ -105,7 +105,7 @@ export class ScalabilityEventListeners {
       });
 
       await this.prisma.integrationConfig.update({
-        where: { id: payload.integrationId },
+        where: { id: payload.integrationId } as any,
         data: { lastSyncAt: new Date(), lastSyncStatus: 'SUCCESS', lastSyncError: null },
       });
 
@@ -123,7 +123,7 @@ export class ScalabilityEventListeners {
         },
       });
       await this.prisma.integrationConfig.update({
-        where: { id: payload.integrationId },
+        where: { id: payload.integrationId } as any,
         data: { lastSyncAt: new Date(), lastSyncStatus: 'SUCCESS', lastSyncError: null },
       });
     }
