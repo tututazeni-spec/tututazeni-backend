@@ -565,7 +565,7 @@ export class LeaveManagementService {
         leaveTypeCode: lt.code,
         balance: lt.annualLimit ?? 0,
         used: 0,
-      })),
+      })) as any,
       skipDuplicates: true,
     });
   }
@@ -578,14 +578,14 @@ export class LeaveManagementService {
 
     for (const lt of leaveTypes) {
       const balances = await this.prisma.read.leaveBalance.findMany({
-        where: { leaveType: lt.code },
+        where: { leaveType: lt.code as any },
       });
       for (const b of balances) {
         const carryOver = Math.min(b.balance, lt.carryOverLimit ?? b.balance);
         const newBalance = (lt.annualLimit ?? 0) + carryOver;
 
         await this.prisma.leaveBalance.update({
-          where: { userId_leaveType: { userId: b.userId, leaveType: lt.code } },
+          where: { userId_leaveType: { userId: b.userId, leaveType: lt.code as any } },
           data: { balance: lt.annualLimit ?? 0, used: 0 },
         });
 
@@ -1010,8 +1010,8 @@ export class LeaveManagementService {
     const events =
       (await this.prisma.eventParticipant
         ?.findMany?.({
-          where: { userId, event: { startDate: { gte: start, lte: end } } },
-          include: { event: { select: { id: true, title: true, startDate: true } } },
+          where: { userId, event: { startDate: { gte: start, lte: end } } } as any,
+          include: { event: { select: { id: true, title: true, startDate: true } } } as any,
         })
         .catch(() => [])) ?? [];
 
@@ -1027,8 +1027,8 @@ export class LeaveManagementService {
   private async applyModuleImpacts(request: any) {
     try {
       await this.prisma.enrollment?.updateMany?.({
-        where: { userId: request.userId, completedAt: null },
-        data: { pausedAt: new Date() },
+        where: { userId: request.userId, completedAt: null } as any,
+        data: { pausedAt: new Date() } as any,
       });
     } catch {}
   }
@@ -1036,8 +1036,8 @@ export class LeaveManagementService {
   private async reverseModuleImpacts(request: any) {
     try {
       await this.prisma.enrollment?.updateMany?.({
-        where: { userId: request.userId, pausedAt: { not: null } },
-        data: { pausedAt: null },
+        where: { userId: request.userId, pausedAt: { not: null } } as any,
+        data: { pausedAt: null } as any,
       });
     } catch {}
   }
