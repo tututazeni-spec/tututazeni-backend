@@ -416,7 +416,7 @@ export class UnitsService {
   }
 
   async create(dto: CreateUnitDto) {
-    return (this.prisma as any).unit.create({ data: dto });
+    return this.prisma.unit.create({ data: dto });
   }
 
   async update(id: number, dto: UpdateUnitDto) {
@@ -475,7 +475,7 @@ export class RolesService {
   }
 
   async addPermission(dto: DepartmentsCreatePermissionDto) {
-    return (this.prisma as any).permission.create({ data: dto });
+    return this.prisma.permission.create({ data: dto });
   }
 
   async removePermission(permissionId: number) {
@@ -484,7 +484,7 @@ export class RolesService {
 
   async assignPermissionToRole(roleId: number, permissionId: number) {
     // FIX: upsert correcto com chave composta
-    return (this.prisma as any).rolePermission.upsert({
+    return this.prisma.rolePermission.upsert({
       where: { roleId_permissionId: { roleId, permissionId } },
       create: { roleId, permissionId },
       update: {},
@@ -583,7 +583,7 @@ export class CareersService {
 
   async createPosition(dto: CreateCareerPositionDto) {
     const { competencies, ...data } = dto;
-    const position = await (this.prisma as any).careerPosition.create({ data });
+    const position = await this.prisma.careerPosition.create({ data });
     if (competencies?.length) {
       await this.prisma.positionCompetency.createMany({
         data: competencies.map(c => ({ positionId: position.id, ...c })),

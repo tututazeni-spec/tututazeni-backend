@@ -190,7 +190,7 @@ export class ApiIntegrationService {
       const latencyMs = Date.now() - start;
       const success = res.status < 500;
 
-      await (this.prisma as any).apiIntegrationLog.create({
+      await this.prisma.apiIntegrationLog.create({
         data: {
           integrationId: id,
           status: success ? 'OK' : 'ERROR',
@@ -208,7 +208,7 @@ export class ApiIntegrationService {
       };
     } catch (err: any) {
       const latencyMs = Date.now() - start;
-      await (this.prisma as any).apiIntegrationLog.create({
+      await this.prisma.apiIntegrationLog.create({
         data: {
           integrationId: id,
           status: 'ERROR',
@@ -578,7 +578,7 @@ export class ApiIntegrationService {
       this.prisma.read.apiIntegrationLog.count({
         where: { createdAt: { gte: since24h }, status: 'ERROR' },
       }),
-      (this.prisma as any).apiIntegrationLog
+      this.prisma.apiIntegrationLog
         .aggregate({
           where: { createdAt: { gte: since24h } },
           _avg: { latencyMs: true },
