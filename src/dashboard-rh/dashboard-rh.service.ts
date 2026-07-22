@@ -222,7 +222,7 @@ export class DashboardRhService {
       this.prisma.read.department.findMany({
         select: { id: true, name: true, _count: { select: { users: true } } },
       }),
-      (this.prisma as any).position.findMany({
+      this.prisma.position.findMany({
         select: { id: true, name: true, level: true, _count: { select: { users: true } } },
         orderBy: { _count: { users: 'desc' } },
         take: 10,
@@ -539,7 +539,7 @@ export class DashboardRhService {
     const uWhere = departmentId ? { user: { departmentId } } : {};
 
     const [competencies, legacySkills, totalUsers] = await Promise.all([
-      (this.prisma as any).userCompetency.findMany({
+      this.prisma.userCompetency.findMany({
         where: uWhere,
         include: { competency: { select: { id: true, name: true, type: true } } },
       }),

@@ -298,7 +298,7 @@ export class LeaderService {
   }
 
   async getMemberProfile(leaderId: number, memberId: number) {
-    const member = await (this.prisma as any).user.findUnique({
+    const member = await this.prisma.user.findUnique({
       where: { id: memberId },
       select: {
         id: true,
@@ -534,7 +534,7 @@ export class LeaderService {
   // ══════════════════════════════════════════════════════
 
   async getTeamPlans(leaderId: number) {
-    const plans = await (this.prisma as any).developmentPlan.findMany({
+    const plans = await this.prisma.developmentPlan.findMany({
       where: { user: { managerId: leaderId }, isTemplate: false },
       include: {
         user: {

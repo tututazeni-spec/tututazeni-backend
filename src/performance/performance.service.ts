@@ -386,7 +386,7 @@ export class PerformanceService {
   // ─── FEEDBACK CONTÍNUO ────────────────────────────────────────────────────
 
   async createFeedback(giverId: number, dto: PerformanceCreateFeedbackDto) {
-    const feedback = await (this.prisma as any).continuousFeedback.create({
+    const feedback = await this.prisma.continuousFeedback.create({
       data: {
         giverId: giverId,
         userId: dto.targetUserId,
@@ -499,7 +499,7 @@ export class PerformanceService {
       data: { status: ReviewStatus.DISPUTE },
     });
 
-    const rhUsers = await (this.prisma as any).user.findMany({
+    const rhUsers = await this.prisma.user.findMany({
       where: { role: { code: { in: ['ADMIN', 'RH'] } } },
       select: { id: true },
     });

@@ -265,7 +265,7 @@ export class SuccessionService {
       matchScore = autoMatch.score;
     }
 
-    const plan = await (this.prisma as any).successionPlan.create({
+    const plan = await this.prisma.successionPlan.create({
       data: {
         criticalPositionId: dto.criticalPositionId,
         candidateId: dto.candidateId,
@@ -534,7 +534,7 @@ export class SuccessionService {
     const where: any = {};
     if (departmentId) where.position = { departmentId };
 
-    const criticalPositions = await (this.prisma as any).criticalPosition.findMany({
+    const criticalPositions = await this.prisma.criticalPosition.findMany({
       where,
       include: {
         position: {
