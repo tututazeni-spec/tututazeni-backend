@@ -384,7 +384,7 @@ export class DevelopmentPlansService {
     });
     if (!action) throw new NotFoundException('Acção não encontrada');
 
-    const evidence = await (this.prisma as any).pdiEvidence.create({
+    const evidence = await this.prisma.pdiEvidence.create({
       data: {
         actionId: dto.actionId,
         submittedById: userId,

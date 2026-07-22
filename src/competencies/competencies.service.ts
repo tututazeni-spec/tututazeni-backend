@@ -366,7 +366,7 @@ export class CompetenciesService {
 
   async mapToPosition(dto: MapCompetencyToPositionDto) {
     await this.findOne(dto.competencyId);
-    return (this.prisma as any).positionCompetency.upsert({
+    return this.prisma.positionCompetency.upsert({
       where: {
         positionId_competencyId: { positionId: dto.positionId, competencyId: dto.competencyId },
       },
