@@ -701,7 +701,10 @@ export class AttendanceService {
         });
       }
       const u = userMap.get(uid)!;
-      if ([AttendanceStatus.PRESENT, AttendanceStatus.PARTIAL].includes(r.status as AttendanceStatus)) u.present++;
+      if (
+        [AttendanceStatus.PRESENT, AttendanceStatus.PARTIAL].includes(r.status as AttendanceStatus)
+      )
+        u.present++;
       if (r.status === AttendanceStatus.LATE) {
         u.present++;
         u.late++;
