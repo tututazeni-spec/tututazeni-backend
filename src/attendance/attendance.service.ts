@@ -119,7 +119,7 @@ export class AttendanceService {
     }
 
     const [data, total] = await Promise.all([
-      (this.prisma as any).attendanceRecord.findMany({
+      this.prisma.attendanceRecord.findMany({
         where,
         skip,
         take: limit,
@@ -129,7 +129,7 @@ export class AttendanceService {
           justifications: { take: 1, orderBy: { createdAt: 'desc' } },
         },
       }),
-      (this.prisma as any).attendanceRecord.count({ where }),
+      this.prisma.attendanceRecord.count({ where }),
     ]);
 
     return {
@@ -146,7 +146,7 @@ export class AttendanceService {
       if (to) where.date.lte = new Date(to);
     }
 
-    const records = await (this.prisma as any).attendanceRecord.findMany({
+    const records = await this.prisma.attendanceRecord.findMany({
       where,
       orderBy: { date: 'desc' },
       include: { justifications: true },
@@ -173,7 +173,7 @@ export class AttendanceService {
   }
 
   async findOne(id: number) {
-    const r = await (this.prisma as any).attendanceRecord.findUnique({
+    const r = await this.prisma.attendanceRecord.findUnique({
       where: { id },
       include: {
         user: { select: { id: true, fullName: true, email: true } },
@@ -188,7 +188,7 @@ export class AttendanceService {
   async clockIn(userId: number, dto: ClockInDto) {
     const today = todayMidnight();
 
-    const existing = await (this.prisma as any).attendanceRecord.findFirst({
+    const existing = await this.prisma.attendanceRecord.findFirst({
       where: { userId, date: today, context: dto.context ?? AttendanceContext.WORK },
     });
     if (existing?.clockIn) {
@@ -239,8 +239,8 @@ export class AttendanceService {
     }
 
     const record = existing
-      ? await (this.prisma as any).attendanceRecord.update({ where: { id: existing.id }, data })
-      : await (this.prisma as any).attendanceRecord.create({ data });
+      ? await this.prisma.attendanceRecord.update({ where: { id: existing.id }, data })
+      : await this.prisma.attendanceRecord.create({ data });
 
     await this.audit.log({
       action: 'CLOCK_IN',
@@ -255,7 +255,7 @@ export class AttendanceService {
 
   async clockOut(userId: number, dto: ClockOutDto = {}) {
     const today = todayMidnight();
-    const record = await (this.prisma as any).attendanceRecord.findFirst({
+    const record = await this.prisma.attendanceRecord.findFirst({
       where: { userId, date: today, clockIn: { not: null } },
       orderBy: { createdAt: 'desc' },
     });
@@ -274,7 +274,7 @@ export class AttendanceService {
       : 480;
     const overtimeMin = Math.max(0, workMinutes - expectedMin);
 
-    const updated = await (this.prisma as any).attendanceRecord.update({
+    const updated = await this.prisma.attendanceRecord.update({
       where: { id: record.id },
       data: {
         clockOut: clockOutTime,
@@ -315,7 +315,7 @@ export class AttendanceService {
     const date = new Date(dto.date);
     date.setHours(0, 0, 0, 0);
 
-    const exists = await (this.prisma as any).attendanceRecord.findFirst({
+    const exists = await this.prisma.attendanceRecord.findFirst({
       where: { userId: dto.userId, date, context: dto.context ?? AttendanceContext.WORK },
     });
     if (exists) throw new ConflictException('Presença já registada para este dia/contexto');
@@ -325,7 +325,7 @@ export class AttendanceService {
         ? calcWorkMinutes(dto.clockIn, dto.clockOut, dto.breakMinutes ?? 0)
         : (dto.workMinutes ?? 0);
 
-    return (this.prisma as any).attendanceRecord.create({
+    return this.prisma.attendanceRecord.create({
       data: {
         userId: dto.userId,
         date,
@@ -375,12 +375,12 @@ export class AttendanceService {
       (dto as any).hoursWorked = minutesToHours(wm);
     }
 
-    return (this.prisma as any).attendanceRecord.update({ where: { id }, data: dto as any });
+    return this.prisma.attendanceRecord.update({ where: { id }, data: dto as any });
   }
 
   async remove(id: number) {
     await this.findOne(id);
-    await (this.prisma as any).attendanceRecord.delete({ where: { id } });
+    await this.prisma.attendanceRecord.delete({ where: { id } });
     return { message: 'Registo removido' };
   }
 
@@ -607,7 +607,7 @@ export class AttendanceService {
     });
 
     if (dto.status === 'APPROVED') {
-      await (this.prisma as any).attendanceRecord.update({
+      await this.prisma.attendanceRecord.update({
         where: { id: justification.attendanceId },
         data: { status: AttendanceStatus.JUSTIFIED },
       });
@@ -677,7 +677,7 @@ export class AttendanceService {
     if (department)
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
-    const records = await (this.prisma as any).attendanceRecord.findMany({
+    const records = await this.prisma.attendanceRecord.findMany({
       where,
       include: { user: { select: { id: true, fullName: true, email: true } } },
     });
@@ -750,7 +750,7 @@ export class AttendanceService {
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const [records, pendingLeaves, pendingJustifications, pendingOvertime] = await Promise.all([
-      (this.prisma as any).attendanceRecord.findMany({
+      this.prisma.attendanceRecord.findMany({
         where,
         include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
       }),
@@ -799,7 +799,7 @@ export class AttendanceService {
     const where: any = { date: { gte: from } };
     if (userId) where.userId = userId;
 
-    const records = await (this.prisma as any).attendanceRecord.findMany({
+    const records = await this.prisma.attendanceRecord.findMany({
       where,
       orderBy: { date: 'asc' },
     });
@@ -830,7 +830,7 @@ export class AttendanceService {
     if (department)
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
-    const records = await (this.prisma as any).attendanceRecord.findMany({
+    const records = await this.prisma.attendanceRecord.findMany({
       where,
       include: { user: { select: { id: true, fullName: true } } },
     });
@@ -854,7 +854,7 @@ export class AttendanceService {
   }
 
   async getEventAttendance(eventId: number) {
-    const records = await (this.prisma as any).attendanceRecord.findMany({
+    const records = await this.prisma.attendanceRecord.findMany({
       where: { eventId },
       include: { user: { select: { id: true, fullName: true, email: true } } },
       orderBy: { clockIn: 'asc' },
@@ -911,7 +911,7 @@ export class AttendanceService {
       cur.setDate(cur.getDate() + 1);
     }
 
-    await (this.prisma as any).attendanceRecord.createMany({
+    await this.prisma.attendanceRecord.createMany({
       data: dates.map(d => ({
         userId: leave.userId,
         date: d,
