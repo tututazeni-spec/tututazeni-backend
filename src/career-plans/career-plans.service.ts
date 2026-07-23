@@ -116,9 +116,9 @@ export class CareerPlansService {
         ...rest,
         active: dto.active ?? true,
         steps: {
-          create: steps.map(s => ({ roleId: s.roleId, order: s.order, label: s.label })) as any,
+          create: steps.map(s => ({ roleId: s.roleId, order: s.order, label: s.label })),
         },
-      },
+      } as any,
       include: { steps: { orderBy: { order: 'asc' }, include: { role: true } } },
     });
     return path;
