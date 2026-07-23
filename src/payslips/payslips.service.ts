@@ -106,7 +106,7 @@ export class PayslipsService {
   // ─── Registar acesso ────────────────────────────────────────────────────────
   async logAccess(payslipId: number, userId: number, action: string, ip?: string) {
     try {
-      await this.prisma.payslipAccessLog.create({
+      await (this.prisma as any).payslipAccessLog.create({
         data: { payslipId, userId, action, ip: ip ?? 'unknown', accessedAt: new Date() },
       });
     } catch (e) {
@@ -151,7 +151,7 @@ export class PayslipsService {
 
   // ─── DETALHE ───────────────────────────────────────────────────────────────
   async findOne(id: number, user?: CurrentUserData) {
-    const p = await this.prisma.payslip.findUnique({
+    const p = await (this.prisma as any).payslip.findUnique({
       where: { id },
       include: {
         user: {
@@ -188,7 +188,7 @@ export class PayslipsService {
     const totals = this.computeTotals(dto);
     const code = this.generateReceiptCode(dto.userId, dto.period);
 
-    return this.prisma.payslip.create({
+    return (this.prisma as any).payslip.create({
       data: {
         ...dto,
         receiptCode: code,
@@ -233,7 +233,7 @@ export class PayslipsService {
         const totals = this.computeTotals({ baseSalary: base });
         const code = this.generateReceiptCode(u.id, period);
 
-        const payslip = await this.prisma.payslip.create({
+        const payslip = await (this.prisma as any).payslip.create({
           data: {
             userId: u.id,
             period,
@@ -363,7 +363,7 @@ export class PayslipsService {
     if (year) where.period = { startsWith: year };
 
     const [data, total] = await Promise.all([
-      this.prisma.payslip.findMany({
+      (this.prisma as any).payslip.findMany({
         where,
         skip,
         take: limit,
