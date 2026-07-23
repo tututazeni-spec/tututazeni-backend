@@ -52,7 +52,7 @@ export class ReportsService {
    * já estão remapeados para os modelos reais.
    */
   private get prismaRead(): any {
-    return (this.prisma as any).db ?? this.prisma;
+    return this.prisma.db ?? this.prisma;
   }
 
   // ══════════════════════════════════════════════════════

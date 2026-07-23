@@ -186,7 +186,7 @@ export class SearchService {
     };
     if (opts.category) where.category = opts.category;
 
-    const courses = await (this.prisma as any).course.findMany({
+    const courses = await this.prisma.course.findMany({
       where,
       select: {
         id: true,
@@ -280,7 +280,7 @@ export class SearchService {
   }
 
   private async searchCompetencies(q: string, opts: { limit: number }): Promise<any[]> {
-    const comps = await (this.prisma as any).competency
+    const comps = await this.prisma.competency
       .findMany({
         where: { OR: [{ name: iLike(q) }, { description: iLike(q) }] },
         select: { id: true, name: true, type: true, description: true },
