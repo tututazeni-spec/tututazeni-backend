@@ -392,7 +392,7 @@ export class DevelopmentPlansService {
         url: dto.url,
         notes: dto.notes,
         evidenceType: dto.evidenceType ?? 'NOTE',
-      },
+      } as any,
     });
 
     // Auto-avançar para IN_PROGRESS se ainda em TODO

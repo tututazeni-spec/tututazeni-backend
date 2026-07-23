@@ -90,7 +90,7 @@ export class DocumentDeclarationsService {
         active: dto.active ?? true,
         version: 1,
         createdById,
-      },
+      } as any,
     });
 
     await this.audit.log({

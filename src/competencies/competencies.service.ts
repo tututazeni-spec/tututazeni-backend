@@ -369,7 +369,7 @@ export class CompetenciesService {
     return this.prisma.positionCompetency.upsert({
       where: {
         positionId_competencyId: { positionId: dto.positionId, competencyId: dto.competencyId },
-      },
+      } as any,
       create: {
         positionId: dto.positionId,
         competencyId: dto.competencyId,

@@ -415,7 +415,7 @@ export class NotificationsService {
     action: string;
     condition: string;
   }) {
-    return this.prisma.automationRule.create({ data });
+    return this.prisma.automationRule.create({ data: data as any });
   }
 
   async toggleAutomationRule(id: number) {

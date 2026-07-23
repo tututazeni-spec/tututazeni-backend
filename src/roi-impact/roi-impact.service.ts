@@ -98,13 +98,13 @@ export class RoiImpactService {
       this.prisma.read.enrollment.count({ where: { ...where, status: 'EM_ANDAMENTO' } }),
       this.prisma.assessmentAttempt
         .aggregate({
-          where: { createdAt: { gte: range.gte, lte: range.lte } },
+          where: { createdAt: { gte: range.gte, lte: range.lte } } as any,
           _avg: { score: true },
         })
         .catch(() => ({ _avg: { score: null } })),
       this.prisma.lessonProgress
         .count({
-          where: { completed: true, updatedAt: { gte: range.gte, lte: range.lte } },
+          where: { completed: true, updatedAt: { gte: range.gte, lte: range.lte } } as any,
         })
         .catch(() => 0),
       // Performance before training period
@@ -259,12 +259,12 @@ export class RoiImpactService {
       }),
       this.prisma.assessmentAttempt
         .aggregate({
-          where: { createdAt: { gte: range.gte, lte: range.lte } },
+          where: { createdAt: { gte: range.gte, lte: range.lte } } as any,
           _avg: { score: true },
         })
         .catch(() => ({ _avg: { score: null } })),
       this.prisma.lessonProgress
-        .count({ where: { completed: true, updatedAt: { gte: range.gte } } })
+        .count({ where: { completed: true, updatedAt: { gte: range.gte } } as any })
         .catch(() => 0),
       // L3
       this.prisma.developmentPlanAction

@@ -718,7 +718,7 @@ export class TalentDevelopmentService {
           url: dto.evidenceUrl,
           notes: dto.notes,
           evidenceType: dto.evidenceUrl ? 'LINK' : 'NOTE',
-        },
+        } as any,
       });
     }
 
@@ -1415,7 +1415,7 @@ export class TalentDevelopmentService {
         level: true,
         _count: { select: { enrollments: true } },
       },
-      orderBy: { _count: { enrollments: 'desc' } },
+      orderBy: { _count: { enrollments: 'desc' } } as any,
       take: 10,
     });
 

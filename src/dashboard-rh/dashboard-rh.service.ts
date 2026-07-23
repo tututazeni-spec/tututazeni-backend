@@ -224,7 +224,7 @@ export class DashboardRhService {
       }),
       this.prisma.position.findMany({
         select: { id: true, name: true, level: true, _count: { select: { users: true } } },
-        orderBy: { _count: { users: 'desc' } },
+        orderBy: { _count: { users: 'desc' } } as any,
         take: 10,
       }),
       this.prisma.user
@@ -266,7 +266,7 @@ export class DashboardRhService {
         id: p.id,
         name: p.name,
         level: p.level,
-        count: p._count.users,
+        count: (p as any)._count.users,
       })),
       byTenure,
     };
