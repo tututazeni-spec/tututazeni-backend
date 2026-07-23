@@ -153,7 +153,7 @@ export class EvaluationService {
     if (!cycle) throw new NotFoundException('Ciclo não encontrado');
 
     // Participation stats
-    const requests = await (this.prisma as any).evaluationRequest
+    const requests = await this.prisma.evaluationRequest
       .findMany({
         where: cycle.id ? { cycleId: cycle.id } : {},
       })
@@ -204,7 +204,7 @@ export class EvaluationService {
       .catch(() => ({ id, status: 'ACTIVE' }));
 
     // Notify all participants
-    const requests = await (this.prisma as any).evaluationRequest
+    const requests = await this.prisma.evaluationRequest
       .findMany({
         where: { ...(id ? { cycleId: id } : {}) },
         select: { evaluatorId: true },
@@ -328,7 +328,7 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async assignEvaluator(dto: AssignEvaluatorDto) {
-    const existing = await (this.prisma as any).evaluationRequest
+    const existing = await this.prisma.evaluationRequest
       .findFirst({
         where: {
           evaluatorId: dto.evaluatorId,
@@ -341,7 +341,7 @@ export class EvaluationService {
 
     if (existing) throw new ConflictException('Avaliador já atribuído para este par neste ciclo');
 
-    const request = await (this.prisma as any).evaluationRequest.create({
+    const request = await this.prisma.evaluationRequest.create({
       data: {
         evaluatorId: dto.evaluatorId,
         evaluatedId: dto.evaluatedId,
@@ -384,7 +384,7 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async submitEvaluation(evaluatorId: number, dto: SubmitEvaluationDto) {
-    const request = await (this.prisma as any).evaluationRequest
+    const request = await this.prisma.evaluationRequest
       .findUnique({
         where: { id: dto.requestId },
         include: { cycle: true },
@@ -449,7 +449,7 @@ export class EvaluationService {
       cycleId: request.cycleId,
     };
 
-    const evaluation = await (this.prisma as any).performanceEvaluation.upsert({
+    const evaluation = await this.prisma.performanceEvaluation.upsert({
       where: {
         evaluatorId_evaluatedId_type_period: {
           evaluatorId,
@@ -468,7 +468,7 @@ export class EvaluationService {
 
     // Mark request as completed
     if (!dto.isDraft) {
-      await (this.prisma as any).evaluationRequest
+      await this.prisma.evaluationRequest
         .update({
           where: { id: dto.requestId },
           data: { status: 'COMPLETED', completedAt: new Date() },
@@ -491,7 +491,7 @@ export class EvaluationService {
 
   private async checkCycleCompletion(evaluatedId: number, cycleId?: number) {
     if (!cycleId) return;
-    const allRequests = await (this.prisma as any).evaluationRequest
+    const allRequests = await this.prisma.evaluationRequest
       .findMany({
         where: { evaluatedId, cycleId },
       })
@@ -546,7 +546,7 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async getPendingEvaluations(evaluatorId: number) {
-    return (this.prisma as any).evaluationRequest
+    return this.prisma.evaluationRequest
       .findMany({
         where: { evaluatorId, status: 'PENDING' },
         include: {
@@ -880,10 +880,8 @@ export class EvaluationService {
           },
         },
       }),
-      (this.prisma as any).evaluationRequest
-        .count({ where: cycleId ? { cycleId } : {} })
-        .catch(() => 0),
-      (this.prisma as any).evaluationRequest
+      this.prisma.evaluationRequest.count({ where: cycleId ? { cycleId } : {} }).catch(() => 0),
+      this.prisma.evaluationRequest
         .count({
           where: { ...(cycleId ? { cycleId } : {}), status: 'COMPLETED' },
         })
