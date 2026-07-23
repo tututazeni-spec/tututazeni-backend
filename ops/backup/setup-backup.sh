@@ -46,8 +46,10 @@ _aws() {
 
 _upsert_env() {
   local key="$1" val="$2"
+  local escaped_val
+  escaped_val=$(printf '%s\n' "$val" | sed 's/[|&\]/\\&/g')
   if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
-    sed -i "s|^${key}=.*|${key}=${val}|" "$ENV_FILE"
+    sed -i "s|^${key}=.*|${key}=${escaped_val}|" "$ENV_FILE"
   else
     echo "${key}=${val}" >> "$ENV_FILE"
   fi
