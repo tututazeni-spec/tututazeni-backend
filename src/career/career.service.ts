@@ -32,7 +32,7 @@ export class CareerService {
   // ─── PERFIL DE CARREIRA DO COLABORADOR ───────────────────────────────────
 
   async getCareerProfile(userId: number) {
-    const user = await this.prisma.user.findUnique({
+    const user = await (this.prisma as any).user.findUnique({
       where: { id: userId },
       include: {
         position: { select: { id: true, name: true, level: true } },
@@ -135,7 +135,7 @@ export class CareerService {
   // ─── GAP DE COMPETÊNCIAS ──────────────────────────────────────────────────
 
   async getCompetencyGapsForUser(userId: number) {
-    const user = await this.prisma.user.findUnique({
+    const user = await (this.prisma as any).user.findUnique({
       where: { id: userId },
       select: { positionId: true },
     });
@@ -171,7 +171,7 @@ export class CareerService {
   // ─── SIMULADOR DE CARREIRA (Próximo cargo) ────────────────────────────────
 
   async simulateNextRole(userId: number, targetPositionId: number) {
-    const user = await this.prisma.user.findUnique({
+    const user = await (this.prisma as any).user.findUnique({
       where: { id: userId },
       select: { positionId: true, hireDate: true },
     });
@@ -333,7 +333,7 @@ export class CareerService {
     });
     if (existing) throw new ConflictException(`Já existe um passo na ordem ${dto.order}`);
 
-    return this.prisma.careerPathStep.create({
+    return (this.prisma as any).careerPathStep.create({
       data: {
         careerPathId: pathId,
         positionId: dto.positionId,
@@ -385,7 +385,7 @@ export class CareerService {
       );
     }
 
-    return this.prisma.userCareerPlan.create({
+    return (this.prisma as any).userCareerPlan.create({
       data: {
         userId,
         title: dto.title,
@@ -405,7 +405,7 @@ export class CareerService {
     const plan = await this.prisma.read.userCareerPlan.findFirst({ where: { id: planId, userId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
-    return this.prisma.userCareerPlan.update({
+    return (this.prisma as any).userCareerPlan.update({
       where: { id: planId },
       data: {
         ...dto,
@@ -422,7 +422,7 @@ export class CareerService {
     const plan = await this.prisma.read.userCareerPlan.findFirst({ where: { id: planId, userId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
-    return this.prisma.careerGoal.create({
+    return (this.prisma as any).careerGoal.create({
       data: {
         careerPlanId: planId,
         title: dto.title,
@@ -723,7 +723,7 @@ export class CareerService {
   // ─── ELEGIBILIDADE PARA PROMOÇÃO ─────────────────────────────────────────
 
   async checkPromotionEligibility(userId: number) {
-    const user = await this.prisma.user.findUnique({
+    const user = await (this.prisma as any).user.findUnique({
       where: { id: userId },
       select: { positionId: true, hireDate: true },
     });
@@ -788,7 +788,7 @@ export class CareerService {
     }
 
     // Criar notificação para RH e gestor
-    const user = await this.prisma.user.findUnique({
+    const user = await (this.prisma as any).user.findUnique({
       where: { id: userId },
       select: { fullName: true, managerId: true },
     });
@@ -847,7 +847,7 @@ export class CareerService {
     });
     if (existing) throw new ConflictException('Este candidato já está mapeado para este cargo');
 
-    const plan = await this.prisma.successionPlan.create({
+    const plan = await (this.prisma as any).successionPlan.create({
       data: {
         positionId: dto.positionId,
         candidateId: dto.candidateId,
@@ -879,7 +879,7 @@ export class CareerService {
     const plan = await this.prisma.read.successionPlan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plano de sucessão não encontrado');
 
-    return this.prisma.successionPlan.update({
+    return (this.prisma as any).successionPlan.update({
       where: { id: planId },
       data: { readiness, justification: justification ?? (plan as any).justification },
     });
