@@ -58,16 +58,27 @@ log "Ficheiro de log: $LOG_FILE"
 CRON_MARKER="# INNOVA-BACKUP"
 CRON_DAILY="0 2 * * * . ${ENV_FILE} && ${BACKUP_DIR}/backup-postgres.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
 CRON_WEEKLY="0 4 * * 0 . ${ENV_FILE} && ${BACKUP_DIR}/verify-backup.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
+# Métricas de backup para Prometheus (textfile collector do node-exporter)
+CRON_METRICS="*/15 * * * * . ${ENV_FILE} && ${BACKUP_DIR}/backup-metrics.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
+
+# Criar directório do textfile collector (lido pelo node-exporter dentro do Docker)
+TEXTFILE_DIR="/var/lib/node-exporter/textfile_collector"
+if [ ! -d "$TEXTFILE_DIR" ]; then
+  mkdir -p "$TEXTFILE_DIR"
+  log "Directório textfile collector criado: $TEXTFILE_DIR"
+fi
 
 # Lê crontab actual, remove entradas antigas do INNOVA e adiciona as novas
 (crontab -l 2>/dev/null | grep -v "$CRON_MARKER" || true
  echo "$CRON_DAILY"
  echo "$CRON_WEEKLY"
+ echo "$CRON_METRICS"
 ) | crontab -
 
 log "Cron jobs instalados:"
-log "  Backup diário : todos os dias às 02:00"
-log "  Verificação   : todos os domingos às 04:00"
+log "  Backup diário  : todos os dias às 02:00"
+log "  Verificação    : todos os domingos às 04:00"
+log "  Métricas backup: a cada 15 minutos (Prometheus textfile)"
 
 # ── Teste de conectividade ao S3 ──────────────────────────────
 echo ""

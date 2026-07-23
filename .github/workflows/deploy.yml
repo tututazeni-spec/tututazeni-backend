@@ -90,7 +90,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: 'ops/docker-compose.prod.yml,ops/deploy/deploy.sh,ops/deploy/rollback.sh,ops/monitoring/prometheus.yml,ops/monitoring/alert-rules.yml,ops/monitoring/alertmanager.yml.tpl,ops/backup/backup-postgres.sh,ops/backup/restore-postgres.sh,ops/backup/verify-backup.sh,ops/backup/install-cron.sh'
+          source: 'ops/docker-compose.prod.yml,ops/deploy/deploy.sh,ops/deploy/rollback.sh,ops/monitoring/prometheus.yml,ops/monitoring/alert-rules.yml,ops/monitoring/alertmanager.yml.tpl,ops/backup/backup-postgres.sh,ops/backup/restore-postgres.sh,ops/backup/verify-backup.sh,ops/backup/install-cron.sh,ops/backup/backup-metrics.sh,ops/backup/walg/walg-backup.sh,ops/backup/walg/walg-pitr-restore.sh,ops/backup/walg/install-cron-walg.sh,ops/backup/walg/walg.env.example,ops/backup/walg/postgresql-walg.conf,ops/dr/DISASTER-RECOVERY.md'
           target: /opt/innova
           strip_components: 1
           overwrite: true
