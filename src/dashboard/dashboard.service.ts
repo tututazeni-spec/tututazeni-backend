@@ -752,7 +752,7 @@ export class DashboardService {
 
   async generateSnapshot() {
     const data = await this.getOrganizationSummary();
-    return this.prisma.dashboardSnapshot
+    return (this.prisma as any).dashboardSnapshot
       .create({
         data: {
           data: data as any,
@@ -788,7 +788,7 @@ export class DashboardService {
         },
         take: limit,
       }),
-      this.prisma.course.findMany({
+      (this.prisma as any).course.findMany({
         where: { title: { contains: query, mode: 'insensitive' }, active: true },
         select: { id: true, title: true, category: true, thumbnailUrl: true },
         take: limit,

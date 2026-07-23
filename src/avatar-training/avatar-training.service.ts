@@ -291,7 +291,7 @@ export class AvatarTrainingService {
   }
 
   async getScenario(id: number, userId?: number) {
-    const s = await this.prisma.avatarScenario
+    const s = await (this.prisma as any).avatarScenario
       .findUnique({
         where: { id },
         include: {
@@ -348,7 +348,7 @@ export class AvatarTrainingService {
       ? `Olá! Sou ${avatar.name}. ${scenario.context ?? ''} Vamos começar o treino?`
       : `Bem-vindo ao cenário "${scenario.title}". Está pronto para começar?`;
 
-    const session = await this.prisma.avatarSession.create({
+    const session = await (this.prisma as any).avatarSession.create({
       data: {
         userId,
         scenarioId: dto.scenarioId,
@@ -385,7 +385,7 @@ export class AvatarTrainingService {
   }
 
   async sendMessage(sessionId: number, userId: number, dto: SendMessageDto) {
-    const session = await this.prisma.avatarSession
+    const session = await (this.prisma as any).avatarSession
       .findUnique({
         where: { id: sessionId },
         include: {
@@ -765,7 +765,7 @@ export class AvatarTrainingService {
         })
         .catch(() => [] as any[]),
       // By category
-      this.prisma.avatarScenario
+      (this.prisma as any).avatarScenario
         .groupBy({
           by: ['category'],
           where: { active: true },
@@ -773,7 +773,7 @@ export class AvatarTrainingService {
         })
         .catch(() => [] as any[]),
       // Recent completions
-      this.prisma.avatarSession.findMany({
+      (this.prisma as any).avatarSession.findMany({
         where: { ...sessionsWhere, status: 'COMPLETED' },
         include: {
           user: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -794,7 +794,7 @@ export class AvatarTrainingService {
     // Enrich top scenarios with titles
     const scenarioIds = (topScenarios as any[]).map((s: any) => s.scenarioId);
     const scenarios = scenarioIds.length
-      ? await this.prisma.avatarScenario.findMany({
+      ? await (this.prisma as any).avatarScenario.findMany({
           where: { id: { in: scenarioIds } },
           select: { id: true, title: true, category: true },
         })
@@ -822,7 +822,7 @@ export class AvatarTrainingService {
   }
 
   async getUserAnalytics(userId: number) {
-    const sessions = await this.prisma.avatarSession.findMany({
+    const sessions = await (this.prisma as any).avatarSession.findMany({
       where: { userId },
       include: { scenario: { select: { category: true, difficulty: true, title: true } } },
       orderBy: { startedAt: 'asc' },

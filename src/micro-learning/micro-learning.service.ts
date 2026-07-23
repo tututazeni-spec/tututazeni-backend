@@ -59,7 +59,7 @@ export class MicroLearningService {
     if (sortBy === 'DURATION') orderBy = { durationSeconds: 'asc' };
 
     const [data, total] = await Promise.all([
-      this.prisma.microLearning.findMany({
+      (this.prisma as any).microLearning.findMany({
         where,
         skip,
         take: limit,
@@ -77,7 +77,7 @@ export class MicroLearningService {
   }
 
   async findOne(id: number) {
-    const ml = await this.prisma.microLearning.findUnique({
+    const ml = await (this.prisma as any).microLearning.findUnique({
       where: { id },
       include: {
         author: {
@@ -212,7 +212,7 @@ export class MicroLearningService {
     if (sortBy === 'DURATION') orderBy = { durationSeconds: 'asc' };
 
     const [items, total] = await Promise.all([
-      this.prisma.microLearning.findMany({
+      (this.prisma as any).microLearning.findMany({
         where,
         skip,
         take: limit,
@@ -271,7 +271,7 @@ export class MicroLearningService {
   }
 
   private async getUserSavesSet(userId: number, ids: number[]) {
-    const saves = await this.prisma.microLearningInteraction.findMany({
+    const saves = await (this.prisma as any).microLearningInteraction.findMany({
       where: { userId, microLearningId: { in: ids }, action: 'SAVE' },
       select: { microLearningId: true },
     });
@@ -432,7 +432,7 @@ export class MicroLearningService {
   }
 
   async getMySaved(userId: number) {
-    const saves = await this.prisma.microLearningInteraction.findMany({
+    const saves = await (this.prisma as any).microLearningInteraction.findMany({
       where: { userId, action: 'SAVE' },
       include: {
         microLearning: {
@@ -471,7 +471,7 @@ export class MicroLearningService {
   }
 
   async getPlaylist(id: number) {
-    const pl = await this.prisma.microLearningPlaylist.findUnique({
+    const pl = await (this.prisma as any).microLearningPlaylist.findUnique({
       where: { id },
       include: {
         items: {
@@ -649,7 +649,7 @@ export class MicroLearningService {
       this.prisma.read.microLearning.count(),
       this.prisma.read.microLearning.count({ where: { status: 'PUBLISHED' } }),
       this.prisma.read.microLearning.aggregate({ _sum: { viewCount: true } }),
-      this.prisma.microLearning.findMany({
+      (this.prisma as any).microLearning.findMany({
         where: { status: 'PUBLISHED' },
         include: { author: { select: { fullName: true } }, _count: { select: { likes: true } } },
         orderBy: { viewCount: 'desc' },
