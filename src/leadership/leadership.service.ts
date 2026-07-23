@@ -267,7 +267,7 @@ export class LeadershipService {
           this.prisma.read.performanceReview.count({
             where: { userId: member.id, status: 'PENDING_APPROVAL' },
           }),
-          (this.prisma as any).continuousFeedback.count({
+          this.prisma.continuousFeedback.count({
             where: { userId: member.id },
           }),
         ]);

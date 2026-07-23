@@ -190,14 +190,14 @@ export class ApiIntegrationService {
       const latencyMs = Date.now() - start;
       const success = res.status < 500;
 
-      await (this.prisma as any).apiIntegrationLog.create({
+      await this.prisma.apiIntegrationLog.create({
         data: {
           integrationId: id,
           status: success ? 'OK' : 'ERROR',
           statusCode: res.status,
           message: success ? `Conexão OK (${latencyMs}ms)` : `Erro HTTP ${res.status}`,
           latencyMs,
-        },
+        } as any,
       });
 
       return {
@@ -208,13 +208,13 @@ export class ApiIntegrationService {
       };
     } catch (err: any) {
       const latencyMs = Date.now() - start;
-      await (this.prisma as any).apiIntegrationLog.create({
+      await this.prisma.apiIntegrationLog.create({
         data: {
           integrationId: id,
           status: 'ERROR',
           message: (err instanceof Error ? err.message : String(err)) ?? 'Timeout',
           latencyMs,
-        },
+        } as any,
       });
       return {
         success: false,
@@ -578,11 +578,11 @@ export class ApiIntegrationService {
       this.prisma.read.apiIntegrationLog.count({
         where: { createdAt: { gte: since24h }, status: 'ERROR' },
       }),
-      (this.prisma as any).apiIntegrationLog
+      this.prisma.apiIntegrationLog
         .aggregate({
           where: { createdAt: { gte: since24h } },
           _avg: { latencyMs: true },
-        })
+        } as any)
         .catch(() => ({ _avg: { latencyMs: null } })),
       safeM(this.prisma, 'webhook')
         .count({ where: { active: true } })
@@ -625,7 +625,9 @@ export class ApiIntegrationService {
         totalLogs24h,
         errorLogs24h,
         errorRate24h,
-        avgLatencyMs: avgLatency._avg.latencyMs ? +avgLatency._avg.latencyMs.toFixed(0) : null,
+        avgLatencyMs: (avgLatency as any)._avg.latencyMs
+          ? +(avgLatency as any)._avg.latencyMs.toFixed(0)
+          : null,
         activeWebhooks: totalWebhooks,
         activeApiKeys: apiKeys,
       },

@@ -384,7 +384,7 @@ export class DevelopmentPlansService {
     });
     if (!action) throw new NotFoundException('Acção não encontrada');
 
-    const evidence = await (this.prisma as any).pdiEvidence.create({
+    const evidence = await this.prisma.pdiEvidence.create({
       data: {
         actionId: dto.actionId,
         submittedById: userId,
@@ -392,7 +392,7 @@ export class DevelopmentPlansService {
         url: dto.url,
         notes: dto.notes,
         evidenceType: dto.evidenceType ?? 'NOTE',
-      },
+      } as any,
     });
 
     // Auto-avançar para IN_PROGRESS se ainda em TODO

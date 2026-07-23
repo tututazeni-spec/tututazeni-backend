@@ -306,7 +306,7 @@ export class HistoryService {
     });
 
     // --- Source 6: Avatar sessions ---
-    const avatarSessions = await (this.prisma as any).avatarSession.findMany({
+    const avatarSessions = await this.prisma.avatarSession.findMany({
       where: {
         userId,
         status: 'COMPLETED',

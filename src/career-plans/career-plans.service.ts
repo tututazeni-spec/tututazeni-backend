@@ -111,21 +111,21 @@ export class CareerPlansService {
 
   async createCareerPath(dto: CareerPlansCreateCareerPathDto, createdById: number) {
     const { steps, ...rest } = dto;
-    const path = await (this.prisma as any).careerPath.create({
+    const path = await this.prisma.careerPath.create({
       data: {
         ...rest,
         active: dto.active ?? true,
         steps: {
           create: steps.map(s => ({ roleId: s.roleId, order: s.order, label: s.label })),
         },
-      },
+      } as any,
       include: { steps: { orderBy: { order: 'asc' }, include: { role: true } } },
     });
     return path;
   }
 
   async getCareerPaths(department?: string) {
-    return (this.prisma as any).careerPath.findMany({
+    return this.prisma.careerPath.findMany({
       where: {
         active: true,
         ...(department
@@ -510,15 +510,14 @@ export class CareerPlansService {
     });
 
     if (dto.approved) {
-      // FIX: User has no employee relation — use (this.prisma as any) to avoid type error
-      await (this.prisma as any).user
+      await this.prisma.user
         .update({
           where: { id: promotion.userId },
           data: {
             employee: {
               update: { role: promotion.targetRole?.name, currentRoleId: promotion.targetRoleId },
             },
-          },
+          } as any,
         })
         .catch(() => {});
 

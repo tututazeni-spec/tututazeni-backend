@@ -83,14 +83,14 @@ export class DocumentDeclarationsService {
       ...new Set((dto.content.match(/\{\{(\w+)\}\}/g) ?? []).map(m => m.slice(2, -2))),
     ];
 
-    const template = await (this.prisma as any).declarationTemplate.create({
+    const template = await this.prisma.declarationTemplate.create({
       data: {
         ...dto,
         variables: dto.variables ?? detected,
         active: dto.active ?? true,
         version: 1,
         createdById,
-      },
+      } as any,
     });
 
     await this.audit.log({

@@ -265,7 +265,7 @@ export class SuccessionService {
       matchScore = autoMatch.score;
     }
 
-    const plan = await (this.prisma as any).successionPlan.create({
+    const plan = await this.prisma.successionPlan.create({
       data: {
         criticalPositionId: dto.criticalPositionId,
         candidateId: dto.candidateId,
@@ -276,7 +276,7 @@ export class SuccessionService {
         available: dto.available ?? true,
         notes: dto.notes,
         readinessByDate: dto.readinessByDate ? new Date(dto.readinessByDate) : null,
-      },
+      } as any,
       include: {
         criticalPosition: { include: { position: true } },
         candidate: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -534,7 +534,7 @@ export class SuccessionService {
     const where: any = {};
     if (departmentId) where.position = { departmentId };
 
-    const criticalPositions = await (this.prisma as any).criticalPosition.findMany({
+    const criticalPositions = (await this.prisma.criticalPosition.findMany({
       where,
       include: {
         position: {
@@ -545,7 +545,7 @@ export class SuccessionService {
             users: { select: { id: true, fullName: true, avatarUrl: true }, take: 1 },
             department: { select: { id: true, name: true } },
           },
-        },
+        } as any,
         successionPlans: {
           include: {
             candidate: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -554,10 +554,10 @@ export class SuccessionService {
           take: 3,
         },
         _count: { select: { successionPlans: true } },
-      },
-      orderBy: [{ businessImpact: 'desc' }, { exitRisk: 'desc' }],
+      } as any,
+      orderBy: [{ businessImpact: 'desc' }, { exitRisk: 'desc' }] as any,
       take: 50,
-    });
+    })) as any[];
 
     return criticalPositions.map(cp => ({
       id: cp.id,

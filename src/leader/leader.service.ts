@@ -298,7 +298,7 @@ export class LeaderService {
   }
 
   async getMemberProfile(leaderId: number, memberId: number) {
-    const member = await (this.prisma as any).user.findUnique({
+    const member = (await this.prisma.user.findUnique({
       where: { id: memberId },
       select: {
         id: true,
@@ -313,7 +313,7 @@ export class LeaderService {
         performanceReviews: {
           orderBy: { createdAt: 'desc' },
           take: 5,
-          select: { id: true, score: true, type: true, period: true, createdAt: true },
+          select: { id: true, score: true, type: true, period: true, createdAt: true } as any,
         },
         enrollments: {
           include: { course: { select: { title: true, category: true } } },
@@ -327,8 +327,8 @@ export class LeaderService {
           include: { actions: { select: { status: true, progress: true }, take: 20 } },
         },
         badgeAwards: { include: { badge: true }, orderBy: { awardedAt: 'desc' }, take: 5 },
-      },
-    });
+      } as any,
+    })) as any;
 
     if (!member) throw new NotFoundException('Membro não encontrado');
 
@@ -534,7 +534,7 @@ export class LeaderService {
   // ══════════════════════════════════════════════════════
 
   async getTeamPlans(leaderId: number) {
-    const plans = await (this.prisma as any).developmentPlan.findMany({
+    const plans = (await this.prisma.developmentPlan.findMany({
       where: { user: { managerId: leaderId }, isTemplate: false },
       include: {
         user: {
@@ -546,15 +546,17 @@ export class LeaderService {
           },
         },
         actions: { select: { status: true, progress: true }, take: 30 },
-        goals: { select: { progress: true, status: true }, take: 10 },
+        goals: { select: { progress: true, status: true } as any, take: 10 },
       },
       orderBy: { updatedAt: 'desc' },
-    });
+    })) as any[];
 
-    return plans.map(p => {
-      const actCompleted = p.actions.filter(a => a.status === 'COMPLETED').length;
+    return plans.map((p: any) => {
+      const actCompleted = p.actions.filter((a: any) => a.status === 'COMPLETED').length;
       const progress = p.actions.length
-        ? Math.round(p.actions.reduce((a, ac) => a + (ac.progress ?? 0), 0) / p.actions.length)
+        ? Math.round(
+            p.actions.reduce((a: number, ac: any) => a + (ac.progress ?? 0), 0) / p.actions.length,
+          )
         : 0;
       return {
         ...p,

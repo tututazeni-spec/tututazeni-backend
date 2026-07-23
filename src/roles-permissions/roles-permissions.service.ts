@@ -395,8 +395,8 @@ export class RolesPermissionsService {
   // ══════════════════════════════════════════════════════
 
   async getPositionTemplates() {
-    return (this.prisma as any).roleTemplate
-      ?.findMany({
+    return this.prisma.roleTemplate
+      .findMany({
         include: { role: { select: { id: true, name: true, code: true } } },
         orderBy: { positionName: 'asc' },
       })
@@ -404,8 +404,8 @@ export class RolesPermissionsService {
   }
 
   async createPositionTemplate(dto: RoleTemplateDto) {
-    return (this.prisma as any).roleTemplate
-      ?.create({
+    return this.prisma.roleTemplate
+      .create({
         data: {
           positionName: dto.positionName,
           roleId: dto.roleId,
@@ -420,8 +420,8 @@ export class RolesPermissionsService {
 
   async applyPositionTemplate(positionId: number) {
     // Find template for this position
-    const template = await (this.prisma as any).roleTemplate
-      ?.findFirst({
+    const template = await this.prisma.roleTemplate
+      .findFirst({
         where: { positionId },
       })
       .catch(() => null);

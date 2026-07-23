@@ -710,7 +710,7 @@ export class TalentDevelopmentService {
 
     // Store evidence/note if provided
     if (dto.evidenceUrl || dto.notes) {
-      await (this.prisma as any).pdiEvidence.create({
+      await this.prisma.pdiEvidence.create({
         data: {
           actionId,
           submittedById: userId,
@@ -718,7 +718,7 @@ export class TalentDevelopmentService {
           url: dto.evidenceUrl,
           notes: dto.notes,
           evidenceType: dto.evidenceUrl ? 'LINK' : 'NOTE',
-        },
+        } as any,
       });
     }
 
@@ -1401,7 +1401,7 @@ export class TalentDevelopmentService {
       .filter(Boolean);
 
     // Recommend published courses not already assigned
-    const courses = await (this.prisma as any).course.findMany({
+    const courses = await this.prisma.course.findMany({
       where: {
         status: 'PUBLISHED',
         id: existingCourseIds.length > 0 ? { notIn: existingCourseIds } : undefined,
@@ -1415,7 +1415,7 @@ export class TalentDevelopmentService {
         level: true,
         _count: { select: { enrollments: true } },
       },
-      orderBy: { _count: { enrollments: 'desc' } },
+      orderBy: { _count: { enrollments: 'desc' } } as any,
       take: 10,
     });
 
