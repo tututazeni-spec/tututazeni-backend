@@ -85,10 +85,15 @@ services:
       - '--path.sysfs=/host/sys'
       - '--path.rootfs=/rootfs'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      # Textfile collector: lê métricas de backup geradas por backup-metrics.sh e walg-backup.sh
+      # O directório host é criado pelo install-cron.sh
+      - '--collector.textfile.directory=/textfile_collector'
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
+      # Métricas de backup escritas pelos scripts no VPS (fora do Docker)
+      - /var/lib/node-exporter/textfile_collector:/textfile_collector:ro
     ports:
       - '127.0.0.1:9100:9100'
     pid: host

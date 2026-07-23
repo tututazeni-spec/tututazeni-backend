@@ -118,3 +118,79 @@ groups:
         annotations:
           summary: 'Watchdog (dead-man) — deve estar sempre a disparar'
           description: 'Se o healthchecks.io deixar de receber isto, o stack de monitorização morreu.'
+
+  # ── Backup PostgreSQL ────────────────────────────────────────────────────
+  # Métricas geradas por ops/backup/backup-metrics.sh (textfile collector)
+  # e ops/backup/walg/walg-backup.sh. node-exporter deve ter
+  # --collector.textfile.directory=/textfile_collector (ver docker-compose.prod.yml).
+  - name: innova-backup
+    rules:
+      # Alerta se o último pg_dump tiver mais de 26 horas (cron diário às 02:00)
+      - alert: BackupTooOld
+        expr: >
+          (time() - innova_backup_last_success_timestamp_seconds) / 3600 > 26
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Backup pg_dump desactualizado'
+          description: >
+            O último backup pg_dump tem {{ $value | printf "%.1f" }}h (limite: 26h).
+            Verificar cron em /var/log/innova-backup.log no VPS.
+
+      # Alerta se as métricas de backup deixarem de ser geradas
+      # (sinal de que o cron de backup-metrics.sh parou)
+      - alert: BackupMetricsStale
+        expr: >
+          (time() - innova_backup_metrics_generated_timestamp_seconds) > 1800
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Métricas de backup não actualizadas'
+          description: >
+            O script backup-metrics.sh não actualizou as métricas há mais de 30 minutos.
+            Verificar o cron e o node-exporter textfile collector.
+
+      # Alerta se o S3 de backup deixar de ser acessível
+      - alert: BackupS3Unreachable
+        expr: innova_backup_s3_reachable == 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'S3 de backup inacessível'
+          description: >
+            O VPS não consegue aceder ao bucket S3 de backup há mais de 15 minutos.
+            Verificar credenciais AWS e conectividade de rede.
+
+      # Alerta se o último backup WAL-G full tiver mais de 8 dias (expectativa: semanal)
+      - alert: WalgFullBackupTooOld
+        expr: >
+          innova_walg_last_full_backup_timestamp_seconds > 0
+          and
+          (time() - innova_walg_last_full_backup_timestamp_seconds) / 86400 > 8
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Backup WAL-G full há mais de 8 dias'
+          description: >
+            O último backup full WAL-G tem mais de 8 dias.
+            A janela de PITR pode estar comprometida. Correr manualmente:
+            sudo -u postgres /opt/innova/backup/walg/walg-backup.sh full
+
+      # Alerta se o WAL-G nunca tiver corrido (timestamp = 0 significa não configurado ou falha)
+      - alert: WalgNotConfigured
+        expr: >
+          innova_walg_last_full_backup_timestamp_seconds == 0
+          and innova_backup_metrics_generated_timestamp_seconds > 0
+        for: 2h
+        labels:
+          severity: info
+        annotations:
+          summary: 'WAL-G sem backup full registado'
+          description: >
+            Nenhum backup WAL-G full foi detectado. Se o WAL-G estiver configurado,
+            correr o primeiro backup manualmente:
+            sudo -u postgres wal-g backup-push $PGDATA
