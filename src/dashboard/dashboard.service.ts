@@ -113,7 +113,7 @@ export class DashboardService {
           goals: { select: { progress: true }, take: 10 },
         },
       }),
-      (this.prisma as any).engagementSurvey.findMany({
+      this.prisma.engagementSurvey.findMany({
         where: { status: 'ACTIVE', responses: { none: { userId } } },
         // `type` não existe no modelo EngagementSurvey (causava 500 em /dashboard/my)
         select: { id: true, title: true },
@@ -406,12 +406,12 @@ export class DashboardService {
         where: { createdAt: { gte: prev, lt: since }, ...deptFilter },
       }),
       // Course não tem campo `active` — usa `status` (causava 500 em /dashboard/organization)
-      (this.prisma as any).course.count({ where: { status: 'PUBLISHED' } }),
-      (this.prisma as any).enrollment.count({
+      this.prisma.course.count({ where: { status: 'PUBLISHED' } }),
+      this.prisma.enrollment.count({
         // Enrollment usa `enrolledAt`, não `createdAt` (causava 500 em /dashboard/organization)
         where: { enrolledAt: { gte: since }, user: deptFilter },
       }),
-      (this.prisma as any).enrollment.count({
+      this.prisma.enrollment.count({
         where: { enrolledAt: { gte: prev, lt: since }, user: deptFilter },
       }),
       this.prisma.read.enrollment.count({
@@ -793,7 +793,7 @@ export class DashboardService {
         select: { id: true, title: true, category: true, thumbnailUrl: true },
         take: limit,
       }),
-      (this.prisma as any).competency
+      this.prisma.competency
         .findMany({
           where: { name: { contains: query, mode: 'insensitive' } },
           select: { id: true, name: true, type: true },
@@ -909,7 +909,7 @@ export class DashboardService {
   }
 
   private async getENPS() {
-    const survey = await (this.prisma as any).engagementSurvey
+    const survey = await this.prisma.engagementSurvey
       .findFirst({
         where: { type: 'ENPS', status: { in: ['ACTIVE', 'COMPLETED'] } },
         include: { responses: { include: { answers: { include: { question: true } } } } },
