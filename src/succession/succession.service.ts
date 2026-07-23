@@ -534,7 +534,7 @@ export class SuccessionService {
     const where: any = {};
     if (departmentId) where.position = { departmentId };
 
-    const criticalPositions = await this.prisma.criticalPosition.findMany({
+    const criticalPositions = (await this.prisma.criticalPosition.findMany({
       where,
       include: {
         position: {
@@ -557,7 +557,7 @@ export class SuccessionService {
       } as any,
       orderBy: [{ businessImpact: 'desc' }, { exitRisk: 'desc' }] as any,
       take: 50,
-    }) as any[];
+    })) as any[];
 
     return criticalPositions.map(cp => ({
       id: cp.id,

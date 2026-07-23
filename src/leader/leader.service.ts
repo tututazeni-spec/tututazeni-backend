@@ -298,7 +298,7 @@ export class LeaderService {
   }
 
   async getMemberProfile(leaderId: number, memberId: number) {
-    const member = await this.prisma.user.findUnique({
+    const member = (await this.prisma.user.findUnique({
       where: { id: memberId },
       select: {
         id: true,
@@ -328,7 +328,7 @@ export class LeaderService {
         },
         badgeAwards: { include: { badge: true }, orderBy: { awardedAt: 'desc' }, take: 5 },
       } as any,
-    }) as any;
+    })) as any;
 
     if (!member) throw new NotFoundException('Membro não encontrado');
 
@@ -534,7 +534,7 @@ export class LeaderService {
   // ══════════════════════════════════════════════════════
 
   async getTeamPlans(leaderId: number) {
-    const plans = await this.prisma.developmentPlan.findMany({
+    const plans = (await this.prisma.developmentPlan.findMany({
       where: { user: { managerId: leaderId }, isTemplate: false },
       include: {
         user: {
@@ -549,7 +549,7 @@ export class LeaderService {
         goals: { select: { progress: true, status: true } as any, take: 10 },
       },
       orderBy: { updatedAt: 'desc' },
-    }) as any[];
+    })) as any[];
 
     return plans.map((p: any) => {
       const actCompleted = p.actions.filter((a: any) => a.status === 'COMPLETED').length;
