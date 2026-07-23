@@ -218,7 +218,7 @@ export class AclService {
   // ── Legacy compat: positional args ─────────────────
 
   async createPermissionLegacy(name: string, action: string, subject: string, roleId: number) {
-    const perm = await (this.prisma as any).permission.create({ data: { name, action, subject } });
+    const perm = await this.prisma.permission.create({ data: { name, action, subject } });
     await this.assignPermissionToRole(roleId, perm.id);
     return perm;
   }
@@ -581,7 +581,7 @@ export class AclService {
     for (const p of BUILTIN_PERMISSIONS) {
       const existing = await this.prisma.permission.findFirst({ where: { name: p.name } });
       if (!existing) {
-        const perm = await (this.prisma as any).permission.create({
+        const perm = await this.prisma.permission.create({
           data: { name: p.name, action: p.action, subject: p.subject },
         });
         created.push(perm);

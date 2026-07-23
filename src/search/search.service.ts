@@ -186,7 +186,7 @@ export class SearchService {
     };
     if (opts.category) where.category = opts.category;
 
-    const courses = await (this.prisma as any).course.findMany({
+    const courses = await this.prisma.course.findMany({
       where,
       select: {
         id: true,
@@ -233,7 +233,7 @@ export class SearchService {
   }
 
   private async searchContent(q: string, opts: { limit: number }): Promise<any[]> {
-    const assets = await (this.prisma as any).contentAsset.findMany({
+    const assets = await this.prisma.contentAsset.findMany({
       where: { OR: [{ title: iLike(q) }, { description: iLike(q) }], active: true },
       select: { id: true, title: true, type: true, description: true, thumbnailUrl: true },
       take: opts.limit,
@@ -280,7 +280,7 @@ export class SearchService {
   }
 
   private async searchCompetencies(q: string, opts: { limit: number }): Promise<any[]> {
-    const comps = await (this.prisma as any).competency
+    const comps = await this.prisma.competency
       .findMany({
         where: { OR: [{ name: iLike(q) }, { description: iLike(q) }] },
         select: { id: true, name: true, type: true, description: true },
@@ -301,7 +301,7 @@ export class SearchService {
   }
 
   private async searchScenarios(q: string, opts: { limit: number }): Promise<any[]> {
-    const scenarios = await (this.prisma as any).avatarScenario
+    const scenarios = await this.prisma.avatarScenario
       .findMany({
         where: { OR: [{ title: iLike(q) }, { description: iLike(q) }], active: true },
         select: { id: true, title: true, category: true, difficulty: true },
@@ -374,7 +374,7 @@ export class SearchService {
         select: { fullName: true },
         take: limit,
       }),
-      (this.prisma as any).course.findMany({
+      this.prisma.course.findMany({
         where: { title: iLike(q), active: true },
         select: { title: true },
         take: limit,
@@ -437,14 +437,14 @@ export class SearchService {
       })
       .then(es => es.map(e => e.courseId));
 
-    const suggestedCourses = await (this.prisma as any).course.findMany({
+    const suggestedCourses = await this.prisma.course.findMany({
       where: { active: true, id: { notIn: enrolled } },
       select: { id: true, title: true, category: true, thumbnailUrl: true },
       take: 5,
     });
 
     // Popular content
-    const popularContent = await (this.prisma as any).contentAsset.findMany({
+    const popularContent = await this.prisma.contentAsset.findMany({
       where: { active: true },
       select: { id: true, title: true, type: true },
       orderBy: { viewCount: 'desc' },
