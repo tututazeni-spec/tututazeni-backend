@@ -36,15 +36,18 @@ fi
 CRON_FULL="0 1 * * 0   ${SCRIPTS_DIR}/walg-backup.sh full  >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
 CRON_DELTA="0 1 * * 1-6 ${SCRIPTS_DIR}/walg-backup.sh delta >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
 CRON_WAL_CLEAN="0 3 * * 0   wal-g wal-push-full-to-wal-archive >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
+CRON_VERIFY="0 5 * * 0   ${SCRIPTS_DIR}/verify-walg-backup.sh >> ${LOG_FILE} 2>&1 ${CRON_MARKER}"
 
 (crontab -l 2>/dev/null | grep -v "$CRON_MARKER" || true
  echo "$CRON_FULL"
  echo "$CRON_DELTA"
+ echo "$CRON_VERIFY"
 ) | crontab -
 
 log "Cron jobs do WAL-G instalados para o utilizador $(whoami):"
 log "  Full backup  : todos os Domingos às 01:00"
 log "  Delta backup : Seg–Sáb às 01:00 (incremental)"
+log "  Verificação WAL-G: todos os Domingos às 05:00"
 log "  WAL archiving: contínuo via archive_command do PostgreSQL"
 log ""
 log "Logs em: $LOG_FILE"
