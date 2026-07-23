@@ -39,7 +39,7 @@ function buildMockPrisma() {
     continuousFeedback: crud(),
   };
 
-  // continuousFeedback is accessed via (this.prisma as any).continuousFeedback
+  // continuousFeedback accessed directly via this.prisma.continuousFeedback
   return mock;
 }
 
@@ -84,7 +84,7 @@ describe('PerformanceService (progress)', () => {
   beforeEach(async () => {
     mockPrisma = buildMockPrisma();
 
-    // continuousFeedback accessed via (this.prisma as any)
+    // continuousFeedback accessed directly via this.prisma.continuousFeedback
     Object.defineProperty(mockPrisma, 'read', {
       get() {
         return mockPrisma;

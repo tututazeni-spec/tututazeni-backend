@@ -59,7 +59,7 @@ const mockPrisma = {
   allowedLocation: { findMany: jest.fn().mockResolvedValue([]) },
 };
 
-// attendanceRecord é acedido como (this.prisma as any).attendanceRecord
+// attendanceRecord acedido directamente via this.prisma.attendanceRecord
 const mockPrismaProxy = new Proxy(mockPrisma, {
   get(target, prop) {
     if (prop === 'attendanceRecord') return mockAttendanceRecord;
