@@ -135,8 +135,8 @@ groups:
         annotations:
           summary: 'Backup pg_dump desactualizado'
           description: >
-            O último backup pg_dump tem {{ printf "%.1f" (div (sub (unixEpoch) (query "innova_backup_last_success_timestamp_seconds" | first | value)) 3600) }}h.
-            Limite: 26h. Verificar cron em /var/log/innova-backup.log no VPS.
+            O último backup pg_dump tem {{ $value | printf "%.1f" }}h (limite: 26h).
+            Verificar cron em /var/log/innova-backup.log no VPS.
 
       # Alerta se as métricas de backup deixarem de ser geradas
       # (sinal de que o cron de backup-metrics.sh parou)
