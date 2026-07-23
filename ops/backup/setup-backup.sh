@@ -31,9 +31,11 @@ _section() {
 }
 
 _prompt() {
-  printf "  %s: " "$1"
-  read -r REPLY
-  echo "$REPLY"
+  local label="$1"
+  printf "  %s: " "$label" >&2
+  local val
+  read -r val
+  printf '%s' "$val"
 }
 
 _aws() {
@@ -46,13 +48,12 @@ _aws() {
 
 _upsert_env() {
   local key="$1" val="$2"
-  local escaped_val
-  escaped_val=$(printf '%s\n' "$val" | sed 's/[|&\]/\\&/g')
-  if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
-    sed -i "s|^${key}=.*|${key}=${escaped_val}|" "$ENV_FILE"
-  else
-    echo "${key}=${val}" >> "$ENV_FILE"
-  fi
+  local tmp
+  tmp="${ENV_FILE}.tmp.$$"
+  grep -v "^${key}=" "$ENV_FILE" 2>/dev/null > "$tmp" || true
+  printf '%s=%s\n' "$key" "$val" >> "$tmp"
+  mv "$tmp" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
 }
 
 # ── Passo 1: Dependências ─────────────────────────────────────

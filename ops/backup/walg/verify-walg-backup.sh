@@ -22,20 +22,6 @@ VERIFY_DURATION=0
 
 log()  { echo "[$(date -Iseconds)] INFO  $*"; }
 warn() { echo "[$(date -Iseconds)] WARN  $*" >&2; }
-fail() {
-  echo "[$(date -Iseconds)] ERROR $*" >&2
-  _write_metrics "failure"
-  _notify "❌ INNOVA WAL-G Verify FALHOU (${CURRENT_PHASE}): $*"
-  exit 1
-}
-
-# ── Carregar variáveis ────────────────────────────────────────
-[ -f "$WALG_ENV_FILE" ] \
-  || fail "Ficheiro de configuração não encontrado: $WALG_ENV_FILE"
-# shellcheck disable=SC1090
-set -o allexport
-source "$WALG_ENV_FILE"
-set +o allexport
 
 _notify() {
   local msg="$1"
@@ -69,6 +55,21 @@ innova_walg_verify_duration_seconds ${VERIFY_DURATION}
 PROM
   mv "${METRICS_FILE}.tmp" "$METRICS_FILE" 2>/dev/null || true
 }
+
+fail() {
+  echo "[$(date -Iseconds)] ERROR $*" >&2
+  _write_metrics "failure"
+  _notify "❌ INNOVA WAL-G Verify FALHOU (${CURRENT_PHASE}): $*"
+  exit 1
+}
+
+# ── Carregar variáveis ────────────────────────────────────────
+[ -f "$WALG_ENV_FILE" ] \
+  || fail "Ficheiro de configuração não encontrado: $WALG_ENV_FILE"
+# shellcheck disable=SC1090
+set -o allexport
+source "$WALG_ENV_FILE"
+set +o allexport
 
 START_TS=$(date +%s)
 
