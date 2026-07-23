@@ -922,6 +922,7 @@ model Role {
   permissions     Permission[]
   code            String? @unique
   rolePermissions RolePermission[]
+  roleTemplates   RoleTemplate[]
 }
 
 model Permission {
@@ -943,6 +944,19 @@ model RolePermission {
   permissionId Int
   role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+}
+
+model RoleTemplate {
+  id           Int      @id @default(autoincrement())
+  positionName String   @db.VarChar(100)
+  roleId       Int
+  positionId   Int?
+  createdAt    DateTime @default(now())
+  role         Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  position     Position? @relation(fields: [positionId], references: [id])
+
+  @@index([roleId])
+  @@index([positionId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1050,6 +1064,7 @@ model Position {
   internalVacancies   InternalVacancy[]
   orgChangesTo        OrgChangeLog[]       @relation("OrgChangePosTto")
   criticalPositions   CriticalPosition[]
+  roleTemplates       RoleTemplate[]
 }
 
 model OrgChangeLog {
