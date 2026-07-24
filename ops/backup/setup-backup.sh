@@ -50,10 +50,12 @@ _upsert_env() {
   local key="$1" val="$2"
   local tmp
   tmp="${ENV_FILE}.tmp.$$"
-  grep -v "^${key}=" "$ENV_FILE" 2>/dev/null > "$tmp" || true
+  # Create owner-only BEFORE any secret lands in the file
+  ( umask 077; : > "$tmp" )
+  grep -v "^${key}=" "$ENV_FILE" 2>/dev/null >> "$tmp" || true
   printf '%s=%s\n' "$key" "$val" >> "$tmp"
+  chmod 600 "$tmp"
   mv "$tmp" "$ENV_FILE"
-  chmod 600 "$ENV_FILE"
 }
 
 # ── Passo 1: Dependências ─────────────────────────────────────
