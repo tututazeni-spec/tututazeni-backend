@@ -25,7 +25,6 @@ export class MailService implements OnModuleInit {
   }
 
   async sendPasswordReset(email: string, token: string): Promise<void> {
-    void token; // nunca logado — entregue ao utilizador apenas via link
     await this.send({
       to: email,
       subject: 'INNOVA — Recuperação de password',
