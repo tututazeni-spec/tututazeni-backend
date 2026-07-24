@@ -30,7 +30,7 @@ DATE_PATH=$(date +%Y/%m/%d)
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
 S3_BUCKET="${BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET não definida}"
 S3_PREFIX="${BACKUP_S3_PREFIX:-innova/postgres}"
-PASSPHRASE="${BACKUP_ENCRYPT_PASSPHRASE:-}"
+PASSPHRASE="${BACKUP_ENCRYPT_PASSPHRASE:?BACKUP_ENCRYPT_PASSPHRASE obrigatória. Ver .env.production.example}"
 
 # ── Logging ──────────────────────────────────────────────────
 log()  { echo "[$(date -Iseconds)] INFO  $*"; }

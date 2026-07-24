@@ -194,3 +194,29 @@ groups:
             Nenhum backup WAL-G full foi detectado. Se o WAL-G estiver configurado,
             correr o primeiro backup manualmente:
             sudo -u postgres wal-g backup-push $PGDATA
+
+      - alert: WalgVerifyFailed
+        expr: innova_walg_verify_success == 0
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Verificação WAL-G falhou'
+          description: >
+            O script verify-walg-backup.sh reportou falha há mais de 1h.
+            Verificar /var/log/innova-walg.log no servidor PostgreSQL.
+            Correr manualmente: sudo -u postgres /opt/innova/backup/walg/verify-walg-backup.sh
+
+      - alert: WalgVerifyStale
+        expr: >
+          innova_walg_verify_last_timestamp_seconds > 0
+          and
+          (time() - innova_walg_verify_last_timestamp_seconds) / 86400 > 9
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Verificação WAL-G não corre há mais de 9 dias'
+          description: >
+            A verificação semanal WAL-G está em atraso (esperada: Domingos 05:00).
+            Verificar o cron no servidor PostgreSQL: crontab -l | grep WALG

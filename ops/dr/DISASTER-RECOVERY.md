@@ -345,3 +345,5 @@ Realizar **a cada 6 meses** em ambiente de staging:
 | Alert rules backup | `ops/monitoring/alert-rules.yml` (grupo `innova-backup`) |
 | Deploy pipeline | `.github/workflows/deploy.yml` |
 | Configuração Postgres WAL | `ops/backup/walg/postgresql-walg.conf` |
+| Script de verificação WAL-G | `ops/backup/walg/verify-walg-backup.sh` |
+| Script de activação (setup) | `ops/backup/setup-backup.sh`            |
