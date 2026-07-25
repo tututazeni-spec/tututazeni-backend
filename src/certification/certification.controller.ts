@@ -20,7 +20,7 @@ import {
   RevokeDto,
   FilterCertificateDto,
 } from './dto';
-import { Role } from '../auth/enums/role.enum';
+import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
 @ApiTags('Certificação Digital')
 @ApiBearerAuth()
@@ -47,6 +47,7 @@ export class CertificationController {
   }
 
   @Get('templates')
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Listar templates' })
   findAllTemplates() {
     return this.service.findAllTemplates();
@@ -78,6 +79,7 @@ export class CertificationController {
   }
 
   @Get('my-certificates')
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Meus certificados' })
   getMyCertificates(
     @CurrentUser() user: CurrentUserData,
@@ -88,12 +90,14 @@ export class CertificationController {
   }
 
   @Get('certificates/:id')
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe de certificado' })
-  findCertificateById(@Param('id') id: string) {
+  findCertificateById(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.findCertificateById(id);
   }
 
   @Post('certificates/:id/download')
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Download de certificado' })
   download(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.service.downloadCertificate(id, user.id);
@@ -116,6 +120,7 @@ export class CertificationController {
   }
 
   @Get('badges')
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Listar badges' })
   findAllBadges() {
     return this.service.findAllBadges();
