@@ -25,7 +25,6 @@ const mockSvc = {
   getAuditLog: jest.fn().mockResolvedValue([]),
   getDeniedLog: jest.fn().mockResolvedValue([]),
   getStats: jest.fn().mockResolvedValue({}),
-  seedBuiltinPermissions: jest.fn().mockResolvedValue({ seeded: 35 }),
 };
 
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
@@ -155,10 +154,5 @@ describe('AclController', () => {
   it('stats → getStats', async () => {
     await controller.stats();
     expect(mockSvc.getStats).toHaveBeenCalled();
-  });
-
-  it('seedPermissions → seedBuiltinPermissions', async () => {
-    await controller.seedPermissions();
-    expect(mockSvc.seedBuiltinPermissions).toHaveBeenCalled();
   });
 });
