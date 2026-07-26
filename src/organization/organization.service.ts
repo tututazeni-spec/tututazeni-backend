@@ -440,7 +440,15 @@ export class OrganizationService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          userId: dto.userId,
+          changeType: dto.changeType,
+          action: 'ORG_CHANGE',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar utilizador de mudança organizacional',
+        }),
+      );
 
     return change;
   }

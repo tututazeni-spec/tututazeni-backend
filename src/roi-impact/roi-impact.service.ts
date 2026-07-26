@@ -1,5 +1,5 @@
 // src/roi-impact/roi-impact.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoiFilterDto, CalculateRoiDto, WhatIfDto, RoiConfidence } from './roi-impact.dto';
 
@@ -62,6 +62,8 @@ function buildNarrative(roi: number, benefit: number, cost: number, completions:
 
 @Injectable()
 export class RoiImpactService {
+  private readonly logger = new Logger(RoiImpactService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -101,12 +103,28 @@ export class RoiImpactService {
           where: { createdAt: { gte: range.gte, lte: range.lte } } as any,
           _avg: { score: true },
         })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'avgAssessmentScore',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular média de notas de avaliação para ROI de formação',
+          });
+          return { _avg: { score: null } };
+        }),
       this.prisma.lessonProgress
         .count({
           where: { completed: true, updatedAt: { gte: range.gte, lte: range.lte } } as any,
         })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'totalLessonCompletions',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar conclusões de lições para ROI de formação',
+          });
+          return 0;
+        }),
       // Performance before training period
       this.prisma.performanceReview
         .aggregate({
@@ -116,7 +134,15 @@ export class RoiImpactService {
           },
           _avg: { score: true },
         })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'performanceBefore',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular performance média antes do período para ROI',
+          });
+          return { _avg: { score: null } };
+        }),
       // Performance after training period
       this.prisma.performanceReview
         .aggregate({
@@ -126,7 +152,15 @@ export class RoiImpactService {
           },
           _avg: { score: true },
         })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'performanceAfter',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular performance média depois do período para ROI',
+          });
+          return { _avg: { score: null } };
+        }),
       // Turnover proxy: inactive users created before period
       this.prisma.read.user.count({ where: { active: false, createdAt: { lt: range.gte } } }),
       this.prisma.read.user.count({
@@ -138,7 +172,15 @@ export class RoiImpactService {
           where: filter.departmentId ? { user: { departmentId: filter.departmentId } } : {},
           _avg: { currentLevel: true },
         })
-        .catch(() => ({ _avg: { currentLevel: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'competencyEvolution',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular evolução média de competências para ROI',
+          });
+          return { _avg: { currentLevel: null } };
+        }),
     ]);
 
     const completionRate = pct(completed, enrollments);
@@ -252,7 +294,15 @@ export class RoiImpactService {
       }),
       this.prisma.surveyResponse
         .aggregate({ where: { createdAt: { gte: range.gte }, ...uWhere }, _avg: { score: true } })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'avgSurveyScore',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular média de surveys para métricas de impacto (L1)',
+          });
+          return { _avg: { score: null } };
+        }),
       // L2
       this.prisma.read.enrollment.count({
         where: { status: 'CONCLUIDO', enrolledAt: { gte: range.gte, lte: range.lte }, ...uWhere },
@@ -262,10 +312,26 @@ export class RoiImpactService {
           where: { createdAt: { gte: range.gte, lte: range.lte } } as any,
           _avg: { score: true },
         })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'avgAssessmentScore',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular média de avaliações para métricas de impacto (L2)',
+          });
+          return { _avg: { score: null } };
+        }),
       this.prisma.lessonProgress
         .count({ where: { completed: true, updatedAt: { gte: range.gte } } as any })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'lessonHours',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar lições concluídas para métricas de impacto (L2)',
+          });
+          return 0;
+        }),
       // L3
       this.prisma.developmentPlanAction
         .count({
@@ -275,17 +341,49 @@ export class RoiImpactService {
             plan: uWhere ? { user: uWhere.user } : {},
           },
         })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'completedActions',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar acções de PDI concluídas para métricas de impacto (L3)',
+          });
+          return 0;
+        }),
       this.prisma.userCompetency
         .aggregate({ where: uWhere, _avg: { currentLevel: true } })
-        .catch(() => ({ _avg: { currentLevel: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'skillAvg',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular média de competências para métricas de impacto (L3)',
+          });
+          return { _avg: { currentLevel: null } };
+        }),
       // L4
       this.prisma.performanceReview
         .aggregate({ where: { createdAt: { gte: range.gte }, ...uWhere }, _avg: { score: true } })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'avgPerf',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular performance actual para métricas de impacto (L4)',
+          });
+          return { _avg: { score: null } };
+        }),
       this.prisma.performanceReview
         .aggregate({ where: { createdAt: { lt: range.gte }, ...uWhere }, _avg: { score: true } })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'prevAvgPerf',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular performance anterior para métricas de impacto (L4)',
+          });
+          return { _avg: { score: null } };
+        }),
       this.prisma.read.user.count({
         where: {
           active: true,
@@ -440,13 +538,29 @@ export class RoiImpactService {
           where: { createdAt: { lt: range.gte }, ...uWhere },
           _avg: { score: true },
         })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'performanceBefore',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular performance média anterior para impacto de performance',
+          });
+          return { _avg: { score: null } };
+        }),
       this.prisma.performanceReview
         .aggregate({
           where: { createdAt: { gte: range.gte }, ...uWhere },
           _avg: { score: true },
         })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'performanceAfter',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular performance média actual para impacto de performance',
+          });
+          return { _avg: { score: null } };
+        }),
       this.prisma.read.performanceReview.count({ where: { score: { gte: 4 }, ...uWhere } }),
       this.prisma.read.performanceReview.count({ where: { score: { lt: 2.5 }, ...uWhere } }),
     ]);
@@ -535,16 +649,48 @@ export class RoiImpactService {
         .then(async mandC => {
           const mandT = await this.prisma.enrollment
             .count({ where: { course: { mandatory: true } as any, ...uWhere } })
-            .catch(() => 0);
+            .catch(e => {
+              this.logger.warn({
+                departmentId: filter.departmentId,
+                metric: 'mandatoryTotal',
+                err: { message: e instanceof Error ? e.message : String(e) },
+                msg: 'Falha ao contar total de matrículas obrigatórias para impacto de aprendizagem',
+              });
+              return 0;
+            });
           return pct(mandC, mandT);
         })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'mandatoryRate',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular taxa de conclusão de formações obrigatórias',
+          });
+          return 0;
+        }),
       this.prisma.userCompetency
         .aggregate({ where: uWhere, _avg: { currentLevel: true } })
-        .catch(() => ({ _avg: { currentLevel: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'avgCompetencyBefore',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular nível médio de competência actual para impacto de aprendizagem',
+          });
+          return { _avg: { currentLevel: null } };
+        }),
       this.prisma.userCompetency
         .aggregate({ where: uWhere, _avg: { targetLevel: true } })
-        .catch(() => ({ _avg: { targetLevel: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId: filter.departmentId,
+            metric: 'avgCompetencyAfter',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular nível médio de competência alvo para impacto de aprendizagem',
+          });
+          return { _avg: { targetLevel: null } };
+        }),
     ]);
 
     const completionRate = pct(completed, total);

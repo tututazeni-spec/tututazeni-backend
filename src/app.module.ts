@@ -6,6 +6,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { buildThrottlerOptions } from './common/config/throttler.config';
 import { LoggerModule } from 'nestjs-pino';
 import { randomUUID } from 'node:crypto';
+import { getRequestContext } from './common/logging/request-context';
 
 // MÓDULOS ORIGINAIS
 import { PrismaModule } from './prisma/prisma.module';
@@ -112,6 +113,11 @@ import { RolesGuard } from './common/guards/roles.guard';
           return id;
         },
         customProps: req => ({ reqId: (req as { id?: string }).id }),
+        // Injecta reqId/userId (via AsyncLocalStorage) em TODO log emitido durante o
+        // pedido — inclusive nos `new Logger()` dos services, que passam pela mesma
+        // instância pino sob o capô. Resolve a ausência de contexto sem obrigar a
+        // reescrever a assinatura de cada chamada de log existente.
+        mixin: () => getRequestContext(),
         redact: {
           paths: [
             'req.headers.authorization',

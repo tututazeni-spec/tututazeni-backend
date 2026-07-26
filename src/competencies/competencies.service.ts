@@ -195,7 +195,15 @@ export class CompetenciesService {
               metadata: JSON.stringify({}),
             },
           })
-          .catch(() => {});
+          .catch((e: unknown) => {
+            this.logger.warn({
+              userId: dto.userId,
+              action: 'COMPETENCY_EVALUATED_NOTIFY',
+              entityId: dto.competencyId,
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao notificar utilizador sobre avaliação de competência pelo gestor',
+            });
+          });
       }
     }
 
@@ -258,7 +266,15 @@ export class CompetenciesService {
               metadata: JSON.stringify({}),
             },
           })
-          .catch(() => {});
+          .catch((e: unknown) => {
+            this.logger.warn({
+              userId: dto.userId,
+              action: 'COMPETENCY_DIVERGENCE_NOTIFY',
+              entityId: dto.competencyId,
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao notificar utilizador sobre divergência de autoavaliação vs gestor',
+            });
+          });
       }
     }
 
@@ -432,7 +448,15 @@ export class CompetenciesService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId: dto.targetUserId,
+          action: 'COMPETENCY_ENDORSED_NOTIFY',
+          entityId: dto.competencyId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar utilizador sobre endorsement de competência recebido',
+        });
+      });
 
     return endorsement;
   }

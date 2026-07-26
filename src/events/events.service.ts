@@ -189,7 +189,15 @@ export class EventsService {
             category: 'LMS',
           })),
         })
-        .catch(() => {});
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVENT_CANCELLED_NOTIFY',
+            entityId: id,
+            participantCount: participants.length,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar participantes sobre cancelamento do evento',
+          });
+        });
     }
 
     return { message: 'Evento cancelado e participantes notificados' };
@@ -252,7 +260,15 @@ export class EventsService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          action: 'EVENT_JOIN_NOTIFY',
+          entityId: eventId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar utilizador sobre inscrição no evento',
+        });
+      });
 
     // XP
     await this.prisma.userPoints
@@ -261,7 +277,15 @@ export class EventsService {
         create: { userId, points: 5 },
         update: { points: { increment: 5 } },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          action: 'EVENT_JOIN_POINTS',
+          entityId: eventId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir pontos de gamificação por inscrição em evento',
+        });
+      });
 
     return participant;
   }
@@ -300,7 +324,15 @@ export class EventsService {
               actionUrl: `/events/${eventId}`,
             },
           })
-          .catch(() => {});
+          .catch((e: unknown) => {
+            this.logger.warn({
+              userId: nextOnWaitlist.userId,
+              action: 'EVENT_WAITLIST_PROMOTED_NOTIFY',
+              entityId: eventId,
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao notificar utilizador promovido da lista de espera',
+            });
+          });
       }
     }
 
@@ -337,7 +369,15 @@ export class EventsService {
         create: { userId, points: 20 },
         update: { points: { increment: 20 } },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          action: 'EVENT_CHECKIN_POINTS',
+          entityId: dto.eventId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir pontos de gamificação por check-in em evento',
+        });
+      });
 
     return updated;
   }
@@ -363,10 +403,26 @@ export class EventsService {
         create: { userId, points: 5 },
         update: { points: { increment: 5 } },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          action: 'EVENT_FEEDBACK_POINTS',
+          entityId: eventId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir pontos de gamificação por feedback de evento',
+        });
+      });
 
     // Emitir certificado se cumprir critérios
-    await this.autoIssueCertificate(eventId, userId).catch(() => {});
+    await this.autoIssueCertificate(eventId, userId).catch((e: unknown) => {
+      this.logger.warn({
+        userId,
+        action: 'EVENT_AUTO_ISSUE_CERTIFICATE',
+        entityId: eventId,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao emitir certificado automático após feedback de evento',
+      });
+    });
 
     return feedback;
   }
@@ -409,7 +465,15 @@ export class EventsService {
           category: 'LMS',
         },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          action: 'EVENT_CERTIFICATE_ISSUED_NOTIFY',
+          entityId: eventId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar utilizador sobre emissão de certificado de evento',
+        });
+      });
   }
 
   // ─── DASHBOARD DO ORGANIZADOR ─────────────────────────────────────────────

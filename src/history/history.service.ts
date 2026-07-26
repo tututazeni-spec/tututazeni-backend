@@ -1,5 +1,5 @@
 // src/history/history.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   HistoryFilterDto,
@@ -160,6 +160,8 @@ function enrichEntry(log: any): any {
 
 @Injectable()
 export class HistoryService {
+  private readonly logger = new Logger(HistoryService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -325,7 +327,15 @@ export class HistoryService {
         orderBy: { issuedAt: 'desc' },
         take: 20,
       })
-      .catch(() => [] as any[]);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          action: 'HISTORY_TIMELINE_CERTIFICATES',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter certificados para a timeline do utilizador',
+        });
+        return [] as any[];
+      });
 
     // ── Merge into unified timeline events ──────────────
 
@@ -540,7 +550,15 @@ export class HistoryService {
           where: { userId },
           orderBy: { issuedAt: 'desc' },
         })
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            action: 'HISTORY_MILESTONES_CERTIFICATES',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter certificados para os marcos do utilizador',
+          });
+          return [] as any[];
+        }),
       this.prisma.read.badgeAward.findMany({
         where: { userId },
         include: { badge: true },
@@ -553,7 +571,15 @@ export class HistoryService {
           orderBy: { createdAt: 'desc' },
           take: 10,
         })
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            action: 'HISTORY_MILESTONES_PROMOTIONS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter registos de promoção para os marcos do utilizador',
+          });
+          return [] as any[];
+        }),
       this.prisma.read.performanceReview.findMany({
         where: { userId, score: { gte: 4 } },
         select: { id: true, score: true, createdAt: true },
@@ -719,7 +745,14 @@ export class HistoryService {
           where: { expiresAt: { gte: now, lte: new Date(Date.now() + 30 * 86400000) } },
           include: { user: { select: { id: true, fullName: true } } },
         })
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'HISTORY_UPCOMING_EXPIRING_CERTS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter certificados a expirar nos próximos 30 dias',
+          });
+          return [] as any[];
+        }),
     ]);
 
     return { anniversaries, expiringCertificates: expiring };
@@ -747,7 +780,14 @@ export class HistoryService {
           orderBy: { _count: { id: 'desc' } },
           take: 10,
         })
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'HISTORY_AUDIT_STATS_BY_ACTION',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao agrupar audit logs por acção nas estatísticas',
+          });
+          return [] as any[];
+        }),
       this.prisma.auditLog
         .groupBy({
           by: ['userId'],
@@ -765,7 +805,14 @@ export class HistoryService {
           const uMap = new Map(users.map(u => [u.id, u]));
           return rows.map(r => ({ user: uMap.get(r.userId), count: r._count.id }));
         })
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'HISTORY_AUDIT_STATS_TOP_USERS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular utilizadores com mais actividade nas estatísticas de audit',
+          });
+          return [] as any[];
+        }),
       this.prisma.auditLog
         .findMany({
           where: {
@@ -778,7 +825,14 @@ export class HistoryService {
           take: 5,
           include: { user: { select: { id: true, fullName: true } } },
         })
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'HISTORY_AUDIT_STATS_RECENT_ALERTS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter alertas administrativos recentes nas estatísticas de audit',
+          });
+          return [] as any[];
+        }),
     ]);
 
     return {

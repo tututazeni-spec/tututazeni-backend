@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -79,6 +80,8 @@ const safeM = (prisma: any, name: string) =>
 
 @Injectable()
 export class EvaluationService {
+  private readonly logger = new Logger(EvaluationService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -107,8 +110,15 @@ export class EvaluationService {
           targetDeptIds: dto.targetDeptIds ?? [],
         },
       })
-      .catch(async () => {
+      .catch(async (e: unknown) => {
         // Fallback to performanceEvaluation approach if cycle model missing
+        this.logger.warn({
+          action: 'EVALUATION_CYCLE_CREATE',
+          name: dto.name,
+          createdById,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar ciclo de avaliação — a usar fallback de compatibilidade',
+        });
         return {
           id: null,
           name: dto.name,
@@ -133,11 +143,27 @@ export class EvaluationService {
         take: limit,
         orderBy: { createdAt: 'desc' },
       })
-      .catch(() => [] as any[]);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_CYCLE_LIST',
+          filters,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao listar ciclos de avaliação — a devolver lista vazia',
+        });
+        return [] as any[];
+      });
 
     const total = await safeM(this.prisma, 'evaluationCycle')
       .count({ where })
-      .catch(() => 0);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_CYCLE_COUNT',
+          filters,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao contar ciclos de avaliação — a devolver 0',
+        });
+        return 0;
+      });
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
@@ -148,7 +174,15 @@ export class EvaluationService {
         where: { id },
         include: { form: true },
       })
-      .catch(() => null);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_CYCLE_FETCH',
+          cycleId: id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter ciclo de avaliação — a devolver null',
+        });
+        return null;
+      });
 
     if (!cycle) throw new NotFoundException('Ciclo não encontrado');
 
@@ -157,7 +191,15 @@ export class EvaluationService {
       .findMany({
         where: cycle.id ? { cycleId: cycle.id } : {},
       })
-      .catch(() => [] as any[]);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_REQUEST_LIST_BY_CYCLE',
+          cycleId: cycle.id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao listar pedidos de avaliação do ciclo — a devolver lista vazia',
+        });
+        return [] as any[];
+      });
 
     const total = requests.length;
     const completed = requests.filter((r: any) => r.status === 'COMPLETED').length;
@@ -178,7 +220,15 @@ export class EvaluationService {
 
     return safeM(this.prisma, 'evaluationCycle')
       .update({ where: { id }, data })
-      .catch(() => ({ id, message: 'Actualizado', ...dto }));
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_CYCLE_UPDATE',
+          cycleId: id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao actualizar ciclo de avaliação — a devolver dados de compatibilidade',
+        });
+        return { id, message: 'Actualizado', ...dto };
+      });
   }
 
   async publishCycle(id: number) {
@@ -187,7 +237,15 @@ export class EvaluationService {
         where: { id },
         data: { status: CycleStatus.PUBLISHED, publishedAt: new Date() },
       })
-      .catch(() => ({ id, status: 'PUBLISHED' }));
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_CYCLE_PUBLISH',
+          cycleId: id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao publicar ciclo de avaliação — a devolver estado de compatibilidade',
+        });
+        return { id, status: 'PUBLISHED' };
+      });
   }
 
   async activateCycle(id: number) {
@@ -201,7 +259,15 @@ export class EvaluationService {
         where: { id },
         data: { status: CycleStatus.ACTIVE, activatedAt: new Date() },
       })
-      .catch(() => ({ id, status: 'ACTIVE' }));
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_CYCLE_ACTIVATE',
+          cycleId: id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao activar ciclo de avaliação — a devolver estado de compatibilidade',
+        });
+        return { id, status: 'ACTIVE' };
+      });
 
     // Notify all participants
     const requests = await (this.prisma as any).evaluationRequest
@@ -209,7 +275,15 @@ export class EvaluationService {
         where: { ...(id ? { cycleId: id } : {}) },
         select: { evaluatorId: true },
       })
-      .catch(() => [] as any[]);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_REQUEST_LIST_BY_CYCLE',
+          cycleId: id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao listar avaliadores do ciclo para notificação — a devolver lista vazia',
+        });
+        return [] as any[];
+      });
 
     const uniqueIds = [...new Set((requests as any[]).map((r: any) => r.evaluatorId))];
     await this.prisma.notificationLog
@@ -222,7 +296,15 @@ export class EvaluationService {
         })),
         skipDuplicates: true,
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_CYCLE_NOTIFY',
+          cycleId: id,
+          userIds: uniqueIds,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificações de início de ciclo',
+        });
+      });
 
     return updated;
   }
@@ -267,7 +349,15 @@ export class EvaluationService {
           })),
           skipDuplicates: true,
         })
-        .catch(() => {});
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_REQUEST_AUTO_ASSIGN',
+            cycleId,
+            assignmentsCount: assignments.length,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar pedidos de avaliação automáticos do ciclo',
+          });
+        });
     }
   }
 
@@ -297,8 +387,15 @@ export class EvaluationService {
         },
         include: { questions: { orderBy: { order: 'asc' } } },
       })
-      .catch(async () => {
+      .catch(async (e: unknown) => {
         // Fallback: return DTO as confirmation
+        this.logger.warn({
+          action: 'EVALUATION_FORM_CREATE',
+          title: dto.title,
+          createdById,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar formulário de avaliação — a usar fallback de compatibilidade',
+        });
         return { ...dto, id: null, message: 'Formulário registado (modo compatibilidade)' };
       });
   }
@@ -309,7 +406,14 @@ export class EvaluationService {
         include: { _count: { select: { questions: true } } },
         orderBy: { createdAt: 'desc' },
       })
-      .catch(() => [] as any[]);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_FORM_LIST',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao listar formulários de avaliação — a devolver lista vazia',
+        });
+        return [] as any[];
+      });
   }
 
   async getForm(id: number) {
@@ -318,7 +422,15 @@ export class EvaluationService {
         where: { id },
         include: { questions: { orderBy: { order: 'asc' } } },
       })
-      .catch(() => null);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_FORM_FETCH',
+          formId: id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter formulário de avaliação — a devolver null',
+        });
+        return null;
+      });
     if (!form) throw new NotFoundException('Formulário não encontrado');
     return form;
   }
@@ -337,7 +449,17 @@ export class EvaluationService {
           ...(dto.cycleId ? { cycleId: dto.cycleId } : {}),
         },
       })
-      .catch(() => null);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_REQUEST_CHECK_EXISTING',
+          evaluatorId: dto.evaluatorId,
+          evaluatedId: dto.evaluatedId,
+          cycleId: dto.cycleId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao verificar atribuição existente de avaliador — a assumir inexistente',
+        });
+        return null;
+      });
 
     if (existing) throw new ConflictException('Avaliador já atribuído para este par neste ciclo');
 
@@ -365,7 +487,15 @@ export class EvaluationService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_REQUEST_NOTIFY',
+          evaluatorId: dto.evaluatorId,
+          evaluatedId: dto.evaluatedId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de nova avaliação atribuída',
+        });
+      });
 
     return request;
   }
@@ -389,7 +519,16 @@ export class EvaluationService {
         where: { id: dto.requestId },
         include: { cycle: true },
       })
-      .catch(() => null);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_REQUEST_FETCH',
+          requestId: dto.requestId,
+          evaluatorId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter pedido de avaliação — a devolver null',
+        });
+        return null;
+      });
 
     if (!request) throw new NotFoundException('Pedido de avaliação não encontrado');
     if (request.evaluatorId !== evaluatorId) {
@@ -412,7 +551,16 @@ export class EvaluationService {
           where: { formId: request.cycle.formId, competencyId: { not: null } },
           select: { id: true, competencyId: true, weight: true },
         })
-        .catch(() => [] as any[]);
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_QUESTION_LIST',
+            formId: request.cycle.formId,
+            requestId: dto.requestId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao listar perguntas do formulário — a devolver lista vazia',
+          });
+          return [] as any[];
+        });
 
       for (const q of questions as any[]) {
         const ans = dto.answers.find(a => a.questionId === q.id);
@@ -473,7 +621,15 @@ export class EvaluationService {
           where: { id: dto.requestId },
           data: { status: 'COMPLETED', completedAt: new Date() },
         })
-        .catch(() => {});
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_REQUEST_COMPLETE',
+            requestId: dto.requestId,
+            evaluatorId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao marcar pedido de avaliação como concluído',
+          });
+        });
 
       // XP for completing evaluation
       await this.prisma.userPoints.upsert({
@@ -495,7 +651,16 @@ export class EvaluationService {
       .findMany({
         where: { evaluatedId, cycleId },
       })
-      .catch(() => [] as any[]);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_REQUEST_LIST_FOR_COMPLETION',
+          evaluatedId,
+          cycleId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao listar pedidos de avaliação para verificar conclusão do ciclo — a devolver lista vazia',
+        });
+        return [] as any[];
+      });
 
     const allDone =
       (allRequests as any[]).length > 0 &&
@@ -511,7 +676,15 @@ export class EvaluationService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_CYCLE_COMPLETED_NOTIFY',
+            evaluatedId,
+            cycleId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de conclusão do ciclo',
+          });
+        });
     }
   }
 
@@ -563,17 +736,41 @@ export class EvaluationService {
         },
         orderBy: { dueDate: 'asc' },
       })
-      .catch(() => [] as any[]);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_REQUEST_LIST_PENDING',
+          evaluatorId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao listar avaliações pendentes — a devolver lista vazia',
+        });
+        return [] as any[];
+      });
   }
 
   async getMyProgress(evaluatorId: number) {
     const [pending, completed] = await Promise.all([
       this.prisma.evaluationRequest
         .count({ where: { evaluatorId, status: 'PENDING' } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_REQUEST_COUNT_PENDING',
+            evaluatorId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar avaliações pendentes — a devolver 0',
+          });
+          return 0;
+        }),
       this.prisma.evaluationRequest
         .count({ where: { evaluatorId, status: 'COMPLETED' } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_REQUEST_COUNT_COMPLETED',
+            evaluatorId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar avaliações concluídas — a devolver 0',
+          });
+          return 0;
+        }),
     ]);
     const total = pending + completed;
     return {
@@ -628,7 +825,16 @@ export class EvaluationService {
     if (cycleId) {
       const cycle = await safeM(this.prisma, 'evaluationCycle')
         .findUnique({ where: { id: cycleId } })
-        .catch(() => null);
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_CYCLE_FETCH_WEIGHTS',
+            cycleId,
+            evaluatedId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter pesos do ciclo para cálculo de resultados — a devolver null',
+          });
+          return null;
+        });
       if (cycle?.weights) weights = JSON.parse(cycle.weights);
     }
 
@@ -824,7 +1030,16 @@ export class EvaluationService {
         where,
         data: { overallScore: dto.calibratedScore } as any,
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_CALIBRATE_SCORE',
+          cycleId,
+          evaluatedId: dto.evaluatedId,
+          calibratedById,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao actualizar scores calibrados das avaliações',
+        });
+      });
 
     // Log calibration in audit
     await this.prisma.auditLog
@@ -836,7 +1051,16 @@ export class EvaluationService {
           entityId: dto.evaluatedId,
         },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_CALIBRATE_AUDIT_LOG',
+          cycleId,
+          evaluatedId: dto.evaluatedId,
+          calibratedById,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar auditoria de calibração de score',
+        });
+      });
 
     await this.prisma.notificationLog
       .create({
@@ -847,7 +1071,14 @@ export class EvaluationService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_CALIBRATE_NOTIFY',
+          evaluatedId: dto.evaluatedId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de calibração de score',
+        });
+      });
 
     return {
       message: 'Score calibrado',
@@ -882,12 +1113,30 @@ export class EvaluationService {
       }),
       (this.prisma as any).evaluationRequest
         .count({ where: cycleId ? { cycleId } : {} })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_ANALYTICS_COUNT_TOTAL_REQUESTS',
+            cycleId,
+            departmentId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar pedidos de avaliação totais para dashboard — a devolver 0',
+          });
+          return 0;
+        }),
       (this.prisma as any).evaluationRequest
         .count({
           where: { ...(cycleId ? { cycleId } : {}), status: 'COMPLETED' },
         })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_ANALYTICS_COUNT_COMPLETED_REQUESTS',
+            cycleId,
+            departmentId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar pedidos de avaliação concluídos para dashboard — a devolver 0',
+          });
+          return 0;
+        }),
     ]);
 
     if (!evals.length)
@@ -982,7 +1231,16 @@ export class EvaluationService {
       .findMany({
         where: { evaluatorId: managerId, status: 'PENDING' },
       })
-      .catch(() => [] as any[]);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_REQUEST_LIST_TEAM_PENDING',
+          managerId,
+          cycleId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao listar avaliações pendentes da equipa — a devolver lista vazia',
+        });
+        return [] as any[];
+      });
 
     const enriched = team.map(u => {
       const uEvals = evals.filter(e => e.evaluatedId === u.id);
@@ -1061,7 +1319,16 @@ export class EvaluationService {
         where: { evaluatedId } as any,
         select: { id: true, fullName: true, managerId: true },
       })
-      .catch(() => null);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_PDI_TRIGGER_USER_FETCH',
+          evaluatedId,
+          cycleId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter utilizador para sugestão de PDI — a devolver null',
+        });
+        return null;
+      });
 
     if (user?.managerId) {
       await this.prisma.notificationLog
@@ -1073,7 +1340,15 @@ export class EvaluationService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_PDI_TRIGGER_NOTIFY',
+            evaluatedId,
+            managerId: user.managerId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de sugestão de PDI para o gestor',
+          });
+        });
     }
 
     return {

@@ -30,14 +30,25 @@ export class CacheService implements OnModuleDestroy {
         return JSON.parse(hit) as T;
       }
     } catch (e) {
-      this.logger.warn(`cache get falhou (${key}): ${e instanceof Error ? e.message : String(e)}`);
+      this.logger.warn({
+        op: 'get',
+        key,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'cache get falhou — a calcular sem cache',
+      });
     }
     this.cacheCounter.inc({ result: 'miss' });
     const value = await compute();
     try {
       await this.redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
     } catch (e) {
-      this.logger.warn(`cache set falhou (${key}): ${e instanceof Error ? e.message : String(e)}`);
+      this.logger.warn({
+        op: 'set',
+        key,
+        ttlSeconds,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'cache set falhou — valor não foi cacheado',
+      });
     }
     return value;
   }

@@ -19,7 +19,9 @@ describe('MailService', () => {
     it('sendPasswordReset resolve sem lançar e regista warn', async () => {
       const spy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
       await expect(service.sendPasswordReset('user@innova.com', 'tok123')).resolves.toBeUndefined();
-      expect(spy).toHaveBeenCalledWith(expect.stringContaining('SMTP não configurado'));
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({ msg: expect.stringContaining('SMTP não configurado') }),
+      );
     });
 
     it('sendUserInvite resolve sem lançar e regista warn', async () => {
@@ -27,13 +29,15 @@ describe('MailService', () => {
       await expect(
         service.sendUserInvite('novo@innova.com', 'João Silva', 'abc123def456'),
       ).resolves.toBeUndefined();
-      expect(spy).toHaveBeenCalledWith(expect.stringContaining('SMTP não configurado'));
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({ msg: expect.stringContaining('SMTP não configurado') }),
+      );
     });
 
     it('token de reset nunca aparece nos logs', async () => {
       const spy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
       await service.sendPasswordReset('user@innova.com', 'segredo-do-token');
-      const logged = spy.mock.calls.map(c => String(c[0])).join(' ');
+      const logged = spy.mock.calls.map(c => JSON.stringify(c[0])).join(' ');
       expect(logged).not.toContain('segredo-do-token');
     });
   });

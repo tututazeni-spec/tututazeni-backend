@@ -247,7 +247,15 @@ export class KnowledgeService {
         create: { userId: authorId, points: 30 },
         update: { points: { increment: 30 } },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId: authorId,
+          action: 'KNOWLEDGE_ARTICLE_CREATE_POINTS',
+          articleId: article.id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir pontos de gamificação por criação de artigo',
+        });
+      });
 
     return article;
   }
@@ -306,7 +314,15 @@ export class KnowledgeService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId: b.userId,
+            action: 'KNOWLEDGE_UPDATED_NOTIFY',
+            entityId: id,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar utilizador sobre actualização de artigo',
+          });
+        });
     }
 
     return updated;
@@ -441,7 +457,15 @@ export class KnowledgeService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId: article.authorId,
+            action: 'KNOWLEDGE_COMMENT_NOTIFY',
+            entityId: dto.articleId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar autor do artigo sobre novo comentário',
+          });
+        });
     }
 
     return comment;
@@ -490,7 +514,15 @@ export class KnowledgeService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId: (question as any).askedById,
+            action: 'KNOWLEDGE_ANSWER_NOTIFY',
+            entityId: dto.questionId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar autor da pergunta sobre resposta',
+          });
+        });
     }
 
     return updated;
@@ -615,7 +647,15 @@ export class KnowledgeService {
         .create({
           data: { query, userId, resultsCount: 0 },
         })
-        .catch(() => {});
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            action: 'KNOWLEDGE_SEARCH_LOG_CREATE',
+            query,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao registar busca sem resultados para gap analysis',
+          });
+        });
     }
 
     return results;

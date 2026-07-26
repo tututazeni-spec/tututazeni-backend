@@ -10,6 +10,7 @@ import {
   TriggerWebhookDto,
 } from './api-integration.dto';
 import * as crypto from 'crypto';
+import { sanitizeForLog } from '../common/logging/sanitize';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -131,7 +132,15 @@ export class ApiIntegrationService {
           changes: JSON.stringify({ name: dto.name, type: dto.type }),
         },
       })
-      .catch(() => {});
+      .catch((err: unknown) =>
+        this.logger.warn({
+          integrationId: integration.id,
+          integrationType: dto.type,
+          action: 'INTEGRATION_CREATED',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao registar audit log de criação de integração',
+        }),
+      );
 
     return integration;
   }
@@ -160,7 +169,14 @@ export class ApiIntegrationService {
           changes: JSON.stringify({ active: !i.active }),
         },
       })
-      .catch(() => {});
+      .catch((err: unknown) =>
+        this.logger.warn({
+          integrationId: id,
+          action: i.active ? 'INTEGRATION_DISABLED' : 'INTEGRATION_ENABLED',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao registar audit log de toggle de integração',
+        }),
+      );
 
     return updated;
   }
@@ -208,6 +224,14 @@ export class ApiIntegrationService {
       };
     } catch (err: any) {
       const latencyMs = Date.now() - start;
+      this.logger.error({
+        integrationId: id,
+        integrationType: integration.type,
+        url,
+        latencyMs,
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao testar conectividade da integração',
+      });
       await this.prisma.apiIntegrationLog.create({
         data: {
           integrationId: id,
@@ -290,11 +314,20 @@ export class ApiIntegrationService {
           active: true,
         },
       })
-      .catch(() => ({
-        name: dto.name,
-        scopes: dto.scopes,
-        message: 'API Key registada (modelo apiKey ausente — execute migration)',
-      }));
+      .catch((err: unknown) => {
+        this.logger.error({
+          createdById,
+          keyName: dto.name,
+          action: 'API_KEY_CREATED',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao criar API key (modelo apiKey ausente ou erro de BD) — a devolver fallback sem persistência',
+        });
+        return {
+          name: dto.name,
+          scopes: dto.scopes,
+          message: 'API Key registada (modelo apiKey ausente — execute migration)',
+        };
+      });
 
     await this.prisma.auditLog
       .create({
@@ -306,7 +339,15 @@ export class ApiIntegrationService {
           changes: JSON.stringify({ name: dto.name, scopes: dto.scopes }),
         },
       })
-      .catch(() => {});
+      .catch((err: unknown) =>
+        this.logger.warn({
+          createdById,
+          keyName: dto.name,
+          action: 'API_KEY_CREATED',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao registar audit log de criação de API key',
+        }),
+      );
 
     // Return the raw key ONCE — never stored in plain text
     return { ...apiKey, key: rawKey, message: '⚠️ Guarda esta chave — não será exibida novamente' };
@@ -319,7 +360,15 @@ export class ApiIntegrationService {
         where,
         orderBy: { createdAt: 'desc' },
       })
-      .catch(() => [] as any[]);
+      .catch((err: unknown) => {
+        this.logger.warn({
+          createdById,
+          action: 'API_KEY_LIST',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao listar API keys — a devolver lista vazia',
+        });
+        return [] as any[];
+      });
 
     return (keys as any[]).map((k: any) => ({
       id: k.id,
@@ -338,12 +387,28 @@ export class ApiIntegrationService {
   async revokeApiKey(keyId: number, userId: number) {
     await safeM(this.prisma, 'apiKey')
       .update({ where: { id: keyId }, data: { active: false } })
-      .catch(() => null);
+      .catch((err: unknown) =>
+        this.logger.warn({
+          keyId,
+          userId,
+          action: 'API_KEY_REVOKED',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao revogar API key',
+        }),
+      );
     await this.prisma.auditLog
       .create({
         data: { userId, action: 'API_KEY_REVOKED', entity: 'ApiKey', entityId: keyId },
       })
-      .catch(() => {});
+      .catch((err: unknown) =>
+        this.logger.warn({
+          keyId,
+          userId,
+          action: 'API_KEY_REVOKED',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao registar audit log de revogação de API key',
+        }),
+      );
     return { message: 'API Key revogada' };
   }
 
@@ -356,13 +421,29 @@ export class ApiIntegrationService {
         where: { id: keyId },
         data: { keyHash, keyPreview: maskApiKey(rawKey), rotatedAt: new Date() },
       })
-      .catch(() => {});
+      .catch((err: unknown) =>
+        this.logger.error({
+          keyId,
+          userId,
+          action: 'API_KEY_ROTATED',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao gravar rotação de API key — chave devolvida ao cliente pode não corresponder ao hash guardado',
+        }),
+      );
 
     await this.prisma.auditLog
       .create({
         data: { userId, action: 'API_KEY_ROTATED', entity: 'ApiKey', entityId: keyId },
       })
-      .catch(() => {});
+      .catch((err: unknown) =>
+        this.logger.warn({
+          keyId,
+          userId,
+          action: 'API_KEY_ROTATED',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao registar audit log de rotação de API key',
+        }),
+      );
 
     return { key: rawKey, message: '⚠️ Nova chave gerada — guarda antes de fechar' };
   }
@@ -375,7 +456,14 @@ export class ApiIntegrationService {
       .findFirst({
         where: { keyHash, active: true },
       })
-      .catch(() => null);
+      .catch((err: unknown) => {
+        this.logger.error({
+          action: 'API_KEY_VALIDATE',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao validar API key — pedido será tratado como não autenticado',
+        });
+        return null;
+      });
 
     if (!key) return null;
     if (key.expiresAt && new Date(key.expiresAt) < new Date()) return null;
@@ -383,7 +471,14 @@ export class ApiIntegrationService {
     // Update last used
     safeM(this.prisma, 'apiKey')
       .update({ where: { id: key.id }, data: { lastUsedAt: new Date() } })
-      .catch(() => {});
+      .catch((err: unknown) =>
+        this.logger.warn({
+          keyId: key.id,
+          action: 'API_KEY_TOUCH_LAST_USED',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao actualizar lastUsedAt da API key',
+        }),
+      );
 
     return { valid: true, scopes: key.scopes ?? [], name: key.name };
   }
@@ -407,28 +502,63 @@ export class ApiIntegrationService {
           createdById,
         },
       })
-      .catch(() => ({
-        name: dto.name,
-        url: dto.url,
-        events: dto.events,
-        secret,
-        message: 'Webhook registado (modelo webhook ausente — execute migration)',
-      }));
+      .catch((err: unknown) => {
+        this.logger.error({
+          createdById,
+          webhookName: dto.name,
+          url: dto.url,
+          action: 'WEBHOOK_CREATED',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao criar webhook (modelo webhook ausente ou erro de BD) — a devolver fallback sem persistência',
+        });
+        return {
+          name: dto.name,
+          url: dto.url,
+          events: dto.events,
+          secret,
+          message: 'Webhook registado (modelo webhook ausente — execute migration)',
+        };
+      });
   }
 
   async getWebhooks() {
     const hooks = await safeM(this.prisma, 'webhook')
       .findMany({ orderBy: { createdAt: 'desc' } })
-      .catch(() => [] as any[]);
+      .catch((err: unknown) => {
+        this.logger.warn({
+          action: 'WEBHOOK_LIST',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao listar webhooks — a devolver lista vazia',
+        });
+        return [] as any[];
+      });
     // Enrich with delivery stats
     return Promise.all(
       (hooks as any[]).map(async (h: any) => {
         const delivered = await safeM(this.prisma, 'webhookDelivery')
           .count({ where: { webhookId: h.id, status: 'DELIVERED' } })
-          .catch(() => 0);
+          .catch((err: unknown) => {
+            this.logger.warn({
+              webhookId: h.id,
+              action: 'WEBHOOK_DELIVERY_COUNT',
+              status: 'DELIVERED',
+              err: { message: err instanceof Error ? err.message : String(err) },
+              msg: 'Falha ao contar entregas de webhook bem-sucedidas',
+            });
+            return 0;
+          });
         const failed = await safeM(this.prisma, 'webhookDelivery')
           .count({ where: { webhookId: h.id, status: 'FAILED' } })
-          .catch(() => 0);
+          .catch((err: unknown) => {
+            this.logger.warn({
+              webhookId: h.id,
+              action: 'WEBHOOK_DELIVERY_COUNT',
+              status: 'FAILED',
+              err: { message: err instanceof Error ? err.message : String(err) },
+              msg: 'Falha ao contar entregas de webhook falhadas',
+            });
+            return 0;
+          });
         return { ...h, secret: '••••••••', stats: { delivered, failed } };
       }),
     );
@@ -440,13 +570,28 @@ export class ApiIntegrationService {
         where: { id },
         data: { active: (hook: any) => !hook.active },
       })
-      .catch(() => ({ id, message: 'Toggled' }));
+      .catch((err: unknown) => {
+        this.logger.warn({
+          webhookId: id,
+          action: 'WEBHOOK_TOGGLE',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao alternar estado do webhook',
+        });
+        return { id, message: 'Toggled' };
+      });
   }
 
   async deleteWebhook(id: number) {
     await safeM(this.prisma, 'webhook')
       .delete({ where: { id } })
-      .catch(() => null);
+      .catch((err: unknown) =>
+        this.logger.warn({
+          webhookId: id,
+          action: 'WEBHOOK_DELETE',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao remover webhook',
+        }),
+      );
     return { message: 'Webhook removido' };
   }
 
@@ -456,7 +601,15 @@ export class ApiIntegrationService {
       .findMany({
         where: { active: true },
       })
-      .catch(() => [] as any[]);
+      .catch((err: unknown) => {
+        this.logger.error({
+          event: dto.event,
+          action: 'WEBHOOK_TRIGGER',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao carregar webhooks activos — evento não será entregue a nenhum subscriber',
+        });
+        return [] as any[];
+      });
 
     const subscribers = (hooks as any[]).filter(
       (h: any) => (h.events ?? []).includes(dto.event) || (h.events ?? []).includes('*'),
@@ -482,7 +635,17 @@ export class ApiIntegrationService {
         data: { webhookId: hook.id, event, payload: body, status: 'PENDING', attempt: 1 },
       })
       .then((d: any) => d.id)
-      .catch(() => null);
+      .catch((err: unknown) => {
+        this.logger.error({
+          webhookId: hook.id,
+          url: hook.url,
+          event,
+          action: 'WEBHOOK_DELIVERY_CREATE',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao registar tentativa de entrega de webhook — entrega prossegue sem tracking em BD',
+        });
+        return null;
+      });
 
     let attempt = 0;
     const maxAttempts = (hook.retryMax ?? 3) + 1;
@@ -515,15 +678,46 @@ export class ApiIntegrationService {
                   responseCode: res.status,
                 },
               })
-              .catch(() => {});
+              .catch((err: unknown) =>
+                this.logger.warn({
+                  webhookId: hook.id,
+                  deliveryId,
+                  event,
+                  action: 'WEBHOOK_DELIVERY_UPDATE',
+                  err: { message: err instanceof Error ? err.message : String(err) },
+                  msg: 'Webhook entregue com sucesso mas falhou ao actualizar registo de entrega',
+                }),
+              );
           }
           return;
         }
-        this.logger.warn(`Webhook ${hook.id} attempt ${attempt + 1} failed: HTTP ${res.status}`);
+
+        let responseBody: unknown;
+        try {
+          responseBody = await res.clone().text();
+        } catch {
+          responseBody = undefined;
+        }
+        this.logger.warn({
+          webhookId: hook.id,
+          url: hook.url,
+          event,
+          attempt: attempt + 1,
+          maxAttempts,
+          statusCode: res.status,
+          responseBody: responseBody ? sanitizeForLog(responseBody) : undefined,
+          msg: 'Falha ao entregar webhook — HTTP não OK',
+        });
       } catch (err: any) {
-        this.logger.warn(
-          `Webhook ${hook.id} attempt ${attempt + 1} error: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        this.logger.warn({
+          webhookId: hook.id,
+          url: hook.url,
+          event,
+          attempt: attempt + 1,
+          maxAttempts,
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao entregar webhook — erro de rede/timeout',
+        });
       }
 
       attempt++;
@@ -540,9 +734,24 @@ export class ApiIntegrationService {
           where: { id: deliveryId },
           data: { status: 'FAILED', attempts: maxAttempts },
         })
-        .catch(() => {});
+        .catch((err: unknown) =>
+          this.logger.warn({
+            webhookId: hook.id,
+            deliveryId,
+            event,
+            action: 'WEBHOOK_DELIVERY_UPDATE',
+            err: { message: err instanceof Error ? err.message : String(err) },
+            msg: 'Webhook falhou definitivamente e também falhou ao actualizar registo de entrega para FAILED',
+          }),
+        );
     }
-    this.logger.error(`Webhook ${hook.id} permanently failed after ${maxAttempts} attempts`);
+    this.logger.error({
+      webhookId: hook.id,
+      url: hook.url,
+      event,
+      maxAttempts,
+      msg: 'Webhook falhou permanentemente após esgotar todas as tentativas',
+    });
   }
 
   async getWebhookDeliveries(webhookId: number, limit = 20) {
@@ -552,7 +761,15 @@ export class ApiIntegrationService {
         orderBy: { createdAt: 'desc' },
         take: limit,
       })
-      .catch(() => [] as any[]);
+      .catch((err: unknown) => {
+        this.logger.warn({
+          webhookId,
+          action: 'WEBHOOK_DELIVERIES_LIST',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao listar entregas de webhook — a devolver lista vazia',
+        });
+        return [] as any[];
+      });
   }
 
   // ══════════════════════════════════════════════════════
@@ -583,13 +800,34 @@ export class ApiIntegrationService {
           where: { createdAt: { gte: since24h } },
           _avg: { latencyMs: true },
         } as any)
-        .catch(() => ({ _avg: { latencyMs: null } })),
+        .catch((err: unknown) => {
+          this.logger.warn({
+            action: 'STATS_AVG_LATENCY',
+            err: { message: err instanceof Error ? err.message : String(err) },
+            msg: 'Falha ao calcular latência média das integrações — a devolver null',
+          });
+          return { _avg: { latencyMs: null } };
+        }),
       safeM(this.prisma, 'webhook')
         .count({ where: { active: true } })
-        .catch(() => 0),
+        .catch((err: unknown) => {
+          this.logger.warn({
+            action: 'STATS_WEBHOOK_COUNT',
+            err: { message: err instanceof Error ? err.message : String(err) },
+            msg: 'Falha ao contar webhooks activos — a devolver 0',
+          });
+          return 0;
+        }),
       safeM(this.prisma, 'apiKey')
         .count({ where: { active: true } })
-        .catch(() => 0),
+        .catch((err: unknown) => {
+          this.logger.warn({
+            action: 'STATS_API_KEY_COUNT',
+            err: { message: err instanceof Error ? err.message : String(err) },
+            msg: 'Falha ao contar API keys activas — a devolver 0',
+          });
+          return 0;
+        }),
     ]);
 
     // Per-integration health

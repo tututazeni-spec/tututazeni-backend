@@ -484,7 +484,16 @@ export class CourseModulesService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {}); // Silenciar falha na notificação
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          action: 'COURSE_MODULE_UNLOCKED_NOTIFY',
+          entityId: nextModule.id,
+          courseId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar utilizador sobre desbloqueio de novo módulo',
+        });
+      });
   }
 
   async getLessonProgress(userId: number, courseId: number) {
@@ -593,7 +602,15 @@ export class CourseModulesService {
         create: { userId, points: 100 },
         update: { points: { increment: 100 } },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          action: 'COURSE_COMPLETION_POINTS',
+          entityId: courseId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir pontos de gamificação por conclusão de curso',
+        });
+      });
 
     // Notificar
     const course = await this.prisma.read.course.findUnique({ where: { id: courseId } });
@@ -606,7 +623,15 @@ export class CourseModulesService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          action: 'COURSE_COMPLETED_NOTIFY',
+          entityId: courseId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar utilizador sobre conclusão de curso',
+        });
+      });
   }
 
   // ─── ANALYTICS POR MÓDULO ─────────────────────────────────────────────────

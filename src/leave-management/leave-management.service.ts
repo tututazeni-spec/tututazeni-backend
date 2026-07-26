@@ -1,6 +1,7 @@
 ﻿// ─── src/leave-management/leave-management.service.ts ────────────────────────
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -76,6 +77,8 @@ function addWorkDays(start: Date, days: number, holidays: string[] = ANGOLA_HOLI
 
 @Injectable()
 export class LeaveManagementService {
+  private readonly logger = new Logger(LeaveManagementService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -1004,7 +1007,15 @@ export class LeaveManagementService {
           where: { userId, completedAt: null },
           include: { course: { select: { id: true, title: true } } },
         })
-        .catch(() => [])) ?? [];
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            action: 'CALCULATE_LEAVE_IMPACT',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter cursos activos para cálculo de impacto de licença',
+          });
+          return [];
+        })) ?? [];
 
     // Eventos no período
     const events =
@@ -1013,7 +1024,15 @@ export class LeaveManagementService {
           where: { userId, event: { startDate: { gte: start, lte: end } } } as any,
           include: { event: { select: { id: true, title: true, startDate: true } } } as any,
         })
-        .catch(() => [])) ?? [];
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            action: 'CALCULATE_LEAVE_IMPACT',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter eventos para cálculo de impacto de licença',
+          });
+          return [];
+        })) ?? [];
 
     if (activeCourses.length === 0 && events.length === 0) return null;
 
@@ -1030,7 +1049,15 @@ export class LeaveManagementService {
         where: { userId: request.userId, completedAt: null } as any,
         data: { pausedAt: new Date() } as any,
       });
-    } catch {}
+    } catch (e) {
+      this.logger.warn({
+        userId: request.userId,
+        requestId: request.id,
+        action: 'APPLY_LEAVE_MODULE_IMPACTS',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao pausar matrículas activas durante aprovação de licença',
+      });
+    }
   }
 
   private async reverseModuleImpacts(request: any) {
@@ -1039,7 +1066,15 @@ export class LeaveManagementService {
         where: { userId: request.userId, pausedAt: { not: null } } as any,
         data: { pausedAt: null } as any,
       });
-    } catch {}
+    } catch (e) {
+      this.logger.warn({
+        userId: request.userId,
+        requestId: request.id,
+        action: 'REVERSE_LEAVE_MODULE_IMPACTS',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao reverter pausa de matrículas durante cancelamento de licença',
+      });
+    }
   }
 
   private async notifyUser(userId: number, type: string, message: string) {
@@ -1047,6 +1082,13 @@ export class LeaveManagementService {
       await this.prisma.notificationLog.create({
         data: { userId, type, message, success: true },
       });
-    } catch {}
+    } catch (e) {
+      this.logger.warn({
+        userId,
+        notificationType: type,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao criar notificação de licença para o utilizador',
+      });
+    }
   }
 }

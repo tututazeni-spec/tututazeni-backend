@@ -32,7 +32,15 @@ export class NotificationsService {
    *  no worker. Para quem precisa do resultado/404 imediato, usar send(). */
   async enqueueSend(dto: CreateNotificationDto): Promise<void> {
     if (!this.queueEnabled) {
-      await this.send(dto).catch(e => this.logger.warn(e?.message));
+      await this.send(dto).catch((e: unknown) =>
+        this.logger.warn({
+          userId: dto.userId,
+          type: dto.type,
+          category: dto.category,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao enviar notificação directamente (fila desactivada)',
+        }),
+      );
       return;
     }
     try {
@@ -42,10 +50,22 @@ export class NotificationsService {
         backoff: 5000,
       });
     } catch (queueErr) {
-      this.logger.warn(
-        `Falha ao enfileirar notificação, a enviar diretamente: ${queueErr instanceof Error ? queueErr.message : String(queueErr)}`,
+      this.logger.warn({
+        userId: dto.userId,
+        type: dto.type,
+        category: dto.category,
+        err: { message: queueErr instanceof Error ? queueErr.message : String(queueErr) },
+        msg: 'Falha ao enfileirar notificação, a enviar diretamente',
+      });
+      await this.send(dto).catch((e: unknown) =>
+        this.logger.warn({
+          userId: dto.userId,
+          type: dto.type,
+          category: dto.category,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao enviar notificação directamente após erro de enfileiramento',
+        }),
       );
-      await this.send(dto).catch(e => this.logger.warn(e?.message));
     }
   }
 

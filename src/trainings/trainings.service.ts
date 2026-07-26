@@ -278,7 +278,15 @@ export class TrainingService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          userId: dto.userId,
+          sessionId: dto.sessionId,
+          action: 'TRAINING_REGISTERED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar utilizador de inscrição em treinamento',
+        }),
+      );
 
     return participant;
   }
@@ -314,7 +322,15 @@ export class TrainingService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e =>
+          this.logger.warn({
+            userId: nextWaitlist.userId,
+            participantId,
+            action: 'TRAINING_WAITLIST_PROMOTED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar promoção de lista de espera',
+          }),
+        );
     }
 
     return { message: 'Inscrição cancelada', waitlistPromoted: !!nextWaitlist };
@@ -357,7 +373,15 @@ export class TrainingService {
           create: { userId: (p as any).userId, points: 100 },
           update: { points: { increment: 100 } },
         })
-        .catch(() => {});
+        .catch(e =>
+          this.logger.warn({
+            userId: (p as any).userId,
+            participantId: id,
+            action: 'TRAINING_COMPLETED_XP',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao atribuir XP por conclusão de treinamento',
+          }),
+        );
     }
 
     return updated;
@@ -398,7 +422,15 @@ export class TrainingService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          userId: registrarId,
+          sessionId: dto.sessionId,
+          action: 'TRAINING_ATTENDANCE_RECORDED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar notificação de presença em massa',
+        }),
+      );
 
     return { sessionId: dto.sessionId, attended, absent, total: participants.length };
   }
@@ -416,7 +448,15 @@ export class TrainingService {
           fileUrl: `/certificates/${code}.pdf`,
         },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.error({
+          userId,
+          sessionId,
+          action: 'CERTIFICATE_ISSUE',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao emitir certificado de treinamento',
+        }),
+      );
 
     await this.prisma.notificationLog
       .create({
@@ -427,7 +467,15 @@ export class TrainingService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          userId,
+          sessionId,
+          action: 'CERTIFICATE_ISSUED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar emissão de certificado',
+        }),
+      );
   }
 
   // ─── RATING ───────────────────────────────────────────────────────────────

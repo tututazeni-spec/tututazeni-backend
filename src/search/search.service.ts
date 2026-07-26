@@ -1,5 +1,5 @@
 // src/search/search.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GlobalSearchDto, TypedSearchDto, SearchEntityType } from './search.dto';
 
@@ -50,6 +50,8 @@ function normalise(
 
 @Injectable()
 export class SearchService {
+  private readonly logger = new Logger(SearchService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -63,7 +65,15 @@ export class SearchService {
     const types = dto.types ?? Object.values(SearchEntityType);
 
     // Track search (fire-and-forget)
-    this.trackSearch(userId, q, 'global').catch(() => {});
+    this.trackSearch(userId, q, 'global').catch(e =>
+      this.logger.warn({
+        userId,
+        query: q,
+        searchType: 'global',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar pesquisa global no histórico',
+      }),
+    );
 
     const fetchers: Promise<any[]>[] = [];
 
@@ -218,7 +228,15 @@ export class SearchService {
         select: { id: true, title: true, description: true, category: true },
         take: opts.limit,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          query: q,
+          entity: 'knowledgeArticle',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao pesquisar documentos (knowledgeArticle)',
+        });
+        return [] as any[];
+      });
 
     return (articles as any[]).map((d: any) =>
       normalise(
@@ -286,7 +304,15 @@ export class SearchService {
         select: { id: true, name: true, type: true, description: true },
         take: opts.limit,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          query: q,
+          entity: 'competency',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao pesquisar competências',
+        });
+        return [] as any[];
+      });
 
     return (comps as any[]).map((c: any) =>
       normalise(
@@ -307,7 +333,15 @@ export class SearchService {
         select: { id: true, title: true, category: true, difficulty: true },
         take: opts.limit,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          query: q,
+          entity: 'avatarScenario',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao pesquisar cenários de avatar',
+        });
+        return [] as any[];
+      });
 
     return (scenarios as any[]).map((s: any) =>
       normalise(
@@ -356,7 +390,15 @@ export class SearchService {
         results = [];
     }
 
-    this.trackSearch(userId, q, type).catch(() => {});
+    this.trackSearch(userId, q, type).catch(e =>
+      this.logger.warn({
+        userId,
+        query: q,
+        searchType: type,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar pesquisa tipada no histórico',
+      }),
+    );
 
     return { query: q, type, results, count: results.length };
   }
@@ -394,7 +436,16 @@ export class SearchService {
         orderBy: { createdAt: 'desc' },
         take: 3,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          query: q,
+          entity: 'searchHistory',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter histórico recente para autocomplete',
+        });
+        return [] as any[];
+      });
 
     const allSuggestions = [
       ...(recentHistory as any[]).map((h: any) => ({ text: h.query, type: 'recent' })),
@@ -459,7 +510,15 @@ export class SearchService {
         orderBy: { _count: { id: 'desc' } },
         take: 10,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          entity: 'searchHistory',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter termos de pesquisa em tendência',
+        });
+        return [] as any[];
+      });
 
     return {
       recommendedCourses: suggestedCourses.map(c =>
@@ -490,7 +549,15 @@ export class SearchService {
         orderBy: { createdAt: 'desc' },
         take: limit,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          entity: 'searchHistory',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter histórico de pesquisas do utilizador',
+        });
+        return [] as any[];
+      });
 
     return { history, count: (history as any[]).length };
   }
@@ -498,7 +565,14 @@ export class SearchService {
   async clearHistory(userId: number) {
     await safeM(this.prisma, 'searchHistory')
       .deleteMany({ where: { userId } })
-      .catch(() => null);
+      .catch(e =>
+        this.logger.warn({
+          userId,
+          entity: 'searchHistory',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao limpar histórico de pesquisas do utilizador',
+        }),
+      );
     return { message: 'Histórico limpo' };
   }
 
@@ -510,11 +584,25 @@ export class SearchService {
     const [totalSearches, uniqueUsers, topTerms, zeroResults] = await Promise.all([
       safeM(this.prisma, 'searchHistory')
         .count({})
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            metric: 'totalSearches',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar total de pesquisas para analytics',
+          });
+          return 0;
+        }),
       safeM(this.prisma, 'searchHistory')
         .groupBy({ by: ['userId'], _count: { id: true } })
         .then((r: any[]) => r.length)
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            metric: 'uniqueUsers',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar utilizadores únicos para analytics',
+          });
+          return 0;
+        }),
       safeM(this.prisma, 'searchHistory')
         .groupBy({
           by: ['query'],
@@ -522,10 +610,24 @@ export class SearchService {
           orderBy: { _count: { id: 'desc' } },
           take: 10,
         })
-        .catch(() => [] as any[]),
+        .catch(e => {
+          this.logger.warn({
+            metric: 'topTerms',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter termos mais pesquisados para analytics',
+          });
+          return [] as any[];
+        }),
       safeM(this.prisma, 'searchHistory')
         .count({ where: { resultsCount: 0 } })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            metric: 'zeroResults',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar pesquisas sem resultados para analytics',
+          });
+          return 0;
+        }),
     ]);
 
     return {
@@ -546,6 +648,14 @@ export class SearchService {
       .create({
         data: { userId, query, searchType, resultsCount, createdAt: new Date() },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          userId,
+          query,
+          searchType,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao gravar registo de pesquisa no histórico',
+        }),
+      );
   }
 }

@@ -1,6 +1,7 @@
 ﻿// src/roles-permissions/roles-permissions.service.ts
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -33,6 +34,8 @@ export {
 
 @Injectable()
 export class RolesPermissionsService {
+  private readonly logger = new Logger(RolesPermissionsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -107,7 +110,14 @@ export class RolesPermissionsService {
           changes: JSON.stringify({ name: role.name }),
         },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          roleId: role.id,
+          action: 'ROLE_CREATED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar auditoria de criação de role',
+        }),
+      );
 
     return role;
   }
@@ -143,7 +153,14 @@ export class RolesPermissionsService {
           changes: JSON.stringify(dto),
         },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          roleId: id,
+          action: 'ROLE_UPDATED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar auditoria de actualização de role',
+        }),
+      );
 
     return updated;
   }
@@ -168,7 +185,14 @@ export class RolesPermissionsService {
           changes: JSON.stringify({ name: role.name }),
         },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          roleId: id,
+          action: 'ROLE_DELETED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar auditoria de remoção de role',
+        }),
+      );
 
     return { message: 'Role removido com sucesso', roleName: role.name };
   }
@@ -211,7 +235,15 @@ export class RolesPermissionsService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          userId,
+          roleId,
+          action: 'ROLE_CHANGED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar utilizador de mudança de role',
+        }),
+      );
 
     await this.prisma.auditLog
       .create({
@@ -223,7 +255,15 @@ export class RolesPermissionsService {
           changes: JSON.stringify({ roleId }),
         },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          userId,
+          roleId,
+          action: 'ROLE_ASSIGNED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar auditoria de atribuição de role',
+        }),
+      );
 
     return { message: `Role "${user.role?.name}" atribuído a ${user.fullName}`, user };
   }
@@ -400,7 +440,14 @@ export class RolesPermissionsService {
         include: { role: { select: { id: true, name: true, code: true } } },
         orderBy: { positionName: 'asc' },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          entity: 'roleTemplate',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter templates de posição (modelo roleTemplate pode estar ausente)',
+        });
+        return [] as any[];
+      });
   }
 
   async createPositionTemplate(dto: RoleTemplateDto) {
@@ -412,10 +459,19 @@ export class RolesPermissionsService {
           positionId: dto.positionId,
         },
       })
-      .catch(() => ({
-        message: 'Template registado (modelo roleTemplate ausente — execute migration)',
-        ...dto,
-      }));
+      .catch(e => {
+        this.logger.warn({
+          positionName: dto.positionName,
+          roleId: dto.roleId,
+          positionId: dto.positionId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar template de posição (modelo roleTemplate pode estar ausente — execute migration)',
+        });
+        return {
+          message: 'Template registado (modelo roleTemplate ausente — execute migration)',
+          ...dto,
+        };
+      });
   }
 
   async applyPositionTemplate(positionId: number) {
@@ -424,7 +480,15 @@ export class RolesPermissionsService {
       .findFirst({
         where: { positionId },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          positionId,
+          entity: 'roleTemplate',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao procurar template de posição (modelo roleTemplate pode estar ausente)',
+        });
+        return null;
+      });
 
     if (!template) return { applied: 0, message: 'Sem template para esta posição' };
 
@@ -452,7 +516,15 @@ export class RolesPermissionsService {
       this.prisma.read.role.count(),
       this.prisma.read.permission.count(),
       this.prisma.read.user.count({ where: { active: true, roleId: null } }),
-      this.prisma.read.auditLog.count({ where: { action: 'ACCESS_DENIED' } }).catch(() => 0),
+      this.prisma.read.auditLog.count({ where: { action: 'ACCESS_DENIED' } }).catch(e => {
+        this.logger.warn({
+          entity: 'auditLog',
+          action: 'ACCESS_DENIED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao contar acessos negados para estatísticas de governança',
+        });
+        return 0;
+      }),
       this.prisma.user
         .groupBy({
           by: ['roleId'],

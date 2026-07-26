@@ -144,7 +144,15 @@ export class LeadershipService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.userId,
+          action: 'LEADERSHIP_ENROLLED',
+          programId: dto.programId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de inscrição em programa de liderança',
+        });
+      });
 
     return participant;
   }
@@ -182,7 +190,15 @@ export class LeadershipService {
             fileUrl: `/certificates/${code}.pdf`,
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            programId,
+            action: 'updateProgress.issueCertificate',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao emitir certificado de programa de liderança',
+          });
+        });
 
       await this.prisma.userPoints
         .upsert({
@@ -190,7 +206,15 @@ export class LeadershipService {
           create: { userId, points: 300 },
           update: { points: { increment: 300 } },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            programId,
+            action: 'updateProgress.awardXp',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao atribuir XP por conclusão de programa de liderança',
+          });
+        });
 
       // Recalcular leadership score
       await this.recalcLeadershipScore(userId);
@@ -403,7 +427,15 @@ export class LeadershipService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.subordinateId,
+          managerId,
+          action: 'ONEONONE_SCHEDULED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de 1:1 agendado',
+        });
+      });
 
     return oneOnOne;
   }
@@ -480,7 +512,15 @@ export class LeadershipService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.leaderId,
+          action: 'LEADERSHIP_360_RECEIVED',
+          feedbackId: feedback.id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de feedback 360° recebido',
+        });
+      });
 
     return { message: 'Feedback 360° submetido', feedbackId: feedback.id };
   }
@@ -638,7 +678,15 @@ export class LeadershipService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.receiverId,
+          senderId,
+          action: 'KUDOS_RECEIVED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de kudos recebido',
+        });
+      });
 
     return kudos;
   }

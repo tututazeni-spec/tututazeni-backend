@@ -246,7 +246,14 @@ export class UsersService {
           message: `Bem-vindo à plataforma INNOVA, ${user.fullName}!`,
         },
       })
-      .catch(() => {});
+      .catch((e: any) => {
+        this.logger.warn({
+          userId: user.id,
+          action: 'USER_CREATED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar notificação de criação de conta',
+        });
+      });
 
     // Registar auditoria
     await this.writeAuditLog(user.id, user.id, 'USER_CREATED', { email: user.email });
@@ -517,7 +524,12 @@ export class UsersService {
         results.success++;
       } catch (e: any) {
         results.errors.push(`User ${userId}: ${e.message}`);
-        this.logger.warn(`Erro: ${e?.message}`);
+        this.logger.warn({
+          userId,
+          action: dto.action,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao executar acção em massa para utilizador',
+        });
       }
     }
 
@@ -578,7 +590,14 @@ export class UsersService {
           message: `Convite enviado para ${dto.email}`,
         },
       })
-      .catch(() => {});
+      .catch((e: any) => {
+        this.logger.warn({
+          userId: (user as any).id,
+          action: 'INVITE_SENT',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar notificação de convite',
+        });
+      });
 
     return { message: 'Convite enviado', userId: (user as any).id };
   }
@@ -601,7 +620,13 @@ export class UsersService {
         },
       });
     } catch (e: any) {
-      this.logger.warn(`Erro: ${e?.message}`);
+      this.logger.warn({
+        userId,
+        performedById,
+        action,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao escrever audit log de utilizador',
+      });
     }
   }
 

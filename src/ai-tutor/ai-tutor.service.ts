@@ -116,7 +116,15 @@ export class AiTutorService {
         create: { userId, points: 2 },
         update: { points: { increment: 2 } },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          sessionId: session.id,
+          action: 'AWARD_AI_TUTOR_START_XP',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir XP por iniciar sessão com o tutor de IA',
+        });
+      });
 
     const providerInfo = this.aiProviders.getProviderInfo();
     const userName = (user as any)?.fullName?.split(' ')[0] ?? 'colega';
@@ -190,7 +198,15 @@ export class AiTutorService {
     // Actualizar memória de longo prazo (a cada 10 mensagens)
     const msgCount = session.messages.filter(m => m.role === 'USER').length;
     if (msgCount > 0 && msgCount % 10 === 0) {
-      this.updateMemory(userId, session.messages as any[]).catch(() => {});
+      this.updateMemory(userId, session.messages as any[]).catch(e => {
+        this.logger.warn({
+          userId,
+          sessionId: dto.sessionId,
+          action: 'UPDATE_AI_TUTOR_MEMORY',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao actualizar memória de longo prazo do tutor de IA',
+        });
+      });
     }
 
     // XP por mensagem
@@ -200,7 +216,15 @@ export class AiTutorService {
         create: { userId, points: 1 },
         update: { points: { increment: 1 } },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          sessionId: dto.sessionId,
+          action: 'AWARD_AI_TUTOR_MESSAGE_XP',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir XP por mensagem ao tutor de IA',
+        });
+      });
 
     return {
       message: saved,
@@ -370,7 +394,14 @@ export class AiTutorService {
     try {
       const clean = response.text.replace(/```json|```/g, '').trim();
       parsed = JSON.parse(clean);
-    } catch {
+    } catch (e) {
+      this.logger.warn({
+        userId,
+        type: dto.type,
+        action: 'PARSE_AI_GENERATED_CONTENT',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Resposta do tutor de IA não é JSON válido — a devolver texto em bruto',
+      });
       parsed = response.text; // retorna texto se não for JSON válido
     }
 

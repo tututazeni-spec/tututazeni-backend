@@ -1,5 +1,5 @@
 ﻿// src/leader/leader.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateLeaderProfileDto,
@@ -66,6 +66,8 @@ function safeM(prisma: any, name: string) {
 
 @Injectable()
 export class LeaderService {
+  private readonly logger = new Logger(LeaderService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -146,7 +148,15 @@ export class LeaderService {
           where: { user: { managerId: leaderId } },
           _avg: { score: true },
         })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch(e => {
+          this.logger.warn({
+            leaderId,
+            action: 'getLeaderDashboard.avgPerfScore',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular score médio de performance da equipa',
+          });
+          return { _avg: { score: null } };
+        }),
       this.prisma.read.developmentPlan.count({
         where: { user: { managerId: leaderId }, status: 'ACTIVE', isTemplate: false },
       }),
@@ -159,7 +169,15 @@ export class LeaderService {
             user: { managerId: leaderId },
           },
         })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            leaderId,
+            action: 'getLeaderDashboard.pendingLeaves',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar pedidos de ausência pendentes da equipa',
+          });
+          return 0;
+        }),
       this.prisma.read.surveyResponse.count({
         where: {
           user: { managerId: leaderId },
@@ -174,7 +192,15 @@ export class LeaderService {
           _count: { id: true },
         })
         .then(r => r.length)
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            leaderId,
+            action: 'getLeaderDashboard.atRiskCount',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular contagem de membros em risco de performance',
+          });
+          return 0;
+        }),
       this.prisma.read.badgeAward.findMany({
         where: {
           user: { managerId: leaderId },
@@ -439,12 +465,21 @@ export class LeaderService {
           isPrivate: dto.isPrivate ?? false,
         },
       })
-      .catch(() => ({
-        giverId,
-        receiverId: dto.recipientId,
-        type: dto.type,
-        content: contentFull,
-      }));
+      .catch(e => {
+        this.logger.warn({
+          giverId,
+          receiverId: dto.recipientId,
+          action: 'giveFeedback.create',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar registo de feedback — modelo feedback pode estar ausente',
+        });
+        return {
+          giverId,
+          receiverId: dto.recipientId,
+          type: dto.type,
+          content: contentFull,
+        };
+      });
 
     await this.prisma.auditLog
       .create({
@@ -456,7 +491,15 @@ export class LeaderService {
           changes: JSON.stringify({ type: dto.type, isPrivate: dto.isPrivate }),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: giverId,
+          entityId: dto.recipientId,
+          action: 'FEEDBACK_GIVEN',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao escrever audit log de feedback',
+        });
+      });
 
     await this.prisma.notificationLog
       .create({
@@ -467,7 +510,14 @@ export class LeaderService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.recipientId,
+          action: 'FEEDBACK_RECEIVED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de feedback recebido',
+        });
+      });
 
     return { message: 'Feedback enviado', feedback };
   }
@@ -480,7 +530,16 @@ export class LeaderService {
         orderBy: { createdAt: 'desc' },
         take: 50,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          leaderId,
+          userId,
+          action: 'getTeamFeedbacks',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter feedbacks da equipa — modelo feedback pode estar ausente',
+        });
+        return [] as any[];
+      });
   }
 
   // ══════════════════════════════════════════════════════
@@ -498,7 +557,16 @@ export class LeaderService {
           status: dto.status ?? 'SCHEDULED',
         },
       })
-      .catch(() => ({ leaderId, participantId: dto.participantId, status: 'SCHEDULED', ...dto }));
+      .catch(e => {
+        this.logger.warn({
+          leaderId,
+          participantId: dto.participantId,
+          action: 'createOneOnOne',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar reunião 1:1 — modelo oneOnOneMeeting pode estar ausente',
+        });
+        return { leaderId, participantId: dto.participantId, status: 'SCHEDULED', ...dto };
+      });
 
     await this.prisma.notificationLog
       .create({
@@ -509,7 +577,14 @@ export class LeaderService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.participantId,
+          action: '1ON1_SCHEDULED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de reunião 1:1 agendada',
+        });
+      });
 
     return meeting;
   }
@@ -523,13 +598,31 @@ export class LeaderService {
         orderBy: { scheduledAt: 'desc' },
         take: 20,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          leaderId,
+          memberId,
+          action: 'getOneOnOnes',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter reuniões 1:1 — modelo oneOnOneMeeting pode estar ausente',
+        });
+        return [] as any[];
+      });
   }
 
   async completeOneOnOne(meetingId: number, notes: string, user: CurrentUserData) {
     const meeting = await safeM(this.prisma, 'oneOnOneMeeting')
       .findUnique({ where: { id: meetingId } })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          meetingId,
+          userId: user?.id,
+          action: 'completeOneOnOne.findUnique',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao procurar reunião 1:1 — modelo oneOnOneMeeting pode estar ausente',
+        });
+        return null;
+      });
 
     // Ownership (A3): a reunião 1:1 tem dois donos possíveis — o líder (hostId)
     // e o membro (participantId) — além de ADMIN/RH. Verificação manual porque
@@ -547,7 +640,16 @@ export class LeaderService {
         where: { id: meetingId },
         data: { status: 'COMPLETED', notes, completedAt: new Date() },
       })
-      .catch(() => ({ id: meetingId, status: 'COMPLETED', notes }));
+      .catch(e => {
+        this.logger.warn({
+          meetingId,
+          userId: user?.id,
+          action: 'completeOneOnOne.update',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao actualizar reunião 1:1 como concluída — modelo oneOnOneMeeting pode estar ausente',
+        });
+        return { id: meetingId, status: 'COMPLETED', notes };
+      });
   }
 
   // ══════════════════════════════════════════════════════
@@ -606,7 +708,15 @@ export class LeaderService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: plan.userId,
+          action: 'PDI_APPROVED',
+          planId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de PDI aprovado',
+        });
+      });
 
     return { message: 'PDI aprovado', plan };
   }
@@ -683,7 +793,16 @@ export class LeaderService {
               enrolledAt: new Date(),
             },
           })
-          .catch(() => null),
+          .catch(e => {
+            this.logger.warn({
+              userId: uid,
+              courseId: dto.courseId,
+              action: 'assignCourse.enroll',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao inscrever utilizador no curso atribuído pelo líder',
+            });
+            return null;
+          }),
       ),
     );
 
@@ -700,7 +819,15 @@ export class LeaderService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: uid,
+            courseId: dto.courseId,
+            action: 'COURSE_ASSIGNED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de curso atribuído',
+          });
+        });
     }
 
     return { message: `${succeeded}/${dto.userIds.length} utilizadores inscritos com sucesso` };
@@ -729,11 +856,19 @@ export class LeaderService {
         },
         include: { user: { select: { id: true, fullName: true } } },
       })
-      .catch(() => ({
-        userId: dto.userId,
-        ...dto,
-        message: 'Perfil guardado (modelo leaderProfile ausente — execute migration)',
-      }));
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.userId,
+          action: 'upsertProfile',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao guardar perfil de líder — modelo leaderProfile pode estar ausente',
+        });
+        return {
+          userId: dto.userId,
+          ...dto,
+          message: 'Perfil guardado (modelo leaderProfile ausente — execute migration)',
+        };
+      });
   }
 
   async getProfile(userId: number) {
@@ -742,7 +877,15 @@ export class LeaderService {
         where: { userId },
         include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          action: 'getProfile',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter perfil de líder — modelo leaderProfile pode estar ausente',
+        });
+        return null;
+      });
   }
 
   // ══════════════════════════════════════════════════════
@@ -767,7 +910,15 @@ export class LeaderService {
     const [atRiskPerf, mandatoryPending, overdueActions, noActivity] = await Promise.all([
       this.prisma.performanceReview
         .count({ where: { userId: { in: teamIds }, score: { lt: 2 } } })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            leaderId,
+            action: 'getLeaderAlerts.atRiskPerf',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar membros com performance crítica',
+          });
+          return 0;
+        }),
       this.prisma.enrollment
         .count({
           where: {
@@ -776,7 +927,15 @@ export class LeaderService {
             status: 'EM_ANDAMENTO',
           },
         })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            leaderId,
+            action: 'getLeaderAlerts.mandatoryPending',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar formações obrigatórias em atraso',
+          });
+          return 0;
+        }),
       this.prisma.developmentPlanAction
         .count({
           where: {
@@ -785,7 +944,15 @@ export class LeaderService {
             dueDate: { lt: new Date() },
           },
         })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            leaderId,
+            action: 'getLeaderAlerts.overdueActions',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar acções de PDI em atraso',
+          });
+          return 0;
+        }),
       // Members with no activity in 15 days
       this.prisma.auditLog
         .groupBy({
@@ -797,7 +964,15 @@ export class LeaderService {
           _count: { id: true },
         })
         .then(r => teamIds.filter(id => !r.find(x => x.userId === id)).length)
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            leaderId,
+            action: 'getLeaderAlerts.noActivity',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular membros sem actividade recente',
+          });
+          return 0;
+        }),
     ]);
 
     if (atRiskPerf > 0)

@@ -560,7 +560,14 @@ export class CareerService {
     });
 
     // Notificar colaboradores com match >= 70%
-    await this.notifyMatchingUsers(id).catch(() => {});
+    await this.notifyMatchingUsers(id).catch(e => {
+      this.logger.warn({
+        vacancyId: id,
+        action: 'NOTIFY_MATCHING_USERS',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao notificar colaboradores compatíveis com a vaga publicada',
+      });
+    });
 
     return updated;
   }
@@ -595,7 +602,15 @@ export class CareerService {
         create: { userId, points: 5 },
         update: { points: { increment: 5 } },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          vacancyId,
+          action: 'AWARD_APPLICATION_XP',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir XP por candidatura a vaga interna',
+        });
+      });
 
     return app;
   }
@@ -622,7 +637,15 @@ export class CareerService {
           metadata: JSON.stringify({ priority: 'MEDIUM', category: 'CAREER' }),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: app.user.id,
+          applicationId: appId,
+          action: 'NOTIFY_APPLICATION_STATUS_UPDATED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar candidato sobre actualização de estado da candidatura',
+        });
+      });
 
     return updated;
   }
@@ -811,7 +834,15 @@ export class CareerService {
             }),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            managerId: user.managerId,
+            action: 'NOTIFY_PROMOTION_REQUEST',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar gestor sobre pedido de promoção',
+          });
+        });
     }
 
     return {
@@ -870,7 +901,15 @@ export class CareerService {
           metadata: JSON.stringify({ priority: 'HIGH', category: 'CAREER' }),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.candidateId,
+          positionId: dto.positionId,
+          action: 'NOTIFY_SUCCESSION_MAPPED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar candidato sobre mapeamento em plano de sucessão',
+        });
+      });
 
     return plan;
   }

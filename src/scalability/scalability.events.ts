@@ -111,9 +111,14 @@ export class ScalabilityEventListeners {
 
       this.logger.log(`[IntegrationSync] Completed: ${payload.integrationId}`);
     } catch (err) {
-      this.logger.error(
-        `[IntegrationSync] Failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      this.logger.error({
+        integrationId: payload.integrationId,
+        syncLogId: payload.syncLogId,
+        type: payload.type,
+        actorId: payload.actorId,
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: '[IntegrationSync] Failed',
+      });
       await this.prisma.integrationSyncLog.update({
         where: { id: payload.syncLogId },
         data: {

@@ -13,6 +13,8 @@ import {
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
+const helpersLogger = new Logger('AutomationHelpers');
+
 function safeM(prisma: any, name: string) {
   return (
     prisma[name] ?? {
@@ -30,7 +32,13 @@ function parseCondition(condition?: string | null): Record<string, any> {
   if (!condition) return {};
   try {
     return JSON.parse(condition);
-  } catch {
+  } catch (e) {
+    helpersLogger.warn({
+      condition,
+      action: 'PARSE_AUTOMATION_CONDITION',
+      err: { message: e instanceof Error ? e.message : String(e) },
+      msg: 'Falha ao fazer parse da condição da regra de automação — JSON inválido',
+    });
     return {};
   }
 }
@@ -39,7 +47,13 @@ function parseParams(params?: string | null): Record<string, any> {
   if (!params) return {};
   try {
     return JSON.parse(params);
-  } catch {
+  } catch (e) {
+    helpersLogger.warn({
+      params,
+      action: 'PARSE_AUTOMATION_ACTION_PARAMS',
+      err: { message: e instanceof Error ? e.message : String(e) },
+      msg: 'Falha ao fazer parse dos actionParams da regra de automação — JSON inválido',
+    });
     return {};
   }
 }
@@ -216,7 +230,14 @@ export class AutomationService {
           changes: JSON.stringify({ name: dto.name, trigger: dto.trigger, action: dto.action }),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          ruleId: rule.id,
+          action: 'AUDIT_LOG_AUTOMATION_RULE_CREATED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar audit log de criação de regra de automação',
+        });
+      });
 
     return rule;
   }
@@ -295,7 +316,13 @@ export class AutomationService {
         results.push({ ruleId: rule.id, name: rule.name, success: true, ...result });
       } catch (e: any) {
         results.push({ ruleId: rule.id, name: rule.name, success: false, error: e.message });
-        this.logger.error(`Rule ${rule.id} failed: ${e.message}`);
+        this.logger.error({
+          ruleId: rule.id,
+          ruleName: rule.name,
+          action: 'RUN_ALL_ACTIVE_RULES',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao executar regra de automação activa',
+        });
       }
     }
 
@@ -346,7 +373,15 @@ export class AutomationService {
         },
       })
       .then((e: any) => e.id)
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          ruleId: rule.id,
+          action: 'CREATE_AUTOMATION_EXECUTION_RECORD',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar execução da automação — a acção prossegue sem tracking',
+        });
+        return null;
+      });
 
     try {
       let result: any;
@@ -378,7 +413,17 @@ export class AutomationService {
                   enrolledAt: new Date(),
                 },
               })
-              .catch(() => null);
+              .catch(e => {
+                this.logger.warn({
+                  userId: targetUserId,
+                  courseId: params.courseId,
+                  ruleId: rule.id,
+                  action: 'AUTOMATION_ASSIGN_COURSE',
+                  err: { message: e instanceof Error ? e.message : String(e) },
+                  msg: 'Falha ao atribuir curso automaticamente ao utilizador',
+                });
+                return null;
+              });
             result = { affected: 1 };
           } else result = { affected: 0, message: 'courseId ou userId em falta' };
           break;
@@ -396,7 +441,16 @@ export class AutomationService {
                   goal: params.goal ?? 'Gerado automaticamente por automação',
                 },
               })
-              .catch(() => null);
+              .catch(e => {
+                this.logger.warn({
+                  userId: targetUserId,
+                  ruleId: rule.id,
+                  action: 'AUTOMATION_CREATE_PDI',
+                  err: { message: e instanceof Error ? e.message : String(e) },
+                  msg: 'Falha ao criar PDI automaticamente',
+                });
+                return null;
+              });
             result = { affected: 1 };
           } else result = { affected: 0 };
           break;
@@ -418,11 +472,30 @@ export class AutomationService {
           if (targetUserId && params.badgeCode) {
             const badge = await this.prisma.badge
               .findFirst({ where: { code: params.badgeCode } as any })
-              .catch(() => null);
+              .catch(e => {
+                this.logger.warn({
+                  badgeCode: params.badgeCode,
+                  ruleId: rule.id,
+                  action: 'AUTOMATION_FIND_BADGE',
+                  err: { message: e instanceof Error ? e.message : String(e) },
+                  msg: 'Falha ao procurar badge para atribuição automática',
+                });
+                return null;
+              });
             if (badge) {
               await this.prisma.badgeAward
                 .create({ data: { userId: targetUserId, badgeId: badge.id } })
-                .catch(() => null);
+                .catch(e => {
+                  this.logger.warn({
+                    userId: targetUserId,
+                    badgeId: badge.id,
+                    ruleId: rule.id,
+                    action: 'AUTOMATION_AWARD_BADGE',
+                    err: { message: e instanceof Error ? e.message : String(e) },
+                    msg: 'Falha ao atribuir badge automaticamente',
+                  });
+                  return null;
+                });
             }
             result = { affected: badge ? 1 : 0 };
           } else result = { affected: 0 };
@@ -445,7 +518,16 @@ export class AutomationService {
               headers: { 'Content-Type': 'application/json', ...(params.headers ?? {}) },
               body: JSON.stringify({ event: rule.trigger, payload, ruleId: rule.id }),
               signal: AbortSignal.timeout(10000),
-            }).catch(() => null);
+            }).catch(e => {
+              this.logger.warn({
+                url: params.url,
+                ruleId: rule.id,
+                action: 'AUTOMATION_WEBHOOK_REQUEST',
+                err: { message: e instanceof Error ? e.message : String(e) },
+                msg: 'Falha ao chamar webhook/HTTP request da automação',
+              });
+              return null;
+            });
             result = { affected: 0, httpStatus: res?.status };
           } else result = { affected: 0, error: 'URL em falta nos actionParams' };
           break;
@@ -476,7 +558,15 @@ export class AutomationService {
                     metadata: JSON.stringify({}),
                   },
                 })
-                .catch(() => {});
+                .catch(e => {
+                  this.logger.warn({
+                    userId: m.id,
+                    ruleId: rule.id,
+                    action: 'AUTOMATION_NOTIFY_MANAGER_HR',
+                    err: { message: e instanceof Error ? e.message : String(e) },
+                    msg: 'Falha ao notificar gestor/RH via automação',
+                  });
+                });
           }
           result = { affected: managers.length };
           break;
@@ -494,7 +584,15 @@ export class AutomationService {
             where: { id: execId },
             data: { status: 'SUCCESS', result: JSON.stringify(result), completedAt: new Date() },
           })
-          .catch(() => {});
+          .catch(e => {
+            this.logger.warn({
+              execId,
+              ruleId: rule.id,
+              action: 'UPDATE_AUTOMATION_EXECUTION_SUCCESS',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao actualizar execução da automação para SUCCESS',
+            });
+          });
 
       return { status: 'SUCCESS', ...result };
     } catch (err: any) {
@@ -508,7 +606,15 @@ export class AutomationService {
               completedAt: new Date(),
             },
           })
-          .catch(() => {});
+          .catch(e => {
+            this.logger.warn({
+              execId,
+              ruleId: rule.id,
+              action: 'UPDATE_AUTOMATION_EXECUTION_FAILED',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao actualizar execução da automação para FAILED',
+            });
+          });
       throw err;
     }
   }
@@ -531,7 +637,14 @@ export class AutomationService {
       .count({
         where: { action: 'LEAVE_REQUEST', description: { contains: '"status":"PENDING"' } },
       })
-      .catch(() => 0);
+      .catch(e => {
+        this.logger.warn({
+          action: 'SEND_LEAVE_REMINDERS_COUNT',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao contar pedidos de ausência pendentes',
+        });
+        return 0;
+      });
     return { pending, message: `${pending} pedido(s) de ausência pendentes` };
   }
 
@@ -557,7 +670,15 @@ export class AutomationService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(err => {
+          this.logger.warn({
+            userId: e.userId,
+            enrollmentId: e.id,
+            action: 'SEND_ENROLLMENT_REMINDER',
+            err: { message: err instanceof Error ? err.message : String(err) },
+            msg: 'Falha ao notificar lembrete de curso pendente',
+          });
+        });
       notified++;
     }
     return { notified };
@@ -569,7 +690,15 @@ export class AutomationService {
     const period = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
     const drafted = await this.prisma.payslip
       .count({ where: { period, status: 'DRAFT' } })
-      .catch(() => 0);
+      .catch(e => {
+        this.logger.warn({
+          period,
+          action: 'CHECK_PAYSLIP_DUE_COUNT',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao contar recibos de vencimento pendentes',
+        });
+        return 0;
+      });
     if (drafted > 0) {
       const hrUsers = await this.prisma.read.user.findMany({
         where: { role: { code: 'RH' } },
@@ -586,7 +715,15 @@ export class AutomationService {
               metadata: JSON.stringify({}),
             },
           })
-          .catch(() => {});
+          .catch(e => {
+            this.logger.warn({
+              userId: u.id,
+              period,
+              action: 'NOTIFY_PAYSLIP_DUE',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao notificar RH sobre recibos de vencimento por emitir',
+            });
+          });
       }
     }
     return { period, drafted, message: `${drafted} recibos por emitir` };
@@ -633,11 +770,27 @@ export class AutomationService {
         take: limit,
         orderBy: { startedAt: 'desc' },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          filters,
+          action: 'GET_EXECUTIONS_LIST',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao listar execuções de automação',
+        });
+        return [] as any[];
+      });
 
     const total = await safeM(this.prisma, 'automationExecution')
       .count({ where })
-      .catch(() => 0);
+      .catch(e => {
+        this.logger.warn({
+          filters,
+          action: 'GET_EXECUTIONS_COUNT',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao contar execuções de automação',
+        });
+        return 0;
+      });
 
     return { data: executions, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
@@ -647,13 +800,30 @@ export class AutomationService {
       .findUnique({
         where: { id: executionId },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          executionId,
+          action: 'RERUN_EXECUTION_FIND',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter execução de automação para reexecutar',
+        });
+        return null;
+      });
 
     if (!exec) return { message: 'Execução não encontrada' };
 
     const rule = await this.prisma.automationRule
       .findUnique({ where: { id: exec.ruleId } })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          executionId,
+          ruleId: exec.ruleId,
+          action: 'RERUN_EXECUTION_FIND_RULE',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter regra associada à execução a reexecutar',
+        });
+        return null;
+      });
     if (!rule) return { message: 'Regra não encontrada' };
 
     const payload = exec.payload ? JSON.parse(exec.payload) : {};
@@ -680,7 +850,14 @@ export class AutomationService {
         by: ['category' as any],
         _count: { id: true },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          action: 'GET_STATS_BY_CATEGORY',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao agrupar regras de automação por categoria',
+        });
+        return [] as any[];
+      });
 
     const recentFails = await safeM(this.prisma, 'automationExecution')
       .findMany({
@@ -688,7 +865,14 @@ export class AutomationService {
         orderBy: { startedAt: 'desc' },
         take: 5,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          action: 'GET_STATS_RECENT_FAILS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao listar execuções falhadas recentes',
+        });
+        return [] as any[];
+      });
 
     return {
       rules: { total, active, inactive: total - active },

@@ -1,5 +1,5 @@
 ﻿// src/engagement/engagement.service.ts
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateSurveyDto,
@@ -47,6 +47,8 @@ function toIndex(avg: number, scale: number): number {
 
 @Injectable()
 export class EngagementService {
+  private readonly logger = new Logger(EngagementService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -219,7 +221,15 @@ export class EngagementService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          action: 'SURVEY_COMPLETED',
+          surveyId: dto.surveyId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de inquérito submetido',
+        });
+      });
 
     return { message: 'Inquérito submetido com sucesso', responseId: response.id };
   }
@@ -503,7 +513,15 @@ export class EngagementService {
               metadata: JSON.stringify({}),
             },
           })
-          .catch(() => {});
+          .catch(e => {
+            this.logger.warn({
+              userId: user.managerId,
+              subordinateId: userId,
+              action: 'MOOD_ALERT',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao criar notificação de alerta de humor para o gestor',
+            });
+          });
       }
     }
   }
@@ -536,7 +554,15 @@ export class EngagementService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: dto.toUserId,
+            fromUserId,
+            action: 'FEEDBACK_RECEIVED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de feedback recebido',
+          });
+        });
     }
 
     return fb;
@@ -627,7 +653,16 @@ export class EngagementService {
         .create({
           data: { userId: dto.toUserId, badgeId: dto.badgeId },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: dto.toUserId,
+            badgeId: dto.badgeId,
+            fromUserId,
+            action: 'giveRecognition.awardBadge',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao atribuir badge de reconhecimento',
+          });
+        });
     }
 
     // Notify recipient
@@ -640,7 +675,15 @@ export class EngagementService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.toUserId,
+          fromUserId,
+          action: 'RECOGNITION_RECEIVED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de reconhecimento recebido',
+        });
+      });
 
     return { message: `Reconhecimento enviado para ${to.fullName}!`, xpAwarded: xp, recognition };
   }
@@ -750,7 +793,15 @@ export class EngagementService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.participantId,
+          hostId: userId,
+          action: 'ONE_ON_ONE_SCHEDULED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de 1:1 agendado',
+        });
+      });
 
     return oneOnOne;
   }
@@ -818,7 +869,16 @@ export class EngagementService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: dto.assigneeId,
+            createdById,
+            action: 'ACTION_PLAN_ASSIGNED',
+            planId: plan.id,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de plano de acção de engagement atribuído',
+          });
+        });
     }
 
     return plan;

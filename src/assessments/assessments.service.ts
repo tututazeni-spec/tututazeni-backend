@@ -445,7 +445,15 @@ export class AssessmentsService {
           create: { userId, points: 50 },
           update: { points: { increment: 50 } },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            assessmentId: assessment.id,
+            action: 'AWARD_ASSESSMENT_PASSED_XP',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao atribuir XP por aprovação em avaliação',
+          });
+        });
 
       await this.prisma.notificationLog
         .create({
@@ -456,7 +464,15 @@ export class AssessmentsService {
             metadata: JSON.stringify({ assessmentId: assessment.id, score }),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            assessmentId: assessment.id,
+            action: 'NOTIFY_ASSESSMENT_PASSED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar utilizador sobre aprovação em avaliação',
+          });
+        });
     } else if (passed === false) {
       await this.prisma.notificationLog
         .create({
@@ -467,7 +483,15 @@ export class AssessmentsService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            assessmentId: assessment.id,
+            action: 'NOTIFY_ASSESSMENT_FAILED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar utilizador sobre reprovação em avaliação',
+          });
+        });
     }
 
     return {

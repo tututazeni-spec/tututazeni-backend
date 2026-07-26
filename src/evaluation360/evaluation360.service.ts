@@ -704,9 +704,14 @@ export class Evaluation360Service {
       peerResponses.length > 0 &&
       peerResponses.length < cycle.quorumMinimum
     ) {
-      this.logger.warn(
-        `[360] Participante ${participantId}: pares abaixo do quorum (${peerResponses.length}/${cycle.quorumMinimum}) — dados de pares ocultados.`,
-      );
+      this.logger.warn({
+        entityId: participantId,
+        action: 'EVAL360_PEER_QUORUM_NOT_MET',
+        cycleId: cycle.id,
+        peerCount: peerResponses.length,
+        quorumMinimum: cycle.quorumMinimum,
+        msg: '[360] Participante com pares abaixo do quorum — dados de pares ocultados',
+      });
     }
 
     // Score por tipo de avaliador (média das respostas numéricas)
@@ -906,9 +911,14 @@ export class Evaluation360Service {
         sourceResultId: resultId,
       });
     } catch (err) {
-      this.logger.warn(
-        `Falha ao criar PDI automático: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      this.logger.warn({
+        userId,
+        action: 'EVAL360_AUTO_PDI_CREATE',
+        entityId: resultId,
+        cycleId,
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao criar PDI automático a partir de resultados de avaliação 360',
+      });
     }
   }
 
