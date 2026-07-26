@@ -37,6 +37,7 @@ export function refreshThrottleLimit(env: string | undefined = process.env.NODE_
 
 const AUTH_THROTTLE = { default: { limit: authThrottleLimit(), ttl: 60000 } };
 const REFRESH_THROTTLE = { default: { limit: refreshThrottleLimit(), ttl: 60000 } };
+export const PASSWORD_RESET_THROTTLE = { default: { limit: 3, ttl: 3_600_000 } };
 
 const tokenCookieOptions = buildTokenCookieOptions(process.env.NODE_ENV === 'production');
 const refreshCookieOptions = buildRefreshCookieOptions(process.env.NODE_ENV === 'production');
@@ -104,14 +105,14 @@ export class AuthController {
 
   // Recuperação de password: quem a usa NÃO está autenticado — tem de ser pública.
   @Public()
-  @Throttle(AUTH_THROTTLE)
+  @Throttle(PASSWORD_RESET_THROTTLE)
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.passwordReset.forgotPassword(dto.email);
   }
 
   @Public()
-  @Throttle(AUTH_THROTTLE)
+  @Throttle(PASSWORD_RESET_THROTTLE)
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.passwordReset.resetPassword(dto.token, dto.newPassword);

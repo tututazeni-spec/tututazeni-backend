@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 
 const userMock = {
   findUnique: jest.fn(),
@@ -87,7 +88,17 @@ describe('UsersService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [UsersService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        UsersService,
+        { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: MailService,
+          useValue: {
+            sendUserInvite: jest.fn().mockResolvedValue(undefined),
+            sendPasswordReset: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+      ],
     }).compile();
     service = module.get<UsersService>(UsersService);
   });
@@ -297,6 +308,91 @@ describe('UsersService', () => {
       mockPrisma.auditLog.count.mockResolvedValue(0);
       const result = await service.getAuditLogs(1);
       expect(result).toBeDefined();
+    });
+  });
+
+  // ─── invite ───────────────────────────────────────────────────────────────
+
+  describe('invite()', () => {
+    const mockMail = {
+      sendUserInvite: jest.fn().mockResolvedValue(undefined),
+    };
+
+    let serviceWithMail: UsersService;
+
+    beforeEach(async () => {
+      jest.clearAllMocks();
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          UsersService,
+          { provide: PrismaService, useValue: mockPrisma },
+          { provide: MailService, useValue: mockMail },
+        ],
+      }).compile();
+      serviceWithMail = module.get<UsersService>(UsersService);
+    });
+
+    it('gera tempPassword com 24 chars hexadecimais (CSPRNG)', async () => {
+      userMock.findUnique.mockResolvedValue(null);
+      userMock.create.mockResolvedValue({ id: 1, email: 'novo@innova.com', fullName: 'Novo User' });
+
+      await serviceWithMail.invite({
+        email: 'novo@innova.com',
+        fullName: 'Novo User',
+        roleId: 1,
+        departmentId: 1,
+      });
+
+      const [, , tempPassword] = mockMail.sendUserInvite.mock.calls[0] as [string, string, string];
+      expect(tempPassword).toHaveLength(24);
+      expect(tempPassword).toMatch(/^[0-9a-f]{24}$/);
+    });
+
+    it('chama sendUserInvite com email e fullName correctos', async () => {
+      userMock.findUnique.mockResolvedValue(null);
+      userMock.create.mockResolvedValue({ id: 2, email: 'x@innova.com', fullName: 'Ana Costa' });
+
+      await serviceWithMail.invite({
+        email: 'x@innova.com',
+        fullName: 'Ana Costa',
+        roleId: 1,
+        departmentId: 1,
+      });
+
+      expect(mockMail.sendUserInvite).toHaveBeenCalledWith(
+        'x@innova.com',
+        'Ana Costa',
+        expect.any(String),
+      );
+    });
+
+    it('lança ConflictException se email já existe', async () => {
+      userMock.findUnique.mockResolvedValue({ id: 99 });
+      await expect(
+        serviceWithMail.invite({
+          email: 'dup@innova.com',
+          fullName: 'Dup',
+          roleId: 1,
+          departmentId: 1,
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(mockMail.sendUserInvite).not.toHaveBeenCalled();
+    });
+
+    it('não cria o utilizador se sendUserInvite lançar (SMTP configurado mas falha)', async () => {
+      mockMail.sendUserInvite.mockRejectedValueOnce(new Error('SMTP timeout'));
+      userMock.findUnique.mockResolvedValue(null);
+
+      await expect(
+        serviceWithMail.invite({
+          email: 'fail@innova.com',
+          fullName: 'Fail',
+          roleId: 1,
+          departmentId: 1,
+        }),
+      ).rejects.toThrow('SMTP timeout');
+
+      expect(userMock.create).not.toHaveBeenCalled();
     });
   });
 });

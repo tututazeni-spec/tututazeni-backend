@@ -41,4 +41,11 @@ export const envValidationSchema = Joi.object({
   JWT_USER_CACHE_TTL_MS: Joi.number().default(30000),
   LOG_LEVEL: Joi.string().valid('trace', 'debug', 'info', 'warn', 'error', 'fatal').default('info'),
   AUTH_ALLOW_BEARER: Joi.boolean().default(true),
+
+  // SMTP — opcionais (sem SMTP_HOST, emails não são enviados; app arranca na mesma)
+  SMTP_HOST: Joi.string().optional(),
+  SMTP_PORT: Joi.number().port().optional().default(587),
+  SMTP_USER: Joi.string().optional(),
+  SMTP_PASS: Joi.string().optional(),
+  SMTP_FROM: Joi.string().optional().default('INNOVA <noreply@innova.ao>'),
 }).options({ allowUnknown: true });

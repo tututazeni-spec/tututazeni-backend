@@ -6,7 +6,9 @@ import {
   Logger,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -60,7 +62,10 @@ const USER_INCLUDE_BASIC = {
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
   private sanitize(user: { password?: string | null }) {
@@ -538,7 +543,12 @@ export class UsersService {
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email já registado');
 
-    const tempPassword = Math.random().toString(36).slice(-10);
+    // CSPRNG — 12 bytes = 24 chars hexadecimais
+    const tempPassword = crypto.randomBytes(12).toString('hex');
+
+    // Enviar email ANTES de criar o user — se SMTP falhar, o user não é criado
+    await this.mail.sendUserInvite(dto.email, dto.fullName, tempPassword);
+
     const user = await this.create({
       ...dto,
       password: tempPassword,
