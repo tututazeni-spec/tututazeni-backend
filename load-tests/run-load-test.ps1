@@ -1,4 +1,4 @@
-# load-tests/run-load-test.ps1
+﻿# load-tests/run-load-test.ps1
 # Script completo para executar load tests no INNOVA
 # Uso: .\load-tests\run-load-test.ps1 [smoke|load|stress|spike]
 # Exemplo: .\load-tests\run-load-test.ps1 load
@@ -26,13 +26,13 @@ Write-Host "✅ Build concluído`n"
 Write-Host "[2/5] A iniciar servidor (NODE_ENV=test)..." -ForegroundColor Cyan
 $env:UV_THREADPOOL_SIZE = "16"
 $env:NODE_ENV = "test"
-$env:DB_POOL_MAX = "50"
+$env:DB_POOL_MAX = "80"
 $serverJob = Start-Job -ScriptBlock {
     param($dir)
     Set-Location $dir
     $env:UV_THREADPOOL_SIZE = "16"
     $env:NODE_ENV = "test"
-    $env:DB_POOL_MAX = "50"
+    $env:DB_POOL_MAX = "80"
     node dist/main.js 2>&1
 } -ArgumentList $RootDir
 
