@@ -158,9 +158,9 @@ describe('LeadershipController', () => {
     expect(mockSvc.submit360Feedback).toHaveBeenCalledWith(1, dto);
   });
 
-  it('get360Summary → get360Summary(leaderId)', async () => {
-    await controller.get360Summary(3);
-    expect(mockSvc.get360Summary).toHaveBeenCalledWith(3);
+  it('get360Summary → get360Summary(leaderId, user)', async () => {
+    await controller.get360Summary(mockUser as any, 3);
+    expect(mockSvc.get360Summary).toHaveBeenCalledWith(3, mockUser);
   });
 
   it('my360Summary → get360Summary(userId)', async () => {

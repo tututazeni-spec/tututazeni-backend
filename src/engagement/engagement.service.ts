@@ -22,6 +22,9 @@ import {
   SurveyStatus,
   RecognitionType,
 } from './engagement.dto';
+import { isPrivileged } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/decorators';
 
 // ─── Scoring helpers ──────────────────────────────────────────────
 
@@ -763,7 +766,18 @@ export class EngagementService {
     });
   }
 
-  async updateOneOnOne(id: number, userId: number, dto: EngagementUpdateOneOnOneDto) {
+  async updateOneOnOne(id: number, user: CurrentUserData, dto: EngagementUpdateOneOnOneDto) {
+    const meeting = await this.prisma.oneOnOneMeeting.findUnique({ where: { id } });
+    if (!meeting) throw new NotFoundException('1:1 não encontrado');
+
+    // Ownership (A3): host OU participante OU ADMIN/RH; senão 404 (não revela existência).
+    const isOwner =
+      String(user.id) === String(meeting.hostId) ||
+      String(user.id) === String(meeting.participantId);
+    if (!isOwner && !isPrivileged(user, [Role.ADMIN, Role.RH])) {
+      throw new NotFoundException('1:1 não encontrado');
+    }
+
     const data: any = { ...dto };
     if (dto.scheduledAt) data.scheduledAt = new Date(dto.scheduledAt);
     if (dto.completed) data.status = 'COMPLETED';

@@ -125,4 +125,33 @@ describe('LeadershipService', () => {
       await expect(service.enroll({ userId: 1, programId: 1 })).rejects.toThrow(ConflictException);
     });
   });
+
+  describe('get360Summary', () => {
+    const leaderA = { id: 1, email: 'leaderA@innova.com', role: { name: 'GESTOR' } };
+    const leaderB = { id: 2, email: 'leaderB@innova.com', role: { name: 'GESTOR' } };
+    const adminUser = { id: 99, email: 'admin@innova.com', role: { name: 'ADMIN' } };
+
+    it('permite ao próprio líder ver o seu sumário 360°', async () => {
+      mockPrisma.leadershipFeedback360.findMany.mockResolvedValue([]);
+      const result = await service.get360Summary(1, leaderA as any);
+      expect(result).toBeDefined();
+    });
+
+    it('não permite líder B ver o sumário 360° de líder A', async () => {
+      mockPrisma.leadershipFeedback360.findMany.mockResolvedValue([]);
+      await expect(service.get360Summary(1, leaderB as any)).rejects.toThrow(NotFoundException);
+    });
+
+    it('permite ADMIN ver o sumário 360° de qualquer líder', async () => {
+      mockPrisma.leadershipFeedback360.findMany.mockResolvedValue([]);
+      const result = await service.get360Summary(1, adminUser as any);
+      expect(result).toBeDefined();
+    });
+
+    it('sem user (chamada interna) não filtra por ownership', async () => {
+      mockPrisma.leadershipFeedback360.findMany.mockResolvedValue([]);
+      const result = await service.get360Summary(1);
+      expect(result).toBeDefined();
+    });
+  });
 });

@@ -139,6 +139,32 @@ describe('EnrollmentsService', () => {
       mockPrisma.enrollment.findUnique.mockResolvedValue(null);
       await expect(service.findOne(99)).rejects.toThrow(NotFoundException);
     });
+
+    // ─── Ownership (A3) ───────────────────────────────────────────────────
+
+    it('o dono lê a própria matrícula', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue(baseEnrollment);
+      mockPrisma.lesson.count.mockResolvedValue(5);
+      mockPrisma.lessonProgress.count.mockResolvedValue(3);
+      const owner = { id: 1, role: { name: 'COLABORADOR' } } as any;
+      await expect(service.findOne(1, owner)).resolves.toMatchObject({ id: 1 });
+    });
+
+    it('IDOR: colaborador B não pode ler a matrícula de A (404)', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue(baseEnrollment);
+      mockPrisma.lesson.count.mockResolvedValue(5);
+      mockPrisma.lessonProgress.count.mockResolvedValue(3);
+      const userB = { id: 8, role: { name: 'COLABORADOR' } } as any;
+      await expect(service.findOne(1, userB)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('RH lê qualquer matrícula (papel privilegiado)', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue(baseEnrollment);
+      mockPrisma.lesson.count.mockResolvedValue(5);
+      mockPrisma.lessonProgress.count.mockResolvedValue(3);
+      const rh = { id: 99, role: { name: 'RH' } } as any;
+      await expect(service.findOne(1, rh)).resolves.toMatchObject({ id: 1 });
+    });
   });
 
   // ─── enroll ───────────────────────────────────────────────────────────────

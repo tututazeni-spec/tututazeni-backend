@@ -12,6 +12,9 @@ import {
   DocumentRequestFilterDto,
   DocumentRequestStatus,
 } from './declarations.dto';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/decorators';
 
 // ─── Variable resolver ────────────────────────────────────────────────────────
 
@@ -216,7 +219,7 @@ export class DocumentDeclarationsService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async findOne(id: number, requesterId?: number) {
+  async findOne(id: number, user?: CurrentUserData) {
     const r = await this.prisma.read.declarationRequest.findUnique({
       where: { id },
       include: {
@@ -227,14 +230,17 @@ export class DocumentDeclarationsService {
         approval: { include: { reviewer: { select: { id: true, fullName: true } } } },
       },
     });
-    if (!r) throw new NotFoundException('Declaração não encontrada');
+    // Ownership (A3): dono OU ADMIN/RH; senão 404.
+    // Quando chamado sem user (contexto interno de confiança), não filtra.
+    if (user) assertCanAccess(r, (r as any)?.userId, user, [Role.ADMIN, Role.RH]);
+    else if (!r) throw new NotFoundException('Declaração não encontrada');
 
-    if (requesterId) {
+    if (user) {
       await this.audit.log({
         action: 'DECLARATION_VIEWED',
         entityType: 'DeclarationRequest',
         entityId: id,
-        userId: requesterId,
+        userId: user.id,
       });
     }
 

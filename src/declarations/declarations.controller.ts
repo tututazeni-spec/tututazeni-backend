@@ -140,7 +140,7 @@ export class DocumentDeclarationsController {
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe de um pedido' })
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
-    return this.svc.findOne(id, user.id);
+    return this.svc.findOne(id, user);
   }
 
   @Post()

@@ -83,7 +83,7 @@ export class MonitoringController {
     @Body() dto: UpdateKeyResultDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.service.updateKeyResult(id, dto, user.id);
+    return this.service.updateKeyResult(id, dto, user);
   }
 
   // ─── INDICADORES ─────────────────────────────────────
@@ -151,7 +151,7 @@ export class MonitoringController {
     @Body() dto: MonitoringSubmitEvaluationDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.service.submitEvaluation(id, dto, user.id);
+    return this.service.submitEvaluation(id, dto, user);
   }
 
   @Get('evaluation/my-evaluations')

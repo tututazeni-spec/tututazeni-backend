@@ -96,7 +96,7 @@ export class LeaderController {
     @CurrentUser() user: CurrentUserData,
     @Param('memberId', ParseIntPipe) memberId: number,
   ) {
-    return this.svc.getMemberProfile(user.id, memberId);
+    return this.svc.getMemberProfile(user, memberId);
   }
 
   // ─── Admin view (specific leader) ────────────────────────────
@@ -150,8 +150,12 @@ export class LeaderController {
   @Patch('1on1/:id/complete')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Concluir reunião 1:1 com notas/actas' })
-  complete1on1(@Param('id', ParseIntPipe) id: number, @Body() dto: Complete1on1Dto) {
-    return this.svc.completeOneOnOne(id, dto.notes);
+  complete1on1(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: Complete1on1Dto,
+  ) {
+    return this.svc.completeOneOnOne(id, dto.notes, user);
   }
 
   // ─── PDI Approval ─────────────────────────────────────────────

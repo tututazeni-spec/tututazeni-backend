@@ -302,6 +302,31 @@ describe('TalentDevelopmentService', () => {
     });
   });
 
+  // ─── getPlan ownership (A3) ───────────────────────────────────────────────
+
+  describe('getPlan ownership (A3)', () => {
+    const employeeA = { id: 1, role: { name: 'COLABORADOR' } } as any;
+    const employeeB = { id: 2, role: { name: 'COLABORADOR' } } as any;
+    const lider = { id: 3, role: { name: 'LIDER' } } as any;
+
+    it('o dono lê o próprio PDI', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
+      const result = await service.getPlan(1, employeeA);
+      expect(result.id).toBe(1);
+    });
+
+    it('colaborador B recebe 404 (não revela existência do PDI de A)', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
+      await expect(service.getPlan(1, employeeB)).rejects.toThrow(NotFoundException);
+    });
+
+    it('LIDER lê qualquer PDI (papel privilegiado)', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
+      const result = await service.getPlan(1, lider);
+      expect(result.id).toBe(1);
+    });
+  });
+
   // ─── updatePlan ───────────────────────────────────────────────────────────
 
   describe('updatePlan', () => {
@@ -607,6 +632,36 @@ describe('TalentDevelopmentService', () => {
     it('deve lançar NotFoundException se não encontrado', async () => {
       mockPrisma.mentoring.findUnique.mockResolvedValue(null);
       await expect(service.getMentoring(99)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── getMentoring ownership (A3) — dois donos possíveis: mentor e mentee ──
+
+  describe('getMentoring ownership (A3)', () => {
+    const mentor = { id: 1, role: { name: 'COLABORADOR' } } as any;
+    const mentee = { id: 2, role: { name: 'COLABORADOR' } } as any;
+    const outsider = { id: 3, role: { name: 'COLABORADOR' } } as any;
+    const rh = { id: 9, role: { name: 'RH' } } as any;
+    const mentoringAB = { id: 1, mentorId: 1, menteeId: 2, status: 'ACTIVE' };
+
+    it('o mentor acede à mentoria', async () => {
+      mockPrisma.mentoring.findUnique.mockResolvedValue(mentoringAB);
+      await expect(service.getMentoring(1, mentor)).resolves.toMatchObject({ id: 1 });
+    });
+
+    it('o mentorando (mentee) acede à mentoria', async () => {
+      mockPrisma.mentoring.findUnique.mockResolvedValue(mentoringAB);
+      await expect(service.getMentoring(1, mentee)).resolves.toMatchObject({ id: 1 });
+    });
+
+    it('colaborador C (nem mentor nem mentee) recebe 404', async () => {
+      mockPrisma.mentoring.findUnique.mockResolvedValue(mentoringAB);
+      await expect(service.getMentoring(1, outsider)).rejects.toThrow(NotFoundException);
+    });
+
+    it('RH acede a qualquer mentoria (papel privilegiado)', async () => {
+      mockPrisma.mentoring.findUnique.mockResolvedValue(mentoringAB);
+      await expect(service.getMentoring(1, rh)).resolves.toMatchObject({ id: 1 });
     });
   });
 

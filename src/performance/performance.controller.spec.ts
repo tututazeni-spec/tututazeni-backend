@@ -152,9 +152,9 @@ describe('PerformanceController', () => {
     expect(mockSvc.getUserHistory).toHaveBeenCalledWith(3);
   });
 
-  it('findOne → findOne(id)', async () => {
-    await controller.findOne(1);
-    expect(mockSvc.findOne).toHaveBeenCalledWith(1);
+  it('findOne → findOne(id, user)', async () => {
+    await controller.findOne(1, mockUser as any);
+    expect(mockSvc.findOne).toHaveBeenCalledWith(1, mockUser);
   });
 
   it('create → create(dto)', async () => {

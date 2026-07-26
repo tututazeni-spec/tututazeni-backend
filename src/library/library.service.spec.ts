@@ -280,17 +280,41 @@ describe('LibraryService', () => {
       expect(result.id).toBe('com-1');
     });
 
-    it('deve remover comentário', async () => {
-      mockPrisma.libraryComment.findUnique.mockResolvedValue({ id: 'com-1' });
+    it('deve remover comentário (autor)', async () => {
+      mockPrisma.libraryComment.findUnique.mockResolvedValue({ id: 'com-1', userId: 1 });
       mockPrisma.libraryComment.update.mockResolvedValue({});
       mockPrisma.auditLog.create.mockResolvedValue({});
-      const result = await service.deleteComment('com-1', 1);
+      const result = await service.deleteComment('com-1', {
+        id: 1,
+        role: { name: 'COLABORADOR' },
+      } as any);
       expect(result.message).toContain('removido');
     });
 
     it('deve lançar NotFoundException ao remover comentário inexistente', async () => {
       mockPrisma.libraryComment.findUnique.mockResolvedValue(null);
-      await expect(service.deleteComment('nao-existe', 1)).rejects.toThrow(NotFoundException);
+      await expect(
+        service.deleteComment('nao-existe', { id: 1, role: { name: 'COLABORADOR' } } as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('não permite utilizador B remover comentário de utilizador A', async () => {
+      mockPrisma.libraryComment.findUnique.mockResolvedValue({ id: 'com-1', userId: 1 });
+      await expect(
+        service.deleteComment('com-1', { id: 2, role: { name: 'COLABORADOR' } } as any),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.libraryComment.update).not.toHaveBeenCalled();
+    });
+
+    it('permite ADMIN remover comentário de outro utilizador', async () => {
+      mockPrisma.libraryComment.findUnique.mockResolvedValue({ id: 'com-1', userId: 1 });
+      mockPrisma.libraryComment.update.mockResolvedValue({});
+      mockPrisma.auditLog.create.mockResolvedValue({});
+      const result = await service.deleteComment('com-1', {
+        id: 2,
+        role: { name: 'ADMIN' },
+      } as any);
+      expect(result.message).toContain('removido');
     });
   });
 

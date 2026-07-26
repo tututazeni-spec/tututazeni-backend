@@ -102,6 +102,34 @@ describe('ContentLibraryService', () => {
       mockPrisma.contentAsset.findUnique.mockResolvedValue(null);
       await expect(service.update(99, {} as any, 1)).rejects.toThrow(NotFoundException);
     });
+
+    // ─── ownership (IDOR — auditoria de segurança) ───────────────────────────
+    it('o autor (createdById) consegue editar o próprio conteúdo', async () => {
+      const owner = { id: 1, role: { name: 'INSTRUCTOR' } } as any;
+      mockPrisma.contentAsset.findUnique.mockResolvedValue({ ...baseAsset, createdById: 1 });
+      mockPrisma.contentAsset.update.mockResolvedValue({ ...baseAsset, title: 'Actualizado' });
+      await expect(
+        service.update(1, { title: 'Actualizado' } as any, 1, owner),
+      ).resolves.toBeDefined();
+    });
+
+    it('outro INSTRUCTOR não consegue editar conteúdo de outro autor → NotFoundException', async () => {
+      const otherInstructor = { id: 2, role: { name: 'INSTRUCTOR' } } as any;
+      mockPrisma.contentAsset.findUnique.mockResolvedValue({ ...baseAsset, createdById: 1 });
+      await expect(
+        service.update(1, { title: 'Hack' } as any, 2, otherInstructor),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(mockPrisma.contentAsset.update).not.toHaveBeenCalled();
+    });
+
+    it('ADMIN/RH conseguem editar conteúdo de qualquer autor', async () => {
+      const admin = { id: 99, role: { name: 'ADMIN' } } as any;
+      mockPrisma.contentAsset.findUnique.mockResolvedValue({ ...baseAsset, createdById: 1 });
+      mockPrisma.contentAsset.update.mockResolvedValue({ ...baseAsset, title: 'Actualizado' });
+      await expect(
+        service.update(1, { title: 'Actualizado' } as any, 99, admin),
+      ).resolves.toBeDefined();
+    });
   });
 
   // ─── publish ──────────────────────────────────────────────────────────────

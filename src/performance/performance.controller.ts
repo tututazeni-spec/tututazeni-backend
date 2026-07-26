@@ -152,8 +152,8 @@ export class PerformanceController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe de uma avaliação' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.findOne(id);
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.findOne(id, user);
   }
 
   @Post()

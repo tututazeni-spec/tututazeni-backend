@@ -11,6 +11,9 @@ import {
   MonitoringSubmitEvaluationDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
+import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/types/current-user';
 
 @Injectable()
 export class MonitoringService {
@@ -85,9 +88,15 @@ export class MonitoringService {
     return kr;
   }
 
-  async updateKeyResult(id: string, dto: UpdateKeyResultDto, userId: number) {
-    const kr = await this.prisma.read.keyResult.findUnique({ where: { id } });
-    if (!kr) throw new NotFoundException('Key Result não encontrado');
+  async updateKeyResult(id: string, dto: UpdateKeyResultDto, user: CurrentUserData) {
+    const kr = await this.prisma.read.keyResult.findUnique({
+      where: { id },
+      include: { objective: { select: { ownerId: true } } },
+    });
+    // Ownership (A3): dono do Objectivo pai (KeyResult não tem owner directo)
+    // OU ADMIN/RH/GESTOR; senão 404.
+    assertCanAccess(kr, kr?.objective?.ownerId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    const userId = user.id;
 
     const range = kr.targetValue - kr.startValue;
     const achieved = dto.newValue - kr.startValue;
@@ -290,13 +299,22 @@ export class MonitoringService {
     return evaluation;
   }
 
-  async submitEvaluation(id: string, dto: MonitoringSubmitEvaluationDto, evaluatorId: number) {
+  async submitEvaluation(id: string, dto: MonitoringSubmitEvaluationDto, user: CurrentUserData) {
     const evaluation = await this.prisma.read.userEvaluation.findUnique({
       where: { id },
     });
     if (!evaluation) throw new NotFoundException('Avaliação não encontrada');
 
+    // Ownership (A3): dois donos possíveis consoante o tipo — em SELF só o
+    // próprio (userId) submete; nos restantes tipos só o avaliador
+    // (evaluatorId) submete. ADMIN/RH têm sempre acesso. Verificação manual
+    // porque assertCanAccess só suporta um único ownerId.
     const isSelf = evaluation.type === 'SELF';
+    const expectedOwnerId = isSelf ? evaluation.userId : evaluation.evaluatorId;
+    if (String(user.id) !== String(expectedOwnerId) && !isPrivileged(user, [Role.ADMIN, Role.RH])) {
+      throw new NotFoundException('Avaliação não encontrada');
+    }
+    const evaluatorId = user.id;
     const updated = await this.prisma.userEvaluation.update({
       where: { id },
       data: {

@@ -21,6 +21,9 @@ import {
   SendKudosDto,
   LeadershipFilterDto,
 } from './leadership.dto';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/types/current-user';
 
 @Injectable()
 export class LeadershipService {
@@ -482,7 +485,11 @@ export class LeadershipService {
     return { message: 'Feedback 360° submetido', feedbackId: feedback.id };
   }
 
-  async get360Summary(leaderId: number) {
+  async get360Summary(leaderId: number, user?: CurrentUserData) {
+    // Ownership (A3): só o próprio líder ou ADMIN/RH podem ver o sumário 360°.
+    // Sem `user` (chamada interna de confiança, ex. recalcLeadershipScore) não filtra.
+    if (user) assertCanAccess({ leaderId }, leaderId, user, [Role.ADMIN, Role.RH]);
+
     const feedbacks = await this.prisma.read.leadershipFeedback360.findMany({
       where: { leaderId },
       include: { responses: true },

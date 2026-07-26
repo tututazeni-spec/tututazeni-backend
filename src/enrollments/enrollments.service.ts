@@ -17,6 +17,9 @@ import {
   UpdateDeadlineDto,
   EnrollmentOrigin,
 } from './enrollments.dto';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/decorators';
 
 const ENROLLMENT_INCLUDE_BASIC = {
   user: {
@@ -160,7 +163,7 @@ export class EnrollmentsService {
 
   // ─── DETALHE ──────────────────────────────────────────────────────────────
 
-  async findOne(id: number) {
+  async findOne(id: number, user?: CurrentUserData) {
     const e = await this.prisma.read.enrollment.findUnique({
       where: { id },
       include: {
@@ -170,7 +173,10 @@ export class EnrollmentsService {
         },
       },
     });
-    if (!e) throw new NotFoundException('Matrícula não encontrada');
+    // Ownership (A3): dono OU ADMIN/RH/GESTOR; senão 404.
+    // Quando chamado sem user (contexto interno de confiança), não filtra.
+    if (user) assertCanAccess(e, (e as any)?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    else if (!e) throw new NotFoundException('Matrícula não encontrada');
 
     const prog = await this.computeProgress(id, (e as any).courseId, (e as any).userId);
     return {

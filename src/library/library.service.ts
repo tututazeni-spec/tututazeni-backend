@@ -9,6 +9,9 @@ import {
   LibraryCreateCommentDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/types/current-user';
 
 @Injectable()
 export class LibraryService {
@@ -235,16 +238,18 @@ export class LibraryService {
     return comment;
   }
 
-  async deleteComment(commentId: string, userId: number) {
+  async deleteComment(commentId: string, user: CurrentUserData) {
     const comment = await this.prisma.read.libraryComment.findUnique({
       where: { id: commentId },
     });
     if (!comment) throw new NotFoundException('Comentário não encontrado');
+    // Ownership (A3): só o autor do comentário ou ADMIN/RH podem remover; senão 404.
+    assertCanAccess(comment, comment.userId, user, [Role.ADMIN, Role.RH]);
     await this.prisma.libraryComment.update({
       where: { id: commentId },
       data: { deletedAt: new Date() },
     });
-    await this.audit.logEntity(userId, 'DELETE', 'LibraryComment', commentId, {});
+    await this.audit.logEntity(user.id, 'DELETE', 'LibraryComment', commentId, {});
     return { message: 'Comentário removido' };
   }
 

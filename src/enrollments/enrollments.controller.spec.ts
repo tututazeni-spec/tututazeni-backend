@@ -103,9 +103,9 @@ describe('EnrollmentsController', () => {
     expect(mockSvc.getUserEnrollments).toHaveBeenCalledWith(7, filters);
   });
 
-  it('findOne → findOne(id)', async () => {
-    await controller.findOne(4);
-    expect(mockSvc.findOne).toHaveBeenCalledWith(4);
+  it('findOne → findOne(id, user)', async () => {
+    await controller.findOne(4, mockUser as any);
+    expect(mockSvc.findOne).toHaveBeenCalledWith(4, mockUser);
   });
 
   it('enroll (admin) → enroll com assignedById', async () => {

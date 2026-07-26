@@ -200,6 +200,42 @@ describe('OnboardingService — additional coverage', () => {
     });
   });
 
+  // ─── findOne ownership (A3) ────────────────────────────────────────────────
+
+  describe('findOne ownership (A3)', () => {
+    const employeeA = { id: 1, role: { name: 'COLABORADOR' } } as any;
+    const employeeB = { id: 2, role: { name: 'COLABORADOR' } } as any;
+    const rh = { id: 9, role: { name: 'RH' } } as any;
+    const planOfA = {
+      id: 1,
+      userId: 1,
+      status: 'IN_PROGRESS',
+      user: { id: 1, fullName: 'Test', email: 'test@innova.com', department: null, position: null },
+      template: { id: 1, name: 'Padrão', tasks: [] },
+      buddy: null,
+      manager: null,
+      hrResponsible: null,
+      taskInstances: [],
+      documents: [],
+      surveys: [],
+    };
+
+    it('o dono lê o próprio plano de onboarding', async () => {
+      mockPrisma.onboardingPlan.findUnique.mockResolvedValue(planOfA);
+      await expect(service.findOne(1, employeeA)).resolves.toMatchObject({ id: 1 });
+    });
+
+    it('colaborador B recebe 404 (não revela existência do plano de A)', async () => {
+      mockPrisma.onboardingPlan.findUnique.mockResolvedValue(planOfA);
+      await expect(service.findOne(1, employeeB)).rejects.toThrow(NotFoundException);
+    });
+
+    it('RH lê qualquer plano (papel privilegiado)', async () => {
+      mockPrisma.onboardingPlan.findUnique.mockResolvedValue(planOfA);
+      await expect(service.findOne(1, rh)).resolves.toMatchObject({ id: 1 });
+    });
+  });
+
   // ─── findAll com filtros ──────────────────────────────────────────────────
 
   describe('findAll with filters', () => {

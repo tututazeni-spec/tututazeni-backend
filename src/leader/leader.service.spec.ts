@@ -21,7 +21,17 @@ const mockPrisma = {
   badgeAward: { findMany: makeFind(), count: makeCount() },
   auditLog: { findMany: makeFind(), create: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
+  oneOnOneMeeting: {
+    findUnique: jest.fn(),
+    update: jest.fn().mockResolvedValue({}),
+    create: jest.fn().mockResolvedValue({}),
+    findMany: makeFind(),
+  },
 };
+
+const leaderUser = { id: 1, email: 'leader@innova.com', role: { name: 'LIDER' } };
+const otherLeaderUser = { id: 99, email: 'other@innova.com', role: { name: 'LIDER' } };
+const adminUser = { id: 999, email: 'admin@innova.com', role: { name: 'ADMIN' } };
 
 describe('LeaderService', () => {
   let service: LeaderService;
@@ -98,7 +108,47 @@ describe('LeaderService', () => {
         developmentPlans: [],
         userCompetencies: [],
       });
-      const result = await service.getMemberProfile(1, 2);
+      mockPrisma.user.count.mockResolvedValue(1); // memberId 2 pertence à equipa do leaderUser (id 1)
+      const result = await service.getMemberProfile(leaderUser as any, 2);
+      expect(result).toBeDefined();
+    });
+
+    it('não permite líder B aceder a perfil de membro de outra equipa (A ≠ B)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 2,
+        fullName: 'Team Member',
+        managerId: 1, // pertence ao leaderUser (id 1), não ao otherLeaderUser (id 99)
+        createdAt: new Date('2021-01-01'),
+        enrollments: [],
+        certificates: [],
+        badgeAwards: [],
+        performanceReviews: [],
+        developmentPlans: [],
+        userCompetencies: [],
+      });
+      mockPrisma.user.count.mockResolvedValue(0); // não é membro da equipa do otherLeaderUser
+
+      await expect(service.getMemberProfile(otherLeaderUser as any, 2)).rejects.toThrow(
+        'Membro não encontrado',
+      );
+    });
+
+    it('permite ADMIN aceder a perfil de membro de qualquer equipa', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 2,
+        fullName: 'Team Member',
+        managerId: 1,
+        createdAt: new Date('2021-01-01'),
+        enrollments: [],
+        certificates: [],
+        badgeAwards: [],
+        performanceReviews: [],
+        developmentPlans: [],
+        userCompetencies: [],
+      });
+      mockPrisma.user.count.mockResolvedValue(0);
+
+      const result = await service.getMemberProfile(adminUser as any, 2);
       expect(result).toBeDefined();
     });
   });
@@ -146,6 +196,65 @@ describe('LeaderService', () => {
   describe('getOneOnOnes', () => {
     it('deve retornar 1:1s do líder', async () => {
       const result = await service.getOneOnOnes(1);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── completeOneOnOne ─────────────────────────────────────────────────────
+
+  describe('completeOneOnOne', () => {
+    it('permite ao host (líder dono) concluir a reunião', async () => {
+      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue({
+        id: 10,
+        hostId: 1,
+        participantId: 2,
+        status: 'SCHEDULED',
+      });
+      mockPrisma.oneOnOneMeeting.update.mockResolvedValue({ id: 10, status: 'COMPLETED' });
+
+      const result = await service.completeOneOnOne(10, 'notas', leaderUser as any);
+      expect(result).toBeDefined();
+      expect(mockPrisma.oneOnOneMeeting.update).toHaveBeenCalled();
+    });
+
+    it('permite ao participante concluir a reunião', async () => {
+      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue({
+        id: 11,
+        hostId: 1,
+        participantId: 2,
+        status: 'SCHEDULED',
+      });
+      mockPrisma.oneOnOneMeeting.update.mockResolvedValue({ id: 11, status: 'COMPLETED' });
+
+      const participantUser = { id: 2, email: 'member@innova.com', role: { name: 'COLABORADOR' } };
+      const result = await service.completeOneOnOne(11, 'notas', participantUser as any);
+      expect(result).toBeDefined();
+    });
+
+    it('não permite líder B (nem host nem participante) concluir reunião de A', async () => {
+      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue({
+        id: 12,
+        hostId: 1,
+        participantId: 2,
+        status: 'SCHEDULED',
+      });
+
+      await expect(service.completeOneOnOne(12, 'notas', otherLeaderUser as any)).rejects.toThrow(
+        'Reunião 1:1 não encontrada',
+      );
+      expect(mockPrisma.oneOnOneMeeting.update).not.toHaveBeenCalled();
+    });
+
+    it('permite ADMIN concluir reunião de qualquer líder', async () => {
+      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue({
+        id: 13,
+        hostId: 1,
+        participantId: 2,
+        status: 'SCHEDULED',
+      });
+      mockPrisma.oneOnOneMeeting.update.mockResolvedValue({ id: 13, status: 'COMPLETED' });
+
+      const result = await service.completeOneOnOne(13, 'notas', adminUser as any);
       expect(result).toBeDefined();
     });
   });
