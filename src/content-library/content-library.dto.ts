@@ -121,10 +121,7 @@ export class ContentFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) maxDuration?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() tag?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?:
-    | 'popular'
-    | 'newest'
-    | 'rating'
-    | 'duration';
+    'popular' | 'newest' | 'rating' | 'duration';
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @IsInt()

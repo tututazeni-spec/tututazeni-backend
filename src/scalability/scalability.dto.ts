@@ -391,6 +391,5 @@ export class PaginationDto {
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?: string;
   @ApiPropertyOptional({ enum: ['asc', 'desc'] }) @IsOptional() @IsString() sortOrder?:
-    | 'asc'
-    | 'desc';
+    'asc' | 'desc';
 }

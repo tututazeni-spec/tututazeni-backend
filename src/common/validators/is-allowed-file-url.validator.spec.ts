@@ -41,7 +41,7 @@ describe('IsAllowedFileUrl', () => {
 
   it('recusa javascript:', async () => {
     const url = 'javascript' + ':alert(1)';
-    // eslint-disable-next-line no-script-url
+
     expect((await errorsFor(url, 'storage.innova.ao')).length).toBeGreaterThan(0);
   });
 
