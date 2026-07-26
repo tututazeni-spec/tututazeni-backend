@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto, RegisterDto, ChangePasswordDto } from './auth.dto';
+import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 
 @Injectable()
 export class AuthService {
@@ -60,7 +61,7 @@ export class AuthService {
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email já registado');
 
-    const hashed = await bcrypt.hash(dto.password, 12);
+    const hashed = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
 
     const collaboratorRole = await this.prisma.read.role.findFirst({
       where: { name: 'COLABORADOR' },
@@ -97,14 +98,27 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.currentPassword, user.password);
     if (!valid) throw new BadRequestException('Senha atual incorreta');
 
-    const hashed = await bcrypt.hash(dto.newPassword, 12);
-    await this.prisma.user.update({ where: { id: userId }, data: { password: hashed } });
+    const hashed = await bcrypt.hash(dto.newPassword, BCRYPT_COST_FACTOR);
+    const now = new Date();
 
-    await this.prisma.auditLog.create({
-      data: { userId, action: 'CHANGE_PASSWORD', entity: 'User', entityId: userId },
-    });
+    // Mudar a senha invalida todas as sessões activas (incluindo a actual) —
+    // um token roubado antes da troca deixa de servir. O próprio JwtStrategy
+    // já rejeita accessTokens emitidos antes de passwordChangedAt.
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { password: hashed, passwordChangedAt: now },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      }),
+      this.prisma.auditLog.create({
+        data: { userId, action: 'CHANGE_PASSWORD', entity: 'User', entityId: userId },
+      }),
+    ]);
 
-    return { message: 'Senha alterada com sucesso' };
+    return { message: 'Senha alterada com sucesso. Sessão terminada, inicia sessão novamente.' };
   }
 
   async me(userId: number) {

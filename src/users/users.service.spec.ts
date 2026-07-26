@@ -37,6 +37,10 @@ const mockPrismaBase = {
     findMany: jest.fn().mockResolvedValue([]),
   },
   userCompetency: { count: jest.fn().mockResolvedValue(0) },
+  refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+  // changePassword corre as escritas dentro de $transaction — mock executa-as
+  // sequencialmente, tal como o Prisma real faz dentro da transacção.
+  $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
 };
 
 const mockPrisma = new Proxy(mockPrismaBase, {

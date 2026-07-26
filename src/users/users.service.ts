@@ -9,6 +9,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -205,7 +206,7 @@ export class UsersService {
         throw new ConflictException(`Número de funcionário ${dto.employeeNumber} já existe`);
     }
 
-    const hashed = dto.password ? await bcrypt.hash(dto.password, 12) : null;
+    const hashed = dto.password ? await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR) : null;
 
     const user = await this.prisma.user.create({
       data: {
@@ -274,7 +275,7 @@ export class UsersService {
     }
 
     const data: any = { ...dto };
-    if (dto.password) data.password = await bcrypt.hash(dto.password, 12);
+    if (dto.password) data.password = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
     if (dto.birthDate) data.birthDate = new Date(dto.birthDate);
     if (dto.hireDate) data.hireDate = new Date(dto.hireDate);
     if (dto.exitDate) data.exitDate = new Date(dto.exitDate);
@@ -365,11 +366,25 @@ export class UsersService {
     const valid = user.password && (await bcrypt.compare(dto.currentPassword, user.password));
     if (!valid) throw new ForbiddenException('Password actual incorrecta');
 
-    const hashed = await bcrypt.hash(dto.newPassword, 12);
-    await this.prisma.user.update({ where: { id: userId }, data: { password: hashed } });
+    const hashed = await bcrypt.hash(dto.newPassword, BCRYPT_COST_FACTOR);
+    const now = new Date();
+
+    // Mudar a senha invalida todas as sessões activas (incluindo a actual) —
+    // um token roubado antes da troca deixa de servir. O próprio JwtStrategy
+    // já rejeita accessTokens emitidos antes de passwordChangedAt.
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { password: hashed, passwordChangedAt: now },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      }),
+    ]);
 
     await this.writeAuditLog(userId, userId, 'PASSWORD_CHANGED');
-    return { message: 'Password alterada com sucesso' };
+    return { message: 'Password alterada com sucesso. Sessão terminada, inicia sessão novamente.' };
   }
 
   // ─── EQUIPA DO GESTOR ─────────────────────────────────────────────────────
