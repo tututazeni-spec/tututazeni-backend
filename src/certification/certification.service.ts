@@ -10,6 +10,8 @@ import {
   FilterCertificateDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
 
 @Injectable()
 export class CertificationService {
@@ -164,7 +166,7 @@ export class CertificationService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findCertificateById(id: string) {
+  async findCertificateById(id: string, user: { id: number; role?: { name: string } | null }) {
     const cert = await this.prisma.read.issuedCertificate.findUnique({
       where: { id },
       include: {
@@ -174,6 +176,7 @@ export class CertificationService {
       },
     });
     if (!cert || cert.deletedAt) throw new NotFoundException('Certificado não encontrado');
+    assertCanAccess(cert, cert.userId, user, [Role.ADMIN, Role.RH]);
     return cert;
   }
 
@@ -230,8 +233,12 @@ export class CertificationService {
 
   // ─── REVOGAÇÃO ───────────────────────────────────────
 
-  async revokeCertificate(id: string, dto: RevokeDto, userId: number) {
-    const cert = await this.findCertificateById(id);
+  async revokeCertificate(
+    id: string,
+    dto: RevokeDto,
+    user: { id: number; role?: { name: string } | null },
+  ) {
+    const cert = await this.findCertificateById(id, user);
     if (cert.isRevoked) throw new ConflictException('Certificado já revogado');
 
     const updated = await this.prisma.issuedCertificate.update({
@@ -240,10 +247,10 @@ export class CertificationService {
         isRevoked: true,
         revokedAt: new Date(),
         revokeReason: dto.reason,
-        revokedById: userId,
+        revokedById: user.id,
       },
     });
-    await this.audit.logEntity(userId, 'UPDATE', 'IssuedCertificate', id, {
+    await this.audit.logEntity(user.id, 'UPDATE', 'IssuedCertificate', id, {
       action: 'REVOKE',
       reason: dto.reason,
     });
@@ -259,13 +266,13 @@ export class CertificationService {
     return updated;
   }
 
-  async downloadCertificate(id: string, userId: number) {
-    const cert = await this.findCertificateById(id);
+  async downloadCertificate(id: string, user: { id: number; role?: { name: string } | null }) {
+    const cert = await this.findCertificateById(id, user);
     await this.prisma.issuedCertificate.update({
       where: { id },
       data: { downloadCount: { increment: 1 } },
     });
-    await this.audit.logEntity(userId, 'DOWNLOAD', 'IssuedCertificate', id, {
+    await this.audit.logEntity(user.id, 'DOWNLOAD', 'IssuedCertificate', id, {
       code: cert.code,
     });
     return { pdfUrl: cert.pdfUrl, publicUrl: cert.publicUrl, title: cert.title };

@@ -93,21 +93,21 @@ export class CertificationController {
   @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe de certificado' })
   findCertificateById(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
-    return this.service.findCertificateById(id);
+    return this.service.findCertificateById(id, user);
   }
 
   @Post('certificates/:id/download')
   @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Download de certificado' })
   download(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
-    return this.service.downloadCertificate(id, user.id);
+    return this.service.downloadCertificate(id, user);
   }
 
   @Put('certificates/:id/revoke')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Revogar certificado' })
   revoke(@Param('id') id: string, @Body() dto: RevokeDto, @CurrentUser() user: CurrentUserData) {
-    return this.service.revokeCertificate(id, dto, user.id);
+    return this.service.revokeCertificate(id, dto, user);
   }
 
   // ─── BADGES ──────────────────────────────────────────
