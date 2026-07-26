@@ -4,6 +4,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 
 const RESET_TTL_MS = 30 * 60 * 1000; // 30 min
 const GENERIC_MESSAGE = 'Se o email existir, receberás instruções de recuperação';
@@ -26,7 +27,7 @@ export class PasswordResetService {
     // ramo real (que também chama bcrypt). Sem isto, a diferença de latência
     // permite distinguir contas existentes de inexistentes por timing.
     if (!user || !user.active) {
-      await bcrypt.hash('dummy-timing-equalizer', 12);
+      await bcrypt.hash('dummy-timing-equalizer', BCRYPT_COST_FACTOR);
       return { message: GENERIC_MESSAGE };
     }
 
@@ -50,7 +51,7 @@ export class PasswordResetService {
       throw new BadRequestException('Token inválido ou expirado');
     }
 
-    const hashed = await bcrypt.hash(newPassword, 12);
+    const hashed = await bcrypt.hash(newPassword, BCRYPT_COST_FACTOR);
     const now = new Date();
     // F1: as três escritas correm de forma atómica — um crash a meio não deixa
     // a senha alterada mas o token reutilizável (ou as sessões activas).

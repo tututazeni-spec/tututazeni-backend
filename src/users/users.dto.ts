@@ -6,7 +6,6 @@ import {
   IsInt,
   IsEnum,
   IsArray,
-  MinLength,
   MaxLength,
   IsDateString,
   Min,
@@ -14,6 +13,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { IsStrongPassword } from '../common/validators/strong-password.decorator';
 
 export enum AccountStatus {
   ACTIVE = 'ACTIVE',
@@ -45,10 +45,10 @@ export class CreateUserDto {
   @IsEmail()
   email!: string;
 
-  @ApiPropertyOptional({ minLength: 8 })
+  @ApiPropertyOptional({ minLength: 10 })
   @IsOptional()
   @IsString()
-  @MinLength(8)
+  @IsStrongPassword()
   password?: string;
 
   @ApiPropertyOptional()
@@ -279,8 +279,8 @@ export class UserChangePasswordDto {
   @IsString()
   currentPassword!: string;
 
-  @ApiProperty({ minLength: 8 })
+  @ApiProperty({ minLength: 10 })
   @IsString()
-  @MinLength(8)
+  @IsStrongPassword()
   newPassword!: string;
 }
