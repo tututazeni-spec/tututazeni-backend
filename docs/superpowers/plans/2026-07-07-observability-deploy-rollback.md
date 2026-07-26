@@ -296,7 +296,7 @@ Criar `ops/.env.production` com valores locais (BD `innova_test` do host, mesma 
 ```bash
 NODE_ENV=production
 PORT=4000
-DATABASE_URL=postgresql://postgres:Placido*7@host.docker.internal:5432/innova_test
+DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/innova_test
 DB_POOL_MAX=10
 USE_REPLICAS=false
 JWT_SECRET=test-secret-key-innova-2024

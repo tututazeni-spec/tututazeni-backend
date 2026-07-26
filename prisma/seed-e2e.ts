@@ -7,7 +7,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import * as bcrypt from 'bcrypt';
 
-const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres:Placido*7@127.0.0.1:5432/innova_dev';
+const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@127.0.0.1:5432/innova_dev';
 
 async function main() {
   const pool = new Pool({ connectionString: DB_URL });
