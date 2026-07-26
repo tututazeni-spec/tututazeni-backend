@@ -72,6 +72,7 @@ describe('AclService (additional)', () => {
 
   describe('createPermission', () => {
     it('deve criar permissão com sucesso', async () => {
+      mockPrisma.role.findFirst.mockResolvedValue({ ...baseRole, id: 9, name: 'ADMIN' });
       mockPrisma.permission.create.mockResolvedValue(basePerm);
       const result = await service.createPermission({
         name: 'dashboard:view',
@@ -83,6 +84,7 @@ describe('AclService (additional)', () => {
     });
 
     it('deve criar permissão com sensitive flag', async () => {
+      mockPrisma.role.findFirst.mockResolvedValue({ ...baseRole, id: 9, name: 'ADMIN' });
       mockPrisma.permission.create.mockResolvedValue({ ...basePerm, sensitive: true });
       const result = await service.createPermission({
         name: 'payroll:view',
@@ -91,6 +93,17 @@ describe('AclService (additional)', () => {
         sensitive: true,
       });
       expect(result).toBeDefined();
+    });
+
+    it('lança erro se o role ADMIN não existir', async () => {
+      mockPrisma.role.findFirst.mockResolvedValue(null);
+      await expect(
+        service.createPermission({
+          name: 'dashboard:view',
+          action: 'VIEW' as any,
+          subject: 'DASHBOARD' as any,
+        }),
+      ).rejects.toThrow("Role 'ADMIN' não encontrado");
     });
   });
 

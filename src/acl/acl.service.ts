@@ -209,11 +209,13 @@ export class AclService {
   }
 
   async createPermission(dto: CreatePermissionDto) {
+    const roleId = await this.getAdminRoleId();
     return this.prisma.permission.create({
       data: {
         name: dto.name,
         action: dto.action,
         subject: dto.subject,
+        roleId,
         ...(dto.sensitive !== undefined && ({ sensitive: dto.sensitive } as any)),
       },
     });
@@ -222,9 +224,21 @@ export class AclService {
   // ── Legacy compat: positional args ─────────────────
 
   async createPermissionLegacy(name: string, action: string, subject: string, roleId: number) {
-    const perm = await (this.prisma as any).permission.create({ data: { name, action, subject } });
+    const perm = await this.prisma.permission.create({ data: { name, action, subject, roleId } });
     await this.assignPermissionToRole(roleId, perm.id);
     return perm;
+  }
+
+  // Permission.roleId é obrigatório no schema (resquício de um design anterior
+  // à relação many-to-many via RolePermission, que é a que o ACL usa de facto —
+  // ver assignPermissionToRole/revokePermissionFromRole). ADMIN é o dono lógico
+  // de todas as permissões (wildcard em getUserPermissions).
+  private async getAdminRoleId(): Promise<number> {
+    const adminRole = await this.prisma.role.findFirst({ where: { name: 'ADMIN' } });
+    if (!adminRole) {
+      throw new Error("Role 'ADMIN' não encontrado — não é possível criar permissões sem ele");
+    }
+    return adminRole.id;
   }
 
   // ══════════════════════════════════════════════════════
