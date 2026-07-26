@@ -1,4 +1,6 @@
 import { Role, AUTHENTICATED_ROLES } from './role.enum';
+import { DepartmentsController } from '../../departments/departments.controller';
+import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 
 describe('AUTHENTICATED_ROLES', () => {
   it('contém todos os valores únicos do enum Role', () => {
@@ -12,8 +14,6 @@ describe('AUTHENTICATED_ROLES', () => {
 
 describe('Roles metadata — DepartmentsController (Grupo B)', () => {
   it('findOne exige GESTOR, RH, ADMIN ou DIRECTOR', () => {
-    const { DepartmentsController } = require('../../departments/departments.controller');
-    const { ROLES_KEY } = require('../../common/decorators/roles.decorator');
     const meta: string[] | undefined = Reflect.getMetadata(
       ROLES_KEY,
       DepartmentsController.prototype.findOne,
@@ -24,8 +24,6 @@ describe('Roles metadata — DepartmentsController (Grupo B)', () => {
   });
 
   it('findAll permite qualquer autenticado (contém COLABORADOR)', () => {
-    const { DepartmentsController } = require('../../departments/departments.controller');
-    const { ROLES_KEY } = require('../../common/decorators/roles.decorator');
     const meta: string[] | undefined = Reflect.getMetadata(
       ROLES_KEY,
       DepartmentsController.prototype.findAll,
