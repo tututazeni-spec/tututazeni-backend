@@ -230,7 +230,7 @@
     ],
     "testEnvironment": "node",
     "moduleNameMapper": {
-      "^@prisma/client$": "<rootDir>/__mocks__/@prisma/client.js"
+      "^@prisma/client$": "<rootDir>/test-mocks/prisma-client.mock.js"
     }
   }
 }
