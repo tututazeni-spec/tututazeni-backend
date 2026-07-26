@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -17,17 +17,19 @@ export class MobileService {
     });
   }
 
-  // Atualizar token push
-  async updatePushToken(sessionId: number, pushToken: string) {
-    return this.prisma.mobileSession.update({
-      where: { id: sessionId },
+  // Atualizar token push — com verificação atomic de propriedade (IDOR fix)
+  async updatePushToken(sessionId: number, pushToken: string, userId: number) {
+    const result = await this.prisma.mobileSession.updateMany({
+      where: { id: sessionId, userId },
       data: { pushToken },
     });
+    if (result.count === 0) throw new NotFoundException('Sessão não encontrada');
+    return { updated: true };
   }
 
   // Registrar sincronização
   async logSync(userId: number, entity: string, status: 'SUCCESS' | 'FAILED') {
-    return this.prisma.mobileSyncLog.create({
+    return (this.prisma as any).mobileSyncLog.create({
       data: {
         userId,
         entity,
@@ -38,12 +40,11 @@ export class MobileService {
 
   // Obter dados mobile para dashboard simplificado
   async getUserMobileDashboard(userId: number) {
-    const enrollments = await this.prisma.read.enrollment.findMany({
+    const enrollments = await (this.prisma as any).read.enrollment.findMany({
       where: { userId },
-      include: { course: true, certificate: true },
     });
 
-    const evaluations = await this.prisma.read.evaluationAttempt.findMany({
+    const evaluations = await (this.prisma as any).read.evaluationAttempt.findMany({
       where: { enrollment: { userId } },
     });
 

@@ -33,7 +33,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
-import { Role } from '../auth/enums/role.enum';
+import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
 @ApiTags('Courses')
 @ApiBearerAuth()
@@ -45,12 +45,14 @@ export class CoursesController {
   // ── Catálogo & Descoberta ─────────────────────────────────────────────────
 
   @Get()
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Catálogo de cursos com filtros e paginação' })
   findAll(@Query() filters: CourseFilterDto) {
     return this.svc.findAll(filters);
   }
 
   @Get('categories')
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Listar categorias disponíveis com contagem' })
   categories() {
     return this.svc.getCategories();
@@ -76,12 +78,14 @@ export class CoursesController {
   }
 
   @Get('certificates/verify/:code')
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Verificar validade de certificado por código' })
   verifyCertificate(@Param('code') code: string) {
     return this.svc.verifyCertificate(code);
   }
 
   @Get(':id')
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe completo do curso (módulos, aulas, feedback)' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);

@@ -40,7 +40,7 @@ import {
   UpdatePositionDto,
   CreateCareerPositionDto,
 } from './departments.dto';
-import { Role } from '../auth/enums/role.enum';
+import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
 // ─── DEPARTMENTS ──────────────────────────────────────────────────────────────
 
@@ -52,12 +52,14 @@ export class DepartmentsController {
   constructor(private readonly svc: DepartmentsService) {}
 
   @Get()
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Listar departamentos (com filtros e paginação)' })
   findAll(@Query() filters: DepartmentFilterDto) {
     return this.svc.findAll(filters);
   }
 
   @Get('tree')
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Árvore hierárquica completa (Org Chart)' })
   getTree() {
     return this.svc.getTree();
@@ -71,12 +73,14 @@ export class DepartmentsController {
   }
 
   @Get(':id')
+  @Roles(Role.GESTOR, Role.RH, Role.ADMIN, Role.DIRECTOR)
   @ApiOperation({ summary: 'Detalhe do departamento (membros, sub-deptos, histórico)' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
   }
 
   @Get(':id/metrics')
+  @Roles(Role.GESTOR, Role.RH, Role.ADMIN, Role.DIRECTOR)
   @ApiOperation({ summary: 'Métricas do departamento' })
   metrics(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getMetrics(id);

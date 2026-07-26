@@ -22,3 +22,19 @@ export enum Role {
   LIDER = 'LIDER',
   AUDITOR = 'AUDITOR',
 }
+
+/**
+ * Todos os papéis activos — para endpoints acessíveis a qualquer utilizador autenticado.
+ * Usar com @Roles(...AUTHENTICATED_ROLES) em vez de omitir o decorator (que é fail-open).
+ * Não inclui aliases (HR, EMPLOYEE) — o RolesGuard compara com user.role.name.
+ */
+export const AUTHENTICATED_ROLES = [
+  Role.COLABORADOR,
+  Role.LIDER,
+  Role.GESTOR,
+  Role.RH,
+  Role.ADMIN,
+  Role.INSTRUCTOR,
+  Role.DIRECTOR,
+  Role.AUDITOR,
+] as const;

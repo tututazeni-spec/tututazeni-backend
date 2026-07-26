@@ -29,7 +29,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
-import { Role } from '../auth/enums/role.enum';
+import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
 @ApiTags('Assessments')
 @ApiBearerAuth()
@@ -41,6 +41,7 @@ export class AssessmentsController {
   // ── Catálogo & Descoberta ─────────────────────────────────────────────────
 
   @Get()
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Listar avaliações com filtros' })
   findAll(@Query() filters: AssessmentFilterDto) {
     return this.svc.findAll(filters);
@@ -61,6 +62,7 @@ export class AssessmentsController {
   }
 
   @Get(':id')
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe da avaliação (sem respostas correctas para colaborador)' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id, true);
@@ -74,6 +76,7 @@ export class AssessmentsController {
   }
 
   @Get('attempts/:attemptId')
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe de uma tentativa (para revisão)' })
   attemptDetail(
     @Param('attemptId', ParseIntPipe) attemptId: number,

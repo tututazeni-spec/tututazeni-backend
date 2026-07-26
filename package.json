@@ -203,7 +203,15 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+.(t|j)s$": [
+        "ts-jest",
+        {
+          "diagnostics": false,
+          "moduleNameMapper": {
+            "^.prisma/client/wasm$": "<rootDir>/../node_modules/.prisma/client/default.js"
+          }
+        }
+      ]
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s",
@@ -220,6 +228,9 @@
       "html",
       "json-summary"
     ],
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^@prisma/client$": "<rootDir>/test-mocks/prisma-client.mock.js"
+    }
   }
 }

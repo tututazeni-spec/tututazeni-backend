@@ -162,7 +162,14 @@ describe('CertificationService', () => {
       mockPrisma.auditLog.create.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
-      const result = await service.revokeCertificate('cert-1', { reason: 'Erro de emissão' }, 1);
+      const result = await service.revokeCertificate(
+        'cert-1',
+        { reason: 'Erro de emissão' },
+        {
+          id: 1,
+          role: { name: 'ADMIN' },
+        },
+      );
       expect(result.isRevoked).toBe(true);
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -176,9 +183,13 @@ describe('CertificationService', () => {
         ...mockCert,
         isRevoked: true,
       });
-      await expect(service.revokeCertificate('cert-1', { reason: 'XXXXX' }, 1)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.revokeCertificate(
+          'cert-1',
+          { reason: 'XXXXX' },
+          { id: 1, role: { name: 'ADMIN' } },
+        ),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
@@ -188,7 +199,10 @@ describe('CertificationService', () => {
       mockPrisma.issuedCertificate.update.mockResolvedValue({});
       mockPrisma.auditLog.create.mockResolvedValue({});
 
-      const result = await service.downloadCertificate('cert-1', 1);
+      const result = await service.downloadCertificate('cert-1', {
+        id: 1,
+        role: { name: 'ADMIN' },
+      });
       expect(result.title).toBe('Curso Teste');
       expect(mockPrisma.auditLog.create).toHaveBeenCalled();
     });
