@@ -475,7 +475,14 @@ export class RolesService {
   }
 
   async addPermission(dto: DepartmentsCreatePermissionDto) {
-    return this.prisma.permission.create({ data: dto as any });
+    // Permission.roleId é obrigatório no schema (resquício de um design
+    // anterior à relação many-to-many via RolePermission, que é a que o ACL
+    // usa de facto). ADMIN é o dono lógico de todas as permissões.
+    const adminRole = await this.prisma.role.findFirst({ where: { name: 'ADMIN' } });
+    if (!adminRole) {
+      throw new Error("Role 'ADMIN' não encontrado — não é possível criar permissões sem ele");
+    }
+    return this.prisma.permission.create({ data: { ...dto, roleId: adminRole.id } as any });
   }
 
   async removePermission(permissionId: number) {
