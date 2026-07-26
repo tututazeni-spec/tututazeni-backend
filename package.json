@@ -68,6 +68,7 @@
     "check-user": "ts-node -P tsconfig.json scripts/checkUser.ts",
     "fix-role": "ts-node -P tsconfig.json scripts/fixUserRole.ts",
     "change-role": "ts-node -P tsconfig.json scripts/changeRole.ts",
+    "seed:acl-permissions": "ts-node -P tsconfig.json scripts/seedAclPermissions.ts",
     "render:build": "npm install --include=dev && npm run db:deploy && npm run build",
     "render:start": "npm start",
     "test:api": "cd bruno && node ../node_modules/@usebruno/cli/bin/bru.js run . -r --env local",

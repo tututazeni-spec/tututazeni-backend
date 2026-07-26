@@ -211,13 +211,4 @@ export class AclController {
   stats() {
     return this.svc.getStats();
   }
-
-  // ─── Seed ────────────────────────────────────────────────────
-
-  @Post('seed-permissions')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: '[ADMIN] Criar permissões built-in (35+) se não existirem' })
-  seedPermissions() {
-    return this.svc.seedBuiltinPermissions();
-  }
 }
