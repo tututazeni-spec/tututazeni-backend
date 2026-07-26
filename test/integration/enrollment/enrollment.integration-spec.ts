@@ -7,7 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
-const TEST_DB_URL = 'postgresql://postgres:Placido*7@127.0.0.1:5432/innova_test';
+const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
 
 describe('Enrollment Integration', () => {
   let app: INestApplication;

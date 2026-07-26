@@ -18,7 +18,7 @@
   - `GET /health/live`, `GET /health/ready` — públicos.
 - JWT aceite via `Authorization: Bearer <token>` (confirmado no `jwt.strategy.ts`).
 - Modelo User: `fullName` (nunca `name`), `active` (nunca `isActive`), role via `roleId`. Course: único por `internalCode`. Department: único por `code`. Enrollment: compound key `[courseId, userId]`, modelo `enrollment`.
-- BD de teste: `postgresql://postgres:Placido*7@127.0.0.1:5432/innova_test` (mesma dos testes de integração). Redis local em `127.0.0.1:6379` (defaults da app).
+- BD de teste: `postgresql://postgres:postgres@127.0.0.1:5432/innova_test` (mesma dos testes de integração). Redis local em `127.0.0.1:6379` (defaults da app).
 - Env da suite: `SMOKE_BASE_URL` (default `http://localhost:4000`), `SMOKE_SEED` (`'false'` desliga o seed), `SMOKE_ALLOW_WRITES` (`'false'` desliga escritas), `SMOKE_EMPLOYEE_EMAIL/PASSWORD`, `SMOKE_RH_EMAIL/PASSWORD`, `SMOKE_COURSE_ID`.
 - Jest: correr via o **Bash tool** (pipe no PowerShell parte o output), `--runInBand --forceExit`.
 - Formatar com `npx prettier --write <ficheiros>` antes de commitar (CI falha em prettier).
@@ -136,7 +136,7 @@ import { Pool } from 'pg';
 import * as bcrypt from 'bcrypt';
 
 const TEST_DB_URL =
-  process.env.DATABASE_URL ?? 'postgresql://postgres:Placido*7@127.0.0.1:5432/innova_test';
+  process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
 
 const SEED_STATE_FILE = path.join(__dirname, '.seed-state.json');
 
@@ -306,7 +306,7 @@ Pré-requisito: Postgres local com a BD `innova_test` e Redis a correr (Memurai 
 Run (Bash tool, `run_in_background`):
 ```bash
 npm run build && cross-env NODE_ENV=test \
-  DATABASE_URL="postgresql://postgres:Placido*7@127.0.0.1:5432/innova_test" \
+  DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/innova_test" \
   JWT_SECRET=test-secret-key-innova-2024 \
   JWT_REFRESH_SECRET=test-refresh-secret-innova-2024 \
   PORT=4000 node dist/main.js
@@ -496,7 +496,7 @@ Inserir entre o passo "Testes de integração" e "Análise SonarCloud":
         run: node dist/main.js &
         env:
           NODE_ENV: test
-          DATABASE_URL: 'postgresql://postgres:Placido*7@localhost:5432/innova_test'
+          DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/innova_test'
           JWT_SECRET: 'test-secret-key-innova-2024'
           JWT_REFRESH_SECRET: 'test-refresh-secret-innova-2024'
           PORT: '4000'
@@ -514,7 +514,7 @@ Inserir entre o passo "Testes de integração" e "Análise SonarCloud":
       - name: Regressão de fluxos críticos
         run: npm run test:regression
         env:
-          DATABASE_URL: 'postgresql://postgres:Placido*7@localhost:5432/innova_test'
+          DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/innova_test'
 ```
 
 Notas:
