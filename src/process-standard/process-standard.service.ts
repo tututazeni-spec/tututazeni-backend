@@ -656,9 +656,7 @@ export class ProcessStandardService {
 
     const avgCycleTime = await this.prisma.read.processInstance.aggregate({
       where: { status: 'COMPLETED', completedAt: { not: null } },
-      _avg: {
-        /* duration field needed */
-      },
+      _avg: {/* duration field needed */},
     });
 
     const recentInstances = await this.prisma.read.processInstance.findMany({

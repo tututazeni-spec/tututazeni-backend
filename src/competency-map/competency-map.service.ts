@@ -417,9 +417,7 @@ export class CompetencyMapService {
   async getOrganisationalGapAnalysis(filters: GapAnalysisFilterDto) {
     const where: any = {};
     if (filters.department)
-      where.user = {
-        /* employee department filter removed — no direct relation */
-      } as any;
+      where.user = {/* employee department filter removed — no direct relation */} as any;
     if (filters.userId) where.userId = filters.userId;
     if (filters.skillType) where.skill = { type: filters.skillType };
 
@@ -505,9 +503,7 @@ export class CompetencyMapService {
 
   async getDepartmentMap(department: string) {
     const users = await this.prisma.read.user.findMany({
-      where: {
-        /* employee department filter removed — no direct relation */
-      } as any,
+      where: {/* employee department filter removed — no direct relation */} as any,
       select: { id: true, fullName: true, avatarUrl: true } as any,
     });
 
@@ -609,9 +605,7 @@ export class CompetencyMapService {
   async getHeatmapData(department?: string) {
     const where: any = {};
     if (department)
-      where.user = {
-        /* employee department filter removed — no direct relation */
-      } as any;
+      where.user = {/* employee department filter removed — no direct relation */} as any;
 
     const data = await this.prisma.read.legacyEmployeeSkill.findMany({
       where,
@@ -636,9 +630,7 @@ export class CompetencyMapService {
     try {
       return (
         this.prisma.course?.findMany?.({
-          where: {
-            /* skills filter removed — Course has no skills relation */
-          } as any,
+          where: {/* skills filter removed — Course has no skills relation */} as any,
           select: { id: true, title: true },
           take: 5,
         }) ?? []
