@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { PerformanceService } from './performance.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -156,6 +157,36 @@ describe('PerformanceService', () => {
     it('deve lançar NotFoundException se não encontrado', async () => {
       mockPrisma.performanceReview.findUnique.mockResolvedValue(null);
       await expect(service.findOne(99)).rejects.toThrow();
+    });
+  });
+
+  // ─── findOne ownership (A3) ────────────────────────────────────────────────
+
+  describe('findOne ownership (A3)', () => {
+    const employeeA = { id: 7, role: { name: 'COLABORADOR' } } as any;
+    const employeeB = { id: 8, role: { name: 'COLABORADOR' } } as any;
+    const reviewerUser = { id: 9, role: { name: 'COLABORADOR' } } as any;
+    const rh = { id: 1, role: { name: 'RH' } } as any;
+    const reviewOfA = { id: 5, userId: 7, reviewerId: 9, cycle: {} };
+
+    it('o avaliado (dono) lê a própria avaliação', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue(reviewOfA);
+      await expect(service.findOne(5, employeeA)).resolves.toMatchObject({ id: 5 });
+    });
+
+    it('o avaliador (reviewer) também acede à avaliação', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue(reviewOfA);
+      await expect(service.findOne(5, reviewerUser)).resolves.toMatchObject({ id: 5 });
+    });
+
+    it('colaborador B (nem avaliado nem avaliador) recebe 404 — não revela existência', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue(reviewOfA);
+      await expect(service.findOne(5, employeeB)).rejects.toThrow(NotFoundException);
+    });
+
+    it('RH lê qualquer avaliação (papel privilegiado)', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue(reviewOfA);
+      await expect(service.findOne(5, rh)).resolves.toMatchObject({ id: 5 });
     });
   });
 

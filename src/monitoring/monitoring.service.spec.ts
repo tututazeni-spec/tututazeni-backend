@@ -53,6 +53,10 @@ const mockAudit = {
   ),
 };
 
+const ownerUser = { id: 1, email: 'owner@innova.com', role: { name: 'COLABORADOR' } };
+const otherUser = { id: 2, email: 'other@innova.com', role: { name: 'COLABORADOR' } };
+const adminUser = { id: 99, email: 'admin@innova.com', role: { name: 'ADMIN' } };
+
 describe('MonitoringService', () => {
   let service: MonitoringService;
 
@@ -138,6 +142,7 @@ describe('MonitoringService', () => {
         startValue: 0,
         targetValue: 100,
         currentValue: 0,
+        objective: { ownerId: 1 },
       });
       mockPrisma.keyResultUpdate.create.mockResolvedValue({});
       mockPrisma.keyResult.update.mockResolvedValue({
@@ -149,7 +154,7 @@ describe('MonitoringService', () => {
       mockPrisma.objective.update.mockResolvedValue({});
       mockPrisma.auditLog.create.mockResolvedValue({});
 
-      const result = await service.updateKeyResult('kr-1', { newValue: 100 }, 1);
+      const result = await service.updateKeyResult('kr-1', { newValue: 100 }, ownerUser as any);
       expect(result.progress).toBe(100);
       expect(result.status).toBe('COMPLETED');
     });
@@ -161,6 +166,7 @@ describe('MonitoringService', () => {
         startValue: 0,
         targetValue: 100,
         currentValue: 0,
+        objective: { ownerId: 1 },
       });
       mockPrisma.keyResultUpdate.create.mockResolvedValue({});
       mockPrisma.keyResult.update.mockResolvedValue({
@@ -172,15 +178,53 @@ describe('MonitoringService', () => {
       mockPrisma.objective.update.mockResolvedValue({});
       mockPrisma.auditLog.create.mockResolvedValue({});
 
-      const result = await service.updateKeyResult('kr-1', { newValue: 50 }, 1);
+      const result = await service.updateKeyResult('kr-1', { newValue: 50 }, ownerUser as any);
       expect(result.status).toBe('AT_RISK');
     });
 
     it('deve lançar NotFoundException se KR não existe', async () => {
       mockPrisma.keyResult.findUnique.mockResolvedValue(null);
-      await expect(service.updateKeyResult('x', { newValue: 10 }, 1)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.updateKeyResult('x', { newValue: 10 }, ownerUser as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('não permite utilizador B actualizar Key Result do Objectivo de A', async () => {
+      mockPrisma.keyResult.findUnique.mockResolvedValue({
+        id: 'kr-1',
+        objectiveId: 'obj-1',
+        startValue: 0,
+        targetValue: 100,
+        currentValue: 0,
+        objective: { ownerId: 1 },
+      });
+      await expect(
+        service.updateKeyResult('kr-1', { newValue: 50 }, otherUser as any),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.keyResult.update).not.toHaveBeenCalled();
+    });
+
+    it('permite ADMIN actualizar Key Result de qualquer Objectivo', async () => {
+      mockPrisma.keyResult.findUnique.mockResolvedValue({
+        id: 'kr-1',
+        objectiveId: 'obj-1',
+        startValue: 0,
+        targetValue: 100,
+        currentValue: 0,
+        objective: { ownerId: 1 },
+      });
+      mockPrisma.keyResultUpdate.create.mockResolvedValue({});
+      mockPrisma.keyResult.update.mockResolvedValue({
+        id: 'kr-1',
+        progress: 50,
+        status: 'AT_RISK',
+      });
+      mockPrisma.keyResult.findMany.mockResolvedValue([{ progress: 50 }]);
+      mockPrisma.objective.update.mockResolvedValue({});
+      mockPrisma.auditLog.create.mockResolvedValue({});
+
+      const result = await service.updateKeyResult('kr-1', { newValue: 50 }, adminUser as any);
+      expect(result).toBeDefined();
     });
   });
 
@@ -263,11 +307,12 @@ describe('MonitoringService', () => {
   });
 
   describe('submitEvaluation', () => {
-    it('deve submeter avaliação e fechar', async () => {
+    it('deve permitir ao avaliador (evaluatorId) submeter avaliação MANAGER e fechar', async () => {
       mockPrisma.userEvaluation.findUnique.mockResolvedValue({
         id: 'ev-1',
         type: 'MANAGER',
         userId: 2,
+        evaluatorId: 3,
       });
       mockPrisma.userEvaluation.update.mockResolvedValue({
         id: 'ev-1',
@@ -277,15 +322,83 @@ describe('MonitoringService', () => {
       mockPrisma.auditLog.create.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
-      const result = await service.submitEvaluation('ev-1', { score: 85 }, 3);
+      const evaluatorUser = { id: 3, email: 'eval@innova.com', role: { name: 'GESTOR' } };
+      const result = await service.submitEvaluation('ev-1', { score: 85 }, evaluatorUser as any);
+      expect(result.status).toBe('CLOSED');
+    });
+
+    it('deve permitir ao próprio (userId) submeter avaliação SELF', async () => {
+      mockPrisma.userEvaluation.findUnique.mockResolvedValue({
+        id: 'ev-2',
+        type: 'SELF',
+        userId: 2,
+        evaluatorId: 3,
+      });
+      mockPrisma.userEvaluation.update.mockResolvedValue({
+        id: 'ev-2',
+        status: 'CLOSED',
+        finalScore: 70,
+      });
+      mockPrisma.auditLog.create.mockResolvedValue({});
+      mockPrisma.notificationLog.create.mockResolvedValue({});
+
+      const selfUser = { id: 2, email: 'self@innova.com', role: { name: 'COLABORADOR' } };
+      const result = await service.submitEvaluation('ev-2', { score: 70 }, selfUser as any);
       expect(result.status).toBe('CLOSED');
     });
 
     it('deve lançar NotFoundException se avaliação não existe', async () => {
       mockPrisma.userEvaluation.findUnique.mockResolvedValue(null);
-      await expect(service.submitEvaluation('x', { score: 80 }, 3)).rejects.toThrow(
-        NotFoundException,
-      );
+      const evaluatorUser = { id: 3, email: 'eval@innova.com', role: { name: 'GESTOR' } };
+      await expect(
+        service.submitEvaluation('x', { score: 80 }, evaluatorUser as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('não permite utilizador B (nem avaliador nem avaliado) submeter avaliação de A', async () => {
+      mockPrisma.userEvaluation.findUnique.mockResolvedValue({
+        id: 'ev-1',
+        type: 'MANAGER',
+        userId: 2,
+        evaluatorId: 3,
+      });
+      const intruder = { id: 999, email: 'intruder@innova.com', role: { name: 'GESTOR' } };
+      await expect(
+        service.submitEvaluation('ev-1', { score: 10 }, intruder as any),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.userEvaluation.update).not.toHaveBeenCalled();
+    });
+
+    it('não permite o avaliado (userId) submeter avaliação do tipo MANAGER', async () => {
+      mockPrisma.userEvaluation.findUnique.mockResolvedValue({
+        id: 'ev-1',
+        type: 'MANAGER',
+        userId: 2,
+        evaluatorId: 3,
+      });
+      const evaluatedUser = { id: 2, email: 'evaluated@innova.com', role: { name: 'COLABORADOR' } };
+      await expect(
+        service.submitEvaluation('ev-1', { score: 10 }, evaluatedUser as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('permite ADMIN submeter avaliação de qualquer utilizador', async () => {
+      mockPrisma.userEvaluation.findUnique.mockResolvedValue({
+        id: 'ev-1',
+        type: 'MANAGER',
+        userId: 2,
+        evaluatorId: 3,
+      });
+      mockPrisma.userEvaluation.update.mockResolvedValue({
+        id: 'ev-1',
+        status: 'CLOSED',
+        finalScore: 85,
+      });
+      mockPrisma.auditLog.create.mockResolvedValue({});
+      mockPrisma.notificationLog.create.mockResolvedValue({});
+
+      const result = await service.submitEvaluation('ev-1', { score: 85 }, adminUser as any);
+      expect(result.status).toBe('CLOSED');
     });
   });
 

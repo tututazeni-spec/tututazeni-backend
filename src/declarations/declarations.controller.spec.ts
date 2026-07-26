@@ -125,9 +125,9 @@ describe('DocumentDeclarationsController', () => {
     expect(mockDocSvc.findAll).toHaveBeenCalledWith({ userId: 1 });
   });
 
-  it('findOne → findOne(id, userId)', async () => {
+  it('findOne → findOne(id, user)', async () => {
     await controller.findOne(3, mockUser as any);
-    expect(mockDocSvc.findOne).toHaveBeenCalledWith(3, 1);
+    expect(mockDocSvc.findOne).toHaveBeenCalledWith(3, mockUser);
   });
 
   it('request → request(userId, dto)', async () => {

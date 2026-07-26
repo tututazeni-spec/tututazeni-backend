@@ -160,6 +160,38 @@ describe('DevelopmentPlansService', () => {
       mockPrisma.developmentPlan.findUnique.mockResolvedValue(null);
       await expect(service.findOne(99)).rejects.toThrow(NotFoundException);
     });
+
+    // ─── Ownership (A3) ───────────────────────────────────────────────────
+
+    it('o dono lê o próprio PDI', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        actions: [],
+        goals: [],
+      });
+      const owner = { id: 1, role: { name: 'COLABORADOR' } } as any;
+      await expect(service.findOne(1, owner)).resolves.toMatchObject({ id: 1 });
+    });
+
+    it('IDOR: colaborador B não pode ler o PDI de A (404)', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        actions: [],
+        goals: [],
+      });
+      const userB = { id: 8, role: { name: 'COLABORADOR' } } as any;
+      await expect(service.findOne(1, userB)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('RH lê qualquer PDI (papel privilegiado)', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        actions: [],
+        goals: [],
+      });
+      const rh = { id: 99, role: { name: 'RH' } } as any;
+      await expect(service.findOne(1, rh)).resolves.toMatchObject({ id: 1 });
+    });
   });
 
   // ─── create ───────────────────────────────────────────────────────────────

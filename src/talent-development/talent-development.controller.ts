@@ -18,7 +18,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TalentDevelopmentService } from './talent-development.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   PlanFilterDto,
   TalentDevelopmentCreateDevelopmentPlanDto,
@@ -130,8 +130,8 @@ export class TalentDevelopmentController {
   @Get('plans/:id')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Detalhe de um plano' })
-  getPlan(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.getPlan(id);
+  getPlan(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getPlan(id, user);
   }
 
   @Patch('plans/:id')
@@ -277,8 +277,8 @@ export class TalentDevelopmentController {
   @Get('mentoring/:id')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Detalhe de mentoria + sessões' })
-  getMentoring(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.getMentoring(id);
+  getMentoring(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getMentoring(id, user);
   }
 
   @Get('mentoring')

@@ -21,6 +21,9 @@ import {
   PerformanceFilterDto,
   ReviewStatus,
 } from './performance.dto';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import type { CurrentUserData } from '../common/types/current-user';
 
 @Injectable()
 export class PerformanceService {
@@ -144,7 +147,7 @@ export class PerformanceService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, user?: CurrentUserData) {
     const r = await this.prisma.read.performanceReview.findUnique({
       where: { id },
       include: {
@@ -159,7 +162,20 @@ export class PerformanceService {
         disputes: { orderBy: { createdAt: 'desc' } },
       },
     });
-    if (!r) throw new NotFoundException('Avaliação não encontrada');
+
+    // Ownership (A3): avaliado OU avaliador OU ADMIN/RH/GESTOR; senão 404.
+    // Quando chamado sem user (contexto interno de confiança), não filtra.
+    if (user) {
+      const isReviewer = r != null && String(user.id) === String((r as any).reviewerId);
+      if (!isReviewer) {
+        assertCanAccess(r, (r as any)?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+      } else if (!r) {
+        throw new NotFoundException('Avaliação não encontrada');
+      }
+    } else if (!r) {
+      throw new NotFoundException('Avaliação não encontrada');
+    }
+
     return r;
   }
 

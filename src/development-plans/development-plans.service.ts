@@ -20,6 +20,9 @@ import {
   CompleteCheckpointDto,
   ApprovePlanDto,
 } from './development-plans.dto';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/decorators';
 
 @Injectable()
 export class DevelopmentPlansService {
@@ -84,7 +87,7 @@ export class DevelopmentPlansService {
     return { data: enriched, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, user?: CurrentUserData) {
     const plan = await this.prisma.read.developmentPlan.findUnique({
       where: { id },
       include: {
@@ -110,7 +113,13 @@ export class DevelopmentPlansService {
         _count: { select: { actions: true, goals: true, checkpoints: true } },
       },
     });
-    if (!plan) throw new NotFoundException('Plano de desenvolvimento não encontrado');
+    // Ownership (A3): dono OU ADMIN/RH/GESTOR; senão 404.
+    // Quando chamado sem user (contexto interno de confiança), não filtra.
+    if (user) {
+      assertCanAccess(plan, (plan as any)?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    } else if (!plan) {
+      throw new NotFoundException('Plano de desenvolvimento não encontrado');
+    }
 
     const actions = plan.actions as any[];
     const completed = actions.filter(a => a.status === 'COMPLETED').length;

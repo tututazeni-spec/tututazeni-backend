@@ -113,9 +113,9 @@ describe('TalentDevelopmentController', () => {
     expect(mockSvc.getPlans).toHaveBeenCalledWith(filters);
   });
 
-  it('getPlan → getPlan(id)', async () => {
-    await controller.getPlan(4);
-    expect(mockSvc.getPlan).toHaveBeenCalledWith(4);
+  it('getPlan → getPlan(id, user)', async () => {
+    await controller.getPlan(4, mockUser as any);
+    expect(mockSvc.getPlan).toHaveBeenCalledWith(4, mockUser);
   });
 
   it('updatePlan → updatePlan(id, dto)', async () => {
@@ -212,9 +212,9 @@ describe('TalentDevelopmentController', () => {
     expect(mockSvc.getMentorRecommendations).toHaveBeenCalledWith(2);
   });
 
-  it('getMentoring → getMentoring(id)', async () => {
-    await controller.getMentoring(4);
-    expect(mockSvc.getMentoring).toHaveBeenCalledWith(4);
+  it('getMentoring → getMentoring(id, user)', async () => {
+    await controller.getMentoring(4, mockUser as any);
+    expect(mockSvc.getMentoring).toHaveBeenCalledWith(4, mockUser);
   });
 
   it('getMentorings → getMentorings(filters)', async () => {

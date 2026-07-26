@@ -146,6 +146,6 @@ export class LibraryController {
   @ApiOperation({ summary: 'Remover comentário' })
   @HttpCode(HttpStatus.OK)
   deleteComment(@Param('commentId') commentId: string, @CurrentUser() user: CurrentUserData) {
-    return this.service.deleteComment(commentId, user.id);
+    return this.service.deleteComment(commentId, user);
   }
 }

@@ -21,6 +21,9 @@ import {
   SubmitOnboardingSurveyDto,
   OnboardingFilterDto,
 } from './onboarding.dto';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import type { CurrentUserData } from '../common/types/current-user';
 
 @Injectable()
 export class OnboardingService {
@@ -168,7 +171,7 @@ export class OnboardingService {
     });
   }
 
-  async findOne(id: number) {
+  async findOne(id: number, user?: CurrentUserData) {
     const plan = await this.prisma.read.onboardingPlan.findUnique({
       where: { id },
       include: {
@@ -201,7 +204,11 @@ export class OnboardingService {
         surveys: true,
       },
     });
-    if (!plan) throw new NotFoundException('Plano de onboarding não encontrado');
+
+    // Ownership (A3): dono do plano OU ADMIN/RH/GESTOR; senão 404.
+    // Quando chamado sem user (contexto interno de confiança), não filtra.
+    if (user) assertCanAccess(plan, plan?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    else if (!plan) throw new NotFoundException('Plano de onboarding não encontrado');
 
     // Calcular progresso
     const tasks = plan.taskInstances;

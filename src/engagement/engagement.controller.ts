@@ -9,12 +9,15 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EngagementService } from './engagement.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { isPrivileged } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
 import {
   CreateSurveyDto,
   UpdateSurveyDto,
@@ -145,7 +148,15 @@ export class EngagementController {
   @Get('mood/team/:managerId')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Overview de humor da equipa (gestor)' })
-  teamMood(@Param('managerId', ParseIntPipe) managerId: number) {
+  teamMood(
+    @Param('managerId', ParseIntPipe) managerId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    // Ownership (A3): o próprio gestor OU ADMIN/RH; senão 403 — impede um
+    // LIDER de ver a equipa de outro gestor trocando o :managerId na URL.
+    if (String(user.id) !== String(managerId) && !isPrivileged(user, [Role.ADMIN, Role.RH])) {
+      throw new ForbiddenException('Sem permissão para ver a equipa de outro gestor');
+    }
     return this.svc.getTeamMoodOverview(managerId);
   }
 
@@ -231,7 +242,7 @@ export class EngagementController {
     @CurrentUser() user: CurrentUserData,
     @Body() dto: EngagementUpdateOneOnOneDto,
   ) {
-    return this.svc.updateOneOnOne(id, user.id, dto);
+    return this.svc.updateOneOnOne(id, user, dto);
   }
 
   // ─── Action Plans ─────────────────────────────────────────────

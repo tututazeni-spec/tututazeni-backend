@@ -67,9 +67,9 @@ describe('DevelopmentPlansController', () => {
     expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
   });
 
-  it('findOne → findOne(id)', async () => {
-    await controller.findOne(3);
-    expect(mockSvc.findOne).toHaveBeenCalledWith(3);
+  it('findOne → findOne(id, user)', async () => {
+    await controller.findOne(3, mockUser as any);
+    expect(mockSvc.findOne).toHaveBeenCalledWith(3, mockUser);
   });
 
   it('create → create(dto)', async () => {

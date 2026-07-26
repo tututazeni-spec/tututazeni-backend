@@ -9,6 +9,9 @@ import {
   TeamFilterDto,
   RiskLevel,
 } from './leader.dto';
+import { isPrivileged } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/types/current-user';
 
 // ─── Schema Fixes Applied ─────────────────────────────────────────
 // ✅ role is a RELATION — never use { role: { in: ['GESTOR'] } }
@@ -297,7 +300,8 @@ export class LeaderService {
     };
   }
 
-  async getMemberProfile(leaderId: number, memberId: number) {
+  async getMemberProfile(user: CurrentUserData, memberId: number) {
+    const leaderId = user.id;
     const member = (await this.prisma.user.findUnique({
       where: { id: memberId },
       select: {
@@ -332,12 +336,14 @@ export class LeaderService {
 
     if (!member) throw new NotFoundException('Membro não encontrado');
 
-    // Verify this member belongs to the leader's team
+    // Ownership (A3): o membro tem de pertencer à equipa do líder autenticado
+    // (managerId === leaderId), ser o próprio, ou o utilizador ser ADMIN/RH.
+    // Substitui o fallback anterior que não impedia realmente o acesso.
     const isTeamMember = await this.prisma.read.user.count({
       where: { id: memberId, managerId: leaderId },
     });
-    if (!isTeamMember && leaderId !== memberId) {
-      // Also allow ADMIN/RH — let the guard handle; just enrich with basic data
+    if (!isTeamMember && leaderId !== memberId && !isPrivileged(user, [Role.ADMIN, Role.RH])) {
+      throw new NotFoundException('Membro não encontrado');
     }
 
     const latestPerf = member.performanceReviews[0]?.score ?? null;
@@ -520,7 +526,22 @@ export class LeaderService {
       .catch(() => [] as any[]);
   }
 
-  async completeOneOnOne(meetingId: number, notes: string) {
+  async completeOneOnOne(meetingId: number, notes: string, user: CurrentUserData) {
+    const meeting = await safeM(this.prisma, 'oneOnOneMeeting')
+      .findUnique({ where: { id: meetingId } })
+      .catch(() => null);
+
+    // Ownership (A3): a reunião 1:1 tem dois donos possíveis — o líder (hostId)
+    // e o membro (participantId) — além de ADMIN/RH. Verificação manual porque
+    // assertCanAccess só suporta um único ownerId.
+    if (!meeting) throw new NotFoundException('Reunião 1:1 não encontrada');
+    const isOwner =
+      String(meeting.hostId) === String(user.id) ||
+      String(meeting.participantId) === String(user.id);
+    if (!isOwner && !isPrivileged(user, [Role.ADMIN, Role.RH])) {
+      throw new NotFoundException('Reunião 1:1 não encontrada');
+    }
+
     return safeM(this.prisma, 'oneOnOneMeeting')
       .update({
         where: { id: meetingId },

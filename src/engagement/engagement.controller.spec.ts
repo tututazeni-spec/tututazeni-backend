@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ForbiddenException } from '@nestjs/common';
 import { EngagementController } from './engagement.controller';
 import { EngagementService } from './engagement.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -139,9 +140,21 @@ describe('EngagementController', () => {
     expect(mockSvc.getMoodTrend).toHaveBeenCalledWith(1, 7);
   });
 
-  it('teamMood → getTeamMoodOverview(managerId)', async () => {
-    await controller.teamMood(5);
+  it('teamMood → getTeamMoodOverview(managerId) quando é o próprio gestor', async () => {
+    const manager = { id: 5, email: 'manager@innova.com', role: { name: 'LIDER' } };
+    await controller.teamMood(5, manager as any);
     expect(mockSvc.getTeamMoodOverview).toHaveBeenCalledWith(5);
+  });
+
+  it('teamMood → ADMIN/RH podem ver equipa de qualquer gestor', async () => {
+    await controller.teamMood(5, mockUser as any);
+    expect(mockSvc.getTeamMoodOverview).toHaveBeenCalledWith(5);
+  });
+
+  it('teamMood → IDOR: gestor B não pode ver a equipa do gestor A', async () => {
+    const managerB = { id: 6, email: 'managerb@innova.com', role: { name: 'LIDER' } };
+    expect(() => controller.teamMood(5, managerB as any)).toThrow(ForbiddenException);
+    expect(mockSvc.getTeamMoodOverview).not.toHaveBeenCalled();
   });
 
   it('createFeedback → createFeedback(userId, dto)', async () => {
@@ -190,10 +203,10 @@ describe('EngagementController', () => {
     expect(mockSvc.getOneOnOnes).toHaveBeenCalledWith(1);
   });
 
-  it('updateOneOnOne → updateOneOnOne(id, userId, dto)', async () => {
+  it('updateOneOnOne → updateOneOnOne(id, user, dto)', async () => {
     const dto = {} as any;
     await controller.updateOneOnOne(2, mockUser as any, dto);
-    expect(mockSvc.updateOneOnOne).toHaveBeenCalledWith(2, 1, dto);
+    expect(mockSvc.updateOneOnOne).toHaveBeenCalledWith(2, mockUser, dto);
   });
 
   it('createActionPlan → createActionPlan(userId, dto)', async () => {

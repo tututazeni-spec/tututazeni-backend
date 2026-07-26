@@ -199,8 +199,14 @@ export class LeadershipController {
   @Get('feedback-360/:leaderId/summary')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Sumário 360° de um líder (média por competência, insights)' })
-  get360Summary(@Param('leaderId', ParseIntPipe) leaderId: number) {
-    return this.svc.get360Summary(leaderId);
+  get360Summary(
+    @CurrentUser() user: CurrentUserData,
+    @Param('leaderId', ParseIntPipe) leaderId: number,
+  ) {
+    // Ownership (A3): só o próprio líder ou ADMIN/RH — GESTOR só vê o seu próprio
+    // sumário (o @Roles acima mantém-se para não excluir GESTOR de `my/summary`,
+    // mas o serviço aplica assertCanAccess e devolve 404 se GESTOR pedir outro líder).
+    return this.svc.get360Summary(leaderId, user);
   }
 
   @Get('feedback-360/my/summary')

@@ -436,14 +436,49 @@ describe('EngagementService (progress)', () => {
   // ─── updateOneOnOne ─────────────────────────────────────────────
 
   describe('updateOneOnOne', () => {
-    it('deve actualizar reunião 1:1 (modelo opcional)', async () => {
-      const result = await service.updateOneOnOne(1, 1, { completed: true } as any);
+    const meeting = { id: 1, hostId: 1, participantId: 2, status: 'SCHEDULED' };
+    const host = { id: 1, role: { name: 'LIDER' } } as any;
+    const participant = { id: 2, role: { name: 'COLABORADOR' } } as any;
+    const otherUser = { id: 99, role: { name: 'COLABORADOR' } } as any;
+    const admin = { id: 50, role: { name: 'ADMIN' } } as any;
+
+    it('deve actualizar reunião 1:1 quando é o host', async () => {
+      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue(meeting);
+      const result = await service.updateOneOnOne(1, host, { completed: true } as any);
       expect(result).toBeDefined();
     });
 
     it('deve converter scheduledAt para Date', async () => {
-      await service.updateOneOnOne(1, 1, { scheduledAt: '2026-07-15T14:00:00' } as any);
-      // No error expected — optional model gracefully degrades
+      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue(meeting);
+      await service.updateOneOnOne(1, host, { scheduledAt: '2026-07-15T14:00:00' } as any);
+      // No error expected
+    });
+
+    it('permite ao participante actualizar o seu próprio 1:1', async () => {
+      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue(meeting);
+      const result = await service.updateOneOnOne(1, participant, { completed: true } as any);
+      expect(result).toBeDefined();
+    });
+
+    it('permite a ADMIN/RH actualizar qualquer 1:1', async () => {
+      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue(meeting);
+      const result = await service.updateOneOnOne(1, admin, { completed: true } as any);
+      expect(result).toBeDefined();
+    });
+
+    it('IDOR: utilizador C não pode actualizar 1:1 alheio (nem host nem participante)', async () => {
+      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue(meeting);
+      await expect(
+        service.updateOneOnOne(1, otherUser, { completed: true } as any),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(mockPrisma.oneOnOneMeeting.update).not.toHaveBeenCalled();
+    });
+
+    it('1:1 inexistente → 404', async () => {
+      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue(null);
+      await expect(
+        service.updateOneOnOne(1, host, { completed: true } as any),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

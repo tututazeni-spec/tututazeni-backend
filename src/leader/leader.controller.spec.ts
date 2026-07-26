@@ -80,9 +80,9 @@ describe('LeaderController', () => {
     expect(mockSvc.getAiRecommendations).toHaveBeenCalledWith(1);
   });
 
-  it('memberProfile → getMemberProfile(userId, memberId)', async () => {
+  it('memberProfile → getMemberProfile(user, memberId)', async () => {
     await controller.memberProfile(mockUser as any, 3);
-    expect(mockSvc.getMemberProfile).toHaveBeenCalledWith(1, 3);
+    expect(mockSvc.getMemberProfile).toHaveBeenCalledWith(mockUser, 3);
   });
 
   it('dashboard → getLeaderDashboard(id)', async () => {
@@ -117,9 +117,9 @@ describe('LeaderController', () => {
     expect(mockSvc.getOneOnOnes).toHaveBeenCalledWith(1, undefined);
   });
 
-  it('complete1on1 → completeOneOnOne(id, notes)', async () => {
-    await controller.complete1on1(4, { notes: 'notas' });
-    expect(mockSvc.completeOneOnOne).toHaveBeenCalledWith(4, 'notas');
+  it('complete1on1 → completeOneOnOne(id, notes, user)', async () => {
+    await controller.complete1on1(mockUser as any, 4, { notes: 'notas' });
+    expect(mockSvc.completeOneOnOne).toHaveBeenCalledWith(4, 'notas', mockUser);
   });
 
   it('approvePlan → approvePlan(planId, userId)', async () => {

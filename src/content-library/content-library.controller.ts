@@ -129,7 +129,7 @@ export class ContentLibraryController {
     @Body() dto: UpdateContentDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.update(id, dto, user.id);
+    return this.svc.update(id, dto, user.id, user);
   }
 
   @Post(':id/publish')

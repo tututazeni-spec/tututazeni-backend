@@ -278,16 +278,39 @@ describe('DocumentDeclarationsService (additional)', () => {
       expect(result).toBeDefined();
     });
 
-    it('deve registar auditoria quando requesterId fornecido', async () => {
+    it('deve registar auditoria quando user fornecido (dono do pedido)', async () => {
       mockPrisma.declarationRequest.findUnique.mockResolvedValue({
         id: 1,
         userId: 1,
         template: baseTemplate,
       });
-      await service.findOne(1, 2);
+      await service.findOne(1, { id: 1, role: { name: 'COLABORADOR' } } as any);
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'DECLARATION_VIEWED' }),
       );
+    });
+
+    it('deve registar auditoria quando RH acede ao pedido de outro utilizador', async () => {
+      mockPrisma.declarationRequest.findUnique.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        template: baseTemplate,
+      });
+      await service.findOne(1, { id: 2, role: { name: 'RH' } } as any);
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'DECLARATION_VIEWED', userId: 2 }),
+      );
+    });
+
+    it('IDOR: colaborador B não pode ler pedido de A (404)', async () => {
+      mockPrisma.declarationRequest.findUnique.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        template: baseTemplate,
+      });
+      await expect(
+        service.findOne(1, { id: 2, role: { name: 'COLABORADOR' } } as any),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('deve lançar NotFoundException se não encontrado', async () => {

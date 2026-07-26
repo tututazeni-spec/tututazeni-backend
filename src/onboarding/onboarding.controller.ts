@@ -134,8 +134,8 @@ export class OnboardingController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do plano (tarefas por fase, progresso)' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.findOne(id);
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.findOne(id, user);
   }
 
   @Post()

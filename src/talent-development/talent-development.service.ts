@@ -28,6 +28,9 @@ import {
   ActionStatus,
   TalentTier,
 } from './talent-development.dto';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import type { CurrentUserData } from '../common/types/current-user';
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS
@@ -399,7 +402,7 @@ export class TalentDevelopmentService {
     return { data: enriched, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async getPlan(id: number) {
+  async getPlan(id: number, user?: CurrentUserData) {
     const plan = await this.prisma.read.developmentPlan.findUnique({
       where: { id },
       include: {
@@ -417,7 +420,12 @@ export class TalentDevelopmentService {
         },
       },
     });
-    if (!plan) throw new NotFoundException('Plano não encontrado');
+
+    // Ownership (A3): dono do PDI OU ADMIN/RH/LIDER; senão 404.
+    // Quando chamado sem user (contexto interno de confiança), não filtra.
+    if (user) assertCanAccess(plan, plan?.userId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
+    else if (!plan) throw new NotFoundException('Plano não encontrado');
+
     return { ...plan, stats: getPlanStats(plan.actions, plan.goals) };
   }
 
@@ -1060,7 +1068,7 @@ export class TalentDevelopmentService {
     return mentoring;
   }
 
-  async getMentoring(id: number) {
+  async getMentoring(id: number, user?: CurrentUserData) {
     const m = await this.prisma.read.mentoring.findUnique({
       where: { id },
       include: {
@@ -1084,6 +1092,19 @@ export class TalentDevelopmentService {
       },
     });
     if (!m) throw new NotFoundException('Mentoria não encontrada');
+
+    // Ownership (A3): mentor OU mentorando OU ADMIN/RH/LIDER; senão 404.
+    // Recurso com dois donos possíveis — assertCanAccess só suporta um
+    // ownerId de cada vez, por isso testamos mentee primeiro e só recorremos
+    // à verificação de papel privilegiado uma vez (evita duplicar a checagem).
+    if (user) {
+      const isMentor = String(user.id) === String((m as any).mentorId);
+      const isMentee = String(user.id) === String((m as any).menteeId);
+      if (!isMentor && !isMentee) {
+        assertCanAccess(m, (m as any).menteeId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
+      }
+    }
+
     return m;
   }
 

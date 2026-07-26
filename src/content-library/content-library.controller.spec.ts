@@ -111,10 +111,10 @@ describe('ContentLibraryController', () => {
     expect(mockSvc.create).toHaveBeenCalledWith(1, dto);
   });
 
-  it('update → update(id, dto, userId)', async () => {
+  it('update → update(id, dto, userId, user)', async () => {
     const dto = {} as any;
     await controller.update(1, dto, mockUser as any);
-    expect(mockSvc.update).toHaveBeenCalledWith(1, dto, 1);
+    expect(mockSvc.update).toHaveBeenCalledWith(1, dto, 1, mockUser);
   });
 
   it('publish → publish(id, userId)', async () => {

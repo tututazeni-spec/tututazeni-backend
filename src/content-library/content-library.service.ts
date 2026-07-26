@@ -12,6 +12,9 @@ import {
   ContentLibraryLearningPathFilterDto,
   ContentStatus,
 } from './content-library.dto';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/types/current-user';
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS
@@ -203,8 +206,13 @@ export class ContentLibraryService {
     return asset;
   }
 
-  async update(id: number, dto: UpdateContentDto, updatedById: number) {
-    await this.findOne(id);
+  async update(id: number, dto: UpdateContentDto, updatedById: number, user?: CurrentUserData) {
+    const existing = await this.prisma.contentAsset.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Conteúdo não encontrado');
+    // Ownership (IDOR fix): só o autor (createdById) OU ADMIN/RH pode editar.
+    // INSTRUCTOR só pode editar o próprio conteúdo — não o de outro instrutor.
+    if (user) assertCanAccess(existing, (existing as any).createdById, user, [Role.ADMIN, Role.RH]);
+
     const data: any = {};
     if (dto.title) data.title = dto.title;
     if (dto.description) data.description = dto.description;
