@@ -228,7 +228,7 @@ export class AddEvidenceDto {
   @ApiPropertyOptional({ description: 'URL do ficheiro ou link externo' })
   @IsOptional()
   @IsString()
-  url?: string;
+  url?: string; // file-url-exempt: dual-propósito (ficheiro em storage OU link externo), ver campo 'type'
 
   @ApiPropertyOptional()
   @IsOptional()

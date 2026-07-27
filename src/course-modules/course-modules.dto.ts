@@ -13,6 +13,7 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { MAX_FILE_SIZE_KB } from '../common/validators/allowed-mime-types';
+import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 
 export enum ModuleStatus {
   DRAFT = 'DRAFT',
@@ -226,7 +227,7 @@ export class CreateModuleMaterialDto {
   title!: string;
 
   @ApiProperty()
-  @IsString()
+  @IsAllowedFileUrl()
   url!: string;
 
   @ApiPropertyOptional()
