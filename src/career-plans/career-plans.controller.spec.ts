@@ -134,14 +134,37 @@ describe('CareerPlansController', () => {
   });
 
   it('getReadiness → calculateReadiness(userId, targetRoleId)', async () => {
-    await controller.getReadiness(2, 5);
+    await controller.getReadiness(2, 5, mockUser as any);
     expect(mockSvc.calculateReadiness).toHaveBeenCalledWith(2, 5);
   });
 
   it('simulate → simulateCareer(dto)', async () => {
-    const dto = {} as any;
-    await controller.simulate(dto);
+    const dto = { userId: 1 } as any;
+    await controller.simulate(dto, mockUser as any);
     expect(mockSvc.simulateCareer).toHaveBeenCalledWith(dto);
+  });
+
+  // A10-11: getReadiness/simulate não tinham ownership — qualquer autenticado
+  // lia o gap de skills e a prontidão de promoção de qualquer colega.
+  describe('getReadiness/simulate — ownership (A10-11)', () => {
+    const colaborador = { id: 2, email: 'c@innova.com', role: { name: 'COLABORADOR' } };
+    const other = { id: 999, email: 'o@innova.com', role: { name: 'COLABORADOR' } };
+
+    it('colaborador não pode ver readiness de outro utilizador', () => {
+      expect(() => controller.getReadiness(2, 5, other as any)).toThrow();
+      expect(mockSvc.calculateReadiness).not.toHaveBeenCalled();
+    });
+
+    it('colaborador pode ver a sua própria readiness', async () => {
+      await controller.getReadiness(2, 5, colaborador as any);
+      expect(mockSvc.calculateReadiness).toHaveBeenCalledWith(2, 5);
+    });
+
+    it('colaborador não pode simular carreira de outro utilizador', () => {
+      const dto = { userId: 2 } as any;
+      expect(() => controller.simulate(dto, other as any)).toThrow();
+      expect(mockSvc.simulateCareer).not.toHaveBeenCalled();
+    });
   });
 
   it('myPlan → getMyPlan(userId)', async () => {

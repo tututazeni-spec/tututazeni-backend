@@ -33,6 +33,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
+import { assertCanAccess } from '../common/authz/ownership';
 
 @ApiTags('Career Plans')
 @ApiBearerAuth()
@@ -154,13 +155,18 @@ export class CareerPlansController {
   getReadiness(
     @Param('userId', ParseIntPipe) userId: number,
     @Param('targetRoleId', ParseIntPipe) targetRoleId: number,
+    @CurrentUser() user: CurrentUserData,
   ) {
+    // A10-11: sem isto, qualquer autenticado lia o gap de skills e a
+    // pontuação de prontidão de promoção de qualquer colega.
+    assertCanAccess({}, userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     return this.svc.calculateReadiness(userId, targetRoleId);
   }
 
   @Post('simulate')
   @ApiOperation({ summary: 'Simular carreira (what-if) — readiness + estimativa + paths' })
-  simulate(@Body() dto: SimulateCareerDto) {
+  simulate(@Body() dto: SimulateCareerDto, @CurrentUser() user: CurrentUserData) {
+    assertCanAccess({}, dto.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     return this.svc.simulateCareer(dto);
   }
 

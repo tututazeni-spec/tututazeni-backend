@@ -186,8 +186,8 @@ export class ProcessStandardController {
 
   @Get('instances/:instanceId')
   @ApiOperation({ summary: 'Detalhe de uma instância com progresso dos steps' })
-  getInstance(@Param('instanceId', ParseIntPipe) id: number) {
-    return this.svc.getInstanceDetail(id);
+  getInstance(@Param('instanceId', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getInstanceDetail(id, user);
   }
 
   @Post(':id/start')
@@ -224,7 +224,7 @@ export class ProcessStandardController {
     @CurrentUser() user: CurrentUserData,
     @Body() dto: CompleteStepDto,
   ) {
-    return this.svc.completeStep(instanceId, stepId, user.id, dto);
+    return this.svc.completeStep(instanceId, stepId, user, dto);
   }
 
   @Post('instances/:instanceId/steps/:stepId/reject')
@@ -236,6 +236,6 @@ export class ProcessStandardController {
     @CurrentUser() user: CurrentUserData,
     @Body() dto: RejectStepDto,
   ) {
-    return this.svc.rejectStep(instanceId, stepId, user.id, dto);
+    return this.svc.rejectStep(instanceId, stepId, user, dto);
   }
 }

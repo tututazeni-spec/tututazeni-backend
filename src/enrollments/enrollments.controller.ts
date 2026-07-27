@@ -63,7 +63,7 @@ export class EnrollmentsController {
     @CurrentUser() user: CurrentUserData,
     @Body() dto: CancelEnrollmentDto,
   ) {
-    return this.svc.cancel(id, dto, user.id);
+    return this.svc.cancel(id, dto, user);
   }
 
   @Post('my/:id/certificate')

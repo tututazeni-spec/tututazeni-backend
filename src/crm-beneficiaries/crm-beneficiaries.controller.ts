@@ -44,6 +44,7 @@ export class CrmBeneficiariesController {
   }
 
   @Get()
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar beneficiários (paginado)' })
   findAll(@Query() filters: FilterBeneficiaryDto) {
     return this.service.findAll(filters);
@@ -73,6 +74,7 @@ export class CrmBeneficiariesController {
   }
 
   @Get(':id')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Detalhe de beneficiário' })
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
@@ -100,6 +102,7 @@ export class CrmBeneficiariesController {
   // ─── INTERACÇÕES ─────────────────────────────────────
 
   @Post(':id/interactions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Adicionar interacção' })
   addInteraction(
     @Param('id') id: string,
@@ -110,6 +113,7 @@ export class CrmBeneficiariesController {
   }
 
   @Get(':id/interactions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar interacções do beneficiário' })
   getInteractions(
     @Param('id') id: string,
@@ -122,6 +126,7 @@ export class CrmBeneficiariesController {
   // ─── NECESSIDADES ────────────────────────────────────
 
   @Post(':id/needs')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Registar necessidade' })
   addNeed(
     @Param('id') id: string,
@@ -132,6 +137,7 @@ export class CrmBeneficiariesController {
   }
 
   @Put('needs/:needId/resolve')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Resolver necessidade' })
   resolveNeed(@Param('needId') needId: string, @CurrentUser() user: CurrentUserData) {
     return this.service.resolveNeed(needId, user.id);

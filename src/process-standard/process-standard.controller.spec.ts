@@ -129,9 +129,9 @@ describe('ProcessStandardController', () => {
     });
   });
 
-  it('getInstance → getInstanceDetail(id)', async () => {
-    await controller.getInstance(3);
-    expect(mockSvc.getInstanceDetail).toHaveBeenCalledWith(3);
+  it('getInstance → getInstanceDetail(id, user)', async () => {
+    await controller.getInstance(3, mockUser as any);
+    expect(mockSvc.getInstanceDetail).toHaveBeenCalledWith(3, mockUser);
   });
 
   it('startInstance → startInstance(id, userId, dto)', async () => {
@@ -145,15 +145,15 @@ describe('ProcessStandardController', () => {
     expect(mockSvc.cancelInstance).toHaveBeenCalledWith(4, 1, 'motivo');
   });
 
-  it('completeStep → completeStep(instanceId, stepId, userId, dto)', async () => {
+  it('completeStep → completeStep(instanceId, stepId, user, dto)', async () => {
     const dto = {} as any;
     await controller.completeStep(5, 2, mockUser as any, dto);
-    expect(mockSvc.completeStep).toHaveBeenCalledWith(5, 2, 1, dto);
+    expect(mockSvc.completeStep).toHaveBeenCalledWith(5, 2, mockUser, dto);
   });
 
-  it('rejectStep → rejectStep(instanceId, stepId, userId, dto)', async () => {
+  it('rejectStep → rejectStep(instanceId, stepId, user, dto)', async () => {
     const dto = {} as any;
     await controller.rejectStep(6, 3, mockUser as any, dto);
-    expect(mockSvc.rejectStep).toHaveBeenCalledWith(6, 3, 1, dto);
+    expect(mockSvc.rejectStep).toHaveBeenCalledWith(6, 3, mockUser, dto);
   });
 });

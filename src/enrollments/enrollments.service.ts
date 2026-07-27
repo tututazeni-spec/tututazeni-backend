@@ -329,8 +329,12 @@ export class EnrollmentsService {
 
   // ─── CANCELAR ─────────────────────────────────────────────────────────────
 
-  async cancel(id: number, dto: CancelEnrollmentDto, requestingUserId: number) {
+  async cancel(id: number, dto: CancelEnrollmentDto, requestingUser: CurrentUserData) {
     const e = (await this.findOne(id)) as any;
+
+    // A10-12: sem isto, qualquer autenticado podia cancelar a matrícula de
+    // outra pessoa via PATCH /enrollments/my/:id/cancel.
+    assertCanAccess(e, e?.userId, requestingUser, [Role.ADMIN, Role.RH]);
 
     if (e.status === 'COMPLETED') {
       throw new ForbiddenException('Matrícula concluída não pode ser cancelada');

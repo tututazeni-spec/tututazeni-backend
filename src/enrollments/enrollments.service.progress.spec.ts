@@ -150,7 +150,11 @@ describe('EnrollmentsService (progress)', () => {
       mockPrisma.lessonProgress.count.mockResolvedValue(3);
       mockPrisma.enrollment.update.mockResolvedValue({ id: 1, status: 'CANCELLED' });
 
-      const result = (await service.cancel(1, { reason: 'Sem tempo' } as any, 5)) as any;
+      const result = (await service.cancel(
+        1,
+        { reason: 'Sem tempo' } as any,
+        { id: 5, role: { name: 'COLABORADOR' } } as any,
+      )) as any;
       expect(result.message).toBeDefined();
     });
 
@@ -162,9 +166,13 @@ describe('EnrollmentsService (progress)', () => {
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(5);
 
-      await expect(service.cancel(1, { reason: 'Teste' } as any, 5)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.cancel(
+          1,
+          { reason: 'Teste' } as any,
+          { id: 5, role: { name: 'COLABORADOR' } } as any,
+        ),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('deve lançar ForbiddenException se matrícula é obrigatória', async () => {
@@ -172,9 +180,13 @@ describe('EnrollmentsService (progress)', () => {
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(0);
 
-      await expect(service.cancel(1, { reason: 'Teste' } as any, 5)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.cancel(
+          1,
+          { reason: 'Teste' } as any,
+          { id: 5, role: { name: 'COLABORADOR' } } as any,
+        ),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 

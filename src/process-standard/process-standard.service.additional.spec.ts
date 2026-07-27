@@ -34,6 +34,19 @@ const mockPrisma: any = new Proxy(
       createMany: makeFind({ count: 0 }),
       deleteMany: makeFind({ count: 0 }),
       findMany: makeFindMany([]),
+      findUnique: makeFind(null),
+    },
+    processInstance: {
+      findUnique: makeFind(null),
+      update: makeFind({}),
+      findMany: makeFindMany([]),
+      count: makeCount(0),
+    },
+    stepProgress: {
+      findUnique: makeFind(null),
+      findFirst: makeFind(null),
+      count: makeCount(0),
+      update: makeFind({}),
     },
     processParticipant: {
       create: makeFind({}),
@@ -200,6 +213,95 @@ describe('ProcessStandardService — additional coverage', () => {
         search: 'Onboarding',
       });
       expect(result).toBeDefined();
+    });
+  });
+
+  // A10-7: getInstanceDetail/completeStep/rejectStep não tinham @Roles nem
+  // ownership — qualquer autenticado podia ver ou forjar a conclusão/rejeição
+  // do passo de qualquer instância de processo.
+  describe('ownership de instâncias e passos (A10-7)', () => {
+    const target = { id: 10, email: 't@innova.com', role: { name: 'COLABORADOR' } };
+    const other = { id: 999, email: 'o@innova.com', role: { name: 'COLABORADOR' } };
+    const admin = { id: 1, email: 'a@innova.com', role: { name: 'ADMIN' } };
+    const baseInstance = {
+      id: 1,
+      targetUserId: 10,
+      initiatedById: 2,
+      process: { steps: [] },
+      stepProgress: [],
+    };
+
+    describe('getInstanceDetail', () => {
+      it('alvo da instância pode ver o detalhe', async () => {
+        mockPrisma.processInstance.findUnique.mockResolvedValue(baseInstance);
+        const result = await service.getInstanceDetail(1, target as any);
+        expect(result).toBeDefined();
+      });
+
+      it('ADMIN pode ver o detalhe de qualquer instância', async () => {
+        mockPrisma.processInstance.findUnique.mockResolvedValue(baseInstance);
+        const result = await service.getInstanceDetail(1, admin as any);
+        expect(result).toBeDefined();
+      });
+
+      it('utilizador não participante não pode ver o detalhe', async () => {
+        mockPrisma.processInstance.findUnique.mockResolvedValue(baseInstance);
+        await expect(service.getInstanceDetail(1, other as any)).rejects.toThrow(NotFoundException);
+      });
+    });
+
+    describe('completeStep', () => {
+      const sp = { instanceId: 1, stepId: 5, status: 'PENDING', stepOrder: 1, startedAt: null };
+
+      it('alvo da instância (sem responsável específico no passo) pode completar', async () => {
+        mockPrisma.stepProgress.findUnique.mockResolvedValue(sp);
+        mockPrisma.processInstance.findUnique.mockResolvedValue({ targetUserId: 10 });
+        mockPrisma.processStep.findUnique.mockResolvedValue({ id: 5, responsibleId: null });
+        mockPrisma.stepProgress.update.mockResolvedValue({ ...sp, status: 'COMPLETED' });
+        const result = await service.completeStep(1, 5, target as any, {} as any);
+        expect(result).toBeDefined();
+      });
+
+      it('utilizador sem relação com a instância nem responsável pelo passo é rejeitado', async () => {
+        mockPrisma.stepProgress.findUnique.mockResolvedValue(sp);
+        mockPrisma.processInstance.findUnique.mockResolvedValue({ targetUserId: 10 });
+        mockPrisma.processStep.findUnique.mockResolvedValue({ id: 5, responsibleId: 777 });
+        await expect(service.completeStep(1, 5, other as any, {} as any)).rejects.toThrow(
+          NotFoundException,
+        );
+        expect(mockPrisma.stepProgress.update).not.toHaveBeenCalled();
+      });
+
+      it('responsável específico do passo pode completar mesmo não sendo o alvo', async () => {
+        mockPrisma.stepProgress.findUnique.mockResolvedValue(sp);
+        mockPrisma.processInstance.findUnique.mockResolvedValue({ targetUserId: 10 });
+        mockPrisma.processStep.findUnique.mockResolvedValue({ id: 5, responsibleId: 999 });
+        mockPrisma.stepProgress.update.mockResolvedValue({ ...sp, status: 'COMPLETED' });
+        const result = await service.completeStep(1, 5, other as any, {} as any);
+        expect(result).toBeDefined();
+      });
+    });
+
+    describe('rejectStep', () => {
+      const sp = { instanceId: 1, stepId: 5, status: 'PENDING' };
+
+      it('utilizador sem relação com a instância nem responsável pelo passo é rejeitado', async () => {
+        mockPrisma.stepProgress.findUnique.mockResolvedValue(sp);
+        mockPrisma.processInstance.findUnique.mockResolvedValue({ targetUserId: 10 });
+        mockPrisma.processStep.findUnique.mockResolvedValue({ id: 5, responsibleId: 777 });
+        await expect(service.rejectStep(1, 5, other as any, {} as any)).rejects.toThrow(
+          NotFoundException,
+        );
+        expect(mockPrisma.stepProgress.update).not.toHaveBeenCalled();
+      });
+
+      it('ADMIN pode rejeitar qualquer passo', async () => {
+        mockPrisma.stepProgress.findUnique.mockResolvedValue(sp);
+        mockPrisma.processInstance.findUnique.mockResolvedValue({ targetUserId: 10 });
+        mockPrisma.processStep.findUnique.mockResolvedValue({ id: 5, responsibleId: null });
+        const result = await service.rejectStep(1, 5, admin as any, {} as any);
+        expect(result).toBeDefined();
+      });
     });
   });
 });
