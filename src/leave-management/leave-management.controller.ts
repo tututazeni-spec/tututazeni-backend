@@ -28,6 +28,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
+import { assertCanAccess } from '../common/authz/ownership';
 
 @ApiTags('Leave Management')
 @ApiBearerAuth()
@@ -116,7 +117,11 @@ export class LeaveManagementController {
     @Query('userId') userId: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
+    @CurrentUser() user: CurrentUserData,
   ) {
+    // A10-23: sem isto, qualquer autenticado podia sondar se um colega tinha
+    // férias marcadas num período arbitrário.
+    assertCanAccess({}, +userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     return this.svc.getConflictCheck(+userId, startDate, endDate);
   }
 

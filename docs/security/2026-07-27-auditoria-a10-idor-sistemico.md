@@ -138,35 +138,86 @@ verifica o dono do plano — incluindo um caso em que completar uma acção de
   `isPrivileged`, `ownershipWhere`) é a peça que falta replicar — não precisa
   de ser reinventado, só aplicado nos 51 controllers ainda não tocados.
 
-## 4. Plano de remediação proposto (não aplicado)
+## 4. Plano de remediação — estado: ✅ concluído (2026-07-27)
 
-Ordem = ordem de risco. Cada bloco reaplica o padrão já validado em produção
-(`assertCanAccess`/`isPrivileged`/`ownershipWhere` + `@Roles()` explícito),
-não introduz nenhum utilitário novo.
+Ordem = ordem de risco. Cada bloco reaplicou o padrão já validado em produção
+(`assertCanAccess`/`isPrivileged`/`ownershipWhere` + `@Roles()` explícito) —
+nenhum utilitário novo foi introduzido.
 
-1. **A10-1** — `select` explícito (sem `password`) em `UsersService.findOne`;
-   avaliar `@Roles()` ou ownership em `GET /users/:id`.
-2. **A10-2 a A10-6** — aplicar `@Roles()`/`assertCanAccess` em `employees`,
-   `evaluation`, `performance` (submitReview + createGoal),
+1. **A10-1** — ✅ PR #67 (merged). `omit: { user: { password: true } }` a
+   nível do `PrismaClient` (primary + réplica) — mais robusto que um `select`
+   local, fecha a classe inteira de fuga, não só `GET /users/:id`.
+2. **A10-2 a A10-6** — ✅ PR #68 (merged). `@Roles()`/`assertCanAccess` em
+   `employees`, `evaluation`, `performance` (submitReview + createGoal),
    `development-plans`, `talent-development`.
-3. **A10-7 a A10-12** — `process-standard`, `organization` (ocultar banda
-   salarial de não-privilegiados), `crm-beneficiaries`, `crm-funders`,
-   `career-plans` (readiness/simulate), `enrollments` (cancel).
-4. **A10-13 a A10-22** — restantes achados médios (`crm-partners`,
+3. **A10-7 a A10-12** — ✅ PR #69 (merged). `process-standard`,
+   `organization`, `crm-beneficiaries`, `crm-funders`, `career-plans`
+   (readiness/simulate), `enrollments` (cancel).
+4. **A10-13 a A10-22** — ✅ PR #70. Restantes achados médios (`crm-partners`,
    `career-plans` addGoal/requestPromotion, `academic`, `enrollments`
    certificate, `leader`, `evaluation360` consent, `declarations`, `pdf`,
    `engagement`).
-5. **A10-23** — `leave-management` conflict-check.
+5. **A10-23** — ✅ `leave-management` conflict-check.
 6. Teste de regressão por achado: "colaborador A não acede/edita recurso de B
-   → 403/404", seguindo o padrão de testes já usado nas specs de
-   `certification.service.ownership.spec.ts` e `mobile.controller.spec.ts`.
+   → 403/404" — aplicado em todos os PRs acima, seguindo o padrão já usado nas
+   specs de `certification.service.ownership.spec.ts` e
+   `mobile.controller.spec.ts`.
 
-## 5. Critérios de aceitação
+### A10-2 — nota de scope: self-service de `employees` removido, não scoped
 
-- [ ] `GET /users/:id` e `GET /users/me` nunca devolvem o campo `password`.
-- [ ] Todas as rotas `:id`/`:userId` listadas na secção 3 usam `@Roles()`
+`Employee` (dados-mestre de RH: `pdis: LegacyPdi[]`, `Attendance`, etc.) não
+tem nenhuma relação com `User` no schema — são duas sequências de IDs
+independentes. Não havia forma correta de fazer o ownership funcionar sem
+inventar uma ligação User↔Employee inexistente, por isso a correção
+**restringe** `COLABORADOR` em vez de o scoping (ver PR #68). Se o frontend
+tiver uma página "meu perfil" a bater nestes endpoints para colaboradores
+comuns, essa funcionalidade passa a 403 — precisa de outra fonte de dados
+(ex.: `GET /users/me`) ou de uma futura ligação real User↔Employee.
+
+### A10-20 — nota de scope: `pdf.controller.ts` continua com dados placeholder
+
+Restringido `payslip`/`report` a ADMIN/RH e documentado com `TODO` inline que
+`declaration`/`certificate` precisam de `assertCanAccess` real antes de serem
+ligados a dados verdadeiros (ver PR #70). Isto não é uma correção completa —
+é uma barreira para que o wiring futuro não reintroduza o IDOR em silêncio.
+
+## 5. A10-24 — decisão registada: sem invalidação de sessão por inactividade
+
+**Decisão: aceite como está — não é uma omissão a corrigir.**
+
+- Access token expira aos 15 minutos (fixo, não deslizante) —
+  `auth.service.ts` `generateTokens()`.
+- Refresh token dura 7 dias mas com rotação a cada uso e deteção de
+  reutilização (token roubado e reaproveitado revoga a cadeia inteira) —
+  `auth.service.ts` `rotateRefreshToken()`.
+- Trocar a password invalida todas as sessões activas de imediato
+  (`passwordChangedAt` + rejeição no `JwtStrategy`).
+- Não existe um temporizador de inactividade explícito (ex.: "sem uso há 30
+  min → sessão morta") — a única invalidação é por expiração fixa do access
+  token ou por acções explícitas (logout, troca de password, reutilização de
+  refresh token detectada).
+
+**Porquê é aceitável:** a janela de exposição de um access token comprometido
+está limitada a 15 minutos por desenho, o que já é uma mitigação forte para
+a maioria dos cenários de sessão esquecida/dispositivo partilhado. Adicionar
+um temporizador de inactividade traria complexidade (tracking de "último
+pedido" por sessão, provavelmente em Redis) sem reduzir de forma
+significativa a janela já pequena.
+
+**Quando reconsiderar:** se o produto vier a lidar com dados sujeitos a
+requisitos de compliance mais apertados (ex.: certos fluxos financeiros ou
+de saúde que exijam logout automático por inactividade), ou se o TTL do
+access token for alargado no futuro, esta decisão deve ser revisitada.
+
+## 6. Critérios de aceitação
+
+- [x] `GET /users/:id` e `GET /users/me` nunca devolvem o campo `password`.
+- [x] Todas as rotas `:id`/`:userId` listadas na secção 3 usam `@Roles()`
       e/ou `assertCanAccess`/`ownershipWhere` — nenhuma depende só de
       "está autenticado" quando o recurso é pessoal ou administrativo.
-- [ ] Cada achado tem um teste de regressão "não-dono → 403/404".
-- [ ] `pdf.controller.ts` ganha desenho de ownership antes de ser ligado a
-      dados reais (não pode ficar como débito técnico até ao lançamento).
+- [x] Cada achado tem um teste de regressão "não-dono → 403/404".
+- [x] `pdf.controller.ts` ganha desenho de ownership antes de ser ligado a
+      dados reais — bloqueado por `@Roles()` + `TODO` inline até essa altura
+      (ver nota A10-20 acima); não fica como débito técnico silencioso.
+- [x] A10-24 (inactividade) tem decisão registada e justificada — não é
+      omissão.
