@@ -15,6 +15,9 @@ import {
   FilterProgramDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/decorators';
 
 @Injectable()
 export class AcademicService {
@@ -367,7 +370,15 @@ export class AcademicService {
     return grade;
   }
 
-  async getEnrollmentGrades(enrollmentId: string) {
+  async getEnrollmentGrades(enrollmentId: string, user: CurrentUserData) {
+    const enrollment = await this.prisma.read.academicEnrollment.findUnique({
+      where: { id: enrollmentId },
+      select: { userId: true },
+    });
+    // A10-15: sem isto, qualquer autenticado que soubesse/adivinhasse um
+    // enrollmentId lia as notas de outro aluno.
+    assertCanAccess(enrollment, enrollment?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+
     return this.prisma.read.academicGrade.findMany({
       where: { enrollmentId },
       orderBy: { gradedAt: 'desc' },

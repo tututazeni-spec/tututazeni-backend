@@ -315,18 +315,34 @@ describe('CareerPlansService (progress)', () => {
 
   describe('addGoal', () => {
     it('deve adicionar meta ao plano de carreira', async () => {
+      mockPrisma.userCareerPlan.findUnique.mockResolvedValue(basePlan);
       mockPrisma.careerGoal.create.mockResolvedValue({ id: 1, progress: 0 });
-      const result = await service.addGoal({
-        planId: 1,
-        title: 'Completar certificação',
-        dueDate: '2026-12-31',
-      } as any);
+      const admin = { id: 99, role: { name: 'ADMIN' } };
+      const result = await service.addGoal(
+        {
+          careerPlanId: 1,
+          title: 'Completar certificação',
+          dueDate: '2026-12-31',
+        } as any,
+        admin as any,
+      );
       expect(result).toBeDefined();
       expect(mockPrisma.careerGoal.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ status: 'PENDING', progress: 0 }),
         }),
       );
+    });
+
+    // A10-14: findOne aplica ownership — sem isto, qualquer autenticado
+    // escrevia metas no plano de carreira de outra pessoa.
+    it('rejeita colaborador a adicionar meta ao plano de outra pessoa', async () => {
+      mockPrisma.userCareerPlan.findUnique.mockResolvedValue(basePlan);
+      const other = { id: 777, role: { name: 'COLABORADOR' } };
+      await expect(
+        service.addGoal({ careerPlanId: 1, title: 'x' } as any, other as any),
+      ).rejects.toThrow();
+      expect(mockPrisma.careerGoal.create).not.toHaveBeenCalled();
     });
   });
 

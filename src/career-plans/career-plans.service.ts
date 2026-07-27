@@ -406,7 +406,10 @@ export class CareerPlansService {
     });
   }
 
-  async addGoal(dto: CareerPlansAddCareerGoalDto) {
+  async addGoal(dto: CareerPlansAddCareerGoalDto, user: CurrentUserData) {
+    // A10-14: findOne aplica o ownership (dono do plano ou ADMIN/RH/GESTOR) —
+    // sem isto, qualquer autenticado escrevia metas no plano de outra pessoa.
+    await this.findOne(dto.careerPlanId, user);
     return this.prisma.careerGoal.create({
       data: {
         ...dto,
