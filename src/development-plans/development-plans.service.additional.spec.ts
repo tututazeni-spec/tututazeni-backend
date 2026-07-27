@@ -318,11 +318,14 @@ describe('DevelopmentPlansService (additional)', () => {
         plan: { userId: 2 },
       });
       mockPrisma.pdiEvidence.create.mockResolvedValue({ id: 1, actionId: 1 });
-      const result = await service.addEvidence(mockAdmin as any, {
-        actionId: 1,
-        description: 'Certificado concluído',
-        type: 'CERTIFICATE' as any,
-      } as any);
+      const result = await service.addEvidence(
+        mockAdmin as any,
+        {
+          actionId: 1,
+          description: 'Certificado concluído',
+          type: 'CERTIFICATE' as any,
+        } as any,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -350,11 +353,14 @@ describe('DevelopmentPlansService (additional)', () => {
     it('deve actualizar progresso do objectivo', async () => {
       mockPrisma.pdiGoal.findUnique.mockResolvedValue({ id: 1, planId: 1, plan: { userId: 2 } });
       mockPrisma.pdiGoal.update.mockResolvedValue({ id: 1, progress: 80 });
-      const result = await service.updateGoalProgress(mockAdmin as any, {
-        goalId: 1,
-        progress: 80,
-        notes: 'A progredir',
-      } as any);
+      const result = await service.updateGoalProgress(
+        mockAdmin as any,
+        {
+          goalId: 1,
+          progress: 80,
+          notes: 'A progredir',
+        } as any,
+      );
       expect(result).toBeDefined();
     });
   });

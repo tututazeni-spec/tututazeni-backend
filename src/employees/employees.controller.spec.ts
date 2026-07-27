@@ -4,6 +4,8 @@ import { EmployeesService } from './employees.service';
 import { EmployeeStatus } from './employees.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { ROLES_KEY } from '../common/decorators/roles.decorator';
+import { Role } from '../auth/enums/role.enum';
 
 const mockSvc = {
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
@@ -286,9 +288,6 @@ describe('EmployeesController', () => {
 // dar dump do dossier completo de qualquer colega via /employees/:id/*.
 // Regressão: nenhuma destas rotas pode voltar a listar COLABORADOR.
 describe('EmployeesController — @Roles nunca inclui COLABORADOR nas rotas sensíveis (A10-2)', () => {
-  const { ROLES_KEY } = require('../common/decorators/roles.decorator');
-  const { Role } = require('../auth/enums/role.enum');
-
   const sensitiveHandlers: [string, string][] = [
     ['findOne', 'GET /employees/:id'],
     ['getStats', 'GET /employees/:id/stats'],

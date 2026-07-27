@@ -152,7 +152,10 @@ export class DevelopmentPlansController {
 
   @Delete('actions/:actionId')
   @ApiOperation({ summary: 'Remover acção do plano' })
-  removeAction(@Param('actionId', ParseIntPipe) actionId: number, @CurrentUser() user: CurrentUserData) {
+  removeAction(
+    @Param('actionId', ParseIntPipe) actionId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
     return this.svc.removeAction(actionId, user);
   }
 

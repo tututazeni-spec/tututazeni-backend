@@ -496,9 +496,9 @@ describe('TalentDevelopmentService', () => {
         completedAt: null,
         plan: { userId: 999 },
       });
-      await expect(
-        service.updateGoal(1, { title: 'Meta B' }, mockUser as any),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.updateGoal(1, { title: 'Meta B' }, mockUser as any)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(mockPrisma.pdiGoal.update).not.toHaveBeenCalled();
     });
   });
@@ -598,9 +598,9 @@ describe('TalentDevelopmentService', () => {
         plan: { userId: 999, name: 'PDI 2024' },
       });
       const other = { id: 2, email: 'other@innova.com', role: { name: 'COLABORADOR' } };
-      await expect(
-        service.updateActionProgress(1, { progress: 50 }, other as any),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.updateActionProgress(1, { progress: 50 }, other as any)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(mockPrisma.developmentPlanAction.update).not.toHaveBeenCalled();
     });
 

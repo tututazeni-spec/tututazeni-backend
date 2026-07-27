@@ -389,11 +389,7 @@ export class DevelopmentPlansService {
     if (!action) throw new NotFoundException('Acção não encontrada');
     // A10-5: sem isto, qualquer autenticado podia editar/completar a acção de
     // PDI de outra pessoa — incluindo atribuir-se XP alheio (ver abaixo).
-    assertCanAccess(action, (action as any).plan.userId, user, [
-      Role.ADMIN,
-      Role.RH,
-      Role.GESTOR,
-    ]);
+    assertCanAccess(action, (action as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     const ownerId = (action as any).plan.userId;
 
     const wasCompleted = action.status !== 'COMPLETED' && dto.status === 'COMPLETED';
@@ -443,11 +439,7 @@ export class DevelopmentPlansService {
       include: { plan: true },
     });
     if (!action) throw new NotFoundException('Acção não encontrada');
-    assertCanAccess(action, (action as any).plan.userId, user, [
-      Role.ADMIN,
-      Role.RH,
-      Role.GESTOR,
-    ]);
+    assertCanAccess(action, (action as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     if (action.status === 'IN_PROGRESS') {
       throw new BadRequestException('Acção em progresso não pode ser removida');
     }
@@ -465,11 +457,7 @@ export class DevelopmentPlansService {
     if (!action) throw new NotFoundException('Acção não encontrada');
     // A10-5: sem isto, qualquer autenticado podia registar evidências na
     // acção de PDI de outra pessoa.
-    assertCanAccess(action, (action as any).plan.userId, user, [
-      Role.ADMIN,
-      Role.RH,
-      Role.GESTOR,
-    ]);
+    assertCanAccess(action, (action as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
 
     const evidence = await this.prisma.pdiEvidence.create({
       data: {

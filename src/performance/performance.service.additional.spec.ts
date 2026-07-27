@@ -295,9 +295,9 @@ describe('PerformanceService (additional)', () => {
         reviewerId: 1,
         cycle: { scoreScale: 5, goalsWeight: 40, competenciesWeight: 40, behaviorsWeight: 20 },
       });
-      await expect(
-        service.submitReview(999, { reviewId: 1, score: 4.0 } as any),
-      ).rejects.toThrow('Apenas o avaliado');
+      await expect(service.submitReview(999, { reviewId: 1, score: 4.0 } as any)).rejects.toThrow(
+        'Apenas o avaliado',
+      );
       expect(mockPrisma.performanceReview.update).not.toHaveBeenCalled();
     });
 
