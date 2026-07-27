@@ -5,7 +5,7 @@
 > estabelecida na A-5, em todos os módulos criados antes e depois dessa
 > auditoria, e adição de um guard-rail automatizado contra regressão.
 > Repositório: `innova` (backend NestJS).
-> **Todos os achados foram remediados nesta sessão.**
+> **Todos os achados foram remediados nesta sessão. Faixa encerrada.**
 
 ---
 
@@ -48,7 +48,7 @@ uma próxima auditoria manual.
 | A9-3 | 🟡 Baixo | `CreateTemplateDto.logoUrl`/`signatureUrl` só com `@IsString()` — sem validação de URL nenhuma. Severidade reduzida: endpoint restrito a ADMIN/RH, e confirmado que o campo não é renderizado no backend nem no frontend hoje (ver §3) | `src/certification/dto/create-template.dto.ts` | ✅ Corrigido |
 | A9-4 | ℹ️ Informativo | `multer`/`@types/multer` permaneciam como dependências directas no `package.json` sem qualquer uso em `src/` desde a remoção do Multer na A-5 — superfície de supply-chain morta | `package.json` | ✅ Removido |
 | A9-5 | ℹ️ Preventivo | A convenção `@IsAllowedFileUrl()` dependia só de disciplina manual — os 3 desvios acima (A9-1/2/3) passaram despercebidos apesar de a A-5 já ter estabelecido essa convenção explicitamente | — | ✅ Guard-rail de CI adicionado |
-| — | ⏳ Pendente | `ops/.env.production.example` tem `ALLOWED_FILE_HOST=CHANGE_ME` como placeholder. `validate-env.ts` já falha o boot se a variável estiver ausente, mas não impede o literal `CHANGE_ME` como valor real. Requer confirmação directa do valor em produção (fora do âmbito de uma alteração de código) | `ops/.env.production.example:49` | ⏳ Por confirmar (infra) |
+| A9-6 | ℹ️ Verificação | `ops/.env.production.example` tem `ALLOWED_FILE_HOST=CHANGE_ME` como placeholder. Confirmado directamente com o responsável do ambiente que o valor real em produção é `ALLOWED_FILE_HOST=storage.innova.ao` (2026-07-27) — não é o placeholder | `ops/.env.production.example:49` | ✅ Confirmado |
 
 ---
 
@@ -232,10 +232,9 @@ Suites afectadas (`crm-funders`, `work-declaration`, `certification`, guard):
 | A9-3 `certification` (logoUrl/signatureUrl) | 1 | ✅ |
 | A9-4 dependência `multer` morta | 1 | ✅ |
 | A9-5 guard-rail de CI | 1 | ✅ |
-| `ALLOWED_FILE_HOST` em produção não confirmado | 1 | ⏳ Pendente (infra) |
-| **Total** | **6** | **5 ✅ / 1 ⏳** |
+| A9-6 `ALLOWED_FILE_HOST` em produção | 1 | ✅ |
+| **Total** | **6** | **6 ✅** |
 
-A faixa A-9 está encerrada do lado do código. O único item em aberto —
-confirmar que `ALLOWED_FILE_HOST` em produção não é o placeholder
-`CHANGE_ME` — depende de acesso à configuração real de produção e não pode
-ser verificado a partir do repositório.
+A faixa A-9 está encerrada, incluindo o item de infra: `ALLOWED_FILE_HOST` em
+produção foi confirmado como `storage.innova.ao` (2026-07-27), não o
+placeholder `CHANGE_ME` de `ops/.env.production.example`.
