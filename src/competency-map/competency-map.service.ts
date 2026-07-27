@@ -1,5 +1,5 @@
 ﻿// ─── src/competency-map/competency-map.service.ts ────────────────────────────
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import {
@@ -45,6 +45,8 @@ function calcWeightedScore(
 
 @Injectable()
 export class CompetencyMapService {
+  private readonly logger = new Logger(CompetencyMapService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -388,7 +390,14 @@ export class CompetencyMapService {
           const order = { HIGH: 0, MEDIUM: 1, LOW: 2 };
           return order[a.priority as GapPriority] - order[b.priority as GapPriority];
         });
-      } catch {}
+      } catch (e) {
+        this.logger.warn({
+          userId,
+          targetRole,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao calcular gap analysis — a devolver sem gaps calculados',
+        });
+      }
     }
 
     const missingMandatory = gaps.filter(g => g.hasGap && g.mandatory);
@@ -635,7 +644,12 @@ export class CompetencyMapService {
           take: 5,
         }) ?? []
       );
-    } catch {
+    } catch (e) {
+      this.logger.warn({
+        skillIds,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao procurar cursos recomendados para os gaps',
+      });
       return [];
     }
   }
@@ -646,6 +660,13 @@ export class CompetencyMapService {
       const managerId = (user as any)?.employee?.managerId;
       if (managerId)
         await this.prisma.notificationLog.create({ data: { userId: managerId, type, message } });
-    } catch {}
+    } catch (e) {
+      this.logger.warn({
+        userId,
+        type,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao notificar gestor',
+      });
+    }
   }
 }

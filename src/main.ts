@@ -23,11 +23,17 @@ async function bootstrap() {
   // Rede de segurança ao nível do processo — sem isto, uma promise não apanhada
   // ou uma excepção síncrona fora do pipeline do Nest morre sem log estruturado.
   process.on('unhandledRejection', (reason: unknown) => {
-    logger.fatal({ err: reason }, 'unhandledRejection — encerrando processo');
+    logger.fatal({
+      err: { message: reason instanceof Error ? reason.message : String(reason) },
+      msg: 'unhandledRejection — encerrando processo',
+    });
     process.exit(1);
   });
   process.on('uncaughtException', (err: Error) => {
-    logger.fatal({ err }, 'uncaughtException — encerrando processo');
+    logger.fatal({
+      err: { message: err.message, stack: err.stack },
+      msg: 'uncaughtException — encerrando processo',
+    });
     process.exit(1);
   });
 

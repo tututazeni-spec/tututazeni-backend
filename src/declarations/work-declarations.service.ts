@@ -2,7 +2,7 @@
 // Módulo 2 — Work Declarations
 // Responsabilidade: formulários dinâmicos de compliance, onboarding, periódicos
 // ─────────────────────────────────────────────────────────────────────────────
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import {
@@ -20,6 +20,8 @@ import {
 
 @Injectable()
 export class WorkDeclarationsService {
+  private readonly logger = new Logger(WorkDeclarationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -488,7 +490,14 @@ export class WorkDeclarationsService {
   private async notifyUser(userId: number, type: string, message: string) {
     try {
       await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } });
-    } catch {}
+    } catch (e) {
+      this.logger.warn({
+        userId,
+        type,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao notificar utilizador',
+      });
+    }
   }
 
   private async notifyRH(type: string, message: string) {
@@ -498,7 +507,13 @@ export class WorkDeclarationsService {
         await this.prisma.notificationLog.create({
           data: { userId: hr.id, type, message, success: true },
         });
-    } catch {}
+    } catch (e) {
+      this.logger.warn({
+        type,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao notificar RH',
+      });
+    }
   }
 
   // ── Auto-trigger (chamado por outros módulos) ─────────────────────────────

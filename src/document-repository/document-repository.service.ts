@@ -1,12 +1,14 @@
 ﻿// ─── src/document-repository/document-repository.service.ts ──────────────────
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
+import { sanitizeForLog } from '../common/logging/sanitize';
 import * as crypto from 'crypto';
 import { hashSharePassword, verifySharePassword } from './share-password';
 import {
@@ -63,6 +65,8 @@ function buildAccessWhere(userId: number, userDept?: string, role?: string) {
 
 @Injectable()
 export class DocumentRepositoryService {
+  private readonly logger = new Logger(DocumentRepositoryService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -664,12 +668,28 @@ export class DocumentRepositoryService {
       await this.prisma.docAuditLog.create({
         data: { documentId, userId, action, metadata: metadata },
       });
-    } catch {}
+    } catch (e) {
+      this.logger.warn({
+        documentId,
+        userId,
+        action,
+        metadata: sanitizeForLog(metadata),
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar audit log de documento',
+      });
+    }
   }
 
   private async notify(userId: number, type: string, message: string) {
     try {
       await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } });
-    } catch {}
+    } catch (e) {
+      this.logger.warn({
+        userId,
+        type,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao notificar utilizador',
+      });
+    }
   }
 }
