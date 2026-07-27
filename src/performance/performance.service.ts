@@ -109,7 +109,15 @@ export class PerformanceService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: u.id,
+            action: 'PERFORMANCE_CYCLE_STARTED',
+            cycleId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de início de ciclo de avaliação',
+          });
+        });
     }
 
     return updated;
@@ -215,7 +223,15 @@ export class PerformanceService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.userId,
+          action: 'PERFORMANCE_REVIEW_CREATED',
+          reviewId: review.id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de avaliação de desempenho iniciada',
+        });
+      });
 
     return review;
   }
@@ -339,7 +355,15 @@ export class PerformanceService {
               metadata: JSON.stringify({}),
             },
           })
-          .catch(() => {});
+          .catch(e => {
+            this.logger.warn({
+              userId: user.managerId,
+              action: 'SELF_REVIEW_COMPLETED',
+              reviewId: dto.reviewId,
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao criar notificação de autoavaliação concluída para o gestor',
+            });
+          });
       }
     }
 
@@ -423,7 +447,15 @@ export class PerformanceService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: dto.targetUserId,
+            action: 'FEEDBACK_RECEIVED',
+            giverId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de feedback contínuo recebido',
+          });
+        });
     }
 
     return feedback;
@@ -486,7 +518,15 @@ export class PerformanceService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: review.userId,
+          action: 'PERFORMANCE_PUBLISHED',
+          reviewId: dto.reviewId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de publicação de avaliação de desempenho',
+        });
+      });
 
     return { message: 'Calibração aplicada e avaliação publicada' };
   }
@@ -529,7 +569,15 @@ export class PerformanceService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: rh.id,
+            action: 'PERFORMANCE_DISPUTE',
+            reviewId: dto.reviewId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar RH sobre disputa de avaliação',
+          });
+        });
     }
 
     return dispute;

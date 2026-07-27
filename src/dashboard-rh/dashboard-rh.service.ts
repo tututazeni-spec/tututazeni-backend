@@ -1,5 +1,5 @@
 // src/dashboard-rh/dashboard-rh.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
@@ -62,6 +62,8 @@ function healthStatusInverse(
 
 @Injectable()
 export class DashboardRhService {
+  private readonly logger = new Logger(DashboardRhService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
@@ -113,7 +115,14 @@ export class DashboardRhService {
             where: { createdAt: { gte: mS1 } },
             _avg: { score: true },
           })
-          .catch(() => ({ _avg: { score: null } })),
+          .catch((e: unknown) => {
+            this.logger.warn({
+              action: 'DASHBOARD_RH_FULL_AVG_PERF',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao obter score médio de performance no dashboard RH completo',
+            });
+            return { _avg: { score: null } };
+          }),
         this.prisma.read.developmentPlan.count({ where: { status: 'ACTIVE', isTemplate: false } }),
         this.prisma.read.enrollment.count({
           where: { status: 'CONCLUIDO', enrolledAt: { gte: mS } },
@@ -122,7 +131,14 @@ export class DashboardRhService {
           .count({
             where: { course: { mandatory: true } as any, status: 'CONCLUIDO' },
           })
-          .catch(() => 0),
+          .catch((e: unknown) => {
+            this.logger.warn({
+              action: 'DASHBOARD_RH_FULL_MANDATORY_COMPLIANCE',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao obter total de formações obrigatórias concluídas no dashboard RH completo',
+            });
+            return 0;
+          }),
         this.prisma.read.surveyResponse.count({ where: { createdAt: { gte: mS } } }),
         this.prisma.read.avatarSession.count({
           where: { status: 'COMPLETED', startedAt: { gte: mS } },
@@ -134,7 +150,14 @@ export class DashboardRhService {
             orderBy: { _count: { id: 'desc' } },
             take: 5,
           })
-          .catch(() => [] as any[]),
+          .catch((e: unknown) => {
+            this.logger.warn({
+              action: 'DASHBOARD_RH_FULL_TOP_BADGES',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao obter top de atribuições de badges no dashboard RH completo',
+            });
+            return [] as any[];
+          }),
         this.prisma.auditLog
           .findMany({
             where: { timestamp: { gte: mS } },
@@ -142,7 +165,14 @@ export class DashboardRhService {
             orderBy: { timestamp: 'desc' },
             take: 10,
           })
-          .catch(() => [] as any[]),
+          .catch((e: unknown) => {
+            this.logger.warn({
+              action: 'DASHBOARD_RH_FULL_RECENT_ACTIVITY',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao obter actividade recente (audit log) no dashboard RH completo',
+            });
+            return [] as any[];
+          }),
       ]);
 
       const total = totalActive + totalInactive;
@@ -337,7 +367,15 @@ export class DashboardRhService {
         orderBy: { score: 'asc' },
         take: 10,
       })
-      .catch(() => [] as any[]);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          months,
+          action: 'DASHBOARD_RH_TURNOVER_AT_RISK',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter utilizadores em risco de saída no painel de turnover',
+        });
+        return [] as any[];
+      });
 
     const turnoverRate = pct(inactive, total);
 
@@ -382,7 +420,15 @@ export class DashboardRhService {
           where: { createdAt: { gte: mS }, user: uWhere },
           _avg: { score: true },
         })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            departmentId,
+            action: 'DASHBOARD_RH_ENGAGEMENT_AVG_SCORE',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter score médio de surveys no painel de engagement',
+          });
+          return { _avg: { score: null } };
+        }),
       safeM(this.prisma, 'recognition').count({ where: { createdAt: { gte: mS } } }),
       this.prisma.read.avatarSession.count({
         where: { status: 'COMPLETED', startedAt: { gte: mS }, user: uWhere },
@@ -424,7 +470,15 @@ export class DashboardRhService {
           .map(d => ({ department: d.name, responses: deptC[d.id] ?? 0 }))
           .sort((a, b) => b.responses - a.responses);
       })
-      .catch(() => [] as any[]);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          departmentId,
+          action: 'DASHBOARD_RH_ENGAGEMENT_DEPT_BREAKDOWN',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter distribuição de participação em surveys por departamento',
+        });
+        return [] as any[];
+      });
 
     return {
       engagementScore,
@@ -476,7 +530,15 @@ export class DashboardRhService {
           having: { currentLevel: { _avg: { gte: 4 } } },
         })
         .then(r => r.length)
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            departmentId,
+            action: 'DASHBOARD_RH_PERFORMANCE_HIPOS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter contagem de HiPos (alto potencial) no painel de performance',
+          });
+          return 0;
+        }),
       this.prisma.read.developmentPlan.count({
         where: { status: 'ACTIVE', isTemplate: false, user: uWhere },
       }),
@@ -548,7 +610,15 @@ export class DashboardRhService {
           where: uWhere,
           include: { skill: { select: { id: true, name: true, type: true } } },
         })
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            departmentId,
+            action: 'DASHBOARD_RH_SKILLS_LEGACY',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter competências legadas (legacyEmployeeSkill) no painel de skills',
+          });
+          return [] as any[];
+        }),
       this.prisma.read.user.count({
         where: { active: true, ...(departmentId ? { departmentId } : {}) },
       }),
@@ -614,10 +684,26 @@ export class DashboardRhService {
       }),
       this.prisma.enrollment
         .count({ where: { course: { mandatory: true } as any, ...uWhere } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            departmentId,
+            action: 'DASHBOARD_RH_TRAINING_MANDATORY',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter total de formações obrigatórias no painel de training',
+          });
+          return 0;
+        }),
       this.prisma.enrollment
         .count({ where: { course: { mandatory: true } as any, status: 'CONCLUIDO', ...uWhere } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            departmentId,
+            action: 'DASHBOARD_RH_TRAINING_MANDATORY_COMPLETE',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter total de formações obrigatórias concluídas no painel de training',
+          });
+          return 0;
+        }),
       this.prisma.enrollment
         .groupBy({
           by: ['courseId'],
@@ -675,13 +761,34 @@ export class DashboardRhService {
     const [mandatory, mandatoryDone, auditLogs, certs] = await Promise.all([
       this.prisma.enrollment
         .count({ where: { course: { mandatory: true } as any } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_COMPLIANCE_MANDATORY',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter total de formações obrigatórias no painel de compliance',
+          });
+          return 0;
+        }),
       this.prisma.enrollment
         .count({ where: { course: { mandatory: true } as any, status: 'CONCLUIDO' } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_COMPLIANCE_MANDATORY_DONE',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter total de formações obrigatórias concluídas no painel de compliance',
+          });
+          return 0;
+        }),
       this.prisma.read.auditLog
         .count({ where: { timestamp: { gte: monthStart() } } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_COMPLIANCE_AUDIT_LOGS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter contagem de eventos de audit log no painel de compliance',
+          });
+          return 0;
+        }),
       this.prisma.certificate
         .findMany({
           where: { issuedAt: { gte: monthStart(3) } },
@@ -691,7 +798,14 @@ export class DashboardRhService {
           orderBy: { issuedAt: 'desc' },
           take: 10,
         })
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_COMPLIANCE_CERTS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter certificados recentes no painel de compliance',
+          });
+          return [] as any[];
+        }),
     ]);
 
     const mandatoryRate = pct(mandatoryDone, mandatory);
@@ -826,7 +940,14 @@ export class DashboardRhService {
           });
           return users;
         })
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_TALENT_HIPOS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter colaboradores de alto potencial no pipeline de talento',
+          });
+          return [] as any[];
+        }),
     ]);
 
     const covered = positions.filter(p => p._count.successionPlans > 0).length;
@@ -861,22 +982,50 @@ export class DashboardRhService {
         .count({
           where: { status: { notIn: ['COMPLETED', 'CANCELLED'] }, dueDate: { lt: new Date() } },
         })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_ALERTS_OVERDUE',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter acções de PDI em atraso nos alertas do dashboard RH',
+          });
+          return 0;
+        }),
       this.prisma.enrollment
         .count({
           where: { course: { mandatory: true } as any, status: { not: 'CONCLUIDO' } },
         })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_ALERTS_MANDATORY_PENDING',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter formações obrigatórias pendentes nos alertas do dashboard RH',
+          });
+          return 0;
+        }),
       this.prisma.performanceReview
         .count({ where: { score: { lt: 2 }, status: 'COMPLETED' } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_ALERTS_AT_RISK_PERF',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter colaboradores com performance crítica nos alertas do dashboard RH',
+          });
+          return 0;
+        }),
       this.prisma.surveyResponse
         .count({ where: { createdAt: { gte: mS } } })
         .then(async r => {
           const total = await this.prisma.read.user.count({ where: { active: true } });
           return total > 0 && r / total < 0.3; // <30% participation = low
         })
-        .catch(() => false),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_ALERTS_LOW_ENGAGEMENT',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular baixa participação em surveys nos alertas do dashboard RH',
+          });
+          return false;
+        }),
     ]);
 
     if (atRiskPerf > 0)
@@ -939,10 +1088,24 @@ export class DashboardRhService {
             reason: 'Baixa performance + histórico de avaliações',
           })),
         )
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_PREDICTIONS_TURNOVER_RISK',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular previsão de risco de saída no dashboard RH',
+          });
+          return [] as any[];
+        }),
       this.prisma.performanceReview
         .count({ where: { score: { lt: 2 }, status: 'COMPLETED' } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_PREDICTIONS_LOW_PERF',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter contagem de baixa performance nas previsões do dashboard RH',
+          });
+          return 0;
+        }),
       this.prisma.read.surveyResponse.count({ where: { createdAt: { gte: monthStart() } } }),
     ]);
 

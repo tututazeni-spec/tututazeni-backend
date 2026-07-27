@@ -1,7 +1,8 @@
 // src/reports/reports.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReportFilterDto, SaveReportDto, CreateScheduleDto, ReportCategory } from './reports.dto';
+import { sanitizeForLog } from '../common/logging/sanitize';
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS
@@ -40,6 +41,8 @@ const TARGET_SKILL_LEVEL = 5;
 
 @Injectable()
 export class ReportsService {
+  private readonly logger = new Logger(ReportsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -226,7 +229,15 @@ export class ReportsService {
             },
             _avg: { score: true },
           })
-          .catch(() => ({ _avg: { score: null } })),
+          .catch(e => {
+            this.logger.warn({
+              filter,
+              metric: 'avgPerformance',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao calcular performance média para relatório de formação',
+            });
+            return { _avg: { score: null } };
+          }),
       ]);
 
     const completionRate = pct(completed, enrollments);
@@ -504,7 +515,15 @@ export class ReportsService {
           take: 100,
         })
         .then(r => r.length)
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            filter,
+            metric: 'hiPos',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar High Potentials para relatório de talento',
+          });
+          return 0;
+        }),
       this.prismaRead.successionPlan.findMany({
         include: {
           position: { select: { name: true, level: true } },
@@ -569,7 +588,15 @@ export class ReportsService {
         .count({
           where: { course: { mandatory: true } as any, ...(uWhere ? { user: uWhere } : {}) },
         })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            filter,
+            metric: 'mandatoryTotal',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar matrículas obrigatórias para relatório de compliance',
+          });
+          return 0;
+        }),
       this.prismaRead.enrollment
         .count({
           where: {
@@ -578,12 +605,28 @@ export class ReportsService {
             ...(uWhere ? { user: uWhere } : {}),
           },
         })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            filter,
+            metric: 'mandatoryCompleted',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar matrículas obrigatórias concluídas para relatório de compliance',
+          });
+          return 0;
+        }),
       this.prismaRead.auditLog
         .count({
           where: { timestamp: { gte: range.gte, lte: range.lte } },
         })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            filter,
+            metric: 'auditLogs',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar eventos de auditoria para relatório de compliance',
+          });
+          return 0;
+        }),
       this.prismaRead.certificate
         .findMany({
           where: { issuedAt: { gte: range.gte, lte: range.lte } },
@@ -593,7 +636,15 @@ export class ReportsService {
           orderBy: { issuedAt: 'desc' },
           take: 20,
         })
-        .catch(() => [] as any[]),
+        .catch(e => {
+          this.logger.warn({
+            filter,
+            metric: 'certifications',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter certificações emitidas para relatório de compliance',
+          });
+          return [] as any[];
+        }),
     ]);
 
     const mandatoryRate = pct(mandatoryCompleted, mandatoryTotal);
@@ -660,7 +711,14 @@ export class ReportsService {
     const payslips = records.map(r => {
       try {
         return { ...r, ...JSON.parse(r.description ?? '{}') };
-      } catch {
+      } catch (e) {
+        this.logger.warn({
+          historyRecordId: r.id,
+          period,
+          record: sanitizeForLog(r),
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao interpretar JSON de registo de folha de pagamento — a usar registo em bruto',
+        });
         return r as any;
       }
     });
@@ -730,7 +788,15 @@ export class ReportsService {
               timestamp: { gte: range.gte, lte: range.lte },
             },
           })
-          .catch(() => 0),
+          .catch(e => {
+            this.logger.warn({
+              filter,
+              metric: 'contentViews',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao contar visualizações de conteúdo para relatório de uso da plataforma',
+            });
+            return 0;
+          }),
         this.prismaRead.auditLog
           .groupBy({
             by: ['entityId'],
@@ -743,7 +809,15 @@ export class ReportsService {
             orderBy: { _count: { id: 'desc' } },
             take: 10,
           })
-          .catch(() => [] as any[]),
+          .catch(e => {
+            this.logger.warn({
+              filter,
+              metric: 'topContent',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao obter conteúdo mais visto para relatório de uso da plataforma',
+            });
+            return [] as any[];
+          }),
         this.prismaRead.avatarSession.count({
           where: { startedAt: { gte: range.gte, lte: range.lte } },
         }),
@@ -752,7 +826,15 @@ export class ReportsService {
         }),
         this.prismaRead.auditLog
           .count({ where: { timestamp: { gte: range.gte, lte: range.lte } } })
-          .catch(() => 0),
+          .catch(e => {
+            this.logger.warn({
+              filter,
+              metric: 'auditActions',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao contar acções de auditoria para relatório de uso da plataforma',
+            });
+            return 0;
+          }),
         this.prismaRead.auditLog
           .groupBy({
             by: ['userId'],
@@ -762,7 +844,15 @@ export class ReportsService {
             take: 5000,
           })
           .then(r => r.length)
-          .catch(() => 0),
+          .catch(e => {
+            this.logger.warn({
+              filter,
+              metric: 'activeUsers',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao contar utilizadores activos para relatório de uso da plataforma',
+            });
+            return 0;
+          }),
       ]);
 
     // Enrich top content

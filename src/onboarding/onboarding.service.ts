@@ -276,7 +276,15 @@ export class OnboardingService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.userId,
+          action: 'ONBOARDING_STARTED',
+          planId: plan.id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de início de onboarding',
+        });
+      });
 
     // Notificar buddy
     if (dto.buddyId) {
@@ -289,7 +297,15 @@ export class OnboardingService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: dto.buddyId,
+            action: 'ONBOARDING_BUDDY_ASSIGNED',
+            planId: plan.id,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de atribuição de buddy',
+          });
+        });
     }
 
     return this.findOne(plan.id);
@@ -380,7 +396,16 @@ export class OnboardingService {
             create: { userId, points: xp },
             update: { points: { increment: xp } },
           })
-          .catch(() => {});
+          .catch(e => {
+            this.logger.warn({
+              userId,
+              action: 'completeTask.awardXp',
+              taskInstanceId: dto.taskInstanceId,
+              xp,
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao atribuir XP por conclusão de tarefa de onboarding',
+            });
+          });
       }
 
       // Verificar se o plano está 100% concluído
@@ -435,7 +460,16 @@ export class OnboardingService {
             create: { userId: (instance.plan as any).userId, points: xp },
             update: { points: { increment: xp } },
           })
-          .catch(() => {});
+          .catch(e => {
+            this.logger.warn({
+              userId: (instance.plan as any).userId,
+              action: 'approveTask.awardXp',
+              taskInstanceId: dto.taskInstanceId,
+              xp,
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao atribuir XP por aprovação de tarefa de onboarding',
+            });
+          });
       }
       await this.checkPlanCompletion((instance as any).planId);
     }
@@ -469,7 +503,15 @@ export class OnboardingService {
           create: { userId: plan.userId, points: 500 },
           update: { points: { increment: 500 } },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: plan.userId,
+            action: 'checkPlanCompletion.awardXp',
+            planId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao atribuir XP por conclusão de onboarding',
+          });
+        });
 
       await this.prisma.notificationLog
         .create({
@@ -480,7 +522,15 @@ export class OnboardingService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: plan.userId,
+            action: 'ONBOARDING_COMPLETED',
+            planId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de conclusão de onboarding',
+          });
+        });
 
       this.logger.log(`Onboarding ${planId} concluído — utilizador ${plan.userId}`);
     } else {

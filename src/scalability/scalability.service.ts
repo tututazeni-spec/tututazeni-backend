@@ -375,9 +375,14 @@ export class ScalabilityService {
           data: { runCount: { increment: 1 }, lastRunAt: new Date(), lastRunStatus: 'SUCCESS' },
         });
       } catch (err) {
-        this.logger.error(
-          `Erro na automação ${rule.id}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        this.logger.error({
+          ruleId: rule.id,
+          executionId: execution.id,
+          tenantId,
+          triggerType,
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Erro ao executar regra de automação',
+        });
         await this.prisma.automationExecution.update({
           where: { id: execution.id },
           data: {
@@ -458,6 +463,13 @@ export class ScalabilityService {
             results.push({ type: action.type, status: 'SKIPPED', reason: 'Unknown action type' });
         }
       } catch (err) {
+        this.logger.warn({
+          tenantId,
+          userId: payload.userId,
+          actionType: action.type,
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao executar acção de automação',
+        });
         results.push({
           type: action.type,
           status: 'ERROR',
@@ -603,9 +615,11 @@ export class ScalabilityService {
       // Verificar thresholds para gerar alertas
       await this.evaluateAlertThresholds(snapshot);
     } catch (err) {
-      this.logger.warn(
-        `Falha ao capturar métricas: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      this.logger.warn({
+        action: 'CAPTURE_SYSTEM_METRICS',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao capturar métricas do sistema (cron)',
+      });
     }
   }
 
@@ -787,6 +801,13 @@ export class ScalabilityService {
           result.created++;
         }
       } catch (err) {
+        this.logger.warn({
+          tenantId: dto.tenantId,
+          row: i + 1,
+          email: row?.email,
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao importar linha de utilizador em bulk import',
+        });
         result.failed++;
         result.errors.push({
           row: i + 1,

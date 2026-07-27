@@ -73,9 +73,14 @@ export class AuditService {
         backoff: 5000,
       });
     } catch (queueErr) {
-      this.logger.warn(
-        `Falha ao enfileirar auditoria, a escrever diretamente: ${queueErr instanceof Error ? queueErr.message : String(queueErr)}`,
-      );
+      this.logger.warn({
+        userId: data.userId,
+        action: data.action,
+        entity: data.entity,
+        entityId: data.entityId,
+        err: { message: queueErr instanceof Error ? queueErr.message : String(queueErr) },
+        msg: 'Falha ao enfileirar auditoria, a escrever diretamente',
+      });
       await this.prisma.auditLog.create({ data }); // não perder compliance
     }
   }

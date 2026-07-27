@@ -1,5 +1,5 @@
 // src/dashboard/dashboard.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
@@ -58,6 +58,8 @@ function safeM(prisma: any, name: string) {
 
 @Injectable()
 export class DashboardService {
+  private readonly logger = new Logger(DashboardService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
@@ -121,7 +123,15 @@ export class DashboardService {
       }),
       this.prisma.evaluationRequest
         .count({ where: { evaluatorId: userId, status: 'PENDING' } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            action: 'DASHBOARD_MY_PENDING_EVALS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter contagem de avaliações pendentes para o dashboard pessoal',
+          });
+          return 0;
+        }),
       this.prisma.read.avatarSession.count({ where: { userId, status: 'COMPLETED' } }),
       this.prisma.read.userCompetency.findMany({
         where: { userId },
@@ -135,7 +145,15 @@ export class DashboardService {
           take: 5,
           select: { id: true, type: true, message: true, createdAt: true },
         })
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            action: 'DASHBOARD_MY_NOTIFICATIONS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter notificações não lidas para o dashboard pessoal',
+          });
+          return [] as any[];
+        }),
     ]);
 
     // PDI stats
@@ -271,15 +289,45 @@ export class DashboardService {
       }),
       this.prisma.enrollment
         .count({ where: { userId: { in: teamIds }, course: { mandatory: true } } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            departmentId: deptId,
+            period: filters.period,
+            action: 'DASHBOARD_MANAGER_MANDATORY_COUNT',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter contagem de formações obrigatórias da equipa',
+          });
+          return 0;
+        }),
       this.prisma.enrollment
         .count({
           where: { userId: { in: teamIds }, course: { mandatory: true }, status: 'CONCLUIDO' },
         })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            departmentId: deptId,
+            period: filters.period,
+            action: 'DASHBOARD_MANAGER_MANDATORY_COMPLETE',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter contagem de formações obrigatórias concluídas pela equipa',
+          });
+          return 0;
+        }),
       this.prisma.evaluationRequest
         .count({ where: { evaluatorId: userId, status: 'PENDING' } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            departmentId: deptId,
+            period: filters.period,
+            action: 'DASHBOARD_MANAGER_PENDING_EVALS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter contagem de avaliações pendentes para o dashboard do gestor',
+          });
+          return 0;
+        }),
       this.prisma.read.surveyResponse.count({
         where: { userId: { in: teamIds }, createdAt: { gte: since } },
       }),
@@ -291,13 +339,33 @@ export class DashboardService {
           where: { userId: { in: teamIds }, createdAt: { gte: since } },
           _avg: { score: true },
         })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            departmentId: deptId,
+            period: filters.period,
+            action: 'DASHBOARD_MANAGER_AVG_PERF',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter média de performance actual da equipa',
+          });
+          return { _avg: { score: null } };
+        }),
       this.prisma.performanceReview
         .aggregate({
           where: { userId: { in: teamIds }, createdAt: { gte: prev, lt: since } },
           _avg: { score: true },
         })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            departmentId: deptId,
+            period: filters.period,
+            action: 'DASHBOARD_MANAGER_PREV_AVG_PERF',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter média de performance do período anterior da equipa',
+          });
+          return { _avg: { score: null } };
+        }),
     ]);
 
     const avgScore = avgPerf._avg.score;
@@ -425,7 +493,16 @@ export class DashboardService {
           where: { createdAt: { gte: since }, user: deptFilter },
           _avg: { score: true },
         })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            departmentId: filters.departmentId,
+            period: filters.period,
+            action: 'DASHBOARD_ORG_AVG_PERF',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter média de performance organizacional',
+          });
+          return { _avg: { score: null } };
+        }),
       this.prisma.read.engagementSurvey.count({ where: { status: 'ACTIVE' } }),
       this.prisma.read.surveyResponse.count({
         where: { createdAt: { gte: since }, user: deptFilter },
@@ -436,7 +513,18 @@ export class DashboardService {
       this.prisma.read.developmentPlan.count({
         where: { status: 'COMPLETED', isTemplate: false, user: deptFilter },
       }),
-      this.prisma.read.evaluationRequest.count({ where: { status: 'PENDING' } }).catch(() => 0),
+      this.prisma.read.evaluationRequest
+        .count({ where: { status: 'PENDING' } })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            departmentId: filters.departmentId,
+            period: filters.period,
+            action: 'DASHBOARD_ORG_PENDING_EVALS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter contagem de avaliações pendentes a nível organizacional',
+          });
+          return 0;
+        }),
       // Dept breakdown
       this.prisma.read.department.findMany({
         select: { id: true, name: true, _count: { select: { users: true } } },
@@ -453,7 +541,16 @@ export class DashboardService {
           take: 100,
         })
         .then(r => r.length)
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            departmentId: filters.departmentId,
+            period: filters.period,
+            action: 'DASHBOARD_ORG_HIPO_COUNT',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular contagem de colaboradores High Potential',
+          });
+          return 0;
+        }),
       // Succession coverage
       this.prisma.successionPlan
         .count()
@@ -461,7 +558,16 @@ export class DashboardService {
           const positions = await this.prisma.read.position.count();
           return positions > 0 ? +((count / positions) * 100).toFixed(1) : 0;
         })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            departmentId: filters.departmentId,
+            period: filters.period,
+            action: 'DASHBOARD_ORG_SUCCESSION_COVERAGE',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular cobertura de sucessão organizacional',
+          });
+          return 0;
+        }),
       // Top content
       this.prisma.auditLog
         .groupBy({
@@ -471,12 +577,30 @@ export class DashboardService {
           orderBy: { _count: { id: 'desc' } },
           take: 5,
         })
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            departmentId: filters.departmentId,
+            period: filters.period,
+            action: 'DASHBOARD_ORG_TOP_CONTENT',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter conteúdos mais vistos a nível organizacional',
+          });
+          return [] as any[];
+        }),
       // Training hours estimate (completions × avg course workload)
       this.prisma.enrollment
         .count({ where: { status: 'CONCLUIDO', user: deptFilter, enrolledAt: { gte: since } } })
         .then(c => c * 2)
-        .catch(() => 0), // ~2h avg
+        .catch((e: unknown) => {
+          this.logger.warn({
+            departmentId: filters.departmentId,
+            period: filters.period,
+            action: 'DASHBOARD_ORG_TRAINING_HOURS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular estimativa de horas de formação organizacional',
+          });
+          return 0;
+        }), // ~2h avg
     ]);
 
     // Enrich top content
@@ -585,13 +709,31 @@ export class DashboardService {
             where: { user: { departmentId }, createdAt: { gte: since } },
             _avg: { score: true },
           })
-          .catch(() => ({ _avg: { score: null } })),
+          .catch((e: unknown) => {
+            this.logger.warn({
+              departmentId,
+              period,
+              action: 'DASHBOARD_DEPT_AVG_SCORE',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao obter média de performance actual do departamento',
+            });
+            return { _avg: { score: null } };
+          }),
         this.prisma.performanceReview
           .aggregate({
             where: { user: { departmentId }, createdAt: { gte: prev, lt: since } },
             _avg: { score: true },
           })
-          .catch(() => ({ _avg: { score: null } })),
+          .catch((e: unknown) => {
+            this.logger.warn({
+              departmentId,
+              period,
+              action: 'DASHBOARD_DEPT_PREV_AVG_SCORE',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao obter média de performance do período anterior do departamento',
+            });
+            return { _avg: { score: null } };
+          }),
         this.prisma.read.developmentPlan.count({
           where: { status: 'ACTIVE', isTemplate: false, user: { departmentId } },
         }),
@@ -643,7 +785,16 @@ export class DashboardService {
     // Pending evaluations
     const pendingEvals = await this.prisma.evaluationRequest
       .count({ where: { evaluatorId: userId, status: 'PENDING' } })
-      .catch(() => 0);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          roleCode,
+          action: 'DASHBOARD_ALERTS_PENDING_EVALS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter contagem de avaliações pendentes para os alertas',
+        });
+        return 0;
+      });
     if (pendingEvals > 0)
       alerts.push({
         type: 'EVALUATION',
@@ -661,7 +812,16 @@ export class DashboardService {
           dueDate: { lt: new Date() },
         },
       })
-      .catch(() => 0);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          roleCode,
+          action: 'DASHBOARD_ALERTS_OVERDUE_ACTIONS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter contagem de acções de PDI em atraso para os alertas',
+        });
+        return 0;
+      });
     if (overdueActions > 0)
       alerts.push({
         type: 'PDI',
@@ -678,7 +838,16 @@ export class DashboardService {
           enrollments: { none: { userId, status: 'CONCLUIDO' } },
         } as any,
       })
-      .catch(() => 0);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          roleCode,
+          action: 'DASHBOARD_ALERTS_MANDATORY_PENDING',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter contagem de formações obrigatórias por concluir para os alertas',
+        });
+        return 0;
+      });
     if (mandatoryPending > 0)
       alerts.push({
         type: 'TRAINING',
@@ -759,7 +928,14 @@ export class DashboardService {
           generatedAt: new Date(),
         },
       })
-      .catch(() => ({ message: 'Snapshot gerado (modelo pode requerer migration)', data }));
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'DASHBOARD_SNAPSHOT_CREATE',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao gravar snapshot do dashboard organizacional (modelo pode requerer migration)',
+        });
+        return { message: 'Snapshot gerado (modelo pode requerer migration)', data };
+      });
   }
 
   // ══════════════════════════════════════════════════════
@@ -799,7 +975,15 @@ export class DashboardService {
           select: { id: true, name: true, type: true },
           take: 5,
         })
-        .catch(() => [] as any[]),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            query,
+            action: 'DASHBOARD_GLOBAL_SEARCH_COMPETENCIES',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao pesquisar competências na pesquisa global',
+          });
+          return [] as any[];
+        }),
     ]);
 
     return { users, courses, competencies };
@@ -895,7 +1079,14 @@ export class DashboardService {
       }),
       this.prisma.user
         .count({ where: { active: true, legacySkills: { some: {} } } })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_TALENT_HEALTH_SKILLS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter contagem de colaboradores com competências para o Talent Health Score',
+          });
+          return 0;
+        }),
       this.prisma.read.user.count({ where: { active: true, performanceReviews: { some: {} } } }),
     ]);
     const pdpCoverage = total > 0 ? (withPlan / total) * 100 : 0;
@@ -915,7 +1106,14 @@ export class DashboardService {
         include: { responses: { include: { answers: { include: { question: true } } } } },
         orderBy: { createdAt: 'desc' },
       })
-      .catch(() => null);
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'DASHBOARD_ENPS_SURVEY',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter inquérito ENPS mais recente',
+        });
+        return null;
+      });
     if (!survey) return null;
 
     const scores = (survey?.responses ?? [])

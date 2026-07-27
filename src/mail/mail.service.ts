@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import type Mail from 'nodemailer/lib/mailer';
+import { sanitizeForLog } from '../common/logging/sanitize';
 
 @Injectable()
 export class MailService implements OnModuleInit {
@@ -60,12 +61,26 @@ export class MailService implements OnModuleInit {
 
   private async send(options: Mail.Options): Promise<void> {
     if (!this.transporter) {
-      this.logger.warn(`Email não enviado (SMTP não configurado): ${String(options.to)}`);
+      this.logger.warn({
+        to: sanitizeForLog(options.to),
+        subject: sanitizeForLog(options.subject),
+        msg: 'Email não enviado — SMTP não configurado',
+      });
       return;
     }
-    await this.transporter.sendMail({
-      from: process.env.SMTP_FROM ?? 'INNOVA <noreply@innova.ao>',
-      ...options,
-    });
+    try {
+      await this.transporter.sendMail({
+        from: process.env.SMTP_FROM ?? 'INNOVA <noreply@innova.ao>',
+        ...options,
+      });
+    } catch (err: unknown) {
+      this.logger.error({
+        to: sanitizeForLog(options.to),
+        subject: sanitizeForLog(options.subject),
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao enviar email via SMTP',
+      });
+      throw err;
+    }
   }
 }

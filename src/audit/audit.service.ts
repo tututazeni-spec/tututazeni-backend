@@ -71,11 +71,33 @@ export class AuditService {
       });
 
       // Detectar anomalias automaticamente
-      this.detectAnomalies(entry).catch(() => {});
+      this.detectAnomalies(entry).catch((err: unknown) =>
+        this.logger.warn({
+          action: dto.action,
+          entity: dto.entity,
+          entityId: dto.entityId,
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao detectar anomalias para este audit log',
+        }),
+      );
 
       return entry;
     } catch (e) {
-      this.logger.error('Falha ao registar audit log:', e);
+      // Falha aqui quebra a cadeia de hash de compliance — mantém-se sem rethrow
+      // para não reverter a operação de negócio que gerou este log, mas fica
+      // registada com todo o contexto para investigação (findAll/getStats não
+      // vão mostrar este evento).
+      this.logger.error({
+        userId: dto.userId,
+        action: dto.action,
+        entity: dto.entity,
+        entityId: dto.entityId,
+        err: {
+          message: e instanceof Error ? e.message : String(e),
+          stack: e instanceof Error ? e.stack : undefined,
+        },
+        msg: 'Falha ao registar audit log — cadeia de compliance quebrada',
+      });
     }
   }
 
@@ -201,7 +223,12 @@ export class AuditService {
         where: { userId, action: 'FAILED', timestamp: { gte: window5min } },
       });
       if (failCount >= 5) {
-        this.logger.warn(`⚠️ ANOMALIA: ${failCount} logins falhados para userId=${userId}`);
+        this.logger.warn({
+          userId,
+          action: 'ANOMALY_FAILED_LOGIN',
+          failCount,
+          msg: 'Anomalia: múltiplos logins falhados em 5min',
+        });
         await this.prisma.notificationLog
           .create({
             data: {
@@ -212,7 +239,14 @@ export class AuditService {
               metadata: JSON.stringify({}),
             },
           })
-          .catch(() => {});
+          .catch((err: unknown) =>
+            this.logger.warn({
+              userId,
+              action: 'ANOMALY_FAILED_LOGIN',
+              err: { message: err instanceof Error ? err.message : String(err) },
+              msg: 'Falha ao registar notificação de alerta de segurança',
+            }),
+          );
       }
     }
 
@@ -222,7 +256,12 @@ export class AuditService {
         where: { userId, action: 'EXPORT', timestamp: { gte: window1h } },
       });
       if (exportCount >= 3) {
-        this.logger.warn(`⚠️ ANOMALIA: ${exportCount} exportações em 1h para userId=${userId}`);
+        this.logger.warn({
+          userId,
+          action: 'ANOMALY_MASS_EXPORT',
+          exportCount,
+          msg: 'Anomalia: exportações em massa em 1h',
+        });
       }
     }
 
@@ -232,9 +271,12 @@ export class AuditService {
         where: { userId, action: 'DELETE', timestamp: { gte: window1h } },
       });
       if (deleteCount >= 10) {
-        this.logger.warn(
-          `⚠️ ANOMALIA: Deleção em massa — ${deleteCount} deletes em 1h userId=${userId}`,
-        );
+        this.logger.warn({
+          userId,
+          action: 'ANOMALY_MASS_DELETE',
+          deleteCount,
+          msg: 'Anomalia: deleção em massa em 1h',
+        });
       }
     }
   }

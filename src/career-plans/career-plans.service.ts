@@ -1,5 +1,5 @@
 // src/career-plans/career-plans.service.ts
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { assertCanAccess } from '../common/authz/ownership';
@@ -38,6 +38,8 @@ function readinessEmoji(level: ReadinessLevel): string {
 
 @Injectable()
 export class CareerPlansService {
+  private readonly logger = new Logger(CareerPlansService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -270,7 +272,14 @@ export class CareerPlansService {
           try {
             const readiness = await this.calculateReadiness(plan.userId, plan.targetRoleId);
             return { ...plan, readiness };
-          } catch {
+          } catch (e) {
+            this.logger.warn({
+              userId: plan.userId,
+              targetRoleId: plan.targetRoleId,
+              action: 'CALCULATE_READINESS_LIST',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao calcular prontidão do plano de carreira ao listar planos',
+            });
             return plan;
           }
         }
@@ -302,7 +311,15 @@ export class CareerPlansService {
     if (plan.targetRoleId) {
       try {
         readiness = await this.calculateReadiness(plan.userId, plan.targetRoleId);
-      } catch {}
+      } catch (e) {
+        this.logger.warn({
+          userId: plan.userId,
+          targetRoleId: plan.targetRoleId,
+          action: 'CALCULATE_READINESS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao calcular prontidão do plano de carreira',
+        });
+      }
     }
 
     return { ...plan, readiness };
@@ -327,7 +344,15 @@ export class CareerPlansService {
     if (plan.targetRoleId) {
       try {
         readiness = await this.calculateReadiness(userId, plan.targetRoleId);
-      } catch {}
+      } catch (e) {
+        this.logger.warn({
+          userId,
+          targetRoleId: plan.targetRoleId,
+          action: 'CALCULATE_READINESS_MY_PLAN',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao calcular prontidão do plano de carreira pessoal',
+        });
+      }
     }
 
     return { ...plan, readiness };
@@ -519,7 +544,16 @@ export class CareerPlansService {
             },
           } as any,
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.error({
+            userId: promotion.userId,
+            promotionId: id,
+            targetRoleId: promotion.targetRoleId,
+            action: 'APPLY_PROMOTION_ROLE_UPDATE',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao actualizar cargo do utilizador após aprovação de promoção',
+          });
+        });
 
       await this.prisma.employeeTimeline
         .create({
@@ -532,7 +566,15 @@ export class CareerPlansService {
             occurredAt: dto.effectiveDate ? new Date(dto.effectiveDate) : new Date(),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: promotion.userId,
+            promotionId: id,
+            action: 'CREATE_EMPLOYEE_TIMELINE_PROMOTED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao registar evento de promoção na timeline do colaborador',
+          });
+        });
 
       await this.notify(
         promotion.userId,
@@ -777,7 +819,13 @@ export class CareerPlansService {
           take: 5,
         }) ?? []
       );
-    } catch {
+    } catch (e) {
+      this.logger.warn({
+        skillIds,
+        action: 'GET_COURSES_FOR_SKILLS',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter cursos recomendados para as competências em falta',
+      });
       return [];
     }
   }
@@ -785,6 +833,14 @@ export class CareerPlansService {
   private async notify(userId: number, type: string, message: string) {
     try {
       await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } });
-    } catch {}
+    } catch (e) {
+      this.logger.warn({
+        userId,
+        type,
+        action: 'NOTIFY',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao criar notificação',
+      });
+    }
   }
 }

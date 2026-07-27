@@ -322,7 +322,15 @@ export class MicroLearningService {
           create: { userId, points: xp },
           update: { points: { increment: xp } },
         })
-        .catch(() => {});
+        .catch(e =>
+          this.logger.warn({
+            userId,
+            microLearningId: dto.microLearningId,
+            action: 'MICROLEARNING_XP',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao atribuir XP por conclusão de micro-learning',
+          }),
+        );
 
       await this.updateStreak(userId);
 
@@ -335,7 +343,15 @@ export class MicroLearningService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e =>
+          this.logger.warn({
+            userId,
+            microLearningId: dto.microLearningId,
+            action: 'MICROLEARNING_COMPLETED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar conclusão de micro-learning',
+          }),
+        );
     }
 
     return record;
@@ -541,7 +557,15 @@ export class MicroLearningService {
               metadata: JSON.stringify({}),
             },
           })
-          .catch(() => {});
+          .catch(e =>
+            this.logger.warn({
+              userId,
+              microLearningId: dto.microLearningId,
+              action: 'MICROLEARNING_DISPATCHED',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao notificar dispatch de micro-learning',
+            }),
+          );
       }
     }
 

@@ -171,7 +171,15 @@ export class DevelopmentPlansService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: data.userId,
+          action: 'PDI_CREATED',
+          planId: plan.id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de PDI criado',
+        });
+      });
 
     return plan;
   }
@@ -235,7 +243,16 @@ export class DevelopmentPlansService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: plan.userId,
+          approverId,
+          action: dto.decision === 'approve' ? 'PDI_APPROVED' : 'PDI_REJECTED',
+          planId: dto.planId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de decisão de aprovação de PDI',
+        });
+      });
 
     return updated;
   }
@@ -263,7 +280,15 @@ export class DevelopmentPlansService {
           fileUrl: `/certificates/${code}.pdf`,
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: plan.userId,
+          planId: id,
+          action: 'complete.issueCertificate',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao emitir certificado de conclusão de PDI',
+        });
+      });
 
     // XP
     await this.prisma.userPoints
@@ -272,7 +297,15 @@ export class DevelopmentPlansService {
         create: { userId: plan.userId, points: 300 },
         update: { points: { increment: 300 } },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: plan.userId,
+          planId: id,
+          action: 'complete.awardXp',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir XP por conclusão de PDI',
+        });
+      });
 
     // Notificar
     await this.prisma.notificationLog
@@ -284,7 +317,15 @@ export class DevelopmentPlansService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: plan.userId,
+          planId: id,
+          action: 'PDI_COMPLETED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de PDI concluído',
+        });
+      });
 
     return updated;
   }
@@ -366,7 +407,16 @@ export class DevelopmentPlansService {
           create: { userId, points: xp },
           update: { points: { increment: xp } },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            actionId,
+            xp,
+            action: 'updateAction.awardXp',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao atribuir XP por conclusão de acção de PDI',
+          });
+        });
 
       // Verificar se o plano está todo completo
       await this.recalcPlanProgress((action as any).planId);

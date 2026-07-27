@@ -1,3 +1,12 @@
+// Corre antes do NestFactory.create() — não há logger injectado ainda. Emite
+// JSON diretamente para stdout para que estes avisos também sejam agregáveis
+// (mesmo formato que os logs do pino) em vez de texto solto de console.warn.
+function bootWarn(message: string): void {
+  process.stdout.write(
+    `${JSON.stringify({ level: 40, time: Date.now(), context: 'Bootstrap', msg: message })}\n`,
+  );
+}
+
 export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
   const { JWT_SECRET, JWT_REFRESH_SECRET, ALLOWED_FILE_HOST } = env;
 
@@ -19,16 +28,14 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
   }
 
   if (!env.APP_URL) {
-    console.warn(
-      '[BOOT] APP_URL não definido — links em documentos e declarações usarão o valor hardcoded.',
-    );
+    bootWarn('APP_URL não definido — links em documentos e declarações usarão o valor hardcoded.');
   }
 
   if (!env.METRICS_TOKEN) {
-    console.warn('[BOOT] METRICS_TOKEN não definido — endpoint /metrics pode estar desprotegido.');
+    bootWarn('METRICS_TOKEN não definido — endpoint /metrics pode estar desprotegido.');
   }
 
   if (!env.STORAGE_BASE_URL) {
-    console.warn('[BOOT] STORAGE_BASE_URL não definido — URLs de DOCX podem falhar.');
+    bootWarn('STORAGE_BASE_URL não definido — URLs de DOCX podem falhar.');
   }
 }

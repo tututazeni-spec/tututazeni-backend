@@ -48,9 +48,13 @@ export class AuthService {
     this.prisma.auditLog
       .create({ data: { userId: user.id, action: 'LOGIN', entity: 'User', entityId: user.id } })
       .catch((err: unknown) =>
-        this.logger.warn(
-          `Falha ao registar audit log de login: ${err instanceof Error ? err.message : err}`,
-        ),
+        this.logger.warn({
+          userId: user.id,
+          action: 'LOGIN',
+          entity: 'User',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao registar audit log de login',
+        }),
       );
 
     const { password: _, ...safeUser } = user;

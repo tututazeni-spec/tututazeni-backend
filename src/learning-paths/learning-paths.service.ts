@@ -440,7 +440,15 @@ export class LearningPathsService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e =>
+          this.logger.warn({
+            userId,
+            learningPathId,
+            action: 'LEARNING_PATH_ASSIGNED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar atribuição de trilha de aprendizagem',
+          }),
+        );
     }
 
     return results;
@@ -546,7 +554,15 @@ export class LearningPathsService {
         create: { userId, points: 200 },
         update: { points: { increment: 200 } },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          userId,
+          learningPathId,
+          action: 'LEARNING_PATH_COMPLETED_XP',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir XP por conclusão de trilha de aprendizagem',
+        }),
+      );
 
     // Notificar
     await this.prisma.notificationLog
@@ -558,9 +574,17 @@ export class LearningPathsService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          userId,
+          learningPathId,
+          action: 'LEARNING_PATH_COMPLETED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar conclusão de trilha de aprendizagem',
+        }),
+      );
 
-    this.logger.log(`Learning Path ${learningPathId} concluída por user ${userId}`);
+    this.logger.log({ userId, learningPathId, msg: 'Learning Path concluída por utilizador' });
   }
 
   // ─── MATRÍCULAS DO UTILIZADOR ─────────────────────────────────────────────

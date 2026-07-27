@@ -1,6 +1,7 @@
 ﻿// src/talent-development/talent-development.service.ts
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ConflictException,
@@ -84,6 +85,8 @@ function getTier(score: number): TalentTier {
 
 @Injectable()
 export class TalentDevelopmentService {
+  private readonly logger = new Logger(TalentDevelopmentService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -357,7 +360,15 @@ export class TalentDevelopmentService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: dto.userId,
+            action: 'DEVELOPMENT_PLAN_CREATED',
+            planId: plan.id,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de plano de desenvolvimento criado',
+          });
+        });
     }
 
     return plan;
@@ -457,7 +468,15 @@ export class TalentDevelopmentService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: plan.user.id,
+          action: 'DEVELOPMENT_PLAN_ACTIVATED',
+          planId: id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de plano de desenvolvimento activado',
+        });
+      });
 
     return updated;
   }
@@ -505,7 +524,15 @@ export class TalentDevelopmentService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: plan.user.id,
+          action: 'DEVELOPMENT_PLAN_COMPLETED',
+          planId: id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de plano de desenvolvimento concluído',
+        });
+      });
 
     return { message: 'Plano concluído', xpEarned: totalXp };
   }
@@ -667,7 +694,15 @@ export class TalentDevelopmentService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: plan.userId,
+          action: 'DEVELOPMENT_ACTION_ASSIGNED',
+          planId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de acção de desenvolvimento atribuída',
+        });
+      });
 
     return action;
   }
@@ -747,7 +782,15 @@ export class TalentDevelopmentService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId: action.plan.userId,
+            action: 'DEVELOPMENT_ACTION_COMPLETED',
+            actionId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de acção de desenvolvimento concluída',
+          });
+        });
     }
 
     await this.recalculatePlanProgress(action.planId);
@@ -778,7 +821,15 @@ export class TalentDevelopmentService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: action.plan.userId,
+          action: dto.approved ? 'ACTION_EVIDENCE_APPROVED' : 'ACTION_EVIDENCE_REJECTED',
+          actionId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de aprovação/rejeição de evidência',
+        });
+      });
 
     if (dto.approved) await this.recalculatePlanProgress(action.planId);
     return { message: dto.approved ? 'Aprovado' : 'Rejeitado', status: newStatus };
@@ -1063,7 +1114,15 @@ export class TalentDevelopmentService {
           metadata: JSON.stringify({}),
         },
       }),
-    ]).catch(() => {});
+    ]).catch(e => {
+      this.logger.warn({
+        mentorId: dto.mentorId,
+        menteeId: dto.menteeId,
+        action: 'createMentoring.notify',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao criar notificações de início de mentoria',
+      });
+    });
 
     return mentoring;
   }

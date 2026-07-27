@@ -58,7 +58,14 @@ export class ProcessStandardService {
         },
       });
     } catch (e) {
-      this.logger.warn(`Falha ao escrever audit log: ${e.message}`);
+      this.logger.warn({
+        userId: opts.userId,
+        action: opts.action,
+        processId: opts.processId,
+        instanceId: opts.instanceId,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao escrever audit log de processo',
+      });
     }
   }
 

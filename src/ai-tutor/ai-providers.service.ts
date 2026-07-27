@@ -107,14 +107,25 @@ export class AiProvidersService {
       messages: [{ role: 'system', content: system }, ...messages],
     };
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.groqApiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.groqApiKey}`,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      this.logger.error({
+        provider: 'groq',
+        operation: 'chat',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha de rede ao chamar Groq API',
+      });
+      throw err;
+    }
 
     if (!res.ok) {
       const err = await res.text();
@@ -122,13 +133,23 @@ export class AiProvidersService {
       throw new InternalServerErrorException(`Erro Groq: ${res.status}`);
     }
 
-    const data: any = await res.json();
-    return {
-      text: data.choices?.[0]?.message?.content ?? '',
-      tokensUsed: data.usage?.completion_tokens ?? 0,
-      provider: 'groq',
-      model: this.groqModel,
-    };
+    try {
+      const data: any = await res.json();
+      return {
+        text: data.choices?.[0]?.message?.content ?? '',
+        tokensUsed: data.usage?.completion_tokens ?? 0,
+        provider: 'groq',
+        model: this.groqModel,
+      };
+    } catch (err) {
+      this.logger.error({
+        provider: 'groq',
+        operation: 'chat',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao interpretar resposta da Groq API',
+      });
+      throw err;
+    }
   }
 
   // ── GOOGLE GEMINI ─────────────────────────────────────────────────────────
@@ -156,11 +177,22 @@ export class AiProvidersService {
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiApiKey}`;
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      this.logger.error({
+        provider: 'gemini',
+        operation: 'chat',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha de rede ao chamar Gemini API',
+      });
+      throw err;
+    }
 
     if (!res.ok) {
       const err = await res.text();
@@ -168,11 +200,21 @@ export class AiProvidersService {
       throw new InternalServerErrorException(`Erro Gemini: ${res.status}`);
     }
 
-    const data: any = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    const tokensUsed = data.usageMetadata?.candidatesTokenCount ?? 0;
+    try {
+      const data: any = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const tokensUsed = data.usageMetadata?.candidatesTokenCount ?? 0;
 
-    return { text, tokensUsed, provider: 'gemini', model: this.geminiModel };
+      return { text, tokensUsed, provider: 'gemini', model: this.geminiModel };
+    } catch (err) {
+      this.logger.error({
+        provider: 'gemini',
+        operation: 'chat',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao interpretar resposta da Gemini API',
+      });
+      throw err;
+    }
   }
 
   // ── OLLAMA (auto-hospedado) ────────────────────────────────────────────────
@@ -195,7 +237,13 @@ export class AiProvidersService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-    } catch {
+    } catch (err) {
+      this.logger.error({
+        provider: 'ollama',
+        operation: 'chat',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha de rede ao chamar Ollama',
+      });
       throw new InternalServerErrorException(
         `Ollama não disponível em ${this.ollamaUrl}. Verifique se está a correr o servidor.`,
       );
@@ -207,12 +255,22 @@ export class AiProvidersService {
       throw new InternalServerErrorException(`Erro Ollama: ${res.status}`);
     }
 
-    const data: any = await res.json();
-    return {
-      text: data.message?.content ?? '',
-      tokensUsed: data.eval_count ?? 0,
-      provider: 'ollama',
-      model: this.ollamaModel,
-    };
+    try {
+      const data: any = await res.json();
+      return {
+        text: data.message?.content ?? '',
+        tokensUsed: data.eval_count ?? 0,
+        provider: 'ollama',
+        model: this.ollamaModel,
+      };
+    } catch (err) {
+      this.logger.error({
+        provider: 'ollama',
+        operation: 'chat',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao interpretar resposta do Ollama',
+      });
+      throw err;
+    }
   }
 }

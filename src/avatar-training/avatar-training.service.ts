@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -120,6 +121,8 @@ Avatar:`;
 
 @Injectable()
 export class AvatarTrainingService {
+  private readonly logger = new Logger(AvatarTrainingService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -147,8 +150,14 @@ export class AvatarTrainingService {
           active: true,
         },
       })
-      .catch(async () => {
+      .catch(async e => {
         // Fallback for Prisma model not yet created
+        this.logger.warn({
+          userId,
+          action: 'CREATE_AVATAR',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar avatar — possivelmente modelo trainingAvatar ausente (migration pendente)',
+        });
         return {
           id: null,
           ...dto,
@@ -173,10 +182,26 @@ export class AvatarTrainingService {
         take: limit,
         orderBy: { createdAt: 'desc' },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          filters,
+          action: 'GET_AVATARS_LIST',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao listar avatares de treino',
+        });
+        return [] as any[];
+      });
     const total = await safeM(this.prisma, 'trainingAvatar')
       .count({ where })
-      .catch(() => 0);
+      .catch(e => {
+        this.logger.warn({
+          filters,
+          action: 'GET_AVATARS_COUNT',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao contar avatares de treino',
+        });
+        return 0;
+      });
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
@@ -184,7 +209,15 @@ export class AvatarTrainingService {
   async getAvatar(id: number) {
     const a = await safeM(this.prisma, 'trainingAvatar')
       .findUnique({ where: { id } })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          avatarId: id,
+          action: 'GET_AVATAR',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter avatar de treino',
+        });
+        return null;
+      });
     if (!a) throw new NotFoundException('Avatar não encontrado');
     return a;
   }
@@ -192,7 +225,15 @@ export class AvatarTrainingService {
   async updateAvatar(id: number, dto: UpdateAvatarDto) {
     return safeM(this.prisma, 'trainingAvatar')
       .update({ where: { id }, data: dto })
-      .catch(() => ({ id, message: 'Actualizado', ...dto }));
+      .catch(e => {
+        this.logger.warn({
+          avatarId: id,
+          action: 'UPDATE_AVATAR',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao actualizar avatar de treino',
+        });
+        return { id, message: 'Actualizado', ...dto };
+      });
   }
 
   async deleteAvatar(id: number) {
@@ -201,7 +242,15 @@ export class AvatarTrainingService {
         where: { id },
         data: { active: false },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          avatarId: id,
+          action: 'DELETE_AVATAR',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao desactivar avatar de treino',
+        });
+        return null;
+      });
     return { message: 'Avatar desactivado' };
   }
 
@@ -210,7 +259,15 @@ export class AvatarTrainingService {
       .create({
         data: { avatarId, fileUrl, title, processed: false },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          avatarId,
+          action: 'UPLOAD_AVATAR_KNOWLEDGE',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao adicionar documento à base de conhecimento do avatar',
+        });
+        return null;
+      });
 
     return { avatarId, fileUrl, title, message: 'Documento adicionado à base de conhecimento' };
   }
@@ -232,7 +289,13 @@ export class AvatarTrainingService {
         },
         include: { competency: { select: { id: true, name: true } } },
       })
-      .catch(async () => {
+      .catch(async e => {
+        this.logger.warn({
+          createdById,
+          action: 'CREATE_SCENARIO',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar cenário — possivelmente campos requerem migration',
+        });
         return {
           ...dto,
           id: null,
@@ -276,7 +339,15 @@ export class AvatarTrainingService {
         _count: { id: true },
         _avg: { score: true },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          scenarioIds: ids,
+          action: 'GET_SCENARIOS_COMPLETION_STATS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter estatísticas de conclusão dos cenários',
+        });
+        return [] as any[];
+      });
     const cMap = new Map((completions as any[]).map((c: any) => [c.scenarioId, c]));
 
     return {
@@ -299,7 +370,15 @@ export class AvatarTrainingService {
           turns: { orderBy: { order: 'asc' } },
         },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          scenarioId: id,
+          action: 'GET_SCENARIO',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter cenário de treino',
+        });
+        return null;
+      });
     if (!s) throw new NotFoundException('Cenário não encontrado');
 
     // User best attempt
@@ -310,7 +389,16 @@ export class AvatarTrainingService {
           where: { userId, scenarioId: id, status: 'COMPLETED' },
           orderBy: { score: 'desc' },
         })
-        .catch(() => null);
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            scenarioId: id,
+            action: 'GET_SCENARIO_BEST_SESSION',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter melhor tentativa do utilizador no cenário',
+          });
+          return null;
+        });
     }
 
     return {
@@ -333,14 +421,30 @@ export class AvatarTrainingService {
         where: { userId, scenarioId: dto.scenarioId, status: 'IN_PROGRESS' },
         data: { status: 'ABANDONED' },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          scenarioId: dto.scenarioId,
+          action: 'ABANDON_PREVIOUS_SESSION',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao abandonar sessão anterior em progresso para o mesmo cenário',
+        });
+      });
 
     // Get avatar (from scenario or override)
     const avatarId = dto.avatarId ?? scenario.avatarId;
     const avatar = avatarId
       ? await safeM(this.prisma, 'trainingAvatar')
           .findUnique({ where: { id: avatarId } })
-          .catch(() => null)
+          .catch(e => {
+            this.logger.warn({
+              avatarId,
+              action: 'START_SESSION_GET_AVATAR',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao obter avatar para iniciar sessão',
+            });
+            return null;
+          })
       : null;
 
     // Build opening line
@@ -374,7 +478,15 @@ export class AvatarTrainingService {
           metadata: JSON.stringify({ sessionId: session.id, scenarioId: dto.scenarioId }),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          sessionId: session.id,
+          action: 'NOTIFY_AVATAR_SESSION_STARTED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de início de sessão de treino com avatar',
+        });
+      });
 
     return {
       session,
@@ -396,7 +508,16 @@ export class AvatarTrainingService {
           },
         },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          sessionId,
+          userId,
+          action: 'SEND_MESSAGE_GET_SESSION',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter sessão de treino ao enviar mensagem',
+        });
+        return null;
+      });
 
     if (!session) throw new NotFoundException('Sessão não encontrada');
     if (session.userId !== userId) throw new ForbiddenException();
@@ -437,7 +558,16 @@ export class AvatarTrainingService {
       const avatar = session.avatarId
         ? await safeM(this.prisma, 'trainingAvatar')
             .findUnique({ where: { id: session.avatarId } })
-            .catch(() => null)
+            .catch(e => {
+              this.logger.warn({
+                avatarId: session.avatarId,
+                sessionId,
+                action: 'SEND_MESSAGE_GET_AVATAR',
+                err: { message: e instanceof Error ? e.message : String(e) },
+                msg: 'Falha ao obter avatar para gerar resposta livre',
+              });
+              return null;
+            })
         : null;
 
       avatarResponse = avatar?.systemPrompt
@@ -486,7 +616,16 @@ export class AvatarTrainingService {
         where: { id: sessionId },
         include: { scenario: true },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          sessionId,
+          userId,
+          action: 'COMPLETE_SESSION_GET_SESSION',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter sessão de treino ao concluir',
+        });
+        return null;
+      });
 
     if (!session) throw new NotFoundException('Sessão não encontrada');
     if (session.userId !== userId) throw new ForbiddenException();
@@ -558,13 +697,30 @@ export class AvatarTrainingService {
         .findFirst({
           where: { code: 'AVATAR_PERFECT' } as any,
         })
-        .catch(() => null);
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            sessionId,
+            action: 'COMPLETE_SESSION_FIND_PERFECT_BADGE',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao procurar badge de score perfeito',
+          });
+          return null;
+        });
       if (perfectBadge) {
         await this.prisma.badgeAward
           .create({
             data: { userId, badgeId: perfectBadge.id },
           })
-          .catch(() => {});
+          .catch(e => {
+            this.logger.warn({
+              userId,
+              badgeId: perfectBadge.id,
+              action: 'COMPLETE_SESSION_AWARD_PERFECT_BADGE',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao atribuir badge de score perfeito',
+            });
+          });
       }
     }
 
@@ -578,7 +734,15 @@ export class AvatarTrainingService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          sessionId,
+          action: 'NOTIFY_AVATAR_SESSION_COMPLETED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de conclusão de sessão',
+        });
+      });
 
     // Suggest next scenario
     const nextScenario = await this.suggestNextScenario(userId, session.scenarioId);
@@ -602,7 +766,16 @@ export class AvatarTrainingService {
         where: { id: sessionId, userId },
         data: { status: 'PAUSED' },
       })
-      .catch(() => ({ sessionId, status: 'PAUSED' }));
+      .catch(e => {
+        this.logger.warn({
+          sessionId,
+          userId,
+          action: 'PAUSE_SESSION',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao pausar sessão de treino',
+        });
+        return { sessionId, status: 'PAUSED' };
+      });
   }
 
   async resumeSession(sessionId: number, userId: number) {
@@ -611,7 +784,16 @@ export class AvatarTrainingService {
         where: { id: sessionId, userId },
         data: { status: 'IN_PROGRESS' },
       })
-      .catch(() => ({ sessionId, status: 'IN_PROGRESS' }));
+      .catch(e => {
+        this.logger.warn({
+          sessionId,
+          userId,
+          action: 'RESUME_SESSION',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao retomar sessão de treino',
+        });
+        return { sessionId, status: 'IN_PROGRESS' };
+      });
   }
 
   // ══════════════════════════════════════════════════════
@@ -651,7 +833,16 @@ export class AvatarTrainingService {
           scenario: { include: { competency: true, turns: { orderBy: { order: 'asc' } } } },
         } as any,
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          sessionId,
+          userId,
+          action: 'GET_SESSION_DETAIL',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter detalhe da sessão de treino',
+        });
+        return null;
+      });
     if (!s) throw new NotFoundException('Sessão não encontrada');
     if (s.userId !== userId) throw new ForbiddenException();
 
@@ -705,7 +896,15 @@ export class AvatarTrainingService {
         orderBy: { _avg: { score: 'desc' } },
         take: limit,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          departmentId,
+          action: 'GET_GLOBAL_LEADERBOARD',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao calcular ranking global de sessões de treino com avatar',
+        });
+        return [] as any[];
+      });
 
     const userIds = (grouped as any[]).map((g: any) => g.userId);
     const users = await this.prisma.read.user.findMany({
@@ -763,7 +962,16 @@ export class AvatarTrainingService {
           orderBy: { _count: { id: 'desc' } },
           take: 5,
         })
-        .catch(() => [] as any[]),
+        .catch(e => {
+          this.logger.warn({
+            departmentId,
+            category,
+            action: 'GET_DASHBOARD_TOP_SCENARIOS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular top cenários por conclusões no dashboard',
+          });
+          return [] as any[];
+        }),
       // By category
       (this.prisma as any).avatarScenario
         .groupBy({
@@ -771,7 +979,16 @@ export class AvatarTrainingService {
           where: { active: true },
           _count: { id: true },
         })
-        .catch(() => [] as any[]),
+        .catch(e => {
+          this.logger.warn({
+            departmentId,
+            category,
+            action: 'GET_DASHBOARD_CATEGORY_BREAKDOWN',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular distribuição de cenários por categoria no dashboard',
+          });
+          return [] as any[];
+        }),
       // Recent completions
       (this.prisma as any).avatarSession.findMany({
         where: { ...sessionsWhere, status: 'COMPLETED' },
@@ -788,7 +1005,16 @@ export class AvatarTrainingService {
           where: { ...sessionsWhere, status: 'COMPLETED' },
           _avg: { score: true },
         })
-        .catch(() => ({ _avg: { score: null } })),
+        .catch(e => {
+          this.logger.warn({
+            departmentId,
+            category,
+            action: 'GET_DASHBOARD_AVG_SCORE',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular score médio no dashboard',
+          });
+          return { _avg: { score: null } };
+        }),
     ]);
 
     // Enrich top scenarios with titles
@@ -924,7 +1150,15 @@ export class AvatarTrainingService {
     const completedIds = await this.prisma.avatarSession
       .findMany({ where: { userId, status: 'COMPLETED' }, select: { scenarioId: true } })
       .then(ss => ss.map(s => s.scenarioId))
-      .catch(() => [] as number[]);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          action: 'GET_RECOMMENDED_SCENARIOS_COMPLETED_IDS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter cenários já concluídos para recomendação',
+        });
+        return [] as number[];
+      });
 
     const where: any = {
       active: true,
@@ -957,7 +1191,16 @@ export class AvatarTrainingService {
       .findUnique({
         where: { id: completedScenarioId },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          scenarioId: completedScenarioId,
+          action: 'SUGGEST_NEXT_SCENARIO_GET_CURRENT',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter cenário concluído para sugerir o próximo',
+        });
+        return null;
+      });
 
     return this.prisma.avatarScenario
       .findFirst({
@@ -969,7 +1212,16 @@ export class AvatarTrainingService {
         include: { competency: { select: { name: true } } },
         orderBy: { createdAt: 'desc' },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          scenarioId: completedScenarioId,
+          action: 'SUGGEST_NEXT_SCENARIO',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao sugerir próximo cenário de treino',
+        });
+        return null;
+      });
   }
 
   // ══════════════════════════════════════════════════════

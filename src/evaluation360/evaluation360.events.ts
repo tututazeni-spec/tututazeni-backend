@@ -40,9 +40,13 @@ export class Evaluation360EventListeners {
         }),
       });
     } catch (err) {
-      this.logger.error(
-        `[360] Falha ao enviar convite: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      this.logger.error({
+        evaluatorId: assignment.evaluatorId,
+        evaluateeId: assignment.evaluateeId,
+        cycleId: assignment.cycleId,
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: '[360] Falha ao enviar convite',
+      });
     }
   }
 
@@ -61,9 +65,13 @@ export class Evaluation360EventListeners {
         type: 'WARNING',
       });
     } catch (err) {
-      this.logger.error(
-        `[360] Falha ao enviar lembrete: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      this.logger.error({
+        evaluatorId: assignment.evaluatorId,
+        evaluateeId: assignment.evaluateeId,
+        cycleId: assignment.cycleId,
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: '[360] Falha ao enviar lembrete',
+      });
     }
   }
 
@@ -98,20 +106,29 @@ export class Evaluation360EventListeners {
         );
 
         if (stdDev < 0.2) {
-          this.logger.warn(
-            `[360] Viés detectado (respostas homogéneas): responseId=${payload.responseId}, avg=${avg.toFixed(2)}`,
-          );
+          this.logger.warn({
+            responseId: payload.responseId,
+            cycleId: payload.cycleId,
+            avg: avg.toFixed(2),
+            msg: '[360] Viés detectado (respostas homogéneas)',
+          });
         }
         if (avg >= 4.9 || avg <= 1.1) {
-          this.logger.warn(
-            `[360] Possível viés extremo: responseId=${payload.responseId}, avg=${avg.toFixed(2)}`,
-          );
+          this.logger.warn({
+            responseId: payload.responseId,
+            cycleId: payload.cycleId,
+            avg: avg.toFixed(2),
+            msg: '[360] Possível viés extremo',
+          });
         }
       }
     } catch (err) {
-      this.logger.error(
-        `[360] Falha na análise pós-submissão: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      this.logger.error({
+        responseId: payload.responseId,
+        cycleId: payload.cycleId,
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: '[360] Falha na análise pós-submissão',
+      });
     }
   }
 
@@ -133,9 +150,11 @@ export class Evaluation360EventListeners {
         `[360] Notificações de resultados enviadas: ${participants.length} participantes`,
       );
     } catch (err) {
-      this.logger.error(
-        `[360] Falha ao notificar resultados: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      this.logger.error({
+        cycleId: payload.cycleId,
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: '[360] Falha ao notificar resultados',
+      });
     }
   }
 
@@ -159,9 +178,12 @@ export class Evaluation360EventListeners {
         type: feedback.type === 'RECOGNITION' ? 'SUCCESS' : 'INFO',
       });
     } catch (err) {
-      this.logger.error(
-        `[360] Falha ao notificar feedback: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      this.logger.error({
+        fromUserId: feedback.fromUserId,
+        toUserId: feedback.toUserId,
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: '[360] Falha ao notificar feedback',
+      });
     }
   }
 
@@ -178,9 +200,13 @@ export class Evaluation360EventListeners {
         `[360] Criando PDI automático para userId=${payload.userId}, ${payload.gaps.length} gaps identificados`,
       );
     } catch (err) {
-      this.logger.error(
-        `[360] Falha ao criar PDI automático: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      this.logger.error({
+        userId: payload.userId,
+        cycleId: payload.cycleId,
+        sourceResultId: payload.sourceResultId,
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: '[360] Falha ao criar PDI automático',
+      });
     }
   }
 

@@ -1,5 +1,5 @@
 // src/acl/acl.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreatePermissionDto,
@@ -196,6 +196,8 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
 
 @Injectable()
 export class AclService {
+  private readonly logger = new Logger(AclService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -358,7 +360,15 @@ export class AclService {
           changes: JSON.stringify({ roleId: dto.roleId }),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.userId,
+          action: 'ROLE_ASSIGNED',
+          entityId: dto.userId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao escrever audit log de atribuição de role',
+        });
+      });
 
     await this.prisma.notificationLog
       .create({
@@ -369,7 +379,15 @@ export class AclService {
           metadata: JSON.stringify({ roleId: dto.roleId }),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.userId,
+          action: 'ROLE_CHANGED',
+          roleId: dto.roleId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de mudança de role',
+        });
+      });
 
     return { message: 'Role atribuído com sucesso', userId: dto.userId, roleId: dto.roleId };
   }
@@ -438,7 +456,13 @@ export class AclService {
   async getPolicies() {
     return (this.prisma as any).accessPolicy
       ?.findMany({ orderBy: { priority: 'desc' } })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao ler políticas de acesso (accessPolicy)',
+        });
+        return [] as any[];
+      });
   }
 
   async createPolicy(dto: CreatePolicyDto, createdById: number) {
@@ -457,10 +481,18 @@ export class AclService {
           active: true,
         },
       })
-      .catch(() => ({
-        message: 'Política registada (modelo accessPolicy ausente — execute migration)',
-        ...dto,
-      }));
+      .catch(e => {
+        this.logger.warn({
+          createdById,
+          action: 'createPolicy',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar política de acesso — modelo accessPolicy pode estar ausente',
+        });
+        return {
+          message: 'Política registada (modelo accessPolicy ausente — execute migration)',
+          ...dto,
+        };
+      });
   }
 
   private async evaluatePolicies(
@@ -480,7 +512,16 @@ export class AclService {
         },
         orderBy: { priority: 'desc' },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          action,
+          subject,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao ler políticas DENY — modelo accessPolicy pode estar ausente',
+        });
+        return [] as any[];
+      });
 
     for (const policy of policies as any[]) {
       try {
@@ -493,7 +534,14 @@ export class AclService {
           const { roleCode } = await this.getUserPermissions(userId);
           if (roleCode === condition.roleCode) return true; // deny
         }
-      } catch {}
+      } catch (e) {
+        this.logger.warn({
+          userId,
+          policyId: policy?.id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao avaliar condição de política de acesso',
+        });
+      }
     }
     return false;
   }
@@ -559,7 +607,16 @@ export class AclService {
           changes: JSON.stringify({ action, subject, reason }),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          action,
+          subject,
+          reason,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao escrever audit log de acesso negado',
+        });
+      });
   }
 
   // ══════════════════════════════════════════════════════
@@ -641,7 +698,14 @@ export class AclService {
         this.prisma.read.user.count({ where: { active: true } }),
         this.prisma.read.role.count(),
         this.prisma.read.permission.count(),
-        this.prisma.read.auditLog.count({ where: { action: 'ACCESS_DENIED' } }).catch(() => 0),
+        this.prisma.read.auditLog.count({ where: { action: 'ACCESS_DENIED' } }).catch(e => {
+          this.logger.warn({
+            action: 'getStats',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar acessos negados para estatísticas ACL',
+          });
+          return 0;
+        }),
         this.prisma.auditLog
           .findMany({
             where: { action: 'ACCESS_DENIED' },
@@ -649,7 +713,14 @@ export class AclService {
             orderBy: { timestamp: 'desc' },
             take: 5,
           })
-          .catch(() => [] as any[]),
+          .catch(e => {
+            this.logger.warn({
+              action: 'getStats',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao obter acessos negados recentes para estatísticas ACL',
+            });
+            return [] as any[];
+          }),
       ],
     );
 

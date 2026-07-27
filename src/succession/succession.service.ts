@@ -293,7 +293,15 @@ export class SuccessionService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e =>
+        this.logger.warn({
+          userId: dto.candidateId,
+          criticalPositionId: dto.criticalPositionId,
+          action: 'SUCCESSION_PLAN_ADDED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar candidato de adição ao plano de sucessão',
+        }),
+      );
 
     return plan;
   }

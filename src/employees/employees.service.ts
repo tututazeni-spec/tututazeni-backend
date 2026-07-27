@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
@@ -43,6 +44,8 @@ function buildOrderBy(sortBy = 'name', sortOrder: 'asc' | 'desc' = 'asc') {
 
 @Injectable()
 export class EmployeesService {
+  private readonly logger = new Logger(EmployeesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -344,9 +347,25 @@ export class EmployeesService {
         ?.count({
           where: { userId: id, completedAt: { not: null } },
         })
-        .catch(() => 0),
+        .catch((e: unknown) => {
+          this.logger.warn({
+            entityId: id,
+            action: 'EMPLOYEE_STATS_COMPLETED_COURSES',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar cursos concluídos nas estatísticas do colaborador',
+          });
+          return 0;
+        }),
       this.prisma.read.employeeSkill.count({ where: { employeeId: id } }),
-      this.prisma.read.badgeAward.count({ where: { userId: id } }).catch(() => 0),
+      this.prisma.read.badgeAward.count({ where: { userId: id } }).catch((e: unknown) => {
+        this.logger.warn({
+          entityId: id,
+          action: 'EMPLOYEE_STATS_BADGES',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao contar badges nas estatísticas do colaborador',
+        });
+        return 0;
+      }),
     ]);
 
     return {
@@ -865,7 +884,17 @@ export class EmployeesService {
             ?.create?.({
               data: { userId: empId, courseId, enrolledAt: new Date() },
             })
-            .catch(() => null),
+            .catch((e: unknown) => {
+              this.logger.warn({
+                userId: assignedById,
+                action: 'EMPLOYEE_BULK_ASSIGN_COURSE',
+                entityId: empId,
+                courseId,
+                err: { message: e instanceof Error ? e.message : String(e) },
+                msg: 'Falha ao atribuir curso em massa a colaborador',
+              });
+              return null;
+            }),
         ),
       ),
     );

@@ -11,12 +11,25 @@ import { enforceHttpsMiddleware } from './common/security/enforce-https';
 import { parseAllowedOrigins } from './common/security/allowed-origins';
 import { createSwaggerAuthMiddleware } from './common/security/swagger-auth.middleware';
 import { validateEnv } from './common/bootstrap/validate-env';
+import { runWithRequestContext } from './common/logging/request-context';
 
 async function bootstrap() {
   validateEnv();
 
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
-  app.useLogger(app.get(Logger));
+  const logger = app.get(Logger);
+  app.useLogger(logger);
+
+  // Rede de segurança ao nível do processo — sem isto, uma promise não apanhada
+  // ou uma excepção síncrona fora do pipeline do Nest morre sem log estruturado.
+  process.on('unhandledRejection', (reason: unknown) => {
+    logger.fatal({ err: reason }, 'unhandledRejection — encerrando processo');
+    process.exit(1);
+  });
+  process.on('uncaughtException', (err: Error) => {
+    logger.fatal({ err }, 'uncaughtException — encerrando processo');
+    process.exit(1);
+  });
 
   // ─── Security ────────────────────────────────────────────────────────────
   const isProd = process.env.NODE_ENV === 'production';
@@ -33,6 +46,13 @@ async function bootstrap() {
   app.use(enforceHttpsMiddleware(isProd));
   app.use(compression());
   app.use(cookieParser());
+
+  // Estabelece o contexto de correlação (reqId) para toda a cadeia do pedido —
+  // middleware corre depois do pino-http (que já atribuiu req.id) e antes dos
+  // guards/interceptors/filters, que o preenchem (userId) ou o consomem.
+  app.use((req: Request, _res: Response, next: () => void) => {
+    runWithRequestContext({ reqId: (req as Request & { id?: string }).id }, next);
+  });
 
   // ─── CORS ────────────────────────────────────────────────────────────────
   app.enableCors({
@@ -135,8 +155,8 @@ async function bootstrap() {
   const port = process.env.PORT ?? 4000;
   await app.listen(port);
 
-  console.log(`\n🚀 INNOVA API running on: http://localhost:${port}`);
-  console.log(`📚 Swagger docs available at: http://localhost:${port}/docs\n`);
+  logger.log(`INNOVA API running on: http://localhost:${port}`);
+  logger.log(`Swagger docs available at: http://localhost:${port}/docs`);
 }
 
 bootstrap();

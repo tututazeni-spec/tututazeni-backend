@@ -1,5 +1,5 @@
 ﻿// src/content-library/content-library.service.ts
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateContentDto,
@@ -82,6 +82,8 @@ function buildOrderBy(sortBy?: string): any {
 
 @Injectable()
 export class ContentLibraryService {
+  private readonly logger = new Logger(ContentLibraryService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ══════════════════════════════════════════════════════
@@ -107,7 +109,14 @@ export class ContentLibraryService {
         where: { entity: 'ContentAsset', action: 'CONTENT_VIEW', entityId: { in: ids } },
         _count: { id: true },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          action: 'findAll.viewCounts',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter contagens de visualizações de conteúdo',
+        });
+        return [] as any[];
+      });
 
     const vcMap = new Map((viewCounts as any[]).map((v: any) => [v.entityId, v._count.id]));
 
@@ -126,7 +135,15 @@ export class ContentLibraryService {
         .count({
           where: { entity: 'ContentAsset', action: 'CONTENT_VIEW', entityId: id },
         })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            contentId: id,
+            action: 'findOne.viewCount',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar visualizações de conteúdo',
+          });
+          return 0;
+        }),
       safeModel(this.prisma, 'contentRating')
         .groupBy({
           by: ['contentId'],
@@ -135,16 +152,41 @@ export class ContentLibraryService {
           _count: { id: true },
         })
         .then((r: any[]) => r[0] ?? null)
-        .catch(() => null),
+        .catch(e => {
+          this.logger.warn({
+            contentId: id,
+            action: 'findOne.avgRating',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular avaliação média — modelo contentRating pode estar ausente',
+          });
+          return null;
+        }),
       safeModel(this.prisma, 'contentRating')
         .count({ where: { contentId: id } })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            contentId: id,
+            action: 'findOne.ratingCount',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar avaliações — modelo contentRating pode estar ausente',
+          });
+          return 0;
+        }),
       userId
         ? safeModel(this.prisma, 'contentProgress')
             .findUnique({
               where: { userId_contentId: { userId, contentId: id } },
             })
-            .catch(() => null)
+            .catch(e => {
+              this.logger.warn({
+                userId,
+                contentId: id,
+                action: 'findOne.userProgress',
+                err: { message: e instanceof Error ? e.message : String(e) },
+                msg: 'Falha ao obter progresso do utilizador — modelo contentProgress pode estar ausente',
+              });
+              return null;
+            })
         : Promise.resolve(null),
       userId
         ? this.prisma.auditLog
@@ -152,7 +194,16 @@ export class ContentLibraryService {
               where: { userId, action: 'CONTENT_BOOKMARK', entity: 'ContentAsset', entityId: id },
             })
             .then(r => !!r)
-            .catch(() => false)
+            .catch(e => {
+              this.logger.warn({
+                userId,
+                contentId: id,
+                action: 'findOne.isBookmarked',
+                err: { message: e instanceof Error ? e.message : String(e) },
+                msg: 'Falha ao verificar se conteúdo está marcado como favorito',
+              });
+              return false;
+            })
         : Promise.resolve(false),
     ]);
 
@@ -201,7 +252,15 @@ export class ContentLibraryService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: createdById,
+          action: 'CONTENT_CREATED',
+          contentId: asset.id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de conteúdo criado',
+        });
+      });
 
     return asset;
   }
@@ -247,7 +306,15 @@ export class ContentLibraryService {
           entityId: id,
         },
       })
-      .catch(() => {});
+      .catch(e => {
+        this.logger.warn({
+          userId: updatedById,
+          action: 'CONTENT_UPDATED',
+          entityId: id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao escrever audit log de conteúdo actualizado',
+        });
+      });
 
     return this.prisma.contentAsset.update({ where: { id }, data });
   }
@@ -317,7 +384,16 @@ export class ContentLibraryService {
           timestamp: { gte: today },
         },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          contentId: id,
+          action: 'view.checkDuplicate',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao verificar visualização duplicada de conteúdo',
+        });
+        return null;
+      });
 
     if (!already) {
       await this.prisma.auditLog.create({
@@ -351,7 +427,16 @@ export class ContentLibraryService {
         create: data,
         update: data,
       })
-      .catch(() => data);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          contentId,
+          action: 'updateProgress.upsert',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao gravar progresso de conteúdo — modelo contentProgress pode estar ausente',
+        });
+        return data;
+      });
 
     // XP for completion
     if (dto.progress === 100) {
@@ -370,7 +455,15 @@ export class ContentLibraryService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {});
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            contentId,
+            action: 'CONTENT_COMPLETED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de conteúdo concluído',
+          });
+        });
     }
 
     return updated;
@@ -382,7 +475,15 @@ export class ContentLibraryService {
         where: { userId },
         orderBy: { lastAccessedAt: 'desc' },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          action: 'getMyProgress',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter progresso de conteúdo — modelo contentProgress pode estar ausente',
+        });
+        return [] as any[];
+      });
 
     if (!(progresses as any[]).length)
       return { data: [], stats: { total: 0, completed: 0, inProgress: 0 } };
@@ -412,7 +513,15 @@ export class ContentLibraryService {
         orderBy: { lastAccessedAt: 'desc' },
         take: limit,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          action: 'getContinueWatching',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter conteúdos em progresso — modelo contentProgress pode estar ausente',
+        });
+        return [] as any[];
+      });
 
     const ids = (progresses as any[]).map((p: any) => p.contentId);
     if (!ids.length) return [];
@@ -441,7 +550,16 @@ export class ContentLibraryService {
         create: { userId, contentId, rating: dto.rating, comment: dto.comment },
         update: { rating: dto.rating, comment: dto.comment, updatedAt: new Date() },
       })
-      .catch(() => ({ userId, contentId, rating: dto.rating }));
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          contentId,
+          action: 'rateContent',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao gravar avaliação — modelo contentRating pode estar ausente',
+        });
+        return { userId, contentId, rating: dto.rating };
+      });
 
     return { message: 'Avaliação registada', rating };
   }
@@ -454,7 +572,15 @@ export class ContentLibraryService {
         where: { contentId },
         orderBy: { createdAt: 'desc' },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          contentId,
+          action: 'getContentRatings',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter avaliações — modelo contentRating pode estar ausente',
+        });
+        return [] as any[];
+      });
 
     // Distribution 1–5
     const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -487,7 +613,16 @@ export class ContentLibraryService {
         create: { userId, contentId, note: dto.note, timestamp: dto.timestamp },
         update: { note: dto.note, timestamp: dto.timestamp, updatedAt: new Date() },
       })
-      .catch(() => ({ userId, contentId, note: dto.note }));
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          contentId,
+          action: 'saveNote',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao gravar nota pessoal — modelo contentNote pode estar ausente',
+        });
+        return { userId, contentId, note: dto.note };
+      });
   }
 
   async getMyNote(contentId: number, userId: number) {
@@ -495,7 +630,16 @@ export class ContentLibraryService {
       .findUnique({
         where: { userId_contentId: { userId, contentId } },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          contentId,
+          action: 'getMyNote',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter nota pessoal — modelo contentNote pode estar ausente',
+        });
+        return null;
+      });
   }
 
   // ══════════════════════════════════════════════════════
@@ -530,7 +674,15 @@ export class ContentLibraryService {
         where: { userId, progress: { gt: 0, lt: 100 } },
         select: { contentId: true },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          action: 'getRecommended.inProgress',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter conteúdos em progresso — modelo contentProgress pode estar ausente',
+        });
+        return [] as any[];
+      });
 
     const inProgressIds = (inProgress as any[]).map((p: any) => p.contentId);
 
@@ -553,7 +705,15 @@ export class ContentLibraryService {
         orderBy: { _count: { id: 'desc' } },
         take: 3,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          action: 'getRecommended.mostUsedFormat',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao calcular formato mais usado pelo utilizador',
+        });
+        return [] as any[];
+      });
 
     const scored = fresh
       .map(c => {
@@ -579,7 +739,14 @@ export class ContentLibraryService {
         orderBy: { _count: { id: 'desc' } },
         take: limit,
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          action: 'getTrending',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao calcular conteúdos em alta (mais vistos na semana)',
+        });
+        return [] as any[];
+      });
 
     const ids = (topViews as any[]).map((v: any) => v.entityId).filter(Boolean) as number[];
     if (!ids.length) {
@@ -617,7 +784,15 @@ export class ContentLibraryService {
       .findMany({
         where: { userId, contentId: { in: ids } },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          action: 'getMandatory',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter progresso de conteúdos obrigatórios — modelo contentProgress pode estar ausente',
+        });
+        return [] as any[];
+      });
     const pMap = new Map((progs as any[]).map((p: any) => [p.contentId, p]));
 
     return mandatory.map(c => ({
@@ -650,7 +825,15 @@ export class ContentLibraryService {
           },
         },
       })
-      .catch(() => ({ ...dto, id: null, message: 'Learning path criada (modo compatibilidade)' }));
+      .catch(e => {
+        this.logger.warn({
+          createdById,
+          action: 'createLearningPath',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar learning path — modelo learningPath pode estar ausente',
+        });
+        return { ...dto, id: null, message: 'Learning path criada (modo compatibilidade)' };
+      });
 
     return path;
   }
@@ -668,11 +851,25 @@ export class ContentLibraryService {
         take: limit,
         orderBy: { createdAt: 'desc' },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          action: 'getLearningPaths.findMany',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter learning paths — modelo learningPath pode estar ausente',
+        });
+        return [] as any[];
+      });
 
     const total = await safeModel(this.prisma, 'learningPath')
       .count({ where })
-      .catch(() => 0);
+      .catch(e => {
+        this.logger.warn({
+          action: 'getLearningPaths.count',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao contar learning paths — modelo learningPath pode estar ausente',
+        });
+        return 0;
+      });
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
@@ -687,7 +884,15 @@ export class ContentLibraryService {
           },
         },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          learningPathId: id,
+          action: 'getLearningPath.findUnique',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter learning path — modelo learningPath pode estar ausente',
+        });
+        return null;
+      });
 
     if (!path) throw new NotFoundException('Learning Path não encontrada');
 
@@ -699,7 +904,16 @@ export class ContentLibraryService {
       .findMany({
         where: { userId, contentId: { in: contentIds } },
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          learningPathId: id,
+          action: 'getLearningPath.progress',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter progresso da learning path — modelo contentProgress pode estar ausente',
+        });
+        return [] as any[];
+      });
     const pMap = new Map((progs as any[]).map((p: any) => [p.contentId, p]));
 
     const enrichedItems = (path.items ?? []).map((item: any) => ({
@@ -728,7 +942,16 @@ export class ContentLibraryService {
         create: { userId, pathId, enrolledAt: new Date() },
         update: { resumedAt: new Date() },
       })
-      .catch(() => null);
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          pathId,
+          action: 'enrollLearningPath',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao inscrever utilizador na learning path — modelo learningPathEnrollment pode estar ausente',
+        });
+        return null;
+      });
 
     return { message: 'Inscrito com sucesso na learning path', pathId, userId };
   }
@@ -758,7 +981,14 @@ export class ContentLibraryService {
       }),
       safeModel(this.prisma, 'contentProgress')
         .count({ where: { progress: 100 } })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            action: 'getAnalyticsDashboard.totalCompletions',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar conclusões de conteúdo — modelo contentProgress pode estar ausente',
+          });
+          return 0;
+        }),
       // Most viewed (last 30 days)
       this.prisma.auditLog
         .groupBy({
@@ -772,7 +1002,14 @@ export class ContentLibraryService {
           orderBy: { _count: { id: 'desc' } },
           take: 5,
         })
-        .catch(() => [] as any[]),
+        .catch(e => {
+          this.logger.warn({
+            action: 'getAnalyticsDashboard.mostViewed',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular conteúdos mais vistos',
+          });
+          return [] as any[];
+        }),
       // Most completed
       safeModel(this.prisma, 'contentProgress')
         .groupBy({
@@ -782,7 +1019,14 @@ export class ContentLibraryService {
           orderBy: { _count: { id: 'desc' } },
           take: 5,
         })
-        .catch(() => [] as any[]),
+        .catch(e => {
+          this.logger.warn({
+            action: 'getAnalyticsDashboard.mostCompleted',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular conteúdos mais concluídos — modelo contentProgress pode estar ausente',
+          });
+          return [] as any[];
+        }),
       // By format
       this.prisma.contentAsset
         .groupBy({
@@ -790,7 +1034,14 @@ export class ContentLibraryService {
           where: { active: true },
           _count: { id: true },
         })
-        .catch(() => [] as any[]),
+        .catch(e => {
+          this.logger.warn({
+            action: 'getAnalyticsDashboard.formatBreakdown',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular distribuição de conteúdos por formato',
+          });
+          return [] as any[];
+        }),
       this.prisma.read.contentAsset.findMany({
         where: { active: true },
         orderBy: { createdAt: 'desc' },
@@ -846,7 +1097,15 @@ export class ContentLibraryService {
       }),
       safeModel(this.prisma, 'contentProgress')
         .count({ where: { userId, progress: 100 } })
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            action: 'getUserAnalytics.completions',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar conclusões do utilizador — modelo contentProgress pode estar ausente',
+          });
+          return 0;
+        }),
       this.prisma.read.auditLog.count({
         where: { userId, action: 'CONTENT_BOOKMARK', entity: 'ContentAsset' },
       }),
@@ -856,7 +1115,15 @@ export class ContentLibraryService {
           select: { timeSpent: true },
         })
         .then((ps: any[]) => ps.reduce((s: number, p: any) => s + (p.timeSpent ?? 0), 0))
-        .catch(() => 0),
+        .catch(e => {
+          this.logger.warn({
+            userId,
+            action: 'getUserAnalytics.totalTimeSpent',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao calcular tempo total gasto pelo utilizador — modelo contentProgress pode estar ausente',
+          });
+          return 0;
+        }),
     ]);
 
     const totalHours = Math.round(totalTimeSpent / 3600);
@@ -893,7 +1160,14 @@ export class ContentLibraryService {
         select: { id: true },
         // tags not guaranteed in schema — cast safe
       })
-      .catch(() => [] as any[]);
+      .catch(e => {
+        this.logger.warn({
+          action: 'getAllTags',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter conteúdos para extrair tags',
+        });
+        return [] as any[];
+      });
 
     // Return empty array if tags field doesn't exist
     return { tags: [] as string[] };

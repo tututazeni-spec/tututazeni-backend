@@ -233,7 +233,15 @@ export class EnrollmentsService {
           where: { courseId: dto.courseId },
           data: { totalEnrollments: { increment: 1 } },
         })
-        .catch(() => {}),
+        .catch((e: any) => {
+          this.logger.warn({
+            userId: dto.userId,
+            courseId: dto.courseId,
+            action: 'COURSE_ENROLLED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao actualizar analytics do curso após matrícula',
+          });
+        }),
       this.prisma.notificationLog
         .create({
           data: {
@@ -243,7 +251,15 @@ export class EnrollmentsService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch(() => {}),
+        .catch((e: any) => {
+          this.logger.warn({
+            userId: dto.userId,
+            courseId: dto.courseId,
+            action: 'COURSE_ENROLLED',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao registar notificação de matrícula',
+          });
+        }),
     ]);
 
     return enrollment;
@@ -339,7 +355,16 @@ export class EnrollmentsService {
         where: { courseId: e.courseId },
         data: { totalEnrollments: { decrement: 1 } },
       })
-      .catch(() => {});
+      .catch((err: any) => {
+        this.logger.warn({
+          userId: e.userId,
+          courseId: e.courseId,
+          enrollmentId: id,
+          action: 'ENROLLMENT_CANCELLED',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao actualizar analytics do curso após cancelamento',
+        });
+      });
 
     return { message: 'Matrícula cancelada' };
   }
@@ -398,7 +423,16 @@ export class EnrollmentsService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch(() => {});
+      .catch((err: any) => {
+        this.logger.warn({
+          userId: e.userId,
+          courseId: e.courseId,
+          enrollmentId,
+          action: 'CERTIFICATE_ISSUED',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao registar notificação de emissão de certificado',
+        });
+      });
 
     return cert;
   }

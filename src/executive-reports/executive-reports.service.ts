@@ -75,7 +75,15 @@ export class ExecutiveReportsService {
         .create({
           data: { reportId: id, userId },
         })
-        .catch(() => {});
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            action: 'EXECUTIVE_REPORT_ACCESS_LOG',
+            entityId: id,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao registar acesso ao relatório executivo',
+          });
+        });
     }
 
     return r;
@@ -135,7 +143,15 @@ export class ExecutiveReportsService {
       .create({
         data: { type: 'EXECUTIVE', generatedBy: generatedById, fileUrl: filePath },
       })
-      .catch(() => {});
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId: generatedById,
+          action: 'EXECUTIVE_REPORT_LOG_CREATE',
+          entityId: report.id,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar log de geração do relatório executivo',
+        });
+      });
 
     return report;
   }
