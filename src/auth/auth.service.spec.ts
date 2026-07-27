@@ -1,8 +1,24 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { AuthService } from './auth.service';
+import { AuthService, sessionIdleTimeoutMs } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+describe('sessionIdleTimeoutMs', () => {
+  it('devolve 30 minutos por omissão quando a env var não está definida', () => {
+    expect(sessionIdleTimeoutMs(undefined)).toBe(1_800_000);
+  });
+
+  it('usa o valor da env var quando é um número válido', () => {
+    expect(sessionIdleTimeoutMs('60000')).toBe(60_000);
+  });
+
+  it('cai no valor por omissão para valores inválidos ou não positivos', () => {
+    expect(sessionIdleTimeoutMs('não-é-um-número')).toBe(1_800_000);
+    expect(sessionIdleTimeoutMs('0')).toBe(1_800_000);
+    expect(sessionIdleTimeoutMs('-5')).toBe(1_800_000);
+  });
+});
 
 jest.mock('bcrypt', () => ({
   compare: jest.fn(),
@@ -262,6 +278,7 @@ describe('AuthService', () => {
         userId: 1,
         revokedAt: null,
         expiresAt: new Date(Date.now() + 1e6),
+        createdAt: new Date(),
       });
       // Simula revogação condicional bem-sucedida (count: 1)
       mockPrisma.refreshToken.updateMany.mockResolvedValueOnce({ count: 1 });
@@ -308,6 +325,7 @@ describe('AuthService', () => {
         userId: 1,
         revokedAt: null,
         expiresAt: new Date(Date.now() + 1e6),
+        createdAt: new Date(),
       });
       // Primeira chamada updateMany (revogação condicional do token apresentado) devolve count: 0
       mockPrisma.refreshToken.updateMany
@@ -347,6 +365,53 @@ describe('AuthService', () => {
       );
       // Não deve ter emitido novos tokens
       expect(mockPrisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    // A10-24: sessão sem refresh há mais tempo que SESSION_IDLE_TIMEOUT_MS
+    // é terminada — a cadeia é revogada mesmo com o token ainda válido.
+    describe('invalidação por inactividade (A10-24)', () => {
+      const originalEnv = process.env.SESSION_IDLE_TIMEOUT_MS;
+
+      afterEach(() => {
+        if (originalEnv === undefined) delete process.env.SESSION_IDLE_TIMEOUT_MS;
+        else process.env.SESSION_IDLE_TIMEOUT_MS = originalEnv;
+      });
+
+      it('revoga a cadeia e lança se o token não é usado há mais tempo que o limite de inactividade', async () => {
+        process.env.SESSION_IDLE_TIMEOUT_MS = '1000'; // 1s, para o teste ser rápido
+        mockPrisma.refreshToken.findUnique.mockResolvedValue({
+          id: 7,
+          userId: 1,
+          revokedAt: null,
+          expiresAt: new Date(Date.now() + 1e6),
+          createdAt: new Date(Date.now() - 5000), // 5s de inactividade > limite de 1s
+        });
+
+        await expect(service.rotateRefreshToken(1, 'test@innova.com', 'idle')).rejects.toThrow(
+          'Sessão expirada por inactividade',
+        );
+
+        expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { userId: 1, revokedAt: null } }),
+        );
+        expect(mockPrisma.refreshToken.create).not.toHaveBeenCalled();
+      });
+
+      it('roda normalmente se ainda dentro da janela de inactividade', async () => {
+        process.env.SESSION_IDLE_TIMEOUT_MS = '60000'; // 60s
+        mockPrisma.refreshToken.findUnique.mockResolvedValue({
+          id: 8,
+          userId: 1,
+          revokedAt: null,
+          expiresAt: new Date(Date.now() + 1e6),
+          createdAt: new Date(), // acabou de ser criado — bem dentro da janela
+        });
+        mockPrisma.refreshToken.updateMany.mockResolvedValueOnce({ count: 1 });
+
+        const out = await service.rotateRefreshToken(1, 'test@innova.com', 'active');
+        expect(out.accessToken).toBeDefined();
+        expect(mockPrisma.refreshToken.create).toHaveBeenCalled();
+      });
     });
   });
 });

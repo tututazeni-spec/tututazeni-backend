@@ -23,8 +23,9 @@
 - Refresh tokens rodam com deteção de reutilização (`auth.service.ts:156-213`):
   token roubado e reutilizado revoga a cadeia inteira; troca de password
   invalida todas as sessões activas (`passwordChangedAt` + `JwtStrategy`
-  rejeita tokens emitidos antes da troca). Access token dura 15 min — não há
-  invalidação por inactividade explícita, mas a janela curta limita o impacto.
+  rejeita tokens emitidos antes da troca). Access token dura 15 min; sessão
+  inactiva há mais de `SESSION_IDLE_TIMEOUT_MS` (30 min por omissão) é
+  revogada no próximo refresh (A10-24, ver secção 5).
 - Módulos administrativos que **foram varridos em auditorias anteriores**
   (`users` escrita, `acl`, `audit`, `roles-permissions`) isolam correctamente
   as operações sensíveis atrás de `@Roles(ADMIN, RH, ...)`.
@@ -124,7 +125,7 @@ verifica o dono do plano — incluindo um caso em que completar uma acção de
 | # | Achado | Evidência |
 |---|---|---|
 | A10-23 | `leave-management.controller.ts` `GET /leave/conflict-check?userId=` sem gate de papel/ownership — permite sondar se um colega tem férias marcadas num período | `leave-management.controller.ts:110-121` |
-| A10-24 | Não há invalidação de sessão por inactividade (só expiração fixa de 15 min no access token); aceitável dado o TTL curto, mas registar como decisão consciente, não omissão | `jwt.strategy.ts`; `auth.service.ts:223-242` |
+| A10-24 | Não havia invalidação de sessão por inactividade — inicialmente aceite como decisão consciente (ver secção 5), depois implementada a pedido | `auth.service.ts` `rotateRefreshToken()`, `sessionIdleTimeoutMs()` |
 
 ### O que está bem (não alterar)
 
@@ -190,33 +191,54 @@ Restringido `payslip`/`report` a ADMIN/RH e documentado com `TODO` inline que
 ligados a dados verdadeiros (ver PR #70). Isto não é uma correção completa —
 é uma barreira para que o wiring futuro não reintroduza o IDOR em silêncio.
 
-## 5. A10-24 — decisão registada: sem invalidação de sessão por inactividade
+## 5. A10-24 — invalidação de sessão por inactividade
 
-**Decisão: aceite como está — não é uma omissão a corrigir.**
+### Estado: ✅ implementado (2026-07-27, a pedido — supersede a decisão original abaixo)
 
-- Access token expira aos 15 minutos (fixo, não deslizante) —
-  `auth.service.ts` `generateTokens()`.
+**Mecanismo:** cada rotação de refresh token cria um registo novo
+(`persistRefreshToken`), portanto o `createdAt` desse registo já representa
+"quando foi a última vez que esta sessão foi renovada" — não foi preciso
+nenhum campo novo nem migração. Em `rotateRefreshToken()`, antes de rodar o
+token, calcula-se `Date.now() - record.createdAt.getTime()`; se ultrapassar
+`SESSION_IDLE_TIMEOUT_MS` (30 min por omissão, configurável), a cadeia
+inteira é revogada e o pedido falha com `UnauthorizedException('Sessão
+expirada por inactividade')` — o utilizador tem de voltar a autenticar-se,
+mesmo que o refresh token em si ainda não tenha atingido a sua expiração
+absoluta de 7 dias.
+
+Como o access token já expira aos 15 min, a granularidade efectiva da
+detecção de inactividade é de ~15 min (o refresh só é tentado quando o
+access token expira e o utilizador volta a fazer um pedido).
+
+**Configuração:** `SESSION_IDLE_TIMEOUT_MS` (env var, Joi schema em
+`src/config/env.validation.ts`, documentada em `.env.example`).
+
+**Testado:** `sessionIdleTimeoutMs()` (parsing/omissão/valores inválidos) e
+`rotateRefreshToken()` (sessão inactiva → revoga e lança; sessão activa →
+roda normalmente) em `auth.service.spec.ts`.
+
+### Decisão original (2026-07-27, antes do pedido de implementação)
+
+> Registada aqui como histórico do raciocínio na altura — foi avaliada e
+> considerada aceitável, mas o pedido explícito de implementar superou-a.
+
+**Decisão original: aceite como estava — não seria uma omissão a corrigir.**
+
+- Access token expira aos 15 minutos (fixo, não deslizante).
 - Refresh token dura 7 dias mas com rotação a cada uso e deteção de
-  reutilização (token roubado e reaproveitado revoga a cadeia inteira) —
-  `auth.service.ts` `rotateRefreshToken()`.
-- Trocar a password invalida todas as sessões activas de imediato
-  (`passwordChangedAt` + rejeição no `JwtStrategy`).
-- Não existe um temporizador de inactividade explícito (ex.: "sem uso há 30
-  min → sessão morta") — a única invalidação é por expiração fixa do access
-  token ou por acções explícitas (logout, troca de password, reutilização de
-  refresh token detectada).
+  reutilização (token roubado e reaproveitado revoga a cadeia inteira).
+- Trocar a password invalida todas as sessões activas de imediato.
+- Não existia um temporizador de inactividade explícito — a única
+  invalidação era por expiração fixa do access token ou por acções
+  explícitas (logout, troca de password, reutilização de refresh token
+  detectada).
 
-**Porquê é aceitável:** a janela de exposição de um access token comprometido
-está limitada a 15 minutos por desenho, o que já é uma mitigação forte para
-a maioria dos cenários de sessão esquecida/dispositivo partilhado. Adicionar
-um temporizador de inactividade traria complexidade (tracking de "último
-pedido" por sessão, provavelmente em Redis) sem reduzir de forma
-significativa a janela já pequena.
-
-**Quando reconsiderar:** se o produto vier a lidar com dados sujeitos a
-requisitos de compliance mais apertados (ex.: certos fluxos financeiros ou
-de saúde que exijam logout automático por inactividade), ou se o TTL do
-access token for alargado no futuro, esta decisão deve ser revisitada.
+**Porquê parecia aceitável:** a janela de exposição de um access token
+comprometido já estava limitada a 15 minutos por desenho. Um temporizador de
+inactividade pareceria trazer complexidade (tracking de "último pedido" por
+sessão) sem reduzir de forma significativa uma janela já pequena — no fim,
+a implementação real (secção acima) mostrou que essa complexidade não era
+necessária, porque o `createdAt` do refresh token já continha a informação.
 
 ## 6. Critérios de aceitação
 
@@ -228,5 +250,6 @@ access token for alargado no futuro, esta decisão deve ser revisitada.
 - [x] `pdf.controller.ts` ganha desenho de ownership antes de ser ligado a
       dados reais — bloqueado por `@Roles()` + `TODO` inline até essa altura
       (ver nota A10-20 acima); não fica como débito técnico silencioso.
-- [x] A10-24 (inactividade) tem decisão registada e justificada — não é
-      omissão.
+- [x] A10-24 (inactividade) — implementado: `rotateRefreshToken()` revoga a
+      sessão se `SESSION_IDLE_TIMEOUT_MS` for excedido desde a última
+      renovação.

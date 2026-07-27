@@ -42,6 +42,12 @@ export const envValidationSchema = Joi.object({
   LOG_LEVEL: Joi.string().valid('trace', 'debug', 'info', 'warn', 'error', 'fatal').default('info'),
   AUTH_ALLOW_BEARER: Joi.boolean().default(true),
 
+  // Invalidação de sessão por inactividade (A10-24) — 30 min por omissão.
+  // Um refresh token não usado há mais tempo do que isto é tratado como
+  // sessão inactiva: a cadeia é revogada e o utilizador tem de voltar a
+  // autenticar-se, mesmo que o refresh token ainda não tenha expirado.
+  SESSION_IDLE_TIMEOUT_MS: Joi.number().default(1_800_000),
+
   // SMTP — opcionais (sem SMTP_HOST, emails não são enviados; app arranca na mesma)
   SMTP_HOST: Joi.string().optional(),
   SMTP_PORT: Joi.number().port().optional().default(587),
