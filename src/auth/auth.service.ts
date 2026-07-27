@@ -12,6 +12,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto, RegisterDto, ChangePasswordDto } from './auth.dto';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 
+// A10-24: um refresh token não usado há mais tempo do que isto é tratado
+// como sessão inactiva — a cadeia é revogada mesmo que o token em si ainda
+// não tenha expirado. 30 min por omissão; configurável via env.
+export function sessionIdleTimeoutMs(
+  env: string | undefined = process.env.SESSION_IDLE_TIMEOUT_MS,
+): number {
+  const parsed = env ? Number(env) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1_800_000;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -195,6 +205,19 @@ export class AuthService {
 
     if (record.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token expirado');
+    }
+
+    // A10-24: cada rotação cria um registo novo (persistRefreshToken), por
+    // isso o createdAt deste registo já é "quando foi a última actividade"
+    // — não precisa de campo extra. Se ninguém veio renovar a sessão dentro
+    // da janela de inactividade, a cadeia inteira morre aqui.
+    const idleMs = Date.now() - record.createdAt.getTime();
+    if (idleMs > sessionIdleTimeoutMs()) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: authorizedUserId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Sessão expirada por inactividade');
     }
 
     // Finding 1: revogação atómica e condicional — apenas revoga se ainda não
