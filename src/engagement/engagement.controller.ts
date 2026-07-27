@@ -315,7 +315,19 @@ export class EngagementController {
   @Get('human-success-score/:userId')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Human Success Score (engagement + performance + learning)' })
-  humanSuccessScore(@Param('userId', ParseIntPipe) userId: number) {
+  humanSuccessScore(
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    // A10-22: qualquer COLABORADOR podia ver a pontuação composta de
+    // qualquer colega — inconsistente com a restrição mais apertada do
+    // mesmo dado em performance.controller.ts.
+    if (
+      String(user.id) !== String(userId) &&
+      !isPrivileged(user, [Role.ADMIN, Role.RH, Role.GESTOR])
+    ) {
+      throw new ForbiddenException('Sem permissão para ver o Human Success Score deste utilizador');
+    }
     return this.svc.getHumanSuccessScore(userId);
   }
 

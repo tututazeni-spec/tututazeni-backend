@@ -270,8 +270,8 @@ export class WorkDeclarationsController {
 
   @Get('submissions/:id')
   @ApiOperation({ summary: 'Detalhe de uma submissão' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.findOneSubmission(id);
+  findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.findOneSubmission(id, user);
   }
 
   @Post('submit')

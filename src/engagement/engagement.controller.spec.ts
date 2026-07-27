@@ -253,7 +253,21 @@ describe('EngagementController', () => {
   });
 
   it('humanSuccessScore → getHumanSuccessScore(userId)', async () => {
-    await controller.humanSuccessScore(5);
+    await controller.humanSuccessScore(5, mockUser as any);
+    expect(mockSvc.getHumanSuccessScore).toHaveBeenCalledWith(5);
+  });
+
+  // A10-22: qualquer COLABORADOR podia ver a pontuação composta de qualquer
+  // colega — inconsistente com a restrição mais apertada em performance.
+  it('humanSuccessScore rejeita colaborador a ver pontuação de outro utilizador', () => {
+    const colaborador = { id: 2, email: 'c@innova.com', role: { name: 'COLABORADOR' } };
+    expect(() => controller.humanSuccessScore(5, colaborador as any)).toThrow();
+    expect(mockSvc.getHumanSuccessScore).not.toHaveBeenCalledWith(5);
+  });
+
+  it('humanSuccessScore permite colaborador ver a sua própria pontuação', async () => {
+    const colaborador = { id: 5, email: 'c@innova.com', role: { name: 'COLABORADOR' } };
+    await controller.humanSuccessScore(5, colaborador as any);
     expect(mockSvc.getHumanSuccessScore).toHaveBeenCalledWith(5);
   });
 

@@ -523,7 +523,12 @@ export class LeaderService {
   }
 
   async getTeamFeedbacks(leaderId: number, userId?: number) {
-    const where: any = userId ? { receiverId: userId } : { giver: { managerId: leaderId } };
+    // A10-17: quando userId era passado, a query trocava a filtragem por
+    // "giver.managerId: leaderId" e passava a devolver feedback recebido por
+    // QUALQUER pessoa — não só a equipa do líder chamador. Agora userId só
+    // estreita dentro do âmbito da equipa, nunca o substitui.
+    const where: any = { giver: { managerId: leaderId } };
+    if (userId) where.receiverId = userId;
     return safeM(this.prisma, 'feedback')
       .findMany({
         where,

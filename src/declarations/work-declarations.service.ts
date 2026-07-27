@@ -5,6 +5,9 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/decorators';
 import {
   CreateWorkDeclFormDto,
   UpdateWorkDeclFormDto,
@@ -199,7 +202,7 @@ export class WorkDeclarationsService {
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async findOneSubmission(id: number) {
+  async findOneSubmission(id: number, user?: CurrentUserData) {
     const s = await this.prisma.read.workDeclSubmission.findUnique({
       where: { id },
       include: {
@@ -209,7 +212,14 @@ export class WorkDeclarationsService {
         review: { include: { reviewer: { select: { id: true, fullName: true } } } },
       },
     });
-    if (!s) throw new NotFoundException('Submissão não encontrada');
+    // A10-19: sem isto, qualquer autenticado lia a submissão de compliance de
+    // qualquer colega por GET /declarations/work/submissions/:id. Chamadas
+    // internas sem `user` (review/bulk-approve) mantêm-se sem filtro.
+    if (user) {
+      assertCanAccess(s, s?.userId, user, [Role.ADMIN, Role.RH]);
+    } else if (!s) {
+      throw new NotFoundException('Submissão não encontrada');
+    }
     return s;
   }
 

@@ -385,8 +385,10 @@ export class EnrollmentsService {
 
   // ─── GERAR CERTIFICADO ────────────────────────────────────────────────────
 
-  async generateCertificate(enrollmentId: number) {
-    const e = (await this.findOne(enrollmentId)) as any;
+  async generateCertificate(enrollmentId: number, user: CurrentUserData) {
+    // A10-16: findOne sem `user` saltava o ownership — qualquer autenticado
+    // gerava/lia o certificado de outra pessoa a partir do enrollmentId.
+    const e = (await this.findOne(enrollmentId, user)) as any;
 
     if (e.status !== 'COMPLETED') {
       throw new BadRequestException('Curso ainda não concluído');
