@@ -88,6 +88,11 @@ describe('AuthService', () => {
       expect(result).toHaveProperty('accessToken');
       expect(result).toHaveProperty('refreshToken');
       expect(result.user).not.toHaveProperty('password');
+      // A10-1: password é omitido por omissão (PrismaService) — login precisa
+      // do hash para o bcrypt.compare, por isso tem de pedir a excepção.
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ omit: { password: false } }),
+      );
     });
 
     it('deve lançar UnauthorizedException se utilizador não existe', async () => {
@@ -170,6 +175,10 @@ describe('AuthService', () => {
         expect.objectContaining({
           data: expect.objectContaining({ entity: 'User', action: 'CHANGE_PASSWORD' }),
         }),
+      );
+      // A10-1: idem — changePassword precisa do hash actual para comparar.
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 1 }, omit: { password: false } }),
       );
     });
 

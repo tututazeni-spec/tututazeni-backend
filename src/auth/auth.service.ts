@@ -32,6 +32,9 @@ export class AuthService {
       include: {
         role: { include: { permissions: true } },
       },
+      // password é omitido por omissão (src/prisma/prisma.service.ts) — precisamos
+      // dele aqui para o bcrypt.compare abaixo.
+      omit: { password: false },
     });
 
     if (!user) throw new UnauthorizedException('Credenciais inválidas');
@@ -95,7 +98,10 @@ export class AuthService {
   async changePassword(userId: number, dto: ChangePasswordDto) {
     // PRIMARY: comparamos a password atual antes de escrever a nova; a réplica
     // poderia devolver um hash desatualizado durante o replication lag.
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      omit: { password: false },
+    });
     if (!user) throw new UnauthorizedException();
 
     if (!user.password) throw new UnauthorizedException('Sem password definida');
