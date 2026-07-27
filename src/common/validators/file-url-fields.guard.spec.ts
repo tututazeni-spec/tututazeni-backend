@@ -9,25 +9,32 @@
 // automaticamente porque a disciplina dependia só de revisão manual.
 //
 // Este teste varre `src/` e falha se encontrar:
-//   A) um controller a extrair fileUrl/logoUrl/signatureUrl directamente de
-//      @Body('...') em vez de passar por um DTO — o padrão exacto do bug em
-//      crm-funders (fileUrl sem qualquer validação);
-//   B) uma propriedade de DTO chamada fileUrl/logoUrl/signatureUrl sem
+//   A) um controller a extrair fileUrl/logoUrl/signatureUrl/url directamente
+//      de @Body('...') em vez de passar por um DTO — o padrão exacto do bug
+//      em crm-funders (fileUrl sem qualquer validação);
+//   B) uma propriedade de DTO chamada fileUrl/logoUrl/signatureUrl/url sem
 //      @IsAllowedFileUrl() nos decoradores imediatamente anteriores — o
-//      padrão exacto do bug em work-declaration/certification (@IsUrl() ou
-//      @IsString() em vez do validador com allowlist).
+//      padrão exacto do bug em work-declaration/certification/course-modules
+//      (@IsUrl() ou @IsString() em vez do validador com allowlist).
 //
-// Âmbito deliberadamente restrito a estes 3 nomes de campo — são os únicos
-// já estabelecidos nesta base de código como "referência a ficheiro em
-// storage externo". Campos como webhookUrl/baseUrl/cdnBaseUrl são URLs
-// externas por natureza (integrações) e não devem ser forçados à mesma
-// allowlist; ficam fora deste guard-rail.
+// Âmbito deliberadamente restrito a estes nomes de campo exactos — são os
+// únicos já estabelecidos nesta base de código como "referência a ficheiro em
+// storage externo". Campos como webhookUrl/baseUrl/cdnBaseUrl (sufixo, não
+// nome exacto) são URLs externas por natureza (integrações) e não devem ser
+// forçados à mesma allowlist; ficam fora deste guard-rail (o match é
+// case-sensitive e sem variação de sufixo, por isso não os apanha).
+//
+// Excepção documentada: um campo `url` genuinamente dual-propósito (ficheiro
+// OU link externo, ex: AddEvidenceDto em development-plans) pode marcar a
+// linha com o comentário `// file-url-exempt: <motivo>` para ser ignorado
+// por este guard-rail — a excepção fica visível e revista no próprio código.
 
 import * as fs from 'fs';
 import * as path from 'path';
 
 const SRC_ROOT = path.join(__dirname, '..', '..');
-const GUARDED_FIELDS = ['fileUrl', 'logoUrl', 'signatureUrl'];
+const GUARDED_FIELDS = ['fileUrl', 'logoUrl', 'signatureUrl', 'url'];
+const EXEMPT_MARKER = 'file-url-exempt:';
 const VALIDATOR_FILE = path.join(__dirname, 'is-allowed-file-url.validator.ts');
 
 function listSourceFiles(dir: string): string[] {
@@ -56,7 +63,11 @@ interface Violation {
 function scan(): Violation[] {
   const violations: Violation[] = [];
   const bodyExtractionRe = new RegExp(`@Body\\(\\s*['"](${GUARDED_FIELDS.join('|')})['"]\\s*\\)`);
-  const propertyRe = new RegExp(`^\\s*(${GUARDED_FIELDS.join('|')})\\??\\s*:\\s*string`);
+  // [?!]? cobre tanto propriedades opcionais (nome?: string) como obrigatórias
+  // com definite-assignment assertion (nome!: string) — só \?? deixava passar
+  // despercebido qualquer campo obrigatório (ex: url!: string em
+  // CreateModuleMaterialDto, encontrado só numa revisão manual posterior).
+  const propertyRe = new RegExp(`^\\s*(${GUARDED_FIELDS.join('|')})[?!]?\\s*:\\s*string`);
 
   for (const file of listSourceFiles(SRC_ROOT)) {
     if (path.resolve(file) === path.resolve(VALIDATOR_FILE)) continue; // define o validador, não o consome
@@ -79,7 +90,7 @@ function scan(): Violation[] {
       // Check B — propriedade de DTO sem @IsAllowedFileUrl() nas linhas anteriores
       const propMatch = line.match(propertyRe);
       const isDtoFile = relFile.includes('/dto/') || relFile.endsWith('.dto.ts');
-      if (propMatch && isDtoFile) {
+      if (propMatch && isDtoFile && !line.includes(EXEMPT_MARKER)) {
         const windowStart = Math.max(0, idx - 6);
         const window = lines.slice(windowStart, idx + 1).join('\n');
         if (!window.includes('@IsAllowedFileUrl(')) {
@@ -98,13 +109,13 @@ function scan(): Violation[] {
   return violations;
 }
 
-describe('Guard-rail: fileUrl/logoUrl/signatureUrl devem usar @IsAllowedFileUrl()', () => {
+describe(`Guard-rail: ${GUARDED_FIELDS.join('/')} devem usar @IsAllowedFileUrl()`, () => {
   it('não encontra campos de ficheiro sem o validador de allowlist', () => {
     const violations = scan();
     if (violations.length > 0) {
       const report = violations.map(v => `  ${v.file}:${v.line} — ${v.reason}`).join('\n');
       throw new Error(
-        `Encontrado(s) ${violations.length} campo(s) fileUrl/logoUrl/signatureUrl ` +
+        `Encontrado(s) ${violations.length} campo(s) ${GUARDED_FIELDS.join('/')} ` +
           `sem @IsAllowedFileUrl() (ver docs/security/2026-07-14-auditoria-a5-upload-ficheiros.md):\n${report}`,
       );
     }
