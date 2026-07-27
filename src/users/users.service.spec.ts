@@ -256,6 +256,12 @@ describe('UsersService', () => {
       await expect(
         service.changePassword(1, { currentPassword: 'wrong', newPassword: 'NewPass@123' } as any),
       ).rejects.toThrow();
+
+      // A10-1: password é omitido por omissão (PrismaService) — changePassword
+      // precisa do hash actual para comparar, por isso tem de pedir a excepção.
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 1 }, omit: { password: false } }),
+      );
     });
   });
 

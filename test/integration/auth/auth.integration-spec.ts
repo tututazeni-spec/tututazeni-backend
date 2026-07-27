@@ -28,6 +28,8 @@ describe('Auth Integration', () => {
       expect(res.body).toHaveProperty('accessToken');
       expect(typeof res.body.accessToken).toBe('string');
       expect(res.body.accessToken.length).toBeGreaterThan(20);
+      // A10-1: o hash da password nunca deve sair na resposta de login.
+      expect(res.body.user).not.toHaveProperty('password');
     });
 
     it('password errada → 401', async () => {

@@ -367,7 +367,10 @@ export class UsersService {
 
   async changePassword(userId: number, dto: UserChangePasswordDto) {
     // Validação de credenciais antes de escrita: força primary (dado sensível, sem réplica atrasada).
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      omit: { password: false },
+    });
     if (!user) throw new NotFoundException();
 
     const valid = user.password && (await bcrypt.compare(dto.currentPassword, user.password));

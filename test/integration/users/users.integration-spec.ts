@@ -50,4 +50,32 @@ describe('Users Integration', () => {
       await request(app.getHttpServer()).get('/users').expect(401);
     });
   });
+
+  // A10-1: GET /users/:id devolvia o hash da password (Prisma `include` sem
+  // `select`/`omit`) a qualquer autenticado. Regressão: nunca deve reaparecer,
+  // nem aqui nem em /users/me, para nenhum papel.
+  describe('GET /users/:id e /users/me — nunca expõem password', () => {
+    it('GET /users/me (employee) não tem campo password', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/users/me')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+
+      expect(res.body).not.toHaveProperty('password');
+    });
+
+    it('GET /users/:id (employee vendo outro utilizador) não tem campo password', async () => {
+      const me = await request(app.getHttpServer())
+        .get('/users/me')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .get(`/users/${me.body.id}`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+
+      expect(res.body).not.toHaveProperty('password');
+    });
+  });
 });

@@ -63,6 +63,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     super({
       adapter: new PrismaPg(writePool),
       log: [{ emit: 'event', level: 'query' }],
+      // A10-1: hash da password nunca sai por omissão em nenhuma query (findUnique,
+      // include, etc.). Os únicos pontos que precisam do hash (login, changePassword)
+      // pedem-no explicitamente com `omit: { password: false }`.
+      omit: { user: { password: true } },
     });
 
     // ─── Réplica (leitura) — opcional, controlada por feature flag ───
@@ -71,10 +75,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
     if (useReplicas) {
       const readPool = makePool(replicaUrl, parseInt(process.env.DB_REPLICA_POOL_MAX || '10', 10));
+      // `omit` muda o tipo de retorno genérico do client — o campo replicaClient
+      // é tipado como PrismaClient "base" porque só é usado para o ciclo de vida
+      // da ligação ($connect/$disconnect/$on); as queries passam por `this.db`,
+      // que já trata este client como `any` (readReplicas abaixo).
       this.replicaClient = new PrismaClient({
         adapter: new PrismaPg(readPool),
         log: [{ emit: 'event', level: 'query' }],
-      });
+        omit: { user: { password: true } },
+      }) as PrismaClient;
     } else {
       this.replicaClient = null;
     }
