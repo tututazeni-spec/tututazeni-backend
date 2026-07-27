@@ -279,3 +279,40 @@ describe('EmployeesController', () => {
     expect(mockSvc.getAuditLog).toHaveBeenCalledWith(1, 20);
   });
 });
+
+// A10-2: Employee (dados-mestre de RH) não tem nenhuma relação com User no
+// schema — não há forma de um COLABORADOR ser "dono" de um Employee. As rotas
+// abaixo deixavam qualquer COLABORADOR (papel base dos ~6000 utilizadores)
+// dar dump do dossier completo de qualquer colega via /employees/:id/*.
+// Regressão: nenhuma destas rotas pode voltar a listar COLABORADOR.
+describe('EmployeesController — @Roles nunca inclui COLABORADOR nas rotas sensíveis (A10-2)', () => {
+  const { ROLES_KEY } = require('../common/decorators/roles.decorator');
+  const { Role } = require('../auth/enums/role.enum');
+
+  const sensitiveHandlers: [string, string][] = [
+    ['findOne', 'GET /employees/:id'],
+    ['getStats', 'GET /employees/:id/stats'],
+    ['getFeedback360', 'GET /employees/:id/feedback360'],
+    ['getCareerPlans', 'GET /employees/:id/career-plans'],
+    ['getPdis', 'GET /employees/:id/pdis'],
+    ['updatePdiProgress', 'PATCH /employees/pdis/:id/progress'],
+    ['getSkills', 'GET /employees/:id/skills'],
+    ['assignSkill', 'POST /employees/:id/skills'],
+    ['updateSkillLevel', 'PATCH /employees/:id/skills/:skillId'],
+    ['getDocuments', 'GET /employees/:id/documents'],
+    ['createDocument', 'POST /employees/:id/documents'],
+    ['getTimeline', 'GET /employees/:id/timeline'],
+    ['getRequests', 'GET /employees/:id/requests'],
+    ['createRequest', 'POST /employees/:id/requests'],
+  ];
+
+  it.each(sensitiveHandlers)('%s (%s) não tem Role.COLABORADOR', methodName => {
+    const meta: string[] | undefined = Reflect.getMetadata(
+      ROLES_KEY,
+      (EmployeesController.prototype as any)[methodName],
+    );
+    expect(meta).toBeDefined();
+    expect(meta).not.toContain(Role.COLABORADOR);
+    expect(meta).toEqual(expect.arrayContaining([Role.ADMIN, Role.RH]));
+  });
+});

@@ -136,8 +136,8 @@ export class DevelopmentPlansController {
 
   @Post('actions')
   @ApiOperation({ summary: 'Adicionar acção ao plano (curso, mentoria, projecto, etc.)' })
-  addAction(@Body() dto: CreatePlanActionDto) {
-    return this.svc.addAction(dto);
+  addAction(@Body() dto: CreatePlanActionDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.addAction(dto, user);
   }
 
   @Put('actions/:actionId')
@@ -147,13 +147,13 @@ export class DevelopmentPlansController {
     @CurrentUser() user: CurrentUserData,
     @Body() dto: UpdatePlanActionDto,
   ) {
-    return this.svc.updateAction(actionId, dto, user.id);
+    return this.svc.updateAction(actionId, dto, user);
   }
 
   @Delete('actions/:actionId')
   @ApiOperation({ summary: 'Remover acção do plano' })
-  removeAction(@Param('actionId', ParseIntPipe) actionId: number) {
-    return this.svc.removeAction(actionId);
+  removeAction(@Param('actionId', ParseIntPipe) actionId: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.removeAction(actionId, user);
   }
 
   // ── Evidências ────────────────────────────────────────────────────────────
@@ -161,36 +161,36 @@ export class DevelopmentPlansController {
   @Post('evidence')
   @ApiOperation({ summary: 'Registar evidência de uma acção (upload, link ou nota)' })
   addEvidence(@CurrentUser() user: CurrentUserData, @Body() dto: AddEvidenceDto) {
-    return this.svc.addEvidence(user.id, dto);
+    return this.svc.addEvidence(user, dto);
   }
 
   // ── Metas ─────────────────────────────────────────────────────────────────
 
   @Post('goals')
   @ApiOperation({ summary: 'Adicionar meta SMART ao plano' })
-  addGoal(@Body() dto: CreatePlanGoalDto) {
-    return this.svc.addGoal(dto);
+  addGoal(@Body() dto: CreatePlanGoalDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.addGoal(dto, user);
   }
 
   @Patch('goals/progress')
   @ApiOperation({ summary: 'Actualizar progresso de uma meta' })
   @HttpCode(HttpStatus.OK)
   updateGoalProgress(@CurrentUser() user: CurrentUserData, @Body() dto: UpdatePlanGoalProgressDto) {
-    return this.svc.updateGoalProgress(user.id, dto);
+    return this.svc.updateGoalProgress(user, dto);
   }
 
   // ── Checkpoints ───────────────────────────────────────────────────────────
 
   @Post('checkpoints')
   @ApiOperation({ summary: 'Agendar checkpoint/check-in do plano' })
-  addCheckpoint(@Body() dto: CreateCheckpointDto) {
-    return this.svc.addCheckpoint(dto);
+  addCheckpoint(@Body() dto: CreateCheckpointDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.addCheckpoint(dto, user);
   }
 
   @Patch('checkpoints/complete')
   @ApiOperation({ summary: 'Registar conclusão de checkpoint' })
   @HttpCode(HttpStatus.OK)
-  completeCheckpoint(@Body() dto: CompleteCheckpointDto) {
-    return this.svc.completeCheckpoint(dto);
+  completeCheckpoint(@Body() dto: CompleteCheckpointDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.completeCheckpoint(dto, user);
   }
 }

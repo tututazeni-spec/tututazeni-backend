@@ -124,6 +124,8 @@ const baseAction = {
   plan: { userId: 1, name: 'PDI 2024' },
 };
 
+const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'COLABORADOR' } };
+
 describe('TalentDevelopmentService', () => {
   let service: TalentDevelopmentService;
 
@@ -465,6 +467,7 @@ describe('TalentDevelopmentService', () => {
         planId: 1,
         title: 'Meta A',
         completedAt: null,
+        plan: { userId: 1 },
       });
       mockPrisma.pdiGoal.update.mockResolvedValue({ id: 1, title: 'Meta B' });
       mockPrisma.developmentPlan.findUnique.mockResolvedValue({
@@ -474,13 +477,29 @@ describe('TalentDevelopmentService', () => {
       });
       mockPrisma.developmentPlan.update.mockResolvedValue(basePlan);
 
-      const result = await service.updateGoal(1, { title: 'Meta B' });
+      const result = await service.updateGoal(1, { title: 'Meta B' }, mockUser as any);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se meta não existe', async () => {
       mockPrisma.pdiGoal.findUnique.mockResolvedValue(null);
-      await expect(service.updateGoal(99, {})).rejects.toThrow(NotFoundException);
+      await expect(service.updateGoal(99, {}, mockUser as any)).rejects.toThrow(NotFoundException);
+    });
+
+    // A10-6: sem ownership, qualquer autenticado podia alterar a meta de PDI
+    // de outra pessoa.
+    it('rejeita colaborador a actualizar meta de outra pessoa', async () => {
+      mockPrisma.pdiGoal.findUnique.mockResolvedValue({
+        id: 1,
+        planId: 1,
+        title: 'Meta A',
+        completedAt: null,
+        plan: { userId: 999 },
+      });
+      await expect(
+        service.updateGoal(1, { title: 'Meta B' }, mockUser as any),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.pdiGoal.update).not.toHaveBeenCalled();
     });
   });
 
@@ -560,15 +579,29 @@ describe('TalentDevelopmentService', () => {
       });
       mockPrisma.developmentPlan.update.mockResolvedValue(basePlan);
 
-      const result = await service.updateActionProgress(1, { progress: 50 }, 1);
+      const result = await service.updateActionProgress(1, { progress: 50 }, mockUser as any);
       expect((result as any).progress).toBe(50);
     });
 
     it('deve lançar NotFoundException se acção não existe', async () => {
       mockPrisma.developmentPlanAction.findUnique.mockResolvedValue(null);
-      await expect(service.updateActionProgress(99, { progress: 50 }, 1)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.updateActionProgress(99, { progress: 50 }, mockUser as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    // A10-6: a rota diz "colaborador actualiza o seu próprio progresso" mas
+    // nunca comparava o dono do plano com quem chamava.
+    it('rejeita colaborador a actualizar progresso de acção de outra pessoa', async () => {
+      mockPrisma.developmentPlanAction.findUnique.mockResolvedValue({
+        ...baseAction,
+        plan: { userId: 999, name: 'PDI 2024' },
+      });
+      const other = { id: 2, email: 'other@innova.com', role: { name: 'COLABORADOR' } };
+      await expect(
+        service.updateActionProgress(1, { progress: 50 }, other as any),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.developmentPlanAction.update).not.toHaveBeenCalled();
     });
 
     it('deve conceder XP quando completado a 100%', async () => {
@@ -582,7 +615,7 @@ describe('TalentDevelopmentService', () => {
       });
       mockPrisma.developmentPlan.update.mockResolvedValue(basePlan);
 
-      const result = await service.updateActionProgress(1, { progress: 100 }, 1);
+      const result = await service.updateActionProgress(1, { progress: 100 }, mockUser as any);
       expect((result as any).progress).toBe(100);
     });
   });

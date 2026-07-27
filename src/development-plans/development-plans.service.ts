@@ -349,8 +349,10 @@ export class DevelopmentPlansService {
 
   // ─── ACÇÕES ───────────────────────────────────────────────────────────────
 
-  async addAction(dto: CreatePlanActionDto) {
-    const plan = (await this.findOne(dto.planId)) as any;
+  async addAction(dto: CreatePlanActionDto, user: CurrentUserData) {
+    // A10-5: findOne sem `user` saltava o ownership — qualquer autenticado
+    // podia adicionar acções ao PDI de outra pessoa.
+    const plan = (await this.findOne(dto.planId, user)) as any;
     if (plan.status === 'COMPLETED' || plan.status === 'CANCELLED') {
       throw new BadRequestException(
         'Não é possível adicionar acções a um plano concluído ou cancelado',
@@ -378,13 +380,21 @@ export class DevelopmentPlansService {
     });
   }
 
-  async updateAction(actionId: number, dto: UpdatePlanActionDto, userId: number) {
+  async updateAction(actionId: number, dto: UpdatePlanActionDto, user: CurrentUserData) {
     // Leitura que decide lógica de escrita (XP/transição): força primary.
     const action = await this.prisma.developmentPlanAction.findUnique({
       where: { id: actionId },
       include: { plan: true },
     });
     if (!action) throw new NotFoundException('Acção não encontrada');
+    // A10-5: sem isto, qualquer autenticado podia editar/completar a acção de
+    // PDI de outra pessoa — incluindo atribuir-se XP alheio (ver abaixo).
+    assertCanAccess(action, (action as any).plan.userId, user, [
+      Role.ADMIN,
+      Role.RH,
+      Role.GESTOR,
+    ]);
+    const ownerId = (action as any).plan.userId;
 
     const wasCompleted = action.status !== 'COMPLETED' && dto.status === 'COMPLETED';
 
@@ -398,18 +408,20 @@ export class DevelopmentPlansService {
       },
     });
 
-    // XP ao completar
+    // XP ao completar — vai sempre para o dono do plano (ownerId), nunca para
+    // quem chamou o endpoint: um ADMIN/RH/GESTOR pode completar a acção de
+    // outra pessoa em nome dela, mas o XP é da pessoa a quem o PDI pertence.
     if (wasCompleted) {
       const xp = (action as any).xpReward ?? 20;
       await this.prisma.userPoints
         .upsert({
-          where: { userId },
-          create: { userId, points: xp },
+          where: { userId: ownerId },
+          create: { userId: ownerId, points: xp },
           update: { points: { increment: xp } },
         })
         .catch(e => {
           this.logger.warn({
-            userId,
+            userId: ownerId,
             actionId,
             xp,
             action: 'updateAction.awardXp',
@@ -425,9 +437,17 @@ export class DevelopmentPlansService {
     return updated;
   }
 
-  async removeAction(actionId: number) {
-    const action = await this.prisma.developmentPlanAction.findUnique({ where: { id: actionId } });
+  async removeAction(actionId: number, user: CurrentUserData) {
+    const action = await this.prisma.developmentPlanAction.findUnique({
+      where: { id: actionId },
+      include: { plan: true },
+    });
     if (!action) throw new NotFoundException('Acção não encontrada');
+    assertCanAccess(action, (action as any).plan.userId, user, [
+      Role.ADMIN,
+      Role.RH,
+      Role.GESTOR,
+    ]);
     if (action.status === 'IN_PROGRESS') {
       throw new BadRequestException('Acção em progresso não pode ser removida');
     }
@@ -437,16 +457,24 @@ export class DevelopmentPlansService {
 
   // ─── EVIDÊNCIAS ───────────────────────────────────────────────────────────
 
-  async addEvidence(userId: number, dto: AddEvidenceDto) {
+  async addEvidence(user: CurrentUserData, dto: AddEvidenceDto) {
     const action = await this.prisma.developmentPlanAction.findUnique({
       where: { id: dto.actionId },
+      include: { plan: true },
     });
     if (!action) throw new NotFoundException('Acção não encontrada');
+    // A10-5: sem isto, qualquer autenticado podia registar evidências na
+    // acção de PDI de outra pessoa.
+    assertCanAccess(action, (action as any).plan.userId, user, [
+      Role.ADMIN,
+      Role.RH,
+      Role.GESTOR,
+    ]);
 
     const evidence = await this.prisma.pdiEvidence.create({
       data: {
         actionId: dto.actionId,
-        submittedById: userId,
+        submittedById: user.id,
         title: dto.title,
         url: dto.url,
         notes: dto.notes,
@@ -467,14 +495,21 @@ export class DevelopmentPlansService {
 
   // ─── METAS ────────────────────────────────────────────────────────────────
 
-  async addGoal(dto: CreatePlanGoalDto) {
-    await this.findOne(dto.planId);
+  async addGoal(dto: CreatePlanGoalDto, user: CurrentUserData) {
+    // A10-5: findOne sem `user` saltava o ownership.
+    await this.findOne(dto.planId, user);
     return this.prisma.pdiGoal.create({ data: dto });
   }
 
-  async updateGoalProgress(userId: number, dto: UpdatePlanGoalProgressDto) {
-    const goal = await this.prisma.pdiGoal.findUnique({ where: { id: dto.goalId } });
+  async updateGoalProgress(user: CurrentUserData, dto: UpdatePlanGoalProgressDto) {
+    const goal = await this.prisma.pdiGoal.findUnique({
+      where: { id: dto.goalId },
+      include: { plan: true },
+    });
     if (!goal) throw new NotFoundException('Meta não encontrada');
+    // A10-5: sem isto, qualquer autenticado podia actualizar o progresso da
+    // meta de PDI de outra pessoa.
+    assertCanAccess(goal, (goal as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
 
     const updated = await this.prisma.pdiGoal.update({
       where: { id: dto.goalId },
@@ -491,8 +526,9 @@ export class DevelopmentPlansService {
 
   // ─── CHECKPOINTS ──────────────────────────────────────────────────────────
 
-  async addCheckpoint(dto: CreateCheckpointDto) {
-    await this.findOne(dto.planId);
+  async addCheckpoint(dto: CreateCheckpointDto, user: CurrentUserData) {
+    // A10-5: findOne sem `user` saltava o ownership.
+    await this.findOne(dto.planId, user);
     return this.prisma.pdiCheckpoint.create({
       data: {
         planId: dto.planId,
@@ -505,9 +541,15 @@ export class DevelopmentPlansService {
     });
   }
 
-  async completeCheckpoint(dto: CompleteCheckpointDto) {
-    const cp = await this.prisma.pdiCheckpoint.findUnique({ where: { id: dto.checkpointId } });
+  async completeCheckpoint(dto: CompleteCheckpointDto, user: CurrentUserData) {
+    const cp = await this.prisma.pdiCheckpoint.findUnique({
+      where: { id: dto.checkpointId },
+      include: { plan: true },
+    });
     if (!cp) throw new NotFoundException('Checkpoint não encontrado');
+    // A10-5: sem isto, qualquer autenticado podia marcar como concluído o
+    // checkpoint de PDI de outra pessoa.
+    assertCanAccess(cp, (cp as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     return this.prisma.pdiCheckpoint.update({
       where: { id: dto.checkpointId },
       data: {

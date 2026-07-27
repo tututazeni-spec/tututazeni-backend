@@ -181,8 +181,24 @@ describe('PerformanceController', () => {
   });
 
   it('createGoal → createGoal(dto)', async () => {
-    const dto = {} as any;
-    await controller.createGoal(dto);
+    const dto = { userId: 1 } as any;
+    await controller.createGoal(dto, mockUser as any);
+    expect(mockSvc.createGoal).toHaveBeenCalledWith(dto);
+  });
+
+  // A10-21: dto.userId não era verificado — qualquer autenticado podia criar
+  // goals atribuídos a colegas arbitrários.
+  it('createGoal rejeita colaborador a criar goal para outro utilizador', async () => {
+    const colaborador = { id: 2, email: 'c@innova.com', role: { name: 'COLABORADOR' } };
+    const dto = { userId: 999 } as any;
+    expect(() => controller.createGoal(dto, colaborador as any)).toThrow();
+    expect(mockSvc.createGoal).not.toHaveBeenCalled();
+  });
+
+  it('createGoal permite colaborador criar o seu próprio goal', async () => {
+    const colaborador = { id: 2, email: 'c@innova.com', role: { name: 'COLABORADOR' } };
+    const dto = { userId: 2 } as any;
+    await controller.createGoal(dto, colaborador as any);
     expect(mockSvc.createGoal).toHaveBeenCalledWith(dto);
   });
 

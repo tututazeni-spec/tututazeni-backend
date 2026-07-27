@@ -270,6 +270,8 @@ describe('PerformanceService (additional)', () => {
       mockPrisma.performanceReview.findUnique.mockResolvedValue({
         ...baseReview,
         managerId: 1,
+        reviewerId: 1,
+        type: 'MANAGER',
         score: 4.0,
         cycle: { scoreScale: 5, goalsWeight: 40, competenciesWeight: 40, behaviorsWeight: 20 },
       });
@@ -279,6 +281,37 @@ describe('PerformanceService (additional)', () => {
         reviewId: 1,
         score: 4.0,
         feedback: 'Bom desempenho',
+      } as any);
+      expect(result).toBeDefined();
+    });
+
+    // A10-4: submitReview usava findOne(reviewId) sem `user`, saltando o
+    // ownership — qualquer autenticado podia forjar a auto-avaliação ou a
+    // avaliação de gestor de outra pessoa.
+    it('rejeita submitter que não é nem o avaliado (SELF) nem o avaliador', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue({
+        ...baseReview,
+        type: 'SELF',
+        reviewerId: 1,
+        cycle: { scoreScale: 5, goalsWeight: 40, competenciesWeight: 40, behaviorsWeight: 20 },
+      });
+      await expect(
+        service.submitReview(999, { reviewId: 1, score: 4.0 } as any),
+      ).rejects.toThrow('Apenas o avaliado');
+      expect(mockPrisma.performanceReview.update).not.toHaveBeenCalled();
+    });
+
+    it('permite o avaliado (review.type SELF) submeter a própria auto-avaliação', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue({
+        ...baseReview,
+        type: 'SELF',
+        reviewerId: 1,
+        cycle: { scoreScale: 5, goalsWeight: 40, competenciesWeight: 40, behaviorsWeight: 20 },
+      });
+      mockPrisma.performanceReview.update.mockResolvedValue({ ...baseReview, status: 'SUBMITTED' });
+      const result = await service.submitReview(baseReview.userId, {
+        reviewId: 1,
+        score: 4.0,
       } as any);
       expect(result).toBeDefined();
     });

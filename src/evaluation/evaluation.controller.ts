@@ -15,6 +15,8 @@ import { EvaluationService } from './evaluation.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
 import {
   CreateCycleDto,
   UpdateCycleDto,
@@ -184,14 +186,22 @@ export class EvaluationController {
   @ApiOperation({
     summary: 'Resultados 360° completos (score, concordância, competências, qualitativo)',
   })
-  results(@Param('userId', ParseIntPipe) userId: number, @Query('cycleId') cycleId?: string) {
+  results(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Query('cycleId') cycleId: string | undefined,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    // A10-3: sem esta verificação, qualquer COLABORADOR lia o 360 completo
+    // (score, nomes de avaliadores, texto qualitativo) de qualquer colega.
+    assertCanAccess({}, userId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
     return this.svc.getResults(userId, cycleId ? +cycleId : undefined);
   }
 
   @Get('evolution/:userId')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Evolução do colaborador ao longo dos ciclos' })
-  evolution(@Param('userId', ParseIntPipe) userId: number) {
+  evolution(@Param('userId', ParseIntPipe) userId: number, @CurrentUser() user: CurrentUserData) {
+    assertCanAccess({}, userId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
     return this.svc.getUserEvolution(userId);
   }
 
