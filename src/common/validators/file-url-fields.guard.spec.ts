@@ -36,7 +36,11 @@ function listSourceFiles(dir: string): string[] {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...listSourceFiles(full));
-    } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.spec.ts') && full !== __filename) {
+    } else if (
+      entry.name.endsWith('.ts') &&
+      !entry.name.endsWith('.spec.ts') &&
+      full !== __filename
+    ) {
       out.push(full);
     }
   }
@@ -51,9 +55,7 @@ interface Violation {
 
 function scan(): Violation[] {
   const violations: Violation[] = [];
-  const bodyExtractionRe = new RegExp(
-    `@Body\\(\\s*['"](${GUARDED_FIELDS.join('|')})['"]\\s*\\)`,
-  );
+  const bodyExtractionRe = new RegExp(`@Body\\(\\s*['"](${GUARDED_FIELDS.join('|')})['"]\\s*\\)`);
   const propertyRe = new RegExp(`^\\s*(${GUARDED_FIELDS.join('|')})\\??\\s*:\\s*string`);
 
   for (const file of listSourceFiles(SRC_ROOT)) {
@@ -100,9 +102,7 @@ describe('Guard-rail: fileUrl/logoUrl/signatureUrl devem usar @IsAllowedFileUrl(
   it('não encontra campos de ficheiro sem o validador de allowlist', () => {
     const violations = scan();
     if (violations.length > 0) {
-      const report = violations
-        .map(v => `  ${v.file}:${v.line} — ${v.reason}`)
-        .join('\n');
+      const report = violations.map(v => `  ${v.file}:${v.line} — ${v.reason}`).join('\n');
       throw new Error(
         `Encontrado(s) ${violations.length} campo(s) fileUrl/logoUrl/signatureUrl ` +
           `sem @IsAllowedFileUrl() (ver docs/security/2026-07-14-auditoria-a5-upload-ficheiros.md):\n${report}`,

@@ -1,7 +1,11 @@
 import { validate } from 'class-validator';
 import { CreateTemplateDto } from './create-template.dto';
 
-async function errorsFor(field: 'logoUrl' | 'signatureUrl', value: string | undefined, host = 'storage.innova.ao') {
+async function errorsFor(
+  field: 'logoUrl' | 'signatureUrl',
+  value: string | undefined,
+  host = 'storage.innova.ao',
+) {
   const prev = process.env.ALLOWED_FILE_HOST;
   process.env.ALLOWED_FILE_HOST = host;
   const d = Object.assign(new CreateTemplateDto(), {
@@ -22,7 +26,9 @@ describe('CreateTemplateDto.logoUrl — IsAllowedFileUrl', () => {
     expect(await errorsFor('logoUrl', undefined)).toHaveLength(0);
   });
   it('recusa http', async () => {
-    expect((await errorsFor('logoUrl', 'http://storage.innova.ao/logo.png')).length).toBeGreaterThan(0);
+    expect(
+      (await errorsFor('logoUrl', 'http://storage.innova.ao/logo.png')).length,
+    ).toBeGreaterThan(0);
   });
   it('recusa host não autorizado', async () => {
     expect((await errorsFor('logoUrl', 'https://evil.com/logo.png')).length).toBeGreaterThan(0);
@@ -34,6 +40,8 @@ describe('CreateTemplateDto.signatureUrl — IsAllowedFileUrl', () => {
     expect(await errorsFor('signatureUrl', 'https://storage.innova.ao/sign.png')).toHaveLength(0);
   });
   it('recusa host não autorizado', async () => {
-    expect((await errorsFor('signatureUrl', 'https://evil.com/sign.png')).length).toBeGreaterThan(0);
+    expect((await errorsFor('signatureUrl', 'https://evil.com/sign.png')).length).toBeGreaterThan(
+      0,
+    );
   });
 });
