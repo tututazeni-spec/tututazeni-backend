@@ -224,9 +224,27 @@ describe('CareerPlansController', () => {
   });
 
   it('requestPromotion → requestPromotion(dto, userId)', async () => {
-    const dto = {} as any;
+    const dto = { userId: 1 } as any;
     await controller.requestPromotion(dto, mockUser as any);
     expect(mockSvc.requestPromotion).toHaveBeenCalledWith(dto, 1);
+  });
+
+  // A10-14: dto.userId não era verificado — qualquer autenticado podia
+  // solicitar promoção "em nome" de qualquer colega.
+  describe('requestPromotion — ownership (A10-14)', () => {
+    const colaborador = { id: 2, email: 'c@innova.com', role: { name: 'COLABORADOR' } };
+
+    it('colaborador não pode solicitar promoção em nome de outro utilizador', () => {
+      const dto = { userId: 999 } as any;
+      expect(() => controller.requestPromotion(dto, colaborador as any)).toThrow();
+      expect(mockSvc.requestPromotion).not.toHaveBeenCalled();
+    });
+
+    it('colaborador pode solicitar a sua própria promoção', async () => {
+      const dto = { userId: 2 } as any;
+      await controller.requestPromotion(dto, colaborador as any);
+      expect(mockSvc.requestPromotion).toHaveBeenCalledWith(dto, 2);
+    });
   });
 
   it('reviewPromotion → reviewPromotion(id, dto, userId, role)', async () => {
