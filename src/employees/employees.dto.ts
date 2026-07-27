@@ -19,6 +19,7 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES } from '../common/validators/allowed-mime-types';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -299,8 +300,11 @@ export class EmployeesCreateDocumentDto {
   @ApiProperty() @IsString() name!: string;
   @ApiProperty() @IsString() type!: string;
   @ApiProperty() @IsAllowedFileUrl() fileUrl!: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() mimeType?: string;
-  @ApiPropertyOptional() @IsOptional() @IsInt() fileSize?: number;
+  @ApiPropertyOptional({ enum: ALLOWED_MIME_TYPES })
+  @IsOptional()
+  @IsIn(ALLOWED_MIME_TYPES)
+  mimeType?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(MAX_FILE_SIZE_BYTES) fileSize?: number;
   @ApiPropertyOptional() @IsOptional() @IsDateString() expiresAt?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() requiresSignature?: boolean;
 }

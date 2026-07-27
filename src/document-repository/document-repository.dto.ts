@@ -1,6 +1,8 @@
 // ─── src/document-repository/document-repository.dto.ts ──────────────────────
 import {
   Max,
+  Min,
+  IsIn,
   IsString,
   IsOptional,
   IsInt,
@@ -10,10 +12,19 @@ import {
   IsDateString,
   IsNotEmpty,
   MaxLength,
+  Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import {
+  ALLOWED_MIME_TYPES,
+  MAX_FILE_SIZE_BYTES,
+  MAX_FILE_NAME_LENGTH,
+} from '../common/validators/allowed-mime-types';
+
+const NO_PATH_SEPARATORS = /^[^/\\]+$/;
+const NO_PATH_SEPARATORS_MESSAGE = 'fileName não pode conter separadores de caminho (/ ou \\)';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -93,9 +104,14 @@ export class CreateDocumentDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() categoryId?: number;
   @ApiProperty() @IsEnum(DocSensitivity) sensitivity!: DocSensitivity;
   @ApiProperty() @IsAllowedFileUrl() fileUrl!: string; // URL no storage (S3/Azure)
-  @ApiProperty() @IsString() mimeType!: string;
-  @ApiPropertyOptional() @IsOptional() @IsInt() fileSize?: number; // bytes
-  @ApiPropertyOptional() @IsOptional() @IsString() fileName?: string;
+  @ApiProperty({ enum: ALLOWED_MIME_TYPES }) @IsIn(ALLOWED_MIME_TYPES) mimeType!: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(MAX_FILE_SIZE_BYTES) fileSize?: number; // bytes
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_FILE_NAME_LENGTH)
+  @Matches(NO_PATH_SEPARATORS, { message: NO_PATH_SEPARATORS_MESSAGE })
+  fileName?: string;
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsString({ each: true }) tags?: string[];
   @ApiPropertyOptional() @IsOptional() @IsInt() ownerId?: number; // colaborador vinculado
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
@@ -109,9 +125,14 @@ export class UpdateDocumentDto extends PartialType(CreateDocumentDto) {}
 
 export class NewVersionDto {
   @ApiProperty() @IsAllowedFileUrl() fileUrl!: string;
-  @ApiProperty() @IsString() mimeType!: string;
-  @ApiPropertyOptional() @IsOptional() @IsInt() fileSize?: number;
-  @ApiPropertyOptional() @IsOptional() @IsString() fileName?: string;
+  @ApiProperty({ enum: ALLOWED_MIME_TYPES }) @IsIn(ALLOWED_MIME_TYPES) mimeType!: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(MAX_FILE_SIZE_BYTES) fileSize?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_FILE_NAME_LENGTH)
+  @Matches(NO_PATH_SEPARATORS, { message: NO_PATH_SEPARATORS_MESSAGE })
+  fileName?: string;
   @ApiProperty() @IsString() changeDescription!: string;
 }
 

@@ -12,6 +12,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { MAX_FILE_SIZE_KB } from '../common/validators/allowed-mime-types';
 
 export enum ModuleStatus {
   DRAFT = 'DRAFT',
@@ -236,7 +237,8 @@ export class CreateModuleMaterialDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()
-  @Min(0)
+  @Min(1)
+  @Max(MAX_FILE_SIZE_KB)
   fileSizeKb?: number;
 }
 
