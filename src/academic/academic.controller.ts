@@ -25,6 +25,7 @@ import {
   FilterProgramDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
+import { assertCanAccess } from '../common/authz/ownership';
 
 @ApiTags('Gestão Académica')
 @ApiBearerAuth()
@@ -105,6 +106,9 @@ export class AcademicController {
   @Post('enrollments')
   @ApiOperation({ summary: 'Matricular aluno' })
   enroll(@Body() dto: CreateEnrollmentDto, @CurrentUser() user: CurrentUserData) {
+    // A10-15: dto.userId não era verificado — qualquer autenticado podia
+    // matricular arbitrariamente qualquer colega num programa.
+    assertCanAccess({}, dto.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     return this.service.enroll(dto, user.id);
   }
 
@@ -136,8 +140,8 @@ export class AcademicController {
 
   @Get('enrollments/:id/grades')
   @ApiOperation({ summary: 'Notas da matrícula' })
-  getEnrollmentGrades(@Param('id') id: string) {
-    return this.service.getEnrollmentGrades(id);
+  getEnrollmentGrades(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.getEnrollmentGrades(id, user);
   }
 
   // ─── TRANSCRIÇÃO ─────────────────────────────────────

@@ -62,8 +62,8 @@ describe('EnrollmentsController', () => {
   });
 
   it('myCertificate → generateCertificate', async () => {
-    await controller.myCertificate(2);
-    expect(mockSvc.generateCertificate).toHaveBeenCalledWith(2);
+    await controller.myCertificate(2, mockUser as any);
+    expect(mockSvc.generateCertificate).toHaveBeenCalledWith(2, mockUser);
   });
 
   it('findAll → findAll(filters)', async () => {
@@ -141,8 +141,8 @@ describe('EnrollmentsController', () => {
   });
 
   it('certificate (admin) → generateCertificate', async () => {
-    await controller.certificate(1);
-    expect(mockSvc.generateCertificate).toHaveBeenCalledWith(1);
+    await controller.certificate(1, mockUser as any);
+    expect(mockSvc.generateCertificate).toHaveBeenCalledWith(1, mockUser);
   });
 
   it('syncOverdue → syncOverdueStatus', async () => {

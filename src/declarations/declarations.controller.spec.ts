@@ -228,9 +228,9 @@ describe('WorkDeclarationsController', () => {
     expect(mockWorkSvc.findSubmissions).toHaveBeenCalledWith(filters);
   });
 
-  it('findOne → findOneSubmission(id)', async () => {
-    await controller.findOne(4);
-    expect(mockWorkSvc.findOneSubmission).toHaveBeenCalledWith(4);
+  it('findOne → findOneSubmission(id, user)', async () => {
+    await controller.findOne(4, mockUser as any);
+    expect(mockWorkSvc.findOneSubmission).toHaveBeenCalledWith(4, mockUser);
   });
 
   it('submit → submit(userId, dto)', async () => {

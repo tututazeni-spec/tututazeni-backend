@@ -45,6 +45,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../auth/enums/role.enum';
+import { assertCanAccess } from '../common/authz/ownership';
 
 @ApiTags('Avaliação 360°')
 @ApiBearerAuth()
@@ -185,7 +186,12 @@ export class Evaluation360Controller {
     @Param('cycleId') cycleId: string,
     @Param('userId') userId: string,
     @Body() dto: ConsentDto,
+    @Request() req: any,
   ) {
+    // A10-18: sem isto, qualquer autenticado podia forjar o consentimento
+    // LGPD de outro colaborador. Consentimento é pessoal — só o próprio
+    // participante (ou ADMIN/RH em correcção administrativa) pode registá-lo.
+    assertCanAccess({}, userId, req.user, [Role.ADMIN, Role.RH]);
     return this.service.giveConsent(cycleId, userId, dto);
   }
 

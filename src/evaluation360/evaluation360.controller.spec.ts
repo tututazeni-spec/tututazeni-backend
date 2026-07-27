@@ -127,8 +127,18 @@ describe('Evaluation360Controller', () => {
 
   it('giveConsent → giveConsent(cycleId, userId, dto)', async () => {
     const dto = {} as any;
-    await controller.giveConsent('cycle-1', 'user-1', dto);
+    const req = { user: { id: 'user-1', role: { name: 'COLABORADOR' } } };
+    await controller.giveConsent('cycle-1', 'user-1', dto, req as any);
     expect(mockSvc.giveConsent).toHaveBeenCalledWith('cycle-1', 'user-1', dto);
+  });
+
+  // A10-18: consentimento LGPD é pessoal — sem isto, qualquer autenticado
+  // podia forjar o consentimento de outro colaborador.
+  it('giveConsent rejeita colaborador a dar consentimento por outra pessoa', async () => {
+    const dto = {} as any;
+    const req = { user: { id: 'user-2', role: { name: 'COLABORADOR' } } };
+    await expect(controller.giveConsent('cycle-1', 'user-1', dto, req as any)).rejects.toThrow();
+    expect(mockSvc.giveConsent).not.toHaveBeenCalledWith('cycle-1', 'user-1', dto);
   });
 
   it('getProgress → getParticipantProgress(cycleId, userId)', async () => {

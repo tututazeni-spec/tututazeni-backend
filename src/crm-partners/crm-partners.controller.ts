@@ -44,6 +44,7 @@ export class CrmPartnersController {
   }
 
   @Get()
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar parceiros (paginado)' })
   findAll(@Query() filters: FilterPartnerDto) {
     return this.service.findAll(filters);
@@ -78,6 +79,7 @@ export class CrmPartnersController {
   }
 
   @Get(':id')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Detalhe de parceiro' })
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
@@ -105,6 +107,7 @@ export class CrmPartnersController {
   // ─── INTERACÇÕES ─────────────────────────────────────
 
   @Post(':id/interactions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Adicionar interacção' })
   addInteraction(
     @Param('id') id: string,
@@ -115,6 +118,7 @@ export class CrmPartnersController {
   }
 
   @Get(':id/interactions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar interacções do parceiro' })
   getInteractions(
     @Param('id') id: string,
@@ -138,6 +142,7 @@ export class CrmPartnersController {
   }
 
   @Put('milestones/:milestoneId/complete')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Marcar milestone como concluído' })
   completeMilestone(
     @Param('milestoneId') milestoneId: string,

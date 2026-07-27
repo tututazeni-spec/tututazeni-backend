@@ -33,6 +33,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
+import { assertCanAccess } from '../common/authz/ownership';
 
 @ApiTags('Career Plans')
 @ApiBearerAuth()
@@ -222,8 +223,8 @@ export class CareerPlansController {
 
   @Post('goals')
   @ApiOperation({ summary: 'Adicionar meta ao plano (curso, projecto, mentoria, etc.)' })
-  addGoal(@Body() dto: CareerPlansAddCareerGoalDto) {
-    return this.svc.addGoal(dto);
+  addGoal(@Body() dto: CareerPlansAddCareerGoalDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.addGoal(dto, user);
   }
 
   @Patch('goals/:goalId/progress')
@@ -248,6 +249,9 @@ export class CareerPlansController {
   @Post('promotions')
   @ApiOperation({ summary: 'Solicitar promoção (valida regras + calcula readiness)' })
   requestPromotion(@Body() dto: CreatePromotionRequestDto, @CurrentUser() user: CurrentUserData) {
+    // A10-14: dto.userId não era verificado — qualquer autenticado podia
+    // solicitar promoção "em nome" de qualquer colega.
+    assertCanAccess({}, dto.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     return this.svc.requestPromotion(dto, user.id);
   }
 

@@ -69,8 +69,8 @@ export class EnrollmentsController {
   @Post('my/:id/certificate')
   @ApiOperation({ summary: 'Gerar/obter certificado da matrícula concluída' })
   @HttpCode(HttpStatus.OK)
-  myCertificate(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.generateCertificate(id);
+  myCertificate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.generateCertificate(id, user);
   }
 
   // ── Admin / RH ────────────────────────────────────────────────────────────
@@ -170,8 +170,8 @@ export class EnrollmentsController {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Gerar certificado para matrícula concluída (Admin)' })
   @HttpCode(HttpStatus.OK)
-  certificate(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.generateCertificate(id);
+  certificate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.generateCertificate(id, user);
   }
 
   @Post('sync-overdue')

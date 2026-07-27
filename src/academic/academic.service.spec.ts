@@ -347,9 +347,20 @@ describe('AcademicService', () => {
     });
 
     it('getEnrollmentGrades deve listar notas', async () => {
+      mockPrisma.academicEnrollment.findUnique.mockResolvedValue({ userId: 1 });
       mockPrisma.academicGrade.findMany.mockResolvedValue([{ id: 'g1' }]);
-      const result = await service.getEnrollmentGrades('enr-1');
+      const owner = { id: 1, role: { name: 'COLABORADOR' } };
+      const result = await service.getEnrollmentGrades('enr-1', owner as any);
       expect(result).toHaveLength(1);
+    });
+
+    // A10-15: sem isto, qualquer autenticado que soubesse um enrollmentId
+    // lia as notas de outro aluno.
+    it('getEnrollmentGrades rejeita utilizador que não é o aluno da matrícula', async () => {
+      mockPrisma.academicEnrollment.findUnique.mockResolvedValue({ userId: 1 });
+      const other = { id: 999, role: { name: 'COLABORADOR' } };
+      await expect(service.getEnrollmentGrades('enr-1', other as any)).rejects.toThrow();
+      expect(mockPrisma.academicGrade.findMany).not.toHaveBeenCalled();
     });
 
     it('getTranscript deve retornar transcrição e matrículas', async () => {
