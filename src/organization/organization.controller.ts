@@ -28,6 +28,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
+import { assertCanAccess } from '../common/authz/ownership';
 
 @ApiTags('Organization')
 @ApiBearerAuth()
@@ -95,7 +96,13 @@ export class OrganizationController {
 
   @Get('users/:userId/profile')
   @ApiOperation({ summary: 'Perfil organizacional completo de um colaborador' })
-  userOrgProfile(@Param('userId', ParseIntPipe) userId: number) {
+  userOrgProfile(
+    @Param('userId', ParseIntPipe) userId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    // A10-8: sem @Roles nem ownership, qualquer autenticado lia a banda
+    // salarial (position.salaryMin/salaryMax) de qualquer colega.
+    assertCanAccess({}, userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     return this.svc.getUserOrgProfile(userId);
   }
 

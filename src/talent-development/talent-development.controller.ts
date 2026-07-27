@@ -184,8 +184,12 @@ export class TalentDevelopmentController {
   @Patch('goals/:id')
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Actualizar meta (inclui progresso)' })
-  updateGoal(@Param('id', ParseIntPipe) id: number, @Body() dto: TalentDevelopmentUpdateGoalDto) {
-    return this.svc.updateGoal(id, dto);
+  updateGoal(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: TalentDevelopmentUpdateGoalDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.updateGoal(id, dto, user);
   }
 
   @Delete('goals/:id')
@@ -218,9 +222,9 @@ export class TalentDevelopmentController {
   updateProgress(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: TalentDevelopmentUpdateProgressDto,
-    @Req() req: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.updateActionProgress(id, dto, req.user.id);
+    return this.svc.updateActionProgress(id, dto, user);
   }
 
   @Post('actions/:id/approve')

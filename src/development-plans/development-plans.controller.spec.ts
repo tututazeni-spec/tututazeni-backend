@@ -115,50 +115,50 @@ describe('DevelopmentPlansController', () => {
     expect(mockSvc.remove).toHaveBeenCalledWith(1);
   });
 
-  it('addAction → addAction(dto)', async () => {
+  it('addAction → addAction(dto, user)', async () => {
     const dto = {} as any;
-    await controller.addAction(dto);
-    expect(mockSvc.addAction).toHaveBeenCalledWith(dto);
+    await controller.addAction(dto, mockUser as any);
+    expect(mockSvc.addAction).toHaveBeenCalledWith(dto, mockUser);
   });
 
-  it('updateAction → updateAction(actionId, dto, userId)', async () => {
+  it('updateAction → updateAction(actionId, dto, user)', async () => {
     const dto = {} as any;
     await controller.updateAction(5, mockUser as any, dto);
-    expect(mockSvc.updateAction).toHaveBeenCalledWith(5, dto, 1);
+    expect(mockSvc.updateAction).toHaveBeenCalledWith(5, dto, mockUser);
   });
 
-  it('removeAction → removeAction(actionId)', async () => {
-    await controller.removeAction(7);
-    expect(mockSvc.removeAction).toHaveBeenCalledWith(7);
+  it('removeAction → removeAction(actionId, user)', async () => {
+    await controller.removeAction(7, mockUser as any);
+    expect(mockSvc.removeAction).toHaveBeenCalledWith(7, mockUser);
   });
 
-  it('addEvidence → addEvidence(userId, dto)', async () => {
+  it('addEvidence → addEvidence(user, dto)', async () => {
     const dto = {} as any;
     await controller.addEvidence(mockUser as any, dto);
-    expect(mockSvc.addEvidence).toHaveBeenCalledWith(1, dto);
+    expect(mockSvc.addEvidence).toHaveBeenCalledWith(mockUser, dto);
   });
 
-  it('addGoal → addGoal(dto)', async () => {
+  it('addGoal → addGoal(dto, user)', async () => {
     const dto = {} as any;
-    await controller.addGoal(dto);
-    expect(mockSvc.addGoal).toHaveBeenCalledWith(dto);
+    await controller.addGoal(dto, mockUser as any);
+    expect(mockSvc.addGoal).toHaveBeenCalledWith(dto, mockUser);
   });
 
-  it('updateGoalProgress → updateGoalProgress(userId, dto)', async () => {
+  it('updateGoalProgress → updateGoalProgress(user, dto)', async () => {
     const dto = {} as any;
     await controller.updateGoalProgress(mockUser as any, dto);
-    expect(mockSvc.updateGoalProgress).toHaveBeenCalledWith(1, dto);
+    expect(mockSvc.updateGoalProgress).toHaveBeenCalledWith(mockUser, dto);
   });
 
-  it('addCheckpoint → addCheckpoint(dto)', async () => {
+  it('addCheckpoint → addCheckpoint(dto, user)', async () => {
     const dto = {} as any;
-    await controller.addCheckpoint(dto);
-    expect(mockSvc.addCheckpoint).toHaveBeenCalledWith(dto);
+    await controller.addCheckpoint(dto, mockUser as any);
+    expect(mockSvc.addCheckpoint).toHaveBeenCalledWith(dto, mockUser);
   });
 
-  it('completeCheckpoint → completeCheckpoint(dto)', async () => {
+  it('completeCheckpoint → completeCheckpoint(dto, user)', async () => {
     const dto = {} as any;
-    await controller.completeCheckpoint(dto);
-    expect(mockSvc.completeCheckpoint).toHaveBeenCalledWith(dto);
+    await controller.completeCheckpoint(dto, mockUser as any);
+    expect(mockSvc.completeCheckpoint).toHaveBeenCalledWith(dto, mockUser);
   });
 });

@@ -32,6 +32,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
+import { assertCanAccess } from '../common/authz/ownership';
 
 @ApiTags('Performance')
 @ApiBearerAuth()
@@ -188,7 +189,10 @@ export class PerformanceController {
 
   @Post('goals')
   @ApiOperation({ summary: 'Criar goal / OKR' })
-  createGoal(@Body() dto: CreateGoalDto) {
+  createGoal(@Body() dto: CreateGoalDto, @CurrentUser() user: CurrentUserData) {
+    // A10-21: dto.userId não era verificado — qualquer autenticado podia criar
+    // goals atribuídos a colegas arbitrários. Só o próprio ou ADMIN/RH/GESTOR.
+    assertCanAccess({}, dto.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     return this.svc.createGoal(dto);
   }
 

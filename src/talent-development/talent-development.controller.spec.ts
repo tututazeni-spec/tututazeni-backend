@@ -151,10 +151,10 @@ describe('TalentDevelopmentController', () => {
     expect(mockSvc.addGoal).toHaveBeenCalledWith(5, dto);
   });
 
-  it('updateGoal → updateGoal(id, dto)', async () => {
+  it('updateGoal → updateGoal(id, dto, user)', async () => {
     const dto = {} as any;
-    await controller.updateGoal(2, dto);
-    expect(mockSvc.updateGoal).toHaveBeenCalledWith(2, dto);
+    await controller.updateGoal(2, dto, mockUser as any);
+    expect(mockSvc.updateGoal).toHaveBeenCalledWith(2, dto, mockUser);
   });
 
   it('deleteGoal → deleteGoal(id)', async () => {
@@ -174,10 +174,10 @@ describe('TalentDevelopmentController', () => {
     expect(mockSvc.updateAction).toHaveBeenCalledWith(2, dto);
   });
 
-  it('updateProgress → updateActionProgress(id, dto, userId)', async () => {
+  it('updateProgress → updateActionProgress(id, dto, user)', async () => {
     const dto = {} as any;
-    await controller.updateProgress(3, dto, mockReq as any);
-    expect(mockSvc.updateActionProgress).toHaveBeenCalledWith(3, dto, 1);
+    await controller.updateProgress(3, dto, mockUser as any);
+    expect(mockSvc.updateActionProgress).toHaveBeenCalledWith(3, dto, mockUser);
   });
 
   it('approveAction → approveActionEvidence(id, dto, userId)', async () => {

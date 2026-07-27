@@ -86,14 +86,14 @@ export class EmployeesController {
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Detalhe completo do colaborador' })
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user?.id);
   }
 
   @Get(':id/stats')
-  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'KPIs e estatísticas do colaborador' })
   getStats(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getEmployeeStats(id);
@@ -182,7 +182,7 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/feedback360')
-  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Histórico de Feedback 360 com média e agrupamento por ciclo' })
   @ApiQuery({ name: 'cycle', required: false })
   getFeedback360(@Param('id', ParseIntPipe) id: number, @Query('cycle') cycle?: string) {
@@ -201,7 +201,7 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/career-plans')
-  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Planos de carreira' })
   getCareerPlans(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getCareerPlans(id);
@@ -229,7 +229,7 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/pdis')
-  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'PDIs do colaborador' })
   getPdis(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getPdis(id);
@@ -243,7 +243,7 @@ export class EmployeesController {
   }
 
   @Patch('pdis/:id/progress')
-  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Atualizar progresso do PDI' })
   updatePdiProgress(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePdiProgressDto) {
     return this.svc.updatePdiProgress(id, dto);
@@ -254,14 +254,14 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/skills')
-  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Skills e competências com gap analysis' })
   getSkills(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getEmployeeSkills(id);
   }
 
   @Post(':id/skills')
-  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Atribuir skill ao colaborador' })
   assignSkill(
     @Param('id', ParseIntPipe) id: number,
@@ -272,7 +272,7 @@ export class EmployeesController {
   }
 
   @Patch(':id/skills/:skillId')
-  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Atualizar nível da skill' })
   updateSkillLevel(
     @Param('id', ParseIntPipe) id: number,
@@ -297,14 +297,14 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/documents')
-  @Roles(Role.ADMIN, Role.RH, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Documentos do colaborador (com alertas de vencimento)' })
   getDocuments(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getDocuments(id);
   }
 
   @Post(':id/documents')
-  @Roles(Role.ADMIN, Role.RH, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Adicionar documento' })
   createDocument(
     @Param('id', ParseIntPipe) id: number,
@@ -326,7 +326,7 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/timeline')
-  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Timeline de eventos do colaborador' })
   @ApiQuery({ name: 'type', required: false })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -350,7 +350,7 @@ export class EmployeesController {
   // ══════════════════════════════════════════════════════════════════
 
   @Get(':id/requests')
-  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Solicitações de autoatendimento' })
   @ApiQuery({ name: 'status', required: false })
   getRequests(@Param('id', ParseIntPipe) id: number, @Query('status') status?: string) {
@@ -358,7 +358,7 @@ export class EmployeesController {
   }
 
   @Post(':id/requests')
-  @Roles(Role.ADMIN, Role.RH, Role.LIDER, Role.COLABORADOR)
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Criar solicitação de autoatendimento' })
   createRequest(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateSelfServiceRequestDto) {
     return this.svc.createRequest({ ...dto, employeeId: id });

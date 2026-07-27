@@ -234,8 +234,12 @@ describe('EnrollmentsService (additional)', () => {
       mockPrisma.lessonProgress.count.mockResolvedValue(0);
       mockPrisma.enrollment.update.mockResolvedValue({ ...baseEnrollment, status: 'CANCELLED' });
       mockPrisma.courseAnalytics = { updateMany: jest.fn().mockResolvedValue({}) };
-      // Real signature: cancel(id, dto, requestingUserId) — 3 args
-      const result = await service.cancel(1, { reason: 'Não aplicável' } as any, 2);
+      // Real signature: cancel(id, dto, requestingUser) — 3 args
+      const result = await service.cancel(
+        1,
+        { reason: 'Não aplicável' } as any,
+        { id: 2, role: { name: 'COLABORADOR' } } as any,
+      );
       expect(result).toBeDefined();
     });
 
@@ -249,8 +253,30 @@ describe('EnrollmentsService (additional)', () => {
       });
       mockPrisma.lesson.count.mockResolvedValue(0);
       mockPrisma.lessonProgress.count.mockResolvedValue(0);
-      // Real signature: cancel(id, dto, requestingUserId) — 3 args
-      await expect(service.cancel(1, {} as any, 2)).rejects.toThrow(ForbiddenException);
+      // Real signature: cancel(id, dto, requestingUser) — 3 args
+      await expect(
+        service.cancel(1, {} as any, { id: 2, role: { name: 'COLABORADOR' } } as any),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    // A10-12: sem ownership, qualquer autenticado podia cancelar a matrícula
+    // de outra pessoa.
+    it('rejeita colaborador a cancelar matrícula de outra pessoa', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        userId: 2,
+        status: 'NOT_STARTED',
+        mandatory: false,
+        courseId: 1,
+      });
+      await expect(
+        service.cancel(
+          1,
+          { reason: 'x' } as any,
+          { id: 999, role: { name: 'COLABORADOR' } } as any,
+        ),
+      ).rejects.toThrow();
+      expect(mockPrisma.enrollment.update).not.toHaveBeenCalled();
     });
   });
 

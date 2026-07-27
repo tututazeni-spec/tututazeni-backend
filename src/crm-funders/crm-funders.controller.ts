@@ -47,6 +47,7 @@ export class CrmFundersController {
   }
 
   @Get()
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar financiadores (paginado)' })
   findAll(@Query() filters: FilterFunderDto) {
     return this.service.findAll(filters);
@@ -77,6 +78,7 @@ export class CrmFundersController {
   }
 
   @Get(':id')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Detalhe de financiador' })
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
@@ -115,6 +117,7 @@ export class CrmFundersController {
   }
 
   @Get(':id/grants')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar grants do financiador' })
   findGrants(
     @Param('id') id: string,
@@ -149,6 +152,7 @@ export class CrmFundersController {
   }
 
   @Get('grants/:grantId/disbursements')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar desembolsos do grant' })
   getDisbursements(
     @Param('grantId') grantId: string,
@@ -161,6 +165,7 @@ export class CrmFundersController {
   // ─── INTERACÇÕES ─────────────────────────────────────
 
   @Post(':id/interactions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Adicionar interacção' })
   addInteraction(
     @Param('id') id: string,

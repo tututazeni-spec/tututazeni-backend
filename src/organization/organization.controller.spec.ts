@@ -84,7 +84,21 @@ describe('OrganizationController', () => {
   });
 
   it('userOrgProfile → getUserOrgProfile(userId)', async () => {
-    await controller.userOrgProfile(4);
+    await controller.userOrgProfile(4, mockUser as any);
+    expect(mockSvc.getUserOrgProfile).toHaveBeenCalledWith(4);
+  });
+
+  // A10-8: sem ownership, qualquer autenticado lia a banda salarial
+  // (position.salaryMin/salaryMax) de qualquer colega.
+  it('userOrgProfile rejeita colaborador a ver perfil de outro utilizador', () => {
+    const colaborador = { id: 2, email: 'c@innova.com', role: { name: 'COLABORADOR' } };
+    expect(() => controller.userOrgProfile(4, colaborador as any)).toThrow();
+    expect(mockSvc.getUserOrgProfile).not.toHaveBeenCalledWith(4);
+  });
+
+  it('userOrgProfile permite colaborador ver o seu próprio perfil', async () => {
+    const colaborador = { id: 4, email: 'c@innova.com', role: { name: 'COLABORADOR' } };
+    await controller.userOrgProfile(4, colaborador as any);
     expect(mockSvc.getUserOrgProfile).toHaveBeenCalledWith(4);
   });
 
