@@ -174,6 +174,15 @@ tiver uma página "meu perfil" a bater nestes endpoints para colaboradores
 comuns, essa funcionalidade passa a 403 — precisa de outra fonte de dados
 (ex.: `GET /users/me`) ou de uma futura ligação real User↔Employee.
 
+**Verificação pós-merge (2026-07-27):** confirmado no frontend que a página
+"meu perfil" (`MyProfileView()` em
+`frontend/app/(platform)/competencies/page.tsx`) usa exclusivamente
+`/competencies/my/*` — nunca `/employees/...`. O único consumidor de
+`/employees/*` no frontend é a lista de RH (`frontend/app/(platform)/employees/page.tsx`),
+já `ADMIN/RH/LIDER`-only e inalterada por este fix. Nenhum utilizador
+`COLABORADOR` foi afectado. Nota mantida acima como registo da decisão e do
+raciocínio na altura da correção, não como risco em aberto.
+
 ### A10-20 — nota de scope: `pdf.controller.ts` continua com dados placeholder
 
 Restringido `payslip`/`report` a ADMIN/RH e documentado com `TODO` inline que
