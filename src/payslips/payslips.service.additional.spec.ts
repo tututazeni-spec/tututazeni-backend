@@ -22,8 +22,6 @@ const mockPrisma = {
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
-const rh = { id: 1, role: { name: 'RH' } } as any;
-
 describe('PayslipsService — cálculo IRT Angola 2026 (calcIRT)', () => {
   let service: PayslipsService;
 
@@ -102,9 +100,7 @@ describe('PayslipsService — totais, overrides e criação', () => {
     expect(out.grossSalary).toBe(260_000);
     expect(out.incomeTax).toBeCloseTo(11_500);
     expect(out.socialSecurity).toBeCloseTo(250_000 * 0.03);
-    expect(out.netSalary).toBeCloseTo(
-      260_000 - 11_500 - 250_000 * 0.03,
-    );
+    expect(out.netSalary).toBeCloseTo(260_000 - 11_500 - 250_000 * 0.03);
     expect(out.irtDetails.effectiveRate).toBeGreaterThan(0);
   });
 
@@ -154,14 +150,26 @@ describe('PayslipsService — transições de estado', () => {
   });
 
   it('issue: emite recibo em DRAFT e notifica o colaborador', async () => {
-    mockPrisma.payslip.findUnique.mockResolvedValue({ id: 1, userId: 7, status: 'DRAFT', period: '2026-04' });
-    mockPrisma.payslip.update.mockResolvedValue({ id: 1, userId: 7, status: 'ISSUED', period: '2026-04' });
+    mockPrisma.payslip.findUnique.mockResolvedValue({
+      id: 1,
+      userId: 7,
+      status: 'DRAFT',
+      period: '2026-04',
+    });
+    mockPrisma.payslip.update.mockResolvedValue({
+      id: 1,
+      userId: 7,
+      status: 'ISSUED',
+      period: '2026-04',
+    });
 
     const out = await service.issue(1);
 
     expect(out.status).toBe('ISSUED');
     expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ userId: 7, type: 'PAYSLIP_ISSUED' }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ userId: 7, type: 'PAYSLIP_ISSUED' }),
+      }),
     );
   });
 
@@ -279,7 +287,9 @@ describe('PayslipsService — bulkCreate', () => {
 
     expect(out.created).toBe(1);
     expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ userId: 1, type: 'PAYSLIP_ISSUED' }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ userId: 1, type: 'PAYSLIP_ISSUED' }),
+      }),
     );
   });
 
@@ -331,8 +341,22 @@ describe('PayslipsService — resumo anual, comparação e disputa', () => {
 
   it('annualSummary: soma correctamente os totais do ano', async () => {
     mockPrisma.payslip.findMany.mockResolvedValue([
-      { period: '2026-01', grossSalary: 100, netSalary: 80, incomeTax: 10, socialSecurity: 5, employerInss: 8 },
-      { period: '2026-02', grossSalary: 200, netSalary: 160, incomeTax: 20, socialSecurity: 10, employerInss: 16 },
+      {
+        period: '2026-01',
+        grossSalary: 100,
+        netSalary: 80,
+        incomeTax: 10,
+        socialSecurity: 5,
+        employerInss: 8,
+      },
+      {
+        period: '2026-02',
+        grossSalary: 200,
+        netSalary: 160,
+        incomeTax: 20,
+        socialSecurity: 10,
+        employerInss: 16,
+      },
     ]);
     const out = await service.annualSummary(7, '2026');
     expect(out.months).toBe(2);
@@ -342,12 +366,16 @@ describe('PayslipsService — resumo anual, comparação e disputa', () => {
 
   it('compare: lança 404 se o período A não existe', async () => {
     mockPrisma.payslip.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 2 });
-    await expect(service.compare(7, '2026-01', '2026-02')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.compare(7, '2026-01', '2026-02')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('compare: lança 404 se o período B não existe', async () => {
     mockPrisma.payslip.findFirst.mockResolvedValueOnce({ id: 1 }).mockResolvedValueOnce(null);
-    await expect(service.compare(7, '2026-01', '2026-02')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.compare(7, '2026-01', '2026-02')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('compare: calcula delta e pct entre dois períodos', async () => {
@@ -390,9 +418,13 @@ describe('PayslipsService — resumo anual, comparação e disputa', () => {
   it('createDispute: colaborador não pode disputar recibo alheio', async () => {
     mockPrisma.payslip.findUnique.mockResolvedValue({ id: 3, userId: 999, receiptCode: 'REC-1' });
     await expect(
-      service.createDispute(3, { id: 7, role: { name: 'COLABORADOR' } } as any, {
-        reason: 'x',
-      } as any),
+      service.createDispute(
+        3,
+        { id: 7, role: { name: 'COLABORADOR' } } as any,
+        {
+          reason: 'x',
+        } as any,
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(mockPrisma.payslipDispute.create).not.toHaveBeenCalled();
   });
@@ -418,7 +450,13 @@ describe('PayslipsService — dashboard RH e logs de acesso', () => {
       .mockResolvedValueOnce(1) // disputed
       .mockResolvedValueOnce(3); // notViewed
     mockPrisma.payslip.aggregate.mockResolvedValue({
-      _sum: { grossSalary: 1000, netSalary: 800, incomeTax: 100, socialSecurity: 50, employerInss: 80 },
+      _sum: {
+        grossSalary: 1000,
+        netSalary: 800,
+        incomeTax: 100,
+        socialSecurity: 50,
+        employerInss: 80,
+      },
       _avg: { netSalary: 80 },
     });
 

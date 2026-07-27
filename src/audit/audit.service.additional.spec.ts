@@ -116,7 +116,9 @@ describe('AuditService — severidade inferida e atalhos semânticos', () => {
   it('acção UPDATE/APPROVE/REJECT em entidade não sensível é MEDIUM', async () => {
     await service.log({ userId: 1, action: 'UPDATE', entity: 'Course', entityId: 1 });
     expect(mockPrisma.auditLog.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ severity: AuditSeverity.MEDIUM }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ severity: AuditSeverity.MEDIUM }),
+      }),
     );
   });
 
@@ -330,7 +332,12 @@ describe('AuditService — consulta, timeline, histórico e stats', () => {
 
   it('exportLogs regista a própria exportação como evento auditável', async () => {
     mockPrisma.auditLog.findMany.mockResolvedValue([
-      { id: 1, timestamp: new Date(), user: { fullName: 'Ana', email: 'ana@x.com' }, action: 'READ' },
+      {
+        id: 1,
+        timestamp: new Date(),
+        user: { fullName: 'Ana', email: 'ana@x.com' },
+        action: 'READ',
+      },
     ]);
 
     const out = await service.exportLogs({} as any, 42);
@@ -344,7 +351,9 @@ describe('AuditService — consulta, timeline, histórico e stats', () => {
   });
 
   it('exportLogs usa "Sistema" quando o log não tem utilizador associado', async () => {
-    mockPrisma.auditLog.findMany.mockResolvedValue([{ id: 1, timestamp: new Date(), action: 'READ' }]);
+    mockPrisma.auditLog.findMany.mockResolvedValue([
+      { id: 1, timestamp: new Date(), action: 'READ' },
+    ]);
     const out = await service.exportLogs({} as any, 42);
     expect(out.data[0].user).toBe('Sistema (—)');
   });
@@ -384,8 +393,26 @@ describe('AuditService — verificação de integridade da cadeia', () => {
     const hash2 = expectedHash(1, 'UPDATE', 'User', 5, ts2, hash1);
 
     mockPrisma.auditLog.findMany.mockResolvedValue([
-      { id: 1, userId: 1, action: 'CREATE', entity: 'User', entityId: 5, timestamp: ts1, hash: hash1, previousHash: 'GENESIS' },
-      { id: 2, userId: 1, action: 'UPDATE', entity: 'User', entityId: 5, timestamp: ts2, hash: hash2, previousHash: hash1 },
+      {
+        id: 1,
+        userId: 1,
+        action: 'CREATE',
+        entity: 'User',
+        entityId: 5,
+        timestamp: ts1,
+        hash: hash1,
+        previousHash: 'GENESIS',
+      },
+      {
+        id: 2,
+        userId: 1,
+        action: 'UPDATE',
+        entity: 'User',
+        entityId: 5,
+        timestamp: ts2,
+        hash: hash2,
+        previousHash: hash1,
+      },
     ]);
 
     const out = await service.verifyIntegrity();
@@ -425,8 +452,26 @@ describe('AuditService — verificação de integridade da cadeia', () => {
     const hash2 = expectedHash(1, 'UPDATE', 'User', 5, ts2, 'hash-forjado');
 
     mockPrisma.auditLog.findMany.mockResolvedValue([
-      { id: 1, userId: 1, action: 'CREATE', entity: 'User', entityId: 5, timestamp: ts1, hash: hash1, previousHash: 'GENESIS' },
-      { id: 2, userId: 1, action: 'UPDATE', entity: 'User', entityId: 5, timestamp: ts2, hash: hash2, previousHash: 'hash-forjado' },
+      {
+        id: 1,
+        userId: 1,
+        action: 'CREATE',
+        entity: 'User',
+        entityId: 5,
+        timestamp: ts1,
+        hash: hash1,
+        previousHash: 'GENESIS',
+      },
+      {
+        id: 2,
+        userId: 1,
+        action: 'UPDATE',
+        entity: 'User',
+        entityId: 5,
+        timestamp: ts2,
+        hash: hash2,
+        previousHash: 'hash-forjado',
+      },
     ]);
 
     const out = await service.verifyIntegrity();

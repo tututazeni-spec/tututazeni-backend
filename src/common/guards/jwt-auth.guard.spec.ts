@@ -79,9 +79,7 @@ describe('JwtAuthGuard', () => {
 
     it('lança UnauthorizedException se não há erro mas também não há utilizador', () => {
       expect(() => guard.handleRequest(null, false)).toThrow(UnauthorizedException);
-      expect(() => guard.handleRequest(undefined, undefined)).toThrow(
-        'Token inválido ou expirado',
-      );
+      expect(() => guard.handleRequest(undefined, undefined)).toThrow('Token inválido ou expirado');
     });
   });
 });
