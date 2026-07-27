@@ -352,7 +352,7 @@ export class CrmFundersService {
     const report = await this.prisma.funderReport.findUnique({
       where: { id: reportId },
     });
-    if (!report) throw new NotFoundException('Relatório não encontrado');
+    if (!report || report.deletedAt) throw new NotFoundException('Relatório não encontrado');
     const updated = await this.prisma.funderReport.update({
       where: { id: reportId },
       data: { status: 'SUBMITTED', submittedAt: new Date(), fileUrl },

@@ -26,6 +26,7 @@ import {
   CreateDisbursementDto,
   CreateFunderInteractionDto,
   CreateFunderReportDto,
+  SubmitFunderReportDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
 
@@ -183,12 +184,13 @@ export class CrmFundersController {
   }
 
   @Put('reports/:reportId/submit')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Submeter relatório' })
   submitReport(
     @Param('reportId') reportId: string,
-    @Body('fileUrl') fileUrl: string,
+    @Body() dto: SubmitFunderReportDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.service.submitReport(reportId, fileUrl, user.id);
+    return this.service.submitReport(reportId, dto.fileUrl, user.id);
   }
 }

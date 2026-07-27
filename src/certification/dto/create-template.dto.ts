@@ -1,6 +1,7 @@
 import { IsString, IsOptional, IsEnum, IsBoolean, IsInt, Length } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CertificateTemplateType } from '@prisma/client';
+import { IsAllowedFileUrl } from '../../common/validators/is-allowed-file-url.validator';
 
 export class CreateTemplateDto {
   @ApiProperty({ example: 'Certificado de Conclusão de Curso' })
@@ -29,12 +30,12 @@ export class CreateTemplateDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsAllowedFileUrl()
   logoUrl?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsAllowedFileUrl()
   signatureUrl?: string;
 
   @ApiPropertyOptional()
