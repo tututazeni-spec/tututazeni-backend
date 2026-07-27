@@ -107,7 +107,23 @@ describe('LeaveManagementController', () => {
   });
 
   it('checkConflicts → getConflictCheck(userId, dates)', async () => {
-    await controller.checkConflicts('5', '2024-06-01', '2024-06-10');
+    await controller.checkConflicts('5', '2024-06-01', '2024-06-10', mockUser as any);
+    expect(mockSvc.getConflictCheck).toHaveBeenCalledWith(5, '2024-06-01', '2024-06-10');
+  });
+
+  // A10-23: sem ownership, qualquer autenticado podia sondar se um colega
+  // tinha férias marcadas num período arbitrário.
+  it('checkConflicts rejeita colaborador a sondar férias de outro utilizador', () => {
+    const colaborador = { id: 2, email: 'c@innova.com', role: { name: 'COLABORADOR' } };
+    expect(() =>
+      controller.checkConflicts('5', '2024-06-01', '2024-06-10', colaborador as any),
+    ).toThrow();
+    expect(mockSvc.getConflictCheck).not.toHaveBeenCalledWith(5, '2024-06-01', '2024-06-10');
+  });
+
+  it('checkConflicts permite colaborador sondar as suas próprias férias', async () => {
+    const colaborador = { id: 5, email: 'c@innova.com', role: { name: 'COLABORADOR' } };
+    await controller.checkConflicts('5', '2024-06-01', '2024-06-10', colaborador as any);
     expect(mockSvc.getConflictCheck).toHaveBeenCalledWith(5, '2024-06-01', '2024-06-10');
   });
 
