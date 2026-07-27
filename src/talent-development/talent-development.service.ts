@@ -637,9 +637,15 @@ export class TalentDevelopmentService {
     });
   }
 
-  async updateGoal(goalId: number, dto: TalentDevelopmentUpdateGoalDto) {
-    const goal = await this.prisma.read.pdiGoal.findUnique({ where: { id: goalId } });
+  async updateGoal(goalId: number, dto: TalentDevelopmentUpdateGoalDto, user: CurrentUserData) {
+    const goal = await this.prisma.read.pdiGoal.findUnique({
+      where: { id: goalId },
+      include: { plan: { select: { userId: true } } },
+    });
     if (!goal) throw new NotFoundException('Meta não encontrada');
+    // A10-6: sem isto, qualquer autenticado podia alterar a meta de PDI de
+    // outra pessoa via PATCH /talent/goals/:id.
+    assertCanAccess(goal, (goal as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
 
     const data: any = { ...dto };
     if (dto.dueDate) data.dueDate = new Date(dto.dueDate);
@@ -731,13 +737,18 @@ export class TalentDevelopmentService {
   async updateActionProgress(
     actionId: number,
     dto: TalentDevelopmentUpdateProgressDto,
-    userId: number,
+    user: CurrentUserData,
   ) {
     const action = await this.prisma.read.developmentPlanAction.findUnique({
       where: { id: actionId },
       include: { plan: { select: { userId: true, name: true } } },
     });
     if (!action) throw new NotFoundException('Acção não encontrada');
+    // A10-6: a rota diz "colaborador actualiza o seu próprio progresso" mas
+    // nunca comparava o dono do plano com quem chamava — qualquer autenticado
+    // podia adulterar o progresso de PDI de outra pessoa.
+    assertCanAccess(action, (action as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
+    const userId = user.id;
 
     const newStatus =
       dto.progress === 100 ? 'COMPLETED' : dto.progress > 0 ? 'IN_PROGRESS' : action.status;

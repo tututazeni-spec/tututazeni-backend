@@ -54,6 +54,8 @@ const mockPrisma: any = {
   user: { findUnique: jest.fn().mockResolvedValue(null) },
 };
 
+const mockAdmin = { id: 99, email: 'admin@innova.com', role: { name: 'ADMIN' } };
+
 const basePlan = {
   id: 1,
   userId: 2,
@@ -235,11 +237,14 @@ describe('DevelopmentPlansService (additional)', () => {
         planId: 1,
         title: 'Acção 1',
       });
-      const result = await service.addAction({
-        planId: 1,
-        title: 'Acção 1',
-        type: 'COURSE' as any,
-      } as any);
+      const result = await service.addAction(
+        {
+          planId: 1,
+          title: 'Acção 1',
+          type: 'COURSE' as any,
+        } as any,
+        mockAdmin as any,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -252,15 +257,55 @@ describe('DevelopmentPlansService (additional)', () => {
         id: 1,
         planId: 1,
         status: 'PENDING',
+        plan: { userId: 2 },
       });
       mockPrisma.developmentPlanAction.update.mockResolvedValue({ id: 1, status: 'IN_PROGRESS' });
-      const result = await service.updateAction(1, { status: 'IN_PROGRESS' } as any, 1);
+      const result = await service.updateAction(
+        1,
+        { status: 'IN_PROGRESS' } as any,
+        mockAdmin as any,
+      );
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se acção não existe', async () => {
       mockPrisma.developmentPlanAction.findUnique.mockResolvedValue(null);
-      await expect(service.updateAction(99, {} as any, 1)).rejects.toThrow(NotFoundException);
+      await expect(service.updateAction(99, {} as any, mockAdmin as any)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    // A10-5: XP de acção completada tem de ir para o dono do plano, nunca
+    // para quem chamou o endpoint (ex.: um GESTOR a completar em nome de outro).
+    it('atribui XP ao dono do plano, não a quem chama', async () => {
+      mockPrisma.developmentPlanAction.findUnique.mockResolvedValue({
+        id: 1,
+        planId: 1,
+        status: 'PENDING',
+        xpReward: 30,
+        plan: { userId: 2 },
+      });
+      mockPrisma.developmentPlanAction.update.mockResolvedValue({ id: 1, status: 'COMPLETED' });
+      mockPrisma.developmentPlanAction.findMany.mockResolvedValue([]);
+      mockPrisma.pdiGoal.findMany.mockResolvedValue([]);
+      await service.updateAction(1, { status: 'COMPLETED' } as any, mockAdmin as any);
+      expect(mockPrisma.userPoints.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 2 } }),
+      );
+    });
+
+    it('rejeita colaborador a editar acção de outra pessoa', async () => {
+      mockPrisma.developmentPlanAction.findUnique.mockResolvedValue({
+        id: 1,
+        planId: 1,
+        status: 'PENDING',
+        plan: { userId: 2 },
+      });
+      const other = { id: 777, email: 'x@innova.com', role: { name: 'COLABORADOR' } };
+      await expect(
+        service.updateAction(1, { status: 'IN_PROGRESS' } as any, other as any),
+      ).rejects.toThrow();
+      expect(mockPrisma.developmentPlanAction.update).not.toHaveBeenCalled();
     });
   });
 
@@ -268,13 +313,19 @@ describe('DevelopmentPlansService (additional)', () => {
 
   describe('addEvidence', () => {
     it('deve adicionar evidência a uma acção', async () => {
-      mockPrisma.developmentPlanAction.findUnique.mockResolvedValue({ id: 1 });
+      mockPrisma.developmentPlanAction.findUnique.mockResolvedValue({
+        id: 1,
+        plan: { userId: 2 },
+      });
       mockPrisma.pdiEvidence.create.mockResolvedValue({ id: 1, actionId: 1 });
-      const result = await service.addEvidence(1, {
-        actionId: 1,
-        description: 'Certificado concluído',
-        type: 'CERTIFICATE' as any,
-      } as any);
+      const result = await service.addEvidence(
+        mockAdmin as any,
+        {
+          actionId: 1,
+          description: 'Certificado concluído',
+          type: 'CERTIFICATE' as any,
+        } as any,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -285,10 +336,13 @@ describe('DevelopmentPlansService (additional)', () => {
     it('deve adicionar objectivo ao plano', async () => {
       mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
       mockPrisma.pdiGoal.create.mockResolvedValue({ id: 1, planId: 1, title: 'Objectivo 1' });
-      const result = await service.addGoal({
-        planId: 1,
-        title: 'Objectivo 1',
-      } as any);
+      const result = await service.addGoal(
+        {
+          planId: 1,
+          title: 'Objectivo 1',
+        } as any,
+        mockAdmin as any,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -297,13 +351,16 @@ describe('DevelopmentPlansService (additional)', () => {
 
   describe('updateGoalProgress', () => {
     it('deve actualizar progresso do objectivo', async () => {
-      mockPrisma.pdiGoal.findUnique.mockResolvedValue({ id: 1, planId: 1 });
+      mockPrisma.pdiGoal.findUnique.mockResolvedValue({ id: 1, planId: 1, plan: { userId: 2 } });
       mockPrisma.pdiGoal.update.mockResolvedValue({ id: 1, progress: 80 });
-      const result = await service.updateGoalProgress(1, {
-        goalId: 1,
-        progress: 80,
-        notes: 'A progredir',
-      } as any);
+      const result = await service.updateGoalProgress(
+        mockAdmin as any,
+        {
+          goalId: 1,
+          progress: 80,
+          notes: 'A progredir',
+        } as any,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -314,11 +371,14 @@ describe('DevelopmentPlansService (additional)', () => {
     it('deve adicionar checkpoint ao plano', async () => {
       mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
       mockPrisma.pdiCheckpoint.create.mockResolvedValue({ id: 1, planId: 1 });
-      const result = await service.addCheckpoint({
-        planId: 1,
-        title: 'Checkpoint 1',
-        scheduledDate: '2026-06-01',
-      } as any);
+      const result = await service.addCheckpoint(
+        {
+          planId: 1,
+          title: 'Checkpoint 1',
+          scheduledDate: '2026-06-01',
+        } as any,
+        mockAdmin as any,
+      );
       expect(result).toBeDefined();
     });
   });

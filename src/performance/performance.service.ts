@@ -255,6 +255,17 @@ export class PerformanceService {
   async submitReview(submitterId: number, dto: SubmitReviewDto) {
     const review = (await this.findOne(dto.reviewId)) as any;
 
+    // A10-4: sem isto, qualquer utilizador autenticado podia submeter a
+    // auto-avaliação ou a avaliação de gestor de outra pessoa (findOne acima
+    // não filtra por dono porque é chamado sem `user`). Auto-avaliação só
+    // pelo avaliado (review.userId); avaliação de gestor só pelo reviewer.
+    const expectedSubmitterId = review.type === 'SELF' ? review.userId : review.reviewerId;
+    if (String(submitterId) !== String(expectedSubmitterId)) {
+      throw new ForbiddenException(
+        'Apenas o avaliado (auto-avaliação) ou o avaliador podem submeter esta avaliação',
+      );
+    }
+
     if (review.status === 'FINALIZED') {
       throw new ForbiddenException('Avaliação já finalizada');
     }

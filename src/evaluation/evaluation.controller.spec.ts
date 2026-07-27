@@ -149,18 +149,51 @@ describe('EvaluationController', () => {
   });
 
   it('results sem cycleId → getResults(userId, undefined)', async () => {
-    await controller.results(4);
+    await controller.results(4, undefined, mockUser as any);
     expect(mockSvc.getResults).toHaveBeenCalledWith(4, undefined);
   });
 
   it('results com cycleId → getResults(userId, parsed)', async () => {
-    await controller.results(4, '3');
+    await controller.results(4, '3', mockUser as any);
     expect(mockSvc.getResults).toHaveBeenCalledWith(4, 3);
   });
 
   it('evolution → getUserEvolution(userId)', async () => {
-    await controller.evolution(5);
+    await controller.evolution(5, mockUser as any);
     expect(mockSvc.getUserEvolution).toHaveBeenCalledWith(5);
+  });
+
+  // A10-3: results/:userId e evolution/:userId aceitavam @Roles(ALL_ROLES) sem
+  // ownership — qualquer COLABORADOR lia o 360 completo de qualquer colega.
+  describe('results/evolution — ownership (A10-3)', () => {
+    const other = { id: 2, email: 'other@innova.com', role: { name: 'COLABORADOR' } };
+    const owner = { id: 4, email: 'owner@innova.com', role: { name: 'COLABORADOR' } };
+    const manager = { id: 9, email: 'mgr@innova.com', role: { name: 'LIDER' } };
+
+    it('colaborador não pode ver results de outro utilizador → excepção', () => {
+      expect(() => controller.results(4, undefined, other as any)).toThrow();
+      expect(mockSvc.getResults).not.toHaveBeenCalled();
+    });
+
+    it('colaborador pode ver os seus próprios results', async () => {
+      await controller.results(4, undefined, owner as any);
+      expect(mockSvc.getResults).toHaveBeenCalledWith(4, undefined);
+    });
+
+    it('LIDER pode ver results de qualquer colaborador', async () => {
+      await controller.results(4, undefined, manager as any);
+      expect(mockSvc.getResults).toHaveBeenCalledWith(4, undefined);
+    });
+
+    it('colaborador não pode ver evolution de outro utilizador → excepção', () => {
+      expect(() => controller.evolution(4, other as any)).toThrow();
+      expect(mockSvc.getUserEvolution).not.toHaveBeenCalled();
+    });
+
+    it('colaborador pode ver a sua própria evolution', async () => {
+      await controller.evolution(4, owner as any);
+      expect(mockSvc.getUserEvolution).toHaveBeenCalledWith(4);
+    });
   });
 
   it('calibrationPanel → getCycleForCalibration(cycleId)', async () => {
