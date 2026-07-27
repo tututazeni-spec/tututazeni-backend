@@ -9,6 +9,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createHash } from 'crypto';
+import { isPrivileged } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/decorators';
 import {
   CreateProcessDto,
   UpdateProcessDto,
@@ -18,6 +21,8 @@ import {
   RejectStepDto,
   ApprovalActionDto,
 } from './process-standard.dto';
+
+const PROCESS_PRIVILEGED_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR];
 
 @Injectable()
 export class ProcessStandardService {
@@ -479,7 +484,7 @@ export class ProcessStandardService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async getInstanceDetail(instanceId: number) {
+  async getInstanceDetail(instanceId: number, user: CurrentUserData) {
     const inst = await this.prisma.read.processInstance.findUnique({
       where: { id: instanceId },
       include: {
@@ -495,17 +500,46 @@ export class ProcessStandardService {
       },
     });
     if (!inst) throw new NotFoundException('Instância não encontrada');
+    // A10-7: sem isto, qualquer autenticado lia o detalhe de qualquer
+    // instância de processo (RH/disciplinar/onboarding) de qualquer colega.
+    const isParticipant =
+      String(user.id) === String(inst.targetUserId) ||
+      String(user.id) === String(inst.initiatedById);
+    if (!isParticipant && !isPrivileged(user, PROCESS_PRIVILEGED_ROLES)) {
+      throw new NotFoundException('Instância não encontrada');
+    }
     return inst;
   }
 
-  async completeStep(instanceId: number, stepId: number, userId: number, dto: CompleteStepDto) {
+  async completeStep(
+    instanceId: number,
+    stepId: number,
+    user: CurrentUserData,
+    dto: CompleteStepDto,
+  ) {
+    const userId = user.id;
     const sp = await this.prisma.read.stepProgress.findUnique({
       where: { instanceId_stepId: { instanceId, stepId } },
     });
     if (!sp) throw new NotFoundException('Passo não encontrado nesta instância');
     if (sp.status === 'COMPLETED') throw new ConflictException('Passo já concluído');
 
+    const instance = await this.prisma.read.processInstance.findUnique({
+      where: { id: instanceId },
+      select: { targetUserId: true },
+    });
+    if (!instance) throw new NotFoundException('Instância não encontrada');
+
     const step = await this.prisma.read.processStep.findUnique({ where: { id: stepId } });
+
+    // A10-7: sem isto, qualquer autenticado podia completar (forjar
+    // aprovação de) o passo de qualquer instância de processo.
+    const isResponsible =
+      String(userId) === String(instance.targetUserId) ||
+      (step?.responsibleId != null && String(userId) === String(step.responsibleId));
+    if (!isResponsible && !isPrivileged(user, PROCESS_PRIVILEGED_ROLES)) {
+      throw new NotFoundException('Passo não encontrado nesta instância');
+    }
 
     // Validar upload obrigatório
     if ((step as any)?.requiresUpload && (!dto.evidenceIds || dto.evidenceIds.length === 0)) {
@@ -564,11 +598,28 @@ export class ProcessStandardService {
     return updated;
   }
 
-  async rejectStep(instanceId: number, stepId: number, userId: number, dto: RejectStepDto) {
+  async rejectStep(instanceId: number, stepId: number, user: CurrentUserData, dto: RejectStepDto) {
+    const userId = user.id;
     const sp = await this.prisma.read.stepProgress.findUnique({
       where: { instanceId_stepId: { instanceId, stepId } },
     });
     if (!sp) throw new NotFoundException('Passo não encontrado');
+
+    const instance = await this.prisma.read.processInstance.findUnique({
+      where: { id: instanceId },
+      select: { targetUserId: true },
+    });
+    if (!instance) throw new NotFoundException('Instância não encontrada');
+    const step = await this.prisma.read.processStep.findUnique({ where: { id: stepId } });
+
+    // A10-7: mesma verificação de completeStep — sem isto, qualquer
+    // autenticado podia rejeitar (forjar) o passo de qualquer instância.
+    const isResponsible =
+      String(userId) === String(instance.targetUserId) ||
+      (step?.responsibleId != null && String(userId) === String(step.responsibleId));
+    if (!isResponsible && !isPrivileged(user, PROCESS_PRIVILEGED_ROLES)) {
+      throw new NotFoundException('Passo não encontrado');
+    }
 
     await this.prisma.stepProgress.update({
       where: { instanceId_stepId: { instanceId, stepId } },

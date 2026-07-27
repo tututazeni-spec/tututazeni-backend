@@ -55,10 +55,10 @@ describe('EnrollmentsController', () => {
     expect(mockSvc.enroll).toHaveBeenCalledWith({ userId: 1, courseId: 5, origin: 'MANUAL' });
   });
 
-  it('cancelMy → cancel(id, dto, userId)', async () => {
+  it('cancelMy → cancel(id, dto, user)', async () => {
     const dto = { reason: 'motivo' } as any;
     await controller.cancelMy(3, mockUser as any, dto);
-    expect(mockSvc.cancel).toHaveBeenCalledWith(3, dto, 1);
+    expect(mockSvc.cancel).toHaveBeenCalledWith(3, dto, mockUser);
   });
 
   it('myCertificate → generateCertificate', async () => {
