@@ -383,6 +383,16 @@ describe('CrmFundersService', () => {
         NotFoundException,
       );
     });
+
+    it('deve lançar NotFoundException ao submeter relatório já eliminado (soft delete)', async () => {
+      mockPrisma.funderReport.findUnique.mockResolvedValue({
+        id: 'rep-1',
+        deletedAt: new Date(),
+      });
+      await expect(service.submitReport('rep-1', 'http://file.pdf', 1)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
   });
 
   describe('getOverdueReports', () => {

@@ -5,3 +5,4 @@ export * from './create-grant.dto';
 export * from './create-disbursement.dto';
 export * from './create-funder-interaction.dto';
 export * from './create-report.dto';
+export * from './submit-report.dto';

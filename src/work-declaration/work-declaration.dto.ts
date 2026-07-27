@@ -15,7 +15,6 @@ import {
   IsObject,
   IsOptional,
   IsString,
-  IsUrl,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -310,7 +309,7 @@ export class SignDeclarationDto {
   type: SignatureType;
 
   @IsOptional()
-  @IsUrl()
+  @IsAllowedFileUrl()
   signatureUrl?: string; // obrigatório para IMAGE_UPLOAD
 
   @IsOptional()
@@ -424,7 +423,7 @@ export class TemplateQueryDto {
 
 export class UpsertTenantConfigDto {
   @IsOptional()
-  @IsUrl()
+  @IsAllowedFileUrl()
   logoUrl?: string;
 
   @IsOptional()
