@@ -92,7 +92,10 @@ export class AuditService {
         action: dto.action,
         entity: dto.entity,
         entityId: dto.entityId,
-        err: { message: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined },
+        err: {
+          message: e instanceof Error ? e.message : String(e),
+          stack: e instanceof Error ? e.stack : undefined,
+        },
         msg: 'Falha ao registar audit log — cadeia de compliance quebrada',
       });
     }
