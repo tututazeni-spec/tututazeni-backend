@@ -70,6 +70,9 @@ Antes de tocar em qualquer ficheiro, internaliza estas regras. Violá-las causa 
 - `CertificateType` enum: **não tem** valor `EVENT` → usar `'COURSE' as any`
 - `Course`: **não tem** relação `skills`
 - Audit module path: `src/common/modules/audit.module.ts`
+- `Payslip.receiptCode` e `User.nif`/`User.nib` — **existem** desde as migrations `20260727212320_add_payslip_receipt_code` e `20260727212644_add_user_nif_nib`. Antes disso o código já os referenciava sem que existissem no schema, e todo o fluxo de recibos rebentava com 500 em runtime. Se voltares a ver um erro Prisma tipo "Unknown argument" num destes campos, confirma que a migration foi mesmo aplicada (`npx prisma migrate status`), não assumas que falta recriar o campo.
+- `PayslipAccessLog.userId` é **quem visualizou** o recibo (pode ser RH numa rota administrativa), **não** o dono do recibo — nunca uses este campo para filtrar "recibos de um utilizador"; usa sempre `payslipId`.
+- `ApiKey` e `Webhook` (usados em `api-integration.service.ts`) **não existem** no schema — o serviço usa um helper `safeM()` que degrada graciosamente (create devolve os dados sem persistir, findMany/findFirst devolvem vazio/null) em vez de rebentar. Isto significa que criar uma API key ou webhook "funciona" (200/201) mas nada fica persistido — não confies neste fluxo sem antes migrar os modelos.
 
 ---
 
@@ -885,6 +888,38 @@ npx ts-node prisma/cleanup-load-test.ts
 
 ---
 
+## 🧪 TESTES — PADRÕES E ARMADILHAS (encontrados a escrever cobertura de testes)
+
+> Secção adicionada após uma sessão dedicada a auditar e fechar lacunas de cobertura de testes (unitários + integração) no projecto. Estes padrões aplicam-se sempre que se escreve ou corre testes neste repositório, não só load tests.
+
+### Divergência schema ↔ código (Prisma)
+
+Este projecto tem um histórico recorrente de serviços que escrevem/lêem campos ou modelos Prisma que **nunca foram migrados** — o código foi escrito a assumir uma alteração de schema que nunca aconteceu. Já foram encontradas 3 instâncias numa só sessão (`Payslip.receiptCode`, `User.nif`/`nib`, os modelos `ApiKey`/`Webhook` inteiros).
+
+**Porque é que os testes existentes não apanham isto:** o `ts-jest` corre com `diagnostics: false` (ver `package.json`), por isso o TypeScript nunca acusa um campo/modelo em falta; e os testes unitários fazem mock directo do `PrismaService`, por isso aceitam alegremente qualquer nome de campo que o mock definir. **Só um teste de integração contra um Postgres real apanha esta classe de bug.**
+
+**Como aplicar:** antes de confiar numa chamada Prisma neste código — especialmente em serviços que usam casts `(this.prisma as any)` — confirma o modelo/campo directamente em `prisma/schema.prisma`, ou exercita o caminho de código com um teste de integração real. Não assumas que os nomes de campo num mock de teste unitário estão correctos só porque compilam.
+
+### Dois serviços de auditoria paralelos
+
+Existem **duas implementações de `AuditService`** completamente independentes, ambas a escrever na mesma tabela `AuditLog`:
+- `src/audit/audit.service.ts` — tem cadeia de hash SHA-256 tamper-evident (`hash`/`previousHash`, `verifyIntegrity()`) e detecção de anomalias, mas **nada na aplicação chama estes métodos** fora do seu próprio módulo/testes.
+- `src/common/services/audit.service.ts` — usado por ~19+ outros serviços (academic, career-plans, certification, lms, library, monitoring, etc.) para auditoria real de eventos de negócio, via fila Bull, **sem** preencher `hash`/`previousHash`.
+
+Consequência prática: `GET /audit/integrity/verify` (só ADMIN) reporta como "quebrada" a esmagadora maioria dos registos reais — não por adulteração, mas porque nunca fizeram parte da cadeia. Se fores mexer em funcionalidade de auditoria/compliance, não assumas que a cadeia de hash reflecte a actividade real da aplicação; confirma primeiro qual dos dois serviços está de facto ligado ao fluxo que estás a alterar.
+
+### Infra de testes de integração (`test/integration/*.integration-spec.ts`)
+
+- **`DB_POOL_MAX`** tem de estar definido em `.env.test` (actualmente `5`). Sem isto, cada spec de integração cria a sua própria app Nest com um pool de 50 ligações por omissão (`src/prisma/prisma.service.ts`), e correr as ~18 specs em série no mesmo processo Jest esgota facilmente as 100 ligações por omissão do Postgres — com erros "too many clients already" que aparecem, de forma enganadora, em specs completamente não relacionadas com a alteração que os despoletou.
+- **Ordem de limpeza no `afterAll`**: eliminar sempre os filhos antes dos pais quando há FK `RESTRICT` (ex.: `AcademicPeriod` antes de `AcademicYear`; `BadgeIssuance` antes de `DigitalBadge`; `PayslipAccessLog`/`PayslipDispute` antes de `Payslip` — filtrando por `payslipId`, nunca por `userId`, porque `PayslipAccessLog.userId` é o visualizador). Como estes blocos usam `.catch(() => undefined)` por passo (convenção do `test/integration/teardown.ts`), uma eliminação falhada é **engolida em silêncio** — o sintoma aparece só na *próxima* execução, como um 409 ou uma contagem errada no primeiro teste, não como um erro na execução que efectivamente deixou o registo órfão.
+- Corre sempre a suite de integração completa (não só o ficheiro que alteraste) antes de dar como fechado um trabalho que a toca — os dois problemas acima só se manifestam com todos os ficheiros juntos.
+
+### Verificação de ownership (IDOR) não é garantidamente exaustiva
+
+O histórico do repositório mostra uma auditoria extensa de IDOR (commits `A10-1` a `A10-24`) que adicionou `assertCanAccess()` a dezenas de endpoints. Mesmo assim, foi encontrada mais uma lacuna depois dessa série estar "fechada": `leader.service.ts#approvePlan` não tinha nenhuma verificação de ownership — qualquer `LIDER`/`DIRECTOR` aprovava o PDI de um colaborador de qualquer equipa, não só da sua. Ao tocar em qualquer endpoint de escrita que opere sobre um recurso pertencente a outro utilizador, não assumas que "já deve estar coberto pela série A10" — confirma explicitamente se o método chama `assertCanAccess`/`isPrivileged` (ou um filtro equivalente) antes de ir direito a um `update`/`delete`.
+
+---
+
 ## 🚨 REGRAS FINAIS PARA O CLAUDE CODE
 
 1. **Nunca assumir** que um modelo existe sem confirmar no `schema.prisma` primeiro
@@ -897,6 +932,10 @@ npx ts-node prisma/cleanup-load-test.ts
 8. **LeaveType** é ENUM — se necessitar de dados de config, usar `(prisma as any).leaveTypeConfig`
 9. **Todos os ficheiros criados** (seed, artillery.yml, CSVs, hooks) devem estar **consistentes entre si** — os IDs do seed alimentam os CSVs, os CSVs alimentam o Artillery
 10. **Antes de cada migração** de índices, corre o smoke test para confirmar que a API está estável
+11. **Nunca confies num mock de Prisma** para confirmar que um campo/modelo existe — confirma sempre em `prisma/schema.prisma` ou com um teste de integração real (ver secção "Divergência schema ↔ código")
+12. **Auditoria/compliance**: `src/audit/audit.service.ts` (cadeia de hash) está desligado da actividade real da app — o registo de eventos de negócio passa por `src/common/services/audit.service.ts`, sem hash chain
+13. **Testes de integração**: `DB_POOL_MAX` tem de estar baixo em `.env.test`; `afterAll` elimina sempre filhos antes de pais (FK RESTRICT) e nunca assumas que `userId` num log de acesso é o dono do recurso
+14. **Verificações de ownership (`assertCanAccess`)** não estão garantidamente completas mesmo em módulos já auditados — confirma sempre por método, nunca por módulo
 
 ---
 
