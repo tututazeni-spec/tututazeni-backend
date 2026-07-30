@@ -487,7 +487,12 @@ describe('PayslipsService — dashboard RH e logs de acesso', () => {
     await service.logAccess(3, 7, 'VIEW', '10.0.0.1');
     expect(mockPrisma.payslipAccessLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ payslipId: 3, userId: 7, action: 'VIEW', ip: '10.0.0.1' }),
+        data: expect.objectContaining({
+          payslipId: 3,
+          userId: 7,
+          action: 'VIEW',
+          ipAddress: '10.0.0.1',
+        }),
       }),
     );
   });

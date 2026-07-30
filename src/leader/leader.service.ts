@@ -697,10 +697,23 @@ export class LeaderService {
     });
   }
 
-  async approvePlan(planId: number, approverId: number) {
+  async approvePlan(planId: number, approver: CurrentUserData) {
+    const existing = await this.prisma.read.developmentPlan.findUnique({
+      where: { id: planId },
+      select: { id: true, user: { select: { managerId: true } } },
+    });
+    if (!existing) throw new NotFoundException('PDI não encontrado');
+    // Ownership: só o gestor directo do colaborador (ou ADMIN/RH) pode aprovar
+    // o PDI — sem isto, qualquer LIDER/DIRECTOR aprovava o PDI de um
+    // colaborador de outra equipa, fora da sua cadeia de gestão.
+    const isOwnTeam = existing.user?.managerId === approver.id;
+    if (!isOwnTeam && !isPrivileged(approver, [Role.ADMIN, Role.RH])) {
+      throw new NotFoundException('PDI não encontrado');
+    }
+
     const plan = await this.prisma.developmentPlan.update({
       where: { id: planId },
-      data: { status: 'ACTIVE', approvedAt: new Date(), approverId } as any,
+      data: { status: 'ACTIVE', approvedAt: new Date(), approverId: approver.id } as any,
       include: { user: { select: { id: true, fullName: true } } },
     });
 

@@ -107,7 +107,7 @@ export class PayslipsService {
   async logAccess(payslipId: number, userId: number, action: string, ip?: string) {
     try {
       await (this.prisma as any).payslipAccessLog.create({
-        data: { payslipId, userId, action, ip: ip ?? 'unknown', accessedAt: new Date() },
+        data: { payslipId, userId, action, ipAddress: ip ?? 'unknown', accessedAt: new Date() },
       });
     } catch (e: any) {
       this.logger.warn({

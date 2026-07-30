@@ -549,6 +549,8 @@ model User {
   // ─── RH / Carreira ────────────────────────────────────────────
   hireDate DateTime?
   exitDate DateTime?
+  nif      String? // Número de Identificação Fiscal — usado no processamento de recibos de vencimento
+  nib      String? // Número de Identificação Bancária — conta para pagamento de salário
 
   // ─── Timestamps ───────────────────────────────────────────────
   createdAt DateTime @default(now())
@@ -3098,6 +3100,7 @@ model Payslip {
   user                   User               @relation(fields: [userId], references: [id])
   period                 String                       // "2026-04"
   paymentDate            String?                      // "2026-04-25"
+  receiptCode            String?                      // "REC-202604-0033-1FA32B18"
   baseSalary          Float    @default(0)
   mealAllowance       Float    @default(0)
   vacationAllowance   Float    @default(0)

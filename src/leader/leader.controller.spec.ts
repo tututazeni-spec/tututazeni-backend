@@ -122,9 +122,9 @@ describe('LeaderController', () => {
     expect(mockSvc.completeOneOnOne).toHaveBeenCalledWith(4, 'notas', mockUser);
   });
 
-  it('approvePlan → approvePlan(planId, userId)', async () => {
+  it('approvePlan → approvePlan(planId, user)', async () => {
     await controller.approvePlan(5, mockUser as any);
-    expect(mockSvc.approvePlan).toHaveBeenCalledWith(5, 1);
+    expect(mockSvc.approvePlan).toHaveBeenCalledWith(5, mockUser);
   });
 
   it('assignCourse → assignCourse(dto)', async () => {
