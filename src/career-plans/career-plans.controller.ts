@@ -178,6 +178,38 @@ export class CareerPlansController {
     return this.svc.getMyPlan(user.id);
   }
 
+  // ── Promotions ────────────────────────────────────────────────────
+  // NOTA: tem de vir antes de `@Get(':id')` — caso contrário
+  // GET /career-plans/promotions é capturado pela rota genérica `:id`
+  // (Nest/Express casam rotas do mesmo verbo por ordem de declaração).
+
+  @Get('promotions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar pedidos de promoção' })
+  getPromotions(@Query() filters: PromotionFilterDto) {
+    return this.svc.getPromotions(filters);
+  }
+
+  @Post('promotions')
+  @ApiOperation({ summary: 'Solicitar promoção (valida regras + calcula readiness)' })
+  requestPromotion(@Body() dto: CreatePromotionRequestDto, @CurrentUser() user: CurrentUserData) {
+    // A10-14: dto.userId não era verificado — qualquer autenticado podia
+    // solicitar promoção "em nome" de qualquer colega.
+    assertCanAccess({}, dto.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    return this.svc.requestPromotion(dto, user.id);
+  }
+
+  @Patch('promotions/:id/review')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Aprovar / rejeitar promoção' })
+  reviewPromotion(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReviewPromotionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.reviewPromotion(id, dto, user.id, user.role?.name);
+  }
+
   // ── Plans CRUD ────────────────────────────────────────────────────
 
   @Get()
@@ -240,34 +272,5 @@ export class CareerPlansController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.updateGoalProgress(goalId, dto, user);
-  }
-
-  // ── Promotions ────────────────────────────────────────────────────
-
-  @Get('promotions')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Listar pedidos de promoção' })
-  getPromotions(@Query() filters: PromotionFilterDto) {
-    return this.svc.getPromotions(filters);
-  }
-
-  @Post('promotions')
-  @ApiOperation({ summary: 'Solicitar promoção (valida regras + calcula readiness)' })
-  requestPromotion(@Body() dto: CreatePromotionRequestDto, @CurrentUser() user: CurrentUserData) {
-    // A10-14: dto.userId não era verificado — qualquer autenticado podia
-    // solicitar promoção "em nome" de qualquer colega.
-    assertCanAccess({}, dto.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
-    return this.svc.requestPromotion(dto, user.id);
-  }
-
-  @Patch('promotions/:id/review')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Aprovar / rejeitar promoção' })
-  reviewPromotion(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: ReviewPromotionDto,
-    @CurrentUser() user: CurrentUserData,
-  ) {
-    return this.svc.reviewPromotion(id, dto, user.id, user.role?.name);
   }
 }

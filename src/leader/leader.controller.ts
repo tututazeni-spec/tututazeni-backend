@@ -164,7 +164,7 @@ export class LeaderController {
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Aprovar PDI de um membro da equipa' })
   approvePlan(@Param('planId', ParseIntPipe) planId: number, @CurrentUser() user: CurrentUserData) {
-    return this.svc.approvePlan(planId, user.id);
+    return this.svc.approvePlan(planId, user);
   }
 
   // ─── Course assignment ────────────────────────────────────────
