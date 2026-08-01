@@ -6,10 +6,13 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { HistoryFilterDto, TimelineFilterDto, HistoryCreateEventDto } from './history.dto';
+import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
-const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
-const MGMT_ROLES = ['ADMIN', 'RH', 'LIDER'] as const;
-const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
+// Tiers indexados pelo enum Role — nunca literais soltos (ver memory
+// role-array-drift: arrays locais já esqueceram GESTOR 5x nesta sessão).
+const ALL_ROLES = AUTHENTICATED_ROLES;
+const MGMT_ROLES = [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR] as const;
+const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
 
 @ApiTags('History & Timeline')
 @ApiBearerAuth()

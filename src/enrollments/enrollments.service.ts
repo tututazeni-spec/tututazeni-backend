@@ -311,11 +311,15 @@ export class EnrollmentsService {
     const e = await this.findOne(id);
     const current = (e as any).status;
 
+    // Mapa indexado pelo estado ACTUAL (de onde se sai), não pelo estado alvo —
+    // bug anterior indexava por dto.status e bloqueava a transição normal
+    // IN_PROGRESS/NOT_STARTED → COMPLETED (o próprio propósito deste endpoint),
+    // enquanto permitia COMPLETED → NOT_STARTED (regressão sem sentido).
     const invalidTransitions: Record<string, string[]> = {
-      COMPLETED: ['NOT_STARTED', 'IN_PROGRESS'],
+      COMPLETED: ['NOT_STARTED', 'IN_PROGRESS', 'CANCELLED'],
       CANCELLED: ['COMPLETED'],
     };
-    if (invalidTransitions[dto.status]?.includes(current)) {
+    if (invalidTransitions[current]?.includes(dto.status)) {
       throw new BadRequestException(`Transição inválida: ${current} → ${dto.status}`);
     }
 
@@ -329,7 +333,12 @@ export class EnrollmentsService {
 
   // ─── CANCELAR ─────────────────────────────────────────────────────────────
 
-  async cancel(id: number, dto: CancelEnrollmentDto, requestingUser: CurrentUserData) {
+  async cancel(
+    id: number,
+    dto: CancelEnrollmentDto,
+    requestingUser: CurrentUserData,
+    bypassMandatoryCheck = false,
+  ) {
     const e = (await this.findOne(id)) as any;
 
     // A10-12: sem isto, qualquer autenticado podia cancelar a matrícula de
@@ -339,7 +348,7 @@ export class EnrollmentsService {
     if (e.status === 'COMPLETED') {
       throw new ForbiddenException('Matrícula concluída não pode ser cancelada');
     }
-    if (e.mandatory) {
+    if (e.mandatory && !bypassMandatoryCheck) {
       throw new ForbiddenException(
         'Matrículas obrigatórias não podem ser canceladas pelo colaborador. Contacte o RH.',
       );

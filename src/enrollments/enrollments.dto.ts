@@ -10,7 +10,7 @@ import {
   Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 // ─── Enums (EN — consistentes com toda a plataforma) ─────────────────────────
 
@@ -138,14 +138,16 @@ export class EnrollmentFilterDto {
 
   @ApiPropertyOptional({ description: 'Apenas matrículas obrigatórias?' })
   @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  @Type(() => Boolean)
   mandatory?: boolean;
 
   @ApiPropertyOptional({ description: 'Apenas matrículas com deadline expirado?' })
   @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  @Type(() => Boolean)
   overdue?: boolean;
 
   @ApiPropertyOptional({ default: 1 })

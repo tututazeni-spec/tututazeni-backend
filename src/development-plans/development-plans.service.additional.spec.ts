@@ -206,7 +206,7 @@ describe('DevelopmentPlansService (additional)', () => {
       mockPrisma.notificationLog.create.mockResolvedValue({});
       const result = await service.approvePlan(
         { planId: 1, decision: 'approve', feedback: 'Aprovado' } as any,
-        1,
+        mockAdmin as any,
       );
       expect(result).toBeDefined();
     });
@@ -221,7 +221,7 @@ describe('DevelopmentPlansService (additional)', () => {
       mockPrisma.notificationLog.create.mockResolvedValue({});
       const result = await service.approvePlan(
         { planId: 1, decision: 'reject', feedback: 'Precisa de revisão' } as any,
-        1,
+        mockAdmin as any,
       );
       expect(result).toBeDefined();
     });

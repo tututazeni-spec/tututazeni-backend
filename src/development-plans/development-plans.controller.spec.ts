@@ -84,15 +84,15 @@ describe('DevelopmentPlansController', () => {
     expect(mockSvc.update).toHaveBeenCalledWith(1, dto);
   });
 
-  it('submit → submitForApproval(id)', async () => {
-    await controller.submit(2);
-    expect(mockSvc.submitForApproval).toHaveBeenCalledWith(2);
+  it('submit → submitForApproval(id, user)', async () => {
+    await controller.submit(2, mockUser as any);
+    expect(mockSvc.submitForApproval).toHaveBeenCalledWith(2, mockUser);
   });
 
-  it('approve → approvePlan(dto, userId)', async () => {
+  it('approve → approvePlan(dto, user)', async () => {
     const dto = {} as any;
     await controller.approve(mockUser as any, dto);
-    expect(mockSvc.approvePlan).toHaveBeenCalledWith(dto, 1);
+    expect(mockSvc.approvePlan).toHaveBeenCalledWith(dto, mockUser);
   });
 
   it('complete → complete(id)', async () => {

@@ -4,12 +4,7 @@ import { EnrollmentsService } from './enrollments.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
-const mockPrismaEnrollment = {
-  update: jest.fn().mockResolvedValue({ id: 1, status: 'CANCELLED' }),
-};
-
 const mockSvc = {
-  prisma: { enrollment: mockPrismaEnrollment },
   getUserEnrollments: jest.fn().mockResolvedValue([]),
   enroll: jest.fn().mockResolvedValue({ id: 1, courseId: 1, userId: 1 }),
   cancel: jest.fn().mockResolvedValue({}),
@@ -132,12 +127,10 @@ describe('EnrollmentsController', () => {
     expect(mockSvc.updateDeadline).toHaveBeenCalledWith(1, dto);
   });
 
-  it('cancel (admin) → prisma.enrollment.update', async () => {
+  it('cancel (admin) → svc.cancel com bypassMandatoryCheck=true', async () => {
     const dto = { reason: 'admin cancel' } as any;
-    const result = await controller.cancel(1, mockUser as any, dto);
-    expect(mockPrismaEnrollment.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 1 } }),
-    );
+    await controller.cancel(1, mockUser as any, dto);
+    expect(mockSvc.cancel).toHaveBeenCalledWith(1, dto, mockUser, true);
   });
 
   it('certificate (admin) → generateCertificate', async () => {

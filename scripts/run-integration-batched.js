@@ -18,7 +18,16 @@ const BATCHES = [
   ['instructor', 'knowledge', 'leader', 'leadership', 'learning-paths', 'leave-management', 'library', 'live-classes', 'lms'],
   ['metrics', 'micro-learning', 'mobile', 'monitoring', 'notifications', 'onboarding', 'organization', 'payslips', 'pdf'],
   ['pdi', 'performance', 'process-standard', 'reports', 'roi-impact', 'roles-permissions', 'scalability', 'search', 'succession'],
-  ['talent-development', 'trainings', 'users', 'work-declaration'],
+  [
+    'talent-development',
+    'trainings',
+    'users',
+    'work-declaration',
+    'enrollments',
+    'development-plans',
+    'history',
+    'health',
+  ],
 ];
 
 let failed = false;
