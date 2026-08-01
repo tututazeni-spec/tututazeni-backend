@@ -169,7 +169,9 @@ export class CourseModulesController {
   }
 
   @Get('lessons/:id/audio')
-  @ApiOperation({ summary: 'Áudio da aula gerado por text-to-speech (proxy — chave fica no backend)' })
+  @ApiOperation({
+    summary: 'Áudio da aula gerado por text-to-speech (proxy — chave fica no backend)',
+  })
   async getLessonAudio(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: CurrentUserData,

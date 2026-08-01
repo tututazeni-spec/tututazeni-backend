@@ -496,9 +496,10 @@ export class CourseModulesService {
       throw new ServiceUnavailableException('Leitura por voz não configurada');
     }
 
-    const text = lesson.textContent.length > 5000
-      ? lesson.textContent.slice(0, 5000) + '...'
-      : lesson.textContent;
+    const text =
+      lesson.textContent.length > 5000
+        ? lesson.textContent.slice(0, 5000) + '...'
+        : lesson.textContent;
 
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
