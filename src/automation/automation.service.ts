@@ -203,7 +203,42 @@ export class AutomationService {
     return r;
   }
 
-  async createRule(dto: CreateRuleDto) {
+  // AutomationRule.tenantId é uma FK obrigatória (multi-tenant) nunca populada
+  // aqui — mesmo helper de tenant único por omissão usado em ApiIntegrationService.
+  private async getDefaultTenantId(): Promise<string> {
+    const existing = await this.prisma.tenantConfig.findFirst();
+    if (existing) return existing.id;
+    const created = await this.prisma.tenantConfig.create({
+      data: { tenantCode: 'DEFAULT', tenantName: 'Default Tenant' },
+    });
+    return created.id;
+  }
+
+  // TriggerType (DTO) usa strings livres/legacy ("course.completed", "manual")
+  // que não correspondem a nenhum valor do enum Prisma AutomationTrigger
+  // ("COURSE_COMPLETED", "MANUAL", ...). Sem mapeamento, o create() rebentava
+  // sempre com "Invalid value for argument triggerType". Mapeia os únicos casos
+  // inequívocos e cai em MANUAL para o resto — ver memória sobre este gap.
+  private mapTriggerType(trigger: string): string {
+    const known = [
+      'USER_HIRED',
+      'USER_PROMOTED',
+      'USER_TRANSFERRED',
+      'USER_OFFBOARDED',
+      'COURSE_COMPLETED',
+      'CERTIFICATE_EXPIRED',
+      'TRAIL_COMPLETED',
+      'SCHEDULED_CRON',
+      'WEBHOOK_EVENT',
+      'MANUAL',
+    ];
+    const upper = trigger?.toUpperCase().replace(/\./g, '_');
+    return known.includes(upper) ? upper : 'MANUAL';
+  }
+
+  async createRule(dto: CreateRuleDto, createdById = 0) {
+    const tenantId = await this.getDefaultTenantId();
+
     const rule = await this.prisma.automationRule.create({
       data: {
         name: dto.name,
@@ -211,6 +246,13 @@ export class AutomationService {
         action: dto.action,
         condition: dto.condition ?? '',
         active: dto.active ?? true,
+        tenantId,
+        triggerType: this.mapTriggerType(dto.trigger) as any,
+        triggerConfigJson: JSON.stringify({ cronExpression: dto.cronExpression ?? null }),
+        actionsJson: JSON.stringify([
+          { type: dto.action, params: dto.actionParams ? parseParams(dto.actionParams) : {} },
+        ]),
+        createdBy: String(createdById),
         // Extra fields stored in condition JSON if model doesn't have columns
         ...(dto.description && ({ description: dto.description } as any)),
         ...(dto.category && ({ category: dto.category } as any)),
@@ -582,7 +624,11 @@ export class AutomationService {
         await safeM(this.prisma, 'automationExecution')
           .update({
             where: { id: execId },
-            data: { status: 'SUCCESS', result: JSON.stringify(result), completedAt: new Date() },
+            data: {
+              status: 'SUCCESS',
+              actionsLog: JSON.stringify(result),
+              finishedAt: new Date(),
+            },
           })
           .catch(e => {
             this.logger.warn({
@@ -602,8 +648,8 @@ export class AutomationService {
             where: { id: execId },
             data: {
               status: 'FAILED',
-              error: err instanceof Error ? err.message : String(err),
-              completedAt: new Date(),
+              errorMessage: err instanceof Error ? err.message : String(err),
+              finishedAt: new Date(),
             },
           })
           .catch(e => {
@@ -795,7 +841,7 @@ export class AutomationService {
     return { data: executions, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
-  async rerunExecution(executionId: number) {
+  async rerunExecution(executionId: string) {
     const exec = await safeM(this.prisma, 'automationExecution')
       .findUnique({
         where: { id: executionId },

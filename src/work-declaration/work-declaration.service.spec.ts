@@ -142,7 +142,7 @@ describe('WorkDeclarationService ownership (A3-2)', () => {
     await svc.listDeclarations('t1', employeeA, {} as any);
     const prisma: any = (svc as any).prisma;
     const whereArg = prisma.declaration.findMany.mock.calls[0][0].where;
-    expect(whereArg.employeeId).toBe('7');
+    expect(whereArg.employeeId).toBe(7);
   });
 
   it('listDeclarations: RH não é forçado ao próprio (sem employeeId no where quando não filtra)', async () => {

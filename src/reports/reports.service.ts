@@ -3,6 +3,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReportFilterDto, SaveReportDto, CreateScheduleDto, ReportCategory } from './reports.dto';
 import { sanitizeForLog } from '../common/logging/sanitize';
+import { assertCanAccess } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import type { CurrentUserData } from '../common/decorators';
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS
@@ -90,7 +93,11 @@ export class ReportsService {
 
     const byPosition = await this.prismaRead.position.findMany({
       select: { id: true, name: true, level: true, _count: { select: { users: true } } },
-      orderBy: { _count: { users: 'desc' } },
+      // Ordenar um findMany por contagem de relação usa { relação: { _count } },
+      // não { _count: { relação } } (essa forma é só válida em groupBy/aggregate)
+      // — ver o padrão já correcto em analytics.service.ts. Isto rebentava
+      // sempre com PrismaClientValidationError (500 incondicional).
+      orderBy: { users: { _count: 'desc' } },
       take: 10,
     });
 
@@ -336,7 +343,12 @@ export class ReportsService {
   async performanceReportFull(filter: ReportFilterDto) {
     const uWhere = userWhere(filter);
     const where: any = {};
-    if (filter.period) where.period = { contains: filter.period };
+    // PerformanceReview não tem coluna `period` (usa `cycleId` → PerformanceCycle,
+    // que também não tem `period`) — este filtro nunca teve um campo real para
+    // mapear e rebentava sempre com PrismaClientValidationError quando ?period=
+    // era passado (incluindo incondicionalmente no endpoint legacy
+    // /reports/performance/by-period). Sem um schema/convenção real de "período"
+    // para performance reviews, ignora-se o filtro em vez de adivinhar um mapeamento.
     if (filter.from)
       where.createdAt = {
         gte: new Date(filter.from),
@@ -679,7 +691,7 @@ export class ReportsService {
     const where: any = { date: { gte: new Date(from), lte: new Date(to) } };
     const records = await this.prismaRead.attendanceRecord.findMany({
       where,
-      include: { employee: { select: { id: true, fullName: true, email: true } } },
+      include: { user: { select: { id: true, fullName: true, email: true } } },
     });
 
     const summary = { present: 0, absent: 0, late: 0, remote: 0, justified: 0 };
@@ -919,7 +931,15 @@ export class ReportsService {
     return this.getBuiltInTemplates();
   }
 
-  async deleteReport(reportId: number) {
+  async deleteReport(reportId: number, user: CurrentUserData) {
+    // Sem isto, qualquer utilizador do tier ALL_MGMT (RH/GESTOR/LIDER/DIRECTOR)
+    // podia apagar o relatório guardado de OUTRO utilizador só por adivinhar o
+    // ID — listSavedReports() já restringe a leitura ao próprio (+ templates),
+    // mas a remoção não tinha nenhuma verificação equivalente.
+    const report = await this.prisma.savedReport.findUnique({ where: { id: reportId } });
+    if (report) {
+      assertCanAccess(report, report.createdById, user, [Role.ADMIN, Role.RH]);
+    }
     // deleteMany é idempotente: não lança P2025 se o id não existir,
     // preservando o "sempre devolve mensagem" do comportamento anterior.
     await this.prisma.savedReport.deleteMany({ where: { id: reportId } });
@@ -952,7 +972,13 @@ export class ReportsService {
     });
   }
 
-  async deleteSchedule(scheduleId: number) {
+  async deleteSchedule(scheduleId: number, user: CurrentUserData) {
+    // Mesma lacuna de ownership que deleteReport() — sem isto, qualquer
+    // utilizador do tier ALL_MGMT podia cancelar o agendamento de outro.
+    const schedule = await this.prisma.reportSchedule.findUnique({ where: { id: scheduleId } });
+    if (schedule) {
+      assertCanAccess(schedule, schedule.createdById, user, [Role.ADMIN, Role.RH]);
+    }
     // updateMany é idempotente: não lança P2025 se o id não existir.
     await this.prisma.reportSchedule.updateMany({
       where: { id: scheduleId },

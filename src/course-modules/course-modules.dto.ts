@@ -130,12 +130,23 @@ export class CreateModuleDto {
 
 export class UpdateModuleDto extends PartialType(CreateModuleDto) {}
 
+export class ReorderItemDto {
+  @ApiProperty()
+  @IsInt()
+  id!: number;
+
+  @ApiProperty()
+  @IsInt()
+  @Min(0)
+  seq!: number;
+}
+
 export class ReorderModulesDto {
-  @ApiProperty({ type: [Object] })
+  @ApiProperty({ type: [ReorderItemDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => Object)
-  order!: Array<{ id: number; seq: number }>;
+  @Type(() => ReorderItemDto)
+  order!: ReorderItemDto[];
 }
 
 export class CreateModuleLessonDto {

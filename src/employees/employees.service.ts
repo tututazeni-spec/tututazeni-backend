@@ -645,6 +645,9 @@ export class EmployeesService {
   }
 
   async assignSkill(dto: any, assignedById: number) {
+    const skill = await this.prisma.skill.findUnique({ where: { id: dto.skillId } });
+    if (!skill) throw new NotFoundException(`Skill #${dto.skillId} não encontrada`);
+
     const existing = await this.prisma.employeeSkill.findUnique({
       where: { employeeId_skillId: { employeeId: dto.employeeId, skillId: dto.skillId } } as any,
     });
@@ -656,7 +659,7 @@ export class EmployeesService {
       });
     }
     return this.prisma.employeeSkill.create({
-      data: dto,
+      data: { ...dto, skillName: skill.name },
       include: { skill: true },
     });
   }

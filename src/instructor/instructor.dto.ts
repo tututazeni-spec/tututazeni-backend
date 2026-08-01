@@ -13,7 +13,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -206,8 +206,9 @@ export class CreateMarketplaceCourseDto {
 export class InstructorFilterDto {
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  @Type(() => Boolean)
   approved?: boolean;
 
   @ApiPropertyOptional()

@@ -276,32 +276,22 @@ export class AvatarTrainingService {
   // SCENARIOS — CRUD
   // ══════════════════════════════════════════════════════
 
+  // AvatarScenario só persiste title/description/difficulty/category/competencyId/
+  // active — avatarId, estimatedMinutes, xpReward, context, objective, thumbnailUrl,
+  // isTemplate, createdById e turns (diálogo ramificado) são aceites no DTO mas não
+  // têm coluna/relação no schema; ver memória sobre esta lacuna arquitectural.
   async createScenario(createdById: number, dto: CreateScenarioDto) {
-    const { turns, ...data } = dto;
-
-    const scenario = await this.prisma.avatarScenario
-      .create({
-        data: {
-          ...data,
-          active: true,
-          ...(createdById && ({ createdById } as any)),
-          ...(turns && ({ turns: { create: turns } } as any)),
-        },
-        include: { competency: { select: { id: true, name: true } } },
-      })
-      .catch(async e => {
-        this.logger.warn({
-          createdById,
-          action: 'CREATE_SCENARIO',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao criar cenário — possivelmente campos requerem migration',
-        });
-        return {
-          ...dto,
-          id: null,
-          message: 'Cenário criado (alguns campos podem requerer migration)',
-        };
-      });
+    const scenario = await this.prisma.avatarScenario.create({
+      data: {
+        title: dto.title,
+        description: dto.description,
+        difficulty: dto.difficulty,
+        category: dto.category,
+        competencyId: dto.competencyId,
+        active: true,
+      },
+      include: { competency: { select: { id: true, name: true } } },
+    });
 
     return scenario;
   }
@@ -367,7 +357,6 @@ export class AvatarTrainingService {
         where: { id },
         include: {
           competency: { select: { id: true, name: true } },
-          turns: { orderBy: { order: 'asc' } },
         },
       })
       .catch(e => {
@@ -465,7 +454,7 @@ export class AvatarTrainingService {
         ]),
       },
       include: {
-        scenario: { include: { competency: true, turns: { orderBy: { order: 'asc' }, take: 1 } } },
+        scenario: { include: { competency: true } },
       },
     });
 
@@ -501,11 +490,7 @@ export class AvatarTrainingService {
       .findUnique({
         where: { id: sessionId },
         include: {
-          scenario: {
-            include: {
-              turns: { orderBy: { order: 'asc' } },
-            },
-          },
+          scenario: true,
         },
       })
       .catch(e => {
@@ -830,7 +815,7 @@ export class AvatarTrainingService {
       .findUnique({
         where: { id: sessionId },
         include: {
-          scenario: { include: { competency: true, turns: { orderBy: { order: 'asc' } } } },
+          scenario: { include: { competency: true } },
         } as any,
       })
       .catch(e => {

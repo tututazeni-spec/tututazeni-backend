@@ -129,9 +129,10 @@ describe('DocumentRepositoryService (additional)', () => {
 
   describe('findAll', () => {
     it('deve retornar documentos paginados para utilizador normal', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ department: { name: 'TI' } });
       mockPrisma.document.findMany.mockResolvedValue([baseDoc]);
       mockPrisma.document.count.mockResolvedValue(1);
-      const result = await service.findAll({ page: 1, limit: 10 }, 1, 'TI', 'EMPLOYEE');
+      const result = await service.findAll({ page: 1, limit: 10 }, 1, 'EMPLOYEE');
       expect(result.data).toHaveLength(1);
       expect(result).toBeDefined();
     });
@@ -139,8 +140,9 @@ describe('DocumentRepositoryService (additional)', () => {
     it('deve dar acesso total a ADMIN', async () => {
       mockPrisma.document.findMany.mockResolvedValue([baseDoc]);
       mockPrisma.document.count.mockResolvedValue(1);
-      await service.findAll({ page: 1, limit: 10 }, 1, undefined, 'ADMIN');
+      await service.findAll({ page: 1, limit: 10 }, 1, 'ADMIN');
       expect(mockPrisma.document.findMany).toHaveBeenCalled();
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
     });
 
     it('deve filtrar por search, category, sensitivity, tag', async () => {

@@ -196,6 +196,20 @@ export class PerformanceService {
     const cycle = await this.prisma.performanceCycle.findUnique({ where: { id: dto.cycleId } });
     if (!cycle) throw new NotFoundException('Ciclo não encontrado');
 
+    // reviewerId é "opcional (se diferente do gestor)" — omitido, tem de
+    // resolver para o gestor directo do avaliado. Sem isto, uma review
+    // MANAGER/PEER/R360 criada sem reviewerId explícito ficava com
+    // reviewerId=null e nunca podia ser submetida (submitReview compara o
+    // submitterId contra reviewerId, e nada bate com null).
+    let reviewerId = dto.reviewerId;
+    if (!reviewerId && dto.type !== 'SELF') {
+      const target = await this.prisma.user.findUnique({
+        where: { id: dto.userId },
+        select: { managerId: true },
+      });
+      reviewerId = target?.managerId ?? undefined;
+    }
+
     const initialStatus = cycle.selfBeforeManager
       ? ReviewStatus.PENDING_SELF
       : ReviewStatus.PENDING_MANAGER;
@@ -205,7 +219,7 @@ export class PerformanceService {
         userId: dto.userId,
         cycleId: dto.cycleId,
         type: dto.type,
-        reviewerId: dto.reviewerId,
+        reviewerId,
         status: initialStatus,
       },
       include: {
@@ -246,6 +260,21 @@ export class PerformanceService {
 
   async remove(id: number) {
     await this.findOne(id);
+
+    // CalibrationLog e PerformanceDispute apontam para PerformanceReview com
+    // ON DELETE RESTRICT (são histórico/auditoria de calibração e disputas,
+    // não devem cascatear) — sem este guard, remover uma review já calibrada
+    // ou disputada rebentava com uma violação de FK em bruto (500).
+    const [calibrationCount, disputeCount] = await Promise.all([
+      this.prisma.calibrationLog.count({ where: { reviewId: id } }),
+      this.prisma.performanceDispute.count({ where: { reviewId: id } }),
+    ]);
+    if (calibrationCount > 0 || disputeCount > 0) {
+      throw new BadRequestException(
+        'Avaliação não pode ser removida: possui histórico de calibração ou disputas associadas',
+      );
+    }
+
     await this.prisma.performanceReview.delete({ where: { id } });
     return { message: 'Avaliação removida' };
   }

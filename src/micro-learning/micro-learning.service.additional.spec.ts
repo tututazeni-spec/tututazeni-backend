@@ -33,6 +33,7 @@ const mockPrisma: any = {
     delete: jest.fn().mockResolvedValue({}),
     count: jest.fn().mockResolvedValue(0),
     findMany: jest.fn().mockResolvedValue([]),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   microLearningPlaylist: {
     findMany: jest.fn().mockResolvedValue([]),

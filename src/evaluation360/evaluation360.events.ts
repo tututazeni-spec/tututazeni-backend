@@ -18,10 +18,10 @@ export class Evaluation360EventListeners {
     const { assignment } = payload;
     try {
       const evaluator = await this.prisma.user.findUnique({
-        where: { id: assignment.evaluatorId },
+        where: { id: +assignment.evaluatorId },
       });
       const evaluatee = await this.prisma.user.findUnique({
-        where: { id: assignment.evaluateeId },
+        where: { id: +assignment.evaluateeId },
       });
       if (!evaluator || !evaluatee) return;
 
@@ -29,7 +29,7 @@ export class Evaluation360EventListeners {
         `[360] Enviando convite: ${evaluator.fullName} vai avaliar ${evaluatee.fullName} (${assignment.role})`,
       );
 
-      await this.notifications.sendToUser(assignment.evaluatorId, {
+      await this.notifications.sendToUser(+assignment.evaluatorId, {
         title: 'Convite para Avaliação 360°',
         message: `Você foi convidado a avaliar ${evaluatee.fullName}. Aceda ao INNOVA para responder.`,
         type: 'INFO',
@@ -55,11 +55,11 @@ export class Evaluation360EventListeners {
     const { assignment } = payload;
     try {
       const evaluatee = await this.prisma.user.findUnique({
-        where: { id: assignment.evaluateeId },
+        where: { id: +assignment.evaluateeId },
       });
       this.logger.log(`[360] Lembrete: avaliador ${assignment.evaluatorId} ainda não respondeu`);
 
-      await this.notifications.sendToUser(assignment.evaluatorId, {
+      await this.notifications.sendToUser(+assignment.evaluatorId, {
         title: 'Lembrete — Avaliação 360° Pendente',
         message: `Não esqueça de avaliar ${evaluatee?.fullName ?? 'um colega'}. O prazo está a terminar.`,
         type: 'WARNING',
@@ -169,9 +169,9 @@ export class Evaluation360EventListeners {
     if (feedback.isPrivate) return;
     try {
       const from = await this.prisma.user.findUnique({
-        where: { id: feedback.fromUserId },
+        where: { id: +feedback.fromUserId },
       });
-      await this.notifications.sendToUser(feedback.toUserId, {
+      await this.notifications.sendToUser(+feedback.toUserId, {
         title: `Novo feedback de ${from?.fullName ?? 'colega'}`,
         message:
           feedback.message.length > 80 ? feedback.message.slice(0, 80) + '...' : feedback.message,

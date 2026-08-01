@@ -19,6 +19,7 @@ const mockPrisma: any = {
     findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     delete: jest.fn(),
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
     upsert: jest.fn(),
@@ -141,15 +142,25 @@ describe('RolesPermissionsService (additional)', () => {
   // ─── remove ───────────────────────────────────────────────────
 
   describe('remove', () => {
-    it('deve eliminar role sem utilizadores', async () => {
+    it('deve eliminar role sem utilizadores nem permissões', async () => {
+      mockPrisma.role.findUnique.mockResolvedValue({
+        ...baseRole,
+        _count: { users: 0 },
+        isSystem: false,
+        permissions: [],
+      });
+      mockPrisma.role.delete.mockResolvedValue(baseRole);
+      await service.remove(1);
+      expect(mockPrisma.role.delete).toHaveBeenCalled();
+    });
+
+    it('deve lançar ConflictException se role ainda tem permissões associadas (seriam eliminadas em cascata)', async () => {
       mockPrisma.role.findUnique.mockResolvedValue({
         ...baseRole,
         _count: { users: 0 },
         isSystem: false,
       });
-      mockPrisma.role.delete.mockResolvedValue(baseRole);
-      await service.remove(1);
-      expect(mockPrisma.role.delete).toHaveBeenCalled();
+      await expect(service.remove(1)).rejects.toThrow(ConflictException);
     });
 
     it('deve lançar ConflictException se role tem utilizadores', async () => {

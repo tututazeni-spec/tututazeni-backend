@@ -272,7 +272,14 @@ export class Evaluation360Service {
   // ============================================================
 
   async createQuestion(dto: Evaluation360CreateQuestionDto, actorId: string) {
-    const question = await this.prisma.eval360Question.create({ data: dto as any });
+    // Eval360Question.competencyId é Int? — o DTO recebe-o como string (como
+    // todos os outros ids neste módulo), tinha de ser convertido antes do create.
+    const question = await this.prisma.eval360Question.create({
+      data: {
+        ...dto,
+        competencyId: dto.competencyId ? +dto.competencyId : undefined,
+      } as any,
+    });
     await this.audit.log({
       entity: 'EvaluationQuestion',
       entityId: question.id,
@@ -286,7 +293,7 @@ export class Evaluation360Service {
   async listQuestions(cycleId?: string, competencyId?: string) {
     const where: any = {};
     if (cycleId) where.cycleId = cycleId;
-    if (competencyId) where.competencyId = competencyId;
+    if (competencyId) where.competencyId = +competencyId;
     return this.prisma.eval360Question.findMany({ where, orderBy: { order: 'asc' } });
   }
 
@@ -883,7 +890,7 @@ export class Evaluation360Service {
   private calculateBonusMultiplier(score: number, cycle: any): number | null {
     if (!cycle.linkedToBonus || !cycle.cutoffBonus) return null;
     if (score < cycle.cutoffBonus) return 0;
-    const normalized = (score - cycle.cutoffBonus) / (cycle.scaleMax ?? 5 - cycle.cutoffBonus);
+    const normalized = (score - cycle.cutoffBonus) / ((cycle.scaleMax ?? 5) - cycle.cutoffBonus);
     return Math.min(1 + normalized * 0.5, 1.5); // máx 1.5x
   }
 
@@ -939,7 +946,9 @@ export class Evaluation360Service {
 
     const cycle = await this.findCycleOrFail(cycleId);
     const canSeeFull = requesterRole === 'ADMIN' || requesterRole === 'RH';
-    const isOwnResult = requesterId === participantId;
+    // requesterId chega como number (User.id via JWT) e participantId como
+    // string (route param) — comparação estrita nunca era true.
+    const isOwnResult = String(requesterId) === String(participantId);
 
     if (!canSeeFull && !isOwnResult)
       throw new ForbiddenException('Sem permissão para ver este resultado.');
@@ -1058,8 +1067,13 @@ export class Evaluation360Service {
   // ============================================================
 
   async createContinuousFeedback(dto: CreateContinuousFeedbackDto, actorId: string) {
+    // Eval360Feedback.competencyId é Int? — o DTO recebe-o como string.
     const feedback = await this.prisma.eval360Feedback.create({
-      data: { ...dto, fromUserId: actorId },
+      data: {
+        ...dto,
+        fromUserId: actorId,
+        competencyId: dto.competencyId ? +dto.competencyId : undefined,
+      },
     });
     this.events.emit('feedback.continuous.created', { feedback });
     return feedback;

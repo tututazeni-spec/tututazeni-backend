@@ -51,7 +51,7 @@ describe('WorkDeclarationController', () => {
   it('create → createDeclaration(tenantId, userId, dto)', async () => {
     const dto = {} as any;
     await controller.create(dto, mockUser as any);
-    expect(mockSvc.createDeclaration).toHaveBeenCalledWith('tenant-1', '1', dto);
+    expect(mockSvc.createDeclaration).toHaveBeenCalledWith('tenant-1', 1, dto);
   });
 
   it('findAll → listDeclarations(tenantId, user, filters)', async () => {
@@ -73,14 +73,14 @@ describe('WorkDeclarationController', () => {
   it('update → updateDeclaration(tenantId, userId, id, dto)', async () => {
     const dto = {} as any;
     await controller.update('uuid-1', dto, mockUser as any);
-    expect(mockSvc.updateDeclaration).toHaveBeenCalledWith('tenant-1', '1', 'uuid-1', dto);
+    expect(mockSvc.updateDeclaration).toHaveBeenCalledWith('tenant-1', 1, 'uuid-1', dto);
   });
 
   it('remove → changeStatus (REVOKED)', async () => {
     await controller.remove('uuid-1', mockUser as any);
     expect(mockSvc.changeStatus).toHaveBeenCalledWith(
       'tenant-1',
-      '1',
+      1,
       'uuid-1',
       expect.objectContaining({ status: 'REVOKED' }),
     );
@@ -89,7 +89,7 @@ describe('WorkDeclarationController', () => {
   it('requestDeclaration → requestDeclaration(tenantId, userId, dto)', async () => {
     const dto = {} as any;
     await controller.requestDeclaration(dto, mockUser as any);
-    expect(mockSvc.requestDeclaration).toHaveBeenCalledWith('tenant-1', '1', dto);
+    expect(mockSvc.requestDeclaration).toHaveBeenCalledWith('tenant-1', 1, dto);
   });
 
   it('getMyDeclarations → listDeclarations(tenantId, user, query)', async () => {
@@ -101,7 +101,7 @@ describe('WorkDeclarationController', () => {
     await controller.issueDeclaration('uuid-1', mockUser as any);
     expect(mockSvc.changeStatus).toHaveBeenCalledWith(
       'tenant-1',
-      '1',
+      1,
       'uuid-1',
       expect.objectContaining({ status: 'ISSUED' }),
     );
@@ -113,30 +113,36 @@ describe('WorkDeclarationController', () => {
   });
 
   it('getTemplates → listTemplates(tenantId)', async () => {
-    await controller.getTemplates('TYPE', 'pt', mockUser as any);
+    await controller.getTemplates(
+      'TYPE',
+      'pt',
+      undefined as any,
+      undefined as any,
+      mockUser as any,
+    );
     expect(mockSvc.listTemplates).toHaveBeenCalledWith('tenant-1', expect.anything());
   });
 
   it('getTemplate → getTemplate(tenantId, id)', async () => {
-    await controller.getTemplate('tpl-1', mockUser as any);
-    expect(mockSvc.getTemplate).toHaveBeenCalledWith('tenant-1', 'tpl-1');
+    await controller.getTemplate(1, mockUser as any);
+    expect(mockSvc.getTemplate).toHaveBeenCalledWith('tenant-1', 1);
   });
 
   it('createTemplate → createTemplate(tenantId, userId, dto)', async () => {
     const dto = {} as any;
     await controller.createTemplate(dto, mockUser as any);
-    expect(mockSvc.createTemplate).toHaveBeenCalledWith('tenant-1', '1', dto);
+    expect(mockSvc.createTemplate).toHaveBeenCalledWith('tenant-1', 1, dto);
   });
 
   it('updateTemplate → updateTemplate(tenantId, userId, id, dto)', async () => {
     const dto = {} as any;
-    await controller.updateTemplate('tpl-1', dto, mockUser as any);
-    expect(mockSvc.updateTemplate).toHaveBeenCalledWith('tenant-1', '1', 'tpl-1', dto);
+    await controller.updateTemplate(1, dto, mockUser as any);
+    expect(mockSvc.updateTemplate).toHaveBeenCalledWith('tenant-1', 1, 1, dto);
   });
 
   it('deleteTemplate → deleteTemplate(tenantId, id)', async () => {
-    await controller.deleteTemplate('tpl-1', mockUser as any);
-    expect(mockSvc.deleteTemplate).toHaveBeenCalledWith('tenant-1', 'tpl-1');
+    await controller.deleteTemplate(1, mockUser as any);
+    expect(mockSvc.deleteTemplate).toHaveBeenCalledWith('tenant-1', 1);
   });
 
   it('getAuditLog → getAuditLogs(tenantId, id)', async () => {
@@ -166,6 +172,6 @@ describe('WorkDeclarationController', () => {
   it('signDeclaration → signDeclaration(tenantId, userId, id, dto) sem signatureFile', async () => {
     const dto = { type: 'DIGITAL', signatureUrl: undefined } as any;
     await controller.signDeclaration('uuid-1', dto, mockUser as any);
-    expect(mockSvc.signDeclaration).toHaveBeenCalledWith('tenant-1', '1', 'uuid-1', dto);
+    expect(mockSvc.signDeclaration).toHaveBeenCalledWith('tenant-1', 1, 'uuid-1', dto);
   });
 });

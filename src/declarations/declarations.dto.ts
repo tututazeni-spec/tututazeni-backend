@@ -8,6 +8,7 @@ import {
   IsBoolean,
   IsArray,
   IsObject,
+  IsDefined,
   ValidateNested,
   IsDateString,
   IsNotEmpty,
@@ -199,7 +200,7 @@ export class UpdateWorkDeclFormDto extends PartialType(CreateWorkDeclFormDto) {}
 
 export class SubmitAnswerDto {
   @ApiProperty() @IsString() key!: string;
-  @ApiProperty() value!: any;
+  @ApiProperty() @IsDefined() value!: any;
 }
 
 export class SubmitWorkDeclDto {

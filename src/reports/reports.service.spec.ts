@@ -63,11 +63,13 @@ const mockPrisma = {
   savedReport: {
     create: jest.fn().mockResolvedValue({ id: 1, name: 'R' }),
     findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
     deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
   },
   reportSchedule: {
     create: jest.fn().mockResolvedValue({ id: 1 }),
     findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   },
 };

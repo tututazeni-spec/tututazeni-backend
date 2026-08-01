@@ -113,8 +113,17 @@ export class CourseModulesService {
       );
     }
 
+    // Assessment.moduleId não tem RESTRICT — a FK é SetNull, por isso eliminar o
+    // módulo desassocia silenciosamente qualquer avaliação ligada a ele. Avisar
+    // em vez de bloquear (mesma convenção usada em deleteLesson()).
+    const linkedAssessments = await this.prisma.read.assessment.count({ where: { moduleId: id } });
+
     await this.prisma.courseModule.delete({ where: { id } });
-    return { message: 'Módulo eliminado' };
+    return {
+      message: 'Módulo eliminado',
+      hadLinkedAssessments: linkedAssessments > 0,
+      linkedAssessments,
+    };
   }
 
   async reorderModules(courseId: number, dto: ReorderModulesDto) {

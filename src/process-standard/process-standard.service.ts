@@ -188,9 +188,15 @@ export class ProcessStandardService {
   async update(id: number, dto: UpdateProcessDto, updatedById: number) {
     const existing = await this.findOne(id);
 
-    if (existing.status === 'ACTIVE') {
+    // O controller documenta esta rota como "apenas DRAFT" — o guard original
+    // só bloqueava ACTIVE, deixando IN_REVIEW (editável a meio do workflow de
+    // aprovação, invalidando silenciosamente a revisão em curso) e ARCHIVED
+    // (processo supostamente encerrado) editáveis também.
+    if (existing.status !== 'DRAFT') {
       throw new ForbiddenException(
-        'Processo activo não pode ser editado directamente. Crie uma nova versão.',
+        existing.status === 'ACTIVE'
+          ? 'Processo activo não pode ser editado directamente. Crie uma nova versão.'
+          : 'Apenas processos em DRAFT podem ser editados.',
       );
     }
 
@@ -212,6 +218,22 @@ export class ProcessStandardService {
     });
 
     if (steps?.length) {
+      // StepProgress.stepId → ProcessStep é ON DELETE RESTRICT. Um processo
+      // pode chegar aqui em DRAFT depois de createNewVersion() (que apenas
+      // reinicia o status, sem tocar nas ProcessStep) tendo já instâncias
+      // antigas com progresso registado contra os steps actuais — substituir
+      // os steps rebentava com uma violação de FK em bruto (500).
+      const existingStepIds = (existing.steps as any[]).map(s => s.id);
+      if (existingStepIds.length) {
+        const progressCount = await this.prisma.stepProgress.count({
+          where: { stepId: { in: existingStepIds } },
+        });
+        if (progressCount > 0) {
+          throw new BadRequestException(
+            'Não é possível substituir as etapas: já existem instâncias com progresso registado nas etapas actuais.',
+          );
+        }
+      }
       await this.prisma.processStep.deleteMany({ where: { processId: id } });
       await this.prisma.processStep.createMany({
         data: steps.map(s => ({
@@ -712,11 +734,6 @@ export class ProcessStandardService {
       }),
     ]);
 
-    const avgCycleTime = await this.prisma.read.processInstance.aggregate({
-      where: { status: 'COMPLETED', completedAt: { not: null } },
-      _avg: {/* duration field needed */},
-    });
-
     const recentInstances = await this.prisma.read.processInstance.findMany({
       take: 5,
       orderBy: { startedAt: 'desc' },
@@ -771,6 +788,25 @@ export class ProcessStandardService {
     if (p.status === 'ACTIVE') {
       throw new ForbiddenException('Processo activo não pode ser eliminado. Archive-o primeiro.');
     }
+
+    // ProcessInstance/ProcessVersion/ProcessApprovalLog apontam para
+    // ProcessStandard com ON DELETE RESTRICT (só ProcessStep tem Cascade) —
+    // um processo DRAFT/ARCHIVED pode perfeitamente já ter passado por
+    // new-version (ProcessVersion), por um ciclo de revisão rejeitado
+    // (ProcessApprovalLog) ou ter tido instâncias enquanto esteve ACTIVE
+    // antes de ser arquivado — sem este guard, eliminar rebentava com uma
+    // violação de FK em bruto (500) em vez de um 4xx limpo.
+    const [instanceCount, versionCount, approvalCount] = await Promise.all([
+      this.prisma.processInstance.count({ where: { processId: id } }),
+      this.prisma.processVersion.count({ where: { processId: id } }),
+      this.prisma.processApprovalLog.count({ where: { processId: id } }),
+    ]);
+    if (instanceCount > 0 || versionCount > 0 || approvalCount > 0) {
+      throw new BadRequestException(
+        'Processo não pode ser eliminado: possui instâncias, versões ou histórico de aprovação associados',
+      );
+    }
+
     await this.prisma.processStandard.delete({ where: { id } });
     await this.writeAuditLog({ processId: id, userId, action: 'DELETED' });
     return { message: 'Processo eliminado' };

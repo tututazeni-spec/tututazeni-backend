@@ -92,12 +92,14 @@ export class ScalabilityService {
       },
     });
 
-    await this.audit.log({
-      entity: 'TenantConfig',
-      entityId: tenant.id,
-      action: 'CREATE',
-      userId: actorId,
-      details: { tenantCode: tenant.tenantCode, plan: tenant.plan },
+    // TenantConfig.id é cuid (String) — audit.log() faz Number(entityId), que
+    // dá NaN para um cuid e é silenciosamente gravado como NULL no AuditLog
+    // (Prisma/Postgres aceitam NaN num Int? sem erro) — perdendo para sempre
+    // a referência real ao tenant no rasto de auditoria. logEntity() é o
+    // helper já existente no codebase precisamente para IDs não-Int.
+    await this.audit.logEntity(Number(actorId), 'CREATE', 'TenantConfig', tenant.id, {
+      tenantCode: tenant.tenantCode,
+      plan: tenant.plan,
     });
 
     this.logger.log(`Tenant criado: ${tenant.tenantCode}`);
@@ -115,13 +117,7 @@ export class ScalabilityService {
         contractEndDate: dto.contractEndDate ? new Date(dto.contractEndDate) : undefined,
       },
     });
-    await this.audit.log({
-      entity: 'TenantConfig',
-      entityId: id,
-      action: 'UPDATE',
-      userId: actorId,
-      details: dto,
-    });
+    await this.audit.logEntity(Number(actorId), 'UPDATE', 'TenantConfig', id, dto);
     return updated;
   }
 
@@ -164,8 +160,20 @@ export class ScalabilityService {
       ? this.encryptSensitiveData(dto.credentialsJson)
       : undefined;
 
+    if (dto.configJson) this.validateJsonField(dto.configJson, 'configJson');
+
+    // `endpoint`/`config` são colunas legadas obrigatórias (sem default) que o
+    // DTO actual não preenche directamente — `baseUrl`/`configJson` são os
+    // equivalentes modernos. Sem isto, a criação rebentava sempre com
+    // "Argument endpoint is missing" (nunca detectado porque este módulo
+    // nunca esteve registado em app.module.ts).
     const integration = await this.prisma.integrationConfig.create({
-      data: { ...dto, credentialsJson: safeCredentials } as any,
+      data: {
+        ...dto,
+        credentialsJson: safeCredentials,
+        endpoint: dto.baseUrl ?? '',
+        config: dto.configJson ? JSON.parse(dto.configJson) : {},
+      } as any,
     });
     await this.audit.log({
       entity: 'IntegrationConfig',
@@ -177,17 +185,23 @@ export class ScalabilityService {
     return integration;
   }
 
-  async updateIntegration(id: string, dto: UpdateIntegrationConfigDto, actorId: string) {
-    const existing = await this.prisma.integrationConfig.findUnique({ where: { id } as any });
+  async updateIntegration(id: number, dto: UpdateIntegrationConfigDto, actorId: string) {
+    const existing = await this.prisma.integrationConfig.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Integração '${id}' não encontrada.`);
 
     const safeCredentials = dto.credentialsJson
       ? this.encryptSensitiveData(dto.credentialsJson)
       : undefined;
+    if (dto.configJson) this.validateJsonField(dto.configJson, 'configJson');
 
     const updated = await this.prisma.integrationConfig.update({
-      where: { id } as any,
-      data: { ...dto, credentialsJson: safeCredentials ?? existing.credentialsJson },
+      where: { id },
+      data: {
+        ...dto,
+        credentialsJson: safeCredentials ?? existing.credentialsJson,
+        ...(dto.baseUrl !== undefined && { endpoint: dto.baseUrl }),
+        ...(dto.configJson !== undefined && { config: JSON.parse(dto.configJson) }),
+      } as any,
     });
     await this.audit.log({
       entity: 'IntegrationConfig',
@@ -215,16 +229,16 @@ export class ScalabilityService {
     return { data, total };
   }
 
-  async triggerSync(integrationId: string, actorId: string) {
+  async triggerSync(integrationId: number, actorId: string) {
     const integration = await this.prisma.integrationConfig.findUnique({
-      where: { id: integrationId } as any,
+      where: { id: integrationId },
     });
     if (!integration) throw new NotFoundException('Integração não encontrada.');
     if (!integration.isActive) throw new BadRequestException('Integração inativa.');
 
     // Criar log de sincronização
     const syncLog = await this.prisma.integrationSyncLog.create({
-      data: { integrationId, status: 'RUNNING' } as any,
+      data: { integrationId, status: 'RUNNING' },
     });
 
     // Disparar evento assíncrono para o worker
@@ -239,9 +253,9 @@ export class ScalabilityService {
     return { syncLogId: syncLog.id, message: 'Sincronização iniciada em background.' };
   }
 
-  async getIntegrationSyncLogs(integrationId: string, limit = 20) {
+  async getIntegrationSyncLogs(integrationId: number, limit = 20) {
     return this.prisma.integrationSyncLog.findMany({
-      where: { integrationId } as any,
+      where: { integrationId },
       orderBy: { startedAt: 'desc' },
       take: limit,
     });
@@ -257,8 +271,23 @@ export class ScalabilityService {
     this.validateJsonField(dto.actionsJson, 'actionsJson');
     if (dto.conditionsJson) this.validateJsonField(dto.conditionsJson, 'conditionsJson');
 
+    // trigger/action/condition são colunas legadas obrigatórias (sem default)
+    // que o DTO actual já não preenche — triggerType/actionsJson/conditionsJson
+    // são os equivalentes modernos. Sem isto, a criação rebentava sempre com
+    // "Argument trigger is missing" (nunca detectado porque este módulo nunca
+    // esteve registado em app.module.ts).
     const rule = await this.prisma.automationRule.create({
-      data: { ...dto, createdBy: actorId } as any,
+      data: {
+        ...dto,
+        // createdBy é String (guarda o userId como texto) — actorId chega
+        // aqui como o número real do JWT apesar do parâmetro estar (mal)
+        // tipado como string; sem o String() explícito, o Prisma rejeita
+        // sempre com "Expected String, provided Int".
+        createdBy: String(actorId),
+        trigger: dto.triggerType,
+        action: dto.actionsJson,
+        condition: dto.conditionsJson ?? '',
+      } as any,
     });
     await this.audit.log({
       entity: 'AutomationRule',
@@ -270,14 +299,22 @@ export class ScalabilityService {
     return rule;
   }
 
-  async updateAutomationRule(id: string, dto: UpdateAutomationRuleDto, actorId: string) {
-    const rule = await this.prisma.automationRule.findUnique({ where: { id } as any });
+  async updateAutomationRule(id: number, dto: UpdateAutomationRuleDto, actorId: string) {
+    const rule = await this.prisma.automationRule.findUnique({ where: { id } });
     if (!rule) throw new NotFoundException('Regra de automação não encontrada.');
 
     if (dto.triggerConfigJson) this.validateJsonField(dto.triggerConfigJson, 'triggerConfigJson');
     if (dto.actionsJson) this.validateJsonField(dto.actionsJson, 'actionsJson');
 
-    const updated = await this.prisma.automationRule.update({ where: { id } as any, data: dto });
+    const updated = await this.prisma.automationRule.update({
+      where: { id },
+      data: {
+        ...dto,
+        ...(dto.triggerType !== undefined && { trigger: dto.triggerType }),
+        ...(dto.actionsJson !== undefined && { action: dto.actionsJson }),
+        ...(dto.conditionsJson !== undefined && { condition: dto.conditionsJson }),
+      } as any,
+    });
     await this.audit.log({
       entity: 'AutomationRule',
       entityId: id,
@@ -306,7 +343,7 @@ export class ScalabilityService {
 
   async executeAutomationRule(dto: ExecuteAutomationRuleDto, actorId: string) {
     const rule = await this.prisma.automationRule.findUnique({
-      where: { id: dto.ruleId } as any,
+      where: { id: dto.ruleId },
     });
     if (!rule) throw new NotFoundException('Regra não encontrada.');
     if (!rule.isActive) throw new BadRequestException('Regra inativa.');
@@ -314,10 +351,11 @@ export class ScalabilityService {
     const execution = await this.prisma.automationExecution.create({
       data: {
         ruleId: dto.ruleId,
-        triggeredBy: actorId,
+        // triggeredBy é String — mesma questão de createdBy() acima.
+        triggeredBy: String(actorId),
         targetUserId: dto.targetUserId,
         status: 'PENDING',
-      } as any,
+      },
     });
 
     // Disparar execução assíncrona
@@ -353,7 +391,12 @@ export class ScalabilityService {
         data: {
           ruleId: rule.id,
           triggeredBy: 'SYSTEM',
-          targetUserId: payload.userId,
+          // AutomationExecution.targetUserId é String? — alguns chamadores
+          // (ex.: bulkImportUsers) passam o id numérico real do User recém-
+          // criado em payload.userId; sem o String() aqui, cada evento de
+          // automação disparado a partir de um id numérico rebentava com
+          // "Expected String or Null, provided Int".
+          targetUserId: payload.userId != null ? String(payload.userId) : undefined,
           status: 'RUNNING',
         },
       });
@@ -487,13 +530,8 @@ export class ScalabilityService {
   async createSlaConfig(dto: CreateSlaConfigDto, actorId: string) {
     await this.findTenantOrFail(dto.tenantId);
     const sla = await this.prisma.slaConfig.create({ data: dto });
-    await this.audit.log({
-      entity: 'SlaConfig',
-      entityId: sla.id,
-      action: 'CREATE',
-      userId: actorId,
-      details: dto,
-    });
+    // SlaConfig.id é cuid — ver nota em createTenant sobre audit.log vs logEntity.
+    await this.audit.logEntity(Number(actorId), 'CREATE', 'SlaConfig', sla.id, dto);
     return sla;
   }
 
@@ -501,13 +539,7 @@ export class ScalabilityService {
     const sla = await this.prisma.slaConfig.findUnique({ where: { id } });
     if (!sla) throw new NotFoundException('SLA Config não encontrada.');
     const updated = await this.prisma.slaConfig.update({ where: { id }, data: dto });
-    await this.audit.log({
-      entity: 'SlaConfig',
-      entityId: id,
-      action: 'UPDATE',
-      userId: actorId,
-      details: dto,
-    });
+    await this.audit.logEntity(Number(actorId), 'UPDATE', 'SlaConfig', id, dto);
     return updated;
   }
 
@@ -540,13 +572,8 @@ export class ScalabilityService {
       create: { tenantId, ...dto },
       update: dto,
     });
-    await this.audit.log({
-      entity: 'ContentDeliveryConfig',
-      entityId: config.id,
-      action: 'UPDATE',
-      userId: actorId,
-      details: dto,
-    });
+    // ContentDeliveryConfig.id é cuid — ver nota em createTenant.
+    await this.audit.logEntity(Number(actorId), 'UPDATE', 'ContentDeliveryConfig', config.id, dto);
     return config;
   }
 
@@ -816,12 +843,11 @@ export class ScalabilityService {
       }
     }
 
-    await this.audit.log({
-      entity: 'BulkImport',
-      entityId: dto.tenantId,
-      action: 'CREATE',
-      userId: actorId,
-      details: { total: result.total, created: result.created, failed: result.failed },
+    // tenantId é cuid — ver nota em createTenant.
+    await this.audit.logEntity(Number(actorId), 'CREATE', 'BulkImport', dto.tenantId, {
+      total: result.total,
+      created: result.created,
+      failed: result.failed,
     });
 
     this.logger.log(`Importação concluída: ${result.created} criados, ${result.failed} falhas`);
@@ -969,13 +995,14 @@ export class ScalabilityService {
   // ============================================================
 
   async scheduleLoadTest(dto: LoadTestConfigDto, actorId: string) {
-    await this.audit.log({
-      entity: 'LoadTest',
-      entityId: dto.tenantId ?? 'global',
-      action: 'CREATE',
-      userId: actorId,
-      details: dto,
-    });
+    // tenantId (ou o literal 'global') é String — ver nota em createTenant.
+    await this.audit.logEntity(
+      Number(actorId),
+      'CREATE',
+      'LoadTest',
+      dto.tenantId ?? 'global',
+      dto,
+    );
 
     this.events.emit('loadtest.scheduled', { ...dto, scheduledBy: actorId });
 

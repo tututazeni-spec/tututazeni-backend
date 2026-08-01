@@ -41,6 +41,10 @@ const mockPrisma: any = {
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
+  tenantConfig: {
+    findFirst: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
+    create: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
+  },
 };
 
 const basePurpose = {

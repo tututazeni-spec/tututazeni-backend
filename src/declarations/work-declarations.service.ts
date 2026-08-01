@@ -127,7 +127,12 @@ export class WorkDeclarationsService {
   async getPendingForUser(userId: number) {
     const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
-      select: { id: true, fullName: true, departmentId: true, roleId: true },
+      select: {
+        id: true,
+        fullName: true,
+        department: { select: { name: true } },
+        role: { select: { code: true } },
+      },
     });
     if (!user) throw new NotFoundException();
 
@@ -137,8 +142,8 @@ export class WorkDeclarationsService {
         active: true,
         OR: [
           { targetAllEmployees: true },
-          { targetDepartments: { has: (user as any).employee?.department ?? '' } },
-          { targetRoles: { has: (user as any).employee?.role ?? '' } },
+          { targetDepartments: { has: user.department?.name ?? '' } },
+          { targetRoles: { has: user.role?.code ?? '' } },
         ],
       },
     });
@@ -181,7 +186,7 @@ export class WorkDeclarationsService {
     }
     if (type) where.form = { type };
     if (department)
-      where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
+      where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const [data, total] = await Promise.all([
       this.prisma.read.workDeclSubmission.findMany({
@@ -227,9 +232,11 @@ export class WorkDeclarationsService {
     const form = await this.getForm(dto.formId);
     if (!form.active) throw new BadRequestException('Formulário inactivo');
 
-    // Verificar se já existe uma submissão não-rascunho
+    // @@unique([userId, formId]) — só pode existir uma submissão por par utilizador/formulário,
+    // por isso a procura tem de encontrar também os rascunhos (senão a 2ª gravação nunca
+    // encontra a 1ª e o create() seguinte rebenta com violação da unique constraint).
     const existing = await this.prisma.workDeclSubmission.findFirst({
-      where: { userId, formId: dto.formId, status: { not: WorkDeclStatus.DRAFT } },
+      where: { userId, formId: dto.formId },
     });
     if (
       existing?.status === WorkDeclStatus.SUBMITTED ||
@@ -250,9 +257,10 @@ export class WorkDeclarationsService {
 
     const status = dto.saveAsDraft ? WorkDeclStatus.DRAFT : WorkDeclStatus.SUBMITTED;
 
-    // Upsert: actualizar rascunho ou criar nova
+    // Upsert: qualquer submissão anterior (DRAFT/REJECTED/EXPIRED) é actualizada in-place —
+    // o par [userId, formId] é único, nunca se pode criar uma segunda linha.
     let submission: any;
-    if (existing?.status === WorkDeclStatus.DRAFT) {
+    if (existing) {
       // Apagar respostas antigas
       await this.prisma.workDeclAnswer.deleteMany({ where: { submissionId: existing.id } });
       submission = await this.prisma.workDeclSubmission.update({
@@ -376,7 +384,7 @@ export class WorkDeclarationsService {
     const submittedIds = new Set(submitted.map(s => s.userId));
 
     const where: any = {};
-    if (department) where.employee = { department: { contains: department, mode: 'insensitive' } };
+    if (department) where.department = { name: { contains: department, mode: 'insensitive' } };
 
     const users = await this.prisma.read.user.findMany({ where, select: { id: true } });
     const pending = users.filter(u => !submittedIds.has(u.id));
@@ -456,12 +464,12 @@ export class WorkDeclarationsService {
     const forms = await this.prisma.read.workDeclForm.findMany({
       where: { active: true, mandatory: true },
     });
-    const where: any = { employee: { isNot: null } };
-    if (department) where.employee = { department: { contains: department, mode: 'insensitive' } };
+    const where: any = { active: true };
+    if (department) where.department = { name: { contains: department, mode: 'insensitive' } };
 
     const users = await this.prisma.read.user.findMany({
       where,
-      select: { id: true, fullName: true },
+      select: { id: true, fullName: true, department: { select: { name: true } } },
     });
 
     const submissions = await this.prisma.read.workDeclSubmission.findMany({
@@ -479,7 +487,7 @@ export class WorkDeclarationsService {
       return {
         userId: u.id,
         name: u.fullName,
-        department: (u as any).employee?.department,
+        department: u.department?.name,
         completedForms,
         totalForms: forms.length,
         complianceRate: forms.length > 0 ? +((completedForms / forms.length) * 100).toFixed(0) : 0,
@@ -512,7 +520,7 @@ export class WorkDeclarationsService {
 
   private async notifyRH(type: string, message: string) {
     try {
-      const hr = await this.prisma.read.user.findFirst({ where: { roleCode: 'RH' } as any });
+      const hr = await this.prisma.read.user.findFirst({ where: { role: { code: 'RH' } } });
       if (hr)
         await this.prisma.notificationLog.create({
           data: { userId: hr.id, type, message, success: true },

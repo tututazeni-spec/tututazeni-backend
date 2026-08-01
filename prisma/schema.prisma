@@ -22,6 +22,7 @@ enum EvalType {
   MANAGER
   PEER
   SUBORDINATE
+  CLIENT
 }
 
 enum CertificateType {
@@ -587,10 +588,10 @@ model User {
   cohortParticipations    CohortParticipant[]
   eventParticipations     EventParticipant[]
   eventFeedbacks          EventFeedback[]
-  attendanceRecords       AttendanceRecord[]  @relation("UserAttendanceRecords")
-  createdVacancies InternalVacancy[] @relation("VacancyCreator")
-  vacancyApplications InternalApplication[]
-  
+  attendanceRecords       AttendanceRecord[]      @relation("UserAttendanceRecords")
+  createdVacancies        InternalVacancy[]       @relation("VacancyCreator")
+  vacancyApplications     InternalApplication[]
+
   // ─── Perfil & Gamificação ─────────────────────────────────────
   profile        Profile?
   points         UserPoints?
@@ -627,7 +628,7 @@ model User {
   trainingRatings      TrainingRating[]
 
   // ─── Onboarding ───────────────────────────────────────────────
-  onboardingAsUser    OnboardingPlan[] @relation("OnboardingPlanUser")
+  onboardingAsUser    OnboardingPlan[]         @relation("OnboardingPlanUser")
   onboardingAsBuddy   OnboardingPlan[]         @relation("OnboardingBuddy")
   onboardingAsManager OnboardingPlan[]         @relation("OnboardingManager")
   onboardingAsHR      OnboardingPlan[]         @relation("OnboardingHR")
@@ -678,7 +679,7 @@ model User {
   promotionReviews    PromotionRequest[] @relation("PromotionReviewer")
   successionPlans     SuccessionPlan[]
   talentPool          TalentPool?
-  talentPoolMentor    TalentPool[]    @relation("TalentPoolMentor")
+  talentPoolMentor    TalentPool[]       @relation("TalentPoolMentor")
   developmentPlans    DevelopmentPlan[]
 
   // ─── Processos ────────────────────────────────────────────────
@@ -760,13 +761,13 @@ model User {
   workDeclReviews      WorkDeclReview[]
 
   // ─── Declarations ──────────────────────────────────────────
-declarationsRequested       Declaration[]            @relation("DeclarationRequestedBy")
-declarationsAssigned        Declaration[]            @relation("DeclarationAssignedTo")
-declarationsAsEmployee      Declaration[]            @relation("DeclarationEmployee")
-declarationSignatures       DeclarationSignature[]
-declarationAuditLogs        DeclarationAuditLog[]
-declarationAttachments      DeclarationAttachment[]
-declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedBy")
+  declarationsRequested       Declaration[]           @relation("DeclarationRequestedBy")
+  declarationsAssigned        Declaration[]           @relation("DeclarationAssignedTo")
+  declarationsAsEmployee      Declaration[]           @relation("DeclarationEmployee")
+  declarationSignatures       DeclarationSignature[]
+  declarationAuditLogs        DeclarationAuditLog[]
+  declarationAttachments      DeclarationAttachment[]
+  declarationTemplatesUpdated DeclarationTemplate[]   @relation("TemplateUpdatedBy")
 
   // ─── Skills ───────────────────────────────────────────────────
   legacySkills         LegacyEmployeeSkill[]
@@ -786,11 +787,11 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   createdPartnerMilestones PartnerMilestone[]   @relation("MilestoneCreator")
 
   // ─── CRM Financiadores ────────────────────────────────────────
-  createdFunders          Funder[]            @relation("FunderCreator")
-  assignedFunders         Funder[]            @relation("FunderOwner")
+  createdFunders            Funder[]            @relation("FunderCreator")
+  assignedFunders           Funder[]            @relation("FunderOwner")
   createdGrantDisbursements GrantDisbursement[] @relation("DisbursementCreator")
-  funderInteractions      FunderInteraction[] @relation("FunderInteractionUser")
-  createdFunderReports    FunderReport[]      @relation("ReportCreator")
+  funderInteractions        FunderInteraction[] @relation("FunderInteractionUser")
+  createdFunderReports      FunderReport[]      @relation("ReportCreator")
 
   // ─── Biblioteca Digital ───────────────────────────────────────
   createdLibraryCollections LibraryCollection[] @relation("CollectionCreator")
@@ -822,30 +823,30 @@ declarationTemplatesUpdated DeclarationTemplate[]    @relation("TemplateUpdatedB
   academicTranscript      AcademicTranscript?  @relation("AcademicTranscriptUser")
 
   // ─── LMS Completo ─────────────────────────────────────────────
-  lmsCreatedPaths       LmsLearningPath[]      @relation("LmsPathCreator")
-  lmsPathEnrollments    LmsPathEnrollment[]    @relation("LmsPathStudent")
-  lmsSessionsInstructed LmsLiveSession[]       @relation("LmsSessionInstructor")
-  lmsSessionsCreated    LmsLiveSession[]       @relation("LmsSessionCreator")
-  lmsLiveAttendances    LmsLiveAttendance[]    @relation("LmsAttendanceUser")
-  lmsLearningAnalytics  LmsLearningAnalytics?  @relation("LmsAnalyticsUser")
+  lmsCreatedPaths       LmsLearningPath[]     @relation("LmsPathCreator")
+  lmsPathEnrollments    LmsPathEnrollment[]   @relation("LmsPathStudent")
+  lmsSessionsInstructed LmsLiveSession[]      @relation("LmsSessionInstructor")
+  lmsSessionsCreated    LmsLiveSession[]      @relation("LmsSessionCreator")
+  lmsLiveAttendances    LmsLiveAttendance[]   @relation("LmsAttendanceUser")
+  lmsLearningAnalytics  LmsLearningAnalytics? @relation("LmsAnalyticsUser")
 
   // ─── Monitoria e Avaliação ────────────────────────────────────
-  createdOkrCycles         OkrCycle[]            @relation("OkrCycleCreator")
-  ownedObjectives          Objective[]           @relation("ObjectiveOwner")
-  keyResultUpdates         KeyResultUpdate[]     @relation("KrUpdater")
-  createdMonIndicators     MonitoringIndicator[] @relation("IndicatorCreator")
-  recordedMonRecords       MonitoringRecord[]    @relation("RecordCreator")
-  createdEvalCycles        EvaluationCycle[]     @relation("EvalCycleCreator")
-  evaluationsAsUser        UserEvaluation[]      @relation("EvalUser")
-  evaluationsAsEvaluator   UserEvaluation[]      @relation("EvalEvaluator")
+  createdOkrCycles       OkrCycle[]            @relation("OkrCycleCreator")
+  ownedObjectives        Objective[]           @relation("ObjectiveOwner")
+  keyResultUpdates       KeyResultUpdate[]     @relation("KrUpdater")
+  createdMonIndicators   MonitoringIndicator[] @relation("IndicatorCreator")
+  recordedMonRecords     MonitoringRecord[]    @relation("RecordCreator")
+  createdEvalCycles      EvaluationCycle[]     @relation("EvalCycleCreator")
+  evaluationsAsUser      UserEvaluation[]      @relation("EvalUser")
+  evaluationsAsEvaluator UserEvaluation[]      @relation("EvalEvaluator")
 
   // ─── Engagement (Grupo A) ─────────────────────────────────────
   moodCheckins         MoodCheckin[]
-  feedbackGiven        Feedback[]     @relation("FeedbackFrom")
-  feedbackReceived     Feedback[]     @relation("FeedbackTo")
-  feedbackReplied      Feedback[]     @relation("FeedbackReplier")
-  recognitionsGiven    Recognition[]  @relation("RecognitionFrom")
-  recognitionsReceived Recognition[]  @relation("RecognitionTo")
+  feedbackGiven        Feedback[]    @relation("FeedbackFrom")
+  feedbackReceived     Feedback[]    @relation("FeedbackTo")
+  feedbackReplied      Feedback[]    @relation("FeedbackReplier")
+  recognitionsGiven    Recognition[] @relation("RecognitionFrom")
+  recognitionsReceived Recognition[] @relation("RecognitionTo")
 
   // ─── Engagement (Grupo B+C) ───────────────────────────────────
   oneOnOneMeetingsHosted       OneOnOneMeeting[]  @relation("OneOnOneMeetingHost")
@@ -922,7 +923,7 @@ model Role {
   description     String?          @db.Text
   users           User[]
   permissions     Permission[]
-  code            String? @unique
+  code            String?          @unique
   rolePermissions RolePermission[]
   roleTemplates   RoleTemplate[]
 }
@@ -949,12 +950,12 @@ model RolePermission {
 }
 
 model RoleTemplate {
-  id           Int      @id @default(autoincrement())
-  positionName String   @db.VarChar(100)
+  id           Int       @id @default(autoincrement())
+  positionName String    @db.VarChar(100)
   roleId       Int
   positionId   Int?
-  createdAt    DateTime @default(now())
-  role         Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+  role         Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
   position     Position? @relation(fields: [positionId], references: [id])
 
   @@index([roleId])
@@ -1001,6 +1002,7 @@ model Department {
   internalVacancies   InternalVacancy[]
   careerPaths         CareerPath[]
   engagementActions   EngagementAction[]
+
   @@index([active])
   @@index([parentId])
 }
@@ -1159,6 +1161,7 @@ model CareerPosition {
   createdAt    DateTime             @default(now())
   competencies PositionCompetency[]
   users        UserCareer[]
+
   @@index([level])
 }
 
@@ -1170,6 +1173,7 @@ model UserCareer {
   endedAt    DateTime?
   user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   position   CareerPosition @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([positionId])
 }
@@ -1187,76 +1191,80 @@ model CareerSkill {
 }
 
 model CareerPath {
-  id          Int              @id @default(autoincrement())
-  name        String
-  description String?
-  active      Boolean          @default(true)
-  plans       UserCareerPlan[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  type         String   // LINEAR|Y_SHAPED|T_SHAPED|W_SHAPED|LATTICE
+  id           Int              @id @default(autoincrement())
+  name         String
+  description  String?
+  active       Boolean          @default(true)
+  plans        UserCareerPlan[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  type         String // LINEAR|Y_SHAPED|T_SHAPED|W_SHAPED|LATTICE
   departmentId Int?
-  department Department?    @relation(fields: [departmentId], references: [id])
-  steps       CareerPathStep[] 
+  department   Department?      @relation(fields: [departmentId], references: [id])
+  steps        CareerPathStep[]
+
   @@index([active])
   @@index([departmentId])
 }
 
 model CareerPathStep {
-  id     Int        @id @default(autoincrement())
-  roleId Int
-  role   CareerRole @relation(fields: [roleId], references: [id])
-  order  Int
-  label  String?
+  id                    Int        @id @default(autoincrement())
+  roleId                Int
+  role                  CareerRole @relation(fields: [roleId], references: [id])
+  order                 Int
+  label                 String?
   careerPathId          Int
   positionId            Int
   minMonthsRequired     Int?
   minPerformanceScore   Float?
-  requiredCourseIds     Int[]  @default([])
-  requiredCompetencyIds Int[]  @default([])
-  careerPath CareerPath @relation(fields: [careerPathId], references: [id], onDelete: Cascade)
-  position   Position   @relation(fields: [positionId],   references: [id])
+  requiredCourseIds     Int[]      @default([])
+  requiredCompetencyIds Int[]      @default([])
+  careerPath            CareerPath @relation(fields: [careerPathId], references: [id], onDelete: Cascade)
+  position              Position   @relation(fields: [positionId], references: [id])
+
   @@unique([careerPathId, order])
   @@index([careerPathId])
 }
 
 model InternalApplication {
-  id         Int      @id @default(autoincrement())
+  id         Int             @id @default(autoincrement())
   vacancyId  Int
   userId     Int
-  motivation String?  @db.Text
-  status     String   @default("PENDING") // PENDING|REVIEWING|SHORTLISTED|REJECTED|ACCEPTED
+  motivation String?         @db.Text
+  status     String          @default("PENDING") // PENDING|REVIEWING|SHORTLISTED|REJECTED|ACCEPTED
   feedback   String?
-  appliedAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  vacancy InternalVacancy @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
-  user    User            @relation(fields: [userId],    references: [id])
+  appliedAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  vacancy    InternalVacancy @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+  user       User            @relation(fields: [userId], references: [id])
+
   @@unique([vacancyId, userId])
   @@index([userId])
   @@index([status])
 }
 
 model InternalVacancy {
-  id                    Int       @id @default(autoincrement())
+  id                    Int                   @id @default(autoincrement())
   title                 String
-  description           String?   @db.Text
-  type                  String    // PROMOTION|LATERAL|GIG_PROJECT|JOB_ROTATION|SHADOWING
-  status                String    @default("DRAFT")
+  description           String?               @db.Text
+  type                  String // PROMOTION|LATERAL|GIG_PROJECT|JOB_ROTATION|SHADOWING
+  status                String                @default("DRAFT")
   positionId            Int?
   departmentId          Int?
   createdById           Int
-  slots                 Int       @default(1)
+  slots                 Int                   @default(1)
   closingDate           DateTime?
   durationDays          Int?
   publishedAt           DateTime?
-  requiredCompetencyIds Int[]     @default([])
-  requiredCourseIds     Int[]     @default([])
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  position     Position?              @relation(fields: [positionId],   references: [id])
-  department   Department?            @relation(fields: [departmentId], references: [id])
-  createdBy    User                   @relation("VacancyCreator", fields: [createdById], references: [id])
-  applications InternalApplication[]
+  requiredCompetencyIds Int[]                 @default([])
+  requiredCourseIds     Int[]                 @default([])
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  position              Position?             @relation(fields: [positionId], references: [id])
+  department            Department?           @relation(fields: [departmentId], references: [id])
+  createdBy             User                  @relation("VacancyCreator", fields: [createdById], references: [id])
+  applications          InternalApplication[]
+
   @@index([status])
   @@index([type])
   @@index([departmentId])
@@ -1326,68 +1334,70 @@ model PromotionRequest {
 }
 
 model SuccessionPlan {
-  id                  Int      @id @default(autoincrement())
-  criticalPositionId  Int
-  candidateId         Int
-  readinessLevel      String   // READY_NOW|READY_SOON|NEEDS_DEVELOPMENT
-  priority            String   // PRIMARY|SECONDARY|TERTIARY
-  matchScore          Float?
-  geographicMobility  Boolean  @default(true)
-  available           Boolean  @default(true)
-  notes               String?
-  readinessByDate     DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  criticalPosition CriticalPosition @relation(fields: [criticalPositionId], references: [id], onDelete: Cascade)
-  candidate        User             @relation(fields: [candidateId],        references: [id])
-  pdi              SuccessionPDI?
-  positionId  Int       // ou String — verificar o tipo de Position.id
-  position    Position  @relation(fields: [positionId], references: [id])
+  id                 Int              @id @default(autoincrement())
+  criticalPositionId Int
+  candidateId        Int
+  readinessLevel     String // READY_NOW|READY_SOON|NEEDS_DEVELOPMENT
+  priority           String // PRIMARY|SECONDARY|TERTIARY
+  matchScore         Float?
+  geographicMobility Boolean          @default(true)
+  available          Boolean          @default(true)
+  notes              String?
+  readinessByDate    DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  criticalPosition   CriticalPosition @relation(fields: [criticalPositionId], references: [id], onDelete: Cascade)
+  candidate          User             @relation(fields: [candidateId], references: [id])
+  pdi                SuccessionPDI?
+  positionId         Int // ou String — verificar o tipo de Position.id
+  position           Position         @relation(fields: [positionId], references: [id])
+
   @@unique([criticalPositionId, candidateId])
   @@index([readinessLevel])
   @@index([candidateId])
 }
 
 model TalentPool {
-  id                  Int      @id @default(autoincrement())
-  userId              Int      @unique
-  readinessLevel      String
-  mentorId            Int?
-  notes               String?
-  geographicMobility  Boolean  @default(true)
-  createdAt           DateTime @default(now())
-  user   User  @relation(fields: [userId],   references: [id])
-  mentor User? @relation("TalentPoolMentor", fields: [mentorId], references: [id])
+  id                 Int      @id @default(autoincrement())
+  userId             Int      @unique
+  readinessLevel     String
+  mentorId           Int?
+  notes              String?
+  geographicMobility Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  user               User     @relation(fields: [userId], references: [id])
+  mentor             User?    @relation("TalentPoolMentor", fields: [mentorId], references: [id])
 }
 
 model SuccessionPDI {
-  id                Int      @id @default(autoincrement())
-  successionPlanId  Int      @unique
-  gaps              String   // JSON
-  developmentGoals  String?
-  learningPathIds   Int[]
-  courseIds         Int[]
-  status            String   @default("ACTIVE")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  successionPlan SuccessionPlan @relation(fields: [successionPlanId], references: [id], onDelete: Cascade)
+  id               Int            @id @default(autoincrement())
+  successionPlanId Int            @unique
+  gaps             String // JSON
+  developmentGoals String?
+  learningPathIds  Int[]
+  courseIds        Int[]
+  status           String         @default("ACTIVE")
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  successionPlan   SuccessionPlan @relation(fields: [successionPlanId], references: [id], onDelete: Cascade)
 }
 
 model CriticalPosition {
-  id                  Int      @id @default(autoincrement())
-  positionId          Int      @unique
-  businessImpact      String   // LOW|MEDIUM|HIGH|CRITICAL
-  replacementTime     String   // IMMEDIATE|SHORT_TERM|MEDIUM_TERM|LONG_TERM
-  exitRisk            String   // LOW|MEDIUM|HIGH|CRITICAL
-  expectedExitDate    DateTime?
-  criticalReason      String?
-  keyPersonRisk       Boolean  @default(false)
-  minSuccessorsRequired Int    @default(2)
-  requiresDocumentation Boolean @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  position       Position         @relation(fields: [positionId],  references: [id])
-  successionPlans SuccessionPlan[]
+  id                    Int              @id @default(autoincrement())
+  positionId            Int              @unique
+  businessImpact        String // LOW|MEDIUM|HIGH|CRITICAL
+  replacementTime       String // IMMEDIATE|SHORT_TERM|MEDIUM_TERM|LONG_TERM
+  exitRisk              String // LOW|MEDIUM|HIGH|CRITICAL
+  expectedExitDate      DateTime?
+  criticalReason        String?
+  keyPersonRisk         Boolean          @default(false)
+  minSuccessorsRequired Int              @default(2)
+  requiresDocumentation Boolean          @default(false)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  position              Position         @relation(fields: [positionId], references: [id])
+  successionPlans       SuccessionPlan[]
+
   @@index([exitRisk])
   @@index([businessImpact])
 }
@@ -1420,6 +1430,7 @@ model DevelopmentPlan {
   approvals          PdiApproval[]
   pdiActions         PdiAction[]
   certificates       Certificate[]
+
   @@index([userId])
   @@index([status])
   @@index([managerId])
@@ -1451,38 +1462,40 @@ model DevelopmentPlanAction {
 }
 
 model PdiEvidence {
-  id            Int                  @id @default(autoincrement())
-  developmentPlanActionId  Int  
-  developmentPlanAction    DevelopmentPlanAction @relation(fields: [developmentPlanActionId], references: [id], onDelete: Cascade)
-  submittedById Int
-  title         String
-  url           String?
-  notes         String?               @db.Text
-  evidenceType  String                @default("NOTE")
-  createdAt     DateTime              @default(now())
-  submittedBy   User                  @relation(fields: [submittedById], references: [id])
+  id                      Int                   @id @default(autoincrement())
+  developmentPlanActionId Int
+  developmentPlanAction   DevelopmentPlanAction @relation(fields: [developmentPlanActionId], references: [id], onDelete: Cascade)
+  submittedById           Int
+  title                   String
+  url                     String?
+  notes                   String?               @db.Text
+  evidenceType            String                @default("NOTE")
+  createdAt               DateTime              @default(now())
+  submittedBy             User                  @relation(fields: [submittedById], references: [id])
+
   @@index([developmentPlanActionId])
 }
 
 model PdiAction {
-  id           Int       @id @default(autoincrement())
-  planId       Int
-  title        String
-  description  String?   @db.Text
-  type         String    // COURSE|MENTORING|COACHING|READING|PROJECT|JOB_ROTATION|MICROLEARNING|WORKSHOP|CERTIFICATION|OTHER
-  status       String    @default("TODO")              // TODO|IN_PROGRESS|COMPLETED|BLOCKED|CANCELLED
-  courseId     Int?
+  id            Int             @id @default(autoincrement())
+  planId        Int
+  title         String
+  description   String?         @db.Text
+  type          String // COURSE|MENTORING|COACHING|READING|PROJECT|JOB_ROTATION|MICROLEARNING|WORKSHOP|CERTIFICATION|OTHER
+  status        String          @default("TODO") // TODO|IN_PROGRESS|COMPLETED|BLOCKED|CANCELLED
+  courseId      Int?
   workloadHours Int?
-  dueDate      DateTime?
-  completedAt  DateTime?
-  resources    String[]
-  xpReward     Int       @default(20)
-  seq          Int       @default(0)
-  mandatory    Boolean   @default(false)
-  progress     Int       @default(0)                   // 0-100
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  plan     DevelopmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  dueDate       DateTime?
+  completedAt   DateTime?
+  resources     String[]
+  xpReward      Int             @default(20)
+  seq           Int             @default(0)
+  mandatory     Boolean         @default(false)
+  progress      Int             @default(0) // 0-100
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  plan          DevelopmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
   @@index([planId])
   @@index([status])
 }
@@ -1541,42 +1554,42 @@ model PdiApproval {
 // ══════════════════════════════════════════════════════════════════
 
 model Course {
-  id                      Int       @id @default(autoincrement())
+  id                      Int                  @id @default(autoincrement())
   title                   String
   shortDescription        String?
-  description             String?   @db.Text
+  description             String?              @db.Text
   category                String?
   tags                    String[]
   thumbnailUrl            String?
   introVideoUrl           String?
   workloadHours           Int?
-  language                String    @default("pt")
-  level                   String    @default("BEGINNER")
-  status                  String    @default("DRAFT")
-  mandatory               Boolean   @default(false)
-  internalCode            String?   @unique
+  language                String               @default("pt")
+  level                   String               @default("BEGINNER")
+  status                  String               @default("DRAFT")
+  mandatory               Boolean              @default(false)
+  internalCode            String?              @unique
   departmentId            Int?
   learningObjectives      String[]
   passingScore            Int?
   certificateValidityDays Int?
-  allowDownload           Boolean   @default(false)
+  allowDownload           Boolean              @default(false)
   publishedAt             DateTime?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
-  department      Department?          @relation(fields: [departmentId], references: [id])
-  modules         CourseModule[]
-  enrollments     Enrollment[]
-  feedbacks       CourseFeedback[]
-  competencies    CourseCompetency[]
-  analytics       CourseAnalytics?
-  certificates    Certificate[]
-  assessments     Assessment[]
-  evaluations     Evaluation[]
-  aiSessions      AiTutorSession[]
-  liveClasses     LiveClass[]
-  trainingImpacts TrainingImpact[]
-  learningPaths   LearningPathCourse[]
-  cohorts         InstructorCohort[]
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  department              Department?          @relation(fields: [departmentId], references: [id])
+  modules                 CourseModule[]
+  enrollments             Enrollment[]
+  feedbacks               CourseFeedback[]
+  competencies            CourseCompetency[]
+  analytics               CourseAnalytics?
+  certificates            Certificate[]
+  assessments             Assessment[]
+  evaluations             Evaluation[]
+  aiSessions              AiTutorSession[]
+  liveClasses             LiveClass[]
+  trainingImpacts         TrainingImpact[]
+  learningPaths           LearningPathCourse[]
+  cohorts                 InstructorCohort[]
 
   @@index([status])
   @@index([category])
@@ -1585,63 +1598,65 @@ model Course {
 }
 
 model CourseModule {
-  id                   Int       @id @default(autoincrement())
+  id                   Int              @id @default(autoincrement())
   courseId             Int
   title                String
   description          String?
   learningObjectives   String[]
   seq                  Int
-  status               String    @default("DRAFT")
+  status               String           @default("DRAFT")
   type                 String?
-  progressionType      String    @default("SEQUENTIAL")
-  completionRule       String    @default("ALL_LESSONS")
-  minCompletionPercent Int       @default(100)
+  progressionType      String           @default("SEQUENTIAL")
+  completionRule       String           @default("ALL_LESSONS")
+  minCompletionPercent Int              @default(100)
   minQuizScore         Int?
-  mandatory            Boolean   @default(true)
+  mandatory            Boolean          @default(true)
   dripDays             Int?
   availableFrom        DateTime?
-  createdAt            DateTime  @default(now())
-  course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  lessons     Lesson[]
-  materials   ModuleMaterial[]
-  assessments Assessment[]
+  createdAt            DateTime         @default(now())
+  course               Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons              Lesson[]
+  materials            ModuleMaterial[]
+  assessments          Assessment[]
+
   @@index([courseId])
   @@index([seq])
 }
 
 model Lesson {
-  id              Int      @id @default(autoincrement())
+  id              Int              @id @default(autoincrement())
   moduleId        Int
   title           String
   description     String?
-  type            String   @default("VIDEO")
-  contentUrl      String?  @db.Text
-  textContent     String?  @db.Text
+  type            String           @default("VIDEO")
+  contentUrl      String?          @db.Text
+  textContent     String?          @db.Text
   seq             Int
   durationMinutes Int?
-  isFree          Boolean  @default(false)
-  allowDownload   Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  content         String?  @db.Text
-  module   CourseModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  progress LessonProgress[]
-  quiz     Quiz?
+  isFree          Boolean          @default(false)
+  allowDownload   Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  content         String?          @db.Text
+  module          CourseModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  progress        LessonProgress[]
+  quiz            Quiz?
 
   @@index([moduleId])
 }
 
 model LessonProgress {
-  id             Int       @id @default(autoincrement())
+  id             Int         @id @default(autoincrement())
   lessonId       Int
   userId         Int
   enrollmentId   Int?
-  completed      Boolean   @default(false)
+  completed      Boolean     @default(false)
   completedAt    DateTime?
   watchedSeconds Int?
   resumePosition Int?
-  lesson     Lesson      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  user       User        @relation(fields: [userId], references: [id])
-  enrollment Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  lesson         Lesson      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user           User        @relation(fields: [userId], references: [id])
+  enrollment     Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+
   @@unique([lessonId, userId])
   @@index([userId])
   @@index([userId, completed])
@@ -1660,27 +1675,28 @@ model ModuleMaterial {
 }
 
 model Enrollment {
-  id             Int       @id @default(autoincrement())
+  id             Int                 @id @default(autoincrement())
   courseId       Int
   userId         Int
-  status         String    @default("NOT_STARTED")
-  origin         String    @default("MANUAL")
-  mandatory      Boolean   @default(false)
+  status         String              @default("NOT_STARTED")
+  origin         String              @default("MANUAL")
+  mandatory      Boolean             @default(false)
   learningPathId Int?
   assignedById   Int?
   deadline       DateTime?
-  enrolledAt     DateTime  @default(now())
+  enrolledAt     DateTime            @default(now())
   startedAt      DateTime?
   completedAt    DateTime?
   cancelledAt    DateTime?
   cancelReason   String?
-  progress       Int  @default(0)
-  course      Course              @relation(fields: [courseId], references: [id])
-  user        User                @relation(fields: [userId], references: [id])
-  certificate Certificate?
-  progresses  LessonProgress[]
-  attempts    EvaluationAttempt[] @relation("EnrollmentAttempts")
-  aiSessions  AiTutorSession[]
+  pausedAt       DateTime?
+  progress       Int                 @default(0)
+  course         Course              @relation(fields: [courseId], references: [id])
+  user           User                @relation(fields: [userId], references: [id])
+  certificate    Certificate?
+  progresses     LessonProgress[]
+  attempts       EvaluationAttempt[] @relation("EnrollmentAttempts")
+  aiSessions     AiTutorSession[]
 
   @@unique([courseId, userId])
   @@index([userId])
@@ -1797,29 +1813,30 @@ model CourseFeedback {
 // ══════════════════════════════════════════════════════════════════
 
 model LearningPath {
-  id               Int       @id @default(autoincrement())
+  id               Int                      @id @default(autoincrement())
   title            String
   shortDescription String?
-  description      String?   @db.Text
+  description      String?                  @db.Text
   objective        String?
   thumbnailUrl     String?
   category         String?
   tags             String[]
-  level            String    @default("BEGINNER")
-  pathType         String    @default("CUSTOM")
-  progressionType  String    @default("SEQUENTIAL")
-  status           String    @default("DRAFT")
-  mandatory        Boolean   @default(false)
-  language         String    @default("pt")
-  totalHours       Int       @default(0)
+  level            String                   @default("BEGINNER")
+  pathType         String                   @default("CUSTOM")
+  progressionType  String                   @default("SEQUENTIAL")
+  status           String                   @default("DRAFT")
+  mandatory        Boolean                  @default(false)
+  language         String                   @default("pt")
+  totalHours       Int                      @default(0)
   deadline         DateTime?
   publishedAt      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  courses     LearningPathCourse[]
-  milestones  LearningPathMilestone[]
-  assignments LearningPathAssignment[]
-  enrollments LearningPathEnrollment[]
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  courses          LearningPathCourse[]
+  milestones       LearningPathMilestone[]
+  assignments      LearningPathAssignment[]
+  enrollments      LearningPathEnrollment[]
+
   @@index([status])
   @@index([category])
 }
@@ -1834,6 +1851,7 @@ model LearningPathCourse {
   deadlineDays   Int?
   learningPath   LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
   course         Course       @relation(fields: [courseId], references: [id])
+
   @@unique([learningPathId, courseId])
   @@index([learningPathId])
 }
@@ -1882,28 +1900,29 @@ model LearningPathEnrollment {
 // ══════════════════════════════════════════════════════════════════
 
 model Assessment {
-  id                 Int      @id @default(autoincrement())
+  id                 Int                  @id @default(autoincrement())
   title              String
   description        String?
-  type               String   @default("QUIZ")
-  status             String   @default("DRAFT")
+  type               String               @default("QUIZ")
+  status             String               @default("DRAFT")
   courseId           Int?
   moduleId           Int?
   learningPathId     Int?
-  passingScore       Int      @default(70)
-  maxAttempts        Int      @default(0)
-  cooldownHours      Int      @default(0)
-  timeLimitMinutes   Int      @default(0)
-  feedbackMode       String   @default("ON_SUBMIT")
-  randomizeQuestions Boolean  @default(false)
-  randomizeOptions   Boolean  @default(false)
-  allowReview        Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  course    Course?              @relation(fields: [courseId], references: [id])
-  module    CourseModule?        @relation(fields: [moduleId], references: [id])
-  questions AssessmentQuestion[]
-  attempts  AssessmentAttempt[]
+  passingScore       Int                  @default(70)
+  maxAttempts        Int                  @default(0)
+  cooldownHours      Int                  @default(0)
+  timeLimitMinutes   Int                  @default(0)
+  feedbackMode       String               @default("ON_SUBMIT")
+  randomizeQuestions Boolean              @default(false)
+  randomizeOptions   Boolean              @default(false)
+  allowReview        Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  course             Course?              @relation(fields: [courseId], references: [id])
+  module             CourseModule?        @relation(fields: [moduleId], references: [id])
+  questions          AssessmentQuestion[]
+  attempts           AssessmentAttempt[]
+
   @@index([courseId])
   @@index([status])
 }
@@ -1924,6 +1943,7 @@ model AssessmentQuestion {
   seq           Int
   assessment    Assessment                @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   answers       AssessmentAttemptAnswer[]
+
   @@index([assessmentId])
 }
 
@@ -1945,6 +1965,7 @@ model AssessmentAttempt {
   assessment        Assessment                @relation(fields: [assessmentId], references: [id])
   user              User                      @relation(fields: [userId], references: [id])
   answers           AssessmentAttemptAnswer[]
+
   @@index([userId])
   @@index([assessmentId])
   @@index([status])
@@ -1966,6 +1987,7 @@ model AssessmentAttemptAnswer {
   reviewedAt      DateTime?
   attempt         AssessmentAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   question        AssessmentQuestion @relation(fields: [questionId], references: [id])
+
   @@unique([attemptId, questionId])
 }
 
@@ -1974,20 +1996,20 @@ model AssessmentAttemptAnswer {
 // ══════════════════════════════════════════════════════════════════
 
 model Competency {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
-  description String?
-  category    String   @default("HARD_SKILL")
-  type        String   @default("BEHAVIORAL")
-  tags        String[]
-  status      String   @default("ACTIVE")
-  isActive    Boolean  @default(true)
-  isGlobal    Boolean  @default(true)
-  tenantId    String?
-  scaleMin    Int      @default(1)
-  scaleMax    Int      @default(5)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                       Int                      @id @default(autoincrement())
+  name                     String                   @unique
+  description              String?
+  category                 String                   @default("HARD_SKILL")
+  type                     String                   @default("BEHAVIORAL")
+  tags                     String[]
+  status                   String                   @default("ACTIVE")
+  isActive                 Boolean                  @default(true)
+  isGlobal                 Boolean                  @default(true)
+  tenantId                 String?
+  scaleMin                 Int                      @default(1)
+  scaleMax                 Int                      @default(5)
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
   userCompetencies         UserCompetency[]
   courses                  CourseCompetency[]
   positions                PositionCompetency[]
@@ -1998,7 +2020,8 @@ model Competency {
   avatarScenarios          AvatarScenario[]
   indicators               CompetencyIndicator[]
   eval360CycleCompetencies Eval360CycleCompetency[]
-  eval360Questions         Eval360Question[] @relation("Eval360QuestionCompetency")
+  eval360Questions         Eval360Question[]        @relation("Eval360QuestionCompetency")
+
   @@index([category])
   @@index([status])
   @@index([isActive])
@@ -2022,6 +2045,7 @@ model ProficiencyLevel {
   value        Int
   description  String?
   competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
   @@unique([competencyId, value])
 }
 
@@ -2039,6 +2063,7 @@ model UserCompetency {
   evaluatedAt  DateTime   @default(now())
   user         User       @relation(fields: [userId], references: [id])
   competency   Competency @relation(fields: [competencyId], references: [id])
+
   @@unique([userId, competencyId])
   @@index([userId])
 }
@@ -2269,17 +2294,23 @@ model NineBoxPlacement {
 }
 
 model PerformanceEvaluation {
-  id             Int      @id @default(autoincrement())
-  evaluatorId    Int
-  evaluatedId    Int
-  type           EvalType
-  period         String
-  criteria       Json
-  generalComment String?  @db.Text
-  overallScore   Float    @default(0)
-  createdAt      DateTime @default(now())
-  evaluator      User     @relation("EvaluatorRelation", fields: [evaluatorId], references: [id])
-  evaluated      User     @relation("EvaluatedRelation", fields: [evaluatedId], references: [id])
+  id                Int      @id @default(autoincrement())
+  evaluatorId       Int
+  evaluatedId       Int
+  type              EvalType
+  period            String
+  criteria          Json
+  generalComment    String?  @db.Text
+  overallScore      Float    @default(0)
+  cycleId           Int?
+  competencyScores  String?  @db.Text
+  strengths         String?  @db.Text
+  improvements      String?  @db.Text
+  recommendations   String?  @db.Text
+  isDraft           Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  evaluator         User     @relation("EvaluatorRelation", fields: [evaluatorId], references: [id])
+  evaluated         User     @relation("EvaluatedRelation", fields: [evaluatedId], references: [id])
 
   @@index([evaluatedId])
   @@index([evaluatorId])
@@ -2290,8 +2321,11 @@ model EvaluationRequest {
   id          Int       @id @default(autoincrement())
   evaluatorId Int
   evaluatedId Int
+  type        EvalType?
   status      String    @default("PENDING")
   dueDate     DateTime?
+  cycleId     Int?
+  completedAt DateTime?
   createdAt   DateTime  @default(now())
   evaluator   User      @relation("RequestEvaluator", fields: [evaluatorId], references: [id])
   evaluated   User      @relation("RequestEvaluated", fields: [evaluatedId], references: [id])
@@ -2524,7 +2558,7 @@ model OnboardingPlan {
   xpEarned        Int                      @default(0)
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
-  user            User  @relation("OnboardingPlanUser", fields: [userId], references: [id])
+  user            User                     @relation("OnboardingPlanUser", fields: [userId], references: [id])
   template        OnboardingTemplate       @relation(fields: [templateId], references: [id])
   buddy           User?                    @relation("OnboardingBuddy", fields: [buddyId], references: [id])
   manager         User?                    @relation("OnboardingManager", fields: [managerId], references: [id])
@@ -2532,6 +2566,7 @@ model OnboardingPlan {
   taskInstances   OnboardingTaskInstance[]
   documents       OnboardingDocument[]
   surveys         OnboardingSurvey[]
+
   @@index([userId])
   @@index([status])
 }
@@ -2583,7 +2618,7 @@ model OnboardingSurvey {
   enps      Int?
   comment   String?
   createdAt DateTime       @default(now())
-  plan      OnboardingPlan @relation(fields: [planId], references: [id])
+  plan      OnboardingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@unique([planId, milestone])
 }
@@ -2593,32 +2628,34 @@ model OnboardingSurvey {
 // ══════════════════════════════════════════════════════════════════
 
 model MicroLearning {
-  id              Int       @id @default(autoincrement())
-  title           String    @db.VarChar(80)
-  description     String?   @db.VarChar(200)
+  id              Int                        @id @default(autoincrement())
+  title           String                     @db.VarChar(80)
+  description     String?                    @db.VarChar(200)
   contentType     String
   level           String
-  status          String    @default("DRAFT")
+  status          String                     @default("DRAFT")
   durationSeconds Int?
   mediaUrl        String?
-  textContent     String?   @db.Text
+  textContent     String?                    @db.Text
   thumbnailUrl    String?
   tags            String[]
   takeaways       String[]
-  xpReward        Int       @default(10)
-  viewCount       Int       @default(0)
+  xpReward        Int                        @default(10)
+  viewCount       Int                        @default(0)
   categoryId      Int?
   learningPathId  Int?
   authorId        Int?
   publishedAt     DateTime?
   scheduledAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  author        User?                      @relation(fields: [authorId], references: [id])
-  quizQuestions MicroQuizQuestion[]
-  progress      MicroLearningProgress[]
-  interactions  MicroLearningInteraction[]
-  quizAttempts  MicroQuizAttempt[]
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  author          User?                      @relation(fields: [authorId], references: [id])
+  quizQuestions   MicroQuizQuestion[]
+  progress        MicroLearningProgress[]
+  interactions    MicroLearningInteraction[]
+  quizAttempts    MicroQuizAttempt[]
+  playlistItems   PlaylistItem[]
+
   @@index([status])
   @@index([contentType])
   @@index([viewCount])
@@ -2644,6 +2681,7 @@ model MicroLearningProgress {
   updatedAt       DateTime      @updatedAt
   user            User          @relation(fields: [userId], references: [id])
   microLearning   MicroLearning @relation(fields: [microLearningId], references: [id])
+
   @@unique([userId, microLearningId])
   @@index([userId])
 }
@@ -2688,6 +2726,7 @@ model PlaylistItem {
   microLearningId Int
   seq             Int
   playlist        MicroLearningPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  microLearning   MicroLearning         @relation(fields: [microLearningId], references: [id], onDelete: Cascade)
 
   @@unique([playlistId, microLearningId])
 }
@@ -2869,6 +2908,7 @@ model KnowledgeInteraction {
   createdAt DateTime         @default(now())
   user      User             @relation(fields: [userId], references: [id])
   article   KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
   @@index([articleId])
   @@index([userId])
 }
@@ -2958,15 +2998,15 @@ model KnowledgeSearchLog {
 // ══════════════════════════════════════════════════════════════════
 
 model ProcessStandard {
-  id               Int       @id @default(autoincrement())
-  code             String    @unique
+  id               Int                  @id @default(autoincrement())
+  code             String               @unique
   title            String
   description      String?
   objective        String?
   scope            String?
-  version          String    @default("1.0")
-  status           String    @default("DRAFT")
-  riskLevel        String    @default("LOW")
+  version          String               @default("1.0")
+  status           String               @default("DRAFT")
+  riskLevel        String               @default("LOW")
   category         String?
   tags             String[]
   defaultSlaHours  Float?
@@ -2975,14 +3015,15 @@ model ProcessStandard {
   publishedAt      DateTime?
   ownerId          Int
   departmentId     Int?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  owner        User                 @relation(fields: [ownerId], references: [id])
-  department   Department?          @relation(fields: [departmentId], references: [id])
-  steps        ProcessStep[]
-  instances    ProcessInstance[]
-  versions     ProcessVersion[]
-  approvalLogs ProcessApprovalLog[]
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  owner            User                 @relation(fields: [ownerId], references: [id])
+  department       Department?          @relation(fields: [departmentId], references: [id])
+  steps            ProcessStep[]
+  instances        ProcessInstance[]
+  versions         ProcessVersion[]
+  approvalLogs     ProcessApprovalLog[]
+
   @@index([status])
   @@index([category])
 }
@@ -3005,26 +3046,28 @@ model ProcessStep {
   process          ProcessStandard @relation(fields: [processId], references: [id], onDelete: Cascade)
   responsible      User?           @relation(fields: [responsibleId], references: [id])
   stepProgress     StepProgress[]
+
   @@index([processId])
 }
 
 model ProcessInstance {
-  id             Int       @id @default(autoincrement())
+  id             Int             @id @default(autoincrement())
   processId      Int
   processVersion String
   initiatedById  Int
   targetUserId   Int
-  status         String    @default("IN_PROGRESS")
+  status         String          @default("IN_PROGRESS")
   notes          String?
   cancelReason   String?
-  startedAt      DateTime  @default(now())
+  startedAt      DateTime        @default(now())
   completedAt    DateTime?
   cancelledAt    DateTime?
   slaDeadline    DateTime?
-  process      ProcessStandard @relation(fields: [processId], references: [id])
-  initiatedBy  User            @relation("InstanceInitiator", fields: [initiatedById], references: [id])
-  targetUser   User            @relation("InstanceTarget", fields: [targetUserId], references: [id])
-  stepProgress StepProgress[]
+  process        ProcessStandard @relation(fields: [processId], references: [id])
+  initiatedBy    User            @relation("InstanceInitiator", fields: [initiatedById], references: [id])
+  targetUser     User            @relation("InstanceTarget", fields: [targetUserId], references: [id])
+  stepProgress   StepProgress[]
+
   @@index([status])
   @@index([processId])
 }
@@ -3095,49 +3138,50 @@ model ProcessAuditLog {
 // ══════════════════════════════════════════════════════════════════
 
 model Payslip {
-  id                     Int                @id @default(autoincrement())
-  userId                 Int
-  user                   User               @relation(fields: [userId], references: [id])
-  period                 String                       // "2026-04"
-  paymentDate            String?                      // "2026-04-25"
-  receiptCode            String?                      // "REC-202604-0033-1FA32B18"
-  baseSalary          Float    @default(0)
-  mealAllowance       Float    @default(0)
-  vacationAllowance   Float    @default(0)
-  christmasAllowance  Float    @default(0)
-  overtime            Float    @default(0)
-  bonuses             Float    @default(0)
-  otherAllowances     Float    @default(0)
-  runId               Int?
-  run                 PayrollRun?        @relation(fields: [runId], references: [id])
-  countryCode         String             @default("AO")
-  grossSalary         Float
-  netSalary           Float    @default(0)
-  totalEarnings       Float    @default(0)
-  incomeTax           Float    @default(0)        // IRT
-  socialSecurity      Float    @default(0)        // INSS 3% colaborador
-  employerInss        Float    @default(0)        // INSS 8% empregador (informativo)
-  healthInsurance     Float    @default(0)
-  loanDeduction       Float    @default(0)
-  advanceDeduction    Float    @default(0)
-  otherDeductions     Float    @default(0)
-  totalDeductions     Float    @default(0)
-  totalEmployerCost      Float              @default(0)
-  irtBracketRate      Float?
-  irtFormula          String?
-  irtOverride         Float?
-  inssOverride        Float?
-  taxBracket             String?
-  status              String   @default("DRAFT")  // DRAFT | ISSUED | ACKNOWLEDGED | DISPUTED
-  notes               String?
-  issuedAt            DateTime?
-  acknowledgedAt      DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  createdById            Int?
-  items                  PayslipItem[]
-  accessLogs             PayslipAccessLog[]
-  disputes               PayslipDispute[]
+  id                 Int                @id @default(autoincrement())
+  userId             Int
+  user               User               @relation(fields: [userId], references: [id])
+  period             String // "2026-04"
+  paymentDate        String? // "2026-04-25"
+  receiptCode        String? // "REC-202604-0033-1FA32B18"
+  baseSalary         Float              @default(0)
+  mealAllowance      Float              @default(0)
+  vacationAllowance  Float              @default(0)
+  christmasAllowance Float              @default(0)
+  overtime           Float              @default(0)
+  bonuses            Float              @default(0)
+  otherAllowances    Float              @default(0)
+  runId              Int?
+  run                PayrollRun?        @relation(fields: [runId], references: [id])
+  countryCode        String             @default("AO")
+  grossSalary        Float
+  netSalary          Float              @default(0)
+  totalEarnings      Float              @default(0)
+  incomeTax          Float              @default(0) // IRT
+  socialSecurity     Float              @default(0) // INSS 3% colaborador
+  employerInss       Float              @default(0) // INSS 8% empregador (informativo)
+  healthInsurance    Float              @default(0)
+  loanDeduction      Float              @default(0)
+  advanceDeduction   Float              @default(0)
+  otherDeductions    Float              @default(0)
+  totalDeductions    Float              @default(0)
+  totalEmployerCost  Float              @default(0)
+  irtBracketRate     Float?
+  irtFormula         String?
+  irtOverride        Float?
+  inssOverride       Float?
+  taxBracket         String?
+  status             String             @default("DRAFT") // DRAFT | ISSUED | ACKNOWLEDGED | DISPUTED
+  notes              String?
+  issuedAt           DateTime?
+  acknowledgedAt     DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  createdById        Int?
+  items              PayslipItem[]
+  accessLogs         PayslipAccessLog[]
+  disputes           PayslipDispute[]
+
   @@unique([userId, period])
   @@index([userId, period])
   @@index([period, status])
@@ -3160,15 +3204,16 @@ model PayslipItem {
 }
 
 model PayslipAccessLog {
-  id        Int      @id @default(autoincrement())
-  payslipId Int
-  payslip   Payslip  @relation(fields: [payslipId], references: [id])
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id])
-  action    String
-  ipAddress String?
-  createdAt DateTime @default(now())
-  accessedAt  DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  payslipId  Int
+  payslip    Payslip  @relation(fields: [payslipId], references: [id])
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  action     String
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+  accessedAt DateTime @default(now())
+
   @@index([payslipId])
   @@index([userId])
 }
@@ -3378,13 +3423,14 @@ model SurveyResponse {
 }
 
 model SurveyAnswer {
-  id         Int            @id @default(autoincrement())
-  responseId Int
-  questionId Int
-  value      Int
-  comment    String?        @db.Text
-  response   SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
-  question   SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  id             Int            @id @default(autoincrement())
+  responseId     Int
+  questionId     Int
+  value          Int?
+  comment        String?        @db.Text
+  selectedOption String?
+  response       SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question       SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@index([responseId])
   @@index([questionId])
@@ -3403,10 +3449,10 @@ model UserPoints {
 }
 
 model Badge {
-  id          Int           @id @default(autoincrement())
-  name        String        @unique
-  description String?       @db.Text
-  awards      BadgeAward[]
+  id           Int           @id @default(autoincrement())
+  name         String        @unique
+  description  String?       @db.Text
+  awards       BadgeAward[]
   recognitions Recognition[]
 }
 
@@ -3465,6 +3511,8 @@ model Document {
   ownerId        Int?
   owner          User?             @relation("DocOwner", fields: [ownerId], references: [id])
   department     String?
+  notes          String?
+  requestSignature Boolean         @default(false)
   expiresAt      DateTime?
   retentionUntil DateTime?
   archivedAt     DateTime?
@@ -3850,135 +3898,145 @@ model NotificationTemplate {
 }
 
 model AuditLog {
-  id        Int      @id @default(autoincrement())
-  userId    Int?
-  action       String                          // CREATE|UPDATE|DELETE|LOGIN|EXPORT|SEND|READ|APPROVE|REJECT|DENIED|FAILED
-  entity       String                          // ex: User, PDI, Course, Payslip
-  entityId  Int?
-  metadata     String?  @db.Text               // JSON extra
-  hash         String?                         // SHA-256 deste registo
-  previousHash String?                         // SHA-256 do registo anterior
-  timestamp DateTime @default(now())
-  createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id])
+  id           Int      @id @default(autoincrement())
+  userId       Int?
+  action       String // CREATE|UPDATE|DELETE|LOGIN|EXPORT|SEND|READ|APPROVE|REJECT|DENIED|FAILED
+  entity       String // ex: User, PDI, Course, Payslip
+  entityId     Int?
+  metadata     String?  @db.Text // JSON extra
+  hash         String? // SHA-256 deste registo
+  previousHash String? // SHA-256 do registo anterior
+  timestamp    DateTime @default(now())
+  createdAt    DateTime @default(now())
+  user         User?    @relation(fields: [userId], references: [id])
   entityName   String?
   before       String?
   after        String?
   changes      String?
-  status       String   @default("SUCCESS")    // SUCCESS|FAILED|DENIED
-  severity     String   @default("LOW")        // LOW|MEDIUM|HIGH|CRITICAL
+  status       String   @default("SUCCESS") // SUCCESS|FAILED|DENIED
+  severity     String   @default("LOW") // LOW|MEDIUM|HIGH|CRITICAL
   ip           String?
   userAgent    String?
   reason       String?
+
   @@index([entity, entityId])
   @@index([userId])
   @@index([createdAt])
 }
 
 model AutomationRule {
-  id        Int      @id @default(autoincrement())
-  name      String
-  trigger   String
-  action    String
-  condition String
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  tenantId      String
-  description   String?
-  triggerType   AutomationTrigger
+  id                Int                   @id @default(autoincrement())
+  name              String
+  trigger           String
+  action            String
+  condition         String
+  active            Boolean               @default(true)
+  createdAt         DateTime              @default(now())
+  tenantId          String
+  description       String?
+  triggerType       AutomationTrigger
   triggerConfigJson String // JSON com configuração do trigger (ex: { "eventType": "USER_HIRED" })
-  conditionsJson  String? // JSON array de condições (ex: department, position)
-  actionsJson     String  // JSON array de ações (ex: enroll_course, send_notification)
-  priority      Int      @default(0) // ordem de execução
-  isActive      Boolean  @default(true)
-  runCount      Int      @default(0)
-  lastRunAt     DateTime?
-  lastRunStatus String?
-  createdBy     String   // userId
-  updatedAt     DateTime @updatedAt
-  tenant     TenantConfig @relation(fields: [tenantId], references: [id])
-  executions AutomationExecution[]
+  conditionsJson    String? // JSON array de condições (ex: department, position)
+  actionsJson       String // JSON array de ações (ex: enroll_course, send_notification)
+  priority          Int                   @default(0) // ordem de execução
+  isActive          Boolean               @default(true)
+  runCount          Int                   @default(0)
+  lastRunAt         DateTime?
+  lastRunStatus     String?
+  createdBy         String // userId
+  updatedAt         DateTime              @updatedAt
+  category          String?
+  actionParams      String? // JSON — parâmetros da acção (legado, ver também actionsJson)
+  maxRetries        Int?
+  tenant            TenantConfig          @relation(fields: [tenantId], references: [id])
+  executions        AutomationExecution[]
+
   @@map("automation_rules")
 }
 
 model AutomationExecution {
-  id           String   @id @default(cuid())
+  id           String         @id @default(cuid())
   ruleId       Int
-  triggeredBy  String?  // userId ou "SYSTEM"
+  triggeredBy  String? // userId ou "SYSTEM"
   targetUserId String?
-  status       String   // PENDING | RUNNING | SUCCESS | FAILED | SKIPPED
-  startedAt    DateTime @default(now())
+  status       String // PENDING | RUNNING | SUCCESS | FAILED | SKIPPED
+  startedAt    DateTime       @default(now())
   finishedAt   DateTime?
-  actionsLog   String?  // JSON com resultado de cada ação
+  actionsLog   String? // JSON com resultado de cada ação
   errorMessage String?
-  rule AutomationRule @relation(fields: [ruleId], references: [id])
+  payload      String? // JSON do payload/evento que despoletou a execução
+  rule         AutomationRule @relation(fields: [ruleId], references: [id])
+
   @@map("automation_executions")
 }
 
 model SlaConfig {
-  id              String   @id @default(cuid())
-  tenantId        String
-  name            String   // ex: "Uptime SLA - Enterprise"
-  uptimePercent   Float    @default(99.5)  // 99.9 = "três noves"
-  maxLatencyMs    Int      @default(2000)  // ms
-  maxErrorRate    Float    @default(0.01)  // 1%
-  incidentResponse Int     @default(60)   // minutos
-  dataRetentionDays Int    @default(365)
-  backupFrequency String   @default("DAILY")
-  rpoMinutes      Int      @default(60)   // Recovery Point Objective
-  rtoMinutes      Int      @default(240)  // Recovery Time Objective
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  tenant          TenantConfig @relation(fields: [tenantId], references: [id])
+  id                String       @id @default(cuid())
+  tenantId          String
+  name              String // ex: "Uptime SLA - Enterprise"
+  uptimePercent     Float        @default(99.5) // 99.9 = "três noves"
+  maxLatencyMs      Int          @default(2000) // ms
+  maxErrorRate      Float        @default(0.01) // 1%
+  incidentResponse  Int          @default(60) // minutos
+  dataRetentionDays Int          @default(365)
+  backupFrequency   String       @default("DAILY")
+  rpoMinutes        Int          @default(60) // Recovery Point Objective
+  rtoMinutes        Int          @default(240) // Recovery Time Objective
+  isActive          Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  tenant            TenantConfig @relation(fields: [tenantId], references: [id])
+
   @@map("sla_configs")
 }
 
 model ContentDeliveryConfig {
-  id              String   @id @default(cuid())
-  tenantId        String   @unique
-  cdnProvider     String?  // CLOUDFRONT | AZURE_CDN | CLOUDFLARE
-  cdnBaseUrl      String?
-  adaptiveBitrate Boolean  @default(true)
-  bitrateProfiles String?  // JSON: [{ label:"480p", bitrate:800 }, ...]
-  offlineSyncEnabled Boolean @default(true)
-  maxOfflineDays  Int      @default(30)
-  compressionEnabled Boolean @default(true)
-  maxVideoSizeMb  Int      @default(500)
-  allowedFormats  String[] @default(["mp4","pdf","scorm","xapi"])
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  tenant          TenantConfig @relation(fields: [tenantId], references: [id])
+  id                 String       @id @default(cuid())
+  tenantId           String       @unique
+  cdnProvider        String? // CLOUDFRONT | AZURE_CDN | CLOUDFLARE
+  cdnBaseUrl         String?
+  adaptiveBitrate    Boolean      @default(true)
+  bitrateProfiles    String? // JSON: [{ label:"480p", bitrate:800 }, ...]
+  offlineSyncEnabled Boolean      @default(true)
+  maxOfflineDays     Int          @default(30)
+  compressionEnabled Boolean      @default(true)
+  maxVideoSizeMb     Int          @default(500)
+  allowedFormats     String[]     @default(["mp4", "pdf", "scorm", "xapi"])
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  tenant             TenantConfig @relation(fields: [tenantId], references: [id])
+
   @@map("content_delivery_configs")
 }
 
 model ScalabilityMetric {
-  id                String   @id @default(cuid())
-  tenantId          String?
-  capturedAt        DateTime @default(now())
-  activeUsers       Int      @default(0)
-  concurrentSessions Int     @default(0)
-  cpuUsagePercent   Float    @default(0)
-  memoryUsagePercent Float   @default(0)
-  diskUsagePercent  Float    @default(0)
-  avgLatencyMs      Int      @default(0)
-  p95LatencyMs      Int      @default(0)
-  p99LatencyMs      Int      @default(0)
-  requestsPerMinute Int      @default(0)
-  errorRate         Float    @default(0)
-  uptimePercent     Float    @default(100)
-  storageUsedGb     Float    @default(0)
-  bandwidthMbps     Float    @default(0)
-  videoStreamCount  Int      @default(0)
-  apiCallsPerMin    Int      @default(0)
-  tenant TenantConfig? @relation(fields: [tenantId], references: [id])
+  id                 String        @id @default(cuid())
+  tenantId           String?
+  capturedAt         DateTime      @default(now())
+  activeUsers        Int           @default(0)
+  concurrentSessions Int           @default(0)
+  cpuUsagePercent    Float         @default(0)
+  memoryUsagePercent Float         @default(0)
+  diskUsagePercent   Float         @default(0)
+  avgLatencyMs       Int           @default(0)
+  p95LatencyMs       Int           @default(0)
+  p99LatencyMs       Int           @default(0)
+  requestsPerMinute  Int           @default(0)
+  errorRate          Float         @default(0)
+  uptimePercent      Float         @default(100)
+  storageUsedGb      Float         @default(0)
+  bandwidthMbps      Float         @default(0)
+  videoStreamCount   Int           @default(0)
+  apiCallsPerMin     Int           @default(0)
+  tenant             TenantConfig? @relation(fields: [tenantId], references: [id])
+
   @@index([capturedAt])
   @@index([tenantId, capturedAt])
   @@map("scalability_metrics")
 }
 
 model SystemAlert {
-  id           String   @id @default(cuid())
+  id           String        @id @default(cuid())
   tenantId     String?
   severity     AlertSeverity
   category     AlertCategory
@@ -3986,14 +4044,15 @@ model SystemAlert {
   message      String
   metricValue  Float?
   threshold    Float?
-  isResolved   Boolean  @default(false)
+  isResolved   Boolean       @default(false)
   resolvedAt   DateTime?
-  resolvedBy   String?  // userId
-  notifiedVia  String[] @default([]) // ["EMAIL","SLACK","PUSH"]
+  resolvedBy   String? // userId
+  notifiedVia  String[]      @default([]) // ["EMAIL","SLACK","PUSH"]
   metadataJson String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  tenant TenantConfig? @relation(fields: [tenantId], references: [id])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  tenant       TenantConfig? @relation(fields: [tenantId], references: [id])
+
   @@index([severity, isResolved])
   @@index([tenantId, createdAt])
   @@map("system_alerts")
@@ -4012,8 +4071,6 @@ model HistoryRecord {
   @@index([userId])
   @@index([entityType])
 }
-
-
 
 // ══════════════════════════════════════════════════════════════════
 // INFRA / MOBILE / REPORTING
@@ -4161,84 +4218,87 @@ model DashboardSnapshot {
 }
 
 model IntegrationConfig {
-  id             Int      @id @default(autoincrement())
-  name           String
-  endpoint       String
-  config         Json
-  apiKey         String?
-  active         Boolean  @default(true)
-  tenantId       String
-  type           IntegrationType
-  status         IntegrationStatus @default(INACTIVE)
-  baseUrl        String?
-  authType       String?  // OAUTH2 | API_KEY | BASIC | BEARER
+  id              Int                  @id @default(autoincrement())
+  name            String
+  endpoint        String
+  config          Json
+  apiKey          String?
+  active          Boolean              @default(true)
+  tenantId        String
+  type            IntegrationType
+  status          IntegrationStatus    @default(INACTIVE)
+  baseUrl         String?
+  authType        String? // OAUTH2 | API_KEY | BASIC | BEARER
   credentialsJson String? // criptografado — client_id, secret, token
-  syncFrequency  SyncFrequency @default(DAILY)
-  lastSyncAt     DateTime?
-  lastSyncStatus String?
-  lastSyncError  String?
-  webhookUrl     String?
-  webhookEvents  String[] // ["course.completed", "user.promoted"]
-  configJson     String?  // configurações extras específicas do tipo
-  isActive       Boolean @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  tenant         TenantConfig @relation(fields: [tenantId], references: [id])
-  syncLogs IntegrationSyncLog[]
+  syncFrequency   SyncFrequency        @default(DAILY)
+  lastSyncAt      DateTime?
+  lastSyncStatus  String?
+  lastSyncError   String?
+  webhookUrl      String?
+  webhookEvents   String[] // ["course.completed", "user.promoted"]
+  configJson      String? // configurações extras específicas do tipo
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  tenant          TenantConfig         @relation(fields: [tenantId], references: [id])
+  syncLogs        IntegrationSyncLog[]
+
   @@map("integration_configs")
 }
 
 model TenantConfig {
-  id                String   @id @default(cuid())
-  tenantCode        String   @unique // ex: "EMPRESA_XYZ"
-  tenantName        String
-  plan              TenantPlan @default(STARTER)
-  maxUsers          Int      @default(100)
-  maxStorageGb      Int      @default(50)
-  isActive          Boolean  @default(true)
-  trialEndsAt       DateTime?
-  billingCycleStart DateTime?
-  contractStartDate DateTime?
-  contractEndDate   DateTime?
-  customDomain      String?
-  logoUrl           String?
-  primaryColor      String?  @default("#1E40AF")
-  defaultLanguage   String   @default("pt")
-  defaultTimezone   String   @default("Africa/Luanda")
-  defaultCurrency   String   @default("AOA")
-  ssoEnabled        Boolean  @default(false)
-  ssoProvider       SsoProvider?
-  ssoConfigJson     String?  // JSON com configuração SSO (metadata, clientId, etc.)
-  offlineModeEnabled Boolean @default(true)
-  adaptiveBitrate   Boolean @default(true)
-  cdnEnabled        Boolean @default(false)
-  cdnConfigJson     String? // JSON com CDN config
-  webhookSecret     String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  integrations  IntegrationConfig[]
-  slaConfigs    SlaConfig[]
-  automationRules AutomationRule[]
-  metrics       ScalabilityMetric[]
-  alerts        SystemAlert[]
-  contentDeliveryConfig ContentDeliveryConfig?
+  id                       String                    @id @default(cuid())
+  tenantCode               String                    @unique // ex: "EMPRESA_XYZ"
+  tenantName               String
+  plan                     TenantPlan                @default(STARTER)
+  maxUsers                 Int                       @default(100)
+  maxStorageGb             Int                       @default(50)
+  isActive                 Boolean                   @default(true)
+  trialEndsAt              DateTime?
+  billingCycleStart        DateTime?
+  contractStartDate        DateTime?
+  contractEndDate          DateTime?
+  customDomain             String?
+  logoUrl                  String?
+  primaryColor             String?                   @default("#1E40AF")
+  defaultLanguage          String                    @default("pt")
+  defaultTimezone          String                    @default("Africa/Luanda")
+  defaultCurrency          String                    @default("AOA")
+  ssoEnabled               Boolean                   @default(false)
+  ssoProvider              SsoProvider?
+  ssoConfigJson            String? // JSON com configuração SSO (metadata, clientId, etc.)
+  offlineModeEnabled       Boolean                   @default(true)
+  adaptiveBitrate          Boolean                   @default(true)
+  cdnEnabled               Boolean                   @default(false)
+  cdnConfigJson            String? // JSON com CDN config
+  webhookSecret            String?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  integrations             IntegrationConfig[]
+  slaConfigs               SlaConfig[]
+  automationRules          AutomationRule[]
+  metrics                  ScalabilityMetric[]
+  alerts                   SystemAlert[]
+  contentDeliveryConfig    ContentDeliveryConfig?
   declarations             Declaration[]
   declarationTenantConfigs DeclarationTenantConfig[]
   declarationTemplates     DeclarationTemplate[]
+
   @@map("tenant_configs")
 }
 
 model IntegrationSyncLog {
-  id              String   @id @default(cuid())
-  integrationId   Int
-  startedAt       DateTime @default(now())
-  finishedAt      DateTime?
-  status          String   // SUCCESS | PARTIAL | FAILED
-  recordsProcessed Int     @default(0)
-  recordsFailed   Int      @default(0)
-  errorMessage    String?
-  detailsJson     String?  // JSON com detalhes de erros individuais
-  integration IntegrationConfig @relation(fields: [integrationId], references: [id])
+  id               String            @id @default(cuid())
+  integrationId    Int
+  startedAt        DateTime          @default(now())
+  finishedAt       DateTime?
+  status           String // SUCCESS | PARTIAL | FAILED
+  recordsProcessed Int               @default(0)
+  recordsFailed    Int               @default(0)
+  errorMessage     String?
+  detailsJson      String? // JSON com detalhes de erros individuais
+  integration      IntegrationConfig @relation(fields: [integrationId], references: [id])
+
   @@map("integration_sync_logs")
 }
 
@@ -4248,6 +4308,7 @@ model ApiIntegrationLog {
   status        String
   statusCode    Int?
   message       String?  @db.Text
+  latencyMs     Int?
   createdAt     DateTime @default(now())
 
   @@index([integrationId])
@@ -4352,21 +4413,35 @@ model AvatarScript {
 }
 
 model ContentAsset {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String?  @db.Text
-  type        String
-  url         String   @db.Text
-  version     Int      @default(1)
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  id               Int      @id @default(autoincrement())
+  title            String
+  description      String?  @db.Text
+  type             String
+  url              String   @db.Text
+  version          String   @default("1.0")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  status           String   @default("DRAFT")
+  createdById      Int?
+  thumbnailUrl     String?
+  author           String?
+  language         String?  @default("pt")
+  level            String?
+  durationMin      Int?
+  category         String?
+  mandatory        Boolean  @default(false)
+  isMicrolearning  Boolean  @default(false)
+  hasCertification Boolean  @default(false)
+  tags             String[] @default([])
+  externalSource   String?
 }
 
 model AvatarScenario {
   id           Int             @id @default(autoincrement())
   title        String
   description  String?         @db.Text
-  difficulty   Int             @default(1)
+  difficulty   String          @default("BEGINNER")
+  category     String?
   competencyId Int?
   active       Boolean         @default(true)
   createdAt    DateTime        @default(now())
@@ -4377,16 +4452,24 @@ model AvatarScenario {
 }
 
 model AvatarSession {
-  id          Int            @id @default(autoincrement())
-  userId      Int
-  scenarioId  Int
-  status      String         @default("IN_PROGRESS")
-  score       Float?
-  feedback    String?        @db.Text
-  startedAt   DateTime       @default(now())
-  completedAt DateTime?
-  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  scenario    AvatarScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  id                  Int            @id @default(autoincrement())
+  userId              Int
+  scenarioId          Int
+  status              String         @default("IN_PROGRESS")
+  score               Float?
+  feedback            String?        @db.Text
+  startedAt           DateTime       @default(now())
+  completedAt         DateTime?
+  avatarId            Int?
+  language            String?
+  conversationHistory String?        @db.Text
+  durationSeconds     Int?
+  behavioralScore     String?        @db.Text
+  userRating          Int?
+  confidenceLevel     Int?
+  reflection          String?        @db.Text
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scenario            AvatarScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([scenarioId])
@@ -4533,12 +4616,13 @@ model LeaveRequest {
   impactPreview   LeaveImpactPreview?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
-  leaveTypeCode  String?
-  reviewNotes    String?
-  reviewedById   Int?
-  reviewedAt     DateTime?
-  halfDay        Boolean   @default(false)
-  halfDayPeriod  String?
+  leaveTypeCode   String?
+  reviewNotes     String?
+  reviewedById    Int?
+  reviewedAt      DateTime?
+  halfDay         Boolean             @default(false)
+  halfDayPeriod   String?
+
   @@index([userId, status])
   @@index([startDate, endDate])
 }
@@ -4568,6 +4652,7 @@ model LeaveBalance {
   used      Float     @default(0)
   expiresAt DateTime?
   updatedAt DateTime  @updatedAt
+
   @@unique([userId, leaveType])
 }
 
@@ -4582,7 +4667,8 @@ model LeaveBalanceHistory {
   requestId     Int?
   updatedById   Int
   createdAt     DateTime  @default(now())
-  leaveTypeCode  String?
+  leaveTypeCode String?
+
   @@index([userId, leaveType])
 }
 
@@ -4625,10 +4711,11 @@ model LeaveTypeConfig {
   maxConsecutiveDays   Int?
   active               Boolean  @default(true)
   category             String?
-  createdAt            DateTime @default(now()) 
+  createdAt            DateTime @default(now())
+
   @@map("leave_type_configs")
 }
- 
+
 model LeavePolicy {
   id                Int      @id @default(autoincrement())
   name              String
@@ -4640,44 +4727,46 @@ model LeavePolicy {
   blackoutPeriods   Json?
   active            Boolean  @default(true)
   createdAt         DateTime @default(now())
+
   @@map("leave_policies")
 }
 
 model AttendanceJustification {
-  id           Int        @id @default(autoincrement())
+  id           Int               @id @default(autoincrement())
   attendanceId Int
-  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  attendance   Attendance        @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
   userId       Int
-  user         User       @relation(fields: [userId], references: [id])
+  user         User              @relation(fields: [userId], references: [id])
   reason       String
   attachments  String[]
   leaveType    LeaveType?
-  status       String     @default("PENDING")
+  status       String            @default("PENDING")
   reviewNotes  String?
   reviewedById Int?
   reviewedAt   DateTime?
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime          @default(now())
   recordId     Int?
   record       AttendanceRecord? @relation("RecordJustifications", fields: [recordId], references: [id])
+
   @@index([attendanceId])
   @@index([status])
 }
 
 model AttendanceRecord {
-  id              Int       @id @default(autoincrement())
+  id              Int                       @id @default(autoincrement())
   userId          Int
   date            DateTime
-  status          String    @default("PRESENT")
-  context         String    @default("WORK")
-  method          String    @default("MANUAL")
+  status          String                    @default("PRESENT")
+  context         String                    @default("WORK")
+  method          String                    @default("MANUAL")
   clockIn         String?
   clockOut        String?
   clockInAt       DateTime?
   clockOutAt      DateTime?
-  breakMinutes    Int?      @default(0)
-  workMinutes     Int?      @default(0)
-  hoursWorked     Float?    @default(0)
-  overtimeMinutes Int?      @default(0)
+  breakMinutes    Int?                      @default(0)
+  workMinutes     Int?                      @default(0)
+  hoursWorked     Float?                    @default(0)
+  overtimeMinutes Int?                      @default(0)
   presencePercent Float?
   latitude        Float?
   longitude       Float?
@@ -4685,7 +4774,7 @@ model AttendanceRecord {
   deviceInfo      String?
   ipAddress       String?
   selfieUrl       String?
-  facialValidated Boolean   @default(false)
+  facialValidated Boolean                   @default(false)
   eventId         Int?
   courseId        Int?
   sessionId       Int?
@@ -4693,11 +4782,12 @@ model AttendanceRecord {
   justification   String?
   notes           String?
   shiftId         Int?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  user            User      @relation("UserAttendanceRecords", fields: [userId], references: [id])
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  user            User                      @relation("UserAttendanceRecords", fields: [userId], references: [id])
   justifications  AttendanceJustification[] @relation("RecordJustifications")
   adjustments     AttendanceAdjustment[]    @relation("RecordAdjustments")
+
   @@unique([userId, date, context])
   @@index([userId, date])
   @@index([date, status])
@@ -4705,16 +4795,17 @@ model AttendanceRecord {
 }
 
 model AttendanceAdjustment {
-  id           Int        @id @default(autoincrement())
+  id           Int               @id @default(autoincrement())
   attendanceId Int
-  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  attendance   Attendance        @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
   adjustedById Int
-  adjustedBy   User       @relation(fields: [adjustedById], references: [id])
+  adjustedBy   User              @relation(fields: [adjustedById], references: [id])
   changes      Json
   reason       String
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime          @default(now())
   recordId     Int?
   record       AttendanceRecord? @relation("RecordAdjustments", fields: [recordId], references: [id])
+
   @@index([attendanceId])
 }
 
@@ -4835,14 +4926,14 @@ model Employee {
 }
 
 model EmployeeSkill {
-  id         Int       @id @default(autoincrement())
-  employeeId Int
-  assessorId Int?
-  skillName  String
-  level      Int?
-  createdAt  DateTime  @default(now())
-  employee   Employee  @relation("EmployeeSkills", fields: [employeeId], references: [id])
-  assessor   Employee? @relation("SkillAssessor", fields: [assessorId], references: [id])
+  id           Int       @id @default(autoincrement())
+  employeeId   Int
+  assessorId   Int?
+  skillName    String
+  level        Int?
+  createdAt    DateTime  @default(now())
+  employee     Employee  @relation("EmployeeSkills", fields: [employeeId], references: [id])
+  assessor     Employee? @relation("SkillAssessor", fields: [assessorId], references: [id])
   skillId      Int?
   currentLevel Int?
   desiredLevel Int?
@@ -4851,6 +4942,7 @@ model EmployeeSkill {
   assessedAt   DateTime?
   updatedAt    DateTime  @updatedAt
   skill        Skill?    @relation("EmployeeSkillRef", fields: [skillId], references: [id])
+
   @@unique([employeeId, skillId])
 }
 
@@ -5081,7 +5173,8 @@ model Skill {
   assessmentHistory SkillAssessmentHistory[]
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
-  employeeSkills2   EmployeeSkill[]  @relation("EmployeeSkillRef")
+  employeeSkills2   EmployeeSkill[]          @relation("EmployeeSkillRef")
+
   @@index([type, active])
 }
 
@@ -5187,55 +5280,56 @@ model Category {
 // ══════════════════════════════════════════════════════════════════
 
 model Declaration {
-  id              String            @id @default(cuid())
-  tenantId        String
-  code            String            @unique // código legível único ex: INNOVA-2024-000123
-  templateId  Int
-  requestedById  Int            // colaborador que solicitou
-  assignedToId   Int?           // RH responsável
-  employeeId     Int            // colaborador referenciado na declaração
-  type            DeclarationType
-  status          DeclarationStatus @default(DRAFT)
-  locale          DeclarationLocale @default(PT)
-  layout          DocumentLayout    @default(FORMAL)
-  
+  id            String            @id @default(cuid())
+  tenantId      String
+  code          String            @unique // código legível único ex: INNOVA-2024-000123
+  templateId    Int
+  requestedById Int // colaborador que solicitou
+  assignedToId  Int? // RH responsável
+  employeeId    Int // colaborador referenciado na declaração
+  type          DeclarationType
+  status        DeclarationStatus @default(DRAFT)
+  locale        DeclarationLocale @default(PT)
+  layout        DocumentLayout    @default(FORMAL)
+
   // Conteúdo gerado
-  renderedContent String?           @db.Text  // HTML renderizado com dados reais
+  renderedContent String? @db.Text // HTML renderizado com dados reais
   pdfUrl          String?
   docxUrl         String?
-  
+
   // Dados do colaborador no momento da emissão (snapshot)
-  employeeSnapshot Json             // nome, cargo, departamento, admissão, etc.
-  
+  employeeSnapshot Json // nome, cargo, departamento, admissão, etc.
+
   // Metadados do documento
-  title           String
-  purpose         String?           // finalidade específica (bancária, acadêmica, etc.)
-  showSalary      Boolean           @default(false)
-  watermark       Boolean           @default(false)
-  expiresAt       DateTime?
-  issuedAt        DateTime?
-  revokedAt       DateTime?
-  revokedReason   String?
+  title         String
+  purpose       String? // finalidade específica (bancária, acadêmica, etc.)
+  showSalary    Boolean   @default(false)
+  watermark     Boolean   @default(false)
+  expiresAt     DateTime?
+  issuedAt      DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
 
   // Verificação
-  verificationHash String?          @unique  // SHA256 do conteúdo final
-  qrCodeUrl       String?
+  verificationHash String? @unique // SHA256 do conteúdo final
+  qrCodeUrl        String?
 
   // Controle
-  requestNotes    String?
-  internalNotes   String?
-  rejectedReason  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tenant TenantConfig @relation(fields: [tenantId], references: [id])
-  template    DeclarationTemplate @relation(fields: [templateId], references: [id])
-  requestedBy User                @relation("DeclarationRequestedBy", fields: [requestedById], references: [id])
-  assignedTo  User?               @relation("DeclarationAssignedTo", fields: [assignedToId], references: [id])
-  employee    User                @relation("DeclarationEmployee", fields: [employeeId], references: [id])
-  signatures  DeclarationSignature[]
-  auditLogs   DeclarationAuditLog[]
-  accessLogs  DeclarationAccessLog[]
-  attachments DeclarationAttachment[]
+  requestNotes   String?
+  internalNotes  String?
+  rejectedReason String?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  tenant         TenantConfig            @relation(fields: [tenantId], references: [id])
+  template       DeclarationTemplate     @relation(fields: [templateId], references: [id])
+  requestedBy    User                    @relation("DeclarationRequestedBy", fields: [requestedById], references: [id])
+  assignedTo     User?                   @relation("DeclarationAssignedTo", fields: [assignedToId], references: [id])
+  employee       User                    @relation("DeclarationEmployee", fields: [employeeId], references: [id])
+  signatures     DeclarationSignature[]
+  auditLogs      DeclarationAuditLog[]
+  accessLogs     DeclarationAccessLog[]
+  attachments    DeclarationAttachment[]
+
   @@index([tenantId, status])
   @@index([tenantId, employeeId])
   @@index([tenantId, requestedById])
@@ -5246,85 +5340,89 @@ model Declaration {
 model DeclarationSignature {
   id              String        @id @default(cuid())
   declarationId   String
-  signerId       Int
-  signerRole      String        // "RH", "MANAGER", "DIRECTOR"
+  signerId        Int
+  signerRole      String // "RH", "MANAGER", "DIRECTOR"
   type            SignatureType @default(IMAGE_UPLOAD)
-  signatureUrl    String?       // URL da imagem da assinatura
-  certificateData Json?         // dados do certificado digital, se aplicável
+  signatureUrl    String? // URL da imagem da assinatura
+  certificateData Json? // dados do certificado digital, se aplicável
   signedAt        DateTime      @default(now())
   ipAddress       String?
   userAgent       String?
-  declaration Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
-  signer      User        @relation(fields: [signerId], references: [id])
+  declaration     Declaration   @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  signer          User          @relation(fields: [signerId], references: [id])
+
   @@unique([declarationId, signerId])
   @@map("declaration_signatures")
 }
 
 model DeclarationAuditLog {
-  id            String   @id @default(cuid())
+  id            String             @id @default(cuid())
   declarationId String
-  actorId        Int
-  action        String   // CREATED, UPDATED, STATUS_CHANGED, SIGNED, EXPORTED, REVOKED, etc.
+  actorId       Int
+  action        String // CREATED, UPDATED, STATUS_CHANGED, SIGNED, EXPORTED, REVOKED, etc.
   fromStatus    DeclarationStatus?
   toStatus      DeclarationStatus?
   details       Json?
   ipAddress     String?
-  timestamp     DateTime @default(now())
-  declaration Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
-  actor       User        @relation(fields: [actorId], references: [id])
+  timestamp     DateTime           @default(now())
+  declaration   Declaration        @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  actor         User               @relation(fields: [actorId], references: [id])
+
   @@index([declarationId])
   @@index([actorId])
   @@map("declaration_audit_logs")
 }
 
 model DeclarationAccessLog {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   declarationId String
-  accessedVia   String   // "QR_CODE", "DIRECT_LINK", "EMAIL_LINK"
+  accessedVia   String // "QR_CODE", "DIRECT_LINK", "EMAIL_LINK"
   ipAddress     String?
   userAgent     String?
-  timestamp     DateTime @default(now())
-  declaration Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  timestamp     DateTime    @default(now())
+  declaration   Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+
   @@index([declarationId])
   @@map("declaration_access_logs")
 }
 
 model DeclarationAttachment {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   declarationId String
-  uploadedById   Int
+  uploadedById  Int
   name          String
   url           String
   mimeType      String
   sizeBytes     Int
-  uploadedAt    DateTime @default(now())
-  declaration Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
-  uploadedBy  User        @relation(fields: [uploadedById], references: [id])
+  uploadedAt    DateTime    @default(now())
+  declaration   Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  uploadedBy    User        @relation(fields: [uploadedById], references: [id])
+
   @@map("declaration_attachments")
 }
 
 model DeclarationTenantConfig {
-  id              String  @id @default(cuid())
-  tenantId        String  @unique
-  logoUrl         String?
-  companyName     String?
-  companyAddress  String?
-  companyPhone    String?
-  companyEmail    String?
-  companyNif      String?
-  headerHtml      String? @db.Text
-  footerHtml      String? @db.Text
-  defaultLayout   DocumentLayout @default(FORMAL)
-  defaultLocale   DeclarationLocale @default(PT)
-  defaultValidity Int?    // dias padrão de validade
-  allowSalaryExposure Boolean @default(false)
-  requireManagerSignature Boolean @default(false)
-  emailNotifications Boolean @default(true)
-  updatedAt DateTime @updatedAt
-  tenant TenantConfig @relation(fields: [tenantId], references: [id])
+  id                      String            @id @default(cuid())
+  tenantId                String            @unique
+  logoUrl                 String?
+  companyName             String?
+  companyAddress          String?
+  companyPhone            String?
+  companyEmail            String?
+  companyNif              String?
+  headerHtml              String?           @db.Text
+  footerHtml              String?           @db.Text
+  defaultLayout           DocumentLayout    @default(FORMAL)
+  defaultLocale           DeclarationLocale @default(PT)
+  defaultValidity         Int? // dias padrão de validade
+  allowSalaryExposure     Boolean           @default(false)
+  requireManagerSignature Boolean           @default(false)
+  emailNotifications      Boolean           @default(true)
+  updatedAt               DateTime          @updatedAt
+  tenant                  TenantConfig      @relation(fields: [tenantId], references: [id])
+
   @@map("declaration_tenant_configs")
 }
-
 
 model DeclarationPurpose {
   id               Int                   @id @default(autoincrement())
@@ -5345,20 +5443,20 @@ model DeclarationTemplate {
   description      String?
   purposeId        Int?
   tenantId         String
-  tenant TenantConfig @relation(fields: [tenantId], references: [id])
-  type            DeclarationType
-  locale          DeclarationLocale @default(PT)
-  layout          DocumentLayout  @default(FORMAL)
+  tenant           TenantConfig         @relation(fields: [tenantId], references: [id])
+  type             DeclarationType
+  locale           DeclarationLocale    @default(PT)
+  layout           DocumentLayout       @default(FORMAL)
   purpose          DeclarationPurpose?  @relation(fields: [purposeId], references: [id])
   language         TemplateLanguage     @default(PT)
   content          String
   variables        String[]
-  bodyContent     String          @db.Text   // HTML com variáveis {{variavel}}
-  isActive        Boolean         @default(true)
-  isDefault       Boolean         @default(false)
-  validityDays    Int?            // null = sem expiração
-  requiredFields  String[]        // campos obrigatórios para este template
-  customVariables Json?           // variáveis personalizadas além das padrão
+  bodyContent      String               @db.Text // HTML com variáveis {{variavel}}
+  isActive         Boolean              @default(true)
+  isDefault        Boolean              @default(false)
+  validityDays     Int? // null = sem expiração
+  requiredFields   String[] // campos obrigatórios para este template
+  customVariables  Json? // variáveis personalizadas além das padrão
   requiresApproval Boolean              @default(true)
   autoGenerate     Boolean              @default(false)
   validDays        Int?
@@ -5369,7 +5467,7 @@ model DeclarationTemplate {
   updatedBy        User?                @relation("TemplateUpdatedBy", fields: [updatedById], references: [id])
   declarations     Declaration[]
   requests         DeclarationRequest[]
-  updatedById    Int?
+  updatedById      Int?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
 
@@ -7049,37 +7147,39 @@ enum EvaluationStatus {
 }
 
 model SavedReport {
-  id          Int      @id @default(autoincrement())
+  id          Int              @id @default(autoincrement())
   name        String
   description String?
-  category    String   // ReportCategory — validado no DTO
+  category    String // ReportCategory — validado no DTO
   reportKey   String
-  params      String   // JSON string dos filtros guardados
-  isTemplate  Boolean  @default(false)
-  favourite   Boolean  @default(false)
+  params      String // JSON string dos filtros guardados
+  isTemplate  Boolean          @default(false)
+  favourite   Boolean          @default(false)
   createdById Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   createdBy   User             @relation("UserSavedReports", fields: [createdById], references: [id], onDelete: Cascade)
   schedules   ReportSchedule[]
+
   @@index([createdById])
   @@index([isTemplate])
 }
 
 model ReportSchedule {
-  id            Int       @id @default(autoincrement())
+  id            Int         @id @default(autoincrement())
   savedReportId Int
-  frequency     String    // ScheduleFrequency — validado no DTO
-  startDate     DateTime  @default(now())
+  frequency     String // ScheduleFrequency — validado no DTO
+  startDate     DateTime    @default(now())
   endDate       DateTime?
-  recipients    String[]  @default([])
-  formats       String[]  @default([])
+  recipients    String[]    @default([])
+  formats       String[]    @default([])
   createdById   Int
-  active        Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
   savedReport   SavedReport @relation(fields: [savedReportId], references: [id], onDelete: Cascade)
   createdBy     User        @relation("UserReportSchedules", fields: [createdById], references: [id], onDelete: Cascade)
+
   @@index([createdById])
   @@index([savedReportId])
 }
@@ -7141,8 +7241,8 @@ model Feedback {
   repliedAt   DateTime?
   repliedById Int?
   createdAt   DateTime  @default(now())
-  from        User?     @relation("FeedbackFrom",    fields: [fromUserId],  references: [id], onDelete: SetNull)
-  to          User?     @relation("FeedbackTo",      fields: [toUserId],    references: [id], onDelete: SetNull)
+  from        User?     @relation("FeedbackFrom", fields: [fromUserId], references: [id], onDelete: SetNull)
+  to          User?     @relation("FeedbackTo", fields: [toUserId], references: [id], onDelete: SetNull)
   repliedBy   User?     @relation("FeedbackReplier", fields: [repliedById], references: [id], onDelete: SetNull)
 
   @@index([toUserId])
@@ -7162,7 +7262,7 @@ model Recognition {
   badgeId    Int?
   createdAt  DateTime @default(now())
   from       User     @relation("RecognitionFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  to         User     @relation("RecognitionTo",   fields: [toUserId],   references: [id], onDelete: Cascade)
+  to         User     @relation("RecognitionTo", fields: [toUserId], references: [id], onDelete: Cascade)
   badge      Badge?   @relation(fields: [badgeId], references: [id], onDelete: SetNull)
 
   @@index([toUserId])
@@ -7191,7 +7291,7 @@ model OneOnOneMeeting {
   nextMeetingDate DateTime?
   completedAt     DateTime?
   createdAt       DateTime  @default(now())
-  host            User      @relation("OneOnOneMeetingHost",        fields: [hostId],        references: [id], onDelete: Cascade)
+  host            User      @relation("OneOnOneMeetingHost", fields: [hostId], references: [id], onDelete: Cascade)
   participant     User      @relation("OneOnOneMeetingParticipant", fields: [participantId], references: [id], onDelete: Cascade)
 
   @@index([hostId])
@@ -7214,10 +7314,10 @@ model EngagementAction {
   progress     Int               @default(0)
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
-  assignee     User?             @relation("EngagementActionAssignee", fields: [assigneeId],  references: [id], onDelete: SetNull)
-  createdBy    User              @relation("EngagementActionCreator",  fields: [createdById], references: [id], onDelete: Cascade)
-  survey       EngagementSurvey? @relation(fields: [surveyId],         references: [id],      onDelete: SetNull)
-  department   Department?       @relation(fields: [departmentId],      references: [id],      onDelete: SetNull)
+  assignee     User?             @relation("EngagementActionAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdBy    User              @relation("EngagementActionCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  survey       EngagementSurvey? @relation(fields: [surveyId], references: [id], onDelete: SetNull)
+  department   Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@index([assigneeId])
@@ -7258,11 +7358,11 @@ model Eval360Cycle {
   updatedAt         DateTime @updatedAt
 
   competencies Eval360CycleCompetency[]
-  assignments   EvaluatorAssignment[]
-  participants  CycleParticipant[]
-  questions     Eval360Question[]
-  responses     EvaluationResponse[]
-  results       EvaluationResult[]
+  assignments  EvaluatorAssignment[]
+  participants CycleParticipant[]
+  questions    Eval360Question[]
+  responses    EvaluationResponse[]
+  results      EvaluationResult[]
 
   @@index([status])
   @@index([tenantId])
@@ -7283,22 +7383,22 @@ model Eval360CycleCompetency {
 }
 
 model EvaluatorAssignment {
-  id             String       @id @default(cuid())
+  id             String               @id @default(cuid())
   cycleId        String
   evaluateeId    String
   evaluatorId    String
   role           String
-  status         String       @default("PENDING")
+  status         String               @default("PENDING")
   suggestedBy    String?
   approvedBy     String?
   approvedAt     DateTime?
   invitedAt      DateTime?
   completedAt    DateTime?
-  reminderCount  Int          @default(0)
+  reminderCount  Int                  @default(0)
   lastReminderAt DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  cycle          Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  cycle          Eval360Cycle         @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   responses      EvaluationResponse[]
 
   @@index([cycleId])
@@ -7328,40 +7428,46 @@ model CycleParticipant {
 }
 
 model Eval360Question {
-  id           String       @id @default(cuid())
-  cycleId      String
-  competencyId Int?
-  text         String       @db.Text
-  type         String
-  applicableTo String[]     @default([])
-  isRequired   Boolean      @default(true)
-  order        Int          @default(0)
-  createdAt    DateTime     @default(now())
-  cycle        Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  competency   Competency?  @relation("Eval360QuestionCompetency", fields: [competencyId], references: [id], onDelete: SetNull)
-  answers      EvaluationAnswer[]
+  id              String             @id @default(cuid())
+  cycleId         String
+  competencyId    Int?
+  text            String             @db.Text
+  type            String
+  applicableTo    String[]           @default([])
+  isRequired      Boolean            @default(true)
+  order           Int                @default(0)
+  scaleMin        Int?
+  scaleMax        Int?
+  scaleLabels     String?
+  options         String?
+  targetPositions String[]           @default([])
+  targetLevels    String[]           @default([])
+  createdAt       DateTime           @default(now())
+  cycle           Eval360Cycle       @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  competency      Competency?        @relation("Eval360QuestionCompetency", fields: [competencyId], references: [id], onDelete: SetNull)
+  answers         EvaluationAnswer[]
 
   @@index([cycleId])
   @@index([competencyId])
 }
 
 model EvaluationResponse {
-  id            String              @id @default(cuid())
-  cycleId       String
-  assignmentId  String              @unique
-  evaluateeId   String
-  evaluatorId   String
-  evaluatorRole String
-  status        String              @default("DRAFT")
-  startedAt     DateTime            @default(now())
-  submittedAt   DateTime?
-  isAnonymized  Boolean             @default(false)
+  id             String              @id @default(cuid())
+  cycleId        String
+  assignmentId   String              @unique
+  evaluateeId    String
+  evaluatorId    String
+  evaluatorRole  String
+  status         String              @default("DRAFT")
+  startedAt      DateTime            @default(now())
+  submittedAt    DateTime?
+  isAnonymized   Boolean             @default(false)
   sentimentScore Float?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  cycle         Eval360Cycle        @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  assignment    EvaluatorAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  answers       EvaluationAnswer[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  cycle          Eval360Cycle        @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  assignment     EvaluatorAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  answers        EvaluationAnswer[]
 
   @@index([cycleId])
   @@index([evaluateeId])
@@ -7410,27 +7516,34 @@ model EvaluationResult {
 }
 
 model Eval360Feedback {
-  id         String   @id @default(cuid())
-  fromUserId String
-  toUserId   String
-  type       String
-  message    String   @db.Text
-  isPrivate  Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id             String   @id @default(cuid())
+  fromUserId     String
+  toUserId       String
+  type           String
+  message        String   @db.Text
+  isPrivate      Boolean  @default(false)
+  tenantId       String?
+  competencyId   Int?
+  relatedCycleId String?
+  createdAt      DateTime @default(now())
 
   @@index([toUserId])
   @@index([fromUserId])
 }
 
 model PulseSurvey {
-  id          String                @id @default(cuid())
-  title       String
-  description String?               @db.Text
-  closesAt    DateTime
-  createdBy   String
-  sentAt      DateTime              @default(now())
-  createdAt   DateTime              @default(now())
-  responses   PulseSurveyResponse[]
+  id            String                @id @default(cuid())
+  title         String
+  description   String?               @db.Text
+  closesAt      DateTime
+  createdBy     String
+  sentAt        DateTime              @default(now())
+  createdAt     DateTime              @default(now())
+  tenantId      String?
+  questions     String?               @db.Text
+  targetUserIds String[]              @default([])
+  isAnonymous   Boolean               @default(false)
+  responses     PulseSurveyResponse[]
 }
 
 model PulseSurveyResponse {

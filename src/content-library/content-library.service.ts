@@ -226,20 +226,19 @@ export class ContentLibraryService {
         url: dto.url,
         active: true,
         version: '1.0',
-        // Extended fields — cast as any for fields not yet in base schema
-        ...(dto.thumbnailUrl && ({ thumbnailUrl: dto.thumbnailUrl } as any)),
-        ...(dto.author && ({ author: dto.author } as any)),
-        ...(dto.language && ({ language: dto.language } as any)),
-        ...(dto.level && ({ level: dto.level } as any)),
-        ...(dto.durationMin && ({ durationMin: dto.durationMin } as any)),
-        ...(dto.category && ({ category: dto.category } as any)),
-        ...(dto.mandatory !== undefined && ({ mandatory: dto.mandatory } as any)),
-        ...(dto.isMicrolearning !== undefined && ({ isMicrolearning: dto.isMicrolearning } as any)),
-        ...(dto.hasCertification !== undefined &&
-          ({ hasCertification: dto.hasCertification } as any)),
-        ...(dto.tags && ({ tags: dto.tags } as any)),
-        ...(dto.externalSource && ({ externalSource: dto.externalSource } as any)),
-        ...({ createdById, status: ContentStatus.DRAFT } as any),
+        ...(dto.thumbnailUrl && { thumbnailUrl: dto.thumbnailUrl }),
+        ...(dto.author && { author: dto.author }),
+        ...(dto.language && { language: dto.language }),
+        ...(dto.level && { level: dto.level }),
+        ...(dto.durationMin && { durationMin: dto.durationMin }),
+        ...(dto.category && { category: dto.category }),
+        ...(dto.mandatory !== undefined && { mandatory: dto.mandatory }),
+        ...(dto.isMicrolearning !== undefined && { isMicrolearning: dto.isMicrolearning }),
+        ...(dto.hasCertification !== undefined && { hasCertification: dto.hasCertification }),
+        ...(dto.tags && { tags: dto.tags }),
+        ...(dto.externalSource && { externalSource: dto.externalSource }),
+        createdById,
+        status: ContentStatus.DRAFT,
       },
     });
 
@@ -293,7 +292,7 @@ export class ContentLibraryService {
     if (dto.status === ContentStatus.ACTIVE) {
       // Bump version on publish
       const current = await this.prisma.contentAsset.findUnique({ where: { id } });
-      const [major, minor] = ((current as any).version ?? '1.0').split('.').map(Number);
+      const [major, minor] = (current?.version ?? '1.0').split('.').map(Number);
       data.version = `${major}.${(minor ?? 0) + 1}`;
     }
 
@@ -326,7 +325,7 @@ export class ContentLibraryService {
   async deprecate(id: number) {
     return this.prisma.contentAsset.update({
       where: { id },
-      data: { active: false, ...({ status: ContentStatus.DEPRECATED } as any) },
+      data: { active: false, status: ContentStatus.DEPRECATED },
     });
   }
 

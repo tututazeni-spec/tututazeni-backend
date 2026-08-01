@@ -268,6 +268,13 @@ export class SuccessionService {
     const plan = await this.prisma.successionPlan.create({
       data: {
         criticalPositionId: dto.criticalPositionId,
+        // SuccessionPlan.positionId é uma FK obrigatória (sem default) para
+        // Position — o próprio schema comenta "verificar o tipo", indício de
+        // ter sido adicionado e nunca ligado ao código; sem isto, criar um
+        // plano de sucessão rebentava sempre com "Argument positionId is
+        // missing". O cargo crítico já referencia a posição, por isso
+        // reutiliza-se o mesmo positionId em vez de o pedir de novo ao caller.
+        positionId: cp.positionId,
         candidateId: dto.candidateId,
         readinessLevel: dto.readinessLevel,
         priority: dto.priority,
@@ -542,6 +549,11 @@ export class SuccessionService {
     const where: any = {};
     if (departmentId) where.position = { departmentId };
 
+    // Position não tem relação `department` (só o escalar `departmentId`) —
+    // sem catch(), isto rebentava sempre (500 incondicional) em qualquer
+    // chamada a GET /succession/org-chart. Sem uma relação para incluir,
+    // faz-se uma segunda query em lote (mesmo padrão já usado noutros
+    // módulos: courses/reports) para anexar o nome do departamento.
     const criticalPositions = (await this.prisma.criticalPosition.findMany({
       where,
       include: {
@@ -550,8 +562,8 @@ export class SuccessionService {
             id: true,
             name: true,
             level: true,
+            departmentId: true,
             users: { select: { id: true, fullName: true, avatarUrl: true }, take: 1 },
-            department: { select: { id: true, name: true } },
           },
         } as any,
         successionPlans: {
@@ -567,9 +579,25 @@ export class SuccessionService {
       take: 50,
     })) as any[];
 
+    const deptIds = [
+      ...new Set(criticalPositions.map(cp => cp.position?.departmentId).filter(Boolean)),
+    ];
+    const depts = deptIds.length
+      ? await this.prisma.read.department.findMany({
+          where: { id: { in: deptIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const deptMap = new Map(depts.map(d => [d.id, d]));
+
     return criticalPositions.map(cp => ({
       id: cp.id,
-      position: cp.position,
+      position: {
+        ...cp.position,
+        department: cp.position?.departmentId
+          ? (deptMap.get(cp.position.departmentId) ?? null)
+          : null,
+      },
       exitRisk: cp.exitRisk,
       businessImpact: cp.businessImpact,
       keyPersonRisk: cp.keyPersonRisk,

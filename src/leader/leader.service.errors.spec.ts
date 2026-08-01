@@ -8,6 +8,7 @@ const mockPrisma = {
     findUnique: jest.fn(),
     update: jest.fn(),
   },
+  pdiApproval: { create: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
@@ -58,7 +59,12 @@ describe('LeaderService.approvePlan — ownership', () => {
 
     expect(mockPrisma.developmentPlan.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ status: 'ACTIVE', approverId: leader.id }),
+        data: expect.objectContaining({ status: 'ACTIVE' }),
+      }),
+    );
+    expect(mockPrisma.pdiApproval.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ planId: 1, approverId: leader.id, decision: 'APPROVED' }),
       }),
     );
     expect(result).toHaveProperty('message');

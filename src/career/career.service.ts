@@ -51,7 +51,8 @@ export class CareerService {
           take: 1,
         },
         careers: {
-          include: { position: { select: { id: true, name: true, level: true } } },
+          // UserCareer.position é CareerPosition (title/level), não Position (name).
+          include: { position: { select: { id: true, title: true, level: true } } },
           orderBy: { startedAt: 'desc' },
           take: 10,
         },
@@ -325,6 +326,35 @@ export class CareerService {
     return this.prisma.careerPath.update({ where: { id }, data: dto });
   }
 
+  // CareerPathStep.roleId é uma FK obrigatória para CareerRole — um modelo/relação
+  // que este módulo nunca referencia em mais nenhum sítio (AddCareerPathStepDto nem
+  // sequer tem o campo). Sem isto, addCareerPathStep() falhava sempre com "roleId
+  // obrigatório". Faz-se a ponte automaticamente: encontra ou cria um CareerRole
+  // com o mesmo nome do Position indicado.
+  private async getOrCreateCareerRole(positionId: number): Promise<number> {
+    const position = await this.prisma.position.findUnique({ where: { id: positionId } });
+    if (!position) throw new NotFoundException(`Cargo #${positionId} não encontrado`);
+
+    const existing = await this.prisma.careerRole.findFirst({ where: { name: position.name } });
+    if (existing) return existing.id;
+
+    const department = position.departmentId
+      ? await this.prisma.department.findUnique({
+          where: { id: position.departmentId },
+          select: { name: true },
+        })
+      : null;
+
+    const created = await this.prisma.careerRole.create({
+      data: {
+        name: position.name,
+        description: position.description,
+        department: department?.name ?? 'Geral',
+      },
+    });
+    return created.id;
+  }
+
   async addCareerPathStep(pathId: number, dto: AddCareerPathStepDto) {
     await this.findOneCareerPath(pathId);
 
@@ -333,10 +363,13 @@ export class CareerService {
     });
     if (existing) throw new ConflictException(`Já existe um passo na ordem ${dto.order}`);
 
+    const roleId = await this.getOrCreateCareerRole(dto.positionId);
+
     return (this.prisma as any).careerPathStep.create({
       data: {
         careerPathId: pathId,
         positionId: dto.positionId,
+        roleId,
         order: dto.order,
         minMonthsRequired: dto.minMonthsRequired,
         minPerformanceScore: dto.minPerformanceScore,
@@ -418,6 +451,18 @@ export class CareerService {
     });
   }
 
+  // CareerGoal não tem coluna `category` (só `type: GoalType`) nem `timeframe`
+  // — o código anterior escrevia dto.timeframe no campo category inexistente e
+  // nunca usava dto.category, pelo que o create() rebentava sempre. dto.category
+  // (SKILL|EXPERIENCE|CERTIFICATION|PROMOTION, texto livre) é mapeado para
+  // GoalType (cai em OTHER se não corresponder); dto.timeframe não tem coluna
+  // correspondente e não é persistido.
+  private mapGoalType(category?: string): string {
+    const known = ['COURSE', 'PROJECT', 'MENTORING', 'CERTIFICATION', 'SKILL', 'OTHER'];
+    const upper = category?.toUpperCase();
+    return upper && known.includes(upper) ? upper : 'OTHER';
+  }
+
   async addGoalToPlan(planId: number, userId: number, dto: AddCareerGoalDto) {
     const plan = await this.prisma.read.userCareerPlan.findFirst({ where: { id: planId, userId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
@@ -427,7 +472,7 @@ export class CareerService {
         careerPlanId: planId,
         title: dto.title,
         description: dto.description,
-        category: dto.timeframe,
+        type: this.mapGoalType(dto.category),
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
         status: 'PENDING',
         progress: 0,
@@ -872,18 +917,40 @@ export class CareerService {
     });
   }
 
+  // SuccessionPlan exige criticalPositionId (FK obrigatória para CriticalPosition,
+  // gerido pelo módulo succession — ver succession.service.ts#createCriticalPosition)
+  // e priority — nenhum dos dois vinha do DTO nem era escrito aqui, e os nomes
+  // readiness/justification não existem no schema (são readinessLevel/notes).
   async createSuccessionPlan(dto: CreateSuccessionPlanDto) {
+    const criticalPosition = await this.prisma.criticalPosition.findUnique({
+      where: { positionId: dto.positionId },
+    });
+    if (!criticalPosition) {
+      throw new NotFoundException(
+        'Este cargo ainda não foi marcado como crítico — crie primeiro em /succession/critical-positions',
+      );
+    }
+
     const existing = await this.prisma.successionPlan.findFirst({
-      where: { positionId: dto.positionId, candidateId: dto.candidateId },
+      where: { criticalPositionId: criticalPosition.id, candidateId: dto.candidateId },
     });
     if (existing) throw new ConflictException('Este candidato já está mapeado para este cargo');
 
+    const existingCount = await this.prisma.successionPlan.count({
+      where: { criticalPositionId: criticalPosition.id },
+    });
+    const priority =
+      existingCount === 0 ? 'PRIMARY' : existingCount === 1 ? 'SECONDARY' : 'TERTIARY';
+
     const plan = await (this.prisma as any).successionPlan.create({
       data: {
+        criticalPositionId: criticalPosition.id,
         positionId: dto.positionId,
         candidateId: dto.candidateId,
-        readiness: dto.readiness,
-        justification: dto.justification,
+        readinessLevel: dto.readiness,
+        priority,
+        notes: dto.justification,
+        readinessByDate: dto.estimatedReadyDate ? new Date(dto.estimatedReadyDate) : null,
       },
       include: {
         position: { select: { id: true, name: true } },
@@ -920,7 +987,7 @@ export class CareerService {
 
     return (this.prisma as any).successionPlan.update({
       where: { id: planId },
-      data: { readiness, justification: justification ?? (plan as any).justification },
+      data: { readinessLevel: readiness, notes: justification ?? (plan as any).notes },
     });
   }
 

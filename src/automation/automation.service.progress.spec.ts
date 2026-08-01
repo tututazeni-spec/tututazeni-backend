@@ -43,6 +43,7 @@ function buildMockPrisma() {
     auditLog: crud(),
     historyRecord: crud(),
     payslip: crud(),
+    tenantConfig: { ...crud(), findFirst: jest.fn().mockResolvedValue({ id: 'tenant-1' }) },
   };
 }
 

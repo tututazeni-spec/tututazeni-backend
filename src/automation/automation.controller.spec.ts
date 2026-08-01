@@ -43,10 +43,11 @@ describe('AutomationController', () => {
     expect(mockSvc.getRules).toHaveBeenCalledWith(undefined);
   });
 
-  it('create → createRule(dto)', async () => {
+  it('create → createRule(dto, user.id)', async () => {
     const dto = {} as any;
-    await controller.create(dto);
-    expect(mockSvc.createRule).toHaveBeenCalledWith(dto);
+    const user = { id: 7 } as any;
+    await controller.create(dto, user);
+    expect(mockSvc.createRule).toHaveBeenCalledWith(dto, 7);
   });
 
   it('update → updateRule(id, dto)', async () => {

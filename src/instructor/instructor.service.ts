@@ -96,6 +96,7 @@ export class InstructorService {
     const profile = await this.prisma.read.instructorProfile.findUnique({
       where: { userId },
       include: {
+        user: { select: { id: true, fullName: true, email: true, avatarUrl: true } },
         reviews: { orderBy: { createdAt: 'desc' }, take: 5 },
         marketplaceCourses: true,
         cohorts: {
@@ -253,15 +254,22 @@ export class InstructorService {
   }
 
   async updateCohort(cohortId: number, userId: number, dto: UpdateCohortDto) {
-    const cohort = await this.getCohortOrFail(cohortId, userId);
-    return this.prisma.instructorCohort.update({
+    await this.getCohortOrFail(cohortId, userId);
+    const { participantIds, ...rest } = dto;
+    const updated = await this.prisma.instructorCohort.update({
       where: { id: cohortId },
       data: {
-        ...dto,
+        ...rest,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
       },
     });
+
+    if (participantIds && participantIds.length > 0) {
+      await this.addParticipants(cohortId, userId, { userIds: participantIds });
+    }
+
+    return updated;
   }
 
   async getCohorts(userId: number, filters: CohortFilterDto) {
@@ -320,12 +328,12 @@ export class InstructorService {
       participants.map(async p => {
         const enrollment = await this.prisma.read.enrollment.findFirst({
           where: { userId: p.userId, courseId: (cohort as any).courseId },
-          select: { progresses: true, status: true, completedAt: true },
+          select: { progress: true, status: true, completedAt: true },
         });
         return {
           ...p,
           enrollmentStatus: enrollment?.status ?? 'NOT_STARTED',
-          enrollmentProgress: enrollment?.progresses?.[0] as any,
+          enrollmentProgress: enrollment?.progress ?? 0,
           completedAt: enrollment?.completedAt,
         };
       }),

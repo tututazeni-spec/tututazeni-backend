@@ -103,7 +103,10 @@ export class EngagementService {
   }
 
   async createSurvey(dto: CreateSurveyDto, createdById: number) {
-    const { questions, startDate, endDate, ...data } = dto;
+    // targetDepartmentIds/frequency não existem em EngagementSurvey — a
+    // segmentação por departamento não está implementada a nível de schema
+    // (activateSurvey() notifica sempre todos os utilizadores activos).
+    const { questions, startDate, endDate, targetDepartmentIds, frequency, ...data } = dto;
 
     return this.prisma.engagementSurvey.create({
       data: {
@@ -829,9 +832,16 @@ export class EngagementService {
       throw new NotFoundException('1:1 não encontrado');
     }
 
-    const data: any = { ...dto };
+    // OneOnOneMeeting não tem coluna `completed` (só `completedAt`/`status`)
+    // nem `notes` (a coluna real chama-se `minutes`).
+    const { completed, notes, ...rest } = dto;
+    const data: any = { ...rest };
+    if (notes !== undefined) data.minutes = notes;
     if (dto.scheduledAt) data.scheduledAt = new Date(dto.scheduledAt);
-    if (dto.completed) data.status = 'COMPLETED';
+    if (completed) {
+      data.status = 'COMPLETED';
+      data.completedAt = new Date();
+    }
 
     return this.prisma.oneOnOneMeeting.update({
       where: { id },

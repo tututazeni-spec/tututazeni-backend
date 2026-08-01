@@ -54,7 +54,10 @@ function buildAccessWhere(userId: number, userDept?: string, role?: string) {
       },
       {
         permissions: {
-          some: { userId, expiresAt: { OR: [{ gt: new Date() }, { equals: null }] } },
+          some: {
+            userId,
+            OR: [{ expiresAt: { gt: new Date() } }, { expiresAt: null }],
+          },
         },
       },
     ],
@@ -91,7 +94,7 @@ export class DocumentRepositoryService {
   // DOCUMENTS — LIST / SEARCH
   // ══════════════════════════════════════════════════════════════════
 
-  async findAll(filters: DocumentFilterDto, userId: number, userDept?: string, role?: string) {
+  async findAll(filters: DocumentFilterDto, userId: number, role?: string) {
     const {
       page = 1,
       limit = 20,
@@ -110,6 +113,18 @@ export class DocumentRepositoryService {
       sortOrder = 'desc',
     } = filters;
     const skip = (page - 1) * limit;
+
+    // CurrentUserData não carrega o departamento do chamador (User não tem
+    // relação `employee`) — resolve-se aqui em vez de confiar num campo que
+    // é sempre undefined vindo do controller.
+    let userDept: string | undefined;
+    if (role !== 'ADMIN' && role !== 'RH') {
+      const caller = await this.prisma.read.user.findUnique({
+        where: { id: userId },
+        select: { department: { select: { name: true } } },
+      });
+      userDept = caller?.department?.name;
+    }
 
     const accessWhere = buildAccessWhere(userId, userDept, role);
     const where: any = { ...accessWhere, status };

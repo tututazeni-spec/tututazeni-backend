@@ -32,6 +32,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Public } from '../common/decorators/public.decorator';
 import { Role } from '../auth/enums/role.enum';
 
 // ─── MODULE 1 — DOCUMENT DECLARATIONS ────────────────────────────────────────
@@ -175,6 +176,7 @@ export class DocumentDeclarationsController {
   }
 
   @Get('verify/:code')
+  @Public()
   @ApiOperation({ summary: 'Verificação pública de declaração por código (sem auth)' })
   verify(@Param('code') code: string) {
     return this.svc.verify(code);

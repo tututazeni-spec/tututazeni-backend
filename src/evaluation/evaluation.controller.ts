@@ -16,7 +16,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { assertCanAccess } from '../common/authz/ownership';
-import { Role } from '../auth/enums/role.enum';
+import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 import {
   CreateCycleDto,
   UpdateCycleDto,
@@ -30,9 +30,9 @@ import {
   CreateEvaluationDto,
 } from './evaluation.dto';
 
-const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
-const MGMT_ROLES = ['ADMIN', 'RH', 'LIDER'] as const;
-const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
+const ALL_ROLES = AUTHENTICATED_ROLES;
+const MGMT_ROLES = [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR] as const;
+const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
 
 @ApiTags('Evaluation 360°')
 @ApiBearerAuth()
@@ -193,7 +193,7 @@ export class EvaluationController {
   ) {
     // A10-3: sem esta verificação, qualquer COLABORADOR lia o 360 completo
     // (score, nomes de avaliadores, texto qualitativo) de qualquer colega.
-    assertCanAccess({}, userId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
+    assertCanAccess({}, userId, user, [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR]);
     return this.svc.getResults(userId, cycleId ? +cycleId : undefined);
   }
 
@@ -201,7 +201,7 @@ export class EvaluationController {
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Evolução do colaborador ao longo dos ciclos' })
   evolution(@Param('userId', ParseIntPipe) userId: number, @CurrentUser() user: CurrentUserData) {
-    assertCanAccess({}, userId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
+    assertCanAccess({}, userId, user, [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR]);
     return this.svc.getUserEvolution(userId);
   }
 

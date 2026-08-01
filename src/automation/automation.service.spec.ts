@@ -36,6 +36,10 @@ const mockPrisma = {
   historyRecord: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
   payslip: { create: jest.fn(), count: jest.fn().mockResolvedValue(0) },
   userPoints: { upsert: jest.fn().mockResolvedValue({}) },
+  tenantConfig: {
+    findFirst: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
+    create: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
+  },
 };
 
 const baseRule = {

@@ -393,6 +393,16 @@ export class DepartmentsService {
 export class UnitsService {
   constructor(private prisma: PrismaService) {}
 
+  // Unit.code é obrigatório e único no schema, mas CreateUnitDto nunca o expunha
+  private async generateCode(): Promise<string> {
+    const last = await this.prisma.unit.findFirst({
+      orderBy: { code: 'desc' },
+      select: { code: true },
+    });
+    const num = last ? parseInt(last.code.replace('UNI-', ''), 10) + 1 : 1;
+    return `UNI-${String(num).padStart(5, '0')}`;
+  }
+
   async findAll() {
     return this.prisma.read.unit.findMany({
       include: {
@@ -416,12 +426,27 @@ export class UnitsService {
   }
 
   async create(dto: CreateUnitDto) {
-    return this.prisma.unit.create({ data: dto as any });
+    // Department é o lado proprietário da relação (Department.unitId), não o inverso
+    const { departmentId, ...rest } = dto;
+    const code = await this.generateCode();
+    const unit = await this.prisma.unit.create({ data: { ...rest, code } });
+    if (departmentId) {
+      await this.prisma.department.update({
+        where: { id: departmentId },
+        data: { unitId: unit.id },
+      });
+    }
+    return unit;
   }
 
   async update(id: number, dto: UpdateUnitDto) {
     await this.findOne(id);
-    return this.prisma.unit.update({ where: { id }, data: dto });
+    const { departmentId, ...rest } = dto;
+    const unit = await this.prisma.unit.update({ where: { id }, data: rest });
+    if (departmentId) {
+      await this.prisma.department.update({ where: { id: departmentId }, data: { unitId: id } });
+    }
+    return unit;
   }
 
   async remove(id: number) {
@@ -490,12 +515,13 @@ export class RolesService {
   }
 
   async assignPermissionToRole(roleId: number, permissionId: number) {
-    // FIX: upsert correcto com chave composta
-    return this.prisma.rolePermission.upsert({
-      where: { roleId_permissionId: { roleId, permissionId } } as any,
-      create: { roleId, permissionId },
-      update: {},
+    // RolePermission não tem @@unique([roleId, permissionId]) no schema —
+    // upsert por chave composta rebentava sempre ("Unknown argument").
+    const existing = await this.prisma.rolePermission.findFirst({
+      where: { roleId, permissionId },
     });
+    if (existing) return existing;
+    return this.prisma.rolePermission.create({ data: { roleId, permissionId } });
   }
 
   async revokePermissionFromRole(roleId: number, permissionId: number) {

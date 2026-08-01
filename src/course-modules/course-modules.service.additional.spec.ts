@@ -42,6 +42,7 @@ const mockPrisma: any = {
     delete: jest.fn().mockResolvedValue({}),
   },
   enrollment: { findFirst: jest.fn().mockResolvedValue(null) },
+  assessment: { count: jest.fn().mockResolvedValue(0) },
 };
 
 const baseCourse = { id: 1, title: 'Curso TypeScript', status: 'PUBLISHED' };

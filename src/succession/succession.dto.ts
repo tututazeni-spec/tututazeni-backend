@@ -13,7 +13,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -270,10 +270,13 @@ export class CriticalPositionFilterDto {
   @Type(() => Number)
   departmentId?: number;
 
+  // @Type(() => Boolean) coage '?withoutSuccessor=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]].
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  @Type(() => Boolean)
   withoutSuccessor?: boolean;
 
   @ApiPropertyOptional({ default: 1 })

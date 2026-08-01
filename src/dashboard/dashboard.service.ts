@@ -921,21 +921,15 @@ export class DashboardService {
 
   async generateSnapshot() {
     const data = await this.getOrganizationSummary();
-    return (this.prisma as any).dashboardSnapshot
-      .create({
-        data: {
-          data: data as any,
-          generatedAt: new Date(),
-        },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'DASHBOARD_SNAPSHOT_CREATE',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao gravar snapshot do dashboard organizacional (modelo pode requerer migration)',
-        });
-        return { message: 'Snapshot gerado (modelo pode requerer migration)', data };
-      });
+    const snapshot = await this.prisma.dashboardSnapshot.create({
+      data: {
+        totalUsers: data.kpis.headcount.total,
+        totalCoursesCompleted: data.kpis.learning.completions,
+        averageScore: data.kpis.performance.avgScore ?? 0,
+        activePlans: data.kpis.development.activePlans,
+      },
+    });
+    return { snapshot, data };
   }
 
   // ══════════════════════════════════════════════════════
@@ -964,8 +958,8 @@ export class DashboardService {
         },
         take: limit,
       }),
-      (this.prisma as any).course.findMany({
-        where: { title: { contains: query, mode: 'insensitive' }, active: true },
+      this.prisma.course.findMany({
+        where: { title: { contains: query, mode: 'insensitive' }, status: 'PUBLISHED' },
         select: { id: true, title: true, category: true, thumbnailUrl: true },
         take: limit,
       }),

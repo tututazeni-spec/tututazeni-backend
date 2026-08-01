@@ -37,6 +37,7 @@ function buildMockPrisma() {
     internalApplication: crud(),
     vacancyApplication: crud(),
     successionPlan: crud(),
+    criticalPosition: crud(),
     positionCompetency: crud(),
     userCompetency: crud(),
     position: crud(),
@@ -536,7 +537,9 @@ describe('CareerService (progress)', () => {
 
   describe('createSuccessionPlan', () => {
     it('deve criar plano de sucessão novo', async () => {
+      mockPrisma.criticalPosition.findUnique.mockResolvedValue({ id: 10, positionId: 1 });
       mockPrisma.successionPlan.findFirst.mockResolvedValue(null);
+      mockPrisma.successionPlan.count.mockResolvedValue(0);
       mockPrisma.successionPlan.create.mockResolvedValue({ id: 1, positionId: 1, candidateId: 5 });
 
       const result = await service.createSuccessionPlan({
@@ -546,6 +549,11 @@ describe('CareerService (progress)', () => {
         justification: 'Tem todas as competências',
       } as any);
       expect(result).toBeDefined();
+      expect(mockPrisma.successionPlan.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ criticalPositionId: 10, priority: 'PRIMARY' }),
+        }),
+      );
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ userId: 5, type: 'SUCCESSION_MAPPED' }),
@@ -553,7 +561,19 @@ describe('CareerService (progress)', () => {
       );
     });
 
+    it('cargo não é crítico → NotFoundException', async () => {
+      mockPrisma.criticalPosition.findUnique.mockResolvedValue(null);
+      await expect(
+        service.createSuccessionPlan({
+          positionId: 1,
+          candidateId: 5,
+          readiness: 'READY_NOW',
+        } as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
     it('deve lançar ConflictException se candidato já mapeado para cargo', async () => {
+      mockPrisma.criticalPosition.findUnique.mockResolvedValue({ id: 10, positionId: 1 });
       mockPrisma.successionPlan.findFirst.mockResolvedValue({ id: 1 });
       await expect(
         service.createSuccessionPlan({
@@ -569,8 +589,8 @@ describe('CareerService (progress)', () => {
 
   describe('updateSuccessionReadiness', () => {
     it('deve actualizar readiness do plano de sucessão', async () => {
-      mockPrisma.successionPlan.findUnique.mockResolvedValue({ id: 1, justification: 'Original' });
-      mockPrisma.successionPlan.update.mockResolvedValue({ id: 1, readiness: 'READY_NOW' });
+      mockPrisma.successionPlan.findUnique.mockResolvedValue({ id: 1, notes: 'Original' });
+      mockPrisma.successionPlan.update.mockResolvedValue({ id: 1, readinessLevel: 'READY_NOW' });
       const result = await service.updateSuccessionReadiness(1, 'READY_NOW', 'Nova justificação');
       expect(result).toBeDefined();
     });
@@ -582,13 +602,13 @@ describe('CareerService (progress)', () => {
       );
     });
 
-    it('deve manter justificação original se não fornecida', async () => {
-      mockPrisma.successionPlan.findUnique.mockResolvedValue({ id: 1, justification: 'Original' });
+    it('deve manter notas originais se não fornecidas', async () => {
+      mockPrisma.successionPlan.findUnique.mockResolvedValue({ id: 1, notes: 'Original' });
       mockPrisma.successionPlan.update.mockResolvedValue({});
       await service.updateSuccessionReadiness(1, 'READY_12M');
       expect(mockPrisma.successionPlan.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ justification: 'Original' }),
+          data: expect.objectContaining({ notes: 'Original' }),
         }),
       );
     });

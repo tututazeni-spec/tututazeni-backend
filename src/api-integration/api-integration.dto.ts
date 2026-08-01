@@ -7,6 +7,7 @@ import {
   IsArray,
   IsInt,
   IsDateString,
+  IsObject,
   MaxLength,
   Min,
   IsNotEmpty,
@@ -129,7 +130,7 @@ export class CreateWebhookDto {
 
 export class TriggerWebhookDto {
   @ApiProperty({ enum: WebhookEventType }) @IsEnum(WebhookEventType) event!: WebhookEventType;
-  @ApiProperty() payload!: Record<string, any>;
+  @ApiProperty() @IsObject() payload!: Record<string, any>;
 }
 
 // ─── ValidateApiKeyBodyDto ────────────────────────────────────────────────────

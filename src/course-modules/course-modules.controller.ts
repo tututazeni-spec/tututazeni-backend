@@ -166,8 +166,13 @@ export class CourseModulesController {
     return this.svc.markLessonComplete(user.id, dto);
   }
 
-  @Get('courses/:courseId/progress')
-  @ApiOperation({ summary: 'Progresso completo do utilizador num curso (módulos + aulas)' })
+  // NOTA: courses.controller.ts já regista GET /courses/:id/progress (progresso simples).
+  // Esta rota usa um path distinto para não colidir e ficar permanentemente inacessível
+  // (a mesma classe de bug já vista no módulo performance — route-shadowing por ordem de registo).
+  @Get('courses/:courseId/module-progress')
+  @ApiOperation({
+    summary: 'Progresso completo do utilizador num curso, por módulo e aula (drip/sequencial)',
+  })
   getCourseProgress(
     @Param('courseId', ParseIntPipe) courseId: number,
     @CurrentUser() user: CurrentUserData,

@@ -11,7 +11,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 // ─── Enums ────────────────────────────────────────────────────────
 
@@ -47,7 +47,12 @@ export class GlobalSearchDto {
     description: 'Filtrar por tipo(s) de entidade',
   })
   @IsOptional()
+  // Express/qs entrega um único ?types=course como string simples, não um
+  // array de 1 elemento — sem esta normalização, @IsArray() rejeitava
+  // sempre (400) qualquer pedido a filtrar por um único tipo de entidade.
+  @Transform(({ value }) => (value === undefined ? value : Array.isArray(value) ? value : [value]))
   @IsArray()
+  @IsEnum(SearchEntityType, { each: true })
   types?: SearchEntityType[];
 
   @ApiPropertyOptional({ enum: SearchSortBy, default: SearchSortBy.RELEVANCE })
@@ -57,7 +62,15 @@ export class GlobalSearchDto {
 
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() category?: string;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) activeOnly?: boolean;
+  // @Type(() => Boolean) coage '?activeOnly=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String)
+  // salta a coerção Boolean e deixa o @Transform decidir a partir da string.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  activeOnly?: boolean;
 
   @ApiPropertyOptional({ default: 5 })
   @IsOptional()

@@ -1,0 +1,16 @@
+-- AlterTable
+ALTER TABLE "ContentAsset" ADD COLUMN     "author" TEXT,
+ADD COLUMN     "category" TEXT,
+ADD COLUMN     "createdById" INTEGER,
+ADD COLUMN     "durationMin" INTEGER,
+ADD COLUMN     "externalSource" TEXT,
+ADD COLUMN     "hasCertification" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "isMicrolearning" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "language" TEXT DEFAULT 'pt',
+ADD COLUMN     "level" TEXT,
+ADD COLUMN     "mandatory" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "status" TEXT NOT NULL DEFAULT 'DRAFT',
+ADD COLUMN     "tags" TEXT[] DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN     "thumbnailUrl" TEXT,
+ALTER COLUMN "version" SET DEFAULT '1.0',
+ALTER COLUMN "version" SET DATA TYPE TEXT;

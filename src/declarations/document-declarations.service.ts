@@ -15,6 +15,7 @@ import {
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
+import { DeclarationType } from '@prisma/client';
 
 // ─── Variable resolver ────────────────────────────────────────────────────────
 
@@ -87,15 +88,19 @@ export class DocumentDeclarationsService {
     const detected = [
       ...new Set((dto.content.match(/\{\{(\w+)\}\}/g) ?? []).map(m => m.slice(2, -2))),
     ];
+    const tenantId = await this.getDefaultTenantId();
 
     const template = await this.prisma.declarationTemplate.create({
       data: {
         ...dto,
+        tenantId,
+        type: DeclarationType.CUSTOM,
+        bodyContent: dto.content,
         variables: dto.variables ?? detected,
         active: dto.active ?? true,
         version: 1,
         createdById,
-      } as any,
+      },
     });
 
     await this.audit.log({
@@ -137,6 +142,7 @@ export class DocumentDeclarationsService {
       where: { id },
       data: {
         ...dto,
+        ...(dto.content ? { bodyContent: dto.content } : {}),
         version: { increment: 1 },
         variables: dto.content
           ? [...new Set((dto.content.match(/\{\{(\w+)\}\}/g) ?? []).map(m => m.slice(2, -2)))]
@@ -471,6 +477,15 @@ export class DocumentDeclarationsService {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
+  private async getDefaultTenantId(): Promise<string> {
+    const existing = await this.prisma.tenantConfig.findFirst();
+    if (existing) return existing.id;
+    const created = await this.prisma.tenantConfig.create({
+      data: { tenantCode: 'DEFAULT', tenantName: 'Default Tenant' },
+    });
+    return created.id;
+  }
+
   private async loadUserData(userId: number) {
     // FIX: removed employee sub-select — User has no employee relation
     return this.prisma.read.user.findUnique({
@@ -494,8 +509,8 @@ export class DocumentDeclarationsService {
 
   private async notifyRH(type: string, message: string) {
     try {
-      // FIX: role: 'RH' → roleCode: 'RH' (role is a relation, not a string)
-      const hr = await this.prisma.read.user.findFirst({ where: { roleCode: 'RH' } as any });
+      // User has no scalar roleCode — role is a relation, filter via role.code
+      const hr = await this.prisma.read.user.findFirst({ where: { role: { code: 'RH' } } });
       if (hr)
         await this.prisma.notificationLog.create({
           data: { userId: hr.id, type, message, success: true },

@@ -196,6 +196,12 @@ export class LeadershipController {
     return this.svc.submit360Feedback(user.id, dto);
   }
 
+  @Get('feedback-360/my/summary')
+  @ApiOperation({ summary: 'O meu sumário de feedback 360°' })
+  my360Summary(@CurrentUser() user: CurrentUserData) {
+    return this.svc.get360Summary(user.id);
+  }
+
   @Get('feedback-360/:leaderId/summary')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Sumário 360° de um líder (média por competência, insights)' })
@@ -207,12 +213,6 @@ export class LeadershipController {
     // sumário (o @Roles acima mantém-se para não excluir GESTOR de `my/summary`,
     // mas o serviço aplica assertCanAccess e devolve 404 se GESTOR pedir outro líder).
     return this.svc.get360Summary(leaderId, user);
-  }
-
-  @Get('feedback-360/my/summary')
-  @ApiOperation({ summary: 'O meu sumário de feedback 360°' })
-  my360Summary(@CurrentUser() user: CurrentUserData) {
-    return this.svc.get360Summary(user.id);
   }
 
   // ── Pulse ─────────────────────────────────────────────────────────────────

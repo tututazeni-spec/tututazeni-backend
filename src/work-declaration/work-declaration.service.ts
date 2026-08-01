@@ -36,10 +36,34 @@ export class WorkDeclarationService {
   ) {}
 
   // ══════════════════════════════════════════════════════════
+  // TENANT RESOLUTION
+  // ══════════════════════════════════════════════════════════
+
+  /**
+   * O JWT/auth flow real nunca popula IAuthUser.tenantId (ver src/auth/) —
+   * chega sempre undefined. Sem isto, todo o create()/update() nesta classe
+   * rebenta com PrismaClientValidationError (tenantId é obrigatório em
+   * Declaration/DeclarationTemplate/DeclarationTenantConfig) e todo o filtro
+   * `where: { tenantId }` em leituras é silenciosamente ignorado pelo Prisma
+   * (undefined não filtra), devolvendo dados sem isolamento de tenant.
+   * Mesmo padrão usado em declarations/document-declarations.service.ts.
+   */
+  private async resolveTenantId(tenantId?: string): Promise<string> {
+    if (tenantId) return tenantId;
+    const existing = await this.prisma.tenantConfig.findFirst();
+    if (existing) return existing.id;
+    const created = await this.prisma.tenantConfig.create({
+      data: { tenantCode: 'DEFAULT', tenantName: 'Default Tenant' },
+    });
+    return created.id;
+  }
+
+  // ══════════════════════════════════════════════════════════
   // TEMPLATES
   // ══════════════════════════════════════════════════════════
 
-  async createTemplate(tenantId: string, userId: string, dto: CreateDeclarationTemplateDto) {
+  async createTemplate(tenantId: string, userId: number, dto: CreateDeclarationTemplateDto) {
+    tenantId = await this.resolveTenantId(tenantId);
     // Se novo template for default, remover default anterior do mesmo tipo
     if (dto.isDefault) {
       await this.prisma.declarationTemplate.updateMany({
@@ -51,18 +75,20 @@ export class WorkDeclarationService {
     return this.prisma.declarationTemplate.create({
       data: {
         ...dto,
+        content: dto.bodyContent,
         tenantId,
-        createdById: userId as any,
+        createdById: userId,
       } as any,
     });
   }
 
   async updateTemplate(
     tenantId: string,
-    userId: string,
-    templateId: string,
+    userId: number,
+    templateId: number,
     dto: UpdateDeclarationTemplateDto,
   ) {
+    tenantId = await this.resolveTenantId(tenantId);
     const template = await this.findTemplateOrThrow(tenantId, templateId);
 
     if (dto.isDefault) {
@@ -73,12 +99,13 @@ export class WorkDeclarationService {
     }
 
     return this.prisma.declarationTemplate.update({
-      where: { id: templateId as any },
-      data: { ...dto, updatedById: userId as any, version: { increment: 1 } },
+      where: { id: templateId },
+      data: { ...dto, updatedById: userId, version: { increment: 1 } },
     });
   }
 
   async listTemplates(tenantId: string, query: TemplateQueryDto) {
+    tenantId = await this.resolveTenantId(tenantId);
     const where: any = { tenantId };
     if (query.type) where.type = query.type;
     if (query.locale) where.locale = query.locale;
@@ -97,11 +124,13 @@ export class WorkDeclarationService {
     });
   }
 
-  async getTemplate(tenantId: string, templateId: string) {
+  async getTemplate(tenantId: string, templateId: number) {
+    tenantId = await this.resolveTenantId(tenantId);
     return this.findTemplateOrThrow(tenantId, templateId);
   }
 
   async previewTemplate(tenantId: string, dto: TemplatePreviewDto) {
+    tenantId = await this.resolveTenantId(tenantId);
     const template = await this.findTemplateOrThrow(tenantId, dto.templateId);
 
     let variables: Record<string, string> = {};
@@ -119,17 +148,18 @@ export class WorkDeclarationService {
     return { rendered, variables, template };
   }
 
-  async deleteTemplate(tenantId: string, templateId: string) {
+  async deleteTemplate(tenantId: string, templateId: number) {
+    tenantId = await this.resolveTenantId(tenantId);
     await this.findTemplateOrThrow(tenantId, templateId);
-    const usage = await this.prisma.declaration.count({ where: { templateId: templateId as any } });
+    const usage = await this.prisma.declaration.count({ where: { templateId } });
     if (usage > 0) {
       // Soft delete — apenas desativa
       return this.prisma.declarationTemplate.update({
-        where: { id: templateId as any },
+        where: { id: templateId },
         data: { isActive: false },
       });
     }
-    return this.prisma.declarationTemplate.delete({ where: { id: templateId as any } });
+    return this.prisma.declarationTemplate.delete({ where: { id: templateId } });
   }
 
   // ══════════════════════════════════════════════════════════
@@ -137,7 +167,8 @@ export class WorkDeclarationService {
   // ══════════════════════════════════════════════════════════
 
   /** Colaborador solicita uma declaração */
-  async requestDeclaration(tenantId: string, requestedById: string, dto: RequestDeclarationDto) {
+  async requestDeclaration(tenantId: string, requestedById: number, dto: RequestDeclarationDto) {
+    tenantId = await this.resolveTenantId(tenantId);
     const template = await this.findTemplateOrThrow(tenantId, dto.templateId);
     const config = await this.getTenantConfig(tenantId);
 
@@ -149,8 +180,8 @@ export class WorkDeclarationService {
         tenantId,
         code,
         templateId: template.id,
-        requestedById: requestedById as any,
-        employeeId: requestedById as any,
+        requestedById,
+        employeeId: requestedById,
         type: dto.type,
         status: DeclarationStatus.DRAFT,
         locale: dto.locale ?? config?.defaultLocale ?? 'PT',
@@ -189,7 +220,8 @@ export class WorkDeclarationService {
   // ══════════════════════════════════════════════════════════
 
   /** RH cria declaração diretamente */
-  async createDeclaration(tenantId: string, createdById: string, dto: CreateDeclarationDto) {
+  async createDeclaration(tenantId: string, createdById: number, dto: CreateDeclarationDto) {
+    tenantId = await this.resolveTenantId(tenantId);
     const template = await this.findTemplateOrThrow(tenantId, dto.templateId);
     const config = await this.getTenantConfig(tenantId);
 
@@ -203,9 +235,9 @@ export class WorkDeclarationService {
         tenantId,
         code,
         templateId: template.id,
-        requestedById: createdById as any,
-        assignedToId: createdById as any,
-        employeeId: dto.employeeId as any,
+        requestedById: createdById,
+        assignedToId: createdById,
+        employeeId: dto.employeeId,
         type: dto.type,
         status: DeclarationStatus.DRAFT,
         locale: dto.locale ?? config?.defaultLocale ?? 'PT',
@@ -236,10 +268,11 @@ export class WorkDeclarationService {
 
   async updateDeclaration(
     tenantId: string,
-    userId: string,
+    userId: number,
     declarationId: string,
     dto: UpdateDeclarationDto,
   ) {
+    tenantId = await this.resolveTenantId(tenantId);
     const declaration = await this.findDeclarationOrThrow(tenantId, declarationId);
     this.assertEditableStatus(declaration.status);
 
@@ -247,7 +280,7 @@ export class WorkDeclarationService {
 
     // Re-renderizar se campos relevantes mudaram
     if (dto.customFields !== undefined || dto.showSalary !== undefined) {
-      const template = await this.findTemplateOrThrow(tenantId, declaration.templateId as any);
+      const template = await this.findTemplateOrThrow(tenantId, declaration.templateId);
       const config = await this.getTenantConfig(tenantId);
       const variables = this.buildVariableMap(
         declaration.employeeSnapshot,
@@ -276,11 +309,12 @@ export class WorkDeclarationService {
   }
 
   async listDeclarations(tenantId: string, user: CurrentUserData, query: DeclarationQueryDto) {
+    tenantId = await this.resolveTenantId(tenantId);
     const privileged = isPrivileged(user, [Role.ADMIN, Role.RH]);
     const where: any = { tenantId };
 
-    // Colaborador vê apenas as suas (employeeId é string na BD).
-    if (!privileged) where.employeeId = String(user.id);
+    // Colaborador vê apenas as suas.
+    if (!privileged) where.employeeId = user.id;
 
     if (query.status) where.status = query.status;
     if (query.type) where.type = query.type;
@@ -322,9 +356,9 @@ export class WorkDeclarationService {
   }
 
   async getDeclaration(tenantId: string, user: CurrentUserData, declarationId: string) {
+    tenantId = await this.resolveTenantId(tenantId);
     const declaration = await this.findDeclarationOrThrow(tenantId, declarationId);
-    // Ownership (A3-2): dono OU ADMIN/RH; senão 404. employeeId é string — o
-    // helper coage ambos os lados.
+    // Ownership (A3-2): dono OU ADMIN/RH; senão 404.
     assertCanAccess(declaration, declaration.employeeId, user, [Role.ADMIN, Role.RH]);
     return declaration;
   }
@@ -335,10 +369,11 @@ export class WorkDeclarationService {
 
   async changeStatus(
     tenantId: string,
-    userId: string,
+    userId: number,
     declarationId: string,
     dto: ChangeDeclarationStatusDto,
   ) {
+    tenantId = await this.resolveTenantId(tenantId);
     const declaration = await this.findDeclarationOrThrow(tenantId, declarationId);
     this.validateStatusTransition(declaration.status, dto.status);
 
@@ -393,14 +428,15 @@ export class WorkDeclarationService {
 
   async signDeclaration(
     tenantId: string,
-    userId: string,
+    userId: number,
     declarationId: string,
     dto: SignDeclarationDto,
   ) {
+    tenantId = await this.resolveTenantId(tenantId);
     const declaration = await this.findDeclarationOrThrow(tenantId, declarationId);
 
     if (
-      ![DeclarationStatus.DRAFT, DeclarationStatus.PENDING].includes(
+      ![DeclarationStatus.DRAFT, DeclarationStatus.PENDING_SIGNATURE].includes(
         declaration.status as DeclarationStatus,
       )
     ) {
@@ -412,10 +448,10 @@ export class WorkDeclarationService {
     }
 
     const signature = await this.prisma.declarationSignature.upsert({
-      where: { declarationId_signerId: { declarationId, signerId: userId as any } },
+      where: { declarationId_signerId: { declarationId, signerId: userId } },
       create: {
         declarationId,
-        signerId: userId as any,
+        signerId: userId,
         signerRole: dto.signerRole,
         type: dto.type,
         signatureUrl: dto.signatureUrl,
@@ -446,10 +482,11 @@ export class WorkDeclarationService {
 
   async exportDeclaration(
     tenantId: string,
-    userId: string,
+    userId: number,
     declarationId: string,
     dto: ExportDeclarationDto,
   ) {
+    tenantId = await this.resolveTenantId(tenantId);
     const declaration = await this.findDeclarationOrThrow(tenantId, declarationId);
 
     if (declaration.status === DeclarationStatus.DRAFT) {
@@ -481,10 +518,11 @@ export class WorkDeclarationService {
 
   async sendDeclaration(
     tenantId: string,
-    userId: string,
+    userId: number,
     declarationId: string,
     dto: SendDeclarationDto,
   ) {
+    tenantId = await this.resolveTenantId(tenantId);
     const declaration = await this.findDeclarationOrThrow(tenantId, declarationId);
 
     if (!declaration.pdfUrl) {
@@ -525,7 +563,7 @@ export class WorkDeclarationService {
         expiresAt: true,
         verificationHash: true,
         employeeSnapshot: true,
-        tenant: { select: { name: true } as any },
+        tenant: { select: { tenantName: true } },
         signatures: {
           select: { signerRole: true, signedAt: true },
         },
@@ -555,7 +593,7 @@ export class WorkDeclarationService {
       status: decl.status,
       issuedAt: decl.issuedAt,
       expiresAt: decl.expiresAt,
-      company: decl.tenant?.name,
+      company: decl.tenant?.tenantName,
       employee: {
         name: decl.employeeSnapshot?.name,
         role: decl.employeeSnapshot?.role,
@@ -570,6 +608,7 @@ export class WorkDeclarationService {
   // ══════════════════════════════════════════════════════════
 
   async upsertTenantConfig(tenantId: string, dto: UpsertTenantConfigDto) {
+    tenantId = await this.resolveTenantId(tenantId);
     return this.prisma.declarationTenantConfig.upsert({
       where: { tenantId },
       create: { tenantId, ...dto },
@@ -578,6 +617,7 @@ export class WorkDeclarationService {
   }
 
   async getTenantConfig(tenantId: string) {
+    tenantId = await this.resolveTenantId(tenantId);
     return this.prisma.declarationTenantConfig.findUnique({
       where: { tenantId },
     });
@@ -588,6 +628,7 @@ export class WorkDeclarationService {
   // ══════════════════════════════════════════════════════════
 
   async getAuditLogs(tenantId: string, declarationId: string) {
+    tenantId = await this.resolveTenantId(tenantId);
     await this.findDeclarationOrThrow(tenantId, declarationId);
     return this.prisma.declarationAuditLog.findMany({
       where: { declarationId },
@@ -601,6 +642,7 @@ export class WorkDeclarationService {
   // ══════════════════════════════════════════════════════════
 
   async getStats(tenantId: string) {
+    tenantId = await this.resolveTenantId(tenantId);
     const [total, byStatus, byType, recentActivity] = await Promise.all([
       this.prisma.declaration.count({ where: { tenantId } }),
       this.prisma.declaration.groupBy({
@@ -630,9 +672,9 @@ export class WorkDeclarationService {
   // MÉTODOS PRIVADOS
   // ══════════════════════════════════════════════════════════
 
-  private async findTemplateOrThrow(tenantId: string, templateId: string) {
+  private async findTemplateOrThrow(tenantId: string, templateId: number) {
     const template = await this.prisma.declarationTemplate.findFirst({
-      where: { id: templateId as any, tenantId },
+      where: { id: templateId, tenantId },
     });
     if (!template) throw new NotFoundException('Template não encontrado.');
     return template;
@@ -717,9 +759,9 @@ export class WorkDeclarationService {
     return titles[type]?.[locale ?? 'PT'] ?? templateName;
   }
 
-  private async buildEmployeeSnapshot(employeeId: string, tenantId: string) {
+  private async buildEmployeeSnapshot(employeeId: number, tenantId: string) {
     const employee = await this.prisma.user.findFirst({
-      where: { id: employeeId as any },
+      where: { id: employeeId },
       include: {
         department: true,
         position: true,
@@ -733,8 +775,8 @@ export class WorkDeclarationService {
       email: emp.email,
       role: emp.position?.name ?? '',
       department: emp.department?.name ?? '',
-      admissionDate: emp.admissionDate ?? null,
-      nationalId: emp.nationalId ?? null,
+      admissionDate: emp.hireDate ?? null,
+      nationalId: emp.nif ?? null,
     };
   }
 
@@ -852,7 +894,7 @@ export class WorkDeclarationService {
 
   private async createAuditLog(
     declarationId: string,
-    actorId: string,
+    actorId: number,
     action: string,
     fromStatus: string | null,
     toStatus: string | null,
@@ -861,7 +903,7 @@ export class WorkDeclarationService {
     await this.prisma.declarationAuditLog.create({
       data: {
         declarationId,
-        actorId: actorId as any,
+        actorId,
         action,
         fromStatus: fromStatus as any,
         toStatus: toStatus as any,

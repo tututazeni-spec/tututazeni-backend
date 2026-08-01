@@ -15,6 +15,7 @@ import { LeaderService } from './leader.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 import {
   CreateLeaderProfileDto,
   GiveFeedbackDto,
@@ -24,8 +25,8 @@ import {
   Complete1on1Dto,
 } from './leader.dto';
 
-const ALL_MGMT = ['ADMIN', 'RH', 'LIDER', 'DIRECTOR'] as const;
-const ADMIN = ['ADMIN', 'RH'] as const;
+const ALL_MGMT = [Role.ADMIN, Role.RH, Role.LIDER, Role.DIRECTOR, Role.GESTOR] as const;
+const ADMIN = [Role.ADMIN, Role.RH] as const;
 
 @ApiTags('Leader — Team Management')
 @ApiBearerAuth()
@@ -148,8 +149,10 @@ export class LeaderController {
   }
 
   @Patch('1on1/:id/complete')
-  @Roles(...ALL_MGMT)
-  @ApiOperation({ summary: 'Concluir reunião 1:1 com notas/actas' })
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({
+    summary: 'Concluir reunião 1:1 com notas/actas (dono: host, participante, ADMIN/RH)',
+  })
   complete1on1(
     @CurrentUser() user: CurrentUserData,
     @Param('id', ParseIntPipe) id: number,

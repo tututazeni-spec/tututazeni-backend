@@ -1,37 +1,29 @@
 import { Controller, Post, Body, Param, Patch, Get, ParseIntPipe } from '@nestjs/common';
 import { MobileService } from './mobile.service';
 import { CurrentUser, CurrentUserData } from '../common/decorators';
+import { RegisterSessionDto, UpdatePushTokenDto, LogSyncDto } from './mobile.dto';
 
 @Controller('mobile')
 export class MobileController {
   constructor(private mobileService: MobileService) {}
 
   @Post('session')
-  registerSession(
-    @Body('deviceId') deviceId: string,
-    @Body('platform') platform: string,
-    @CurrentUser() user: CurrentUserData,
-    @Body('pushToken') pushToken?: string,
-  ) {
-    return this.mobileService.registerSession(user.id, deviceId, platform, pushToken);
+  registerSession(@Body() dto: RegisterSessionDto, @CurrentUser() user: CurrentUserData) {
+    return this.mobileService.registerSession(user.id, dto.deviceId, dto.platform, dto.pushToken);
   }
 
   @Patch('session/:id/push-token')
   updatePushToken(
     @Param('id', ParseIntPipe) id: number,
-    @Body('pushToken') pushToken: string,
+    @Body() dto: UpdatePushTokenDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.mobileService.updatePushToken(id, pushToken, user.id);
+    return this.mobileService.updatePushToken(id, dto.pushToken, user.id);
   }
 
   @Post('sync-log')
-  logSync(
-    @Body('entity') entity: string,
-    @Body('status') status: 'SUCCESS' | 'FAILED',
-    @CurrentUser() user: CurrentUserData,
-  ) {
-    return this.mobileService.logSync(user.id, entity, status);
+  logSync(@Body() dto: LogSyncDto, @CurrentUser() user: CurrentUserData) {
+    return this.mobileService.logSync(user.id, dto.entity, dto.status);
   }
 
   @Get('dashboard')

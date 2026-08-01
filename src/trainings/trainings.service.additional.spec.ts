@@ -36,6 +36,7 @@ const mockPrisma = {
   trainingParticipant: {
     findFirst: makeFind(null),
     create: makeFind({ id: 1, userId: 1, sessionId: 1, status: 'CONFIRMED' }),
+    upsert: makeFind({ id: 1, userId: 1, sessionId: 1, status: 'CONFIRMED' }),
     findMany: makeFindMany([]),
     update: makeFind({}),
     count: makeCount(0),

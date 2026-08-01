@@ -23,12 +23,11 @@ import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.valid
 // ─── Enums espelhados do Prisma ──────────────────────────────
 export enum DeclarationStatus {
   DRAFT = 'DRAFT',
-  PENDING = 'PENDING',
+  PENDING_SIGNATURE = 'PENDING_SIGNATURE',
   SIGNED = 'SIGNED',
   ISSUED = 'ISSUED',
   EXPIRED = 'EXPIRED',
   REVOKED = 'REVOKED',
-  GENERATED = 'GENERATED',
 }
 
 export enum DeclarationType {
@@ -151,13 +150,14 @@ export class UpdateDeclarationTemplateDto {
 }
 
 export class TemplatePreviewDto {
-  @IsString()
-  @IsNotEmpty()
-  templateId: string;
+  @IsInt()
+  @Type(() => Number)
+  templateId: number;
 
   @IsOptional()
-  @IsString()
-  employeeId?: string; // usa dados reais para preview
+  @IsInt()
+  @Type(() => Number)
+  employeeId?: number; // usa dados reais para preview
 
   @IsOptional()
   @IsObject()
@@ -169,9 +169,9 @@ export class TemplatePreviewDto {
 // ────────────────────────────────────────────────────────────
 
 export class RequestDeclarationDto {
-  @IsString()
-  @IsNotEmpty()
-  templateId: string;
+  @IsInt()
+  @Type(() => Number)
+  templateId: number;
 
   @IsEnum(DeclarationType)
   type: DeclarationType;
@@ -203,24 +203,14 @@ export class RequestDeclarationDto {
   requestNotes?: string;
 }
 
-export class DeclarationFilterDto {
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
-  @ApiPropertyOptional() @IsOptional() @IsEnum(DeclarationType) type?: DeclarationType;
-  @ApiPropertyOptional() @IsOptional() @IsEnum(DeclarationStatus) status?: DeclarationStatus;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
-}
-
-export { DeclarationFilterDto as FilterDeclarationsDto };
-
 export class CreateDeclarationDto {
-  @IsString()
-  @IsNotEmpty()
-  templateId: string;
+  @IsInt()
+  @Type(() => Number)
+  templateId: number;
 
-  @IsString()
-  @IsNotEmpty()
-  employeeId: string;
+  @IsInt()
+  @Type(() => Number)
+  employeeId: number;
 
   @IsEnum(DeclarationType)
   type: DeclarationType;
@@ -290,8 +280,9 @@ export class UpdateDeclarationDto {
   internalNotes?: string;
 
   @IsOptional()
-  @IsString()
-  assignedToId?: string;
+  @IsInt()
+  @Type(() => Number)
+  assignedToId?: number;
 }
 
 export class ChangeDeclarationStatusDto {
@@ -359,12 +350,14 @@ export class DeclarationQueryDto {
   type?: DeclarationType;
 
   @IsOptional()
-  @IsString()
-  employeeId?: string;
+  @IsInt()
+  @Type(() => Number)
+  employeeId?: number;
 
   @IsOptional()
-  @IsString()
-  assignedToId?: string;
+  @IsInt()
+  @Type(() => Number)
+  assignedToId?: number;
 
   @IsOptional()
   @IsDateString()

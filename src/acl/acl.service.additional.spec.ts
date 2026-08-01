@@ -179,9 +179,17 @@ describe('AclService (additional)', () => {
   // ─── revokePermissionFromRole ──────────────────────────────────
 
   describe('revokePermissionFromRole', () => {
-    it('deve revogar permissão do role', async () => {
-      mockPrisma.role.update.mockResolvedValue({ ...baseRole, permissions: [] });
+    it('deve reatribuir a permissão ao role ADMIN (Permission.roleId é required)', async () => {
+      mockPrisma.role.findFirst.mockResolvedValue({ ...baseRole, id: 9, name: 'ADMIN' });
+      mockPrisma.permission.update.mockResolvedValue({ ...basePerm, roleId: 9 });
+      mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, permissions: [] });
+
       const result = await service.revokePermissionFromRole(1, 1);
+
+      expect(mockPrisma.permission.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { roleId: 9 },
+      });
       expect(result).toBeDefined();
     });
   });

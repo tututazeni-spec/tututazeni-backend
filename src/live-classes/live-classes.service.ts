@@ -89,6 +89,10 @@ export class LiveClassesService {
   }
 
   async leaveClass(liveClassId: number, userId: number) {
+    const existing = await this.prisma.liveAttendance.findUnique({
+      where: { liveClassId_userId: { liveClassId, userId } },
+    });
+    if (!existing) throw new NotFoundException('Não está inscrito nesta aula');
     return this.prisma.liveAttendance.update({
       where: { liveClassId_userId: { liveClassId, userId } },
       data: { leftAt: new Date() },

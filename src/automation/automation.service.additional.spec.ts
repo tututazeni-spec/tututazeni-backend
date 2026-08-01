@@ -34,6 +34,10 @@ const mockPrisma: any = {
   badgeAward: { create: jest.fn().mockResolvedValue({}) },
   developmentPlan: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { upsert: jest.fn().mockResolvedValue({}) },
+  tenantConfig: {
+    findFirst: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
+    create: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
+  },
 };
 
 const baseRule = {

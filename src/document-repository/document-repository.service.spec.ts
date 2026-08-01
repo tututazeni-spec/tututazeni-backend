@@ -33,6 +33,7 @@ const mockPrisma = {
     findUnique: jest.fn(),
   },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
+  user: { findUnique: jest.fn().mockResolvedValue(null) },
 };
 
 const baseDoc = {

@@ -8,11 +8,20 @@ import { GlobalSearchDto, TypedSearchDto, SearchEntityType } from './search.dto'
 const iLike = (q: string) => ({ contains: q, mode: 'insensitive' as const });
 
 function safeM(prisma: any, name: string) {
+  // Stub tinha de cobrir TODOS os métodos realmente chamados contra
+  // `searchHistory` (modelo que não existe em prisma/schema.prisma — todo o
+  // histórico de pesquisa é, e sempre foi, um no-op silencioso). Faltavam
+  // create/deleteMany/groupBy — chamá-los rebentava com "is not a function",
+  // um TypeError síncrono que nunca chega a atingir o .catch() encadeado
+  // (só intercepta promises rejeitadas, não uma propriedade inexistente).
   return (
     prisma[name] ?? {
       findMany: async () => [],
       count: async () => 0,
       findFirst: async () => null,
+      create: async () => ({}),
+      deleteMany: async () => ({ count: 0 }),
+      groupBy: async () => [],
     }
   );
 }
@@ -78,18 +87,23 @@ export class SearchService {
     const fetchers: Promise<any[]>[] = [];
 
     if (types.includes(SearchEntityType.USER))
-      fetchers.push(this.searchUsers(q, { limit, departmentId: dto.departmentId }));
+      fetchers.push(
+        this.searchUsers(q, { limit, departmentId: dto.departmentId, activeOnly: dto.activeOnly }),
+      );
     else fetchers.push(Promise.resolve([]));
 
     if (types.includes(SearchEntityType.COURSE))
-      fetchers.push(this.searchCourses(q, { limit, category: dto.category }));
+      fetchers.push(
+        this.searchCourses(q, { limit, category: dto.category, activeOnly: dto.activeOnly }),
+      );
     else fetchers.push(Promise.resolve([]));
 
     if (types.includes(SearchEntityType.DOCUMENT))
       fetchers.push(this.searchDocuments(q, { limit }));
     else fetchers.push(Promise.resolve([]));
 
-    if (types.includes(SearchEntityType.CONTENT)) fetchers.push(this.searchContent(q, { limit }));
+    if (types.includes(SearchEntityType.CONTENT))
+      fetchers.push(this.searchContent(q, { limit, activeOnly: dto.activeOnly }));
     else fetchers.push(Promise.resolve([]));
 
     if (types.includes(SearchEntityType.PDI)) fetchers.push(this.searchPdis(q, { limit, userId }));
@@ -100,7 +114,7 @@ export class SearchService {
     else fetchers.push(Promise.resolve([]));
 
     if (types.includes(SearchEntityType.SCENARIO))
-      fetchers.push(this.searchScenarios(q, { limit }));
+      fetchers.push(this.searchScenarios(q, { limit, activeOnly: dto.activeOnly }));
     else fetchers.push(Promise.resolve([]));
 
     const [users, courses, documents, content, pdis, competencies, scenarios] =
@@ -147,7 +161,7 @@ export class SearchService {
 
   private async searchUsers(
     q: string,
-    opts: { limit: number; departmentId?: number },
+    opts: { limit: number; departmentId?: number; activeOnly?: boolean },
   ): Promise<any[]> {
     const where: any = {
       OR: [
@@ -156,8 +170,11 @@ export class SearchService {
         { position: { name: iLike(q) } },
         { department: { name: iLike(q) } },
       ],
-      active: true,
     };
+    // activeOnly era aceite pelo GlobalSearchDto mas nunca lido — `active`
+    // estava sempre hardcoded a true, tornando impossível pesquisar
+    // colaboradores inactivos mesmo pedindo explicitamente activeOnly=false.
+    if (opts.activeOnly !== false) where.active = true;
     if (opts.departmentId) where.departmentId = opts.departmentId;
 
     const users = await this.prisma.read.user.findMany({
@@ -188,12 +205,17 @@ export class SearchService {
 
   private async searchCourses(
     q: string,
-    opts: { limit: number; category?: string },
+    opts: { limit: number; category?: string; activeOnly?: boolean },
   ): Promise<any[]> {
     const where: any = {
       OR: [{ title: iLike(q) }, { description: iLike(q) }, { category: iLike(q) }],
-      active: true,
     };
+    // Course não tem coluna `active` — o estado real é `status` (String,
+    // convenção DRAFT/PUBLISHED/ARCHIVED usada em todo o módulo courses).
+    // Sem catch() nesta query, isto rebentava sempre (500 incondicional) em
+    // qualquer pesquisa que envolvesse cursos: global search, /search/courses,
+    // autocomplete e /search/suggestions (as três últimas corrigidas abaixo).
+    if (opts.activeOnly !== false) where.status = 'PUBLISHED';
     if (opts.category) where.category = opts.category;
 
     const courses = await this.prisma.course.findMany({
@@ -222,10 +244,22 @@ export class SearchService {
   }
 
   private async searchDocuments(q: string, opts: { limit: number }): Promise<any[]> {
+    // KnowledgeArticle não tem campo `description` (é `summary`) nem `tags`
+    // como coluna escalar (é a relação KnowledgeTag[]) — esta query rebentava
+    // sempre a nível do Prisma; o .catch() escondia-o silenciosamente,
+    // tornando a pesquisa de documentos permanentemente muda (0 resultados,
+    // sem erro visível) desde sempre.
     const articles = await safeM(this.prisma, 'knowledgeArticle')
       .findMany({
-        where: { OR: [{ title: iLike(q) }, { description: iLike(q) }, { tags: iLike(q) }] },
-        select: { id: true, title: true, description: true, category: true },
+        where: {
+          OR: [{ title: iLike(q) }, { summary: iLike(q) }, { tags: { some: { name: iLike(q) } } }],
+        },
+        select: {
+          id: true,
+          title: true,
+          summary: true,
+          category: { select: { name: true } },
+        },
         take: opts.limit,
       })
       .catch(e => {
@@ -243,16 +277,21 @@ export class SearchService {
         SearchEntityType.DOCUMENT,
         d.id,
         d.title,
-        d.description ?? d.category ?? '',
+        d.summary ?? d.category?.name ?? '',
         {},
         `/knowledge/${d.id}`,
       ),
     );
   }
 
-  private async searchContent(q: string, opts: { limit: number }): Promise<any[]> {
+  private async searchContent(
+    q: string,
+    opts: { limit: number; activeOnly?: boolean },
+  ): Promise<any[]> {
+    const where: any = { OR: [{ title: iLike(q) }, { description: iLike(q) }] };
+    if (opts.activeOnly !== false) where.active = true;
     const assets = await (this.prisma as any).contentAsset.findMany({
-      where: { OR: [{ title: iLike(q) }, { description: iLike(q) }], active: true },
+      where,
       select: { id: true, title: true, type: true, description: true, thumbnailUrl: true },
       take: opts.limit,
     });
@@ -326,10 +365,15 @@ export class SearchService {
     );
   }
 
-  private async searchScenarios(q: string, opts: { limit: number }): Promise<any[]> {
+  private async searchScenarios(
+    q: string,
+    opts: { limit: number; activeOnly?: boolean },
+  ): Promise<any[]> {
+    const where: any = { OR: [{ title: iLike(q) }, { description: iLike(q) }] };
+    if (opts.activeOnly !== false) where.active = true;
     const scenarios = await (this.prisma as any).avatarScenario
       .findMany({
-        where: { OR: [{ title: iLike(q) }, { description: iLike(q) }], active: true },
+        where,
         select: { id: true, title: true, category: true, difficulty: true },
         take: opts.limit,
       })
@@ -417,7 +461,7 @@ export class SearchService {
         take: limit,
       }),
       (this.prisma as any).course.findMany({
-        where: { title: iLike(q), active: true },
+        where: { title: iLike(q), status: 'PUBLISHED' },
         select: { title: true },
         take: limit,
       }),
@@ -489,16 +533,20 @@ export class SearchService {
       .then(es => es.map(e => e.courseId));
 
     const suggestedCourses = await (this.prisma as any).course.findMany({
-      where: { active: true, id: { notIn: enrolled } },
+      where: { status: 'PUBLISHED', id: { notIn: enrolled } },
       select: { id: true, title: true, category: true, thumbnailUrl: true },
       take: 5,
     });
 
-    // Popular content
+    // Popular content — ContentAsset não tem nenhuma coluna de contagem de
+    // vistas (nem `viewCount` nem equivalente); sem catch() nesta query,
+    // rebentava sempre (500 incondicional). Sem uma métrica real de
+    // popularidade disponível, usa-se recência como proxy em vez de
+    // inventar uma coluna que não existe.
     const popularContent = await (this.prisma as any).contentAsset.findMany({
       where: { active: true },
       select: { id: true, title: true, type: true },
-      orderBy: { viewCount: 'desc' },
+      orderBy: { createdAt: 'desc' },
       take: 5,
     });
 

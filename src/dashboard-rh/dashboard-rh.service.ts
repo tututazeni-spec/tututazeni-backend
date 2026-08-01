@@ -254,7 +254,7 @@ export class DashboardRhService {
       }),
       this.prisma.position.findMany({
         select: { id: true, name: true, level: true, _count: { select: { users: true } } },
-        orderBy: { _count: { users: 'desc' } } as any,
+        orderBy: { users: { _count: 'desc' } },
         take: 10,
       }),
       this.prisma.user
@@ -1218,22 +1218,15 @@ export class DashboardRhService {
   // ══════════════════════════════════════════════════════
 
   async getPayrollPanel(period: string) {
-    const records = await this.prisma.read.historyRecord.findMany({
-      where: { action: 'PAYSLIP', description: { contains: `"period":"${period}"` } },
+    const payslips = await this.prisma.read.payslip.findMany({
+      where: { period },
       include: { user: { select: { id: true, fullName: true, department: true } } },
     });
-    const payslips = records.map(r => {
-      try {
-        return { ...r, ...JSON.parse(r.description ?? '{}') };
-      } catch {
-        return r as any;
-      }
-    });
     const totals = payslips.reduce(
-      (acc: any, p: any) => ({
-        gross: acc.gross + (p.grossSalary ?? 0),
-        net: acc.net + (p.netSalary ?? 0),
-        deduct: acc.deduct + (p.totalDeductions ?? 0),
+      (acc, p) => ({
+        gross: acc.gross + p.grossSalary,
+        net: acc.net + p.netSalary,
+        deduct: acc.deduct + p.totalDeductions,
       }),
       { gross: 0, net: 0, deduct: 0 },
     );

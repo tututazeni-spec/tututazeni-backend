@@ -226,9 +226,10 @@ export class EventsService {
       throw new ConflictException('Já inscrito neste evento');
     }
 
-    // Verificar capacidade
+    // Verificar capacidade — PRESENT também ocupa vaga (colaborador já fez check-in);
+    // sem isto, assim que alguém fazia check-in deixava de contar para a lotação.
     const participantCount = await this.prisma.read.eventParticipant.count({
-      where: { eventId, status: { in: ['PENDING', 'CONFIRMED'] } },
+      where: { eventId, status: { in: ['PENDING', 'CONFIRMED', 'PRESENT'] } },
     });
 
     let status: ParticipantStatus = ParticipantStatus.CONFIRMED;

@@ -20,6 +20,7 @@ import {
   IsPositive,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { Type, Transform } from 'class-transformer';
 
 // -------------------------------------------------------
 // ENUMS (espelhar do Prisma)
@@ -149,7 +150,9 @@ export class CreateIntegrationConfigDto {
 export class UpdateIntegrationConfigDto extends PartialType(CreateIntegrationConfigDto) {}
 
 export class TriggerSyncDto {
-  @ApiProperty() @IsString() @IsNotEmpty() integrationId: string;
+  // IntegrationConfig.id é Int (autoincrement), não String — ver
+  // [[project-innova-schema-code-drift]] (entrada scalability).
+  @ApiProperty() @IsInt() integrationId: number;
 }
 
 // -------------------------------------------------------
@@ -183,7 +186,8 @@ export class CreateAutomationRuleDto {
 export class UpdateAutomationRuleDto extends PartialType(CreateAutomationRuleDto) {}
 
 export class ExecuteAutomationRuleDto {
-  @ApiProperty() @IsString() @IsNotEmpty() ruleId: string;
+  // AutomationRule.id é Int (autoincrement), não String.
+  @ApiProperty() @IsInt() ruleId: number;
   @ApiPropertyOptional() @IsOptional() @IsString() targetUserId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() triggeredBy?: string;
 }
@@ -297,7 +301,17 @@ export class AlertsQueryDto {
   @IsOptional()
   @IsEnum(AlertCategory)
   category?: AlertCategory;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() isResolved?: boolean;
+  // @Type(() => Boolean) (implícito ou explícito) sob enableImplicitConversion
+  // coage '?isResolved=false' para true (Boolean('false') === true em JS) —
+  // ver [[project-innova-boolean-query-filter-coercion]]. @Type(() => String)
+  // faz o class-transformer saltar a coerção Boolean e passar a string crua
+  // para o @Transform, que então decide correctamente.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isResolved?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(200) limit?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) offset?: number;
 }
