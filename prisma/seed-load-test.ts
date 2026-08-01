@@ -30,8 +30,8 @@ async function main() {
   const passwordHash = await bcrypt.hash(TEST_PASSWORD, 4);
 
   // ── 1. Roles ─────────────────────────────────────────────────────────────
-  // Valores reais confirmados nos controllers: COLABORADOR, GESTOR, RH, ADMIN
-  const roleNames = ['COLABORADOR', 'GESTOR', 'RH', 'ADMIN'];
+  // Valores reais confirmados nos controllers: COLABORADOR, GESTOR, LIDER, RH, ADMIN
+  const roleNames = ['COLABORADOR', 'GESTOR', 'LIDER', 'RH', 'ADMIN'];
   const roleMap: Record<string, { id: number }> = {};
 
   for (const name of roleNames) {
@@ -60,13 +60,16 @@ async function main() {
 
   console.log(`\n⏳ A criar ${TOTAL_USERS} utilizadores...`);
   for (let i = 1; i <= TOTAL_USERS; i++) {
-    const roleName = i <= 10 ? 'ADMIN' : i <= 30 ? 'RH' : i <= 50 ? 'GESTOR' : 'COLABORADOR';
+    const roleName = i <= 10 ? 'ADMIN' : i <= 30 ? 'RH' : i <= 50 ? 'GESTOR' : i <= 70 ? 'LIDER' : 'COLABORADOR';
 
     const email = `load.test.user${i}@innova-test.com`;
 
     const user = await prisma.user.upsert({
       where: { email },
-      update: { password: passwordHash }, // actualiza hash para rounds=4
+      // roleId incluído para re-seeds idempotentes: sem isto, correr o seed
+      // depois de mudar os limiares de role (ex. adicionar LIDER) não move os
+      // utilizadores já existentes para a role nova — só actualizava a password.
+      update: { password: passwordHash, roleId: roleMap[roleName].id },
       create: {
         email,
         fullName: `Utilizador Teste ${i}`,
