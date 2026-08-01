@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
+import { CacheService } from '../cache/cache.service';
 import * as crypto from 'crypto';
 import {
   AttendanceFilterDto,
@@ -33,7 +34,10 @@ import {
   OvertimeStatus,
 } from './attendance.dto';
 
-const qrStore = new Map<string, { userId?: number; payload: any; expiresAt: number }>();
+interface QrEntry { userId?: number; payload: any; expiresAt: number }
+function qrKey(token: string): string {
+  return `attendance:qr:${token}`;
+}
 
 function parseTime(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
@@ -84,6 +88,7 @@ export class AttendanceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly cache: CacheService,
   ) {}
 
   async findAll(filters: AttendanceFilterDto) {
@@ -635,17 +640,24 @@ export class AttendanceService {
     const ttl = dto.ttlSeconds ?? 30;
     const expiresAt = Date.now() + ttl * 1000;
 
-    qrStore.set(token, {
-      payload: {
-        context: dto.context ?? AttendanceContext.WORK,
-        eventId: dto.eventId,
-        sessionId: dto.sessionId,
-        requireGeolocation: dto.requireGeolocation ?? false,
-        generatedById: generatorId,
-        generatedAt: new Date().toISOString(),
+    // TTL do Redis com folga sobre `expiresAt` — a expiração de negócio é sempre
+    // decidida pelo campo `expiresAt`, o Redis só garante que a chave não fica
+    // pendurada para sempre se nunca for validada.
+    await this.cache.set<QrEntry>(
+      qrKey(token),
+      {
+        payload: {
+          context: dto.context ?? AttendanceContext.WORK,
+          eventId: dto.eventId,
+          sessionId: dto.sessionId,
+          requireGeolocation: dto.requireGeolocation ?? false,
+          generatedById: generatorId,
+          generatedAt: new Date().toISOString(),
+        },
+        expiresAt,
       },
-      expiresAt,
-    });
+      ttl + 5,
+    );
 
     return { token, expiresAt: new Date(expiresAt).toISOString(), ttlSeconds: ttl };
   }
@@ -655,10 +667,11 @@ export class AttendanceService {
     userId: number,
     location?: { latitude: number; longitude: number },
   ) {
-    const entry = qrStore.get(token);
+    const key = qrKey(token);
+    const entry = await this.cache.get<QrEntry>(key);
     if (!entry) throw new BadRequestException('QR code inválido ou já utilizado');
     if (Date.now() > entry.expiresAt) {
-      qrStore.delete(token);
+      await this.cache.del(key);
       throw new BadRequestException('QR code expirado');
     }
     if (entry.userId && entry.userId !== userId)
@@ -666,7 +679,7 @@ export class AttendanceService {
     if (entry.payload.requireGeolocation && !location)
       throw new BadRequestException('Geolocalização obrigatória para este QR code');
 
-    qrStore.delete(token);
+    await this.cache.del(key);
     return entry.payload;
   }
 

@@ -3,6 +3,7 @@ import { NotFoundException, ConflictException } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
+import { CacheService } from '../cache/cache.service';
 import { AttendanceStatus, AttendanceContext } from './attendance.dto';
 
 const mockAttendanceRecord = {
@@ -69,6 +70,15 @@ const mockPrismaProxy = new Proxy(mockPrisma, {
 
 const mockAudit = { log: jest.fn().mockResolvedValue({}) };
 
+function buildMockCache() {
+  const store = new Map<string, unknown>();
+  return {
+    get: jest.fn((key: string) => Promise.resolve(store.has(key) ? store.get(key) : null)),
+    set: jest.fn((key: string, value: unknown) => { store.set(key, value); return Promise.resolve(); }),
+    del: jest.fn((key: string) => { store.delete(key); return Promise.resolve(); }),
+  };
+}
+
 const baseRecord = {
   id: 1,
   userId: 1,
@@ -99,6 +109,7 @@ describe('AttendanceService', () => {
         AttendanceService,
         { provide: PrismaService, useValue: mockPrismaProxy },
         { provide: AuditService, useValue: mockAudit },
+        { provide: CacheService, useValue: buildMockCache() },
       ],
     }).compile();
     service = module.get<AttendanceService>(AttendanceService);

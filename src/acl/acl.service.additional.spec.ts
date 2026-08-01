@@ -1,6 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AclService } from './acl.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
+
+function buildMockCache() {
+  const store = new Map<string, unknown>();
+  return {
+    get: jest.fn((key: string) => Promise.resolve(store.has(key) ? store.get(key) : null)),
+    set: jest.fn((key: string, value: unknown) => { store.set(key, value); return Promise.resolve(); }),
+    del: jest.fn((key: string) => { store.delete(key); return Promise.resolve(); }),
+  };
+}
 
 const mockPrisma = {
   permission: {
@@ -63,7 +73,11 @@ describe('AclService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AclService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        AclService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CacheService, useValue: buildMockCache() },
+      ],
     }).compile();
     service = module.get<AclService>(AclService);
   });

@@ -1,6 +1,7 @@
 // src/acl/acl.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
 import {
   CreatePermissionDto,
   BulkAssignPermissionsDto,
@@ -12,27 +13,14 @@ import {
   AclAuditFilterDto,
 } from './acl.dto';
 
-// ─── In-memory permission cache (production: replace with Redis) ──
+// ─── Permission cache (Redis via CacheService — antes era um Map em memória do
+// processo, o que dava permissões desactualizadas noutras instâncias após uma
+// mudança de role, em qualquer deployment com mais do que 1 réplica) ──
 
-const permCache = new Map<number, { permissions: string[]; roleCode: string; cachedAt: number }>();
-const CACHE_TTL = 60000; // 1 min
+const PERM_CACHE_TTL_SECONDS = 60;
 
-function cacheGet(userId: number) {
-  const entry = permCache.get(userId);
-  if (!entry) return null;
-  if (Date.now() - entry.cachedAt > CACHE_TTL) {
-    permCache.delete(userId);
-    return null;
-  }
-  return entry;
-}
-
-function cachePut(userId: number, permissions: string[], roleCode: string) {
-  permCache.set(userId, { permissions, roleCode, cachedAt: Date.now() });
-}
-
-function cacheInvalidate(userId: number) {
-  permCache.delete(userId);
+function permKey(userId: number): string {
+  return `acl:perm:${userId}`;
 }
 
 // ─── Built-in permission matrix ──────────────────────────────────
@@ -198,7 +186,10 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
 export class AclService {
   private readonly logger = new Logger(AclService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   // ══════════════════════════════════════════════════════
   // PERMISSIONS — CRUD
@@ -352,7 +343,7 @@ export class AclService {
       where: { id: dto.userId },
       data: { roleId: dto.roleId },
     });
-    cacheInvalidate(dto.userId);
+    await this.cache.del(permKey(dto.userId));
 
     await this.prisma.auditLog
       .create({
@@ -402,7 +393,9 @@ export class AclService {
 
   async getUserPermissions(userId: number) {
     // Check cache first
-    const cached = cacheGet(userId);
+    const cached = await this.cache.get<{ permissions: string[]; roleCode: string }>(
+      permKey(userId),
+    );
     if (cached)
       return { userId, roleCode: cached.roleCode, permissions: cached.permissions, cached: true };
 
@@ -420,7 +413,7 @@ export class AclService {
         ? ['*', ...BUILTIN_PERMISSIONS.map(p => p.name)]
         : permissions;
 
-    cachePut(userId, effective, roleCode);
+    await this.cache.set(permKey(userId), { permissions: effective, roleCode }, PERM_CACHE_TTL_SECONDS);
     return { userId, roleCode, permissions: effective, cached: false };
   }
 
