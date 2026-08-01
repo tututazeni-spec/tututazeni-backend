@@ -78,6 +78,77 @@ describe('CacheService', () => {
   });
 });
 
+describe('CacheService.get/set/del', () => {
+  it('get: hit devolve o valor parseado e incrementa counter com hit', async () => {
+    const redis = { get: jest.fn().mockResolvedValue(JSON.stringify({ a: 1 })) } as any;
+    const counter = makeCounter();
+    const svc = new CacheService(redis, makeConfig(), counter, makeLogger());
+    await expect(svc.get('k')).resolves.toEqual({ a: 1 });
+    expect(counter.inc).toHaveBeenCalledWith({ result: 'hit' });
+  });
+
+  it('get: miss devolve null e incrementa counter com miss', async () => {
+    const redis = { get: jest.fn().mockResolvedValue(null) } as any;
+    const counter = makeCounter();
+    const svc = new CacheService(redis, makeConfig(), counter, makeLogger());
+    await expect(svc.get('k')).resolves.toBeNull();
+    expect(counter.inc).toHaveBeenCalledWith({ result: 'miss' });
+  });
+
+  it('get: CACHE_ENABLED=false devolve null sem tocar no redis', async () => {
+    const redis = { get: jest.fn() } as any;
+    const svc = new CacheService(redis, makeConfig('false'), makeCounter(), makeLogger());
+    await expect(svc.get('k')).resolves.toBeNull();
+    expect(redis.get).not.toHaveBeenCalled();
+  });
+
+  it('get: Redis em baixo devolve null em vez de rebentar', async () => {
+    const redis = { get: jest.fn().mockRejectedValue(new Error('down')) } as any;
+    const svc = new CacheService(redis, makeConfig(), makeCounter(), makeLogger());
+    await expect(svc.get('k')).resolves.toBeNull();
+  });
+
+  it('set: escreve com EX/ttl', async () => {
+    const redis = { set: jest.fn().mockResolvedValue('OK') } as any;
+    const svc = new CacheService(redis, makeConfig(), makeCounter(), makeLogger());
+    await svc.set('k', { a: 1 }, 60);
+    expect(redis.set).toHaveBeenCalledWith('k', JSON.stringify({ a: 1 }), 'EX', 60);
+  });
+
+  it('set: CACHE_ENABLED=false não toca no redis', async () => {
+    const redis = { set: jest.fn() } as any;
+    const svc = new CacheService(redis, makeConfig('false'), makeCounter(), makeLogger());
+    await svc.set('k', { a: 1 }, 60);
+    expect(redis.set).not.toHaveBeenCalled();
+  });
+
+  it('set: Redis em baixo não rebenta', async () => {
+    const redis = { set: jest.fn().mockRejectedValue(new Error('down')) } as any;
+    const svc = new CacheService(redis, makeConfig(), makeCounter(), makeLogger());
+    await expect(svc.set('k', { a: 1 }, 60)).resolves.toBeUndefined();
+  });
+
+  it('del: remove a chave', async () => {
+    const redis = { del: jest.fn().mockResolvedValue(1) } as any;
+    const svc = new CacheService(redis, makeConfig(), makeCounter(), makeLogger());
+    await svc.del('k');
+    expect(redis.del).toHaveBeenCalledWith('k');
+  });
+
+  it('del: CACHE_ENABLED=false não toca no redis', async () => {
+    const redis = { del: jest.fn() } as any;
+    const svc = new CacheService(redis, makeConfig('false'), makeCounter(), makeLogger());
+    await svc.del('k');
+    expect(redis.del).not.toHaveBeenCalled();
+  });
+
+  it('del: Redis em baixo não rebenta', async () => {
+    const redis = { del: jest.fn().mockRejectedValue(new Error('down')) } as any;
+    const svc = new CacheService(redis, makeConfig(), makeCounter(), makeLogger());
+    await expect(svc.del('k')).resolves.toBeUndefined();
+  });
+});
+
 function makeService(ping: jest.Mock) {
   const redis = { ping, quit: jest.fn().mockResolvedValue(undefined) } as any;
   const config = { get: jest.fn((_k: string, d?: string) => d) } as any;

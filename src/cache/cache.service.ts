@@ -53,6 +53,59 @@ export class CacheService implements OnModuleDestroy {
     return value;
   }
 
+  /** Lê um valor da cache. Devolve null em cache miss, flag off ou erro de Redis. */
+  async get<T>(key: string): Promise<T | null> {
+    if (!this.cacheEnabled) return null;
+    try {
+      const hit = await this.redis.get(key);
+      if (hit) {
+        this.cacheCounter.inc({ result: 'hit' });
+        return JSON.parse(hit) as T;
+      }
+      this.cacheCounter.inc({ result: 'miss' });
+      return null;
+    } catch (e) {
+      this.logger.warn({
+        op: 'get',
+        key,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'cache get falhou — a devolver null',
+      });
+      return null;
+    }
+  }
+
+  /** Escreve um valor na cache com TTL. Flag off ou Redis em baixo → no-op silencioso. */
+  async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
+    if (!this.cacheEnabled) return;
+    try {
+      await this.redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+    } catch (e) {
+      this.logger.warn({
+        op: 'set',
+        key,
+        ttlSeconds,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'cache set falhou — valor não foi cacheado',
+      });
+    }
+  }
+
+  /** Remove uma chave da cache (invalidação explícita). Flag off ou Redis em baixo → no-op silencioso. */
+  async del(key: string): Promise<void> {
+    if (!this.cacheEnabled) return;
+    try {
+      await this.redis.del(key);
+    } catch (e) {
+      this.logger.warn({
+        op: 'del',
+        key,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'cache del falhou',
+      });
+    }
+  }
+
   /** Verifica conectividade do Redis (health check). Rejeita se inacessível. */
   async ping(): Promise<void> {
     await this.redis.ping();
