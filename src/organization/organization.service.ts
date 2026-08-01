@@ -28,7 +28,7 @@ export class OrganizationService {
   // ─── ESTATÍSTICAS / DASHBOARD ─────────────────────────────────────────────
 
   async getStats() {
-    const [units, departments, positions, totalStaff, managers, activePositions] =
+    const [units, departments, positions, totalStaff, managers, activePositions, spanReport] =
       await Promise.all([
         this.prisma.read.unit.count(),
         this.prisma.read.department.count({ where: { status: 'ACTIVE' } }),
@@ -38,6 +38,7 @@ export class OrganizationService {
         this.prisma.read.position.findMany({
           select: { id: true, headcountPlanned: true, _count: { select: { users: true } } },
         }),
+        this.getSpanOfControlReport(),
       ]);
 
     // Headcount: ocupado vs planeado
@@ -84,13 +85,10 @@ export class OrganizationService {
         spanOfControl,
         managerCount: managerIds.length,
         maxHierarchyDepth: maxDepth,
-        managersOverloaded: await this.prisma.read.user.count({
-          where: {
-            active: true,
-            subordinates: { some: {} },
-            // gestores com >10 liderados directos
-          },
-        }),
+        // gestores com >10 liderados directos — reutiliza o mesmo cálculo já
+        // correcto de getSpanOfControlReport(); a query anterior aqui só
+        // contava gestores com PELO MENOS 1 liderado, nunca filtrando por >10.
+        managersOverloaded: spanReport.summary.overloaded,
       },
       topDepartments: deptDist,
     };
@@ -363,7 +361,11 @@ export class OrganizationService {
   async updatePosition(id: number, dto: UpdateOrgPositionDto) {
     const pos = await this.prisma.read.position.findUnique({ where: { id } });
     if (!pos) throw new NotFoundException('Posição não encontrada');
-    return this.prisma.position.update({ where: { id }, data: dto });
+    // competencyIds não é uma coluna do Position — a associação real é via o
+    // modelo PositionCompetency (que exige requiredLevel, não fornecido pelo
+    // DTO); aceite mas ainda não persistido, ver memória do módulo.
+    const { competencyIds, ...data } = dto;
+    return this.prisma.position.update({ where: { id }, data });
   }
 
   async deletePosition(id: number) {

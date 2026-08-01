@@ -27,9 +27,16 @@ export default async function globalSetup() {
       env: { ...process.env },
       stdio: 'pipe',
     });
-  } catch {
-    // Migrations may already be applied or DB temporarily unreachable — continue
-    console.log('ℹ️  migrate deploy skipped (already up to date)');
+  } catch (e: any) {
+    // `migrate deploy` exits 0 (no throw) when there's simply nothing pending —
+    // any throw here is a real problem (e.g. a previously failed migration
+    // blocking new ones, per P3009) and must not be swallowed: doing so lets
+    // the suite run against a stale/incomplete schema and fail confusingly
+    // downstream instead of here, with a clear cause.
+    console.error('❌ prisma migrate deploy falhou:');
+    console.error(e.stdout?.toString?.() ?? e.stdout);
+    console.error(e.stderr?.toString?.() ?? e.stderr);
+    throw e;
   }
 
   const prisma = createPrisma();

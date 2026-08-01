@@ -352,6 +352,10 @@ export class KnowledgeService {
         'Artigo obrigatório com confirmações não pode ser eliminado. Archive-o.',
       );
     }
+    // ArticleRating/ArticleQuestion/ArticleAcknowledgement não têm onDelete: Cascade no schema
+    await this.prisma.articleRating.deleteMany({ where: { articleId: id } });
+    await this.prisma.articleQuestion.deleteMany({ where: { articleId: id } });
+    await this.prisma.articleAcknowledgement.deleteMany({ where: { articleId: id } });
     await this.prisma.knowledgeArticle.delete({ where: { id } });
     return { message: 'Artigo eliminado' };
   }

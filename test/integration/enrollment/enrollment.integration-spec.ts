@@ -36,6 +36,17 @@ describe('Enrollment Integration', () => {
   });
 
   afterAll(async () => {
+    // INT-TEST-001 é o curso partilhado por vários specs (ver setup.ts) — sem
+    // esta limpeza, a auto-inscrição criada aqui sobrevive entre execuções e
+    // faz o teste "inscrição com sucesso" falhar sempre com 409 a partir da 2ª run.
+    const employee = await prisma.user.findUnique({
+      where: { email: 'int.employee@innova-test.com' },
+    });
+    if (employee) {
+      await prisma.enrollment
+        .deleteMany({ where: { userId: employee.id, courseId } })
+        .catch(() => undefined);
+    }
     await prisma.$disconnect();
     await pool.end();
     await app.close();
@@ -59,9 +70,7 @@ describe('Enrollment Integration', () => {
     });
 
     it('sem token → 401', async () => {
-      await request(app.getHttpServer())
-        .post(`/enrollments/self-enroll/${courseId}`)
-        .expect(401);
+      await request(app.getHttpServer()).post(`/enrollments/self-enroll/${courseId}`).expect(401);
     });
   });
 
@@ -72,7 +81,7 @@ describe('Enrollment Integration', () => {
         .set('Authorization', `Bearer ${employeeToken}`)
         .expect(200);
 
-      const items = Array.isArray(res.body) ? res.body : res.body.data ?? res.body;
+      const items = Array.isArray(res.body) ? res.body : (res.body.data ?? res.body);
       expect(items).toBeDefined();
     });
   });

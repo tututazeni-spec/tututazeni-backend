@@ -5,9 +5,10 @@ import { DashboardRhService } from './dashboard-rh.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 
-const ADMIN = ['ADMIN', 'RH', 'DIRECTOR'] as const;
-const MGMT = ['ADMIN', 'RH', 'DIRECTOR', 'LIDER'] as const;
+const ADMIN = [Role.ADMIN, Role.RH, Role.DIRECTOR] as const;
+const MGMT = [Role.ADMIN, Role.RH, Role.DIRECTOR, Role.LIDER, Role.GESTOR] as const;
 
 @ApiTags('Dashboard RH')
 @ApiBearerAuth()

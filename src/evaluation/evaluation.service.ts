@@ -514,10 +514,11 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async submitEvaluation(evaluatorId: number, dto: SubmitEvaluationDto) {
+    // EvaluationRequest não tem relação `cycle` (só o escalar cycleId) —
+    // incluir a relação rebentava sempre ("Unknown field cycle").
     const request = await (this.prisma as any).evaluationRequest
       .findUnique({
         where: { id: dto.requestId },
-        include: { cycle: true },
       })
       .catch((e: unknown) => {
         this.logger.warn({
@@ -597,22 +598,32 @@ export class EvaluationService {
       cycleId: request.cycleId,
     };
 
-    const evaluation = await (this.prisma as any).performanceEvaluation.upsert({
+    // PerformanceEvaluation não tem @@unique([evaluatorId, evaluatedId, type, period]) —
+    // upsert por essa chave composta rebentava sempre ("Unknown argument").
+    const existingEval = await this.prisma.performanceEvaluation.findFirst({
       where: {
-        evaluatorId_evaluatedId_type_period: {
-          evaluatorId,
-          evaluatedId: request.evaluatedId,
-          type: request.type,
-          period: evalData.period,
-        },
-      },
-      create: evalData as any,
-      update: evalData as any,
-      include: {
-        evaluator: { select: { id: true, fullName: true } },
-        evaluated: { select: { id: true, fullName: true } },
+        evaluatorId,
+        evaluatedId: request.evaluatedId,
+        type: request.type,
+        period: evalData.period,
       },
     });
+    const evaluation = existingEval
+      ? await this.prisma.performanceEvaluation.update({
+          where: { id: existingEval.id },
+          data: evalData as any,
+          include: {
+            evaluator: { select: { id: true, fullName: true } },
+            evaluated: { select: { id: true, fullName: true } },
+          },
+        })
+      : await this.prisma.performanceEvaluation.create({
+          data: evalData as any,
+          include: {
+            evaluator: { select: { id: true, fullName: true } },
+            evaluated: { select: { id: true, fullName: true } },
+          },
+        });
 
     // Mark request as completed
     if (!dto.isDraft) {
@@ -719,6 +730,9 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async getPendingEvaluations(evaluatorId: number) {
+    // EvaluationRequest não tem relação `cycle` (só o escalar cycleId) — este
+    // include rebentava sempre e era mascarado pelo .catch() abaixo, deixando
+    // /evaluations/pending permanentemente vazio para todos os utilizadores.
     return (this.prisma as any).evaluationRequest
       .findMany({
         where: { evaluatorId, status: 'PENDING' },
@@ -732,7 +746,6 @@ export class EvaluationService {
               department: { select: { name: true } },
             },
           },
-          cycle: { select: { id: true, name: true, endDate: true, model: true } },
         },
         orderBy: { dueDate: 'asc' },
       })
@@ -1316,7 +1329,7 @@ export class EvaluationService {
     // Create notification for manager to create PDI
     const user = await this.prisma.user
       .findUnique({
-        where: { evaluatedId } as any,
+        where: { id: evaluatedId },
         select: { id: true, fullName: true, managerId: true },
       })
       .catch((e: unknown) => {

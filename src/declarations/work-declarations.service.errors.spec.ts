@@ -79,14 +79,15 @@ describe('WorkDeclarationsService — submit (erros)', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('submissão REJECTED anterior permite nova submissão (não bloqueia)', async () => {
+  it('submissão REJECTED anterior permite nova submissão (não bloqueia, actualiza a mesma linha por causa do @@unique([userId, formId]))', async () => {
     mockPrisma.workDeclForm.findUnique.mockResolvedValue(activeForm);
     mockPrisma.workDeclSubmission.findFirst.mockResolvedValue({ id: 5, status: 'REJECTED' });
-    mockPrisma.workDeclSubmission.create.mockResolvedValue({ id: 6, status: 'SUBMITTED' });
+    mockPrisma.workDeclSubmission.update.mockResolvedValue({ id: 5, status: 'SUBMITTED' });
     await expect(
       service.submit(7, { formId: 1, answers: [{ key: 'q1', value: 'x' }] } as any),
     ).resolves.toBeDefined();
-    expect(mockPrisma.workDeclSubmission.create).toHaveBeenCalled();
+    expect(mockPrisma.workDeclSubmission.update).toHaveBeenCalled();
+    expect(mockPrisma.workDeclSubmission.create).not.toHaveBeenCalled();
   });
 
   it('faltam campos obrigatórios (sem saveAsDraft) → BadRequestException', async () => {

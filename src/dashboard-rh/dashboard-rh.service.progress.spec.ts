@@ -409,37 +409,32 @@ describe('DashboardRhService (progress)', () => {
 
   describe('getPayrollPanel', () => {
     it('deve retornar painel de folha salarial vazio', async () => {
-      mockPrisma.historyRecord.findMany.mockResolvedValue([]);
+      mockPrisma.payslip.findMany.mockResolvedValue([]);
       const result = (await service.getPayrollPanel('2026-06')) as any;
       expect(result.period).toBe('2026-06');
       expect(result.headcount).toBe(0);
       expect(result.totalGross).toBe(0);
     });
 
-    it('deve calcular totais salariais a partir de registos', async () => {
-      mockPrisma.historyRecord.findMany.mockResolvedValue([
+    it('deve calcular totais salariais a partir dos payslips reais do período', async () => {
+      mockPrisma.payslip.findMany.mockResolvedValue([
         {
-          action: 'PAYSLIP',
-          description: JSON.stringify({
-            period: '2026-06',
-            grossSalary: 2000,
-            netSalary: 1600,
-            totalDeductions: 400,
-          }),
+          grossSalary: 2000,
+          netSalary: 1600,
+          totalDeductions: 400,
           user: { id: 1, fullName: 'Ana', department: { name: 'TI' } },
         },
         {
-          action: 'PAYSLIP',
-          description: JSON.stringify({
-            period: '2026-06',
-            grossSalary: 3000,
-            netSalary: 2400,
-            totalDeductions: 600,
-          }),
+          grossSalary: 3000,
+          netSalary: 2400,
+          totalDeductions: 600,
           user: { id: 2, fullName: 'João', department: { name: 'RH' } },
         },
       ]);
       const result = (await service.getPayrollPanel('2026-06')) as any;
+      expect(mockPrisma.payslip.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { period: '2026-06' } }),
+      );
       expect(result.headcount).toBe(2);
       expect(result.totalGross).toBe(5000);
       expect(result.totalNet).toBe(4000);

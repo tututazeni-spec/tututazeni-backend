@@ -137,14 +137,14 @@ export class CreateUnitDto {
 
   @ApiProperty({ example: 'SEDE', description: 'Tipo: SEDE | DELEGACAO | AGENCIA' })
   @IsString()
-  tipo: string;
+  type: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   province?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Departamento a associar a esta unidade' })
   @IsOptional()
   @IsInt()
   departmentId?: number;
@@ -202,14 +202,20 @@ export class CreatePositionDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
-  department?: string;
+  @IsInt()
+  departmentId?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()
   @Min(0)
-  baseSalary?: number;
+  salaryMin?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  salaryMax?: number;
 }
 
 export class UpdatePositionDto extends PartialType(CreatePositionDto) {}
@@ -221,10 +227,9 @@ export class CreateCareerPositionDto {
   @IsString()
   title: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty()
   @IsString()
-  description?: string;
+  description: string;
 
   @ApiProperty({ example: 'JUNIOR' })
   @IsString()

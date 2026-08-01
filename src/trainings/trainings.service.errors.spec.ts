@@ -14,6 +14,7 @@ const mockPrisma = {
     findUnique: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
     create: jest.fn(),
+    upsert: jest.fn(),
     update: jest.fn().mockResolvedValue({}),
   },
   trainingSession: { findUnique: jest.fn() },
@@ -39,7 +40,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
     await expect(
       service.registerParticipant({ sessionId: 1, userId: 7 } as any),
     ).rejects.toBeInstanceOf(ConflictException);
-    expect(mockPrisma.trainingParticipant.create).not.toHaveBeenCalled();
+    expect(mockPrisma.trainingParticipant.upsert).not.toHaveBeenCalled();
   });
 
   it('sessão inexistente → NotFoundException', async () => {
@@ -61,7 +62,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
     await expect(
       service.registerParticipant({ sessionId: 1, userId: 7 } as any),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(mockPrisma.trainingParticipant.create).not.toHaveBeenCalled();
+    expect(mockPrisma.trainingParticipant.upsert).not.toHaveBeenCalled();
   });
 
   it('sessão lotada com lista de espera → status WAITLIST', async () => {
@@ -72,12 +73,12 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
       waitlistEnabled: true,
       _count: { participants: 2 },
     });
-    mockPrisma.trainingParticipant.create.mockResolvedValue({ id: 5, status: 'WAITLIST' });
+    mockPrisma.trainingParticipant.upsert.mockResolvedValue({ id: 5, status: 'WAITLIST' });
 
     await service.registerParticipant({ sessionId: 1, userId: 7 } as any);
 
-    expect(mockPrisma.trainingParticipant.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: 'WAITLIST' }) }),
+    expect(mockPrisma.trainingParticipant.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ status: 'WAITLIST' }) }),
     );
   });
 
@@ -89,12 +90,12 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
       waitlistEnabled: false,
       _count: { participants: 500 },
     });
-    mockPrisma.trainingParticipant.create.mockResolvedValue({ id: 5, status: 'REGISTERED' });
+    mockPrisma.trainingParticipant.upsert.mockResolvedValue({ id: 5, status: 'REGISTERED' });
 
     await service.registerParticipant({ sessionId: 1, userId: 7 } as any);
 
-    expect(mockPrisma.trainingParticipant.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: 'REGISTERED' }) }),
+    expect(mockPrisma.trainingParticipant.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ status: 'REGISTERED' }) }),
     );
   });
 });

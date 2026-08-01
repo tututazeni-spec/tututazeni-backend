@@ -81,7 +81,11 @@ export class RoiImpactService {
     const costPerEnroll = params.costPerEnrollment ?? DEFAULTS.costPerEnrollment;
     const benefitPerC = params.benefitPerCompletion ?? DEFAULTS.benefitPerCompletion;
 
-    const where: any = { enrolledAt: { gte: range.gte, lte: range.lte }, ...uWhere };
+    const where: any = {
+      enrolledAt: { gte: range.gte, lte: range.lte },
+      ...uWhere,
+      ...(filter.courseId ? { courseId: filter.courseId } : {}),
+    };
 
     const [
       enrollments,
@@ -305,7 +309,12 @@ export class RoiImpactService {
         }),
       // L2
       this.prisma.read.enrollment.count({
-        where: { status: 'CONCLUIDO', enrolledAt: { gte: range.gte, lte: range.lte }, ...uWhere },
+        where: {
+          status: 'CONCLUIDO',
+          enrolledAt: { gte: range.gte, lte: range.lte },
+          ...uWhere,
+          ...(filter.courseId ? { courseId: filter.courseId } : {}),
+        },
       }),
       this.prisma.assessmentAttempt
         .aggregate({
@@ -399,7 +408,11 @@ export class RoiImpactService {
       }),
       // L5
       this.prisma.read.enrollment.count({
-        where: { enrolledAt: { gte: range.gte, lte: range.lte }, ...uWhere },
+        where: {
+          enrolledAt: { gte: range.gte, lte: range.lte },
+          ...uWhere,
+          ...(filter.courseId ? { courseId: filter.courseId } : {}),
+        },
       }),
     ]);
 
@@ -610,7 +623,11 @@ export class RoiImpactService {
   async getLearningImpact(filter: RoiFilterDto = {}) {
     const range = dateRange(filter);
     const uWhere = filter.departmentId ? { user: { departmentId: filter.departmentId } } : {};
-    const where: any = { enrolledAt: { gte: range.gte, lte: range.lte }, ...uWhere };
+    const where: any = {
+      enrolledAt: { gte: range.gte, lte: range.lte },
+      ...uWhere,
+      ...(filter.courseId ? { courseId: filter.courseId } : {}),
+    };
 
     const [
       total,
@@ -843,16 +860,26 @@ export class RoiImpactService {
 
   async getProgramLibrary(filter: RoiFilterDto = {}) {
     const range = dateRange(filter);
+    // filter.departmentId/courseId eram aceites pelo DTO mas nunca usados
+    // aqui — a "biblioteca de programas" ignorava-os silenciosamente,
+    // devolvendo sempre todos os cursos independentemente do filtro pedido.
+    const uWhere = filter.departmentId ? { user: { departmentId: filter.departmentId } } : {};
+    const courseFilter = filter.courseId ? { courseId: filter.courseId } : {};
 
     const courseStats = await this.prisma.read.enrollment.groupBy({
       by: ['courseId'],
-      where: { enrolledAt: { gte: range.gte, lte: range.lte } },
+      where: { enrolledAt: { gte: range.gte, lte: range.lte }, ...uWhere, ...courseFilter },
       _count: { id: true },
     });
 
     const completedStats = await this.prisma.read.enrollment.groupBy({
       by: ['courseId'],
-      where: { status: 'CONCLUIDO', enrolledAt: { gte: range.gte, lte: range.lte } },
+      where: {
+        status: 'CONCLUIDO',
+        enrolledAt: { gte: range.gte, lte: range.lte },
+        ...uWhere,
+        ...courseFilter,
+      },
       _count: { id: true },
     });
 

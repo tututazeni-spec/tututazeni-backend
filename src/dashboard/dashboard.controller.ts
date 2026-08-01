@@ -6,10 +6,11 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { DashboardFilterDto, OrgFilterDto, DashboardPeriod } from './dashboard.dto';
+import { AUTHENTICATED_ROLES, Role } from '../auth/enums/role.enum';
 
-const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
-const MGMT_ROLES = ['ADMIN', 'RH', 'LIDER'] as const;
-const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
+const ALL_ROLES = AUTHENTICATED_ROLES;
+const MGMT_ROLES = [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR] as const;
+const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
 
 @ApiTags('Dashboard')
 @ApiBearerAuth()
@@ -63,7 +64,7 @@ export class DashboardController {
   @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Central de alertas personalizada por perfil' })
   alerts(@CurrentUser() user: CurrentUserData) {
-    return this.svc.getAlerts(user.id, user.roleCode);
+    return this.svc.getAlerts(user.id, user.role?.name);
   }
 
   // ─── Gamification leaderboard ─────────────────────────────────

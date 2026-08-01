@@ -17,6 +17,7 @@ const mockPrisma = {
     create: jest.fn().mockResolvedValue({}),
     count: jest.fn().mockResolvedValue(0),
     findMany: jest.fn().mockResolvedValue([]),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   microLearningProgress: {
     upsert: jest.fn().mockResolvedValue({}),

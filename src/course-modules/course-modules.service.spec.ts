@@ -42,6 +42,7 @@ const mockPrisma = {
   course: { findUnique: jest.fn() },
   courseAnalytics: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
+  assessment: { count: jest.fn().mockResolvedValue(0) },
 };
 
 const baseMod = {

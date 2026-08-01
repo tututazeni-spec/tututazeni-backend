@@ -380,24 +380,27 @@ export class CompetenciesService {
 
   // ─── MAPEAMENTOS ──────────────────────────────────────────────────────────
 
+  // PositionCompetency não tem @@unique([positionId, competencyId]) — suporta
+  // positionId OU careerPositionId (dois modelos de cargo distintos), pelo que
+  // não existe uma chave composta real para usar em upsert(). find-then-write.
   async mapToPosition(dto: MapCompetencyToPositionDto) {
     await this.findOne(dto.competencyId);
-    return this.prisma.positionCompetency.upsert({
-      where: {
-        positionId_competencyId: { positionId: dto.positionId, competencyId: dto.competencyId },
-      } as any,
-      create: {
-        positionId: dto.positionId,
-        competencyId: dto.competencyId,
-        requiredLevel: dto.requiredLevel,
-        priority: dto.priority,
-        weight: dto.weight ?? 1,
-      },
-      update: {
-        requiredLevel: dto.requiredLevel,
-        priority: dto.priority,
-        weight: dto.weight ?? undefined,
-      },
+
+    const existing = await this.prisma.positionCompetency.findFirst({
+      where: { positionId: dto.positionId, competencyId: dto.competencyId },
+    });
+
+    const data = {
+      requiredLevel: dto.requiredLevel,
+      priority: dto.priority,
+      weight: dto.weight ?? 1,
+    };
+
+    if (existing) {
+      return this.prisma.positionCompetency.update({ where: { id: existing.id }, data });
+    }
+    return this.prisma.positionCompetency.create({
+      data: { positionId: dto.positionId, competencyId: dto.competencyId, ...data },
     });
   }
 

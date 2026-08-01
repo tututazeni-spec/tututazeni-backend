@@ -164,7 +164,9 @@ export class LeadershipService {
     });
     if (!participant) throw new NotFoundException('Participante não encontrado');
 
-    const isCompleting = dto.progress >= 100 || dto.status === 'COMPLETED';
+    const wasAlreadyCompleted = participant.status === 'COMPLETED';
+    const isCompleting =
+      !wasAlreadyCompleted && (dto.progress >= 100 || dto.status === 'COMPLETED');
 
     const updated = await this.prisma.leadershipParticipant.update({
       where: { userId_programId: { userId, programId } },
@@ -570,6 +572,16 @@ export class LeadershipService {
   // ─── PULSE ────────────────────────────────────────────────────────────────
 
   async submitPulse(respondentId: number, dto: SubmitPulseDto) {
+    const month = new Date().getMonth() + 1;
+    const year = new Date().getFullYear();
+
+    const existing = await this.prisma.leadershipPulse.findUnique({
+      where: {
+        leaderId_respondentId_month_year: { leaderId: dto.leaderId, respondentId, month, year },
+      },
+    });
+    if (existing) throw new ConflictException('Já submeteu o pulse survey deste líder este mês');
+
     return this.prisma.leadershipPulse.create({
       data: {
         leaderId: dto.leaderId,
@@ -578,8 +590,8 @@ export class LeadershipService {
         q1: dto.q1,
         q2: dto.q2,
         q3: dto.q3,
-        month: new Date().getMonth() + 1,
-        year: new Date().getFullYear(),
+        month,
+        year,
       },
     });
   }

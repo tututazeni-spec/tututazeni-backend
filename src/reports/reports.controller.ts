@@ -17,9 +17,14 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { ReportFilterDto, SaveReportDto, CreateScheduleDto, ReportCategory } from './reports.dto';
+import { Role } from '../auth/enums/role.enum';
 
-const ALL_MGMT = ['ADMIN', 'RH', 'LIDER', 'DIRECTOR'] as const;
-const ADMIN = ['ADMIN', 'RH'] as const;
+// ALL_MGMT hand-rolava ['ADMIN','RH','LIDER','DIRECTOR'] e omitia GESTOR — o
+// papel canónico de "gestor de equipa" (ver Role em role.enum.ts) — trancando
+// qualquer gestor de linha real fora de todos os relatórios deste módulo.
+// Mesmo padrão já encontrado em dashboard/dashboard-rh/engagement.
+const ALL_MGMT = [Role.ADMIN, Role.RH, Role.LIDER, Role.DIRECTOR, Role.GESTOR] as const;
+const ADMIN = [Role.ADMIN, Role.RH] as const;
 
 @ApiTags('Reports')
 @ApiBearerAuth()
@@ -170,8 +175,8 @@ export class ReportsController {
   @Delete('saved/:id')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Remover relatório guardado' })
-  deleteReport(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.deleteReport(id);
+  deleteReport(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.deleteReport(id, user);
   }
 
   // ─── Templates ────────────────────────────────────────────────
@@ -202,8 +207,8 @@ export class ReportsController {
   @Delete('schedules/:id')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Cancelar agendamento' })
-  deleteSchedule(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.deleteSchedule(id);
+  deleteSchedule(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.deleteSchedule(id, user);
   }
 
   // ─── CSV Export ───────────────────────────────────────────────

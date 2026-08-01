@@ -26,7 +26,8 @@ const mockPrisma: any = {
   },
   positionCompetency: {
     findFirst: jest.fn().mockResolvedValue(null),
-    upsert: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
     deleteMany: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
   },
@@ -245,15 +246,32 @@ describe('CompetenciesService (additional)', () => {
   // ─── mapToPosition ────────────────────────────────────────────
 
   describe('mapToPosition', () => {
-    it('deve mapear competência a posição', async () => {
+    it('deve criar mapeamento quando não existe', async () => {
       mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
-      mockPrisma.positionCompetency.upsert.mockResolvedValue({ competencyId: 1, positionId: 1 });
+      mockPrisma.positionCompetency.findFirst.mockResolvedValue(null);
+      mockPrisma.positionCompetency.create.mockResolvedValue({ competencyId: 1, positionId: 1 });
       const result = await service.mapToPosition({
         competencyId: 1,
         positionId: 1,
         requiredLevel: 3,
       } as any);
       expect(result).toBeDefined();
+      expect(mockPrisma.positionCompetency.create).toHaveBeenCalled();
+    });
+
+    it('deve actualizar mapeamento existente (sem @@unique — find-then-write)', async () => {
+      mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
+      mockPrisma.positionCompetency.findFirst.mockResolvedValue({ id: 5 });
+      mockPrisma.positionCompetency.update.mockResolvedValue({ id: 5, requiredLevel: 4 });
+      const result = await service.mapToPosition({
+        competencyId: 1,
+        positionId: 1,
+        requiredLevel: 4,
+      } as any);
+      expect(result).toBeDefined();
+      expect(mockPrisma.positionCompetency.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 5 } }),
+      );
     });
   });
 

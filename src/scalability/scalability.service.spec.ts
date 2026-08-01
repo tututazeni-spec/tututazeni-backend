@@ -62,7 +62,13 @@ describe('ScalabilityService', () => {
         ScalabilityService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: NotificationsService, useValue: { send: jest.fn().mockResolvedValue({}) } },
-        { provide: AuditService, useValue: { log: jest.fn().mockResolvedValue({}) } },
+        {
+          provide: AuditService,
+          useValue: {
+            log: jest.fn().mockResolvedValue({}),
+            logEntity: jest.fn().mockResolvedValue({}),
+          },
+        },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();

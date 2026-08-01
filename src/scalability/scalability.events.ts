@@ -83,7 +83,7 @@ export class ScalabilityEventListeners {
    */
   @OnEvent('integration.sync.requested')
   async onSyncRequested(payload: {
-    integrationId: string;
+    integrationId: number;
     syncLogId: string;
     type: string;
     configJson?: string | null;
@@ -105,7 +105,7 @@ export class ScalabilityEventListeners {
       });
 
       await this.prisma.integrationConfig.update({
-        where: { id: payload.integrationId } as any,
+        where: { id: payload.integrationId },
         data: { lastSyncAt: new Date(), lastSyncStatus: 'SUCCESS', lastSyncError: null },
       });
 
@@ -127,9 +127,17 @@ export class ScalabilityEventListeners {
           errorMessage: err instanceof Error ? err.message : String(err),
         },
       });
+      // Bug de copy-paste: este bloco de catch gravava sempre 'SUCCESS'/null,
+      // idêntico ao bloco de sucesso acima — o IntegrationConfig nunca
+      // reflectia uma falha de sincronização, apesar do IntegrationSyncLog
+      // (linha acima) já estar correctamente marcado como 'FAILED'.
       await this.prisma.integrationConfig.update({
-        where: { id: payload.integrationId } as any,
-        data: { lastSyncAt: new Date(), lastSyncStatus: 'SUCCESS', lastSyncError: null },
+        where: { id: payload.integrationId },
+        data: {
+          lastSyncAt: new Date(),
+          lastSyncStatus: 'FAILED',
+          lastSyncError: err instanceof Error ? err.message : String(err),
+        },
       });
     }
   }

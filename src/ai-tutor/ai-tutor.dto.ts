@@ -7,6 +7,7 @@ import {
   Max,
   IsEnum,
   IsBoolean,
+  IsObject,
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -114,6 +115,7 @@ export class ExecuteAgentActionDto {
   action!: AgentAction;
 
   @ApiProperty({ description: 'Parâmetros da acção (ex: { courseId: 5 })' })
+  @IsObject()
   params!: Record<string, any>;
 
   @ApiProperty({ description: 'Confirmação explícita obrigatória' })

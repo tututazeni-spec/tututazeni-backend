@@ -29,6 +29,7 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Public } from '../common/decorators/public.decorator';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Document Repository')
@@ -87,6 +88,7 @@ export class DocumentRepositoryController {
   // ── Share Link (público, sem auth) ───────────────────────────────
 
   @Get('share/:token')
+  @Public()
   @ApiOperation({ summary: 'Resolver link de partilha (sem autenticação)' })
   resolveShare(@Param('token') token: string, @Query('password') password?: string) {
     return this.svc.resolveShareLink(token, password);
@@ -97,7 +99,7 @@ export class DocumentRepositoryController {
   @Get()
   @ApiOperation({ summary: 'Listar documentos (filtros + busca inteligente por OCR text + tags)' })
   findAll(@Query() filters: DocumentFilterDto, @CurrentUser() user: CurrentUserData) {
-    return this.svc.findAll(filters, user.id, user.employee?.department, user.role?.name);
+    return this.svc.findAll(filters, user.id, user.role?.name);
   }
 
   @Get(':id')

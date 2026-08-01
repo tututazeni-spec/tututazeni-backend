@@ -201,11 +201,17 @@ describe('DashboardService (progress)', () => {
       mockPrisma.auditLog.groupBy.mockResolvedValue([]);
       mockPrisma.contentAsset.findMany.mockResolvedValue([]);
       mockPrisma.course.count.mockResolvedValue(20);
-      // dashboardSnapshot.create via as any
       mockPrisma.dashboardSnapshot.create.mockResolvedValue({ id: 1, generatedAt: new Date() });
       const result = (await service.generateSnapshot()) as any;
-      // Either snapshot created or fallback message
-      expect(result).toBeDefined();
+      expect(result.snapshot).toEqual({ id: 1, generatedAt: expect.any(Date) });
+      expect(mockPrisma.dashboardSnapshot.create).toHaveBeenCalledWith({
+        data: {
+          totalUsers: 100,
+          totalCoursesCompleted: expect.any(Number),
+          averageScore: 3.5,
+          activePlans: 30,
+        },
+      });
     });
   });
 

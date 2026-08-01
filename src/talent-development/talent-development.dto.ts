@@ -12,7 +12,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 // ─── Enums ───────────────────────────────────────────────────────
 
@@ -75,7 +75,14 @@ export class PlanFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) managerId?: number;
   @ApiPropertyOptional({ enum: PlanStatus }) @IsOptional() @IsEnum(PlanStatus) status?: PlanStatus;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) isTemplate?: boolean;
+  // @Type(() => Boolean) coage '?isTemplate=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]].
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isTemplate?: boolean;
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @IsInt()

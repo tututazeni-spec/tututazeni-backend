@@ -88,7 +88,7 @@ describe('DocumentRepositoryController', () => {
   it('findAll → findAll(filters, userId, ...)', async () => {
     const filters = {} as any;
     await controller.findAll(filters, mockUser as any);
-    expect(mockSvc.findAll).toHaveBeenCalledWith(filters, 1, undefined, 'ADMIN');
+    expect(mockSvc.findAll).toHaveBeenCalledWith(filters, 1, 'ADMIN');
   });
 
   it('findOne → findOne(id, userId)', async () => {

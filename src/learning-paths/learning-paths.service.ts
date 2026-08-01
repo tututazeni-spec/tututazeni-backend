@@ -242,9 +242,12 @@ export class LearningPathsService {
 
   async remove(id: number) {
     const lp = (await this.findOne(id)) as any;
-    if (lp.status === 'PUBLISHED' && lp._count.enrollments > 0) {
+    // LearningPathEnrollment/LearningPathAssignment não têm onDelete: Cascade —
+    // verificar por contagem, não por status, ou uma trilha ARCHIVED com
+    // matrículas/atribuições antigas 500a por violação de FK RESTRICT.
+    if (lp._count.enrollments > 0 || lp._count.assignments > 0) {
       throw new ForbiddenException(
-        'Trilha publicada com matrículas não pode ser eliminada. Archive-a primeiro.',
+        'Trilha com matrículas ou atribuições não pode ser eliminada. Archive-a primeiro.',
       );
     }
     await this.prisma.learningPath.delete({ where: { id } });

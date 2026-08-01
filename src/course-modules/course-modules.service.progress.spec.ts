@@ -35,6 +35,7 @@ function buildMockPrisma() {
     courseAnalytics: crud(),
     quiz: crud(),
     quizAttempt: crud(),
+    assessment: crud(),
   };
 }
 

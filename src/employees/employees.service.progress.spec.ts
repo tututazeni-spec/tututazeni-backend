@@ -32,6 +32,7 @@ function buildMockPrisma() {
     feedback360: crud(),
     careerPlan: crud(),
     legacyPdi: { ...crud(), create: jest.fn().mockResolvedValue({ id: 1, actions: [] }) },
+    skill: crud(),
     employeeSkill: crud(),
     employeeDocument: crud(),
     employeeTimeline: crud(),
@@ -256,19 +257,30 @@ describe('EmployeesService (progress)', () => {
 
   describe('assignSkill', () => {
     it('deve criar nova competência se não existe', async () => {
+      mockPrisma.skill.findUnique.mockResolvedValue({ id: 5, name: 'TypeScript' });
       mockPrisma.employeeSkill.findUnique.mockResolvedValue(null);
       mockPrisma.employeeSkill.create.mockResolvedValue({ id: 1 });
       const result = await service.assignSkill({ employeeId: 1, skillId: 5, currentLevel: 3 }, 9);
-      expect(mockPrisma.employeeSkill.create).toHaveBeenCalled();
+      expect(mockPrisma.employeeSkill.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ skillName: 'TypeScript' }) }),
+      );
       expect(result).toBeDefined();
     });
 
     it('deve actualizar competência existente', async () => {
+      mockPrisma.skill.findUnique.mockResolvedValue({ id: 5, name: 'TypeScript' });
       mockPrisma.employeeSkill.findUnique.mockResolvedValue({ id: 1 });
       mockPrisma.employeeSkill.update.mockResolvedValue({ id: 1, currentLevel: 4 });
       const result = await service.assignSkill({ employeeId: 1, skillId: 5, currentLevel: 4 }, 9);
       expect(mockPrisma.employeeSkill.update).toHaveBeenCalled();
       expect(result).toBeDefined();
+    });
+
+    it('skill inexistente → NotFoundException', async () => {
+      mockPrisma.skill.findUnique.mockResolvedValue(null);
+      await expect(
+        service.assignSkill({ employeeId: 1, skillId: 999, currentLevel: 3 }, 9),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

@@ -19,6 +19,7 @@ import { TalentDevelopmentService } from './talent-development.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role } from '../auth/enums/role.enum';
 import {
   PlanFilterDto,
   TalentDevelopmentCreateDevelopmentPlanDto,
@@ -40,9 +41,12 @@ import {
   TalentDevelopmentDashboardFilterDto,
 } from './talent-development.dto';
 
-const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
-const MGMT_ROLES = ['ADMIN', 'RH', 'LIDER'] as const;
-const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
+// ALL_ROLES/MGMT_ROLES hand-rolados omitiam Role.GESTOR — mesmo padrão já
+// encontrado em dashboard/dashboard-rh/engagement/reports (5ª instância) —
+// ver [[project-innova-role-array-drift]].
+const ALL_ROLES = [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR, Role.COLABORADOR] as const;
+const MGMT_ROLES = [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR] as const;
+const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
 
 @ApiTags('Talent Development')
 @ApiBearerAuth()

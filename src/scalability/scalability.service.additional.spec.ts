@@ -103,7 +103,10 @@ const mockPrisma: any = new Proxy(
   },
 );
 
-const mockAudit = { log: jest.fn().mockResolvedValue({}) };
+const mockAudit = {
+  log: jest.fn().mockResolvedValue({}),
+  logEntity: jest.fn().mockResolvedValue({}),
+};
 const mockEvents = { emit: jest.fn() };
 const mockNotifications = {
   sendToUser: jest.fn().mockResolvedValue({}),
@@ -173,8 +176,12 @@ describe('ScalabilityService (additional)', () => {
         'admin',
       );
       expect(result).toBeDefined();
-      expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'CREATE', entity: 'TenantConfig' }),
+      expect(mockAudit.logEntity).toHaveBeenCalledWith(
+        expect.anything(),
+        'CREATE',
+        'TenantConfig',
+        expect.anything(),
+        expect.anything(),
       );
     });
 
@@ -404,7 +411,13 @@ describe('ScalabilityService (additional)', () => {
         'admin',
       );
       expect(result).toBeDefined();
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ entity: 'SlaConfig' }));
+      expect(mockAudit.logEntity).toHaveBeenCalledWith(
+        expect.anything(),
+        'CREATE',
+        'SlaConfig',
+        expect.anything(),
+        expect.anything(),
+      );
     });
 
     it('deve lançar NotFoundException se tenant não existe', async () => {
@@ -482,7 +495,9 @@ describe('ScalabilityService (additional)', () => {
     it('deve criar/actualizar config de entrega de conteúdo', async () => {
       (mockPrisma as any).contentDeliveryConfig = {
         findUnique: jest.fn().mockResolvedValue(null),
-        upsert: jest.fn().mockResolvedValue({ tenantId: 'tenant-1', adaptiveBitrate: false }),
+        upsert: jest
+          .fn()
+          .mockResolvedValue({ id: 'cdc-1', tenantId: 'tenant-1', adaptiveBitrate: false }),
       };
       const result = await service.updateContentDeliveryConfig(
         'tenant-1',
@@ -490,8 +505,12 @@ describe('ScalabilityService (additional)', () => {
         'admin',
       );
       expect(result).toBeDefined();
-      expect(mockAudit.log).toHaveBeenCalledWith(
-        expect.objectContaining({ entity: 'ContentDeliveryConfig' }),
+      expect(mockAudit.logEntity).toHaveBeenCalledWith(
+        expect.anything(),
+        'UPDATE',
+        'ContentDeliveryConfig',
+        expect.anything(),
+        expect.anything(),
       );
     });
   });
@@ -771,7 +790,13 @@ describe('ScalabilityService (additional)', () => {
       );
       expect(result).toHaveProperty('message');
       expect(mockEvents.emit).toHaveBeenCalledWith('loadtest.scheduled', expect.any(Object));
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ entity: 'LoadTest' }));
+      expect(mockAudit.logEntity).toHaveBeenCalledWith(
+        expect.anything(),
+        'CREATE',
+        'LoadTest',
+        expect.anything(),
+        expect.anything(),
+      );
     });
   });
 

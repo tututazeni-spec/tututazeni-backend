@@ -137,6 +137,13 @@ const mockPrisma: any = {
     findUnique: jest.fn().mockResolvedValue(null),
     findMany: jest.fn().mockResolvedValue([]),
   },
+  careerRole: {
+    findFirst: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({ id: 9 }),
+  },
+  department: {
+    findUnique: jest.fn().mockResolvedValue(null),
+  },
   enrollment: {
     findMany: jest.fn().mockResolvedValue([]),
   },
@@ -379,14 +386,29 @@ describe('CareerService (additional)', () => {
   describe('addCareerPathStep', () => {
     it('deve adicionar passo à trilha de carreira', async () => {
       mockPrisma.careerPath.findUnique.mockResolvedValue(baseCareerPath);
+      mockPrisma.position.findUnique.mockResolvedValue(basePosition);
+      mockPrisma.careerRole.findFirst.mockResolvedValue(null);
+      mockPrisma.careerRole.create.mockResolvedValue({ id: 9 });
       mockPrisma.careerPathStep.create.mockResolvedValue({
         id: 1,
         careerPathId: 1,
         positionId: 2,
+        roleId: 9,
         order: 1,
       });
       const result = await service.addCareerPathStep(1, { positionId: 2, order: 1 } as any);
       expect(result).toBeDefined();
+      expect(mockPrisma.careerPathStep.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ roleId: 9 }) }),
+      );
+    });
+
+    it('cargo inexistente → NotFoundException', async () => {
+      mockPrisma.careerPath.findUnique.mockResolvedValue(baseCareerPath);
+      mockPrisma.position.findUnique.mockResolvedValue(null);
+      await expect(
+        service.addCareerPathStep(1, { positionId: 999, order: 1 } as any),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

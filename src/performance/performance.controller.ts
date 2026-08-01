@@ -171,6 +171,19 @@ export class PerformanceController {
     return this.svc.submitReview(user.id, dto);
   }
 
+  // 9box tem de ser registada ANTES de ':id' — caso contrário este PUT
+  // literal fica sempre sombreado pelo PUT ':id' abaixo (Express casa rotas
+  // pela ordem de registo, e ParseIntPipe aceita "9box" porque parseInt('9box')
+  // = 9, silenciosamente a tratar como o ID de uma review em vez de 404). O
+  // mesmo padrão de bug já tinha sido encontrado e corrigido no módulo
+  // leadership (feedback-360/my/summary vs feedback-360/:leaderId/summary).
+  @Put('9box')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Posicionar/mover colaborador na 9-box (drag & drop)' })
+  update9Box(@CurrentUser() user: CurrentUserData, @Body() dto: Update9BoxDto) {
+    return this.svc.update9Box(user.id, dto);
+  }
+
   @Put(':id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar avaliação' })
@@ -246,14 +259,5 @@ export class PerformanceController {
   @ApiOperation({ summary: 'Contestar avaliação publicada' })
   dispute(@CurrentUser() user: CurrentUserData, @Body() dto: PerformanceCreateDisputeDto) {
     return this.svc.createDispute(user.id, dto);
-  }
-
-  // ── 9-Box ──────────────────────────────────────────────────────────────────
-
-  @Put('9box')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Posicionar/mover colaborador na 9-box (drag & drop)' })
-  update9Box(@CurrentUser() user: CurrentUserData, @Body() dto: Update9BoxDto) {
-    return this.svc.update9Box(user.id, dto);
   }
 }

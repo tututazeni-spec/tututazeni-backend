@@ -129,6 +129,7 @@ export class LeaveManagementService {
   private async getApplicablePolicy(userId: number): Promise<any | null> {
     const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
+      include: { department: { select: { name: true } } },
     });
     if (!user) return null;
 
@@ -136,7 +137,7 @@ export class LeaveManagementService {
     return this.prisma.leavePolicy.findFirst({
       where: {
         active: true,
-        OR: [{ department: (user as any).employee?.department ?? '' }, { department: null }],
+        OR: [{ department: (user as any).department?.name ?? '' }, { department: null }],
       },
       orderBy: { department: 'desc' }, // More specific first
     });
@@ -166,7 +167,7 @@ export class LeaveManagementService {
     if (leaveTypeCode) where.leaveTypeCode = leaveTypeCode;
     if (status) where.status = status;
     if (department)
-      where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
+      where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
     if (from || to) {
       where.startDate = {};
       if (from) where.startDate.gte = new Date(from);
@@ -631,7 +632,7 @@ export class LeaveManagementService {
 
     if (filters.department)
       where.user = {
-        employee: { department: { contains: filters.department, mode: 'insensitive' } },
+        department: { name: { contains: filters.department, mode: 'insensitive' } },
       };
     if (filters.leaveTypeCode) where.leaveTypeCode = filters.leaveTypeCode;
 
@@ -711,7 +712,7 @@ export class LeaveManagementService {
     const to = new Date(year, 11, 31);
     const where: any = { startDate: { gte: from, lte: to } };
     if (department)
-      where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
+      where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const [allRequests, pending, approved, activeNow] = await Promise.all([
       this.prisma.read.leaveRequest.findMany({ where }),
@@ -836,7 +837,7 @@ export class LeaveManagementService {
     // 3. Saldo disponível
     if (leaveType.annualLimit) {
       const balance = await this.prisma.read.leaveBalance.findUnique({
-        where: { userId_leaveType: { userId, leaveType: leaveType } },
+        where: { userId_leaveType: { userId, leaveType: leaveType.code as any } },
       });
       const available = balance?.balance ?? 0;
       if (workDays > available) {
@@ -884,7 +885,7 @@ export class LeaveManagementService {
   private async createApprovalFlow(requestId: number, userId: number, policy: any) {
     const levels = policy?.approvalLevels ?? 1;
     const user = await this.prisma.read.user.findUnique({ where: { id: userId } });
-    const managerId = (user as any)?.employee?.managerId;
+    const managerId = (user as any)?.managerId;
 
     const approvals: any[] = [];
 
@@ -893,7 +894,7 @@ export class LeaveManagementService {
 
     // Nível 2+: RH (buscar por role)
     if (levels >= 2) {
-      const hr = await this.prisma.read.user.findFirst({ where: { roleCode: 'RH' } as any });
+      const hr = await this.prisma.read.user.findFirst({ where: { role: { code: 'RH' } } });
       if (hr) approvals.push({ requestId, approverId: hr.id, level: 2 });
     }
 

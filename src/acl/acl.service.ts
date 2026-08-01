@@ -323,12 +323,16 @@ export class AclService {
     });
   }
 
+  // Permission.roleId é obrigatório (relação 1:N de dono único, não M2M) — não é
+  // possível "disconnect" numa relação required. Revogar reatribui a permissão
+  // ao role ADMIN (o mesmo dono por omissão usado em createPermission).
   async revokePermissionFromRole(roleId: number, permissionId: number) {
-    return this.prisma.role.update({
-      where: { id: roleId },
-      data: { permissions: { disconnect: { id: permissionId } } },
-      include: { permissions: true },
+    const adminRoleId = await this.getAdminRoleId();
+    await this.prisma.permission.update({
+      where: { id: permissionId },
+      data: { roleId: adminRoleId },
     });
+    return this.getRole(roleId);
   }
 
   async bulkAssignPermissions(dto: BulkAssignPermissionsDto) {

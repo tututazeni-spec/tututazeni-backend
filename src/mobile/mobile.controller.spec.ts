@@ -31,12 +31,15 @@ describe('MobileController', () => {
   });
 
   it('registerSession usa user.id do JWT — não aceita userId do body', async () => {
-    await controller.registerSession('dev-001', 'ios', mockUser, 'push-tok');
+    await controller.registerSession(
+      { deviceId: 'dev-001', platform: 'ios', pushToken: 'push-tok' },
+      mockUser,
+    );
     expect(mockService.registerSession).toHaveBeenCalledWith(42, 'dev-001', 'ios', 'push-tok');
   });
 
   it('logSync usa user.id do JWT — não aceita userId do body', async () => {
-    await controller.logSync('enrollment', 'SUCCESS', mockUser);
+    await controller.logSync({ entity: 'enrollment', status: 'SUCCESS' }, mockUser);
     expect(mockService.logSync).toHaveBeenCalledWith(42, 'enrollment', 'SUCCESS');
   });
 
@@ -46,7 +49,7 @@ describe('MobileController', () => {
   });
 
   it('updatePushToken passa sessionId + pushToken + userId do JWT', async () => {
-    await controller.updatePushToken(7, 'new-tok', mockUser);
+    await controller.updatePushToken(7, { pushToken: 'new-tok' }, mockUser);
     expect(mockService.updatePushToken).toHaveBeenCalledWith(7, 'new-tok', 42);
   });
 });

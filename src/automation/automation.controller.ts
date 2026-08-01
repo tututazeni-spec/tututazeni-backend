@@ -18,7 +18,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AutomationService } from './automation.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators';
+import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   CreateRuleDto,
   UpdateRuleDto,
@@ -48,8 +48,8 @@ export class AutomationController {
 
   @Post('rules')
   @ApiOperation({ summary: 'Criar regra de automação (trigger → condition → action)' })
-  create(@Body() dto: CreateRuleDto) {
-    return this.svc.createRule(dto);
+  create(@Body() dto: CreateRuleDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.createRule(dto, user.id);
   }
 
   @Put('rules/:id')
@@ -102,7 +102,7 @@ export class AutomationController {
 
   @Post('executions/:id/rerun')
   @ApiOperation({ summary: 'Re-executar uma execução falhada' })
-  rerun(@Param('id', ParseIntPipe) id: number) {
+  rerun(@Param('id') id: string) {
     return this.svc.rerunExecution(id);
   }
 

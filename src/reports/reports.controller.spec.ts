@@ -139,9 +139,9 @@ describe('ReportsController', () => {
     expect(mockSvc.saveReport).toHaveBeenCalledWith(1, dto);
   });
 
-  it('deleteReport → deleteReport(id)', async () => {
-    await controller.deleteReport(3);
-    expect(mockSvc.deleteReport).toHaveBeenCalledWith(3);
+  it('deleteReport → deleteReport(id, user)', async () => {
+    await controller.deleteReport(3, mockUser as any);
+    expect(mockSvc.deleteReport).toHaveBeenCalledWith(3, mockUser);
   });
 
   it('templates → getTemplates', async () => {
@@ -160,8 +160,8 @@ describe('ReportsController', () => {
     expect(mockSvc.listSchedules).toHaveBeenCalledWith(1);
   });
 
-  it('deleteSchedule → deleteSchedule(id)', async () => {
-    await controller.deleteSchedule(2);
-    expect(mockSvc.deleteSchedule).toHaveBeenCalledWith(2);
+  it('deleteSchedule → deleteSchedule(id, user)', async () => {
+    await controller.deleteSchedule(2, mockUser as any);
+    expect(mockSvc.deleteSchedule).toHaveBeenCalledWith(2, mockUser);
   });
 });

@@ -100,7 +100,7 @@ describe('ScalabilityEventListeners', () => {
   describe('onSyncRequested', () => {
     it('deve processar sync com sucesso', async () => {
       await listeners.onSyncRequested({
-        integrationId: 'integ-1',
+        integrationId: 1,
         syncLogId: 'log-1',
         type: 'ERP_HR',
         actorId: 'user-1',
@@ -112,18 +112,28 @@ describe('ScalabilityEventListeners', () => {
     });
 
     it('deve lidar com erros de sync e actualizar log', async () => {
-      integrationSyncLogMock.update
-        .mockResolvedValueOnce({}) // primeira chamada de sucesso temporária
-        .mockRejectedValueOnce(new Error('DB error')); // segunda chamada falha
+      // A única chamada a integrationSyncLog.update() dentro do bloco try é a
+      // de sucesso — tem de ser essa a rejeitar para cair no catch (o bloco
+      // try nunca chama integrationSyncLog.update() uma segunda vez).
+      integrationSyncLogMock.update.mockRejectedValueOnce(new Error('DB error'));
 
       await expect(
         listeners.onSyncRequested({
-          integrationId: 'integ-1',
+          integrationId: 1,
           syncLogId: 'log-1',
           type: 'ERP_HR',
           actorId: 'user-1',
         }),
       ).resolves.not.toThrow();
+
+      // Bug de copy-paste corrigido: o bloco de catch gravava sempre
+      // lastSyncStatus 'SUCCESS' — tem de reflectir a falha real.
+      expect(integrationConfigMock.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 1 },
+          data: expect.objectContaining({ lastSyncStatus: 'FAILED', lastSyncError: 'DB error' }),
+        }),
+      );
     });
   });
 });

@@ -343,7 +343,13 @@ export class LeaderService {
         performanceReviews: {
           orderBy: { createdAt: 'desc' },
           take: 5,
-          select: { id: true, score: true, type: true, period: true, createdAt: true } as any,
+          select: {
+            id: true,
+            score: true,
+            type: true,
+            createdAt: true,
+            cycle: { select: { name: true } },
+          } as any,
         },
         enrollments: {
           include: { course: { select: { title: true, category: true } } },
@@ -458,11 +464,11 @@ export class LeaderService {
     const feedback = await safeM(this.prisma, 'feedback')
       .create({
         data: {
-          giverId,
-          receiverId: dto.recipientId,
+          fromUserId: giverId,
+          toUserId: dto.recipientId,
           type: dto.type,
-          content: contentFull,
-          isPrivate: dto.isPrivate ?? false,
+          message: contentFull,
+          anonymous: dto.isPrivate ?? false,
         },
       })
       .catch(e => {
@@ -527,8 +533,8 @@ export class LeaderService {
     // "giver.managerId: leaderId" e passava a devolver feedback recebido por
     // QUALQUER pessoa — não só a equipa do líder chamador. Agora userId só
     // estreita dentro do âmbito da equipa, nunca o substitui.
-    const where: any = { giver: { managerId: leaderId } };
-    if (userId) where.receiverId = userId;
+    const where: any = { from: { managerId: leaderId } };
+    if (userId) where.toUserId = userId;
     return safeM(this.prisma, 'feedback')
       .findMany({
         where,
@@ -555,9 +561,9 @@ export class LeaderService {
     const meeting = await safeM(this.prisma, 'oneOnOneMeeting')
       .create({
         data: {
-          leaderId,
+          hostId: leaderId,
           participantId: dto.participantId,
-          scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
+          scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : new Date(),
           agenda: dto.agenda,
           status: dto.status ?? 'SCHEDULED',
         },
@@ -595,7 +601,7 @@ export class LeaderService {
   }
 
   async getOneOnOnes(leaderId: number, memberId?: number) {
-    const where: any = { leaderId };
+    const where: any = { hostId: leaderId };
     if (memberId) where.participantId = memberId;
     return safeM(this.prisma, 'oneOnOneMeeting')
       .findMany({
@@ -643,7 +649,7 @@ export class LeaderService {
     return safeM(this.prisma, 'oneOnOneMeeting')
       .update({
         where: { id: meetingId },
-        data: { status: 'COMPLETED', notes, completedAt: new Date() },
+        data: { status: 'COMPLETED', minutes: notes, completedAt: new Date() },
       })
       .catch(e => {
         this.logger.warn({
@@ -674,7 +680,7 @@ export class LeaderService {
           },
         },
         actions: { select: { status: true, progress: true }, take: 30 },
-        goals: { select: { progress: true, status: true } as any, take: 10 },
+        goals: { select: { progress: true } as any, take: 10 },
       },
       orderBy: { updatedAt: 'desc' },
     })) as any[];
@@ -713,9 +719,23 @@ export class LeaderService {
 
     const plan = await this.prisma.developmentPlan.update({
       where: { id: planId },
-      data: { status: 'ACTIVE', approvedAt: new Date(), approverId: approver.id } as any,
+      data: { status: 'ACTIVE', activatedAt: new Date() },
       include: { user: { select: { id: true, fullName: true } } },
     });
+
+    await this.prisma.pdiApproval
+      .create({
+        data: { planId, approverId: approver.id, decision: 'APPROVED' },
+      })
+      .catch(e => {
+        this.logger.warn({
+          planId,
+          approverId: approver.id,
+          action: 'approvePlan.pdiApproval',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar aprovação de PDI em PdiApproval',
+        });
+      });
 
     await this.prisma.notificationLog
       .create({

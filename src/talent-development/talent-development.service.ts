@@ -764,9 +764,12 @@ export class TalentDevelopmentService {
 
     // Store evidence/note if provided
     if (dto.evidenceUrl || dto.notes) {
+      // PdiEvidence.developmentPlanActionId é o FK real (não `actionId`) —
+      // sem catch() nesta chamada, submeter progresso COM evidência/notas
+      // (o caso de uso principal deste endpoint) rebentava sempre (500).
       await this.prisma.pdiEvidence.create({
         data: {
-          actionId,
+          developmentPlanActionId: actionId,
           submittedById: userId,
           title: dto.evidenceTitle ?? dto.notes ?? 'Actualização de progresso',
           url: dto.evidenceUrl,
@@ -1506,7 +1509,11 @@ export class TalentDevelopmentService {
         level: true,
         _count: { select: { enrollments: true } },
       },
-      orderBy: { _count: { enrollments: 'desc' } } as any,
+      // Ordenar um findMany por contagem de relação usa { relação: { _count } },
+      // não { _count: { relação } } (só válido em groupBy/aggregate) — ver
+      // padrão correcto em analytics.service.ts. Rebentava sempre
+      // (PrismaClientValidationError) em GET /talent/recommendations/:userId.
+      orderBy: { enrollments: { _count: 'desc' } } as any,
       take: 10,
     });
 

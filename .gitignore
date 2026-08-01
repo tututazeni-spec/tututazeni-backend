@@ -13,6 +13,9 @@ prisma/migrations/*.sql
 Build files
 =========================
 
+# Redis
+dump.rdb
+
 dist/
 build/
 .next/

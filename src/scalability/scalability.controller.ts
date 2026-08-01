@@ -16,6 +16,7 @@ import {
   HttpCode,
   HttpStatus,
   DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { ScalabilityService } from './scalability.service';
@@ -114,7 +115,7 @@ export class ScalabilityController {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar configuração de integração' })
   async updateIntegration(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateIntegrationConfigDto,
     @Request() req: any,
   ) {
@@ -141,7 +142,7 @@ export class ScalabilityController {
   @ApiOperation({ summary: 'Histórico de sincronizações de uma integração' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getSyncLogs(
-    @Param('integrationId') integrationId: string,
+    @Param('integrationId', ParseIntPipe) integrationId: number,
     @Query('limit', new DefaultValuePipe(20)) limit: number,
   ) {
     return this.service.getIntegrationSyncLogs(integrationId, +limit);
@@ -162,7 +163,7 @@ export class ScalabilityController {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar regra de automação' })
   async updateAutomationRule(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateAutomationRuleDto,
     @Request() req: any,
   ) {

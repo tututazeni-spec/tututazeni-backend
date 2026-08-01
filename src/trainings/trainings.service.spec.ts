@@ -16,6 +16,7 @@ const mockPrisma = {
   trainingParticipant: {
     findFirst: jest.fn(),
     create: jest.fn(),
+    upsert: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
     update: jest.fn(),
     count: jest.fn().mockResolvedValue(0),

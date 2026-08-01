@@ -26,6 +26,8 @@ import { LeadershipModule } from './leadership/leadership.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { MicroLearningModule } from './micro-learning/micro-learning.module';
 import { LiveClassesModule } from './live-classes/live-classes.module';
+import { MobileModule } from './mobile/mobile.module';
+import { ScalabilityModule } from './scalability/scalability.module';
 import { TrainingModule } from './trainings/trainings.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ExecutiveReportsModule } from './executive-reports/executive-reports.module';
@@ -41,6 +43,7 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { LeaveManagementModule } from './leave-management/leave-management.module';
 import { PayslipsModule } from './payslips/payslips.module';
 import { WorkDeclarationModule } from './work-declaration/work-declaration.module';
+import { DeclarationsModule } from './declarations/declarations.module';
 import { DocumentRepositoryModule } from './document-repository/document-repository.module';
 
 // MÓDULOS NOVOS — TALENTO E CARREIRA
@@ -163,6 +166,8 @@ import { RolesGuard } from './common/guards/roles.guard';
     KnowledgeModule,
     MicroLearningModule,
     LiveClassesModule,
+    MobileModule,
+    ScalabilityModule,
     TrainingModule,
     AnalyticsModule,
     ExecutiveReportsModule,
@@ -177,6 +182,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     PayslipsModule,
     PdfModule,
     WorkDeclarationModule,
+    DeclarationsModule,
     DocumentRepositoryModule,
     CareerPlansModule,
     CareerModule,

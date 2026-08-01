@@ -24,6 +24,19 @@ export class MicroLearningService {
 
   constructor(private prisma: PrismaService) {}
 
+  // MicroLearning não tem relações "category"/"likes"/"comments" — categoryId é um
+  // escalar sem FK, e "likes" tem de ser contado via a relação real "interactions"
+  // filtrada por action='LIKE' (Prisma não filtra _count por sub-condição).
+  private async getLikeCountMap(ids: number[]): Promise<Map<number, number>> {
+    if (!ids.length) return new Map();
+    const rows = await this.prisma.read.microLearningInteraction.groupBy({
+      by: ['microLearningId'],
+      where: { microLearningId: { in: ids }, action: 'LIKE' },
+      _count: true,
+    });
+    return new Map(rows.map(r => [r.microLearningId, (r as any)._count]));
+  }
+
   // ─── CATÁLOGO ─────────────────────────────────────────────────────────────
 
   async findAll(filters: MicroLearningFilterDto) {
@@ -65,15 +78,21 @@ export class MicroLearningService {
         take: limit,
         include: {
           author: { select: { id: true, fullName: true, position: { select: { name: true } } } },
-          category: { select: { id: true, name: true } },
-          _count: { select: { progress: true, likes: true } },
+          _count: { select: { progress: true } },
         },
         orderBy,
       }),
       this.prisma.read.microLearning.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const likeCounts = await this.getLikeCountMap(data.map((d: any) => d.id));
+    return {
+      data: data.map((d: any) => ({ ...d, likeCount: likeCounts.get(d.id) ?? 0 })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: number) {
@@ -88,12 +107,23 @@ export class MicroLearningService {
             position: { select: { name: true } },
           },
         },
-        category: { select: { id: true, name: true } },
-        quizQuestions: { select: { id: true, question: true, options: true } }, // não expõe respostas correctas
-        _count: { select: { progress: true, likes: true, comments: true } },
+        quizQuestions: { select: { id: true, question: true, options: true } },
+        _count: { select: { progress: true, interactions: true, quizAttempts: true } },
       },
     });
     if (!ml) throw new NotFoundException('Micro-learning não encontrado');
+
+    // Não expor respostas correctas: "options" é um JSON serializado que inclui
+    // isCorrect por opção (ver submitQuiz()) — tinha de ser filtrado e nunca foi.
+    if (ml.quizQuestions?.length) {
+      ml.quizQuestions = ml.quizQuestions.map((q: any) => ({
+        ...q,
+        options: JSON.parse(q.options).map((o: any) => ({ text: o.text })),
+      }));
+    }
+
+    const likeCounts = await this.getLikeCountMap([id]);
+    ml.likeCount = likeCounts.get(id) ?? 0;
     return ml;
   }
 
@@ -181,9 +211,18 @@ export class MicroLearningService {
 
   async remove(id: number) {
     const ml = await this.findOne(id);
-    if (ml.status === 'PUBLISHED') {
+    // MicroLearningProgress/Interaction/QuizAttempt não têm onDelete: Cascade —
+    // verificar por contagem, não só por status, ou um item ARCHIVED com histórico
+    // de utilizadores 500a por violação de FK RESTRICT em vez de dar 403 limpo.
+    const counts = (ml as any)._count ?? {};
+    if (
+      ml.status === 'PUBLISHED' ||
+      counts.progress > 0 ||
+      counts.interactions > 0 ||
+      counts.quizAttempts > 0
+    ) {
       throw new ForbiddenException(
-        'Conteúdo publicado não pode ser eliminado. Archive-o primeiro.',
+        'Conteúdo publicado ou com histórico de utilizadores não pode ser eliminado. Archive-o primeiro.',
       );
     }
     await this.prisma.microLearning.delete({ where: { id } });
@@ -218,8 +257,7 @@ export class MicroLearningService {
         take: limit,
         include: {
           author: { select: { id: true, fullName: true, position: { select: { name: true } } } },
-          category: { select: { id: true, name: true } },
-          _count: { select: { progress: true, likes: true } },
+          _count: { select: { progress: true } },
         },
         orderBy,
       }),
@@ -227,22 +265,16 @@ export class MicroLearningService {
     ]);
 
     // Enriquecer com progresso e estado do utilizador
-    const userProgressMap = await this.getUserProgressMap(
-      userId,
-      items.map(i => i.id),
-    );
-    const userLikesSet = await this.getUserLikesSet(
-      userId,
-      items.map(i => i.id),
-    );
-    const userSavesSet = await this.getUserSavesSet(
-      userId,
-      items.map(i => i.id),
-    );
+    const ids = items.map(i => i.id);
+    const userProgressMap = await this.getUserProgressMap(userId, ids);
+    const userLikesSet = await this.getUserLikesSet(userId, ids);
+    const userSavesSet = await this.getUserSavesSet(userId, ids);
+    const likeCounts = await this.getLikeCountMap(ids);
 
     return {
       data: items.map(item => ({
         ...item,
+        likeCount: likeCounts.get(item.id) ?? 0,
         userProgress: userProgressMap.get(item.id) ?? null,
         userLiked: userLikesSet.has(item.id),
         userSaved: userSavesSet.has(item.id),
@@ -454,14 +486,14 @@ export class MicroLearningService {
         microLearning: {
           include: {
             author: { select: { id: true, fullName: true } },
-            category: { select: { id: true, name: true } },
-            _count: { select: { likes: true } },
           },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
-    return saves.map(s => s.microLearning);
+    const items = saves.map(s => s.microLearning);
+    const likeCounts = await this.getLikeCountMap(items.map((i: any) => i.id));
+    return items.map((i: any) => ({ ...i, likeCount: likeCounts.get(i.id) ?? 0 }));
   }
 
   // ─── PLAYLISTS ────────────────────────────────────────────────────────────
@@ -675,7 +707,7 @@ export class MicroLearningService {
       this.prisma.read.microLearning.aggregate({ _sum: { viewCount: true } }),
       (this.prisma as any).microLearning.findMany({
         where: { status: 'PUBLISHED' },
-        include: { author: { select: { fullName: true } }, _count: { select: { likes: true } } },
+        include: { author: { select: { fullName: true } } },
         orderBy: { viewCount: 'desc' },
         take: 5,
       }),
@@ -685,13 +717,14 @@ export class MicroLearningService {
     const avgCompletionRate = await this.prisma.read.microLearningProgress.aggregate({
       _avg: { progress: true },
     });
+    const likeCounts = await this.getLikeCountMap(topContent.map((c: any) => c.id));
 
     return {
       content: { total, published },
       views: totalViews._sum.viewCount ?? 0,
       avgCompletionRate: Math.round(avgCompletionRate._avg.progress ?? 0),
       activeStreaks,
-      topContent,
+      topContent: topContent.map((c: any) => ({ ...c, likeCount: likeCounts.get(c.id) ?? 0 })),
     };
   }
 }

@@ -188,6 +188,13 @@ export class TrainingService {
         'Treinamento com participantes não pode ser eliminado. Archive-o primeiro.',
       );
     }
+    // TrainingRating.trainingId → Training é ON DELETE RESTRICT (só as
+    // sessões/participantes cascateiam) — um treinamento ARCHIVED (que passa
+    // no guard acima) pode perfeitamente já ter avaliações, e o delete()
+    // rebentava com uma violação de FK em bruto (500) em vez de um 4xx limpo.
+    if (t._count.ratings > 0) {
+      throw new ForbiddenException('Treinamento com avaliações não pode ser eliminado.');
+    }
     await this.prisma.training.delete({ where: { id } });
     return { message: 'Treinamento eliminado' };
   }
@@ -242,7 +249,12 @@ export class TrainingService {
 
     const session = await this.prisma.read.trainingSession.findUnique({
       where: { id: dto.sessionId },
-      include: { _count: { select: { participants: true } } },
+      // Contar apenas participantes activos — sem este filtro, uma vaga
+      // liberta por cancelamento nunca era recuperada, esgotando
+      // permanentemente a sessão para futuras inscrições.
+      include: {
+        _count: { select: { participants: { where: { status: { not: 'CANCELLED' } } } } },
+      },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
 
@@ -260,8 +272,20 @@ export class TrainingService {
             })()
           : ParticipantStatus.REGISTERED;
 
-    const participant = await this.prisma.trainingParticipant.create({
-      data: { sessionId: dto.sessionId, userId: dto.userId, status },
+    // upsert em vez de create: (sessionId, userId) é @@unique, e uma
+    // inscrição cancelada anteriormente já ocupa essa combinação — um
+    // create() directo rebentava sempre com violação de unicidade ao
+    // tentar reinscrever-se na mesma sessão após cancelar.
+    const participant = await this.prisma.trainingParticipant.upsert({
+      where: { sessionId_userId: { sessionId: dto.sessionId, userId: dto.userId } },
+      create: { sessionId: dto.sessionId, userId: dto.userId, status },
+      update: {
+        status,
+        cancellationReason: null,
+        completedAt: null,
+        finalScore: null,
+        attendedHours: null,
+      },
       include: { user: { select: { id: true, fullName: true } } },
     });
 

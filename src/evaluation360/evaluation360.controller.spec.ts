@@ -38,7 +38,7 @@ const mockSvc = {
   submitPulseSurveyResponse: jest.fn().mockResolvedValue({}),
 };
 
-const mockReq = { user: { id: 1, roleCode: 'ADMIN' } };
+const mockReq = { user: { id: 1, role: { name: 'ADMIN' } } };
 
 describe('Evaluation360Controller', () => {
   let controller: Evaluation360Controller;
@@ -60,13 +60,13 @@ describe('Evaluation360Controller', () => {
   it('createCompetency → createCompetency(dto, userId)', async () => {
     const dto = {} as any;
     await controller.createCompetency(dto, mockReq as any);
-    expect(mockSvc.createCompetency).toHaveBeenCalledWith(dto, 1);
+    expect(mockSvc.createCompetency).toHaveBeenCalledWith(dto, '1');
   });
 
   it('updateCompetency → updateCompetency(id, dto, userId)', async () => {
     const dto = {} as any;
     await controller.updateCompetency('c1', dto, mockReq as any);
-    expect(mockSvc.updateCompetency).toHaveBeenCalledWith('c1', dto, 1);
+    expect(mockSvc.updateCompetency).toHaveBeenCalledWith('c1', dto, '1');
   });
 
   it('listCompetencies → listCompetencies(tenantId, query)', async () => {
@@ -77,19 +77,19 @@ describe('Evaluation360Controller', () => {
   it('createCycle → createCycle(dto, userId)', async () => {
     const dto = {} as any;
     await controller.createCycle(dto, mockReq as any);
-    expect(mockSvc.createCycle).toHaveBeenCalledWith(dto, 1);
+    expect(mockSvc.createCycle).toHaveBeenCalledWith(dto, '1');
   });
 
   it('updateCycle → updateCycle(id, dto, userId)', async () => {
     const dto = {} as any;
     await controller.updateCycle('cycle-1', dto, mockReq as any);
-    expect(mockSvc.updateCycle).toHaveBeenCalledWith('cycle-1', dto, 1);
+    expect(mockSvc.updateCycle).toHaveBeenCalledWith('cycle-1', dto, '1');
   });
 
   it('publishCycle → publishCycle(id, dto, userId)', async () => {
     const dto = {} as any;
     await controller.publishCycle('cycle-1', dto, mockReq as any);
-    expect(mockSvc.publishCycle).toHaveBeenCalledWith('cycle-1', dto, 1);
+    expect(mockSvc.publishCycle).toHaveBeenCalledWith('cycle-1', dto, '1');
   });
 
   it('listCycles → listCycles(tenantId, query)', async () => {
@@ -105,13 +105,13 @@ describe('Evaluation360Controller', () => {
 
   it('calculateResults → calculateCycleResults(id, userId)', async () => {
     await controller.calculateResults('cycle-1', mockReq as any);
-    expect(mockSvc.calculateCycleResults).toHaveBeenCalledWith('cycle-1', 1);
+    expect(mockSvc.calculateCycleResults).toHaveBeenCalledWith('cycle-1', '1');
   });
 
   it('createQuestion → createQuestion(dto, userId)', async () => {
     const dto = {} as any;
     await controller.createQuestion(dto, mockReq as any);
-    expect(mockSvc.createQuestion).toHaveBeenCalledWith(dto, 1);
+    expect(mockSvc.createQuestion).toHaveBeenCalledWith(dto, '1');
   });
 
   it('listQuestions → listQuestions(cycleId, competencyId)', async () => {
@@ -122,7 +122,7 @@ describe('Evaluation360Controller', () => {
   it('addParticipants → addParticipants(id, dto, userId)', async () => {
     const dto = {} as any;
     await controller.addParticipants('cycle-1', dto, mockReq as any);
-    expect(mockSvc.addParticipants).toHaveBeenCalledWith('cycle-1', dto, 1);
+    expect(mockSvc.addParticipants).toHaveBeenCalledWith('cycle-1', dto, '1');
   });
 
   it('giveConsent → giveConsent(cycleId, userId, dto)', async () => {
@@ -155,29 +155,29 @@ describe('Evaluation360Controller', () => {
   it('assignEvaluators → assignEvaluators(id, dto, userId)', async () => {
     const dto = {} as any;
     await controller.assignEvaluators('cycle-1', dto, mockReq as any);
-    expect(mockSvc.assignEvaluators).toHaveBeenCalledWith('cycle-1', dto, 1);
+    expect(mockSvc.assignEvaluators).toHaveBeenCalledWith('cycle-1', dto, '1');
   });
 
   it('approveEvaluators → approveEvaluators(id, dto, userId)', async () => {
     const dto = {} as any;
     await controller.approveEvaluators('cycle-1', dto, mockReq as any);
-    expect(mockSvc.approveEvaluators).toHaveBeenCalledWith('cycle-1', dto, 1);
+    expect(mockSvc.approveEvaluators).toHaveBeenCalledWith('cycle-1', dto, '1');
   });
 
   it('sendInvites → sendCycleInvites(id, userId)', async () => {
     await controller.sendInvites('cycle-1', mockReq as any);
-    expect(mockSvc.sendCycleInvites).toHaveBeenCalledWith('cycle-1', 1);
+    expect(mockSvc.sendCycleInvites).toHaveBeenCalledWith('cycle-1', '1');
   });
 
   it('sendReminders → sendReminders(id, dto, userId)', async () => {
     const dto = {} as any;
     await controller.sendReminders('cycle-1', dto, mockReq as any);
-    expect(mockSvc.sendReminders).toHaveBeenCalledWith('cycle-1', dto, 1);
+    expect(mockSvc.sendReminders).toHaveBeenCalledWith('cycle-1', dto, '1');
   });
 
   it('getForm → getEvaluationForm(cycleId, userId, evaluateeId)', async () => {
     await controller.getForm('cycle-1', 'user-2', mockReq as any);
-    expect(mockSvc.getEvaluationForm).toHaveBeenCalledWith('cycle-1', 1, 'user-2');
+    expect(mockSvc.getEvaluationForm).toHaveBeenCalledWith('cycle-1', '1', 'user-2');
   });
 
   it('submitResponse → submitResponse', async () => {
@@ -188,12 +188,12 @@ describe('Evaluation360Controller', () => {
 
   it('getResult → getParticipantResult(cycleId, participantId, userId, roleCode)', async () => {
     await controller.getResult('cycle-1', 'p1', mockReq as any);
-    expect(mockSvc.getParticipantResult).toHaveBeenCalledWith('cycle-1', 'p1', 1, 'ADMIN');
+    expect(mockSvc.getParticipantResult).toHaveBeenCalledWith('cycle-1', 'p1', '1', 'ADMIN');
   });
 
   it('getTeamAnalytics → getTeamAnalytics(cycleId, userId)', async () => {
     await controller.getTeamAnalytics('cycle-1', mockReq as any);
-    expect(mockSvc.getTeamAnalytics).toHaveBeenCalledWith('cycle-1', 1);
+    expect(mockSvc.getTeamAnalytics).toHaveBeenCalledWith('cycle-1', '1');
   });
 
   it('getOrgAnalytics → getOrganizationalAnalytics(query)', async () => {
@@ -211,19 +211,19 @@ describe('Evaluation360Controller', () => {
   it('generateReport → generateReport(dto, userId)', async () => {
     const dto = {} as any;
     await controller.generateReport(dto, mockReq as any);
-    expect(mockSvc.generateReport).toHaveBeenCalledWith(dto, 1);
+    expect(mockSvc.generateReport).toHaveBeenCalledWith(dto, '1');
   });
 
   it('calibrateScore → calibrateScore(cycleId, dto, userId)', async () => {
     const dto = {} as any;
     await controller.calibrateScore('cycle-1', dto, mockReq as any);
-    expect(mockSvc.calibrateScore).toHaveBeenCalledWith('cycle-1', dto, 1);
+    expect(mockSvc.calibrateScore).toHaveBeenCalledWith('cycle-1', dto, '1');
   });
 
   it('createFeedback → createContinuousFeedback(dto, userId)', async () => {
     const dto = {} as any;
     await controller.createFeedback(dto, mockReq as any);
-    expect(mockSvc.createContinuousFeedback).toHaveBeenCalledWith(dto, 1);
+    expect(mockSvc.createContinuousFeedback).toHaveBeenCalledWith(dto, '1');
   });
 
   it('listFeedback → listFeedbackForUser(userId, query)', async () => {
@@ -235,12 +235,12 @@ describe('Evaluation360Controller', () => {
   it('createPulseSurvey → createPulseSurvey(dto, userId)', async () => {
     const dto = {} as any;
     await controller.createPulseSurvey(dto, mockReq as any);
-    expect(mockSvc.createPulseSurvey).toHaveBeenCalledWith(dto, 1);
+    expect(mockSvc.createPulseSurvey).toHaveBeenCalledWith(dto, '1');
   });
 
   it('submitPulseResponse → submitPulseSurveyResponse(surveyId, userId, dto)', async () => {
     const dto = {} as any;
     await controller.submitPulseResponse('ps1', dto, mockReq as any);
-    expect(mockSvc.submitPulseSurveyResponse).toHaveBeenCalledWith('ps1', 1, dto);
+    expect(mockSvc.submitPulseSurveyResponse).toHaveBeenCalledWith('ps1', '1', dto);
   });
 });

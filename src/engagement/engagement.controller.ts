@@ -17,7 +17,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { isPrivileged } from '../common/authz/ownership';
-import { Role } from '../auth/enums/role.enum';
+import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 import {
   CreateSurveyDto,
   UpdateSurveyDto,
@@ -37,9 +37,9 @@ import {
   EngagementFilterDto,
 } from './engagement.dto';
 
-const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
-const MGMT_ROLES = ['ADMIN', 'RH', 'LIDER'] as const;
-const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
+const ALL_ROLES = AUTHENTICATED_ROLES;
+const MGMT_ROLES = [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR] as const;
+const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
 
 @ApiTags('Engagement')
 @ApiBearerAuth()
@@ -235,7 +235,7 @@ export class EngagementController {
   }
 
   @Patch('one-on-one/:id')
-  @Roles(...MGMT_ROLES)
+  @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Actualizar 1:1 (notas, conclusão, reagendamento)' })
   updateOneOnOne(
     @Param('id', ParseIntPipe) id: number,

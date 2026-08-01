@@ -62,7 +62,7 @@ export class Evaluation360Controller {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar competência no banco de competências' })
   async createCompetency(@Body() dto: Evaluation360CreateCompetencyDto, @Request() req: any) {
-    return this.service.createCompetency(dto, req.user.id);
+    return this.service.createCompetency(dto, String(req.user.id));
   }
 
   @Patch('competencies/:id')
@@ -73,7 +73,7 @@ export class Evaluation360Controller {
     @Body() dto: Evaluation360UpdateCompetencyDto,
     @Request() req: any,
   ) {
-    return this.service.updateCompetency(id, dto, req.user.id);
+    return this.service.updateCompetency(id, dto, String(req.user.id));
   }
 
   @Get('competencies')
@@ -94,7 +94,7 @@ export class Evaluation360Controller {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar ciclo de avaliação 360°' })
   async createCycle(@Body() dto: CreateEvaluationCycleDto, @Request() req: any) {
-    return this.service.createCycle(dto, req.user.id);
+    return this.service.createCycle(dto, String(req.user.id));
   }
 
   @Patch('cycles/:id')
@@ -105,7 +105,7 @@ export class Evaluation360Controller {
     @Body() dto: UpdateEvaluationCycleDto,
     @Request() req: any,
   ) {
-    return this.service.updateCycle(id, dto, req.user.id);
+    return this.service.updateCycle(id, dto, String(req.user.id));
   }
 
   @Post('cycles/:id/publish')
@@ -113,7 +113,7 @@ export class Evaluation360Controller {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Publicar ciclo (DRAFT → PUBLISHED)' })
   async publishCycle(@Param('id') id: string, @Body() dto: PublishCycleDto, @Request() req: any) {
-    return this.service.publishCycle(id, dto, req.user.id);
+    return this.service.publishCycle(id, dto, String(req.user.id));
   }
 
   @Get('cycles')
@@ -139,7 +139,7 @@ export class Evaluation360Controller {
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Calcular resultados do ciclo' })
   async calculateResults(@Param('id') id: string, @Request() req: any) {
-    return this.service.calculateCycleResults(id, req.user.id);
+    return this.service.calculateCycleResults(id, String(req.user.id));
   }
 
   // ============================================================
@@ -150,7 +150,7 @@ export class Evaluation360Controller {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar questão (global ou vinculada a ciclo/competência)' })
   async createQuestion(@Body() dto: Evaluation360CreateQuestionDto, @Request() req: any) {
-    return this.service.createQuestion(dto, req.user.id);
+    return this.service.createQuestion(dto, String(req.user.id));
   }
 
   @Get('questions')
@@ -177,7 +177,7 @@ export class Evaluation360Controller {
     @Body() dto: AddParticipantsDto,
     @Request() req: any,
   ) {
-    return this.service.addParticipants(id, dto, req.user.id);
+    return this.service.addParticipants(id, dto, String(req.user.id));
   }
 
   @Post('cycles/:cycleId/participants/:userId/consent')
@@ -220,7 +220,7 @@ export class Evaluation360Controller {
     @Body() dto: BulkAssignEvaluatorsDto,
     @Request() req: any,
   ) {
-    return this.service.assignEvaluators(id, dto, req.user.id);
+    return this.service.assignEvaluators(id, dto, String(req.user.id));
   }
 
   @Post('cycles/:id/evaluators/approve')
@@ -232,7 +232,7 @@ export class Evaluation360Controller {
     @Body() dto: ApproveEvaluatorsDto,
     @Request() req: any,
   ) {
-    return this.service.approveEvaluators(id, dto, req.user.id);
+    return this.service.approveEvaluators(id, dto, String(req.user.id));
   }
 
   @Post('cycles/:id/invites/send')
@@ -240,7 +240,7 @@ export class Evaluation360Controller {
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Enviar convites para todos os avaliadores pendentes' })
   async sendInvites(@Param('id') id: string, @Request() req: any) {
-    return this.service.sendCycleInvites(id, req.user.id);
+    return this.service.sendCycleInvites(id, String(req.user.id));
   }
 
   @Post('cycles/:id/reminders')
@@ -248,7 +248,7 @@ export class Evaluation360Controller {
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Enviar lembretes para avaliadores pendentes' })
   async sendReminders(@Param('id') id: string, @Body() dto: SendRemindersDto, @Request() req: any) {
-    return this.service.sendReminders(id, dto, req.user.id);
+    return this.service.sendReminders(id, dto, String(req.user.id));
   }
 
   // ============================================================
@@ -263,7 +263,7 @@ export class Evaluation360Controller {
     @Query('evaluateeId') evaluateeId: string,
     @Request() req: any,
   ) {
-    return this.service.getEvaluationForm(cycleId, req.user.id, evaluateeId);
+    return this.service.getEvaluationForm(cycleId, String(req.user.id), evaluateeId);
   }
 
   @Post('cycles/:cycleId/responses')
@@ -276,7 +276,13 @@ export class Evaluation360Controller {
     @Body() dto: SubmitResponseDto,
     @Request() req: any,
   ) {
-    return this.service.submitResponse(cycleId, req.user.id, evaluateeId, dto, req.user.id);
+    return this.service.submitResponse(
+      cycleId,
+      String(req.user.id),
+      evaluateeId,
+      dto,
+      String(req.user.id),
+    );
   }
 
   // ============================================================
@@ -293,8 +299,8 @@ export class Evaluation360Controller {
     return this.service.getParticipantResult(
       cycleId,
       participantId,
-      req.user.id,
-      req.user.roleCode,
+      String(req.user.id),
+      req.user.role?.name,
     );
   }
 
@@ -302,7 +308,7 @@ export class Evaluation360Controller {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Analytics da equipa (heatmap de competências)' })
   async getTeamAnalytics(@Param('cycleId') cycleId: string, @Request() req: any) {
-    return this.service.getTeamAnalytics(cycleId, req.user.id);
+    return this.service.getTeamAnalytics(cycleId, String(req.user.id));
   }
 
   @Get('analytics/organizational')
@@ -328,7 +334,7 @@ export class Evaluation360Controller {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Gerar relatório (individual, equipa ou organizacional)' })
   async generateReport(@Body() dto: GenerateReportDto, @Request() req: any) {
-    return this.service.generateReport(dto, req.user.id);
+    return this.service.generateReport(dto, String(req.user.id));
   }
 
   // ============================================================
@@ -343,7 +349,7 @@ export class Evaluation360Controller {
     @Body() dto: Evaluation360CalibrateScoreDto,
     @Request() req: any,
   ) {
-    return this.service.calibrateScore(cycleId, dto, req.user.id);
+    return this.service.calibrateScore(cycleId, dto, String(req.user.id));
   }
 
   // ============================================================
@@ -353,7 +359,7 @@ export class Evaluation360Controller {
   @Post('feedback/continuous')
   @ApiOperation({ summary: 'Enviar feedback contínuo (elogio, desenvolvimento, check-in)' })
   async createFeedback(@Body() dto: CreateContinuousFeedbackDto, @Request() req: any) {
-    return this.service.createContinuousFeedback(dto, req.user.id);
+    return this.service.createContinuousFeedback(dto, String(req.user.id));
   }
 
   @Get('feedback/continuous/:userId')
@@ -370,7 +376,7 @@ export class Evaluation360Controller {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar pulse survey' })
   async createPulseSurvey(@Body() dto: CreatePulseSurveyDto, @Request() req: any) {
-    return this.service.createPulseSurvey(dto, req.user.id);
+    return this.service.createPulseSurvey(dto, String(req.user.id));
   }
 
   @Post('pulse-surveys/:id/responses')
@@ -381,6 +387,6 @@ export class Evaluation360Controller {
     @Body() dto: SubmitPulseSurveyDto,
     @Request() req: any,
   ) {
-    return this.service.submitPulseSurveyResponse(surveyId, req.user.id, dto);
+    return this.service.submitPulseSurveyResponse(surveyId, String(req.user.id), dto);
   }
 }

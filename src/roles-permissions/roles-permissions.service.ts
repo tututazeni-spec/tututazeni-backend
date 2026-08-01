@@ -38,6 +38,19 @@ export class RolesPermissionsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  // Permission.roleId é uma FK obrigatória (single-owner), não M2M, apesar
+  // de connect/disconnect/set no relation "permissions" sugerirem o
+  // contrário — ver [[project-innova-acl-permission-ownership]] (mesmo
+  // padrão já encontrado e corrigido no módulo acl). ADMIN é o dono lógico
+  // por convenção de permissões "libertadas" de um role.
+  private async getAdminRoleId(): Promise<number> {
+    const adminRole = await this.prisma.role.findFirst({ where: { name: 'ADMIN' } });
+    if (!adminRole) {
+      throw new Error("Role 'ADMIN' não encontrado — não é possível libertar permissões sem ele");
+    }
+    return adminRole.id;
+  }
+
   // ══════════════════════════════════════════════════════
   // ROLES — CRUD
   // ══════════════════════════════════════════════════════
@@ -173,6 +186,15 @@ export class RolesPermissionsService {
       throw new ConflictException(
         `Role tem ${(role._count as any).users} utilizador(es) atribuídos — reatribua antes de remover`,
       );
+    // Permission.roleId → Role é ON DELETE CASCADE: sem este guard, remover
+    // um role apagaria PERMANENTEMENTE todas as permissões que ele possui
+    // (não apenas a associação) — usa setRolePermissions(id, []) primeiro
+    // para libertar as permissões para o ADMIN antes de remover o role.
+    if (((role as any).permissions as any[])?.length > 0) {
+      throw new ConflictException(
+        `Role tem ${(role as any).permissions.length} permissão(ões) associada(s) — reatribua-as (setRolePermissions) antes de remover, para não as perder em cascata`,
+      );
+    }
 
     await this.prisma.role.delete({ where: { id } });
     await this.prisma.auditLog
@@ -293,20 +315,42 @@ export class RolesPermissionsService {
 
   async removePermissionsFromRole(roleId: number, permissionIds: number[]) {
     await this.findOne(roleId);
-    return this.prisma.role.update({
-      where: { id: roleId },
-      data: { permissions: { disconnect: permissionIds.map(id => ({ id })) } },
-      include: { permissions: true },
+    // disconnect numa relação obrigatória (Permission.roleId) rebenta sempre
+    // com "would violate the required relation" — reatribuir ao ADMIN em vez
+    // de desligar é o mesmo padrão já usado em acl.service.ts.
+    const adminRoleId = await this.getAdminRoleId();
+    await this.prisma.permission.updateMany({
+      where: { id: { in: permissionIds }, roleId },
+      data: { roleId: adminRoleId },
     });
+    return this.findOne(roleId);
   }
 
   async setRolePermissions(roleId: number, permissionIds: number[]) {
-    await this.findOne(roleId);
-    return this.prisma.role.update({
-      where: { id: roleId },
-      data: { permissions: { set: permissionIds.map(id => ({ id })) } },
-      include: { permissions: true },
-    });
+    const role = await this.findOne(roleId);
+    // { permissions: { set: [...] } } implica um disconnect implícito de tudo
+    // o que já não está na nova lista — na relação obrigatória Permission.roleId
+    // isso rebenta exactamente da mesma forma que um disconnect explícito.
+    // Em vez disso, reatribui-se directamente pelo FK: o que sai vai para o
+    // ADMIN (dono lógico de permissões libertadas), o que entra passa a
+    // pertencer a este role.
+    const currentIds = ((role as any).permissions as any[]).map(p => p.id);
+    const toRelease = currentIds.filter(id => !permissionIds.includes(id));
+
+    if (toRelease.length) {
+      const adminRoleId = await this.getAdminRoleId();
+      await this.prisma.permission.updateMany({
+        where: { id: { in: toRelease } },
+        data: { roleId: adminRoleId },
+      });
+    }
+    if (permissionIds.length) {
+      await this.prisma.permission.updateMany({
+        where: { id: { in: permissionIds } },
+        data: { roleId },
+      });
+    }
+    return this.findOne(roleId);
   }
 
   // ══════════════════════════════════════════════════════
