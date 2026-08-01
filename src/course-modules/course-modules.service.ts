@@ -3,6 +3,7 @@
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ServiceUnavailableException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -472,6 +473,65 @@ export class CourseModulesService {
       moduleCompleted,
       courseId,
     };
+  }
+
+  // Text-to-speech da aula via ElevenLabs. A chave fica só no backend — o
+  // frontend nunca a vê (antes vinha de NEXT_PUBLIC_ELEVENLABS_API_KEY e era
+  // embutida no bundle do browser, ver CourseAvatarReader.tsx).
+  async getLessonAudio(lessonId: number, userId: number): Promise<Buffer> {
+    const access = await this.isLessonAccessible(lessonId, userId);
+    if (!access.accessible) {
+      throw new ForbiddenException(access.reason ?? 'Aula não acessível');
+    }
+
+    const lesson = await this.prisma.read.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson) throw new NotFoundException('Aula não encontrada');
+    if (!lesson.textContent) {
+      throw new BadRequestException('Aula não tem conteúdo de texto para ler');
+    }
+
+    const apiKey = process.env.ELEVENLABS_API_KEY ?? '';
+    const voiceId = process.env.ELEVENLABS_VOICE_ID ?? '';
+    if (!apiKey || !voiceId) {
+      throw new ServiceUnavailableException('Leitura por voz não configurada');
+    }
+
+    const text =
+      lesson.textContent.length > 5000
+        ? lesson.textContent.slice(0, 5000) + '...'
+        : lesson.textContent;
+
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        Accept: 'audio/mpeg',
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.8,
+          style: 0.2,
+          use_speaker_boost: true,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      this.logger.warn({
+        userId,
+        action: 'LESSON_AUDIO_ELEVENLABS_ERROR',
+        entityId: lessonId,
+        status: response.status,
+        msg: 'Falha ao gerar áudio da aula via ElevenLabs',
+      });
+      throw new ServiceUnavailableException('Falha ao gerar áudio da aula');
+    }
+
+    return Buffer.from(await response.arrayBuffer());
   }
 
   private async notifyNextModuleUnlock(currentModuleId: number, userId: number, courseId: number) {

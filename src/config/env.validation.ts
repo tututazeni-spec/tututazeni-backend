@@ -37,6 +37,11 @@ export const envValidationSchema = Joi.object({
   OLLAMA_URL: Joi.string().uri().optional().allow(''),
   OLLAMA_MODEL: Joi.string().optional(),
 
+  // Avatar de leitura (text-to-speech) — opcionais (app funciona sem eles;
+  // GET /lessons/:id/audio devolve 503 se não configurados)
+  ELEVENLABS_API_KEY: Joi.string().optional().allow(''),
+  ELEVENLABS_VOICE_ID: Joi.string().optional().allow(''),
+
   // Runtime
   JWT_USER_CACHE_TTL_MS: Joi.number().default(30000),
   LOG_LEVEL: Joi.string().valid('trace', 'debug', 'info', 'warn', 'error', 'fatal').default('info'),

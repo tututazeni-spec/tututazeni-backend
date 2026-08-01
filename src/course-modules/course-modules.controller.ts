@@ -11,7 +11,9 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CourseModulesService } from './course-modules.service';
 import {
@@ -164,6 +166,24 @@ export class CourseModulesController {
   @HttpCode(HttpStatus.OK)
   markComplete(@CurrentUser() user: CurrentUserData, @Body() dto: MarkModuleLessonCompleteDto) {
     return this.svc.markLessonComplete(user.id, dto);
+  }
+
+  @Get('lessons/:id/audio')
+  @ApiOperation({
+    summary: 'Áudio da aula gerado por text-to-speech (proxy — chave fica no backend)',
+  })
+  async getLessonAudio(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+    @Res() res: Response,
+  ) {
+    const audio = await this.svc.getLessonAudio(id, user.id);
+    res.set({
+      'Content-Type': 'audio/mpeg',
+      'Content-Length': audio.length,
+      'Cache-Control': 'private, max-age=86400',
+    });
+    res.end(audio);
   }
 
   // NOTA: courses.controller.ts já regista GET /courses/:id/progress (progresso simples).
