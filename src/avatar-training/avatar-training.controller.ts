@@ -18,6 +18,7 @@ import { AvatarTrainingService } from './avatar-training.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 import {
   CreateAvatarDto,
   UpdateAvatarDto,
@@ -31,9 +32,8 @@ import {
   UploadKnowledgeDto,
 } from './avatar-training.dto';
 
-const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR'] as const;
-const MGMT_ROLES = ['ADMIN', 'RH', 'LIDER'] as const;
-const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
+const MGMT_ROLES = [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR] as const;
+const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
 
 @ApiTags('Avatar Training')
 @ApiBearerAuth()
@@ -52,14 +52,14 @@ export class AvatarTrainingController {
   }
 
   @Get('avatars')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Listar avatares disponíveis (filtrar por role, público)' })
   getAvatars(@Query() filters: AvatarFilterDto) {
     return this.svc.getAvatars(filters);
   }
 
   @Get('avatars/:id')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe de um avatar' })
   getAvatar(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAvatar(id);
@@ -97,7 +97,7 @@ export class AvatarTrainingController {
   }
 
   @Get('scenarios')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({
     summary: 'Catálogo de cenários (filtrar por categoria, dificuldade, competência)',
   })
@@ -106,21 +106,21 @@ export class AvatarTrainingController {
   }
 
   @Get('scenarios/recommended')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Cenários recomendados baseados no perfil e gaps do utilizador' })
   recommended(@CurrentUser() user: CurrentUserData, @Query('limit') limit?: string) {
     return this.svc.getRecommendedScenarios(user.id, limit ? +limit : 6);
   }
 
   @Get('scenarios/:id')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe do cenário com turns e melhor tentativa do utilizador' })
   getScenario(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getScenario(id, user.id);
   }
 
   @Get('scenarios/:scenarioId/leaderboard')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Ranking de pontuação de um cenário' })
   leaderboard(@Param('scenarioId', ParseIntPipe) id: number, @Query('limit') limit?: string) {
     return this.svc.getLeaderboard(id, limit ? +limit : 10);
@@ -129,14 +129,14 @@ export class AvatarTrainingController {
   // ─── Sessions — Lifecycle ─────────────────────────────────────
 
   @Post('sessions/start')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Iniciar sessão de simulação com avatar' })
   start(@CurrentUser() user: CurrentUserData, @Body() dto: StartSessionDto) {
     return this.svc.startSession(user.id, dto);
   }
 
   @Post('sessions/:id/message')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Enviar mensagem na sessão — avatar responde + score em tempo real' })
   sendMessage(
     @Param('id', ParseIntPipe) id: number,
@@ -147,7 +147,7 @@ export class AvatarTrainingController {
   }
 
   @Post('sessions/:id/complete')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({
     summary: 'Concluir sessão — score final, XP, feedback comportamental, próximo cenário',
   })
@@ -160,21 +160,21 @@ export class AvatarTrainingController {
   }
 
   @Post('sessions/:id/pause')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Pausar sessão' })
   pause(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.pauseSession(id, user.id);
   }
 
   @Post('sessions/:id/resume')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Retomar sessão pausada' })
   resume(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.resumeSession(id, user.id);
   }
 
   @Get('sessions/:id')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe de sessão com histórico de conversa + scores comportamentais' })
   sessionDetail(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getSessionDetail(id, user.id);
@@ -183,14 +183,14 @@ export class AvatarTrainingController {
   // ─── History & Progress ───────────────────────────────────────
 
   @Get('my-history')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Meu histórico + estatísticas (streak, score médio, XP)' })
   myHistory(@CurrentUser() user: CurrentUserData, @Query('limit') limit?: string) {
     return this.svc.getMyHistory(user.id, limit ? +limit : 20);
   }
 
   @Get('my-analytics')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Análise pessoal aprofundada (por categoria, evolução, competências)' })
   myAnalytics(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserAnalytics(user.id);
@@ -199,7 +199,7 @@ export class AvatarTrainingController {
   // ─── Leaderboard & Social ─────────────────────────────────────
 
   @Get('leaderboard')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Leaderboard global (opcionalmente por departamento)' })
   globalLeaderboard(@Query('departmentId') departmentId?: string, @Query('limit') limit?: string) {
     return this.svc.getGlobalLeaderboard(
