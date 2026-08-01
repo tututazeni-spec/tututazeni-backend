@@ -413,7 +413,11 @@ export class AclService {
         ? ['*', ...BUILTIN_PERMISSIONS.map(p => p.name)]
         : permissions;
 
-    await this.cache.set(permKey(userId), { permissions: effective, roleCode }, PERM_CACHE_TTL_SECONDS);
+    await this.cache.set(
+      permKey(userId),
+      { permissions: effective, roleCode },
+      PERM_CACHE_TTL_SECONDS,
+    );
     return { userId, roleCode, permissions: effective, cached: false };
   }
 

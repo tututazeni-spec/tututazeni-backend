@@ -34,7 +34,11 @@ import {
   OvertimeStatus,
 } from './attendance.dto';
 
-interface QrEntry { userId?: number; payload: any; expiresAt: number }
+interface QrEntry {
+  userId?: number;
+  payload: any;
+  expiresAt: number;
+}
 function qrKey(token: string): string {
   return `attendance:qr:${token}`;
 }

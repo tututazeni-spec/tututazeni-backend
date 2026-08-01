@@ -7,8 +7,14 @@ function buildMockCache() {
   const store = new Map<string, unknown>();
   return {
     get: jest.fn((key: string) => Promise.resolve(store.has(key) ? store.get(key) : null)),
-    set: jest.fn((key: string, value: unknown) => { store.set(key, value); return Promise.resolve(); }),
-    del: jest.fn((key: string) => { store.delete(key); return Promise.resolve(); }),
+    set: jest.fn((key: string, value: unknown) => {
+      store.set(key, value);
+      return Promise.resolve();
+    }),
+    del: jest.fn((key: string) => {
+      store.delete(key);
+      return Promise.resolve();
+    }),
   };
 }
 
