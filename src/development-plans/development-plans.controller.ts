@@ -96,8 +96,8 @@ export class DevelopmentPlansController {
   @Patch(':id/submit')
   @ApiOperation({ summary: 'Submeter plano para aprovação (DRAFT → PENDING_APPROVAL)' })
   @HttpCode(HttpStatus.OK)
-  submit(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.submitForApproval(id);
+  submit(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.submitForApproval(id, user);
   }
 
   @Post('approve')
@@ -105,24 +105,7 @@ export class DevelopmentPlansController {
   @ApiOperation({ summary: 'Aprovar ou rejeitar plano (gestor/RH)' })
   @HttpCode(HttpStatus.OK)
   approve(@CurrentUser() user: CurrentUserData, @Body() dto: ApprovePlanDto) {
-    return this.svc.approvePlan(dto, user.id);
-  }
-
-  @Patch(':id/complete')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Concluir plano (emite certificado + XP)' })
-  @HttpCode(HttpStatus.OK)
-  complete(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.complete(id);
-  }
-
-  @Patch(':id/cancel')
-  @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Cancelar plano' })
-  @HttpCode(HttpStatus.OK)
-  @ApiQuery({ name: 'reason', required: false })
-  cancel(@Param('id', ParseIntPipe) id: number, @Query('reason') reason?: string) {
-    return this.svc.cancel(id, reason);
+    return this.svc.approvePlan(dto, user);
   }
 
   @Delete(':id')
@@ -195,5 +178,26 @@ export class DevelopmentPlansController {
   @HttpCode(HttpStatus.OK)
   completeCheckpoint(@Body() dto: CompleteCheckpointDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.completeCheckpoint(dto, user);
+  }
+
+  // ── Gestão do Plano (rotas ':id/...' — têm de vir DEPOIS das rotas
+  // literais acima, senão ':id/complete' engole 'checkpoints/complete' e
+  // ':id/cancel' e faz o ParseIntPipe rejeitar "checkpoints" como id) ───────
+
+  @Patch(':id/complete')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Concluir plano (emite certificado + XP)' })
+  @HttpCode(HttpStatus.OK)
+  complete(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.complete(id);
+  }
+
+  @Patch(':id/cancel')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Cancelar plano' })
+  @HttpCode(HttpStatus.OK)
+  @ApiQuery({ name: 'reason', required: false })
+  cancel(@Param('id', ParseIntPipe) id: number, @Query('reason') reason?: string) {
+    return this.svc.cancel(id, reason);
   }
 }

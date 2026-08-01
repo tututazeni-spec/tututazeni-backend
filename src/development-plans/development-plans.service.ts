@@ -197,8 +197,10 @@ export class DevelopmentPlansService {
     });
   }
 
-  async submitForApproval(id: number) {
-    const plan = (await this.findOne(id)) as any;
+  async submitForApproval(id: number, user: CurrentUserData) {
+    // Sem isto, qualquer autenticado podia submeter o PDI de outra pessoa para
+    // aprovação (a rota não tinha @Roles nem verificação de dono nenhuma).
+    const plan = (await this.findOne(id, user)) as any;
     if (plan.status !== 'DRAFT') {
       throw new BadRequestException('Apenas planos em DRAFT podem ser submetidos');
     }
@@ -208,8 +210,16 @@ export class DevelopmentPlansService {
     });
   }
 
-  async approvePlan(dto: ApprovePlanDto, approverId: number) {
+  async approvePlan(dto: ApprovePlanDto, approver: CurrentUserData) {
     const plan = (await this.findOne(dto.planId)) as any;
+    // Ownership: só o gestor designado do plano (managerId) OU ADMIN/RH podem
+    // aprovar — um GESTOR de outra equipa não deve poder decidir sobre um PDI
+    // que não gere. `findOne` sem `user` não filtra por dono (userId), o que
+    // aqui seria a relação errada de qualquer forma: quem aprova é o managerId,
+    // não o dono do plano. Mesma classe de bug já encontrada em
+    // leader.service.approvePlan (ver memory ownership-check-gaps).
+    assertCanAccess(plan, plan.managerId, approver, [Role.ADMIN, Role.RH]);
+    const approverId = approver.id;
     if (plan.status !== 'PENDING_APPROVAL') {
       throw new BadRequestException('Plano não está pendente de aprovação');
     }
@@ -461,13 +471,13 @@ export class DevelopmentPlansService {
 
     const evidence = await this.prisma.pdiEvidence.create({
       data: {
-        actionId: dto.actionId,
+        developmentPlanActionId: dto.actionId,
         submittedById: user.id,
         title: dto.title,
         url: dto.url,
         notes: dto.notes,
         evidenceType: dto.evidenceType ?? 'NOTE',
-      } as any,
+      },
     });
 
     // Auto-avançar para IN_PROGRESS se ainda em TODO

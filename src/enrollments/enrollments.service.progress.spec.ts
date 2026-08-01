@@ -95,7 +95,7 @@ describe('EnrollmentsService (progress)', () => {
 
   describe('updateStatus', () => {
     it('deve actualizar status para CANCELLED a partir de NOT_STARTED', async () => {
-      // invalidTransitions['CANCELLED'] = ['COMPLETED'] — NOT_STARTED não está na lista → válido
+      // invalidTransitions['NOT_STARTED'] não existe como chave → válido
       mockPrisma.enrollment.findUnique.mockResolvedValue({
         ...baseEnrollment,
         status: 'NOT_STARTED',
@@ -109,22 +109,27 @@ describe('EnrollmentsService (progress)', () => {
       expect(mockPrisma.enrollment.update).toHaveBeenCalled();
     });
 
-    it('deve lançar BadRequestException ao tentar COMPLETED a partir de IN_PROGRESS', async () => {
-      // invalidTransitions['COMPLETED'] inclui 'IN_PROGRESS' → inválido
+    it('deve actualizar status para COMPLETED a partir de IN_PROGRESS (fluxo normal)', async () => {
+      // Bug corrigido: o mapa estava indexado pelo estado alvo em vez do
+      // estado actual, bloqueando sempre esta transição — o próprio propósito
+      // do endpoint. invalidTransitions é agora indexado por `current`.
       mockPrisma.enrollment.findUnique.mockResolvedValue({
         ...baseEnrollment,
         status: 'IN_PROGRESS',
       });
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(3);
+      mockPrisma.enrollment.update.mockResolvedValue({ id: 1, status: 'COMPLETED' });
 
-      await expect(service.updateStatus(1, { status: 'COMPLETED' } as any)).rejects.toThrow(
-        BadRequestException,
+      const result = await service.updateStatus(1, { status: 'COMPLETED' } as any);
+      expect(result).toBeDefined();
+      expect(mockPrisma.enrollment.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) }),
       );
     });
 
     it('deve lançar BadRequestException ao tentar CANCELLED a partir de COMPLETED', async () => {
-      // invalidTransitions['CANCELLED'] inclui 'COMPLETED' → inválido
+      // invalidTransitions['COMPLETED'] inclui 'CANCELLED' → inválido
       mockPrisma.enrollment.findUnique.mockResolvedValue({
         ...baseEnrollment,
         status: 'COMPLETED',

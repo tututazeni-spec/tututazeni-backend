@@ -152,18 +152,18 @@ export class EnrollmentsController {
 
   @Patch(':id/cancel')
   @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Cancelar matrícula (Admin pode cancelar qualquer)' })
+  @ApiOperation({
+    summary: 'Cancelar matrícula (Admin pode cancelar qualquer, incl. obrigatórias)',
+  })
   @HttpCode(HttpStatus.OK)
   cancel(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() admin: CurrentUserData,
     @Body() dto: CancelEnrollmentDto,
   ) {
-    // Admin ignora a verificação de mandatory
-    return this.prisma.enrollment.update({
-      where: { id },
-      data: { status: 'CANCELLED', cancelReason: dto.reason, cancelledAt: new Date() },
-    });
+    // Admin ignora a verificação de mandatory, mas mantém as restantes
+    // validações do serviço (existência, estado COMPLETED, side-effects).
+    return this.svc.cancel(id, dto, admin, true);
   }
 
   @Post(':id/certificate')
@@ -180,10 +180,5 @@ export class EnrollmentsController {
   @HttpCode(HttpStatus.OK)
   syncOverdue() {
     return this.svc.syncOverdueStatus();
-  }
-
-  // ─── Fix: usar o prisma da service para o admin cancel ─────────────────
-  private get prisma() {
-    return (this.svc as any).prisma;
   }
 }
