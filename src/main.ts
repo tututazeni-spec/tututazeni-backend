@@ -10,6 +10,8 @@ import { AppModule } from './app.module';
 import { enforceHttpsMiddleware } from './common/security/enforce-https';
 import { parseAllowedOrigins } from './common/security/allowed-origins';
 import { createSwaggerAuthMiddleware } from './common/security/swagger-auth.middleware';
+import { csrfHeaderMiddleware } from './common/security/csrf-header-guard';
+import { TOKEN_COOKIE } from './auth/token-cookie';
 import { validateEnv } from './common/bootstrap/validate-env';
 import { runWithRequestContext } from './common/logging/request-context';
 
@@ -52,6 +54,9 @@ async function bootstrap() {
   app.use(enforceHttpsMiddleware(isProd));
   app.use(compression());
   app.use(cookieParser());
+  // Segunda camada de defesa CSRF, além de SameSite=Lax + CORS restrito
+  // (ver csrf-header-guard.ts) — tem de correr depois do cookieParser.
+  app.use(csrfHeaderMiddleware(TOKEN_COOKIE));
 
   // Estabelece o contexto de correlação (reqId) para toda a cadeia do pedido —
   // middleware corre depois do pino-http (que já atribuiu req.id) e antes dos
