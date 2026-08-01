@@ -32,7 +32,11 @@ describe('requiresCsrfHeaderCheck', () => {
 });
 
 describe('csrfHeaderMiddleware', () => {
-  function run(method: string, cookies: Record<string, unknown> | undefined, headers: Record<string, string>) {
+  function run(
+    method: string,
+    cookies: Record<string, unknown> | undefined,
+    headers: Record<string, string>,
+  ) {
     const req = { method, cookies, headers } as never;
     const json = jest.fn();
     const status = jest.fn().mockReturnValue({ json });
@@ -56,9 +60,7 @@ describe('csrfHeaderMiddleware', () => {
   it('rejeita com 403 um POST com cookie de sessão e sem o cabeçalho', () => {
     const { next, status, json } = run('POST', { token: 'x' }, {});
     expect(status).toHaveBeenCalledWith(403);
-    expect(json).toHaveBeenCalledWith(
-      expect.objectContaining({ statusCode: 403 }),
-    );
+    expect(json).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
     expect(next).not.toHaveBeenCalled();
   });
 
