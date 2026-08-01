@@ -16,6 +16,7 @@ import { ContentLibraryService } from './content-library.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
+import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 import {
   CreateContentDto,
   UpdateContentDto,
@@ -27,9 +28,8 @@ import {
   ContentLibraryLearningPathFilterDto,
 } from './content-library.dto';
 
-const ALL_ROLES = ['ADMIN', 'RH', 'LIDER', 'COLABORADOR', 'INSTRUCTOR'] as const;
-const AUTHOR_ROLES = ['ADMIN', 'RH', 'INSTRUCTOR'] as const;
-const ADMIN_ROLES = ['ADMIN', 'RH'] as const;
+const AUTHOR_ROLES = [Role.ADMIN, Role.RH, Role.INSTRUCTOR] as const;
+const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
 
 @ApiTags('Content Library')
 @ApiBearerAuth()
@@ -41,7 +41,7 @@ export class ContentLibraryController {
   // ─── Catalogue ────────────────────────────────────────────────
 
   @Get()
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({
     summary: 'Catálogo com busca full-text e filtros (format, level, category, tags…)',
   })
@@ -50,56 +50,56 @@ export class ContentLibraryController {
   }
 
   @Get('trending')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Conteúdos em trending (mais vistos nos últimos 7 dias)' })
   trending(@Query('limit') limit?: string) {
     return this.svc.getTrending(limit ? +limit : 10);
   }
 
   @Get('new')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Conteúdos adicionados recentemente' })
   newContent(@Query('limit') limit?: string) {
     return this.svc.getNewContent(limit ? +limit : 10);
   }
 
   @Get('recommended')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Conteúdos recomendados para mim (baseado em perfil + histórico)' })
   recommended(@CurrentUser() user: CurrentUserData, @Query('limit') limit?: string) {
     return this.svc.getRecommended(user.id, limit ? +limit : 10);
   }
 
   @Get('mandatory')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Conteúdos obrigatórios com o meu progresso' })
   mandatory(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMandatory(user.id);
   }
 
   @Get('bookmarks')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Os meus conteúdos guardados' })
   bookmarks(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyBookmarks(user.id);
   }
 
   @Get('continue-watching')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Continuar a ver — conteúdos em progresso' })
   continueWatching(@CurrentUser() user: CurrentUserData, @Query('limit') limit?: string) {
     return this.svc.getContinueWatching(user.id, limit ? +limit : 5);
   }
 
   @Get('categories')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Distribuição de conteúdos por formato/categoria' })
   categories() {
     return this.svc.getCategoryBreakdown();
   }
 
   @Get('tags')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Todas as tags disponíveis' })
   tags() {
     return this.svc.getAllTags();
@@ -108,7 +108,7 @@ export class ContentLibraryController {
   // ─── Single Content ───────────────────────────────────────────
 
   @Get(':id')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe do conteúdo (com rating, progresso do utilizador)' })
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.findOne(id, user.id);
@@ -149,14 +149,14 @@ export class ContentLibraryController {
   // ─── Interactions ─────────────────────────────────────────────
 
   @Patch(':id/view')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Registar visualização (deduplicado por dia)' })
   view(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.view(id, user.id);
   }
 
   @Patch(':id/bookmark')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Guardar / remover dos guardados (toggle)' })
   bookmark(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.bookmark(id, user.id);
@@ -165,7 +165,7 @@ export class ContentLibraryController {
   // ─── Progress ─────────────────────────────────────────────────
 
   @Patch(':id/progress')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Actualizar progresso (% + tempo + última posição)' })
   updateProgress(
     @Param('id', ParseIntPipe) id: number,
@@ -176,7 +176,7 @@ export class ContentLibraryController {
   }
 
   @Get('my/progress')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Histórico de progresso pessoal + estatísticas' })
   myProgress(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyProgress(user.id);
@@ -185,7 +185,7 @@ export class ContentLibraryController {
   // ─── Ratings ──────────────────────────────────────────────────
 
   @Post(':id/rate')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Avaliar conteúdo (1–5 estrelas + comentário)' })
   rate(
     @Param('id', ParseIntPipe) id: number,
@@ -196,7 +196,7 @@ export class ContentLibraryController {
   }
 
   @Get(':id/ratings')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Avaliações de um conteúdo (média + distribuição + comentários)' })
   ratings(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getContentRatings(id);
@@ -205,7 +205,7 @@ export class ContentLibraryController {
   // ─── Notes ────────────────────────────────────────────────────
 
   @Post(':id/note')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Guardar nota pessoal num conteúdo' })
   saveNote(
     @Param('id', ParseIntPipe) id: number,
@@ -216,7 +216,7 @@ export class ContentLibraryController {
   }
 
   @Get(':id/note')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Obter a minha nota num conteúdo' })
   getNote(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getMyNote(id, user.id);
@@ -225,14 +225,14 @@ export class ContentLibraryController {
   // ─── Learning Paths ───────────────────────────────────────────
 
   @Get('paths/all')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Listar learning paths' })
   getLearningPaths(@Query() filters: ContentLibraryLearningPathFilterDto) {
     return this.svc.getLearningPaths(filters);
   }
 
   @Get('paths/:id')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe de learning path com progresso do utilizador' })
   getLearningPath(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.getLearningPath(id, user.id);
@@ -246,7 +246,7 @@ export class ContentLibraryController {
   }
 
   @Post('paths/:id/enroll')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Inscrever-se numa learning path' })
   enrollPath(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.enrollLearningPath(id, user.id);
@@ -262,7 +262,7 @@ export class ContentLibraryController {
   }
 
   @Get('analytics/my-stats')
-  @Roles(...ALL_ROLES)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'As minhas estatísticas pessoais de consumo' })
   myStats(@CurrentUser() user: CurrentUserData) {
     return this.svc.getUserAnalytics(user.id);
