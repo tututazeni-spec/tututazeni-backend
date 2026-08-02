@@ -87,8 +87,8 @@ describe('DashboardService (progress)', () => {
     it('deve calcular completionRate com dados', async () => {
       mockPrisma.user.count.mockResolvedValue(20);
       mockPrisma.enrollment.count
-        .mockResolvedValueOnce(15) // enrollments EM_ANDAMENTO
-        .mockResolvedValueOnce(10) // completions CONCLUIDO
+        .mockResolvedValueOnce(15) // enrollments IN_PROGRESS
+        .mockResolvedValueOnce(10) // completions COMPLETED
         .mockResolvedValueOnce(0); // activePlans (via count)
       mockPrisma.performanceReview.aggregate.mockResolvedValue({ _avg: { score: 3.5 } });
       mockPrisma.developmentPlan.count.mockResolvedValue(8);

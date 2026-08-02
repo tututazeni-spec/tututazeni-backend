@@ -11,17 +11,11 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import { EnrollmentStatus } from '@prisma/client';
 
 // ─── Enums (EN — consistentes com toda a plataforma) ─────────────────────────
 
-export enum EnrollmentStatus {
-  NOT_STARTED = 'NOT_STARTED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  OVERDUE = 'OVERDUE',
-  EXPIRED = 'EXPIRED',
-  CANCELLED = 'CANCELLED',
-}
+export { EnrollmentStatus };
 
 export enum EnrollmentOrigin {
   MANUAL = 'MANUAL', // Admin/RH

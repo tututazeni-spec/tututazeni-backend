@@ -58,7 +58,7 @@ const baseEnrollment = {
   id: 1,
   userId: 2,
   courseId: 1,
-  status: 'ACTIVE',
+  status: 'NOT_STARTED',
   origin: 'SELF',
   mandatory: false,
   deadline: null,
@@ -117,7 +117,7 @@ describe('EnrollmentsService (additional)', () => {
       await service.findAll({
         userId: 1,
         courseId: 1,
-        status: 'ACTIVE' as any,
+        status: 'IN_PROGRESS' as any,
         mandatory: true,
         overdue: true,
       });

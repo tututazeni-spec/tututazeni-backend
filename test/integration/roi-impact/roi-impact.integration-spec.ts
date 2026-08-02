@@ -72,7 +72,7 @@ describe('Roi Impact Integration', () => {
       data: {
         courseId: courseAId,
         userId: employeeId,
-        status: 'CONCLUIDO',
+        status: 'COMPLETED',
         enrolledAt: new Date(),
       },
     });

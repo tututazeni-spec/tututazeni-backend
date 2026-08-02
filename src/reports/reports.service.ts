@@ -1,5 +1,6 @@
 // src/reports/reports.service.ts
 import { Injectable, Logger } from '@nestjs/common';
+import { EnrollmentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReportFilterDto, SaveReportDto, CreateScheduleDto, ReportCategory } from './reports.dto';
 import { sanitizeForLog } from '../common/logging/sanitize';
@@ -168,9 +169,15 @@ export class ReportsService {
     const [enrollments, completed, inProgress, cancelled, byCourseFull, byDept, avgScore] =
       await Promise.all([
         this.prismaRead.enrollment.count({ where }),
-        this.prismaRead.enrollment.count({ where: { ...where, status: 'CONCLUIDO' } }),
-        this.prismaRead.enrollment.count({ where: { ...where, status: 'EM_ANDAMENTO' } }),
-        this.prismaRead.enrollment.count({ where: { ...where, status: 'CANCELADO' } }),
+        this.prismaRead.enrollment.count({
+          where: { ...where, status: EnrollmentStatus.COMPLETED },
+        }),
+        this.prismaRead.enrollment.count({
+          where: { ...where, status: EnrollmentStatus.IN_PROGRESS },
+        }),
+        this.prismaRead.enrollment.count({
+          where: { ...where, status: EnrollmentStatus.CANCELLED },
+        }),
         // Top courses
         this.prismaRead.enrollment
           .groupBy({
@@ -189,7 +196,7 @@ export class ReportsService {
             const cMap = new Map(courses.map(c => [c.id, c]));
             const compls = await this.prismaRead.enrollment.groupBy({
               by: ['courseId'],
-              where: { ...where, status: 'CONCLUIDO' },
+              where: { ...where, status: EnrollmentStatus.COMPLETED },
               _count: { id: true },
             });
             const compMap = new Map<any, number>(compls.map((c: any) => [c.courseId, c._count.id]));
@@ -204,7 +211,7 @@ export class ReportsService {
         this.prismaRead.enrollment
           .groupBy({
             by: ['userId'],
-            where: { ...where, status: 'CONCLUIDO' },
+            where: { ...where, status: EnrollmentStatus.COMPLETED },
             _count: { id: true },
             orderBy: { _count: { id: 'desc' } },
             take: 200,
@@ -613,7 +620,7 @@ export class ReportsService {
         .count({
           where: {
             course: { mandatory: true } as any,
-            status: 'CONCLUIDO',
+            status: EnrollmentStatus.COMPLETED,
             ...(uWhere ? { user: uWhere } : {}),
           },
         })

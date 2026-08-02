@@ -1674,11 +1674,20 @@ model ModuleMaterial {
   module     CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
 }
 
+enum EnrollmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  OVERDUE
+}
+
 model Enrollment {
   id             Int                 @id @default(autoincrement())
   courseId       Int
   userId         Int
-  status         String              @default("NOT_STARTED")
+  status         EnrollmentStatus    @default(NOT_STARTED)
   origin         String              @default("MANUAL")
   mandatory      Boolean             @default(false)
   learningPathId Int?

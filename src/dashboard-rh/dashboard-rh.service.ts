@@ -1,5 +1,6 @@
 // src/dashboard-rh/dashboard-rh.service.ts
 import { Injectable, Logger } from '@nestjs/common';
+import { EnrollmentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
@@ -125,11 +126,11 @@ export class DashboardRhService {
           }),
         this.prisma.read.developmentPlan.count({ where: { status: 'ACTIVE', isTemplate: false } }),
         this.prisma.read.enrollment.count({
-          where: { status: 'CONCLUIDO', enrolledAt: { gte: mS } },
+          where: { status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: mS } },
         }),
         this.prisma.enrollment
           .count({
-            where: { course: { mandatory: true } as any, status: 'CONCLUIDO' },
+            where: { course: { mandatory: true } as any, status: EnrollmentStatus.COMPLETED },
           })
           .catch((e: unknown) => {
             this.logger.warn({
@@ -676,11 +677,13 @@ export class DashboardRhService {
     ] = await Promise.all([
       this.prisma.read.enrollment.count({ where: { enrolledAt: { gte: mS }, ...uWhere } }),
       this.prisma.read.enrollment.count({
-        where: { status: 'CONCLUIDO', enrolledAt: { gte: mS }, ...uWhere },
+        where: { status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: mS }, ...uWhere },
       }),
-      this.prisma.read.enrollment.count({ where: { status: 'EM_ANDAMENTO', ...uWhere } }),
       this.prisma.read.enrollment.count({
-        where: { status: 'CANCELADO', enrolledAt: { gte: mS }, ...uWhere },
+        where: { status: EnrollmentStatus.IN_PROGRESS, ...uWhere },
+      }),
+      this.prisma.read.enrollment.count({
+        where: { status: EnrollmentStatus.CANCELLED, enrolledAt: { gte: mS }, ...uWhere },
       }),
       this.prisma.enrollment
         .count({ where: { course: { mandatory: true } as any, ...uWhere } })
@@ -694,7 +697,13 @@ export class DashboardRhService {
           return 0;
         }),
       this.prisma.enrollment
-        .count({ where: { course: { mandatory: true } as any, status: 'CONCLUIDO', ...uWhere } })
+        .count({
+          where: {
+            course: { mandatory: true } as any,
+            status: EnrollmentStatus.COMPLETED,
+            ...uWhere,
+          },
+        })
         .catch((e: unknown) => {
           this.logger.warn({
             departmentId,
@@ -770,7 +779,9 @@ export class DashboardRhService {
           return 0;
         }),
       this.prisma.enrollment
-        .count({ where: { course: { mandatory: true } as any, status: 'CONCLUIDO' } })
+        .count({
+          where: { course: { mandatory: true } as any, status: EnrollmentStatus.COMPLETED },
+        })
         .catch((e: unknown) => {
           this.logger.warn({
             action: 'DASHBOARD_RH_COMPLIANCE_MANDATORY_DONE',
@@ -992,7 +1003,10 @@ export class DashboardRhService {
         }),
       this.prisma.enrollment
         .count({
-          where: { course: { mandatory: true } as any, status: { not: 'CONCLUIDO' } },
+          where: {
+            course: { mandatory: true } as any,
+            status: { not: EnrollmentStatus.COMPLETED },
+          },
         })
         .catch((e: unknown) => {
           this.logger.warn({
@@ -1138,7 +1152,7 @@ export class DashboardRhService {
         select: { userId: true, score: true },
       }),
       this.prisma.read.enrollment.findMany({
-        where: { userId: { in: userIds }, status: 'CONCLUIDO' },
+        where: { userId: { in: userIds }, status: EnrollmentStatus.COMPLETED },
         select: { userId: true },
       }),
       this.prisma.read.surveyResponse.findMany({

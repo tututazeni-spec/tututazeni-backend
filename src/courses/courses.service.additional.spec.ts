@@ -423,7 +423,7 @@ describe('CoursesService (additional)', () => {
 
     it('deve lançar ConflictException se já matriculado', async () => {
       mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
-      mockPrisma.enrollment.findFirst.mockResolvedValue({ id: 1, status: 'ACTIVE' });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({ id: 1, status: 'IN_PROGRESS' });
       await expect(service.enroll(1, 2, {})).rejects.toThrow(ConflictException);
     });
 
@@ -484,7 +484,7 @@ describe('CoursesService (additional)', () => {
 
     it('deve ignorar utilizadores já matriculados no assign', async () => {
       mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
-      mockPrisma.enrollment.findFirst.mockResolvedValue({ id: 1, status: 'ACTIVE' });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({ id: 1, status: 'IN_PROGRESS' });
       const result = await service.assignCourse(1, { targetType: 'USER' as any, targetId: 2 }, 1);
       expect(result.skipped).toBe(1);
     });

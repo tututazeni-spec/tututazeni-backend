@@ -1,5 +1,6 @@
 ﻿// src/leader/leader.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { EnrollmentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateLeaderProfileDto,
@@ -17,7 +18,7 @@ import { CurrentUserData } from '../common/types/current-user';
 // ✅ role is a RELATION — never use { role: { in: ['GESTOR'] } }
 //    Use roleCode on User directly (if field exists) or role.code
 // ✅ leaveRequest model does not exist → HistoryRecord fallback
-// ✅ enrollment status: EM_ANDAMENTO (not IN_PROGRESS)
+// ✅ enrollment status: enum EnrollmentStatus (Prisma) — convenção EN em toda a plataforma
 // ✅ performanceReview.score (not overallScore)
 // ✅ task model does not exist → auditLog fallback
 // ✅ leaderProfile model may not exist → safe .catch() fallbacks
@@ -131,14 +132,13 @@ export class LeaderService {
       recentBadges,
     ] = await Promise.all([
       this.prisma.read.user.count({ where: { managerId: leaderId, active: true } }),
-      // FIX: EM_ANDAMENTO not IN_PROGRESS
       this.prisma.read.enrollment.count({
-        where: { user: { managerId: leaderId }, status: 'EM_ANDAMENTO' },
+        where: { user: { managerId: leaderId }, status: EnrollmentStatus.IN_PROGRESS },
       }),
       this.prisma.read.enrollment.count({
         where: {
           user: { managerId: leaderId },
-          status: 'CONCLUIDO',
+          status: EnrollmentStatus.COMPLETED,
           enrolledAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
         },
       }),
@@ -262,7 +262,10 @@ export class LeaderService {
           department: { select: { name: true } },
           points: { select: { points: true } },
           performanceReviews: { select: { score: true }, orderBy: { createdAt: 'desc' }, take: 1 },
-          enrollments: { select: { status: true }, where: { status: 'EM_ANDAMENTO' } },
+          enrollments: {
+            select: { status: true },
+            where: { status: EnrollmentStatus.IN_PROGRESS },
+          },
           developmentPlans: {
             select: { id: true, overallProgress: true, status: true },
             where: { isTemplate: false, status: 'ACTIVE' },
@@ -390,7 +393,7 @@ export class LeaderService {
       latestPerfScore: latestPerf,
       riskLevel: computeRisk(
         latestPerf,
-        member.enrollments.filter(e => e.status === 'EM_ANDAMENTO').length,
+        member.enrollments.filter(e => e.status === EnrollmentStatus.IN_PROGRESS).length,
         0,
       ),
       planProgress,
@@ -827,7 +830,7 @@ export class LeaderService {
             data: {
               userId: uid,
               courseId: dto.courseId,
-              status: 'EM_ANDAMENTO',
+              status: EnrollmentStatus.NOT_STARTED,
               enrolledAt: new Date(),
             },
           })
@@ -962,7 +965,7 @@ export class LeaderService {
           where: {
             userId: { in: teamIds },
             course: { mandatory: true } as any,
-            status: 'EM_ANDAMENTO',
+            status: EnrollmentStatus.IN_PROGRESS,
           },
         })
         .catch(e => {
