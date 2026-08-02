@@ -13,48 +13,11 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import { PlanStatus, ActionType, ActionStatus, PlanPriority } from '@prisma/client';
 
 // ─── Enums ───────────────────────────────────────────────────────
 
-export enum PlanStatus {
-  DRAFT = 'DRAFT',
-  ACTIVE = 'ACTIVE',
-  PAUSED = 'PAUSED',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
-}
-
-export enum ActionType {
-  COURSE = 'COURSE',
-  CERTIFICATION = 'CERTIFICATION',
-  MICROLEARNING = 'MICROLEARNING',
-  PROJECT = 'PROJECT',
-  JOB_ROTATION = 'JOB_ROTATION',
-  SHADOWING = 'SHADOWING',
-  MENTORING = 'MENTORING',
-  COACHING = 'COACHING',
-  PEER_COACHING = 'PEER_COACHING',
-  FEEDBACK = 'FEEDBACK',
-  READING = 'READING',
-  WORKSHOP = 'WORKSHOP',
-  CONFERENCE = 'CONFERENCE',
-  OTHER = 'OTHER',
-}
-
-export enum ActionStatus {
-  TODO = 'TODO',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
-  OVERDUE = 'OVERDUE',
-}
-
-export enum PlanPriority {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  CRITICAL = 'CRITICAL',
-}
+export { PlanStatus, ActionType, ActionStatus, PlanPriority };
 
 export enum TalentTier {
   HIGH = 'HIGH',

@@ -318,7 +318,7 @@ describe('Career Integration', () => {
         .send({
           positionId,
           candidateId: employeeId,
-          readiness: 'READY_12M',
+          readiness: 'READY_SOON',
           justification: 'Bom desempenho consistente',
         })
         .expect(201);

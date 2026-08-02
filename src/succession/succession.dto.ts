@@ -14,41 +14,17 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import {
+  ReadinessLevel,
+  SuccessorPriority,
+  RiskLevel,
+  BusinessImpact,
+  ReplacementTime,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum ReadinessLevel {
-  READY_NOW = 'READY_NOW', // 0–6 meses
-  READY_SOON = 'READY_SOON', // 6–12 meses
-  NEEDS_DEVELOPMENT = 'NEEDS_DEVELOPMENT', // 12–24+ meses
-}
-
-export enum SuccessorPriority {
-  PRIMARY = 'PRIMARY', // Primário
-  SECONDARY = 'SECONDARY', // Secundário
-  TERTIARY = 'TERTIARY', // Terciário / Longo prazo
-}
-
-export enum RiskLevel {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  CRITICAL = 'CRITICAL',
-}
-
-export enum BusinessImpact {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  CRITICAL = 'CRITICAL',
-}
-
-export enum ReplacementTime {
-  IMMEDIATE = 'IMMEDIATE', // < 30 dias
-  SHORT_TERM = 'SHORT_TERM', // 1–3 meses
-  MEDIUM_TERM = 'MEDIUM_TERM', // 3–6 meses
-  LONG_TERM = 'LONG_TERM', // > 6 meses
-}
+export { ReadinessLevel, SuccessorPriority, RiskLevel, BusinessImpact, ReplacementTime };
 
 // ─── Critical Position ────────────────────────────────────────────────────────
 

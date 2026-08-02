@@ -64,7 +64,7 @@ describe('LeaderService.approvePlan — ownership', () => {
     );
     expect(mockPrisma.pdiApproval.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ planId: 1, approverId: leader.id, decision: 'APPROVED' }),
+        data: expect.objectContaining({ planId: 1, approverId: leader.id, decision: 'APPROVE' }),
       }),
     );
     expect(result).toHaveProperty('message');
