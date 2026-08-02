@@ -12,45 +12,16 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import { DepartmentStatus, PositionLevel, OrgChangeType, UnitType } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum DepartmentStatus {
-  ACTIVE = 'ACTIVE',
-  INACTIVE = 'INACTIVE',
-}
-
-export enum PositionLevel {
-  INTERN = 'INTERN',
-  JUNIOR = 'JUNIOR',
-  MID = 'MID',
-  SENIOR = 'SENIOR',
-  LEAD = 'LEAD',
-  MANAGER = 'MANAGER',
-  DIRECTOR = 'DIRECTOR',
-  EXECUTIVE = 'EXECUTIVE',
-}
+export { DepartmentStatus, PositionLevel, OrgChangeType, UnitType };
 
 export enum ReportingType {
   DIRECT = 'DIRECT',
   MATRIX = 'MATRIX',
   DOTTED = 'DOTTED',
-}
-
-export enum OrgChangeType {
-  PROMOTION = 'PROMOTION',
-  TRANSFER = 'TRANSFER',
-  RESTRUCTURE = 'RESTRUCTURE',
-  HIRE = 'HIRE',
-  TERMINATION = 'TERMINATION',
-  MANAGER_CHANGE = 'MANAGER_CHANGE',
-}
-
-export enum UnitType {
-  HEADQUARTERS = 'HEADQUARTERS',
-  BRANCH = 'BRANCH',
-  REMOTE = 'REMOTE',
-  PROJECT = 'PROJECT',
 }
 
 // ─── Department ───────────────────────────────────────────────────────────────

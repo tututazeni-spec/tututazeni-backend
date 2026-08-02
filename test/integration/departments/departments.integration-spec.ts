@@ -241,7 +241,7 @@ describe('Departments Integration', () => {
       const res = await request(app.getHttpServer())
         .post('/units')
         .set('Authorization', `Bearer ${rhToken}`)
-        .send({ name: 'Unidade Teste Integração', type: 'SEDE', departmentId })
+        .send({ name: 'Unidade Teste Integração', type: 'HEADQUARTERS', departmentId })
         .expect(201);
       unitId = res.body.id;
       expect(res.body.type).toBe('SEDE');
@@ -310,7 +310,7 @@ describe('Departments Integration', () => {
       const res = await request(app.getHttpServer())
         .post('/roles/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
-        .send({ name: 'int:test:permission', action: 'read', subject: 'IntTest' })
+        .send({ name: 'int:test:permission', action: 'VIEW', subject: 'USERS' })
         .expect(201);
       permissionId = res.body.id;
       expect(permissionId).toBeDefined();

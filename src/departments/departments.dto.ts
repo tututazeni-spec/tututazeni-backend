@@ -1,7 +1,17 @@
 // src/departments/departments.dto.ts
-import { IsString, IsOptional, IsInt, IsBoolean, IsArray, Min, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsInt,
+  IsBoolean,
+  IsArray,
+  IsEnum,
+  Min,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { UnitType, PositionLevel, PermissionAction, PermissionSubject } from '@prisma/client';
 
 // ─── Department ───────────────────────────────────────────────────────────────
 
@@ -135,9 +145,9 @@ export class CreateUnitDto {
   @MaxLength(120)
   name: string;
 
-  @ApiProperty({ example: 'SEDE', description: 'Tipo: SEDE | DELEGACAO | AGENCIA' })
-  @IsString()
-  type: string;
+  @ApiProperty({ enum: UnitType, example: UnitType.BRANCH })
+  @IsEnum(UnitType)
+  type: UnitType;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -173,13 +183,13 @@ export class DepartmentsCreatePermissionDto {
   @IsString()
   name: string;
 
-  @ApiProperty({ example: 'read' })
-  @IsString()
-  action: string;
+  @ApiProperty({ enum: PermissionAction, example: PermissionAction.VIEW })
+  @IsEnum(PermissionAction)
+  action: PermissionAction;
 
-  @ApiProperty({ example: 'Course' })
-  @IsString()
-  subject: string;
+  @ApiProperty({ enum: PermissionSubject, example: PermissionSubject.LMS })
+  @IsEnum(PermissionSubject)
+  subject: PermissionSubject;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -195,10 +205,10 @@ export class CreatePositionDto {
   @MaxLength(120)
   name: string;
 
-  @ApiPropertyOptional({ example: 'SENIOR' })
+  @ApiPropertyOptional({ enum: PositionLevel, example: PositionLevel.SENIOR })
   @IsOptional()
-  @IsString()
-  level?: string;
+  @IsEnum(PositionLevel)
+  level?: PositionLevel;
 
   @ApiPropertyOptional()
   @IsOptional()

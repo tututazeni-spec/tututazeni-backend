@@ -522,6 +522,20 @@ enum AlertCategory {
 // CORE — USER
 // ══════════════════════════════════════════════════════════════════
 
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  BLOCKED
+  PENDING
+}
+
+enum HrStatus {
+  ACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
 model User {
   // ─── Identidade ───────────────────────────────────────────────
   id             Int     @id @default(autoincrement())
@@ -543,9 +557,9 @@ model User {
   timezone String @default("Africa/Luanda")
 
   // ─── Status ───────────────────────────────────────────────────
-  active        Boolean @default(true)
-  accountStatus String  @default("PENDING")
-  hrStatus      String  @default("ACTIVE")
+  active        Boolean       @default(true)
+  accountStatus AccountStatus @default(PENDING)
+  hrStatus      HrStatus      @default(ACTIVE)
 
   // ─── RH / Carreira ────────────────────────────────────────────
   hireDate DateTime?
@@ -928,13 +942,44 @@ model Role {
   roleTemplates   RoleTemplate[]
 }
 
+enum PermissionAction {
+  VIEW
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  EXPORT
+  EXECUTE
+  ALL
+}
+
+enum PermissionSubject {
+  DASHBOARD
+  REPORTS
+  USERS
+  ROLES
+  LMS
+  PERFORMANCE
+  ENGAGEMENT
+  TALENT
+  EVALUATION
+  CONTENT_LIBRARY
+  AVATAR_TRAINING
+  ROI_IMPACT
+  HISTORY
+  PAYROLL
+  SENSITIVE_DATA
+  ACL
+  HR
+}
+
 model Permission {
-  id              Int              @id @default(autoincrement())
-  name            String           @unique
-  action          String
-  subject         String
+  id              Int               @id @default(autoincrement())
+  name            String            @unique
+  action          PermissionAction
+  subject         PermissionSubject
   roleId          Int
-  role            Role             @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  role            Role              @relation(fields: [roleId], references: [id], onDelete: Cascade)
   rolePermissions RolePermission[]
 
   @@index([action])
@@ -966,13 +1011,18 @@ model RoleTemplate {
 // ORGANIZAÇÃO
 // ══════════════════════════════════════════════════════════════════
 
+enum DepartmentStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model Department {
   id                  Int                     @id @default(autoincrement())
   code                String                  @unique
   name                String
   description         String?
   active              Boolean                 @default(true)
-  status              String                  @default("ACTIVE")
+  status              DepartmentStatus        @default(ACTIVE)
   color               String?
   icon                String?
   costCenter          String?
@@ -1032,11 +1082,18 @@ model DepartmentTransferLog {
   @@index([toDepartmentId])
 }
 
+enum UnitType {
+  HEADQUARTERS
+  BRANCH
+  REMOTE
+  PROJECT
+}
+
 model Unit {
   id                 Int                 @id @default(autoincrement())
   name               String
   code               String              @unique
-  type               String              @default("BRANCH")
+  type               UnitType            @default(BRANCH)
   province           String?
   address            String?
   city               String?
@@ -1049,12 +1106,23 @@ model Unit {
   operationalMetrics OperationalMetric[]
 }
 
+enum PositionLevel {
+  INTERN
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+  MANAGER
+  DIRECTOR
+  EXECUTIVE
+}
+
 model Position {
   id                  Int                  @id @default(autoincrement())
   name                String
   code                String?
   description         String?
-  level               String?
+  level               PositionLevel?
   departmentId        Int?
   salaryMin           Float?
   salaryMax           Float?
@@ -1071,10 +1139,19 @@ model Position {
   roleTemplates       RoleTemplate[]
 }
 
+enum OrgChangeType {
+  PROMOTION
+  TRANSFER
+  RESTRUCTURE
+  HIRE
+  TERMINATION
+  MANAGER_CHANGE
+}
+
 model OrgChangeLog {
-  id               Int         @id @default(autoincrement())
+  id               Int           @id @default(autoincrement())
   userId           Int
-  changeType       String
+  changeType       OrgChangeType
   fromDepartmentId Int?
   toDepartmentId   Int?
   fromPositionId   Int?
@@ -1085,13 +1162,13 @@ model OrgChangeLog {
   reason           String?
   notes            String?
   performedById    Int
-  createdAt        DateTime    @default(now())
-  user             User        @relation("OrgChangeUser", fields: [userId], references: [id])
-  performedBy      User        @relation("OrgChangePerformer", fields: [performedById], references: [id])
-  fromDepartment   Department? @relation("OrgChangeFrom", fields: [fromDepartmentId], references: [id])
-  toDepartment     Department? @relation("OrgChangeTo", fields: [toDepartmentId], references: [id])
-  fromPosition     Position?   @relation("OrgChangePosFrom", fields: [fromPositionId], references: [id])
-  toPosition       Position?   @relation("OrgChangePosTto", fields: [toPositionId], references: [id])
+  createdAt        DateTime      @default(now())
+  user             User          @relation("OrgChangeUser", fields: [userId], references: [id])
+  performedBy      User          @relation("OrgChangePerformer", fields: [performedById], references: [id])
+  fromDepartment   Department?   @relation("OrgChangeFrom", fields: [fromDepartmentId], references: [id])
+  toDepartment     Department?   @relation("OrgChangeTo", fields: [toDepartmentId], references: [id])
+  fromPosition     Position?     @relation("OrgChangePosFrom", fields: [fromPositionId], references: [id])
+  toPosition       Position?     @relation("OrgChangePosTto", fields: [toPositionId], references: [id])
 
   @@index([userId])
   @@index([changeType])
@@ -2303,23 +2380,23 @@ model NineBoxPlacement {
 }
 
 model PerformanceEvaluation {
-  id                Int      @id @default(autoincrement())
-  evaluatorId       Int
-  evaluatedId       Int
-  type              EvalType
-  period            String
-  criteria          Json
-  generalComment    String?  @db.Text
-  overallScore      Float    @default(0)
-  cycleId           Int?
-  competencyScores  String?  @db.Text
-  strengths         String?  @db.Text
-  improvements      String?  @db.Text
-  recommendations   String?  @db.Text
-  isDraft           Boolean  @default(false)
-  createdAt         DateTime @default(now())
-  evaluator         User     @relation("EvaluatorRelation", fields: [evaluatorId], references: [id])
-  evaluated         User     @relation("EvaluatedRelation", fields: [evaluatedId], references: [id])
+  id               Int      @id @default(autoincrement())
+  evaluatorId      Int
+  evaluatedId      Int
+  type             EvalType
+  period           String
+  criteria         Json
+  generalComment   String?  @db.Text
+  overallScore     Float    @default(0)
+  cycleId          Int?
+  competencyScores String?  @db.Text
+  strengths        String?  @db.Text
+  improvements     String?  @db.Text
+  recommendations  String?  @db.Text
+  isDraft          Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  evaluator        User     @relation("EvaluatorRelation", fields: [evaluatorId], references: [id])
+  evaluated        User     @relation("EvaluatedRelation", fields: [evaluatedId], references: [id])
 
   @@index([evaluatedId])
   @@index([evaluatorId])
@@ -3498,44 +3575,44 @@ model DocCategoryModel {
 }
 
 model Document {
-  id             Int               @id @default(autoincrement())
-  title          String
-  description    String?
-  category       DocCategoryType
-  categoryId     Int?
-  docCategory    DocCategoryModel? @relation(fields: [categoryId], references: [id])
-  sensitivity    DocSensitivity    @default(INTERNAL)
-  status         DocStatus         @default(ACTIVE)
-  origin         String            @default("UPLOAD")
-  fileUrl        String
-  mimeType       String
-  fileSize       Int?
-  fileName       String?
-  version        String            @default("1.0")
-  tags           String[]
-  ocrText        String?
-  ocrStatus      String?
-  createdById    Int
-  createdBy      User              @relation("DocCreator", fields: [createdById], references: [id])
-  ownerId        Int?
-  owner          User?             @relation("DocOwner", fields: [ownerId], references: [id])
-  department     String?
-  notes          String?
-  requestSignature Boolean         @default(false)
-  expiresAt      DateTime?
-  retentionUntil DateTime?
-  archivedAt     DateTime?
-  archiveReason  String?
-  deletedAt      DateTime?
-  deleteReason   String?
-  downloadCount  Int               @default(0)
-  versions       DocVersion[]
-  permissions    DocPermission[]
-  shareLinks     DocShareLink[]
-  downloads      DocDownload[]
-  auditLogs      DocAuditLog[]
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id               Int               @id @default(autoincrement())
+  title            String
+  description      String?
+  category         DocCategoryType
+  categoryId       Int?
+  docCategory      DocCategoryModel? @relation(fields: [categoryId], references: [id])
+  sensitivity      DocSensitivity    @default(INTERNAL)
+  status           DocStatus         @default(ACTIVE)
+  origin           String            @default("UPLOAD")
+  fileUrl          String
+  mimeType         String
+  fileSize         Int?
+  fileName         String?
+  version          String            @default("1.0")
+  tags             String[]
+  ocrText          String?
+  ocrStatus        String?
+  createdById      Int
+  createdBy        User              @relation("DocCreator", fields: [createdById], references: [id])
+  ownerId          Int?
+  owner            User?             @relation("DocOwner", fields: [ownerId], references: [id])
+  department       String?
+  notes            String?
+  requestSignature Boolean           @default(false)
+  expiresAt        DateTime?
+  retentionUntil   DateTime?
+  archivedAt       DateTime?
+  archiveReason    String?
+  deletedAt        DateTime?
+  deleteReason     String?
+  downloadCount    Int               @default(0)
+  versions         DocVersion[]
+  permissions      DocPermission[]
+  shareLinks       DocShareLink[]
+  downloads        DocDownload[]
+  auditLogs        DocAuditLog[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([category, status])
   @@index([ownerId])
