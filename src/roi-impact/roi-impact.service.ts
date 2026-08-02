@@ -101,8 +101,12 @@ export class RoiImpactService {
       competencyEvolution,
     ] = await Promise.all([
       this.prisma.read.enrollment.count({ where }),
-      this.prisma.read.enrollment.count({ where: { ...where, status: EnrollmentStatus.COMPLETED } }),
-      this.prisma.read.enrollment.count({ where: { ...where, status: EnrollmentStatus.IN_PROGRESS } }),
+      this.prisma.read.enrollment.count({
+        where: { ...where, status: EnrollmentStatus.COMPLETED },
+      }),
+      this.prisma.read.enrollment.count({
+        where: { ...where, status: EnrollmentStatus.IN_PROGRESS },
+      }),
       this.prisma.assessmentAttempt
         .aggregate({
           where: { createdAt: { gte: range.gte, lte: range.lte } } as any,
@@ -641,9 +645,15 @@ export class RoiImpactService {
       avgCompetencyAfter,
     ] = await Promise.all([
       this.prisma.read.enrollment.count({ where }),
-      this.prisma.read.enrollment.count({ where: { ...where, status: EnrollmentStatus.COMPLETED } }),
-      this.prisma.read.enrollment.count({ where: { ...where, status: EnrollmentStatus.IN_PROGRESS } }),
-      this.prisma.read.enrollment.count({ where: { ...where, status: EnrollmentStatus.CANCELLED } }),
+      this.prisma.read.enrollment.count({
+        where: { ...where, status: EnrollmentStatus.COMPLETED },
+      }),
+      this.prisma.read.enrollment.count({
+        where: { ...where, status: EnrollmentStatus.IN_PROGRESS },
+      }),
+      this.prisma.read.enrollment.count({
+        where: { ...where, status: EnrollmentStatus.CANCELLED },
+      }),
       // Top courses by completions
       this.prisma.enrollment
         .groupBy({
@@ -663,7 +673,13 @@ export class RoiImpactService {
           return rows.map(r => ({ course: cMap.get(r.courseId), completions: r._count.id }));
         }),
       this.prisma.enrollment
-        .count({ where: { course: { mandatory: true } as any, status: EnrollmentStatus.COMPLETED, ...uWhere } })
+        .count({
+          where: {
+            course: { mandatory: true } as any,
+            status: EnrollmentStatus.COMPLETED,
+            ...uWhere,
+          },
+        })
         .then(async mandC => {
           const mandT = await this.prisma.enrollment
             .count({ where: { course: { mandatory: true } as any, ...uWhere } })

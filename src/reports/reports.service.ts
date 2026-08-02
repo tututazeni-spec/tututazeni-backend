@@ -169,9 +169,15 @@ export class ReportsService {
     const [enrollments, completed, inProgress, cancelled, byCourseFull, byDept, avgScore] =
       await Promise.all([
         this.prismaRead.enrollment.count({ where }),
-        this.prismaRead.enrollment.count({ where: { ...where, status: EnrollmentStatus.COMPLETED } }),
-        this.prismaRead.enrollment.count({ where: { ...where, status: EnrollmentStatus.IN_PROGRESS } }),
-        this.prismaRead.enrollment.count({ where: { ...where, status: EnrollmentStatus.CANCELLED } }),
+        this.prismaRead.enrollment.count({
+          where: { ...where, status: EnrollmentStatus.COMPLETED },
+        }),
+        this.prismaRead.enrollment.count({
+          where: { ...where, status: EnrollmentStatus.IN_PROGRESS },
+        }),
+        this.prismaRead.enrollment.count({
+          where: { ...where, status: EnrollmentStatus.CANCELLED },
+        }),
         // Top courses
         this.prismaRead.enrollment
           .groupBy({

@@ -262,7 +262,10 @@ export class LeaderService {
           department: { select: { name: true } },
           points: { select: { points: true } },
           performanceReviews: { select: { score: true }, orderBy: { createdAt: 'desc' }, take: 1 },
-          enrollments: { select: { status: true }, where: { status: EnrollmentStatus.IN_PROGRESS } },
+          enrollments: {
+            select: { status: true },
+            where: { status: EnrollmentStatus.IN_PROGRESS },
+          },
           developmentPlans: {
             select: { id: true, overallProgress: true, status: true },
             where: { isTemplate: false, status: 'ACTIVE' },

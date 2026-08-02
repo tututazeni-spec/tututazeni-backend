@@ -98,7 +98,9 @@ export class DashboardService {
           createdAt: true,
         },
       }),
-      this.prisma.read.enrollment.count({ where: { userId, status: EnrollmentStatus.IN_PROGRESS } }),
+      this.prisma.read.enrollment.count({
+        where: { userId, status: EnrollmentStatus.IN_PROGRESS },
+      }),
       this.prisma.read.enrollment.count({ where: { userId, status: EnrollmentStatus.COMPLETED } }),
       this.prisma.read.enrollment.count({ where: { userId } }),
       this.prisma.read.userPoints.findUnique({ where: { userId } }),
@@ -286,7 +288,11 @@ export class DashboardService {
         where: { userId: { in: teamIds }, status: EnrollmentStatus.IN_PROGRESS },
       }),
       this.prisma.read.enrollment.count({
-        where: { userId: { in: teamIds }, status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: since } },
+        where: {
+          userId: { in: teamIds },
+          status: EnrollmentStatus.COMPLETED,
+          enrolledAt: { gte: since },
+        },
       }),
       this.prisma.enrollment
         .count({ where: { userId: { in: teamIds }, course: { mandatory: true } } })
@@ -303,7 +309,11 @@ export class DashboardService {
         }),
       this.prisma.enrollment
         .count({
-          where: { userId: { in: teamIds }, course: { mandatory: true }, status: EnrollmentStatus.COMPLETED },
+          where: {
+            userId: { in: teamIds },
+            course: { mandatory: true },
+            status: EnrollmentStatus.COMPLETED,
+          },
         })
         .catch((e: unknown) => {
           this.logger.warn({
@@ -487,7 +497,11 @@ export class DashboardService {
         where: { status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: since }, user: deptFilter },
       }),
       this.prisma.read.enrollment.count({
-        where: { status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: prev, lt: since }, user: deptFilter },
+        where: {
+          status: EnrollmentStatus.COMPLETED,
+          enrolledAt: { gte: prev, lt: since },
+          user: deptFilter,
+        },
       }),
       this.prisma.performanceReview
         .aggregate({
@@ -590,7 +604,13 @@ export class DashboardService {
         }),
       // Training hours estimate (completions × avg course workload)
       this.prisma.enrollment
-        .count({ where: { status: EnrollmentStatus.COMPLETED, user: deptFilter, enrolledAt: { gte: since } } })
+        .count({
+          where: {
+            status: EnrollmentStatus.COMPLETED,
+            user: deptFilter,
+            enrolledAt: { gte: since },
+          },
+        })
         .then(c => c * 2)
         .catch((e: unknown) => {
           this.logger.warn({
@@ -703,7 +723,11 @@ export class DashboardService {
           where: { user: { departmentId }, status: EnrollmentStatus.IN_PROGRESS },
         }),
         this.prisma.read.enrollment.count({
-          where: { user: { departmentId }, status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: since } },
+          where: {
+            user: { departmentId },
+            status: EnrollmentStatus.COMPLETED,
+            enrolledAt: { gte: since },
+          },
         }),
         this.prisma.performanceReview
           .aggregate({
