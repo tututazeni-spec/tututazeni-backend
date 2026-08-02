@@ -156,13 +156,13 @@ describe('Roles Permissions Integration', () => {
 
       const admin = await prisma.role.findFirst({ where: { name: 'ADMIN' } });
       const a = await prisma.permission.create({
-        data: { name: 'int-test:read-a', action: 'READ', subject: 'INT_TEST_A', roleId: admin!.id },
+        data: { name: 'int-test:read-a', action: 'VIEW', subject: 'USERS', roleId: admin!.id },
       });
       const b = await prisma.permission.create({
-        data: { name: 'int-test:read-b', action: 'READ', subject: 'INT_TEST_B', roleId: admin!.id },
+        data: { name: 'int-test:read-b', action: 'VIEW', subject: 'REPORTS', roleId: admin!.id },
       });
       const c = await prisma.permission.create({
-        data: { name: 'int-test:read-c', action: 'READ', subject: 'INT_TEST_C', roleId: admin!.id },
+        data: { name: 'int-test:read-c', action: 'VIEW', subject: 'LMS', roleId: admin!.id },
       });
       permA = a.id;
       permB = b.id;
@@ -248,8 +248,8 @@ describe('Roles Permissions Integration', () => {
       const perm = await prisma.permission.create({
         data: {
           name: 'int-test:clone-perm',
-          action: 'READ',
-          subject: 'INT_TEST_CLONE',
+          action: 'VIEW',
+          subject: 'DASHBOARD',
           roleId: sourceId,
         },
       });

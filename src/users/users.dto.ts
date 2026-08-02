@@ -14,20 +14,9 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsStrongPassword } from '../common/validators/strong-password.decorator';
+import { AccountStatus, HrStatus } from '@prisma/client';
 
-export enum AccountStatus {
-  ACTIVE = 'ACTIVE',
-  INACTIVE = 'INACTIVE',
-  SUSPENDED = 'SUSPENDED',
-  BLOCKED = 'BLOCKED',
-  PENDING = 'PENDING',
-}
-
-export enum HrStatus {
-  ACTIVE = 'ACTIVE',
-  ON_LEAVE = 'ON_LEAVE',
-  TERMINATED = 'TERMINATED',
-}
+export { AccountStatus, HrStatus };
 
 export enum Gender {
   MALE = 'MALE',

@@ -11,39 +11,11 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { PermissionAction, PermissionSubject } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────
 
-export enum PermissionAction {
-  VIEW = 'VIEW',
-  CREATE = 'CREATE',
-  UPDATE = 'UPDATE',
-  DELETE = 'DELETE',
-  APPROVE = 'APPROVE',
-  EXPORT = 'EXPORT',
-  EXECUTE = 'EXECUTE',
-  ALL = '*',
-}
-
-export enum PermissionSubject {
-  DASHBOARD = 'DASHBOARD',
-  REPORTS = 'REPORTS',
-  USERS = 'USERS',
-  ROLES = 'ROLES',
-  LMS = 'LMS',
-  PERFORMANCE = 'PERFORMANCE',
-  ENGAGEMENT = 'ENGAGEMENT',
-  TALENT = 'TALENT',
-  EVALUATION = 'EVALUATION',
-  CONTENT_LIBRARY = 'CONTENT_LIBRARY',
-  AVATAR_TRAINING = 'AVATAR_TRAINING',
-  ROI_IMPACT = 'ROI_IMPACT',
-  HISTORY = 'HISTORY',
-  PAYROLL = 'PAYROLL',
-  SENSITIVE_DATA = 'SENSITIVE_DATA',
-  ACL = 'ACL',
-  HR = 'HR',
-}
+export { PermissionAction, PermissionSubject };
 
 export enum PolicyConditionType {
   DEPARTMENT = 'DEPARTMENT',

@@ -33,6 +33,76 @@ const Prisma = {
 
 const UserRole = { COLABORADOR: 'COLABORADOR', LIDER: 'LIDER', RH: 'RH', ADMIN: 'ADMIN' };
 
+const AccountStatus = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  SUSPENDED: 'SUSPENDED',
+  BLOCKED: 'BLOCKED',
+  PENDING: 'PENDING',
+};
+
+const HrStatus = { ACTIVE: 'ACTIVE', ON_LEAVE: 'ON_LEAVE', TERMINATED: 'TERMINATED' };
+
+const PermissionAction = {
+  VIEW: 'VIEW',
+  CREATE: 'CREATE',
+  UPDATE: 'UPDATE',
+  DELETE: 'DELETE',
+  APPROVE: 'APPROVE',
+  EXPORT: 'EXPORT',
+  EXECUTE: 'EXECUTE',
+  ALL: 'ALL',
+};
+
+const PermissionSubject = {
+  DASHBOARD: 'DASHBOARD',
+  REPORTS: 'REPORTS',
+  USERS: 'USERS',
+  ROLES: 'ROLES',
+  LMS: 'LMS',
+  PERFORMANCE: 'PERFORMANCE',
+  ENGAGEMENT: 'ENGAGEMENT',
+  TALENT: 'TALENT',
+  EVALUATION: 'EVALUATION',
+  CONTENT_LIBRARY: 'CONTENT_LIBRARY',
+  AVATAR_TRAINING: 'AVATAR_TRAINING',
+  ROI_IMPACT: 'ROI_IMPACT',
+  HISTORY: 'HISTORY',
+  PAYROLL: 'PAYROLL',
+  SENSITIVE_DATA: 'SENSITIVE_DATA',
+  ACL: 'ACL',
+  HR: 'HR',
+};
+
+const DepartmentStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE' };
+
+const UnitType = {
+  HEADQUARTERS: 'HEADQUARTERS',
+  BRANCH: 'BRANCH',
+  REMOTE: 'REMOTE',
+  PROJECT: 'PROJECT',
+};
+
+const PositionLevel = {
+  INTERN: 'INTERN',
+  JUNIOR: 'JUNIOR',
+  MID: 'MID',
+  SENIOR: 'SENIOR',
+  LEAD: 'LEAD',
+  MANAGER: 'MANAGER',
+  DIRECTOR: 'DIRECTOR',
+  EXECUTIVE: 'EXECUTIVE',
+};
+
+const OrgChangeType = {
+  PROMOTION: 'PROMOTION',
+  TRANSFER: 'TRANSFER',
+  RESTRUCTURE: 'RESTRUCTURE',
+  HIRE: 'HIRE',
+  TERMINATION: 'TERMINATION',
+  MANAGER_CHANGE: 'MANAGER_CHANGE',
+};
+
 const EvalType = { SELF: 'SELF', MANAGER: 'MANAGER', PEER: 'PEER', SUBORDINATE: 'SUBORDINATE' };
 
 const CertificateType = {
@@ -717,6 +787,14 @@ module.exports = {
   Prisma,
   // Enums
   UserRole,
+  AccountStatus,
+  HrStatus,
+  PermissionAction,
+  PermissionSubject,
+  DepartmentStatus,
+  UnitType,
+  PositionLevel,
+  OrgChangeType,
   EvalType,
   CertificateType,
   EventStatus,

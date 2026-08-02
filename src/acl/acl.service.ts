@@ -2,6 +2,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
+import { PermissionAction, PermissionSubject } from '@prisma/client';
 import {
   CreatePermissionDto,
   BulkAssignPermissionsDto,
@@ -27,8 +28,8 @@ function permKey(userId: number): string {
 
 export const BUILTIN_PERMISSIONS: {
   name: string;
-  action: string;
-  subject: string;
+  action: PermissionAction;
+  subject: PermissionSubject;
   sensitive: boolean;
 }[] = [
   // Dashboard
@@ -212,14 +213,6 @@ export class AclService {
         ...(dto.sensitive !== undefined && ({ sensitive: dto.sensitive } as any)),
       },
     });
-  }
-
-  // ── Legacy compat: positional args ─────────────────
-
-  async createPermissionLegacy(name: string, action: string, subject: string, roleId: number) {
-    const perm = await this.prisma.permission.create({ data: { name, action, subject, roleId } });
-    await this.assignPermissionToRole(roleId, perm.id);
-    return perm;
   }
 
   // Permission.roleId é obrigatório no schema (resquício de um design anterior
