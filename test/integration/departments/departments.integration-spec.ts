@@ -244,7 +244,7 @@ describe('Departments Integration', () => {
         .send({ name: 'Unidade Teste Integração', type: 'HEADQUARTERS', departmentId })
         .expect(201);
       unitId = res.body.id;
-      expect(res.body.type).toBe('SEDE');
+      expect(res.body.type).toBe('HEADQUARTERS');
 
       const dept = await prisma.department.findUnique({ where: { id: departmentId } });
       expect(dept!.unitId).toBe(unitId);
