@@ -1,5 +1,6 @@
 // src/history/history.service.ts
 import { Injectable, Logger } from '@nestjs/common';
+import { EnrollmentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   HistoryFilterDto,
@@ -356,7 +357,7 @@ export class HistoryService {
     // Enrollment events
     for (const e of enrollments) {
       if (filters.category && filters.category !== EventCategory.LEARNING) continue;
-      const completed = e.status === 'CONCLUIDO';
+      const completed = e.status === EnrollmentStatus.COMPLETED;
       events.push({
         id: `enroll-${e.id}`,
         source: 'ENROLLMENT',
@@ -653,7 +654,7 @@ export class HistoryService {
         orderBy: { timestamp: 'asc' },
       }),
       this.prisma.read.enrollment.count({ where: { userId } }),
-      this.prisma.read.enrollment.count({ where: { userId, status: 'CONCLUIDO' } }),
+      this.prisma.read.enrollment.count({ where: { userId, status: EnrollmentStatus.COMPLETED } }),
       this.prisma.read.badgeAward.count({ where: { userId } }),
       this.prisma.read.userPoints.findUnique({ where: { userId } }),
     ]);

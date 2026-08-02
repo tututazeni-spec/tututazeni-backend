@@ -1,5 +1,6 @@
 // src/roi-impact/roi-impact.service.ts
 import { Injectable, Logger } from '@nestjs/common';
+import { EnrollmentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoiFilterDto, CalculateRoiDto, WhatIfDto, RoiConfidence } from './roi-impact.dto';
 
@@ -100,8 +101,8 @@ export class RoiImpactService {
       competencyEvolution,
     ] = await Promise.all([
       this.prisma.read.enrollment.count({ where }),
-      this.prisma.read.enrollment.count({ where: { ...where, status: 'CONCLUIDO' } }),
-      this.prisma.read.enrollment.count({ where: { ...where, status: 'EM_ANDAMENTO' } }),
+      this.prisma.read.enrollment.count({ where: { ...where, status: EnrollmentStatus.COMPLETED } }),
+      this.prisma.read.enrollment.count({ where: { ...where, status: EnrollmentStatus.IN_PROGRESS } }),
       this.prisma.assessmentAttempt
         .aggregate({
           where: { createdAt: { gte: range.gte, lte: range.lte } } as any,
@@ -310,7 +311,7 @@ export class RoiImpactService {
       // L2
       this.prisma.read.enrollment.count({
         where: {
-          status: 'CONCLUIDO',
+          status: EnrollmentStatus.COMPLETED,
           enrolledAt: { gte: range.gte, lte: range.lte },
           ...uWhere,
           ...(filter.courseId ? { courseId: filter.courseId } : {}),
@@ -640,14 +641,14 @@ export class RoiImpactService {
       avgCompetencyAfter,
     ] = await Promise.all([
       this.prisma.read.enrollment.count({ where }),
-      this.prisma.read.enrollment.count({ where: { ...where, status: 'CONCLUIDO' } }),
-      this.prisma.read.enrollment.count({ where: { ...where, status: 'EM_ANDAMENTO' } }),
-      this.prisma.read.enrollment.count({ where: { ...where, status: 'CANCELADO' } }),
+      this.prisma.read.enrollment.count({ where: { ...where, status: EnrollmentStatus.COMPLETED } }),
+      this.prisma.read.enrollment.count({ where: { ...where, status: EnrollmentStatus.IN_PROGRESS } }),
+      this.prisma.read.enrollment.count({ where: { ...where, status: EnrollmentStatus.CANCELLED } }),
       // Top courses by completions
       this.prisma.enrollment
         .groupBy({
           by: ['courseId'],
-          where: { ...where, status: 'CONCLUIDO' },
+          where: { ...where, status: EnrollmentStatus.COMPLETED },
           _count: { id: true },
           orderBy: { _count: { id: 'desc' } },
           take: 5,
@@ -662,7 +663,7 @@ export class RoiImpactService {
           return rows.map(r => ({ course: cMap.get(r.courseId), completions: r._count.id }));
         }),
       this.prisma.enrollment
-        .count({ where: { course: { mandatory: true } as any, status: 'CONCLUIDO', ...uWhere } })
+        .count({ where: { course: { mandatory: true } as any, status: EnrollmentStatus.COMPLETED, ...uWhere } })
         .then(async mandC => {
           const mandT = await this.prisma.enrollment
             .count({ where: { course: { mandatory: true } as any, ...uWhere } })
@@ -745,7 +746,7 @@ export class RoiImpactService {
   async simulateWhatIf(dto: WhatIfDto) {
     const currentEnrollments = await this.prisma.read.enrollment.count();
     const currentCompleted = await this.prisma.read.enrollment.count({
-      where: { status: 'CONCLUIDO' },
+      where: { status: EnrollmentStatus.COMPLETED },
     });
 
     const targetEnrollments = dto.targetEnrollments ?? currentEnrollments;
@@ -875,7 +876,7 @@ export class RoiImpactService {
     const completedStats = await this.prisma.read.enrollment.groupBy({
       by: ['courseId'],
       where: {
-        status: 'CONCLUIDO',
+        status: EnrollmentStatus.COMPLETED,
         enrolledAt: { gte: range.gte, lte: range.lte },
         ...uWhere,
         ...courseFilter,

@@ -1,5 +1,6 @@
 ﻿// src/automation/automation.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { EnrollmentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateRuleDto,
@@ -451,7 +452,7 @@ export class AutomationService {
                 data: {
                   userId: targetUserId,
                   courseId: params.courseId,
-                  status: 'EM_ANDAMENTO',
+                  status: EnrollmentStatus.NOT_STARTED,
                   enrolledAt: new Date(),
                 },
               })
@@ -697,7 +698,7 @@ export class AutomationService {
   private async sendEnrollmentReminders(): Promise<any> {
     const cutoff = new Date(Date.now() - 14 * 86400000);
     const enrollments = await this.prisma.read.enrollment.findMany({
-      where: { status: 'EM_ANDAMENTO', enrolledAt: { lte: cutoff } },
+      where: { status: EnrollmentStatus.IN_PROGRESS, enrolledAt: { lte: cutoff } },
       include: {
         user: { select: { id: true, fullName: true } },
         course: { select: { title: true } },

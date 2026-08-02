@@ -1,5 +1,6 @@
 // src/dashboard/dashboard.service.ts
 import { Injectable, Logger } from '@nestjs/common';
+import { EnrollmentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
@@ -97,8 +98,8 @@ export class DashboardService {
           createdAt: true,
         },
       }),
-      this.prisma.read.enrollment.count({ where: { userId, status: 'EM_ANDAMENTO' } }),
-      this.prisma.read.enrollment.count({ where: { userId, status: 'CONCLUIDO' } }),
+      this.prisma.read.enrollment.count({ where: { userId, status: EnrollmentStatus.IN_PROGRESS } }),
+      this.prisma.read.enrollment.count({ where: { userId, status: EnrollmentStatus.COMPLETED } }),
       this.prisma.read.enrollment.count({ where: { userId } }),
       this.prisma.read.userPoints.findUnique({ where: { userId } }),
       this.prisma.read.badgeAward.findMany({
@@ -282,10 +283,10 @@ export class DashboardService {
         where: { userId: { in: teamIds }, status: 'COMPLETED', isTemplate: false },
       }),
       this.prisma.read.enrollment.count({
-        where: { userId: { in: teamIds }, status: 'EM_ANDAMENTO' },
+        where: { userId: { in: teamIds }, status: EnrollmentStatus.IN_PROGRESS },
       }),
       this.prisma.read.enrollment.count({
-        where: { userId: { in: teamIds }, status: 'CONCLUIDO', enrolledAt: { gte: since } },
+        where: { userId: { in: teamIds }, status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: since } },
       }),
       this.prisma.enrollment
         .count({ where: { userId: { in: teamIds }, course: { mandatory: true } } })
@@ -302,7 +303,7 @@ export class DashboardService {
         }),
       this.prisma.enrollment
         .count({
-          where: { userId: { in: teamIds }, course: { mandatory: true }, status: 'CONCLUIDO' },
+          where: { userId: { in: teamIds }, course: { mandatory: true }, status: EnrollmentStatus.COMPLETED },
         })
         .catch((e: unknown) => {
           this.logger.warn({
@@ -393,8 +394,8 @@ export class DashboardService {
       const uEnrolls = memberEnrollments.filter(e => e.userId === u.id);
       const uPlan = memberPlans.find(p => p.userId === u.id);
       const uLatestPerf = memberPerfReviews.find(r => r.userId === u.id);
-      const uCompleted = uEnrolls.filter(e => e.status === 'CONCLUIDO').length;
-      const uInProgress = uEnrolls.filter(e => e.status === 'EM_ANDAMENTO').length;
+      const uCompleted = uEnrolls.filter(e => e.status === EnrollmentStatus.COMPLETED).length;
+      const uInProgress = uEnrolls.filter(e => e.status === EnrollmentStatus.IN_PROGRESS).length;
 
       return {
         user: { id: u.id, fullName: u.fullName, avatarUrl: u.avatarUrl, position: u.position },
@@ -483,10 +484,10 @@ export class DashboardService {
         where: { enrolledAt: { gte: prev, lt: since }, user: deptFilter },
       }),
       this.prisma.read.enrollment.count({
-        where: { status: 'CONCLUIDO', enrolledAt: { gte: since }, user: deptFilter },
+        where: { status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: since }, user: deptFilter },
       }),
       this.prisma.read.enrollment.count({
-        where: { status: 'CONCLUIDO', enrolledAt: { gte: prev, lt: since }, user: deptFilter },
+        where: { status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: prev, lt: since }, user: deptFilter },
       }),
       this.prisma.performanceReview
         .aggregate({
@@ -589,7 +590,7 @@ export class DashboardService {
         }),
       // Training hours estimate (completions × avg course workload)
       this.prisma.enrollment
-        .count({ where: { status: 'CONCLUIDO', user: deptFilter, enrolledAt: { gte: since } } })
+        .count({ where: { status: EnrollmentStatus.COMPLETED, user: deptFilter, enrolledAt: { gte: since } } })
         .then(c => c * 2)
         .catch((e: unknown) => {
           this.logger.warn({
@@ -699,10 +700,10 @@ export class DashboardService {
       await Promise.all([
         this.prisma.read.user.count({ where: { departmentId, active: true } }),
         this.prisma.read.enrollment.count({
-          where: { user: { departmentId }, status: 'EM_ANDAMENTO' },
+          where: { user: { departmentId }, status: EnrollmentStatus.IN_PROGRESS },
         }),
         this.prisma.read.enrollment.count({
-          where: { user: { departmentId }, status: 'CONCLUIDO', enrolledAt: { gte: since } },
+          where: { user: { departmentId }, status: EnrollmentStatus.COMPLETED, enrolledAt: { gte: since } },
         }),
         this.prisma.performanceReview
           .aggregate({
@@ -835,7 +836,7 @@ export class DashboardService {
       .count({
         where: {
           mandatory: true,
-          enrollments: { none: { userId, status: 'CONCLUIDO' } },
+          enrollments: { none: { userId, status: EnrollmentStatus.COMPLETED } },
         } as any,
       })
       .catch((e: unknown) => {

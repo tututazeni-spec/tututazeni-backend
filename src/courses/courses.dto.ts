@@ -34,12 +34,6 @@ export enum LessonType {
   SCORM = 'SCORM',
   QUIZ = 'QUIZ',
 }
-export enum EnrollmentStatus {
-  NOT_STARTED = 'NOT_STARTED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  EXPIRED = 'EXPIRED',
-}
 export enum QuizQuestionType {
   MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
   TRUE_FALSE = 'TRUE_FALSE',

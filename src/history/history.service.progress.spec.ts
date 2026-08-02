@@ -322,7 +322,7 @@ describe('HistoryService (progress)', () => {
       mockPrisma.enrollment.findMany.mockResolvedValue([
         {
           id: 2,
-          status: 'CONCLUIDO',
+          status: 'COMPLETED',
           enrolledAt: recent,
           course: { id: 1, title: 'NestJS', category: 'TECH' },
         },

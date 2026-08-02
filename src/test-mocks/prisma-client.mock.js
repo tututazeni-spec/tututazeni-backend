@@ -109,6 +109,15 @@ const TimelineEventType = {
   NOTE: 'NOTE',
 };
 
+const EnrollmentStatus = {
+  NOT_STARTED: 'NOT_STARTED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+  EXPIRED: 'EXPIRED',
+  OVERDUE: 'OVERDUE',
+};
+
 const RequestStatus = {
   PENDING: 'PENDING',
   APPROVED: 'APPROVED',
@@ -714,6 +723,7 @@ module.exports = {
   ReportFormat,
   AiRole,
   EmployeeStatus,
+  EnrollmentStatus,
   ContractType,
   WorkMode,
   SeniorityLevel,
