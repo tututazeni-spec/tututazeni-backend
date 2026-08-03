@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ReadinessLevel } from '@prisma/client';
+import { ReadinessLevel, ReviewStatus } from '@prisma/client';
 import {
   CreateCareerPathDto,
   UpdateCareerPathDto,
@@ -69,7 +69,7 @@ export class CareerService {
           take: 10,
         },
         performanceReviews: {
-          where: { status: 'SUBMITTED' },
+          where: { status: ReviewStatus.PUBLISHED },
           orderBy: { createdAt: 'desc' },
           take: 5,
           select: { id: true, type: true, score: true, feedback: true, createdAt: true },
