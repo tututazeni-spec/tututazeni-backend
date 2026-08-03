@@ -5755,18 +5755,21 @@ model EmployeeSkill {
   @@unique([employeeId, skillId])
 }
 
+// status reutiliza EmployeeStatus — confirmado que UpdateContractStatusDto
+// já valida @IsEnum(EmployeeStatus) e updateContractStatus() grava esse
+// valor directamente (mesmo conceito activo/inactivo/terminado que Employee).
 model Contract {
-  id         Int          @id @default(autoincrement())
+  id         Int            @id @default(autoincrement())
   employeeId Int
-  employee   Employee     @relation(fields: [employeeId], references: [id])
+  employee   Employee       @relation(fields: [employeeId], references: [id])
   type       ContractType
   startDate  DateTime
   endDate    DateTime?
-  status     String
+  status     EmployeeStatus
   salary     Float?
   notes      String?
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 }
 
 model Feedback360 {
@@ -5787,19 +5790,34 @@ model Feedback360 {
   @@index([employeeId, cycle])
 }
 
+// Nome distinto de "CareerPlanStatus" (já existente para UserCareerPlan, o
+// módulo career moderno, com valores diferentes: DRAFT/ACTIVE/COMPLETED/
+// PAUSED/ARCHIVED). Este CareerPlan é o modelo legado ligado a Employee.
+enum LegacyCareerPlanStatus {
+  ACTIVE
+  INACTIVE
+  COMPLETED
+  CANCELLED
+}
+
 model CareerPlan {
-  id              Int      @id @default(autoincrement())
+  id              Int                    @id @default(autoincrement())
   employeeId      Int
-  employee        Employee @relation(fields: [employeeId], references: [id])
+  employee        Employee               @relation(fields: [employeeId], references: [id])
   title           String
   description     String
   targetRole      String?
   startDate       DateTime
   endDate         DateTime
-  progressPercent Int      @default(0)
-  status          String   @default("ACTIVE")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  progressPercent Int                    @default(0)
+  status          LegacyCareerPlanStatus @default(ACTIVE)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+}
+
+enum LegacyPdiStatus {
+  ACTIVE
+  COMPLETED
 }
 
 model LegacyPdi {
@@ -5811,7 +5829,7 @@ model LegacyPdi {
   startDate       DateTime
   endDate         DateTime
   progressPercent Int               @default(0)
-  status          String            @default("ACTIVE")
+  status          LegacyPdiStatus   @default(ACTIVE)
   notes           String?
   actions         LegacyPdiAction[]
   createdAt       DateTime          @default(now())
@@ -5833,24 +5851,29 @@ model LegacyPdiAction {
   createdAt    DateTime  @default(now())
 }
 
+enum EmployeeDocumentStatus {
+  ACTIVE
+  DELETED
+}
+
 model EmployeeDocument {
-  id                Int       @id @default(autoincrement())
+  id                Int                    @id @default(autoincrement())
   employeeId        Int
-  employee          Employee  @relation(fields: [employeeId], references: [id])
+  employee          Employee               @relation(fields: [employeeId], references: [id])
   name              String
   type              String
   fileUrl           String
   mimeType          String?
   fileSize          Int?
   expiresAt         DateTime?
-  requiresSignature Boolean   @default(false)
+  requiresSignature Boolean                @default(false)
   signedAt          DateTime?
-  status            String    @default("ACTIVE")
+  status            EmployeeDocumentStatus @default(ACTIVE)
   uploadedById      Int
   deletedAt         DateTime?
   deletedById       Int?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
 
   @@index([employeeId, status])
 }
@@ -6146,11 +6169,17 @@ model Declaration {
   @@map("declarations")
 }
 
+enum SignerRole {
+  RH
+  MANAGER
+  DIRECTOR
+}
+
 model DeclarationSignature {
   id              String        @id @default(cuid())
   declarationId   String
   signerId        Int
-  signerRole      String // "RH", "MANAGER", "DIRECTOR"
+  signerRole      SignerRole
   type            SignatureType @default(IMAGE_UPLOAD)
   signatureUrl    String? // URL da imagem da assinatura
   certificateData Json? // dados do certificado digital, se aplicável
@@ -6164,32 +6193,53 @@ model DeclarationSignature {
   @@map("declaration_signatures")
 }
 
+// Módulo com um único escritor confirmado (work-declaration.service.ts) —
+// ao contrário de AuditLog.action (19+ serviços) ou NotificationLog.type
+// (41 ficheiros), este conjunto é fechado e estável, por isso convertido
+// (não deixado como String livre).
+enum DeclarationAuditAction {
+  REQUESTED
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  SIGNED
+  EXPORTED
+  SENT
+  REVOKED
+}
+
 model DeclarationAuditLog {
-  id            String             @id @default(cuid())
+  id            String                 @id @default(cuid())
   declarationId String
   actorId       Int
-  action        String // CREATED, UPDATED, STATUS_CHANGED, SIGNED, EXPORTED, REVOKED, etc.
+  action        DeclarationAuditAction
   fromStatus    DeclarationStatus?
   toStatus      DeclarationStatus?
   details       Json?
   ipAddress     String?
-  timestamp     DateTime           @default(now())
-  declaration   Declaration        @relation(fields: [declarationId], references: [id], onDelete: Cascade)
-  actor         User               @relation(fields: [actorId], references: [id])
+  timestamp     DateTime               @default(now())
+  declaration   Declaration            @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  actor         User                   @relation(fields: [actorId], references: [id])
 
   @@index([declarationId])
   @@index([actorId])
   @@map("declaration_audit_logs")
 }
 
+enum AccessMethod {
+  QR_CODE
+  DIRECT_LINK
+  EMAIL_LINK
+}
+
 model DeclarationAccessLog {
-  id            String      @id @default(cuid())
+  id            String       @id @default(cuid())
   declarationId String
-  accessedVia   String // "QR_CODE", "DIRECT_LINK", "EMAIL_LINK"
+  accessedVia   AccessMethod
   ipAddress     String?
   userAgent     String?
-  timestamp     DateTime    @default(now())
-  declaration   Declaration @relation(fields: [declarationId], references: [id], onDelete: Cascade)
+  timestamp     DateTime     @default(now())
+  declaration   Declaration  @relation(fields: [declarationId], references: [id], onDelete: Cascade)
 
   @@index([declarationId])
   @@map("declaration_access_logs")

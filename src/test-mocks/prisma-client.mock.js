@@ -1322,6 +1322,32 @@ const LeaveDecision = {
 
 const JustificationStatus = { PENDING: 'PENDING', APPROVED: 'APPROVED', REJECTED: 'REJECTED' };
 
+const LegacyCareerPlanStatus = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+
+const LegacyPdiStatus = { ACTIVE: 'ACTIVE', COMPLETED: 'COMPLETED' };
+
+const EmployeeDocumentStatus = { ACTIVE: 'ACTIVE', DELETED: 'DELETED' };
+
+const SignerRole = { RH: 'RH', MANAGER: 'MANAGER', DIRECTOR: 'DIRECTOR' };
+
+const AccessMethod = { QR_CODE: 'QR_CODE', DIRECT_LINK: 'DIRECT_LINK', EMAIL_LINK: 'EMAIL_LINK' };
+
+const DeclarationAuditAction = {
+  REQUESTED: 'REQUESTED',
+  CREATED: 'CREATED',
+  UPDATED: 'UPDATED',
+  STATUS_CHANGED: 'STATUS_CHANGED',
+  SIGNED: 'SIGNED',
+  EXPORTED: 'EXPORTED',
+  SENT: 'SENT',
+  REVOKED: 'REVOKED',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -1528,4 +1554,10 @@ module.exports = {
   DayPeriod,
   LeaveDecision,
   JustificationStatus,
+  LegacyCareerPlanStatus,
+  LegacyPdiStatus,
+  EmployeeDocumentStatus,
+  SignerRole,
+  AccessMethod,
+  DeclarationAuditAction,
 };

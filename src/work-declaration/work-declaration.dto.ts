@@ -19,6 +19,9 @@ import {
   Min,
 } from 'class-validator';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import { SignerRole } from '@prisma/client';
+
+export { SignerRole };
 
 // ─── Enums espelhados do Prisma ──────────────────────────────
 export enum DeclarationStatus {
@@ -307,9 +310,8 @@ export class SignDeclarationDto {
   @IsObject()
   certificateData?: Record<string, unknown>; // para DIGITAL_CERTIFIED
 
-  @IsString()
-  @IsNotEmpty()
-  signerRole: string; // "RH" | "MANAGER" | "DIRECTOR"
+  @IsEnum(SignerRole)
+  signerRole: SignerRole;
 }
 
 export class ExportDeclarationDto {
