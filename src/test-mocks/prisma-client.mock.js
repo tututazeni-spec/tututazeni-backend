@@ -72,7 +72,7 @@ const PerformanceGoalStatus = {
 
 const FeedbackType = { PRAISE: 'PRAISE', IMPROVEMENT: 'IMPROVEMENT', GENERAL: 'GENERAL' };
 
-const DisputeStatus = { OPEN: 'OPEN' };
+const DisputeStatus = { OPEN: 'OPEN', RESOLVED: 'RESOLVED' };
 
 const EvaluationRequestStatus = {
   PENDING: 'PENDING',
@@ -520,11 +520,9 @@ const OvertimeStatus = {
 
 const PayslipStatus = {
   DRAFT: 'DRAFT',
-  PENDING: 'PENDING',
-  APPROVED: 'APPROVED',
   ISSUED: 'ISSUED',
   ACKNOWLEDGED: 'ACKNOWLEDGED',
-  CANCELLED: 'CANCELLED',
+  DISPUTED: 'DISPUTED',
 };
 
 const PayrollRunStatus = {
@@ -1310,6 +1308,20 @@ const ReportConfidentiality = {
 
 const KpiStatus = { GREEN: 'GREEN', YELLOW: 'YELLOW', RED: 'RED' };
 
+const PayslipAccessAction = { VIEW: 'VIEW', ADMIN_VIEW: 'ADMIN_VIEW' };
+
+const DayPeriod = { AM: 'AM', PM: 'PM' };
+
+const LeaveDecision = {
+  APPROVE: 'APPROVE',
+  REJECT: 'REJECT',
+  ESCALATE: 'ESCALATE',
+  DELEGATE: 'DELEGATE',
+  CANCELLED: 'CANCELLED',
+};
+
+const JustificationStatus = { PENDING: 'PENDING', APPROVED: 'APPROVED', REJECTED: 'REJECTED' };
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -1512,4 +1524,8 @@ module.exports = {
   ExecutiveReportStatus,
   ReportConfidentiality,
   KpiStatus,
+  PayslipAccessAction,
+  DayPeriod,
+  LeaveDecision,
+  JustificationStatus,
 };

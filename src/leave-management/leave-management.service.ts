@@ -8,6 +8,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { LeaveDecision } from '@prisma/client';
 import { AuditService } from '../common/services/audit.service';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -350,10 +351,16 @@ export class LeaveManagementService {
     }
 
     // Registar decisão
+    const decisionMap: Record<ApprovalAction, LeaveDecision> = {
+      [ApprovalAction.APPROVE]: LeaveDecision.APPROVE,
+      [ApprovalAction.REJECT]: LeaveDecision.REJECT,
+      [ApprovalAction.ESCALATE]: LeaveDecision.ESCALATE,
+      [ApprovalAction.DELEGATE]: LeaveDecision.DELEGATE,
+    };
     await this.prisma.leaveApproval.update({
       where: { id: approval.id },
       data: {
-        decision: dto.action,
+        decision: decisionMap[dto.action],
         notes: dto.notes,
         decidedAt: new Date(),
       },

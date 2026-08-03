@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PayslipAccessAction } from '@prisma/client';
 import {
   CreatePayslipDto,
   UpdatePayslipDto,
@@ -104,9 +105,9 @@ export class PayslipsService {
   }
 
   // ─── Registar acesso ────────────────────────────────────────────────────────
-  async logAccess(payslipId: number, userId: number, action: string, ip?: string) {
+  async logAccess(payslipId: number, userId: number, action: PayslipAccessAction, ip?: string) {
     try {
-      await (this.prisma as any).payslipAccessLog.create({
+      await this.prisma.payslipAccessLog.create({
         data: { payslipId, userId, action, ipAddress: ip ?? 'unknown', accessedAt: new Date() },
       });
     } catch (e: any) {
