@@ -1,10 +1,6 @@
 import { validate } from 'class-validator';
-import {
-  CreateDocumentDto,
-  NewVersionDto,
-  DocCategory,
-  DocSensitivity,
-} from './document-repository.dto';
+import { CreateDocumentDto, NewVersionDto } from './document-repository.dto';
+import { DocCategoryType, DocSensitivity } from '@prisma/client';
 
 async function errorsFor<T extends object>(instance: T, field: string, host = 'storage.innova.ao') {
   const prev = process.env.ALLOWED_FILE_HOST;
@@ -17,7 +13,7 @@ async function errorsFor<T extends object>(instance: T, field: string, host = 's
 function baseDoc(overrides: Record<string, unknown> = {}) {
   return Object.assign(new CreateDocumentDto(), {
     title: 'Doc',
-    category: DocCategory.OTHER,
+    category: DocCategoryType.OTHER,
     sensitivity: DocSensitivity.PUBLIC,
     fileUrl: 'https://storage.innova.ao/d.pdf',
     mimeType: 'application/pdf',

@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { EngagementService } from './engagement.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { SurveyStatus, SurveyType } from './engagement.dto';
+import { SurveyStatus, SurveyType } from '@prisma/client';
 
 const engagementSurveyMock = {
   findUnique: jest.fn(),

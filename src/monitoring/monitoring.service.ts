@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { MonitoringEvalType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateOkrCycleDto,
@@ -265,7 +266,7 @@ export class MonitoringService {
     cycleId: string,
     userId: number,
     evaluatorId: number,
-    type: string,
+    type: MonitoringEvalType,
     assignedBy: number,
   ) {
     const existing = await this.prisma.userEvaluation.findUnique({
