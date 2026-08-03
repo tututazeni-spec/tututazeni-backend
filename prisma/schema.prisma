@@ -6799,13 +6799,17 @@ enum NeedStatus {
 // MÓDULO 2 — CRM PARCEIROS
 // ══════════════════════════════════════════════════════════════════
 
+// Partner.province reutiliza "AngolaProvince" (já usado por Beneficiary.
+// province) — achado estrutural já documentado (AngolaProvince existe mas
+// não é usado por todos os modelos com esse conceito); conversão mecânica
+// segura, mesmos valores, sem decisão de produto necessária.
 model Partner {
-  id              String        @id @default(cuid())
-  code            String        @unique
+  id              String          @id @default(cuid())
+  code            String          @unique
   name            String
   legalName       String?
   type            PartnerType
-  tier            PartnerTier   @default(STANDARD)
+  tier            PartnerTier     @default(STANDARD)
   contactName     String?
   contactTitle    String?
   email           String?
@@ -6816,14 +6820,14 @@ model Partner {
   nif             String?
   address         String?
   city            String?
-  province        String?
-  country         String        @default("Angola")
-  status          PartnerStatus @default(ACTIVE)
+  province        AngolaProvince?
+  country         String          @default("Angola")
+  status          PartnerStatus   @default(ACTIVE)
   contractStart   DateTime?
   contractEnd     DateTime?
   contractUrl     String?
   annualValue     Float?
-  currency        String        @default("AOA")
+  currency        String          @default("AOA")
   revenueSharing  Float?
   services        String[]
   tags            String[]
@@ -6833,10 +6837,10 @@ model Partner {
   notes           String?
   lastContactAt   DateTime?
   nextReviewAt    DateTime?
-  satisfactionAvg Float         @default(0)
+  satisfactionAvg Float           @default(0)
   createdById     Int
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
   deletedAt       DateTime?
 
   createdBy    User                 @relation("PartnerCreator", fields: [createdById], references: [id])
@@ -6882,6 +6886,9 @@ model PartnerInteraction {
   @@index([deletedAt])
 }
 
+// priority reutiliza "NeedPriority" (BeneficiaryNeed, mesmo domínio CRM) —
+// sem valor real gravado em código (só o default 'MEDIUM' do schema), mas
+// o mesmo conceito de prioridade LOW/MEDIUM/HIGH/URGENT já usado ao lado.
 model PartnerMilestone {
   id          String          @id @default(cuid())
   partnerId   String
@@ -6892,7 +6899,7 @@ model PartnerMilestone {
   status      MilestoneStatus @default(PENDING)
   value       Float?
   currency    String          @default("AOA")
-  priority    String          @default("MEDIUM")
+  priority    NeedPriority    @default(MEDIUM)
   notes       String?
   createdById Int
   createdAt   DateTime        @default(now())
