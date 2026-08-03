@@ -16,8 +16,14 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import { ScenarioCategory, Difficulty, AvatarSessionStatus as SessionStatus } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────
+// NOTA: SessionStatus aqui é o `AvatarSessionStatus` do Prisma — nome local
+// mantido por compatibilidade, distinto do `SessionStatus` de outro módulo
+// (SCHEDULED/LIVE/COMPLETED/CANCELLED/POSTPONED).
+
+export { ScenarioCategory, Difficulty, SessionStatus };
 
 export enum AvatarRole {
   COACH = 'COACH',
@@ -45,31 +51,6 @@ export enum AvatarPersonality {
   MOTIVATIONAL = 'MOTIVATIONAL',
   STRICT = 'STRICT',
   FRIENDLY = 'FRIENDLY',
-}
-
-export enum ScenarioCategory {
-  SOFT_SKILLS = 'SOFT_SKILLS',
-  SALES = 'SALES',
-  CUSTOMER_SERVICE = 'CUSTOMER_SERVICE',
-  ONBOARDING = 'ONBOARDING',
-  COMPLIANCE = 'COMPLIANCE',
-  LEADERSHIP = 'LEADERSHIP',
-  SECURITY = 'SECURITY',
-  NEGOTIATION = 'NEGOTIATION',
-}
-
-export enum Difficulty {
-  BEGINNER = 'BEGINNER',
-  INTERMEDIATE = 'INTERMEDIATE',
-  ADVANCED = 'ADVANCED',
-  EXPERT = 'EXPERT',
-}
-
-export enum SessionStatus {
-  IN_PROGRESS = 'IN_PROGRESS',
-  PAUSED = 'PAUSED',
-  COMPLETED = 'COMPLETED',
-  ABANDONED = 'ABANDONED',
 }
 
 export enum MessageRole {

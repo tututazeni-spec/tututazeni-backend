@@ -333,7 +333,13 @@ const CertificateType = {
   DEVELOPMENT: 'DEVELOPMENT',
 };
 
-const EventStatus = { PENDING: 'PENDING', CONFIRMED: 'CONFIRMED', CANCELED: 'CANCELED' };
+const EventStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  LIVE: 'LIVE',
+  ENDED: 'ENDED',
+  CANCELLED: 'CANCELLED',
+};
 
 const ReportFormat = { PDF: 'PDF' };
 
@@ -1348,6 +1354,122 @@ const DeclarationAuditAction = {
   REVOKED: 'REVOKED',
 };
 
+const ContentFormat = {
+  VIDEO: 'VIDEO',
+  ARTICLE: 'ARTICLE',
+  PODCAST: 'PODCAST',
+  PDF: 'PDF',
+  EBOOK: 'EBOOK',
+  SCORM: 'SCORM',
+  MICROLEARNING: 'MICROLEARNING',
+  INFOGRAPHIC: 'INFOGRAPHIC',
+  QUIZ: 'QUIZ',
+  TEMPLATE: 'TEMPLATE',
+  PRESENTATION: 'PRESENTATION',
+  COURSE: 'COURSE',
+  WEBINAR: 'WEBINAR',
+  HTML5: 'HTML5',
+};
+
+const ContentAssetStatus = {
+  DRAFT: 'DRAFT',
+  REVIEW: 'REVIEW',
+  ACTIVE: 'ACTIVE',
+  DEPRECATED: 'DEPRECATED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const ContentAssetLevel = {
+  BEGINNER: 'BEGINNER',
+  INTERMEDIATE: 'INTERMEDIATE',
+  ADVANCED: 'ADVANCED',
+  EXPERT: 'EXPERT',
+};
+
+const ContentCategory = {
+  HARD_SKILLS: 'HARD_SKILLS',
+  SOFT_SKILLS: 'SOFT_SKILLS',
+  COMPLIANCE: 'COMPLIANCE',
+  ONBOARDING: 'ONBOARDING',
+  LANGUAGES: 'LANGUAGES',
+  PRODUCTS: 'PRODUCTS',
+  WELLBEING: 'WELLBEING',
+  LEADERSHIP: 'LEADERSHIP',
+  TECHNICAL: 'TECHNICAL',
+  OTHER: 'OTHER',
+};
+
+const Difficulty = {
+  BEGINNER: 'BEGINNER',
+  INTERMEDIATE: 'INTERMEDIATE',
+  ADVANCED: 'ADVANCED',
+  EXPERT: 'EXPERT',
+};
+
+const ScenarioCategory = {
+  SOFT_SKILLS: 'SOFT_SKILLS',
+  SALES: 'SALES',
+  CUSTOMER_SERVICE: 'CUSTOMER_SERVICE',
+  ONBOARDING: 'ONBOARDING',
+  COMPLIANCE: 'COMPLIANCE',
+  LEADERSHIP: 'LEADERSHIP',
+  SECURITY: 'SECURITY',
+  NEGOTIATION: 'NEGOTIATION',
+};
+
+const AvatarSessionStatus = {
+  IN_PROGRESS: 'IN_PROGRESS',
+  PAUSED: 'PAUSED',
+  COMPLETED: 'COMPLETED',
+  ABANDONED: 'ABANDONED',
+};
+
+const EventType = {
+  TRAINING: 'TRAINING',
+  WORKSHOP: 'WORKSHOP',
+  WEBINAR: 'WEBINAR',
+  LIVE_CLASS: 'LIVE_CLASS',
+  HACKATHON: 'HACKATHON',
+  MENTORING: 'MENTORING',
+  CORPORATE: 'CORPORATE',
+  ONBOARDING: 'ONBOARDING',
+  NETWORKING: 'NETWORKING',
+  EXTERNAL: 'EXTERNAL',
+  TALK: 'TALK',
+};
+
+const EventModalidade = { ONLINE: 'ONLINE', PRESENCIAL: 'PRESENCIAL', HYBRID: 'HYBRID' };
+
+const EventParticipantStatus = {
+  PENDING: 'PENDING',
+  CONFIRMED: 'CONFIRMED',
+  WAITLIST: 'WAITLIST',
+  PRESENT: 'PRESENT',
+  ABSENT: 'ABSENT',
+  CANCELLED: 'CANCELLED',
+  NO_SHOW: 'NO_SHOW',
+};
+
+const InstructorType = {
+  MASTER: 'MASTER',
+  SENIOR: 'SENIOR',
+  STANDARD: 'STANDARD',
+  MENTOR: 'MENTOR',
+  EXTERNAL: 'EXTERNAL',
+};
+
+const CohortModalidade = { ONLINE: 'ONLINE', PRESENCIAL: 'PRESENCIAL', HYBRID: 'HYBRID' };
+
+const CohortStatus = {
+  DRAFT: 'DRAFT',
+  OPEN: 'OPEN',
+  ACTIVE: 'ACTIVE',
+  CLOSED: 'CLOSED',
+  CANCELLED: 'CANCELLED',
+};
+
+const CohortParticipantStatus = { ACTIVE: 'ACTIVE' };
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -1560,4 +1682,18 @@ module.exports = {
   SignerRole,
   AccessMethod,
   DeclarationAuditAction,
+  ContentFormat,
+  ContentAssetStatus,
+  ContentAssetLevel,
+  ContentCategory,
+  Difficulty,
+  ScenarioCategory,
+  AvatarSessionStatus,
+  EventType,
+  EventModalidade,
+  EventParticipantStatus,
+  InstructorType,
+  CohortModalidade,
+  CohortStatus,
+  CohortParticipantStatus,
 };

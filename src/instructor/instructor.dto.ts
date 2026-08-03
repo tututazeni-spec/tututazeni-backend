@@ -14,30 +14,11 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import { InstructorType, CohortModalidade, CohortStatus } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum InstructorType {
-  MASTER = 'MASTER',
-  SENIOR = 'SENIOR',
-  STANDARD = 'STANDARD',
-  MENTOR = 'MENTOR',
-  EXTERNAL = 'EXTERNAL',
-}
-
-export enum CohortModalidade {
-  ONLINE = 'ONLINE',
-  PRESENCIAL = 'PRESENCIAL',
-  HYBRID = 'HYBRID',
-}
-
-export enum CohortStatus {
-  DRAFT = 'DRAFT',
-  OPEN = 'OPEN',
-  ACTIVE = 'ACTIVE',
-  CLOSED = 'CLOSED',
-  CANCELLED = 'CANCELLED',
-}
+export { InstructorType, CohortModalidade, CohortStatus };
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
 

@@ -32,10 +32,17 @@ enum CertificateType {
   DEVELOPMENT
 }
 
+// Redefinido no lote 10: o enum já existia mas nunca tinha sido usado por
+// nenhum campo — os valores declarados (PENDING/CONFIRMED/CANCELED) não
+// correspondiam aos valores reais escritos por events.service.ts
+// (DRAFT/PUBLISHED/CANCELLED, confirmados por grep; LIVE/ENDED declarados
+// no DTO mas ainda não escritos por nenhum fluxo).
 enum EventStatus {
-  PENDING
-  CONFIRMED
-  CANCELED
+  DRAFT
+  PUBLISHED
+  LIVE
+  ENDED
+  CANCELLED
 }
 
 enum ReportFormat {
@@ -4401,12 +4408,20 @@ model PostClassResponse {
 // INSTRUTOR & MARKETPLACE
 // ══════════════════════════════════════════════════════════════════
 
+enum InstructorType {
+  MASTER
+  SENIOR
+  STANDARD
+  MENTOR
+  EXTERNAL
+}
+
 model InstructorProfile {
   id                    Int                 @id @default(autoincrement())
   userId                Int                 @unique
   bio                   String?             @db.Text
   expertiseArea         String
-  instructorType        String              @default("STANDARD")
+  instructorType        InstructorType      @default(STANDARD)
   specialties           String[]            @default([])
   certifications        String[]            @default([])
   linkedinUrl           String?
@@ -4428,15 +4443,29 @@ model InstructorProfile {
   @@index([instructorType])
 }
 
+enum CohortModalidade {
+  ONLINE
+  PRESENCIAL
+  HYBRID
+}
+
+enum CohortStatus {
+  DRAFT
+  OPEN
+  ACTIVE
+  CLOSED
+  CANCELLED
+}
+
 model InstructorCohort {
   id              Int                 @id @default(autoincrement())
   instructorId    Int
   courseId        Int
   name            String
   description     String?
-  modalidade      String              @default("ONLINE")
+  modalidade      CohortModalidade    @default(ONLINE)
   maxParticipants Int                 @default(30)
-  status          String              @default("OPEN")
+  status          CohortStatus        @default(OPEN)
   startDate       DateTime
   endDate         DateTime?
   createdAt       DateTime            @default(now())
@@ -4449,16 +4478,23 @@ model InstructorCohort {
   @@index([status])
 }
 
+// Único valor confirmado por grep em instructor.service.ts — sem fluxo de
+// withdraw/completion implementado ainda (mesmo padrão de DisputeStatus
+// antes do lote 8).
+enum CohortParticipantStatus {
+  ACTIVE
+}
+
 model CohortParticipant {
-  id           Int              @id @default(autoincrement())
+  id           Int                     @id @default(autoincrement())
   cohortId     Int
   userId       Int
-  status       String           @default("ACTIVE")
-  progress     Int              @default(0)
-  enrolledAt   DateTime         @default(now())
+  status       CohortParticipantStatus @default(ACTIVE)
+  progress     Int                     @default(0)
+  enrolledAt   DateTime                @default(now())
   lastActiveAt DateTime?
-  cohort       InstructorCohort @relation(fields: [cohortId], references: [id])
-  user         User             @relation(fields: [userId], references: [id])
+  cohort       InstructorCohort        @relation(fields: [cohortId], references: [id])
+  user         User                    @relation(fields: [userId], references: [id])
 
   @@unique([cohortId, userId])
   @@index([cohortId])
@@ -5196,64 +5232,140 @@ model AvatarScript {
   createdAt DateTime @default(now())
 }
 
+enum ContentFormat {
+  VIDEO
+  ARTICLE
+  PODCAST
+  PDF
+  EBOOK
+  SCORM
+  MICROLEARNING
+  INFOGRAPHIC
+  QUIZ
+  TEMPLATE
+  PRESENTATION
+  COURSE
+  WEBINAR
+  HTML5
+}
+
+// Nome distinto de "ContentStatus" (já existente para MicroLearning, lote 5,
+// valores diferentes: DRAFT/PUBLISHED/ARCHIVED).
+enum ContentAssetStatus {
+  DRAFT
+  REVIEW
+  ACTIVE
+  DEPRECATED
+  ARCHIVED
+}
+
+// Nome distinto de "ContentLevel" (já existente para MicroLearning, lote 5,
+// valores diferentes: BEGINNER/INTERMEDIATE/ADVANCED, sem EXPERT).
+enum ContentAssetLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum ContentCategory {
+  HARD_SKILLS
+  SOFT_SKILLS
+  COMPLIANCE
+  ONBOARDING
+  LANGUAGES
+  PRODUCTS
+  WELLBEING
+  LEADERSHIP
+  TECHNICAL
+  OTHER
+}
+
 model ContentAsset {
-  id               Int      @id @default(autoincrement())
+  id               Int                @id @default(autoincrement())
   title            String
-  description      String?  @db.Text
-  type             String
-  url              String   @db.Text
-  version          String   @default("1.0")
-  active           Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  status           String   @default("DRAFT")
+  description      String?            @db.Text
+  type             ContentFormat
+  url              String             @db.Text
+  version          String             @default("1.0")
+  active           Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  status           ContentAssetStatus @default(DRAFT)
   createdById      Int?
   thumbnailUrl     String?
   author           String?
-  language         String?  @default("pt")
-  level            String?
+  language         String?            @default("pt")
+  level            ContentAssetLevel?
   durationMin      Int?
-  category         String?
-  mandatory        Boolean  @default(false)
-  isMicrolearning  Boolean  @default(false)
-  hasCertification Boolean  @default(false)
-  tags             String[] @default([])
+  category         ContentCategory?
+  mandatory        Boolean            @default(false)
+  isMicrolearning  Boolean            @default(false)
+  hasCertification Boolean            @default(false)
+  tags             String[]           @default([])
   externalSource   String?
 }
 
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum ScenarioCategory {
+  SOFT_SKILLS
+  SALES
+  CUSTOMER_SERVICE
+  ONBOARDING
+  COMPLIANCE
+  LEADERSHIP
+  SECURITY
+  NEGOTIATION
+}
+
+// Nome distinto de "SessionStatus" (já existente noutro módulo, valores
+// diferentes: SCHEDULED/LIVE/COMPLETED/CANCELLED/POSTPONED).
+enum AvatarSessionStatus {
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  ABANDONED
+}
+
 model AvatarScenario {
-  id           Int             @id @default(autoincrement())
+  id           Int               @id @default(autoincrement())
   title        String
-  description  String?         @db.Text
-  difficulty   String          @default("BEGINNER")
-  category     String?
+  description  String?           @db.Text
+  difficulty   Difficulty        @default(BEGINNER)
+  category     ScenarioCategory?
   competencyId Int?
-  active       Boolean         @default(true)
-  createdAt    DateTime        @default(now())
-  competency   Competency?     @relation(fields: [competencyId], references: [id], onDelete: SetNull)
+  active       Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  competency   Competency?       @relation(fields: [competencyId], references: [id], onDelete: SetNull)
   sessions     AvatarSession[]
 
   @@index([competencyId])
 }
 
 model AvatarSession {
-  id                  Int            @id @default(autoincrement())
+  id                  Int                 @id @default(autoincrement())
   userId              Int
   scenarioId          Int
-  status              String         @default("IN_PROGRESS")
+  status              AvatarSessionStatus @default(IN_PROGRESS)
   score               Float?
-  feedback            String?        @db.Text
-  startedAt           DateTime       @default(now())
+  feedback            String?             @db.Text
+  startedAt           DateTime            @default(now())
   completedAt         DateTime?
   avatarId            Int?
   language            String?
-  conversationHistory String?        @db.Text
+  conversationHistory String?             @db.Text
   durationSeconds     Int?
-  behavioralScore     String?        @db.Text
+  behavioralScore     String?             @db.Text
   userRating          Int?
   confidenceLevel     Int?
-  reflection          String?        @db.Text
-  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  scenario            AvatarScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  reflection          String?             @db.Text
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scenario            AvatarScenario      @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([scenarioId])
@@ -5263,13 +5375,33 @@ model AvatarSession {
 // EVENTOS
 // ══════════════════════════════════════════════════════════════════
 
+enum EventType {
+  TRAINING
+  WORKSHOP
+  WEBINAR
+  LIVE_CLASS
+  HACKATHON
+  MENTORING
+  CORPORATE
+  ONBOARDING
+  NETWORKING
+  EXTERNAL
+  TALK
+}
+
+enum EventModalidade {
+  ONLINE
+  PRESENCIAL
+  HYBRID
+}
+
 model Event {
   id                   Int                @id @default(autoincrement())
   title                String
   description          String?            @db.Text
-  type                 String             @default("TRAINING")
-  modalidade           String             @default("ONLINE")
-  status               String             @default("DRAFT")
+  type                 EventType          @default(TRAINING)
+  modalidade           EventModalidade    @default(ONLINE)
+  status               EventStatus        @default(DRAFT)
   startAt              DateTime
   endAt                DateTime
   location             String?
@@ -5297,17 +5429,30 @@ model Event {
   @@index([startAt])
 }
 
+// Nome distinto de "ParticipantStatus" (já existente para LeadershipParticipant,
+// lote 4, e "TrainingParticipantStatus" para Trainings, lote 5 — valores
+// diferentes em ambos os casos).
+enum EventParticipantStatus {
+  PENDING
+  CONFIRMED
+  WAITLIST
+  PRESENT
+  ABSENT
+  CANCELLED
+  NO_SHOW
+}
+
 model EventParticipant {
-  id           Int       @id @default(autoincrement())
+  id           Int                    @id @default(autoincrement())
   eventId      Int
   userId       Int
-  status       String    @default("PENDING")
+  status       EventParticipantStatus @default(PENDING)
   note         String?
-  registeredAt DateTime  @default(now())
+  registeredAt DateTime               @default(now())
   checkedInAt  DateTime?
   checkedOutAt DateTime?
-  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user         User      @relation(fields: [userId], references: [id])
+  event        Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user         User                   @relation(fields: [userId], references: [id])
 
   @@unique([eventId, userId])
   @@index([eventId])
