@@ -13,46 +13,19 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import {
+  EventType,
+  EventModalidade,
+  EventStatus,
+  EventParticipantStatus as ParticipantStatus,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
+// NOTA: ParticipantStatus aqui é o `EventParticipantStatus` do Prisma — nome
+// local mantido por compatibilidade, distinto do `ParticipantStatus`
+// (LeadershipParticipant, lote 4) e `TrainingParticipantStatus` (lote 5).
 
-export enum EventType {
-  TRAINING = 'TRAINING',
-  WORKSHOP = 'WORKSHOP',
-  WEBINAR = 'WEBINAR',
-  LIVE_CLASS = 'LIVE_CLASS',
-  HACKATHON = 'HACKATHON',
-  MENTORING = 'MENTORING',
-  CORPORATE = 'CORPORATE',
-  ONBOARDING = 'ONBOARDING',
-  NETWORKING = 'NETWORKING',
-  EXTERNAL = 'EXTERNAL',
-  TALK = 'TALK',
-}
-
-export enum EventModalidade {
-  ONLINE = 'ONLINE',
-  PRESENCIAL = 'PRESENCIAL',
-  HYBRID = 'HYBRID',
-}
-
-export enum EventStatus {
-  DRAFT = 'DRAFT',
-  PUBLISHED = 'PUBLISHED',
-  LIVE = 'LIVE',
-  ENDED = 'ENDED',
-  CANCELLED = 'CANCELLED',
-}
-
-export enum ParticipantStatus {
-  PENDING = 'PENDING',
-  CONFIRMED = 'CONFIRMED',
-  WAITLIST = 'WAITLIST',
-  PRESENT = 'PRESENT',
-  ABSENT = 'ABSENT',
-  CANCELLED = 'CANCELLED',
-  NO_SHOW = 'NO_SHOW',
-}
+export { EventType, EventModalidade, EventStatus, ParticipantStatus };
 
 // ─── Event ────────────────────────────────────────────────────────────────────
 

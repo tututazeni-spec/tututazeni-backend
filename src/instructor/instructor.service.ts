@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CohortParticipantStatus } from '@prisma/client';
 import {
   CreateInstructorProfileDto,
   UpdateInstructorProfileDto,
@@ -366,7 +367,7 @@ export class InstructorService {
     const data = dto.userIds.map(userId => ({
       cohortId,
       userId,
-      status: 'ACTIVE',
+      status: CohortParticipantStatus.ACTIVE,
       enrolledAt: new Date(),
     }));
 

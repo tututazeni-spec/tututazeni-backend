@@ -12,53 +12,19 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import {
+  ContentFormat,
+  ContentAssetStatus as ContentStatus,
+  ContentAssetLevel as ContentLevel,
+  ContentCategory,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────
+// NOTA: ContentStatus/ContentLevel aqui são `ContentAssetStatus`/
+// `ContentAssetLevel` do Prisma — nomes locais mantidos por compatibilidade,
+// distintos do `ContentStatus`/`ContentLevel` (MicroLearning, lote 5).
 
-export enum ContentFormat {
-  VIDEO = 'VIDEO',
-  ARTICLE = 'ARTICLE',
-  PODCAST = 'PODCAST',
-  PDF = 'PDF',
-  EBOOK = 'EBOOK',
-  SCORM = 'SCORM',
-  MICROLEARNING = 'MICROLEARNING',
-  INFOGRAPHIC = 'INFOGRAPHIC',
-  QUIZ = 'QUIZ',
-  TEMPLATE = 'TEMPLATE',
-  PRESENTATION = 'PRESENTATION',
-  COURSE = 'COURSE',
-  WEBINAR = 'WEBINAR',
-  HTML5 = 'HTML5',
-}
-
-export enum ContentLevel {
-  BEGINNER = 'BEGINNER',
-  INTERMEDIATE = 'INTERMEDIATE',
-  ADVANCED = 'ADVANCED',
-  EXPERT = 'EXPERT',
-}
-
-export enum ContentStatus {
-  DRAFT = 'DRAFT',
-  REVIEW = 'REVIEW',
-  ACTIVE = 'ACTIVE',
-  DEPRECATED = 'DEPRECATED',
-  ARCHIVED = 'ARCHIVED',
-}
-
-export enum ContentCategory {
-  HARD_SKILLS = 'HARD_SKILLS',
-  SOFT_SKILLS = 'SOFT_SKILLS',
-  COMPLIANCE = 'COMPLIANCE',
-  ONBOARDING = 'ONBOARDING',
-  LANGUAGES = 'LANGUAGES',
-  PRODUCTS = 'PRODUCTS',
-  WELLBEING = 'WELLBEING',
-  LEADERSHIP = 'LEADERSHIP',
-  TECHNICAL = 'TECHNICAL',
-  OTHER = 'OTHER',
-}
+export { ContentFormat, ContentStatus, ContentLevel, ContentCategory };
 
 // ─── Content DTOs ─────────────────────────────────────────────────
 
