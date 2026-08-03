@@ -410,12 +410,12 @@ describe('ContentLibraryService (additional)', () => {
       );
     });
 
-    it('deve ordenar por popular', async () => {
+    it('deve ordenar por popular — ContentAsset não tem coluna viewCount, cai para createdAt desc', async () => {
       mockPrisma.contentAsset.findMany.mockResolvedValue([]);
       mockPrisma.contentAsset.count.mockResolvedValue(0);
       await service.findAll({ sortBy: 'popular' });
       expect(mockPrisma.contentAsset.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ orderBy: { viewCount: 'desc' } }),
+        expect.objectContaining({ orderBy: { createdAt: 'desc' } }),
       );
     });
 

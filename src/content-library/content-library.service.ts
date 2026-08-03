@@ -1,5 +1,6 @@
 ﻿// src/content-library/content-library.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateContentDto,
@@ -37,8 +38,8 @@ function safeModel(prisma: any, model: string) {
   );
 }
 
-function buildWhereFromFilters(filters: ContentFilterDto): any {
-  const where: any = { active: true };
+function buildWhereFromFilters(filters: ContentFilterDto): Prisma.ContentAssetWhereInput {
+  const where: Prisma.ContentAssetWhereInput = { active: true };
 
   // Status filter — only show active by default
   where.status = ContentStatus.ACTIVE;
@@ -63,14 +64,22 @@ function buildWhereFromFilters(filters: ContentFilterDto): any {
   return where;
 }
 
-function buildOrderBy(sortBy?: string): any {
+function buildOrderBy(
+  sortBy?: string,
+): Prisma.ContentAssetOrderByWithRelationInput | Prisma.ContentAssetOrderByWithRelationInput[] {
   switch (sortBy) {
     case 'newest':
       return { createdAt: 'desc' };
     case 'duration':
       return [{ durationMin: 'asc' }];
     case 'popular':
-      return { viewCount: 'desc' };
+      // ContentAsset não tem coluna de contagem de visualizações — as vistas
+      // são derivadas de AuditLog (ver findAll) e não podem ser usadas num
+      // Prisma orderBy. 'rating' tem a mesma limitação (também cai aqui).
+      // Antes desta função ser tipada, isto chamava orderBy: { viewCount },
+      // um campo que nunca existiu em ContentAsset — rebentava com um erro
+      // de validação do Prisma em runtime sempre que sortBy='popular'.
+      return { createdAt: 'desc' };
     default:
       return { createdAt: 'desc' };
   }

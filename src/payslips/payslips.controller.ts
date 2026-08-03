@@ -99,7 +99,7 @@ export class PayslipsController {
   @Post('simulate')
   @ApiOperation({ summary: 'Simular cálculo salarial (IRT, INSS, líquido)' })
   @HttpCode(HttpStatus.OK)
-  simulate(@Body() dto: SimulatePayslipDto): any {
+  simulate(@Body() dto: SimulatePayslipDto) {
     return this.svc.simulate(dto);
   }
 

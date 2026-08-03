@@ -1,6 +1,6 @@
 // src/history/history.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { EnrollmentStatus } from '@prisma/client';
+import { EnrollmentStatus, AuditLog, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   HistoryFilterDto,
@@ -128,8 +128,14 @@ function buildTitle(action: string, entity: string): string {
   return `${action} em ${entity}`;
 }
 
-// Enrich a raw AuditLog entry with derived fields
-function enrichEntry(log: any): any {
+// Enrich a raw AuditLog entry with derived fields — `user` varia consoante o
+// include usado em cada ponto de chamada (nalguns nem é incluído), por isso
+// é sempre opcional aqui.
+type AuditLogEntry = AuditLog & {
+  user?: Partial<Pick<User, 'id' | 'fullName' | 'email' | 'avatarUrl'>> | null;
+};
+
+function enrichEntry(log: AuditLogEntry) {
   const category = categorise(log.action, log.entity);
   const module = deriveModule(log.action, log.entity);
   const impact = impactScore(log.action, log.entity);

@@ -23,7 +23,7 @@ import { CurrentUserData } from '../common/types/current-user';
 
 // ─── Tabela IRT Angola 2026 (Lei nº 26/2020 + actualização 2026) ─────────────
 // Isenção até 150.000 Kz/mês (Portaria 2026)
-interface IrtBracket {
+export interface IrtBracket {
   min: number;
   max: number | null;
   rate: number;
