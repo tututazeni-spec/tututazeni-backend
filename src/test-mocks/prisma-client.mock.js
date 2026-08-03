@@ -1235,6 +1235,81 @@ const StepProgressStatus = {
   SKIPPED: 'SKIPPED',
 };
 
+const NotificationPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', CRITICAL: 'CRITICAL' };
+
+const NotificationCategory = {
+  LMS: 'LMS',
+  PDI: 'PDI',
+  PERFORMANCE: 'PERFORMANCE',
+  HR: 'HR',
+  ENGAGEMENT: 'ENGAGEMENT',
+  GAMIFICATION: 'GAMIFICATION',
+  SYSTEM: 'SYSTEM',
+  ONBOARDING: 'ONBOARDING',
+  KNOWLEDGE: 'KNOWLEDGE',
+};
+
+const DigestFrequency = { NONE: 'NONE', DAILY: 'DAILY', WEEKLY: 'WEEKLY' };
+
+const AuditStatus = { SUCCESS: 'SUCCESS', FAILED: 'FAILED', DENIED: 'DENIED' };
+
+const AutomationCategory = {
+  HR: 'HR',
+  LMS: 'LMS',
+  PERFORMANCE: 'PERFORMANCE',
+  ENGAGEMENT: 'ENGAGEMENT',
+  GAMIFICATION: 'GAMIFICATION',
+  OPERATIONAL: 'OPERATIONAL',
+  CUSTOM: 'CUSTOM',
+};
+
+const ExecutionStatus = {
+  PENDING: 'PENDING',
+  RUNNING: 'RUNNING',
+  SUCCESS: 'SUCCESS',
+  FAILED: 'FAILED',
+  SKIPPED: 'SKIPPED',
+};
+
+const AuthType = { OAUTH2: 'OAUTH2', API_KEY: 'API_KEY', BASIC: 'BASIC', BEARER: 'BEARER' };
+
+const SyncLogStatus = {
+  RUNNING: 'RUNNING',
+  SUCCESS: 'SUCCESS',
+  PARTIAL: 'PARTIAL',
+  FAILED: 'FAILED',
+};
+
+const ApiCallStatus = { OK: 'OK', ERROR: 'ERROR' };
+
+const MobileSyncStatus = { SUCCESS: 'SUCCESS', FAILED: 'FAILED' };
+
+const ReportType = {
+  FLASH: 'FLASH',
+  MONTHLY: 'MONTHLY',
+  QUARTERLY: 'QUARTERLY',
+  ANNUAL: 'ANNUAL',
+  CUSTOM: 'CUSTOM',
+  AUDIT: 'AUDIT',
+};
+
+const ExecutiveReportStatus = {
+  DRAFT: 'DRAFT',
+  IN_REVIEW: 'IN_REVIEW',
+  APPROVED: 'APPROVED',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const ReportConfidentiality = {
+  PUBLIC: 'PUBLIC',
+  INTERNAL: 'INTERNAL',
+  CONFIDENTIAL: 'CONFIDENTIAL',
+  RESTRICTED: 'RESTRICTED',
+};
+
+const KpiStatus = { GREEN: 'GREEN', YELLOW: 'YELLOW', RED: 'RED' };
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -1423,4 +1498,18 @@ module.exports = {
   StepType,
   InstanceStatus,
   StepProgressStatus,
+  NotificationPriority,
+  NotificationCategory,
+  DigestFrequency,
+  AuditStatus,
+  AutomationCategory,
+  ExecutionStatus,
+  AuthType,
+  SyncLogStatus,
+  ApiCallStatus,
+  MobileSyncStatus,
+  ReportType,
+  ExecutiveReportStatus,
+  ReportConfidentiality,
+  KpiStatus,
 };

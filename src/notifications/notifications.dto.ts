@@ -10,33 +10,16 @@ import {
   IsObject,
   MaxLength,
   Min,
-  IsIn,
   ArrayMaxSize,
   IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { NotificationPriority, NotificationCategory, DigestFrequency } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum NotificationPriority {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  CRITICAL = 'CRITICAL',
-}
-
-export enum NotificationCategory {
-  LMS = 'LMS',
-  PDI = 'PDI',
-  PERFORMANCE = 'PERFORMANCE',
-  HR = 'HR',
-  ENGAGEMENT = 'ENGAGEMENT',
-  GAMIFICATION = 'GAMIFICATION',
-  SYSTEM = 'SYSTEM',
-  ONBOARDING = 'ONBOARDING',
-  KNOWLEDGE = 'KNOWLEDGE',
-}
+export { NotificationPriority, NotificationCategory, DigestFrequency };
 
 // ─── Send ─────────────────────────────────────────────────────────────────────
 
@@ -221,10 +204,10 @@ export class UpdatePreferencesDto {
   @Min(0)
   quietHourEnd?: number;
 
-  @ApiPropertyOptional({ description: 'Digest: NONE, DAILY, WEEKLY' })
+  @ApiPropertyOptional({ enum: DigestFrequency })
   @IsOptional()
-  @IsIn(['NONE', 'DAILY', 'WEEKLY'])
-  digestFrequency?: string;
+  @IsEnum(DigestFrequency)
+  digestFrequency?: DigestFrequency;
 
   @ApiPropertyOptional({ description: 'Categorias desactivadas' })
   @IsOptional()

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MobileSyncStatus } from '@prisma/client';
 
 @Injectable()
 export class MobileService {
@@ -28,8 +29,8 @@ export class MobileService {
   }
 
   // Registrar sincronização
-  async logSync(userId: number, entity: string, status: 'SUCCESS' | 'FAILED') {
-    return (this.prisma as any).mobileSyncLog.create({
+  async logSync(userId: number, entity: string, status: MobileSyncStatus) {
+    return this.prisma.mobileSyncLog.create({
       data: {
         userId,
         entity,

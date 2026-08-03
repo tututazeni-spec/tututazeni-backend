@@ -1,4 +1,7 @@
-import { IsString, IsOptional, IsIn, IsNotEmpty } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNotEmpty } from 'class-validator';
+import { MobileSyncStatus } from '@prisma/client';
+
+export { MobileSyncStatus };
 
 export class RegisterSessionDto {
   @IsString()
@@ -25,6 +28,6 @@ export class LogSyncDto {
   @IsNotEmpty()
   entity!: string;
 
-  @IsIn(['SUCCESS', 'FAILED'])
-  status!: 'SUCCESS' | 'FAILED';
+  @IsEnum(MobileSyncStatus)
+  status!: MobileSyncStatus;
 }

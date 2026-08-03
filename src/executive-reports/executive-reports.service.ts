@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ApprovalDecision } from '@prisma/client';
 import {
   CreateExecutiveReportDto,
   UpdateExecutiveReportDto,
@@ -210,7 +211,7 @@ export class ExecutiveReportsService {
       data: {
         reportId: dto.reportId,
         approverId,
-        decision: dto.decision.toUpperCase(),
+        decision: dto.decision === 'approve' ? ApprovalDecision.APPROVE : ApprovalDecision.REJECT,
         comment: dto.comment,
       },
     });

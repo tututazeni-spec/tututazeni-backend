@@ -228,7 +228,7 @@ export class ApiIntegrationService {
           statusCode: res.status,
           message: success ? `Conexão OK (${latencyMs}ms)` : `Erro HTTP ${res.status}`,
           latencyMs,
-        } as any,
+        },
       });
 
       return {
@@ -253,7 +253,7 @@ export class ApiIntegrationService {
           status: 'ERROR',
           message: (err instanceof Error ? err.message : String(err)) ?? 'Timeout',
           latencyMs,
-        } as any,
+        },
       });
       return {
         success: false,
@@ -272,7 +272,7 @@ export class ApiIntegrationService {
     const { page = 1, limit = 50, from, to, status } = filters;
     const skip = (page - 1) * limit;
     const where: any = { integrationId };
-    if (status) where.status = { contains: status, mode: 'insensitive' };
+    if (status) where.status = status;
     if (from || to) {
       where.createdAt = {};
       if (from) where.createdAt.gte = new Date(from);

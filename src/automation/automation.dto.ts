@@ -2,6 +2,7 @@
 import { IsString, IsOptional, IsEnum, IsBoolean, IsInt, MaxLength, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { AutomationCategory, ExecutionStatus } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────
 
@@ -49,23 +50,7 @@ export enum ActionType {
   NOTIFY_HR = 'NOTIFY_HR',
 }
 
-export enum AutomationCategory {
-  HR = 'HR',
-  LMS = 'LMS',
-  PERFORMANCE = 'PERFORMANCE',
-  ENGAGEMENT = 'ENGAGEMENT',
-  GAMIFICATION = 'GAMIFICATION',
-  OPERATIONAL = 'OPERATIONAL',
-  CUSTOM = 'CUSTOM',
-}
-
-export enum ExecutionStatus {
-  PENDING = 'PENDING',
-  RUNNING = 'RUNNING',
-  SUCCESS = 'SUCCESS',
-  FAILED = 'FAILED',
-  SKIPPED = 'SKIPPED',
-}
+export { AutomationCategory, ExecutionStatus };
 
 // ─── Rule DTOs ────────────────────────────────────────────────────
 

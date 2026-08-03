@@ -14,22 +14,19 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { IntegrationType, IntegrationStatus, AuthType, ApiCallStatus } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────
+// CORRIGIDO: IntegrationType/IntegrationStatus eram enums locais com valores
+// completamente diferentes dos enums Prisma reais de IntegrationConfig.type/
+// .status (ex.: 'HRIS'/'LMS'/'BI'/'SSO'/'MESSAGING'/'HEALTH'/'CUSTOM'/'WEBHOOK'
+// vs. ERP_HR/MICROSOFT_TEAMS/SLACK/SSO_GOOGLE/SSO_MICROSOFT/SCORM_PROVIDER/
+// XAPI_LRS/BI_TOOL/CUSTOM_WEBHOOK). createIntegration() grava dto.type
+// directamente em integrationConfig.create() — qualquer um destes valores
+// só-do-DTO (ex. 'HRIS') passava a validação do DTO mas rebentava com 500 no
+// Prisma. Corrigido importando os enums reais.
 
-export enum IntegrationType {
-  HRIS = 'HRIS',
-  ERP = 'ERP',
-  ATS = 'ATS',
-  LMS = 'LMS',
-  PAYROLL = 'PAYROLL',
-  BI = 'BI',
-  SSO = 'SSO',
-  MESSAGING = 'MESSAGING',
-  HEALTH = 'HEALTH',
-  CUSTOM = 'CUSTOM',
-  WEBHOOK = 'WEBHOOK',
-}
+export { IntegrationType, IntegrationStatus, AuthType, ApiCallStatus };
 
 export enum ApiKeyScope {
   READ = 'read',
@@ -51,13 +48,6 @@ export enum WebhookEventType {
   DOCUMENT_SIGNED = 'document.signed',
 }
 
-export enum IntegrationStatus {
-  ACTIVE = 'ACTIVE',
-  INACTIVE = 'INACTIVE',
-  ERROR = 'ERROR',
-  PENDING = 'PENDING',
-}
-
 // ─── Integration DTOs ─────────────────────────────────────────────
 
 export class CreateIntegrationDto {
@@ -67,7 +57,7 @@ export class CreateIntegrationDto {
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() baseUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() apiKey?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() authType?: string;
+  @ApiPropertyOptional({ enum: AuthType }) @IsOptional() @IsEnum(AuthType) authType?: AuthType;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
   @ApiPropertyOptional() @IsOptional() config?: Record<string, any>;
   @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() allowedIps?: string[];
@@ -85,7 +75,10 @@ export class UpdateIntegrationDto {
 export class IntegrationLogFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
+  @ApiPropertyOptional({ enum: ApiCallStatus })
+  @IsOptional()
+  @IsEnum(ApiCallStatus)
+  status?: ApiCallStatus;
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @IsInt()
