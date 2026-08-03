@@ -96,7 +96,8 @@ export class DepartmentsService {
     });
 
     // Construir árvore recursivamente
-    const buildTree = (parentId: number | null): any[] =>
+    type DepartmentNode = (typeof all)[number] & { children: DepartmentNode[] };
+    const buildTree = (parentId: number | null): DepartmentNode[] =>
       all.filter(d => d.parentId === parentId).map(d => ({ ...d, children: buildTree(d.id) }));
 
     return buildTree(null);

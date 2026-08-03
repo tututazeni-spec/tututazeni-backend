@@ -49,7 +49,7 @@ function normalise(
   subtitle: string,
   extra: Record<string, any> = {},
   url?: string,
-): any {
+) {
   return { type, id, title, subtitle: subtitle || '', url: url ?? `/${type}s/${id}`, ...extra };
 }
 

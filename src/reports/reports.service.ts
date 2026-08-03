@@ -1,6 +1,6 @@
 // src/reports/reports.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { EnrollmentStatus, ReportCategory } from '@prisma/client';
+import { EnrollmentStatus, ReportCategory, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReportFilterDto, SaveReportDto, CreateScheduleDto } from './reports.dto';
 import { sanitizeForLog } from '../common/logging/sanitize';
@@ -29,8 +29,8 @@ function trend(curr: number, prev: number): number {
 }
 
 /** Build user filter from department/manager */
-function userWhere(filter: ReportFilterDto): any {
-  const where: any = {};
+function userWhere(filter: ReportFilterDto): Prisma.UserWhereInput | undefined {
+  const where: Prisma.UserWhereInput = {};
   if (filter.departmentId) where.departmentId = filter.departmentId;
   if (filter.managerId) where.managerId = filter.managerId;
   if (filter.positionId) where.positionId = filter.positionId;

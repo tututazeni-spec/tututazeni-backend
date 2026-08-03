@@ -863,7 +863,7 @@ export class ScalabilityService {
     }
   }
 
-  private parseCSV(raw: string): any[] {
+  private parseCSV(raw: string): Record<string, string>[] {
     const lines = raw.split('\n').filter(l => l.trim());
     if (lines.length < 2) throw new Error('CSV sem dados.');
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
