@@ -13,74 +13,29 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import {
+  OnboardingStatus,
+  TaskCategory,
+  TaskType,
+  TaskStatus,
+  TaskPhase,
+  ResponsibleRole,
+  DocumentStatus,
+  SurveyMilestone,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum OnboardingStatus {
-  NOT_STARTED = 'NOT_STARTED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  ABANDONED = 'ABANDONED',
-  ON_HOLD = 'ON_HOLD',
-}
-
-export enum TaskCategory {
-  DOCUMENTS = 'DOCUMENTS',
-  IT_ACCESS = 'IT_ACCESS',
-  TRAINING = 'TRAINING',
-  SOCIAL = 'SOCIAL',
-  BENEFITS = 'BENEFITS',
-  ADMIN = 'ADMIN',
-  MEETING = 'MEETING',
-}
-
-export enum TaskType {
-  TASK = 'TASK',
-  COURSE = 'COURSE',
-  LEARNING_PATH = 'LEARNING_PATH',
-  PROCESS = 'PROCESS',
-  DOCUMENT = 'DOCUMENT',
-  MEETING = 'MEETING',
-}
-
-export enum TaskStatus {
-  PENDING = 'PENDING',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  BLOCKED = 'BLOCKED',
-  SKIPPED = 'SKIPPED',
-}
-
-export enum TaskPhase {
-  PRE_BOARDING = 'PRE_BOARDING',
-  DAY_1 = 'DAY_1',
-  WEEK_1 = 'WEEK_1',
-  DAY_30 = 'DAY_30',
-  DAY_60 = 'DAY_60',
-  DAY_90 = 'DAY_90',
-}
-
-export enum ResponsibleRole {
-  SELF = 'SELF',
-  HR = 'HR',
-  MANAGER = 'MANAGER',
-  IT = 'IT',
-  BUDDY = 'BUDDY',
-  EXTERNAL = 'EXTERNAL',
-}
-
-export enum DocumentStatus {
-  PENDING = 'PENDING',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED',
-}
-
-export enum SurveyMilestone {
-  DAY_1 = 'DAY_1',
-  DAY_7 = 'DAY_7',
-  DAY_30 = 'DAY_30',
-  DAY_90 = 'DAY_90',
-}
+export {
+  OnboardingStatus,
+  TaskCategory,
+  TaskType,
+  TaskStatus,
+  TaskPhase,
+  ResponsibleRole,
+  DocumentStatus,
+  SurveyMilestone,
+};
 
 // ─── Template ─────────────────────────────────────────────────────────────────
 

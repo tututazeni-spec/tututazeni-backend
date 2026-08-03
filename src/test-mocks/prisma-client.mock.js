@@ -1093,6 +1093,116 @@ const EvaluationStatus = {
   ARCHIVED: 'ARCHIVED',
 };
 
+const OnboardingStatus = {
+  NOT_STARTED: 'NOT_STARTED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  ABANDONED: 'ABANDONED',
+  ON_HOLD: 'ON_HOLD',
+};
+
+const TaskCategory = {
+  DOCUMENTS: 'DOCUMENTS',
+  IT_ACCESS: 'IT_ACCESS',
+  TRAINING: 'TRAINING',
+  SOCIAL: 'SOCIAL',
+  BENEFITS: 'BENEFITS',
+  ADMIN: 'ADMIN',
+  MEETING: 'MEETING',
+};
+
+const TaskType = {
+  TASK: 'TASK',
+  COURSE: 'COURSE',
+  LEARNING_PATH: 'LEARNING_PATH',
+  PROCESS: 'PROCESS',
+  DOCUMENT: 'DOCUMENT',
+  MEETING: 'MEETING',
+};
+
+const TaskStatus = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  BLOCKED: 'BLOCKED',
+  SKIPPED: 'SKIPPED',
+};
+
+const TaskPhase = {
+  PRE_BOARDING: 'PRE_BOARDING',
+  DAY_1: 'DAY_1',
+  WEEK_1: 'WEEK_1',
+  DAY_30: 'DAY_30',
+  DAY_60: 'DAY_60',
+  DAY_90: 'DAY_90',
+};
+
+const ResponsibleRole = {
+  SELF: 'SELF',
+  HR: 'HR',
+  MANAGER: 'MANAGER',
+  IT: 'IT',
+  BUDDY: 'BUDDY',
+  EXTERNAL: 'EXTERNAL',
+};
+
+const DocumentStatus = { PENDING: 'PENDING', APPROVED: 'APPROVED', REJECTED: 'REJECTED' };
+
+const SurveyMilestone = { DAY_1: 'DAY_1', DAY_7: 'DAY_7', DAY_30: 'DAY_30', DAY_90: 'DAY_90' };
+
+const ContentType = {
+  VIDEO: 'VIDEO',
+  TEXT: 'TEXT',
+  AUDIO: 'AUDIO',
+  INFOGRAPHIC: 'INFOGRAPHIC',
+  QUIZ: 'QUIZ',
+};
+
+const ContentLevel = { BEGINNER: 'BEGINNER', INTERMEDIATE: 'INTERMEDIATE', ADVANCED: 'ADVANCED' };
+
+const ContentStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHIVED' };
+
+const MicroLearningAction = { LIKE: 'LIKE', SAVE: 'SAVE', SKIP: 'SKIP' };
+
+const TrainingType = { PRESENTIAL: 'PRESENTIAL', ONLINE: 'ONLINE', HYBRID: 'HYBRID' };
+
+const TrainingLevel = { BEGINNER: 'BEGINNER', INTERMEDIATE: 'INTERMEDIATE', ADVANCED: 'ADVANCED' };
+
+const TrainingStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHIVED' };
+
+const TrainingParticipantStatus = {
+  WAITLIST: 'WAITLIST',
+  REGISTERED: 'REGISTERED',
+  ATTENDED: 'ATTENDED',
+  ABSENT: 'ABSENT',
+  CANCELLED: 'CANCELLED',
+  COMPLETED: 'COMPLETED',
+};
+
+const SessionModality = { PRESENTIAL: 'PRESENTIAL', ONLINE: 'ONLINE', HYBRID: 'HYBRID' };
+
+const ArticleStatus = {
+  DRAFT: 'DRAFT',
+  IN_REVIEW: 'IN_REVIEW',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const ArticleAccess = {
+  PUBLIC: 'PUBLIC',
+  DEPARTMENT: 'DEPARTMENT',
+  ROLE: 'ROLE',
+  CONFIDENTIAL: 'CONFIDENTIAL',
+};
+
+const InteractionAction = {
+  VIEW: 'VIEW',
+  LIKE: 'LIKE',
+  DISLIKE: 'DISLIKE',
+  BOOKMARK: 'BOOKMARK',
+  SHARE: 'SHARE',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -1257,4 +1367,24 @@ module.exports = {
   IndicatorFrequency,
   EvalCycleType,
   EvaluationStatus,
+  OnboardingStatus,
+  TaskCategory,
+  TaskType,
+  TaskStatus,
+  TaskPhase,
+  ResponsibleRole,
+  DocumentStatus,
+  SurveyMilestone,
+  ContentType,
+  ContentLevel,
+  ContentStatus,
+  MicroLearningAction,
+  TrainingType,
+  TrainingLevel,
+  TrainingStatus,
+  TrainingParticipantStatus,
+  SessionModality,
+  ArticleStatus,
+  ArticleAccess,
+  InteractionAction,
 };

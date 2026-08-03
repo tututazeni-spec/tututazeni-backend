@@ -12,30 +12,11 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import { ArticleStatus, ArticleAccess, InteractionAction } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum ArticleStatus {
-  DRAFT = 'DRAFT',
-  IN_REVIEW = 'IN_REVIEW',
-  PUBLISHED = 'PUBLISHED',
-  ARCHIVED = 'ARCHIVED',
-}
-
-export enum ArticleAccess {
-  PUBLIC = 'PUBLIC',
-  DEPARTMENT = 'DEPARTMENT',
-  ROLE = 'ROLE',
-  CONFIDENTIAL = 'CONFIDENTIAL',
-}
-
-export enum InteractionAction {
-  VIEW = 'VIEW',
-  LIKE = 'LIKE',
-  DISLIKE = 'DISLIKE',
-  BOOKMARK = 'BOOKMARK',
-  SHARE = 'SHARE',
-}
+export { ArticleStatus, ArticleAccess, InteractionAction };
 
 export enum ArticleSortBy {
   RECENT = 'RECENT',

@@ -14,41 +14,20 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import {
+  TrainingType,
+  TrainingLevel,
+  TrainingStatus,
+  TrainingParticipantStatus as ParticipantStatus,
+  SessionModality,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
+// NOTA: ParticipantStatus aqui é o `TrainingParticipantStatus` do Prisma —
+// nome local mantido por compatibilidade, distinto do `ParticipantStatus`
+// (LeadershipParticipant) usado no módulo leadership.
 
-export enum TrainingType {
-  PRESENTIAL = 'PRESENTIAL',
-  ONLINE = 'ONLINE',
-  HYBRID = 'HYBRID',
-}
-
-export enum TrainingLevel {
-  BEGINNER = 'BEGINNER',
-  INTERMEDIATE = 'INTERMEDIATE',
-  ADVANCED = 'ADVANCED',
-}
-
-export enum TrainingStatus {
-  DRAFT = 'DRAFT',
-  PUBLISHED = 'PUBLISHED',
-  ARCHIVED = 'ARCHIVED',
-}
-
-export enum ParticipantStatus {
-  WAITLIST = 'WAITLIST',
-  REGISTERED = 'REGISTERED',
-  ATTENDED = 'ATTENDED',
-  ABSENT = 'ABSENT',
-  CANCELLED = 'CANCELLED',
-  COMPLETED = 'COMPLETED',
-}
-
-export enum SessionModality {
-  PRESENTIAL = 'PRESENTIAL',
-  ONLINE = 'ONLINE',
-  HYBRID = 'HYBRID',
-}
+export { TrainingType, TrainingLevel, TrainingStatus, ParticipantStatus, SessionModality };
 
 // ─── Training ─────────────────────────────────────────────────────────────────
 
