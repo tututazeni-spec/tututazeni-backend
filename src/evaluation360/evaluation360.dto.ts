@@ -20,58 +20,29 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { CompetencyType, CompetencyCategory } from '@prisma/client';
+import {
+  CompetencyType,
+  CompetencyCategory,
+  EvaluationModel,
+  Eval360CycleType,
+  Eval360CycleStatus,
+  AnonymityMode,
+  EvaluatorRole,
+  Eval360QuestionType,
+  Eval360FeedbackType,
+} from '@prisma/client';
 
 // ─── ENUMS ───────────────────────────────────────────────────
-export { CompetencyType };
-export enum EvaluationModel {
-  DEG_90 = 'DEG_90',
-  DEG_180 = 'DEG_180',
-  DEG_270 = 'DEG_270',
-  DEG_360 = 'DEG_360',
-  HYBRID = 'HYBRID',
-}
-export enum CycleType {
-  TRIMESTRAL = 'TRIMESTRAL',
-  SEMESTRAL = 'SEMESTRAL',
-  ANUAL = 'ANUAL',
-  PROJECT = 'PROJECT',
-  CUSTOM = 'CUSTOM',
-}
-export enum CycleStatus {
-  DRAFT = 'DRAFT',
-  PUBLISHED = 'PUBLISHED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  PROCESSING = 'PROCESSING',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
-}
-export enum AnonymityMode {
-  ANONYMOUS = 'ANONYMOUS',
-  SEMI_ANONYMOUS = 'SEMI_ANONYMOUS',
-  OPEN = 'OPEN',
-}
-export enum EvaluatorRole {
-  SELF = 'SELF',
-  MANAGER = 'MANAGER',
-  PEER = 'PEER',
-  SUBORDINATE = 'SUBORDINATE',
-  EXTERNAL = 'EXTERNAL',
-}
-export enum QuestionType {
-  LIKERT = 'LIKERT',
-  FREQUENCY = 'FREQUENCY',
-  MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
-  YES_NO = 'YES_NO',
-  OPEN_TEXT = 'OPEN_TEXT',
-  SITUATIONAL = 'SITUATIONAL',
-}
-export enum FeedbackType {
-  RECOGNITION = 'RECOGNITION',
-  DEVELOPMENT = 'DEVELOPMENT',
-  CHECK_IN = 'CHECK_IN',
-  PULSE = 'PULSE',
-}
+export {
+  CompetencyType,
+  EvaluationModel,
+  Eval360CycleType,
+  Eval360CycleStatus,
+  AnonymityMode,
+  EvaluatorRole,
+  Eval360QuestionType,
+  Eval360FeedbackType,
+};
 
 // ─── COMPETENCY ──────────────────────────────────────────────
 export class CompetencyIndicatorDto {
@@ -118,7 +89,7 @@ export class CreateEvaluationCycleDto {
   @ApiProperty() @IsString() @IsNotEmpty() @MaxLength(150) name: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiProperty({ enum: EvaluationModel }) @IsEnum(EvaluationModel) model: EvaluationModel;
-  @ApiProperty({ enum: CycleType }) @IsEnum(CycleType) type: CycleType;
+  @ApiProperty({ enum: Eval360CycleType }) @IsEnum(Eval360CycleType) type: Eval360CycleType;
   @ApiProperty() @IsDateString() startDate: string;
   @ApiProperty() @IsDateString() endDate: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) gracePeriodDays?: number;
@@ -167,7 +138,9 @@ export class Evaluation360CreateQuestionDto {
   @ApiPropertyOptional() @IsOptional() @IsString() cycleId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() competencyId?: string;
   @ApiProperty() @IsString() @IsNotEmpty() text: string;
-  @ApiProperty({ enum: QuestionType }) @IsEnum(QuestionType) type: QuestionType;
+  @ApiProperty({ enum: Eval360QuestionType })
+  @IsEnum(Eval360QuestionType)
+  type: Eval360QuestionType;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isRequired?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isOpen?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) order?: number;
@@ -240,7 +213,9 @@ export class SubmitResponseDto {
 export class CreateContinuousFeedbackDto {
   @ApiProperty() @IsString() tenantId: string;
   @ApiProperty() @IsString() toUserId: string;
-  @ApiProperty({ enum: FeedbackType }) @IsEnum(FeedbackType) type: FeedbackType;
+  @ApiProperty({ enum: Eval360FeedbackType })
+  @IsEnum(Eval360FeedbackType)
+  type: Eval360FeedbackType;
   @ApiProperty() @IsString() @IsNotEmpty() @MaxLength(1000) message: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isPrivate?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsString() competencyId?: string;

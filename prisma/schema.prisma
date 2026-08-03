@@ -8344,21 +8344,21 @@ model MoodCheckin {
 }
 
 model Feedback {
-  id          Int       @id @default(autoincrement())
+  id          Int                    @id @default(autoincrement())
   fromUserId  Int?
   toUserId    Int?
-  type        String
-  message     String    @db.Text
-  anonymous   Boolean   @default(false)
+  type        EngagementFeedbackType
+  message     String                 @db.Text
+  anonymous   Boolean                @default(false)
   projectRef  String?
-  status      String    @default("OPEN")
-  reply       String?   @db.Text
+  status      FeedbackStatus         @default(OPEN)
+  reply       String?                @db.Text
   repliedAt   DateTime?
   repliedById Int?
-  createdAt   DateTime  @default(now())
-  from        User?     @relation("FeedbackFrom", fields: [fromUserId], references: [id], onDelete: SetNull)
-  to          User?     @relation("FeedbackTo", fields: [toUserId], references: [id], onDelete: SetNull)
-  repliedBy   User?     @relation("FeedbackReplier", fields: [repliedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime               @default(now())
+  from        User?                  @relation("FeedbackFrom", fields: [fromUserId], references: [id], onDelete: SetNull)
+  to          User?                  @relation("FeedbackTo", fields: [toUserId], references: [id], onDelete: SetNull)
+  repliedBy   User?                  @relation("FeedbackReplier", fields: [repliedById], references: [id], onDelete: SetNull)
 
   @@index([toUserId])
   @@index([fromUserId])
@@ -8367,18 +8367,18 @@ model Feedback {
 }
 
 model Recognition {
-  id         Int      @id @default(autoincrement())
+  id         Int             @id @default(autoincrement())
   fromUserId Int
   toUserId   Int
-  type       String
+  type       RecognitionType
   message    String
-  public     Boolean  @default(true)
+  public     Boolean         @default(true)
   value      String?
   badgeId    Int?
-  createdAt  DateTime @default(now())
-  from       User     @relation("RecognitionFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  to         User     @relation("RecognitionTo", fields: [toUserId], references: [id], onDelete: Cascade)
-  badge      Badge?   @relation(fields: [badgeId], references: [id], onDelete: SetNull)
+  createdAt  DateTime        @default(now())
+  from       User            @relation("RecognitionFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  to         User            @relation("RecognitionTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  badge      Badge?          @relation(fields: [badgeId], references: [id], onDelete: SetNull)
 
   @@index([toUserId])
   @@index([fromUserId])
@@ -8391,23 +8391,23 @@ model Recognition {
 // ══════════════════════════════════════════════════════════════════
 
 model OneOnOneMeeting {
-  id              Int       @id @default(autoincrement())
+  id              Int            @id @default(autoincrement())
   hostId          Int
   participantId   Int
   scheduledAt     DateTime
-  durationMinutes Int       @default(30)
-  agenda          String?   @db.Text
-  status          String    @default("SCHEDULED")
-  recurring       Boolean   @default(false)
+  durationMinutes Int            @default(30)
+  agenda          String?        @db.Text
+  status          OneOnOneStatus @default(SCHEDULED)
+  recurring       Boolean        @default(false)
   frequency       String?
   meetingUrl      String?
-  minutes         String?   @db.Text
-  actionItems     String?   @db.Text
+  minutes         String?        @db.Text
+  actionItems     String?        @db.Text
   nextMeetingDate DateTime?
   completedAt     DateTime?
-  createdAt       DateTime  @default(now())
-  host            User      @relation("OneOnOneMeetingHost", fields: [hostId], references: [id], onDelete: Cascade)
-  participant     User      @relation("OneOnOneMeetingParticipant", fields: [participantId], references: [id], onDelete: Cascade)
+  createdAt       DateTime       @default(now())
+  host            User           @relation("OneOnOneMeetingHost", fields: [hostId], references: [id], onDelete: Cascade)
+  participant     User           @relation("OneOnOneMeetingParticipant", fields: [participantId], references: [id], onDelete: Cascade)
 
   @@index([hostId])
   @@index([participantId])
@@ -8425,7 +8425,7 @@ model EngagementAction {
   surveyId     Int?
   departmentId Int?
   priority     String            @default("MEDIUM")
-  status       String            @default("OPEN")
+  status       ActionPlanStatus  @default(OPEN)
   progress     Int               @default(0)
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
@@ -8440,37 +8440,64 @@ model EngagementAction {
   @@index([surveyId])
 }
 
+enum EngagementFeedbackType {
+  OPEN
+  ANONYMOUS
+  PEER
+  MANAGER
+  RECOGNITION
+}
+
+enum FeedbackStatus {
+  OPEN
+  REPLIED
+}
+
+enum RecognitionType {
+  KUDOS
+  BADGE
+  ACHIEVEMENT
+  MILESTONE
+}
+
+enum ActionPlanStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 // ══════════════════════════════════════════════════════════════════
 // AVALIAÇÃO 360° — GRUPO D
 // ══════════════════════════════════════════════════════════════════
 
 model Eval360Cycle {
-  id                String   @id @default(cuid())
+  id                String             @id @default(cuid())
   tenantId          String?
   name              String
-  description       String?  @db.Text
-  model             String   @default("360")
-  type              String   @default("ANNUAL")
+  description       String?            @db.Text
+  model             EvaluationModel    @default(DEG_360)
+  type              Eval360CycleType   @default(ANUAL)
   startDate         DateTime
   endDate           DateTime
-  gracePeriodDays   Int      @default(3)
-  status            String   @default("DRAFT")
-  anonymityMode     String   @default("ANONYMOUS")
-  quorumMinimum     Int      @default(3)
-  weightSelf        Float    @default(10)
-  weightManager     Float    @default(40)
-  weightPeer        Float    @default(30)
-  weightSubordinate Float    @default(20)
-  weightExternal    Float    @default(0)
+  gracePeriodDays   Int                @default(3)
+  status            Eval360CycleStatus @default(DRAFT)
+  anonymityMode     AnonymityMode      @default(ANONYMOUS)
+  quorumMinimum     Int                @default(3)
+  weightSelf        Float              @default(10)
+  weightManager     Float              @default(40)
+  weightPeer        Float              @default(30)
+  weightSubordinate Float              @default(20)
+  weightExternal    Float              @default(0)
   cutoffPromotion   Float?
   cutoffBonus       Float?
   cutoffProgram     Float?
-  linkedToPdi       Boolean  @default(true)
-  linkedToBonus     Boolean  @default(false)
-  linkedToOkrs      Boolean  @default(false)
+  linkedToPdi       Boolean            @default(true)
+  linkedToBonus     Boolean            @default(false)
+  linkedToOkrs      Boolean            @default(false)
   createdBy         String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   competencies Eval360CycleCompetency[]
   assignments  EvaluatorAssignment[]
@@ -8498,22 +8525,22 @@ model Eval360CycleCompetency {
 }
 
 model EvaluatorAssignment {
-  id             String               @id @default(cuid())
+  id             String                    @id @default(cuid())
   cycleId        String
   evaluateeId    String
   evaluatorId    String
-  role           String
-  status         String               @default("PENDING")
+  role           EvaluatorRole
+  status         EvaluatorAssignmentStatus @default(PENDING)
   suggestedBy    String?
   approvedBy     String?
   approvedAt     DateTime?
   invitedAt      DateTime?
   completedAt    DateTime?
-  reminderCount  Int                  @default(0)
+  reminderCount  Int                       @default(0)
   lastReminderAt DateTime?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  cycle          Eval360Cycle         @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  cycle          Eval360Cycle              @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   responses      EvaluationResponse[]
 
   @@index([cycleId])
@@ -8523,10 +8550,10 @@ model EvaluatorAssignment {
 }
 
 model CycleParticipant {
-  id                   String       @id @default(cuid())
+  id                   String                 @id @default(cuid())
   cycleId              String
   userId               String
-  status               String       @default("PENDING")
+  status               CycleParticipantStatus @default(PENDING)
   consentGiven         Boolean?
   consentAt            DateTime?
   finalScore           Float?
@@ -8534,8 +8561,8 @@ model CycleParticipant {
   isEligiblePromotion  Boolean?
   isEligibleBonus      Boolean?
   scoreByEvaluatorType String?
-  createdAt            DateTime     @default(now())
-  cycle                Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  createdAt            DateTime               @default(now())
+  cycle                Eval360Cycle           @relation(fields: [cycleId], references: [id], onDelete: Cascade)
 
   @@unique([cycleId, userId])
   @@index([cycleId])
@@ -8543,23 +8570,23 @@ model CycleParticipant {
 }
 
 model Eval360Question {
-  id              String             @id @default(cuid())
+  id              String              @id @default(cuid())
   cycleId         String
   competencyId    Int?
-  text            String             @db.Text
-  type            String
-  applicableTo    String[]           @default([])
-  isRequired      Boolean            @default(true)
-  order           Int                @default(0)
+  text            String              @db.Text
+  type            Eval360QuestionType
+  applicableTo    String[]            @default([])
+  isRequired      Boolean             @default(true)
+  order           Int                 @default(0)
   scaleMin        Int?
   scaleMax        Int?
   scaleLabels     String?
   options         String?
-  targetPositions String[]           @default([])
-  targetLevels    String[]           @default([])
-  createdAt       DateTime           @default(now())
-  cycle           Eval360Cycle       @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  competency      Competency?        @relation("Eval360QuestionCompetency", fields: [competencyId], references: [id], onDelete: SetNull)
+  targetPositions String[]            @default([])
+  targetLevels    String[]            @default([])
+  createdAt       DateTime            @default(now())
+  cycle           Eval360Cycle        @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  competency      Competency?         @relation("Eval360QuestionCompetency", fields: [competencyId], references: [id], onDelete: SetNull)
   answers         EvaluationAnswer[]
 
   @@index([cycleId])
@@ -8567,21 +8594,21 @@ model Eval360Question {
 }
 
 model EvaluationResponse {
-  id             String              @id @default(cuid())
+  id             String                   @id @default(cuid())
   cycleId        String
-  assignmentId   String              @unique
+  assignmentId   String                   @unique
   evaluateeId    String
   evaluatorId    String
-  evaluatorRole  String
-  status         String              @default("DRAFT")
-  startedAt      DateTime            @default(now())
+  evaluatorRole  EvaluatorRole
+  status         EvaluationResponseStatus @default(DRAFT)
+  startedAt      DateTime                 @default(now())
   submittedAt    DateTime?
-  isAnonymized   Boolean             @default(false)
+  isAnonymized   Boolean                  @default(false)
   sentimentScore Float?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  cycle          Eval360Cycle        @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  assignment     EvaluatorAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  cycle          Eval360Cycle             @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  assignment     EvaluatorAssignment      @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   answers        EvaluationAnswer[]
 
   @@index([cycleId])
@@ -8631,16 +8658,16 @@ model EvaluationResult {
 }
 
 model Eval360Feedback {
-  id             String   @id @default(cuid())
+  id             String              @id @default(cuid())
   fromUserId     String
   toUserId       String
-  type           String
-  message        String   @db.Text
-  isPrivate      Boolean  @default(false)
+  type           Eval360FeedbackType
+  message        String              @db.Text
+  isPrivate      Boolean             @default(false)
   tenantId       String?
   competencyId   Int?
   relatedCycleId String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime            @default(now())
 
   @@index([toUserId])
   @@index([fromUserId])
@@ -8671,4 +8698,78 @@ model PulseSurveyResponse {
 
   @@unique([surveyId, userId])
   @@index([surveyId])
+}
+
+enum EvaluationModel {
+  DEG_90
+  DEG_180
+  DEG_270
+  DEG_360
+  HYBRID
+}
+
+enum Eval360CycleType {
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+  PROJECT
+  CUSTOM
+}
+
+enum Eval360CycleStatus {
+  DRAFT
+  PUBLISHED
+  IN_PROGRESS
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+enum AnonymityMode {
+  ANONYMOUS
+  SEMI_ANONYMOUS
+  OPEN
+}
+
+enum EvaluatorRole {
+  SELF
+  MANAGER
+  PEER
+  SUBORDINATE
+  EXTERNAL
+}
+
+enum EvaluatorAssignmentStatus {
+  PENDING
+  INVITED
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+}
+
+enum CycleParticipantStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum Eval360QuestionType {
+  LIKERT
+  FREQUENCY
+  MULTIPLE_CHOICE
+  YES_NO
+  OPEN_TEXT
+  SITUATIONAL
+}
+
+enum EvaluationResponseStatus {
+  DRAFT
+  SUBMITTED
+}
+
+enum Eval360FeedbackType {
+  RECOGNITION
+  DEVELOPMENT
+  CHECK_IN
+  PULSE
 }

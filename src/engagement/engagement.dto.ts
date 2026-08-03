@@ -15,24 +15,16 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { SurveyType, SurveyStatus, SurveyQuestionType } from '@prisma/client';
+import {
+  SurveyType,
+  SurveyStatus,
+  SurveyQuestionType,
+  EngagementFeedbackType,
+  RecognitionType,
+  ActionPlanStatus,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────
-
-export enum FeedbackType {
-  OPEN = 'OPEN',
-  ANONYMOUS = 'ANONYMOUS',
-  PEER = 'PEER',
-  MANAGER = 'MANAGER',
-  RECOGNITION = 'RECOGNITION',
-}
-
-export enum RecognitionType {
-  KUDOS = 'KUDOS',
-  BADGE = 'BADGE',
-  ACHIEVEMENT = 'ACHIEVEMENT',
-  MILESTONE = 'MILESTONE',
-}
 
 export enum MoodLevel {
   GREAT = 5,
@@ -40,13 +32,6 @@ export enum MoodLevel {
   NEUTRAL = 3,
   SAD = 2,
   TERRIBLE = 1,
-}
-
-export enum ActionPlanStatus {
-  OPEN = 'OPEN',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
 }
 
 // ─── Survey DTOs ──────────────────────────────────────────────────
@@ -152,7 +137,9 @@ export class SubmitMoodDto {
 
 export class CreateFeedbackDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() toUserId?: number;
-  @ApiProperty({ enum: FeedbackType }) @IsEnum(FeedbackType) type!: FeedbackType;
+  @ApiProperty({ enum: EngagementFeedbackType })
+  @IsEnum(EngagementFeedbackType)
+  type!: EngagementFeedbackType;
   @ApiProperty() @IsString() @MaxLength(2000) message!: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() anonymous?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsString() projectRef?: string;
@@ -164,10 +151,10 @@ export class FeedbackReplyDto {
 }
 
 export class FeedbackFilterDto {
-  @ApiPropertyOptional({ enum: FeedbackType })
+  @ApiPropertyOptional({ enum: EngagementFeedbackType })
   @IsOptional()
-  @IsEnum(FeedbackType)
-  type?: FeedbackType;
+  @IsEnum(EngagementFeedbackType)
+  type?: EngagementFeedbackType;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) toUserId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) fromUserId?: number;
   @ApiPropertyOptional({ default: 1 })

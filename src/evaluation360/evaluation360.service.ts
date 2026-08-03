@@ -37,7 +37,7 @@ import {
   SendRemindersDto,
   Evaluation360PaginationDto,
   EvaluatorRole,
-  CycleStatus,
+  Eval360CycleStatus,
   AnonymityMode,
 } from './evaluation360.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -176,7 +176,11 @@ export class Evaluation360Service {
 
   async updateCycle(id: string, dto: UpdateEvaluationCycleDto, actorId: string) {
     const cycle = await this.findCycleOrFail(id);
-    if ([CycleStatus.IN_PROGRESS, CycleStatus.COMPLETED].includes(cycle.status as CycleStatus)) {
+    const lockedStatuses: Eval360CycleStatus[] = [
+      Eval360CycleStatus.IN_PROGRESS,
+      Eval360CycleStatus.COMPLETED,
+    ];
+    if (lockedStatuses.includes(cycle.status as Eval360CycleStatus)) {
       throw new BadRequestException('Ciclo em curso ou concluído não pode ser alterado.');
     }
     if (dto.weightSelf !== undefined || dto.weightManager !== undefined)
@@ -194,7 +198,7 @@ export class Evaluation360Service {
 
   async publishCycle(id: string, dto: PublishCycleDto, actorId: string) {
     const cycle = await this.findCycleOrFail(id);
-    if (cycle.status !== CycleStatus.DRAFT)
+    if (cycle.status !== Eval360CycleStatus.DRAFT)
       throw new BadRequestException('Apenas ciclos em rascunho podem ser publicados.');
 
     const participantCount = await this.prisma.cycleParticipant.count({
@@ -215,7 +219,7 @@ export class Evaluation360Service {
 
     const updated = await this.prisma.eval360Cycle.update({
       where: { id },
-      data: { status: CycleStatus.PUBLISHED },
+      data: { status: Eval360CycleStatus.PUBLISHED },
     });
 
     if (dto.sendInvitesNow) {

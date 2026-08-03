@@ -1,6 +1,6 @@
 ﻿// src/engagement/engagement.service.ts
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { ReviewStatus, SurveyType, SurveyStatus } from '@prisma/client';
+import { ReviewStatus, SurveyType, SurveyStatus, RecognitionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateSurveyDto,
@@ -19,7 +19,6 @@ import {
   CreateActionPlanDto,
   UpdateActionPlanDto,
   EngagementFilterDto,
-  RecognitionType,
 } from './engagement.dto';
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
