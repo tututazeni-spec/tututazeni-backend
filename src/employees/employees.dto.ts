@@ -20,16 +20,16 @@ import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestj
 import { Type } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES } from '../common/validators/allowed-mime-types';
+import {
+  EmployeeStatus,
+  LegacyCareerPlanStatus,
+  LegacyPdiStatus,
+  EmployeeDocumentStatus,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum EmployeeStatus {
-  ACTIVE = 'ACTIVE',
-  INACTIVE = 'INACTIVE',
-  ON_LEAVE = 'ON_LEAVE',
-  TERMINATED = 'TERMINATED',
-  SUSPENDED = 'SUSPENDED',
-}
+export { EmployeeStatus, LegacyCareerPlanStatus, LegacyPdiStatus, EmployeeDocumentStatus };
 
 /**
  * Tipos de contrato de trabalho — Angola
@@ -206,7 +206,7 @@ export class CreateContractDto {
   @ApiProperty() @IsDateString() startDate!: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() endDate?: string;
   @ApiProperty() @IsEnum(ContractType) type!: ContractType;
-  @ApiProperty() @IsString() status!: string;
+  @ApiProperty() @IsEnum(EmployeeStatus) status!: EmployeeStatus;
   @ApiPropertyOptional() @IsOptional() @IsNumber() salary?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
 }
@@ -402,6 +402,6 @@ export class UpdateContractStatusDto {
 // ─── UpdateCareerPlanStatusDto ────────────────────────────────────────────────
 
 export class UpdateCareerPlanStatusDto {
-  @IsIn(['ACTIVE', 'INACTIVE', 'COMPLETED', 'CANCELLED'])
-  status!: string;
+  @IsEnum(LegacyCareerPlanStatus)
+  status!: LegacyCareerPlanStatus;
 }

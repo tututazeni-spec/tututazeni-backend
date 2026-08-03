@@ -5,6 +5,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfService } from '../pdf/pdf.service';
+import { DeclarationAuditAction } from '@prisma/client';
 import * as crypto from 'crypto';
 import { isPrivileged, assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -895,7 +896,7 @@ export class WorkDeclarationService {
   private async createAuditLog(
     declarationId: string,
     actorId: number,
-    action: string,
+    action: DeclarationAuditAction,
     fromStatus: string | null,
     toStatus: string | null,
     details?: object,

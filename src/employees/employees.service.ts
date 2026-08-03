@@ -26,6 +26,7 @@ import {
   EmployeeFilterDto,
   EmployeeStatus,
   TimelineEventType,
+  LegacyCareerPlanStatus,
 } from './employees.dto';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -444,7 +445,7 @@ export class EmployeesService {
     });
   }
 
-  async updateContractStatus(id: number, status: string) {
+  async updateContractStatus(id: number, status: EmployeeStatus) {
     return this.prisma.contract.update({ where: { id }, data: { status } });
   }
 
@@ -554,7 +555,7 @@ export class EmployeesService {
     });
   }
 
-  async updateCareerPlanStatus(id: number, status: string) {
+  async updateCareerPlanStatus(id: number, status: LegacyCareerPlanStatus) {
     return this.prisma.careerPlan.update({ where: { id }, data: { status } });
   }
 
