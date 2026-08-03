@@ -14,38 +14,19 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import {
+  ReportType,
+  ExecutiveReportStatus as ReportStatus,
+  ReportConfidentiality,
+  KpiStatus,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
+// NOTA: ReportStatus aqui é o `ExecutiveReportStatus` do Prisma — nome local
+// mantido por compatibilidade, distinto do `ReportStatus` (FunderReport,
+// PENDING/SUBMITTED/APPROVED/REJECTED/OVERDUE) usado no módulo crm-funders.
 
-export enum ReportType {
-  FLASH = 'FLASH', // Semanal
-  MONTHLY = 'MONTHLY', // Mensal
-  QUARTERLY = 'QUARTERLY', // Trimestral
-  ANNUAL = 'ANNUAL', // Anual
-  CUSTOM = 'CUSTOM', // Sob demanda
-  AUDIT = 'AUDIT', // Auditoria
-}
-
-export enum ReportStatus {
-  DRAFT = 'DRAFT',
-  IN_REVIEW = 'IN_REVIEW',
-  APPROVED = 'APPROVED',
-  PUBLISHED = 'PUBLISHED',
-  ARCHIVED = 'ARCHIVED',
-}
-
-export enum ReportConfidentiality {
-  PUBLIC = 'PUBLIC',
-  INTERNAL = 'INTERNAL',
-  CONFIDENTIAL = 'CONFIDENTIAL',
-  RESTRICTED = 'RESTRICTED',
-}
-
-export enum KpiStatus {
-  GREEN = 'GREEN', // Dentro do target
-  YELLOW = 'YELLOW', // Atenção
-  RED = 'RED', // Crítico
-}
+export { ReportType, ReportStatus, ReportConfidentiality, KpiStatus };
 
 // ─── KPI ──────────────────────────────────────────────────────────────────────
 

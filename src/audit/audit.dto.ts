@@ -2,7 +2,16 @@
 import { IsString, IsInt, IsOptional, IsEnum, IsBoolean, IsDateString, Min } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { AuditStatus, RiskLevel as AuditSeverity } from '@prisma/client';
 
+export { AuditStatus, AuditSeverity };
+
+// AuditLog.action permanece String livre no schema — escrito por 19+ serviços
+// através de common/services/audit.service.ts com nomes de acção arbitrários
+// (CLOCK_IN, SKILL_CREATED, DOWNLOAD, PUBLISH, REMIND, etc.), muito além dos
+// 12 valores documentados no comentário do schema. Este enum aqui é usado só
+// para validar o filtro opcional AuditFilterDto.action — não reflecte a
+// totalidade dos valores reais gravados.
 export enum AuditAction {
   CREATE = 'CREATE',
   UPDATE = 'UPDATE',
@@ -16,19 +25,6 @@ export enum AuditAction {
   REJECT = 'REJECT',
   DENIED = 'DENIED',
   FAILED = 'FAILED',
-}
-
-export enum AuditSeverity {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  CRITICAL = 'CRITICAL',
-}
-
-export enum AuditStatus {
-  SUCCESS = 'SUCCESS',
-  FAILED = 'FAILED',
-  DENIED = 'DENIED',
 }
 
 export class AuditFilterDto {

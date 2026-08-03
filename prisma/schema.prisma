@@ -4495,24 +4495,55 @@ model MarketplaceCourse {
 // NOTIFICAÇÕES & AUDITORIA
 // ══════════════════════════════════════════════════════════════════
 
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NotificationCategory {
+  LMS
+  PDI
+  PERFORMANCE
+  HR
+  ENGAGEMENT
+  GAMIFICATION
+  SYSTEM
+  ONBOARDING
+  KNOWLEDGE
+}
+
+enum DigestFrequency {
+  NONE
+  DAILY
+  WEEKLY
+}
+
+enum AuditStatus {
+  SUCCESS
+  FAILED
+  DENIED
+}
+
 model NotificationLog {
-  id          Int       @id @default(autoincrement())
+  id          Int                   @id @default(autoincrement())
   userId      Int
   type        String
   title       String?
-  message     String    @db.Text
-  priority    String    @default("MEDIUM")
-  category    String?
+  message     String                @db.Text
+  priority    NotificationPriority  @default(MEDIUM)
+  category    NotificationCategory?
   actionUrl   String?
   actionLabel String?
   metadata    String?
-  read        Boolean   @default(false)
+  read        Boolean               @default(false)
   readAt      DateTime?
-  archived    Boolean   @default(false)
-  success     Boolean   @default(true)
+  archived    Boolean               @default(false)
+  success     Boolean               @default(true)
   expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
-  user        User      @relation(fields: [userId], references: [id])
+  createdAt   DateTime              @default(now())
+  user        User                  @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([read])
@@ -4522,56 +4553,56 @@ model NotificationLog {
 }
 
 model NotificationPreference {
-  id                 Int      @id @default(autoincrement())
-  userId             Int      @unique
-  inApp              Boolean  @default(true)
-  email              Boolean  @default(true)
-  push               Boolean  @default(false)
-  slack              Boolean  @default(false)
-  sms                Boolean  @default(false)
-  quietHourStart     Int      @default(22)
-  quietHourEnd       Int      @default(8)
-  digestFrequency    String   @default("NONE")
-  disabledCategories String[] @default([])
-  updatedAt          DateTime @updatedAt
-  user               User     @relation(fields: [userId], references: [id])
+  id                 Int             @id @default(autoincrement())
+  userId             Int             @unique
+  inApp              Boolean         @default(true)
+  email              Boolean         @default(true)
+  push               Boolean         @default(false)
+  slack              Boolean         @default(false)
+  sms                Boolean         @default(false)
+  quietHourStart     Int             @default(22)
+  quietHourEnd       Int             @default(8)
+  digestFrequency    DigestFrequency @default(NONE)
+  disabledCategories String[]        @default([])
+  updatedAt          DateTime        @updatedAt
+  user               User            @relation(fields: [userId], references: [id])
 }
 
 model NotificationTemplate {
-  id                Int      @id @default(autoincrement())
+  id                Int                   @id @default(autoincrement())
   name              String
-  eventType         String   @unique
-  messageTemplate   String   @db.Text
+  eventType         String                @unique
+  messageTemplate   String                @db.Text
   titleTemplate     String?
-  priority          String   @default("MEDIUM")
-  category          String?
+  priority          NotificationPriority  @default(MEDIUM)
+  category          NotificationCategory?
   actionUrlTemplate String?
-  active            Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  active            Boolean               @default(true)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
 
   @@index([eventType])
   @@index([active])
 }
 
 model AuditLog {
-  id           Int      @id @default(autoincrement())
+  id           Int         @id @default(autoincrement())
   userId       Int?
   action       String // CREATE|UPDATE|DELETE|LOGIN|EXPORT|SEND|READ|APPROVE|REJECT|DENIED|FAILED
   entity       String // ex: User, PDI, Course, Payslip
   entityId     Int?
-  metadata     String?  @db.Text // JSON extra
+  metadata     String?     @db.Text // JSON extra
   hash         String? // SHA-256 deste registo
   previousHash String? // SHA-256 do registo anterior
-  timestamp    DateTime @default(now())
-  createdAt    DateTime @default(now())
-  user         User?    @relation(fields: [userId], references: [id])
+  timestamp    DateTime    @default(now())
+  createdAt    DateTime    @default(now())
+  user         User?       @relation(fields: [userId], references: [id])
   entityName   String?
   before       String?
   after        String?
   changes      String?
-  status       String   @default("SUCCESS") // SUCCESS|FAILED|DENIED
-  severity     String   @default("LOW") // LOW|MEDIUM|HIGH|CRITICAL
+  status       AuditStatus @default(SUCCESS)
+  severity     RiskLevel   @default(LOW)
   ip           String?
   userAgent    String?
   reason       String?
@@ -4579,6 +4610,24 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([userId])
   @@index([createdAt])
+}
+
+enum AutomationCategory {
+  HR
+  LMS
+  PERFORMANCE
+  ENGAGEMENT
+  GAMIFICATION
+  OPERATIONAL
+  CUSTOM
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  SKIPPED
 }
 
 model AutomationRule {
@@ -4599,10 +4648,10 @@ model AutomationRule {
   isActive          Boolean               @default(true)
   runCount          Int                   @default(0)
   lastRunAt         DateTime?
-  lastRunStatus     String?
+  lastRunStatus     ExecutionStatus?
   createdBy         String // userId
   updatedAt         DateTime              @updatedAt
-  category          String?
+  category          AutomationCategory?
   actionParams      String? // JSON — parâmetros da acção (legado, ver também actionsJson)
   maxRetries        Int?
   tenant            TenantConfig          @relation(fields: [tenantId], references: [id])
@@ -4612,17 +4661,17 @@ model AutomationRule {
 }
 
 model AutomationExecution {
-  id           String         @id @default(cuid())
+  id           String          @id @default(cuid())
   ruleId       Int
   triggeredBy  String? // userId ou "SYSTEM"
   targetUserId String?
-  status       String // PENDING | RUNNING | SUCCESS | FAILED | SKIPPED
-  startedAt    DateTime       @default(now())
+  status       ExecutionStatus
+  startedAt    DateTime        @default(now())
   finishedAt   DateTime?
   actionsLog   String? // JSON com resultado de cada ação
   errorMessage String?
   payload      String? // JSON do payload/evento que despoletou a execução
-  rule         AutomationRule @relation(fields: [ruleId], references: [id])
+  rule         AutomationRule  @relation(fields: [ruleId], references: [id])
 
   @@map("automation_executions")
 }
@@ -4745,13 +4794,18 @@ model MobileSession {
   @@index([userId])
 }
 
+enum MobileSyncStatus {
+  SUCCESS
+  FAILED
+}
+
 model MobileSyncLog {
-  id       Int      @id @default(autoincrement())
+  id       Int              @id @default(autoincrement())
   userId   Int
-  syncedAt DateTime @default(now())
+  syncedAt DateTime         @default(now())
   entity   String
-  status   String
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status   MobileSyncStatus
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -4765,13 +4819,45 @@ model ReportLog {
   user        User     @relation(fields: [generatedBy], references: [id])
 }
 
+enum ReportType {
+  FLASH
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  CUSTOM
+  AUDIT
+}
+
+// Nome distinto de "ReportStatus" (já existente para FunderReport, com
+// valores diferentes: PENDING/SUBMITTED/APPROVED/REJECTED/OVERDUE).
+enum ExecutiveReportStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ReportConfidentiality {
+  PUBLIC
+  INTERNAL
+  CONFIDENTIAL
+  RESTRICTED
+}
+
+enum KpiStatus {
+  GREEN
+  YELLOW
+  RED
+}
+
 model ExecutiveReport {
-  id              Int               @id @default(autoincrement())
+  id              Int                   @id @default(autoincrement())
   title           String
   subtitle        String?
-  type            String            @default("MONTHLY")
-  status          String            @default("DRAFT")
-  confidentiality String            @default("CONFIDENTIAL")
+  type            ReportType            @default(MONTHLY)
+  status          ExecutiveReportStatus @default(DRAFT)
+  confidentiality ReportConfidentiality @default(CONFIDENTIAL)
   generatedById   Int
   departmentId    Int?
   period          String?
@@ -4781,15 +4867,15 @@ model ExecutiveReport {
   risks           String[]
   recommendations String[]
   nextSteps       String[]
-  narrative       String?           @db.Text
+  narrative       String?               @db.Text
   filePath        String
   format          ReportFormat
   approvedAt      DateTime?
   publishedAt     DateTime?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  generatedBy     User              @relation(fields: [generatedById], references: [id], onDelete: Cascade)
-  department      Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  generatedBy     User                  @relation(fields: [generatedById], references: [id], onDelete: Cascade)
+  department      Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   metrics         ExecutiveMetric[]
   approvals       ReportApproval[]
   accessLogs      ReportAccessLog[]
@@ -4808,7 +4894,7 @@ model ExecutiveMetric {
   unit          String?
   previousValue Float?
   target        Float?
-  status        String?
+  status        KpiStatus?
   comment       String?
   sortOrder     Int             @default(0)
   report        ExecutiveReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
@@ -4817,14 +4903,14 @@ model ExecutiveMetric {
 }
 
 model ReportApproval {
-  id         Int             @id @default(autoincrement())
+  id         Int              @id @default(autoincrement())
   reportId   Int
   approverId Int
-  decision   String
+  decision   ApprovalDecision
   comment    String?
-  createdAt  DateTime        @default(now())
-  report     ExecutiveReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  approver   User            @relation(fields: [approverId], references: [id])
+  createdAt  DateTime         @default(now())
+  report     ExecutiveReport  @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  approver   User             @relation(fields: [approverId], references: [id])
 
   @@index([reportId])
 }
@@ -4874,6 +4960,23 @@ model DashboardSnapshot {
   @@index([departmentId])
 }
 
+enum AuthType {
+  OAUTH2
+  API_KEY
+  BASIC
+  BEARER
+}
+
+// SUCCESS | FAILED — usado por IntegrationConfig.lastSyncStatus (resumo do
+// último sync) e IntegrationSyncLog.status (histórico completo, inclui
+// também RUNNING/PARTIAL).
+enum SyncLogStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
 model IntegrationConfig {
   id              Int                  @id @default(autoincrement())
   name            String
@@ -4885,11 +4988,11 @@ model IntegrationConfig {
   type            IntegrationType
   status          IntegrationStatus    @default(INACTIVE)
   baseUrl         String?
-  authType        String? // OAUTH2 | API_KEY | BASIC | BEARER
+  authType        AuthType?
   credentialsJson String? // criptografado — client_id, secret, token
   syncFrequency   SyncFrequency        @default(DAILY)
   lastSyncAt      DateTime?
-  lastSyncStatus  String?
+  lastSyncStatus  SyncLogStatus?
   lastSyncError   String?
   webhookUrl      String?
   webhookEvents   String[] // ["course.completed", "user.promoted"]
@@ -4949,7 +5052,7 @@ model IntegrationSyncLog {
   integrationId    Int
   startedAt        DateTime          @default(now())
   finishedAt       DateTime?
-  status           String // SUCCESS | PARTIAL | FAILED
+  status           SyncLogStatus
   recordsProcessed Int               @default(0)
   recordsFailed    Int               @default(0)
   errorMessage     String?
@@ -4959,14 +5062,19 @@ model IntegrationSyncLog {
   @@map("integration_sync_logs")
 }
 
+enum ApiCallStatus {
+  OK
+  ERROR
+}
+
 model ApiIntegrationLog {
-  id            Int      @id @default(autoincrement())
+  id            Int           @id @default(autoincrement())
   integrationId Int
-  status        String
+  status        ApiCallStatus
   statusCode    Int?
-  message       String?  @db.Text
+  message       String?       @db.Text
   latencyMs     Int?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime      @default(now())
 
   @@index([integrationId])
 }
