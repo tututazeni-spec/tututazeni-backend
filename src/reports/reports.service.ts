@@ -1,8 +1,8 @@
 // src/reports/reports.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { EnrollmentStatus } from '@prisma/client';
+import { EnrollmentStatus, ReportCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ReportFilterDto, SaveReportDto, CreateScheduleDto, ReportCategory } from './reports.dto';
+import { ReportFilterDto, SaveReportDto, CreateScheduleDto } from './reports.dto';
 import { sanitizeForLog } from '../common/logging/sanitize';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';

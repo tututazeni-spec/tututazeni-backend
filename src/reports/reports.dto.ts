@@ -13,35 +13,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-
-// ─── Enums ────────────────────────────────────────────────────────
-
-export enum ReportCategory {
-  HR = 'HR',
-  LEARNING = 'LEARNING',
-  PERFORMANCE = 'PERFORMANCE',
-  ENGAGEMENT = 'ENGAGEMENT',
-  TALENT = 'TALENT',
-  COMPLIANCE = 'COMPLIANCE',
-  OPERATIONAL = 'OPERATIONAL',
-  FINANCIAL = 'FINANCIAL',
-}
-
-export enum ReportFormat {
-  JSON = 'JSON',
-  CSV = 'CSV',
-  XLSX = 'XLSX',
-  PDF = 'PDF',
-  HTML = 'HTML',
-}
-
-export enum ScheduleFrequency {
-  ONCE = 'ONCE',
-  DAILY = 'DAILY',
-  WEEKLY = 'WEEKLY',
-  MONTHLY = 'MONTHLY',
-  QUARTERLY = 'QUARTERLY',
-}
+import { ReportCategory, ExportFormat, ScheduleFrequency } from '@prisma/client';
 
 // ─── Filter DTOs ──────────────────────────────────────────────────
 
@@ -72,10 +44,10 @@ export class ReportFilterDto {
   @Min(1)
   @Type(() => Number)
   limit?: number;
-  @ApiPropertyOptional({ enum: ReportFormat })
+  @ApiPropertyOptional({ enum: ExportFormat })
   @IsOptional()
-  @IsEnum(ReportFormat)
-  format?: ReportFormat;
+  @IsEnum(ExportFormat)
+  format?: ExportFormat;
 }
 
 // ─── Saved Report DTOs ────────────────────────────────────────────
@@ -104,9 +76,9 @@ export class CreateScheduleDto {
   @IsArray()
   @IsEmail({}, { each: true })
   recipients?: string[];
-  @ApiPropertyOptional({ enum: ReportFormat, isArray: true })
+  @ApiPropertyOptional({ enum: ExportFormat, isArray: true })
   @IsOptional()
   @IsArray()
-  @IsEnum(ReportFormat, { each: true })
-  formats?: ReportFormat[];
+  @IsEnum(ExportFormat, { each: true })
+  formats?: ExportFormat[];
 }

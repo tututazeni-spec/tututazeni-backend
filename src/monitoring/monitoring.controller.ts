@@ -11,6 +11,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { MonitoringEvalType } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
@@ -138,10 +139,16 @@ export class MonitoringController {
     @Param('cycleId') cycleId: string,
     @Body('userId', ParseIntPipe) userId: number,
     @Body('evaluatorId', ParseIntPipe) evaluatorId: number,
-    @Body('type') type: string,
+    @Body('type') type: MonitoringEvalType,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.service.assignEvaluation(cycleId, userId, evaluatorId, type || 'MANAGER', user.id);
+    return this.service.assignEvaluation(
+      cycleId,
+      userId,
+      evaluatorId,
+      type || MonitoringEvalType.MANAGER,
+      user.id,
+    );
   }
 
   @Put('evaluation/:id/submit')

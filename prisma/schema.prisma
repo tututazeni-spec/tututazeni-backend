@@ -4058,9 +4058,9 @@ model EngagementSurvey {
   id                     Int                @id @default(autoincrement())
   title                  String
   description            String?            @db.Text
-  type                   String             @default("PULSE")
+  type                   SurveyType         @default(PULSE)
   isTemplate             Boolean            @default(false)
-  status                 String             @default("ACTIVE")
+  status                 SurveyStatus       @default(ACTIVE)
   anonymous              Boolean            @default(false)
   minResponsesForResults Int                @default(3)
   startDate              DateTime?
@@ -4076,15 +4076,15 @@ model EngagementSurvey {
 }
 
 model SurveyQuestion {
-  id       Int              @id @default(autoincrement())
+  id       Int                @id @default(autoincrement())
   surveyId Int
-  text     String           @db.Text
-  type     String
+  text     String             @db.Text
+  type     SurveyQuestionType
   order    Int
-  required Boolean          @default(true)
+  required Boolean            @default(true)
   options  String[]
-  scaleMax Int              @default(5)
-  survey   EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  scaleMax Int                @default(5)
+  survey   EngagementSurvey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   answers  SurveyAnswer[]
 
   @@index([surveyId])
@@ -4117,6 +4117,32 @@ model SurveyAnswer {
 
   @@index([responseId])
   @@index([questionId])
+}
+
+enum SurveyType {
+  CLIMATE
+  PULSE
+  ENPS
+  ONBOARDING
+  OFFBOARDING
+  CUSTOM
+  WELLBEING
+}
+
+enum SurveyStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum SurveyQuestionType {
+  SCALE
+  MULTIPLE
+  TEXT
+  ENPS
+  EMOJI
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -4180,7 +4206,7 @@ model Document {
   docCategory      DocCategoryModel? @relation(fields: [categoryId], references: [id])
   sensitivity      DocSensitivity    @default(INTERNAL)
   status           DocStatus         @default(ACTIVE)
-  origin           String            @default("UPLOAD")
+  origin           DocOrigin         @default(UPLOAD)
   fileUrl          String
   mimeType         String
   fileSize         Int?
@@ -4236,17 +4262,17 @@ model DocVersion {
 }
 
 model DocPermission {
-  id          Int       @id @default(autoincrement())
+  id          Int                 @id @default(autoincrement())
   documentId  Int
-  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document    Document            @relation(fields: [documentId], references: [id], onDelete: Cascade)
   userId      Int?
-  user        User?     @relation(fields: [userId], references: [id])
+  user        User?               @relation(fields: [userId], references: [id])
   department  String?
-  permissions String[]
+  permissions DocPermissionType[]
   expiresAt   DateTime?
   grantedById Int
-  grantedBy   User      @relation("PermissionGrantor", fields: [grantedById], references: [id])
-  createdAt   DateTime  @default(now())
+  grantedBy   User                @relation("PermissionGrantor", fields: [grantedById], references: [id])
+  createdAt   DateTime            @default(now())
 
   @@index([documentId])
   @@index([userId])
@@ -4282,17 +4308,43 @@ model DocDownload {
 }
 
 model DocAuditLog {
-  id         Int      @id @default(autoincrement())
+  id         Int            @id @default(autoincrement())
   documentId Int
-  document   Document @relation(fields: [documentId], references: [id])
+  document   Document       @relation(fields: [documentId], references: [id])
   userId     Int
-  user       User     @relation(fields: [userId], references: [id])
-  action     String
+  user       User           @relation(fields: [userId], references: [id])
+  action     DocAuditAction
   metadata   Json?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime       @default(now())
 
   @@index([documentId, createdAt])
   @@index([userId])
+}
+
+enum DocOrigin {
+  UPLOAD
+  SYSTEM
+  INTEGRATION
+}
+
+enum DocPermissionType {
+  VIEW
+  COMMENT
+  EDIT
+  SHARE
+  DELETE
+}
+
+enum DocAuditAction {
+  UPLOADED
+  VIEWED
+  DOWNLOADED
+  UPDATED
+  VERSIONED
+  SHARED
+  ARCHIVED
+  DELETED
+  ACCESS_DENIED
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -7943,19 +7995,19 @@ model OkrCycle {
 }
 
 model Objective {
-  id           String        @id @default(cuid())
+  id           String          @id @default(cuid())
   cycleId      String
   ownerId      Int
   departmentId String?
   title        String
   description  String?
-  type         ObjectiveType @default(INDIVIDUAL)
-  status       String        @default("DRAFT")
-  progress     Float         @default(0)
-  weight       Float         @default(1)
+  type         ObjectiveType   @default(INDIVIDUAL)
+  status       ObjectiveStatus @default(DRAFT)
+  progress     Float           @default(0)
+  weight       Float           @default(1)
   parentId     String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
   deletedAt    DateTime?
 
   cycle      OkrCycle    @relation(fields: [cycleId], references: [id])
@@ -7969,20 +8021,20 @@ model Objective {
 }
 
 model KeyResult {
-  id           String    @id @default(cuid())
+  id           String          @id @default(cuid())
   objectiveId  String
   title        String
   description  String?
   metric       String?
-  startValue   Float     @default(0)
+  startValue   Float           @default(0)
   targetValue  Float
-  currentValue Float     @default(0)
+  currentValue Float           @default(0)
   unit         String?
-  progress     Float     @default(0)
-  status       String    @default("ON_TRACK")
+  progress     Float           @default(0)
+  status       KeyResultStatus @default(ON_TRACK)
   dueDate      DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
   deletedAt    DateTime?
 
   objective Objective         @relation(fields: [objectiveId], references: [id])
@@ -8082,12 +8134,12 @@ model EvaluationCycle {
 }
 
 model UserEvaluation {
-  id              String    @id @default(cuid())
+  id              String               @id @default(cuid())
   cycleId         String
   userId          Int
   evaluatorId     Int
-  type            String    @default("MANAGER")
-  status          String    @default("PENDING")
+  type            MonitoringEvalType   @default(MANAGER)
+  status          MonitoringEvalStatus @default(PENDING)
   selfScore       Float?
   managerScore    Float?
   finalScore      Float?
@@ -8098,8 +8150,8 @@ model UserEvaluation {
   improvements    String?
   developmentPlan String?
   submittedAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
   deletedAt       DateTime?
 
   cycle     EvaluationCycle @relation(fields: [cycleId], references: [id])
@@ -8157,11 +8209,36 @@ enum EvaluationStatus {
   ARCHIVED
 }
 
+enum ObjectiveStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum KeyResultStatus {
+  ON_TRACK
+  AT_RISK
+  OFF_TRACK
+  COMPLETED
+}
+
+enum MonitoringEvalType {
+  SELF
+  MANAGER
+  PEER
+}
+
+enum MonitoringEvalStatus {
+  PENDING
+  OPEN
+  CLOSED
+}
+
 model SavedReport {
   id          Int              @id @default(autoincrement())
   name        String
   description String?
-  category    String // ReportCategory — validado no DTO
+  category    ReportCategory
   reportKey   String
   params      String // JSON string dos filtros guardados
   isTemplate  Boolean          @default(false)
@@ -8177,22 +8254,49 @@ model SavedReport {
 }
 
 model ReportSchedule {
-  id            Int         @id @default(autoincrement())
+  id            Int               @id @default(autoincrement())
   savedReportId Int
-  frequency     String // ScheduleFrequency — validado no DTO
-  startDate     DateTime    @default(now())
+  frequency     ScheduleFrequency
+  startDate     DateTime          @default(now())
   endDate       DateTime?
-  recipients    String[]    @default([])
-  formats       String[]    @default([])
+  recipients    String[]          @default([])
+  formats       ExportFormat[]    @default([])
   createdById   Int
-  active        Boolean     @default(true)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  savedReport   SavedReport @relation(fields: [savedReportId], references: [id], onDelete: Cascade)
-  createdBy     User        @relation("UserReportSchedules", fields: [createdById], references: [id], onDelete: Cascade)
+  active        Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  savedReport   SavedReport       @relation(fields: [savedReportId], references: [id], onDelete: Cascade)
+  createdBy     User              @relation("UserReportSchedules", fields: [createdById], references: [id], onDelete: Cascade)
 
   @@index([createdById])
   @@index([savedReportId])
+}
+
+enum ReportCategory {
+  HR
+  LEARNING
+  PERFORMANCE
+  ENGAGEMENT
+  TALENT
+  COMPLIANCE
+  OPERATIONAL
+  FINANCIAL
+}
+
+enum ExportFormat {
+  JSON
+  CSV
+  XLSX
+  PDF
+  HTML
+}
+
+enum ScheduleFrequency {
+  ONCE
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
 }
 
 model PasswordResetToken {

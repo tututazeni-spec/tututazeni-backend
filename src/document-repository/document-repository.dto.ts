@@ -16,6 +16,14 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import {
+  DocCategoryType,
+  DocSensitivity,
+  DocStatus,
+  DocPermissionType,
+  DocOrigin,
+  ShareLinkAccess,
+} from '@prisma/client';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 import {
   ALLOWED_MIME_TYPES,
@@ -26,68 +34,12 @@ import {
 const NO_PATH_SEPARATORS = /^[^/\\]+$/;
 const NO_PATH_SEPARATORS_MESSAGE = 'fileName não pode conter separadores de caminho (/ ou \\)';
 
-// ─── Enums ────────────────────────────────────────────────────────────────────
-
-export enum DocCategory {
-  PERSONAL = 'PERSONAL', // Documentos pessoais
-  LABOUR = 'LABOUR', // Trabalhistas / contratos
-  LEARNING = 'LEARNING', // Certificados, materiais LMS
-  CORPORATE = 'CORPORATE', // Políticas, manuais, regulamentos
-  RECRUITMENT = 'RECRUITMENT', // Candidaturas (LGPD: 1 ano)
-  COMPLIANCE = 'COMPLIANCE', // Legais, fiscais
-  HEALTH = 'HEALTH', // Saúde (até 20 anos)
-  PAYROLL = 'PAYROLL', // Holerites, comprovantes
-  LEAVE = 'LEAVE', // Atestados, licenças
-  OTHER = 'OTHER',
-}
-
-export enum DocSensitivity {
-  PUBLIC = 'PUBLIC', // Visível a todos internamente
-  INTERNAL = 'INTERNAL', // Uso interno geral
-  CONFIDENTIAL = 'CONFIDENTIAL', // Apenas RH / gestor directo
-  RESTRICTED = 'RESTRICTED', // Owner + admin
-  SECRET = 'SECRET', // Admin only
-}
-
-export enum DocStatus {
-  DRAFT = 'DRAFT',
-  ACTIVE = 'ACTIVE',
-  EXPIRED = 'EXPIRED',
-  ARCHIVED = 'ARCHIVED',
-  DELETED = 'DELETED', // soft delete, mantido para retenção
-}
-
-export enum DocPermission {
-  VIEW = 'VIEW',
-  COMMENT = 'COMMENT',
-  EDIT = 'EDIT',
-  SHARE = 'SHARE',
-  DELETE = 'DELETE',
-}
-
-export enum DocAuditAction {
-  UPLOADED = 'UPLOADED',
-  VIEWED = 'VIEWED',
-  DOWNLOADED = 'DOWNLOADED',
-  UPDATED = 'UPDATED',
-  VERSIONED = 'VERSIONED',
-  SHARED = 'SHARED',
-  ARCHIVED = 'ARCHIVED',
-  DELETED = 'DELETED',
-  ACCESS_DENIED = 'ACCESS_DENIED',
-}
-
-export enum ShareLinkAccess {
-  VIEW_ONLY = 'VIEW_ONLY',
-  VIEW_DOWNLOAD = 'VIEW_DOWNLOAD',
-}
-
 // ─── Categories (configuráveis) ───────────────────────────────────────────────
 
 export class CreateDocCategoryDto {
   @ApiProperty() @IsString() name!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
-  @ApiProperty() @IsEnum(DocCategory) type!: DocCategory;
+  @ApiProperty() @IsEnum(DocCategoryType) type!: DocCategoryType;
   @ApiPropertyOptional() @IsOptional() @IsInt() retentionYears?: number; // anos de retenção legal
   @ApiPropertyOptional() @IsOptional() @IsEnum(DocSensitivity) defaultSensitivity?: DocSensitivity;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() requiresApproval?: boolean;
@@ -100,7 +52,7 @@ export class CreateDocCategoryDto {
 export class CreateDocumentDto {
   @ApiProperty() @IsString() title!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
-  @ApiProperty() @IsEnum(DocCategory) category!: DocCategory;
+  @ApiProperty() @IsEnum(DocCategoryType) category!: DocCategoryType;
   @ApiPropertyOptional() @IsOptional() @IsInt() categoryId?: number;
   @ApiProperty() @IsEnum(DocSensitivity) sensitivity!: DocSensitivity;
   @ApiProperty() @IsAllowedFileUrl() fileUrl!: string; // URL no storage (S3/Azure)
@@ -117,7 +69,7 @@ export class CreateDocumentDto {
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() expiresAt?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() origin?: string; // UPLOAD | SYSTEM | INTEGRATION
+  @ApiPropertyOptional() @IsOptional() @IsEnum(DocOrigin) origin?: DocOrigin;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() requestSignature?: boolean;
 }
 
@@ -144,8 +96,8 @@ export class GrantPermissionDto {
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
   @ApiProperty({ type: [String] })
   @IsArray()
-  @IsEnum(DocPermission, { each: true })
-  permissions!: DocPermission[];
+  @IsEnum(DocPermissionType, { each: true })
+  permissions!: DocPermissionType[];
   @ApiPropertyOptional() @IsOptional() @IsDateString() expiresAt?: string;
 }
 
@@ -163,7 +115,7 @@ export class CreateShareLinkDto {
 
 export class DocumentFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
-  @ApiPropertyOptional() @IsOptional() @IsEnum(DocCategory) category?: DocCategory;
+  @ApiPropertyOptional() @IsOptional() @IsEnum(DocCategoryType) category?: DocCategoryType;
   @ApiPropertyOptional() @IsOptional() @IsEnum(DocSensitivity) sensitivity?: DocSensitivity;
   @ApiPropertyOptional() @IsOptional() @IsEnum(DocStatus) status?: DocStatus;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;

@@ -16,7 +16,8 @@ import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
-import { ReportFilterDto, SaveReportDto, CreateScheduleDto, ReportCategory } from './reports.dto';
+import { ReportFilterDto, SaveReportDto, CreateScheduleDto } from './reports.dto';
+import { ReportCategory } from '@prisma/client';
 import { Role } from '../auth/enums/role.enum';
 
 // ALL_MGMT hand-rolava ['ADMIN','RH','LIDER','DIRECTOR'] e omitia GESTOR — o

@@ -72,6 +72,32 @@ const PerformanceGoalStatus = {
 
 const FeedbackType = { PRAISE: 'PRAISE', IMPROVEMENT: 'IMPROVEMENT', GENERAL: 'GENERAL' };
 
+const SurveyType = {
+  CLIMATE: 'CLIMATE',
+  PULSE: 'PULSE',
+  ENPS: 'ENPS',
+  ONBOARDING: 'ONBOARDING',
+  OFFBOARDING: 'OFFBOARDING',
+  CUSTOM: 'CUSTOM',
+  WELLBEING: 'WELLBEING',
+};
+
+const SurveyStatus = {
+  DRAFT: 'DRAFT',
+  ACTIVE: 'ACTIVE',
+  PAUSED: 'PAUSED',
+  COMPLETED: 'COMPLETED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const SurveyQuestionType = {
+  SCALE: 'SCALE',
+  MULTIPLE: 'MULTIPLE',
+  TEXT: 'TEXT',
+  ENPS: 'ENPS',
+  EMOJI: 'EMOJI',
+};
+
 const DisputeStatus = { OPEN: 'OPEN', RESOLVED: 'RESOLVED' };
 
 const EvaluationRequestStatus = {
@@ -614,17 +640,34 @@ const PurposeCategory = {
 
 const DocCategoryType = {
   PERSONAL: 'PERSONAL',
-  CONTRACT: 'CONTRACT',
-  CERTIFICATE: 'CERTIFICATE',
-  TRAINING: 'TRAINING',
-  PERFORMANCE: 'PERFORMANCE',
+  LABOUR: 'LABOUR',
+  LEARNING: 'LEARNING',
+  CORPORATE: 'CORPORATE',
+  RECRUITMENT: 'RECRUITMENT',
   COMPLIANCE: 'COMPLIANCE',
+  HEALTH: 'HEALTH',
+  PAYROLL: 'PAYROLL',
+  LEAVE: 'LEAVE',
+  POLITICA: 'POLITICA',
+  MANUAL: 'MANUAL',
+  PROCEDIMENTO: 'PROCEDIMENTO',
+  FORMULARIO: 'FORMULARIO',
+  CONTRATO: 'CONTRATO',
+  REGULAMENTO: 'REGULAMENTO',
+  COMUNICADO: 'COMUNICADO',
   OTHER: 'OTHER',
+  OUTRO: 'OUTRO',
 };
 
-const DocAccess = { PUBLIC: 'PUBLIC', RESTRICTED: 'RESTRICTED', PRIVATE: 'PRIVATE' };
+const DocAccess = { PUBLIC: 'PUBLIC', DEPARTMENT: 'DEPARTMENT', RESTRICTED: 'RESTRICTED' };
 
-const DocSensitivity = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', CRITICAL: 'CRITICAL' };
+const DocSensitivity = {
+  PUBLIC: 'PUBLIC',
+  INTERNAL: 'INTERNAL',
+  CONFIDENTIAL: 'CONFIDENTIAL',
+  RESTRICTED: 'RESTRICTED',
+  SECRET: 'SECRET',
+};
 
 const DocStatus = {
   DRAFT: 'DRAFT',
@@ -634,7 +677,29 @@ const DocStatus = {
   EXPIRED: 'EXPIRED',
 };
 
-const ShareLinkAccess = { VIEW: 'VIEW', DOWNLOAD: 'DOWNLOAD' };
+const DocOrigin = { UPLOAD: 'UPLOAD', SYSTEM: 'SYSTEM', INTEGRATION: 'INTEGRATION' };
+
+const DocPermissionType = {
+  VIEW: 'VIEW',
+  COMMENT: 'COMMENT',
+  EDIT: 'EDIT',
+  SHARE: 'SHARE',
+  DELETE: 'DELETE',
+};
+
+const DocAuditAction = {
+  UPLOADED: 'UPLOADED',
+  VIEWED: 'VIEWED',
+  DOWNLOADED: 'DOWNLOADED',
+  UPDATED: 'UPDATED',
+  VERSIONED: 'VERSIONED',
+  SHARED: 'SHARED',
+  ARCHIVED: 'ARCHIVED',
+  DELETED: 'DELETED',
+  ACCESS_DENIED: 'ACCESS_DENIED',
+};
+
+const ShareLinkAccess = { VIEW_ONLY: 'VIEW_ONLY', VIEW_DOWNLOAD: 'VIEW_DOWNLOAD' };
 
 const CareerPlanStatus = {
   DRAFT: 'DRAFT',
@@ -1097,6 +1162,19 @@ const EvaluationStatus = {
   ARCHIVED: 'ARCHIVED',
 };
 
+const ObjectiveStatus = { DRAFT: 'DRAFT', IN_PROGRESS: 'IN_PROGRESS', COMPLETED: 'COMPLETED' };
+
+const KeyResultStatus = {
+  ON_TRACK: 'ON_TRACK',
+  AT_RISK: 'AT_RISK',
+  OFF_TRACK: 'OFF_TRACK',
+  COMPLETED: 'COMPLETED',
+};
+
+const MonitoringEvalType = { SELF: 'SELF', MANAGER: 'MANAGER', PEER: 'PEER' };
+
+const MonitoringEvalStatus = { PENDING: 'PENDING', OPEN: 'OPEN', CLOSED: 'CLOSED' };
+
 const OnboardingStatus = {
   NOT_STARTED: 'NOT_STARTED',
   IN_PROGRESS: 'IN_PROGRESS',
@@ -1314,6 +1392,27 @@ const ReportConfidentiality = {
 
 const KpiStatus = { GREEN: 'GREEN', YELLOW: 'YELLOW', RED: 'RED' };
 
+const ReportCategory = {
+  HR: 'HR',
+  LEARNING: 'LEARNING',
+  PERFORMANCE: 'PERFORMANCE',
+  ENGAGEMENT: 'ENGAGEMENT',
+  TALENT: 'TALENT',
+  COMPLIANCE: 'COMPLIANCE',
+  OPERATIONAL: 'OPERATIONAL',
+  FINANCIAL: 'FINANCIAL',
+};
+
+const ExportFormat = { JSON: 'JSON', CSV: 'CSV', XLSX: 'XLSX', PDF: 'PDF', HTML: 'HTML' };
+
+const ScheduleFrequency = {
+  ONCE: 'ONCE',
+  DAILY: 'DAILY',
+  WEEKLY: 'WEEKLY',
+  MONTHLY: 'MONTHLY',
+  QUARTERLY: 'QUARTERLY',
+};
+
 const PayslipAccessAction = { VIEW: 'VIEW', ADMIN_VIEW: 'ADMIN_VIEW' };
 
 const DayPeriod = { AM: 'AM', PM: 'PM' };
@@ -1482,6 +1581,9 @@ module.exports = {
   PerformanceCategory,
   PerformanceGoalStatus,
   FeedbackType,
+  SurveyType,
+  SurveyStatus,
+  SurveyQuestionType,
   DisputeStatus,
   EvaluationRequestStatus,
   LeadershipProgramLevel,
@@ -1563,6 +1665,9 @@ module.exports = {
   DocAccess,
   DocSensitivity,
   DocStatus,
+  DocOrigin,
+  DocPermissionType,
+  DocAuditAction,
   ShareLinkAccess,
   CareerPlanStatus,
   CareerPathType,
@@ -1631,6 +1736,10 @@ module.exports = {
   OkrType,
   OkrStatus,
   ObjectiveType,
+  ObjectiveStatus,
+  KeyResultStatus,
+  MonitoringEvalType,
+  MonitoringEvalStatus,
   IndicatorFrequency,
   EvalCycleType,
   EvaluationStatus,
@@ -1672,6 +1781,9 @@ module.exports = {
   ExecutiveReportStatus,
   ReportConfidentiality,
   KpiStatus,
+  ReportCategory,
+  ExportFormat,
+  ScheduleFrequency,
   PayslipAccessAction,
   DayPeriod,
   LeaveDecision,

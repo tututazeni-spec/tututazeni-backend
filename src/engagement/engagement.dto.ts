@@ -15,34 +15,9 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { SurveyType, SurveyStatus, SurveyQuestionType } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────
-
-export enum SurveyType {
-  CLIMATE = 'CLIMATE',
-  PULSE = 'PULSE',
-  ENPS = 'ENPS',
-  ONBOARDING = 'ONBOARDING',
-  OFFBOARDING = 'OFFBOARDING',
-  CUSTOM = 'CUSTOM',
-  WELLBEING = 'WELLBEING',
-}
-
-export enum SurveyStatus {
-  DRAFT = 'DRAFT',
-  ACTIVE = 'ACTIVE',
-  PAUSED = 'PAUSED',
-  COMPLETED = 'COMPLETED',
-  ARCHIVED = 'ARCHIVED',
-}
-
-export enum QuestionType {
-  SCALE = 'SCALE',
-  MULTIPLE = 'MULTIPLE',
-  TEXT = 'TEXT',
-  ENPS = 'ENPS',
-  EMOJI = 'EMOJI',
-}
 
 export enum FeedbackType {
   OPEN = 'OPEN',
@@ -78,7 +53,7 @@ export enum ActionPlanStatus {
 
 export class QuestionDto {
   @ApiProperty() @IsString() @MaxLength(500) text!: string;
-  @ApiProperty({ enum: QuestionType }) @IsEnum(QuestionType) type!: QuestionType;
+  @ApiProperty({ enum: SurveyQuestionType }) @IsEnum(SurveyQuestionType) type!: SurveyQuestionType;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(100) order?: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() required?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsString({ each: true }) options?: string[];

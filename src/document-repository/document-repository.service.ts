@@ -19,22 +19,25 @@ import {
   GrantPermissionDto,
   CreateShareLinkDto,
   CreateDocCategoryDto,
+} from './document-repository.dto';
+import {
   DocSensitivity,
   DocStatus,
-  DocCategory,
+  DocCategoryType,
   DocAuditAction,
-} from './document-repository.dto';
+  DocOrigin,
+} from '@prisma/client';
 
 // ─── Retention policies (Angola defaults, configurável por categoria) ─────────
-const DEFAULT_RETENTION: Partial<Record<DocCategory, number>> = {
-  [DocCategory.HEALTH]: 20,
-  [DocCategory.LABOUR]: 10,
-  [DocCategory.PAYROLL]: 10,
-  [DocCategory.COMPLIANCE]: 10,
-  [DocCategory.CORPORATE]: 5,
-  [DocCategory.RECRUITMENT]: 1,
-  [DocCategory.LEARNING]: 5,
-  [DocCategory.PERSONAL]: 5,
+const DEFAULT_RETENTION: Partial<Record<DocCategoryType, number>> = {
+  [DocCategoryType.HEALTH]: 20,
+  [DocCategoryType.LABOUR]: 10,
+  [DocCategoryType.PAYROLL]: 10,
+  [DocCategoryType.COMPLIANCE]: 10,
+  [DocCategoryType.CORPORATE]: 5,
+  [DocCategoryType.RECRUITMENT]: 1,
+  [DocCategoryType.LEARNING]: 5,
+  [DocCategoryType.PERSONAL]: 5,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -209,12 +212,12 @@ export class DocumentRepositoryService {
 
   async create(createdById: number, dto: CreateDocumentDto) {
     // DLP: documentos sensíveis não podem ser PUBLIC
-    if (
-      [DocSensitivity.CONFIDENTIAL, DocSensitivity.RESTRICTED, DocSensitivity.SECRET].includes(
-        dto.sensitivity,
-      ) &&
-      dto.sensitivity === DocSensitivity.PUBLIC
-    ) {
+    const sensitiveLevels: DocSensitivity[] = [
+      DocSensitivity.CONFIDENTIAL,
+      DocSensitivity.RESTRICTED,
+      DocSensitivity.SECRET,
+    ];
+    if (sensitiveLevels.includes(dto.sensitivity) && dto.sensitivity === DocSensitivity.PUBLIC) {
       throw new BadRequestException('Documentos confidenciais não podem ter acesso público');
     }
 
@@ -228,7 +231,7 @@ export class DocumentRepositoryService {
         ...dto,
         tags: dto.tags ?? [],
         status: DocStatus.ACTIVE,
-        origin: dto.origin ?? 'UPLOAD',
+        origin: dto.origin ?? DocOrigin.UPLOAD,
         version: '1.0',
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
         retentionUntil,
@@ -274,15 +277,17 @@ export class DocumentRepositoryService {
     const current = await this.findOne(id);
 
     // Protecção: documentos expirados/arquivados não editáveis
-    if ([DocStatus.ARCHIVED, DocStatus.DELETED].includes(current.status as DocStatus)) {
+    const nonEditableStatuses: DocStatus[] = [DocStatus.ARCHIVED, DocStatus.DELETED];
+    if (nonEditableStatuses.includes(current.status as DocStatus)) {
       throw new BadRequestException('Documento arquivado ou eliminado não pode ser editado');
     }
 
     // DLP check
-    if (
-      dto.sensitivity &&
-      [DocSensitivity.CONFIDENTIAL, DocSensitivity.SECRET].includes(dto.sensitivity)
-    ) {
+    const restrictedSensitivities: DocSensitivity[] = [
+      DocSensitivity.CONFIDENTIAL,
+      DocSensitivity.SECRET,
+    ];
+    if (dto.sensitivity && restrictedSensitivities.includes(dto.sensitivity)) {
       // Só admin/RH pode tornar um doc confidencial (controlado no controller)
     }
 
@@ -432,9 +437,8 @@ export class DocumentRepositoryService {
     const doc = await this.findOne(dto.documentId);
 
     // DLP: documentos confidenciais/secretos não compartilháveis externamente
-    if (
-      [DocSensitivity.SECRET, DocSensitivity.RESTRICTED].includes(doc.sensitivity as DocSensitivity)
-    ) {
+    const noExternalShare: DocSensitivity[] = [DocSensitivity.SECRET, DocSensitivity.RESTRICTED];
+    if (noExternalShare.includes(doc.sensitivity as DocSensitivity)) {
       throw new ForbiddenException('Este documento não pode ser partilhado externamente');
     }
 
