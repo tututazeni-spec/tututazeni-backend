@@ -1,5 +1,6 @@
 ﻿// src/engagement/engagement.service.ts
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { ReviewStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateSurveyDto,
@@ -1174,7 +1175,7 @@ export class EngagementService {
         take: 5,
       }),
       this.prisma.read.performanceReview.findMany({
-        where: { userId, status: 'COMPLETED' },
+        where: { userId, status: ReviewStatus.PUBLISHED },
         select: { score: true },
         orderBy: { createdAt: 'desc' },
         take: 3,

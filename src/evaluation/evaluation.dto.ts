@@ -15,8 +15,11 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { EvaluationRequestStatus as RequestStatus } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────
+
+export { RequestStatus };
 
 export enum EvalType {
   SELF = 'SELF',
@@ -50,13 +53,6 @@ export enum QuestionType {
   NPS = 'NPS',
   BOOLEAN = 'BOOLEAN',
   NA_ALLOWED = 'NA_ALLOWED',
-}
-
-export enum RequestStatus {
-  PENDING = 'PENDING',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  SKIPPED = 'SKIPPED',
 }
 
 // ─── Cycle DTOs ───────────────────────────────────────────────────

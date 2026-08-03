@@ -20,6 +20,8 @@ import {
   Update9BoxDto,
   PerformanceFilterDto,
   ReviewStatus,
+  PerformanceCategory,
+  GoalStatus,
 } from './performance.dto';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -353,10 +355,10 @@ export class PerformanceService {
 
     const scale = (review.cycle?.scoreScale ?? 5) * 20;
     const scoreNorm = ((finalScore ?? 0) / scale) * 100;
-    let category: string;
-    if (scoreNorm >= 75) category = 'HIGH';
-    else if (scoreNorm >= 45) category = 'MEDIUM';
-    else category = 'LOW';
+    let category: PerformanceCategory;
+    if (scoreNorm >= 75) category = PerformanceCategory.HIGH;
+    else if (scoreNorm >= 45) category = PerformanceCategory.MEDIUM;
+    else category = PerformanceCategory.LOW;
 
     const threshold = review.cycle?.scoreScale ?? 5;
     const isExtreme = (finalScore ?? 0) <= 1 || (finalScore ?? 0) >= threshold;
@@ -443,10 +445,10 @@ export class PerformanceService {
       Math.round((dto.currentValue / ((goal as any).targetValue || 1)) * 100),
     );
 
-    let status = 'ON_TRACK';
-    if (progress >= 100) status = 'COMPLETED';
-    else if (progress < 25) status = 'OFF_TRACK';
-    else if (progress < 60) status = 'AT_RISK';
+    let status: GoalStatus = GoalStatus.ON_TRACK;
+    if (progress >= 100) status = GoalStatus.COMPLETED;
+    else if (progress < 25) status = GoalStatus.OFF_TRACK;
+    else if (progress < 60) status = GoalStatus.AT_RISK;
 
     return this.prisma.performanceGoal.update({
       where: { id: goalId },

@@ -6,6 +6,7 @@
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReviewStatus, LeadershipClassification } from '@prisma/client';
 import {
   CreateLeadershipProgramDto,
   UpdateLeadershipProgramDto,
@@ -294,7 +295,7 @@ export class LeadershipService {
             select: { score: true, category: true, status: true },
           }),
           this.prisma.read.performanceReview.count({
-            where: { userId: member.id, status: 'PENDING_APPROVAL' },
+            where: { userId: member.id, status: ReviewStatus.PENDING_MANAGER },
           }),
           this.prisma.continuousFeedback.count({
             where: { userId: member.id },
@@ -744,11 +745,11 @@ export class LeadershipService {
         Math.min(100, programsCompleted * 20) * 0.1 * 10, // max 100
     );
 
-    let classification = 'AVERAGE';
-    if (score >= 800) classification = 'TOP_10';
-    else if (score >= 650) classification = 'ABOVE_AVERAGE';
-    else if (score < 400) classification = 'CRITICAL';
-    else if (score < 500) classification = 'BELOW_AVERAGE';
+    let classification: LeadershipClassification = LeadershipClassification.AVERAGE;
+    if (score >= 800) classification = LeadershipClassification.TOP_10;
+    else if (score >= 650) classification = LeadershipClassification.ABOVE_AVERAGE;
+    else if (score < 400) classification = LeadershipClassification.CRITICAL;
+    else if (score < 500) classification = LeadershipClassification.BELOW_AVERAGE;
 
     await this.prisma.leadershipScore.upsert({
       where: { userId: leaderId },

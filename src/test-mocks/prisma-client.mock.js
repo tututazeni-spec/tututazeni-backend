@@ -33,6 +33,84 @@ const Prisma = {
 
 const UserRole = { COLABORADOR: 'COLABORADOR', LIDER: 'LIDER', RH: 'RH', ADMIN: 'ADMIN' };
 
+const CycleType = {
+  PROBATION: 'PROBATION',
+  QUARTERLY: 'QUARTERLY',
+  SEMESTER: 'SEMESTER',
+  ANNUAL: 'ANNUAL',
+  AD_HOC: 'AD_HOC',
+};
+
+const CycleStatus = {
+  PLANNED: 'PLANNED',
+  ACTIVE: 'ACTIVE',
+  CLOSED: 'CLOSED',
+  CANCELLED: 'CANCELLED',
+};
+
+const ReviewType = { SELF: 'SELF', MANAGER: 'MANAGER', PEER: 'PEER', R360: 'R360' };
+
+const ReviewStatus = {
+  DRAFT: 'DRAFT',
+  PENDING_SELF: 'PENDING_SELF',
+  PENDING_MANAGER: 'PENDING_MANAGER',
+  PENDING_360: 'PENDING_360',
+  CALIBRATION: 'CALIBRATION',
+  PUBLISHED: 'PUBLISHED',
+  DISPUTE: 'DISPUTE',
+  FINALIZED: 'FINALIZED',
+};
+
+const PerformanceCategory = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH' };
+
+const PerformanceGoalStatus = {
+  ON_TRACK: 'ON_TRACK',
+  AT_RISK: 'AT_RISK',
+  OFF_TRACK: 'OFF_TRACK',
+  COMPLETED: 'COMPLETED',
+};
+
+const FeedbackType = { PRAISE: 'PRAISE', IMPROVEMENT: 'IMPROVEMENT', GENERAL: 'GENERAL' };
+
+const DisputeStatus = { OPEN: 'OPEN' };
+
+const EvaluationRequestStatus = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  SKIPPED: 'SKIPPED',
+};
+
+const LeadershipProgramLevel = {
+  INITIAL: 'INITIAL',
+  INTERMEDIATE: 'INTERMEDIATE',
+  ADVANCED: 'ADVANCED',
+};
+
+const ProgramStatus = { DRAFT: 'DRAFT', ACTIVE: 'ACTIVE', ARCHIVED: 'ARCHIVED' };
+
+const ParticipantStatus = {
+  ENROLLED: 'ENROLLED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  WITHDRAWN: 'WITHDRAWN',
+};
+
+const OneOnOneStatus = {
+  SCHEDULED: 'SCHEDULED',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+  RESCHEDULED: 'RESCHEDULED',
+};
+
+const LeadershipClassification = {
+  CRITICAL: 'CRITICAL',
+  BELOW_AVERAGE: 'BELOW_AVERAGE',
+  AVERAGE: 'AVERAGE',
+  ABOVE_AVERAGE: 'ABOVE_AVERAGE',
+  TOP_10: 'TOP_10',
+};
+
 const CourseLevel = { BEGINNER: 'BEGINNER', INTERMEDIATE: 'INTERMEDIATE', ADVANCED: 'ADVANCED' };
 
 const CourseStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHIVED' };
@@ -1020,6 +1098,20 @@ module.exports = {
   Prisma,
   // Enums
   UserRole,
+  CycleType,
+  CycleStatus,
+  ReviewType,
+  ReviewStatus,
+  PerformanceCategory,
+  PerformanceGoalStatus,
+  FeedbackType,
+  DisputeStatus,
+  EvaluationRequestStatus,
+  LeadershipProgramLevel,
+  ProgramStatus,
+  ParticipantStatus,
+  OneOnOneStatus,
+  LeadershipClassification,
   CourseLevel,
   CourseStatus,
   ModuleStatus,
