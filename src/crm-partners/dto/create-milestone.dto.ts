@@ -1,6 +1,7 @@
-import { IsString, IsOptional, IsDateString, IsNumber, Min } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsDateString, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { NeedPriority } from '@prisma/client';
 
 export class CreateMilestoneDto {
   @ApiProperty()
@@ -28,10 +29,10 @@ export class CreateMilestoneDto {
   @IsString()
   currency?: string;
 
-  @ApiPropertyOptional({ default: 'MEDIUM' })
+  @ApiPropertyOptional({ enum: NeedPriority, default: 'MEDIUM' })
   @IsOptional()
-  @IsString()
-  priority?: string;
+  @IsEnum(NeedPriority)
+  priority?: NeedPriority;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -13,7 +13,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PartnerType, PartnerTier } from '@prisma/client';
+import { PartnerType, PartnerTier, AngolaProvince } from '@prisma/client';
 
 export class CreatePartnerDto {
   @ApiProperty({ enum: PartnerType })
@@ -85,10 +85,10 @@ export class CreatePartnerDto {
   @IsString()
   city?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: AngolaProvince })
   @IsOptional()
-  @IsString()
-  province?: string;
+  @IsEnum(AngolaProvince)
+  province?: AngolaProvince;
 
   @ApiPropertyOptional({ default: 'Angola' })
   @IsOptional()

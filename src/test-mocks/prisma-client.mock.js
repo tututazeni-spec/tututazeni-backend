@@ -854,7 +854,7 @@ const InteractionType = {
   NOTE: 'NOTE',
 };
 
-const NeedPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', CRITICAL: 'CRITICAL' };
+const NeedPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', URGENT: 'URGENT' };
 
 const NeedStatus = {
   IDENTIFIED: 'IDENTIFIED',
