@@ -286,12 +286,13 @@ export class EnrollmentsService {
         });
         results.success++;
         results.enrolled.push(userId);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (e instanceof ConflictException) {
           results.skipped++;
         } else {
-          results.errors.push({ userId, error: e.message });
-          this.logger.warn(`Bulk enroll error user ${userId}: ${e.message}`);
+          const message = e instanceof Error ? e.message : String(e);
+          results.errors.push({ userId, error: message });
+          this.logger.warn(`Bulk enroll error user ${userId}: ${message}`);
         }
       }
     }

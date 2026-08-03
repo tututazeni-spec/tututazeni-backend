@@ -508,7 +508,7 @@ export class WorkDeclarationsService {
   private async notifyUser(userId: number, type: string, message: string) {
     try {
       await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } });
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         userId,
         type,
@@ -525,7 +525,7 @@ export class WorkDeclarationsService {
         await this.prisma.notificationLog.create({
           data: { userId: hr.id, type, message, success: true },
         });
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         type,
         err: { message: e instanceof Error ? e.message : String(e) },

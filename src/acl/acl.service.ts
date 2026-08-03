@@ -528,7 +528,7 @@ export class AclService {
           const { roleCode } = await this.getUserPermissions(userId);
           if (roleCode === condition.roleCode) return true; // deny
         }
-      } catch (e) {
+      } catch (e: unknown) {
         this.logger.warn({
           userId,
           policyId: policy?.id,

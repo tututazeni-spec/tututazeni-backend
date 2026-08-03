@@ -1057,7 +1057,7 @@ export class LeaveManagementService {
         where: { userId: request.userId, completedAt: null } as any,
         data: { pausedAt: new Date() } as any,
       });
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         userId: request.userId,
         requestId: request.id,
@@ -1074,7 +1074,7 @@ export class LeaveManagementService {
         where: { userId: request.userId, pausedAt: { not: null } } as any,
         data: { pausedAt: null } as any,
       });
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         userId: request.userId,
         requestId: request.id,
@@ -1090,7 +1090,7 @@ export class LeaveManagementService {
       await this.prisma.notificationLog.create({
         data: { userId, type, message, success: true },
       });
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         userId,
         notificationType: type,

@@ -921,7 +921,7 @@ export class Evaluation360Service {
         actions,
         sourceResultId: resultId,
       });
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.warn({
         userId,
         action: 'EVAL360_AUTO_PDI_CREATE',

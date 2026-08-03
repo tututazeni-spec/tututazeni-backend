@@ -110,7 +110,7 @@ export class ScalabilityEventListeners {
       });
 
       this.logger.log(`[IntegrationSync] Completed: ${payload.integrationId}`);
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         integrationId: payload.integrationId,
         syncLogId: payload.syncLogId,
@@ -169,7 +169,7 @@ export class ScalabilityEventListeners {
         where: { id: payload.executionId },
         data: { status: 'SUCCESS', finishedAt: new Date() },
       });
-    } catch (err) {
+    } catch (err: unknown) {
       await this.prisma.automationExecution.update({
         where: { id: payload.executionId },
         data: {

@@ -117,7 +117,7 @@ export class AiProvidersService {
         },
         body: JSON.stringify(body),
       });
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         provider: 'groq',
         operation: 'chat',
@@ -141,7 +141,7 @@ export class AiProvidersService {
         provider: 'groq',
         model: this.groqModel,
       };
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         provider: 'groq',
         operation: 'chat',
@@ -184,7 +184,7 @@ export class AiProvidersService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         provider: 'gemini',
         operation: 'chat',
@@ -206,7 +206,7 @@ export class AiProvidersService {
       const tokensUsed = data.usageMetadata?.candidatesTokenCount ?? 0;
 
       return { text, tokensUsed, provider: 'gemini', model: this.geminiModel };
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         provider: 'gemini',
         operation: 'chat',
@@ -237,7 +237,7 @@ export class AiProvidersService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         provider: 'ollama',
         operation: 'chat',
@@ -263,7 +263,7 @@ export class AiProvidersService {
         provider: 'ollama',
         model: this.ollamaModel,
       };
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         provider: 'ollama',
         operation: 'chat',

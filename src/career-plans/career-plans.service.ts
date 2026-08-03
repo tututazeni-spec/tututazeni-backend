@@ -272,7 +272,7 @@ export class CareerPlansService {
           try {
             const readiness = await this.calculateReadiness(plan.userId, plan.targetRoleId);
             return { ...plan, readiness };
-          } catch (e) {
+          } catch (e: unknown) {
             this.logger.warn({
               userId: plan.userId,
               targetRoleId: plan.targetRoleId,
@@ -311,7 +311,7 @@ export class CareerPlansService {
     if (plan.targetRoleId) {
       try {
         readiness = await this.calculateReadiness(plan.userId, plan.targetRoleId);
-      } catch (e) {
+      } catch (e: unknown) {
         this.logger.warn({
           userId: plan.userId,
           targetRoleId: plan.targetRoleId,
@@ -344,7 +344,7 @@ export class CareerPlansService {
     if (plan.targetRoleId) {
       try {
         readiness = await this.calculateReadiness(userId, plan.targetRoleId);
-      } catch (e) {
+      } catch (e: unknown) {
         this.logger.warn({
           userId,
           targetRoleId: plan.targetRoleId,
@@ -822,7 +822,7 @@ export class CareerPlansService {
           take: 5,
         }) ?? []
       );
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         skillIds,
         action: 'GET_COURSES_FOR_SKILLS',
@@ -836,7 +836,7 @@ export class CareerPlansService {
   private async notify(userId: number, type: string, message: string) {
     try {
       await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } });
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         userId,
         type,

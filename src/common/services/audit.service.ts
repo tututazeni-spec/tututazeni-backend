@@ -72,7 +72,7 @@ export class AuditService {
         attempts: 3,
         backoff: 5000,
       });
-    } catch (queueErr) {
+    } catch (queueErr: unknown) {
       this.logger.warn({
         userId: data.userId,
         action: data.action,

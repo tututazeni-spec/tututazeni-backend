@@ -525,12 +525,13 @@ export class UsersService {
           });
         }
         results.success++;
-      } catch (e: any) {
-        results.errors.push(`User ${userId}: ${e.message}`);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        results.errors.push(`User ${userId}: ${message}`);
         this.logger.warn({
           userId,
           action: dto.action,
-          err: { message: e instanceof Error ? e.message : String(e) },
+          err: { message },
           msg: 'Falha ao executar acção em massa para utilizador',
         });
       }
@@ -553,8 +554,9 @@ export class UsersService {
         const user = await this.create(users[i]);
         results.success++;
         results.created.push((user as any).id);
-      } catch (e: any) {
-        results.errors.push({ line: i + 1, email: users[i].email, error: e.message });
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        results.errors.push({ line: i + 1, email: users[i].email, error: message });
       }
     }
 
@@ -622,7 +624,7 @@ export class UsersService {
           meta: meta ? JSON.stringify(meta) : null,
         },
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.logger.warn({
         userId,
         performedById,
