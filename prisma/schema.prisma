@@ -8446,6 +8446,10 @@ enum EngagementFeedbackType {
   PEER
   MANAGER
   RECOGNITION
+  POSITIVE
+  CONSTRUCTIVE
+  NEUTRAL
+  SBI
 }
 
 enum FeedbackStatus {

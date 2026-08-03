@@ -135,6 +135,10 @@ const EngagementFeedbackType = {
   PEER: 'PEER',
   MANAGER: 'MANAGER',
   RECOGNITION: 'RECOGNITION',
+  POSITIVE: 'POSITIVE',
+  CONSTRUCTIVE: 'CONSTRUCTIVE',
+  NEUTRAL: 'NEUTRAL',
+  SBI: 'SBI',
 };
 
 const FeedbackStatus = { OPEN: 'OPEN', REPLIED: 'REPLIED' };
