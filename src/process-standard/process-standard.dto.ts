@@ -15,45 +15,20 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import {
+  ProcessStatus,
+  RiskLevel,
+  StepType,
+  InstanceStatus,
+  StepProgressStatus as TaskStatus,
+} from '@prisma/client';
 
 // ─── Enums ─────────────────────────────────────────────────────────────────
-export enum ProcessStatus {
-  DRAFT = 'DRAFT',
-  IN_REVIEW = 'IN_REVIEW',
-  ACTIVE = 'ACTIVE',
-  ARCHIVED = 'ARCHIVED',
-}
+// NOTA: TaskStatus aqui é o `StepProgressStatus` do Prisma — nome local
+// mantido por compatibilidade, distinto do `TaskStatus` (OnboardingTaskInstance)
+// usado no módulo onboarding.
 
-export enum RiskLevel {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  CRITICAL = 'CRITICAL',
-}
-
-export enum StepType {
-  START = 'START',
-  END = 'END',
-  TASK = 'TASK',
-  DECISION = 'DECISION',
-  GATEWAY = 'GATEWAY',
-  REVIEW = 'REVIEW',
-}
-
-export enum InstanceStatus {
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
-  ON_HOLD = 'ON_HOLD',
-}
-
-export enum TaskStatus {
-  PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
-  REJECTED = 'REJECTED',
-  ESCALATED = 'ESCALATED',
-  SKIPPED = 'SKIPPED',
-}
+export { ProcessStatus, RiskLevel, StepType, InstanceStatus, TaskStatus };
 
 // ─── Step DTO ─────────────────────────────────────────────────────────────
 export class ProcessStepDto {

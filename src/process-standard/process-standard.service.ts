@@ -12,6 +12,7 @@ import { createHash } from 'crypto';
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
+import { ApprovalDecision } from '@prisma/client';
 import {
   CreateProcessDto,
   UpdateProcessDto,
@@ -350,7 +351,7 @@ export class ProcessStandardService {
       data: {
         processId: id,
         userId,
-        action: dto.action.toUpperCase(),
+        action: dto.action === 'approve' ? ApprovalDecision.APPROVE : ApprovalDecision.REJECT,
         comment: dto.comment,
         status: newStatus,
       },

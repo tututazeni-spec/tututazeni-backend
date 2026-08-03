@@ -1203,6 +1203,38 @@ const InteractionAction = {
   SHARE: 'SHARE',
 };
 
+const ProcessStatus = {
+  DRAFT: 'DRAFT',
+  IN_REVIEW: 'IN_REVIEW',
+  ACTIVE: 'ACTIVE',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const StepType = {
+  START: 'START',
+  END: 'END',
+  TASK: 'TASK',
+  DECISION: 'DECISION',
+  GATEWAY: 'GATEWAY',
+  REVIEW: 'REVIEW',
+};
+
+const InstanceStatus = {
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+  ON_HOLD: 'ON_HOLD',
+};
+
+const StepProgressStatus = {
+  WAITING: 'WAITING',
+  PENDING: 'PENDING',
+  COMPLETED: 'COMPLETED',
+  REJECTED: 'REJECTED',
+  ESCALATED: 'ESCALATED',
+  SKIPPED: 'SKIPPED',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -1387,4 +1419,8 @@ module.exports = {
   ArticleStatus,
   ArticleAccess,
   InteractionAction,
+  ProcessStatus,
+  StepType,
+  InstanceStatus,
+  StepProgressStatus,
 };

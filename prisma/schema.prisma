@@ -3622,6 +3622,38 @@ model KnowledgeSearchLog {
 // PROCESSOS
 // ══════════════════════════════════════════════════════════════════
 
+enum ProcessStatus {
+  DRAFT
+  IN_REVIEW
+  ACTIVE
+  ARCHIVED
+}
+
+enum StepType {
+  START
+  END
+  TASK
+  DECISION
+  GATEWAY
+  REVIEW
+}
+
+enum InstanceStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  ON_HOLD
+}
+
+enum StepProgressStatus {
+  WAITING
+  PENDING
+  COMPLETED
+  REJECTED
+  ESCALATED
+  SKIPPED
+}
+
 model ProcessStandard {
   id               Int                  @id @default(autoincrement())
   code             String               @unique
@@ -3630,8 +3662,8 @@ model ProcessStandard {
   objective        String?
   scope            String?
   version          String               @default("1.0")
-  status           String               @default("DRAFT")
-  riskLevel        String               @default("LOW")
+  status           ProcessStatus        @default(DRAFT)
+  riskLevel        RiskLevel            @default(LOW)
   category         String?
   tags             String[]
   defaultSlaHours  Float?
@@ -3656,7 +3688,7 @@ model ProcessStandard {
 model ProcessStep {
   id               Int             @id @default(autoincrement())
   processId        Int
-  type             String          @default("TASK")
+  type             StepType        @default(TASK)
   title            String
   description      String?
   order            Int
@@ -3681,7 +3713,7 @@ model ProcessInstance {
   processVersion String
   initiatedById  Int
   targetUserId   Int
-  status         String          @default("IN_PROGRESS")
+  status         InstanceStatus  @default(IN_PROGRESS)
   notes          String?
   cancelReason   String?
   startedAt      DateTime        @default(now())
@@ -3698,11 +3730,11 @@ model ProcessInstance {
 }
 
 model StepProgress {
-  id            Int       @id @default(autoincrement())
+  id            Int                @id @default(autoincrement())
   instanceId    Int
   stepId        Int
   stepOrder     Int
-  status        String    @default("WAITING")
+  status        StepProgressStatus @default(WAITING)
   notes         String?
   formData      String?
   action        String?
@@ -3732,15 +3764,15 @@ model ProcessVersion {
 }
 
 model ProcessApprovalLog {
-  id        Int             @id @default(autoincrement())
+  id        Int              @id @default(autoincrement())
   processId Int
   userId    Int
-  action    String
+  action    ApprovalDecision
   comment   String?
-  status    String
-  createdAt DateTime        @default(now())
-  process   ProcessStandard @relation(fields: [processId], references: [id])
-  user      User            @relation(fields: [userId], references: [id])
+  status    ProcessStatus
+  createdAt DateTime         @default(now())
+  process   ProcessStandard  @relation(fields: [processId], references: [id])
+  user      User             @relation(fields: [userId], references: [id])
 }
 
 model ProcessAuditLog {
