@@ -14,34 +14,16 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import {
+  LeadershipProgramLevel as ProgramLevel,
+  ProgramStatus,
+  ParticipantStatus,
+  OneOnOneStatus,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum ProgramLevel {
-  INITIAL = 'INITIAL',
-  INTERMEDIATE = 'INTERMEDIATE',
-  ADVANCED = 'ADVANCED',
-}
-
-export enum ProgramStatus {
-  DRAFT = 'DRAFT',
-  ACTIVE = 'ACTIVE',
-  ARCHIVED = 'ARCHIVED',
-}
-
-export enum ParticipantStatus {
-  ENROLLED = 'ENROLLED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  WITHDRAWN = 'WITHDRAWN',
-}
-
-export enum OneOnOneStatus {
-  SCHEDULED = 'SCHEDULED',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
-  RESCHEDULED = 'RESCHEDULED',
-}
+export { ProgramLevel, ProgramStatus, ParticipantStatus, OneOnOneStatus };
 
 export enum LeadershipCompetency {
   COMMUNICATION = 'COMMUNICATION',

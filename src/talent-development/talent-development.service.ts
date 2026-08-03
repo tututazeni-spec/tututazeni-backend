@@ -7,6 +7,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReviewStatus } from '@prisma/client';
 import {
   PlanFilterDto,
   TalentDevelopmentCreateDevelopmentPlanDto,
@@ -109,7 +110,10 @@ export class TalentDevelopmentService {
         department: { select: { id: true, name: true } },
         // PerformanceReview relation on User is "performanceReviews" (ReviewedUser)
         performanceReviews: {
-          where: { type: 'MANAGER', status: { in: ['COMPLETED', 'SUBMITTED'] } },
+          where: {
+            type: 'MANAGER',
+            status: { in: [ReviewStatus.PUBLISHED, ReviewStatus.CALIBRATION] },
+          },
           orderBy: { createdAt: 'desc' },
           take: 1,
           select: { score: true, potentialScore: true },

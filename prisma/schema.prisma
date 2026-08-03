@@ -2514,23 +2514,38 @@ model CompetencyMap {
 // PERFORMANCE
 // ══════════════════════════════════════════════════════════════════
 
+enum CycleType {
+  PROBATION
+  QUARTERLY
+  SEMESTER
+  ANNUAL
+  AD_HOC
+}
+
+enum CycleStatus {
+  PLANNED
+  ACTIVE
+  CLOSED
+  CANCELLED
+}
+
 model PerformanceCycle {
-  id                  Int       @id @default(autoincrement())
+  id                  Int         @id @default(autoincrement())
   name                String
-  type                String
-  status              String    @default("PLANNED")
+  type                CycleType
+  status              CycleStatus @default(PLANNED)
   startDate           DateTime
   endDate             DateTime
   selfEvalDeadline    DateTime?
   managerEvalDeadline DateTime?
-  goalsWeight         Int       @default(40)
-  competenciesWeight  Int       @default(40)
-  behaviorsWeight     Int       @default(20)
-  selfBeforeManager   Boolean   @default(true)
-  anonymous360        Boolean   @default(true)
-  scoreScale          Int       @default(5)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  goalsWeight         Int         @default(40)
+  competenciesWeight  Int         @default(40)
+  behaviorsWeight     Int         @default(20)
+  selfBeforeManager   Boolean     @default(true)
+  anonymous360        Boolean     @default(true)
+  scoreScale          Int         @default(5)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   reviews  PerformanceReview[]
   goals    PerformanceGoal[]
@@ -2540,21 +2555,45 @@ model PerformanceCycle {
   @@index([status])
 }
 
+enum ReviewType {
+  SELF
+  MANAGER
+  PEER
+  R360
+}
+
+enum ReviewStatus {
+  DRAFT
+  PENDING_SELF
+  PENDING_MANAGER
+  PENDING_360
+  CALIBRATION
+  PUBLISHED
+  DISPUTE
+  FINALIZED
+}
+
+enum PerformanceCategory {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 model PerformanceReview {
-  id             Int       @id @default(autoincrement())
+  id             Int                  @id @default(autoincrement())
   userId         Int
   cycleId        Int
   reviewerId     Int?
-  type           String
-  status         String    @default("PENDING_SELF")
+  type           ReviewType
+  status         ReviewStatus         @default(PENDING_SELF)
   score          Float?
   potentialScore Int?
   feedback       String?
   justification  String?
-  category       String?
+  category       PerformanceCategory?
   submittedAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
   user     User             @relation("ReviewedUser", fields: [userId], references: [id])
   reviewer User?            @relation("ReviewerUser", fields: [reviewerId], references: [id])
@@ -2570,22 +2609,29 @@ model PerformanceReview {
   @@index([status])
 }
 
+enum PerformanceGoalStatus {
+  ON_TRACK
+  AT_RISK
+  OFF_TRACK
+  COMPLETED
+}
+
 model PerformanceGoal {
-  id           Int       @id @default(autoincrement())
+  id           Int                   @id @default(autoincrement())
   userId       Int
   cycleId      Int
   title        String
   description  String?
   targetValue  Float
-  currentValue Float     @default(0)
-  progress     Int       @default(0)
-  weight       Float     @default(100)
+  currentValue Float                 @default(0)
+  progress     Int                   @default(0)
+  weight       Float                 @default(100)
   unit         String?
-  status       String    @default("ON_TRACK")
+  status       PerformanceGoalStatus @default(ON_TRACK)
   notes        String?
   dueDate      DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
 
   user        User             @relation(fields: [userId], references: [id])
   cycle       PerformanceCycle @relation(fields: [cycleId], references: [id])
@@ -2617,12 +2663,18 @@ model CompetencyEvaluation {
   @@unique([reviewId, competencyId])
 }
 
+enum FeedbackType {
+  PRAISE
+  IMPROVEMENT
+  GENERAL
+}
+
 model ContinuousFeedback {
   id            Int               @id @default(autoincrement())
   giverId       Int
   userId        Int
   cycleId       Int?
-  type          String
+  type          FeedbackType
   message       String
   visibleToUser Boolean           @default(true)
   createdAt     DateTime          @default(now())
@@ -2645,13 +2697,17 @@ model CalibrationLog {
   calibrator      User              @relation(fields: [calibratorId], references: [id])
 }
 
+enum DisputeStatus {
+  OPEN
+}
+
 model PerformanceDispute {
   id         Int               @id @default(autoincrement())
   reviewId   Int
   userId     Int
   reason     String
   evidence   String?
-  status     String            @default("OPEN")
+  status     DisputeStatus     @default(OPEN)
   resolution String?
   createdAt  DateTime          @default(now())
   review     PerformanceReview @relation(fields: [reviewId], references: [id])
@@ -2698,18 +2754,25 @@ model PerformanceEvaluation {
   @@index([period])
 }
 
+enum EvaluationRequestStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
 model EvaluationRequest {
-  id          Int       @id @default(autoincrement())
+  id          Int                     @id @default(autoincrement())
   evaluatorId Int
   evaluatedId Int
   type        EvalType?
-  status      String    @default("PENDING")
+  status      EvaluationRequestStatus @default(PENDING)
   dueDate     DateTime?
   cycleId     Int?
   completedAt DateTime?
-  createdAt   DateTime  @default(now())
-  evaluator   User      @relation("RequestEvaluator", fields: [evaluatorId], references: [id])
-  evaluated   User      @relation("RequestEvaluated", fields: [evaluatedId], references: [id])
+  createdAt   DateTime                @default(now())
+  evaluator   User                    @relation("RequestEvaluator", fields: [evaluatorId], references: [id])
+  evaluated   User                    @relation("RequestEvaluated", fields: [evaluatedId], references: [id])
 
   @@index([evaluatorId])
   @@index([evaluatedId])
@@ -2719,20 +2782,32 @@ model EvaluationRequest {
 // LIDERANÇA
 // ══════════════════════════════════════════════════════════════════
 
+enum LeadershipProgramLevel {
+  INITIAL
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum ProgramStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
 model LeadershipProgram {
-  id                 Int       @id @default(autoincrement())
+  id                 Int                    @id @default(autoincrement())
   name               String
-  description        String?   @db.Text
-  level              String
-  status             String    @default("DRAFT")
+  description        String?                @db.Text
+  level              LeadershipProgramLevel
+  status             ProgramStatus          @default(DRAFT)
   durationWeeks      Int?
   learningPathId     Int?
-  mandatory          Boolean   @default(false)
+  mandatory          Boolean                @default(false)
   minLeadershipScore Int?
   startDate          DateTime?
   endDate            DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
 
   participants LeadershipParticipant[]
   certificates Certificate[]
@@ -2741,12 +2816,19 @@ model LeadershipProgram {
   @@index([status])
 }
 
+enum ParticipantStatus {
+  ENROLLED
+  IN_PROGRESS
+  COMPLETED
+  WITHDRAWN
+}
+
 model LeadershipParticipant {
   id          Int               @id @default(autoincrement())
   userId      Int
   programId   Int
   progress    Int               @default(0)
-  status      String            @default("ENROLLED")
+  status      ParticipantStatus @default(ENROLLED)
   notes       String?
   enrolledAt  DateTime          @default(now())
   completedAt DateTime?
@@ -2757,22 +2839,29 @@ model LeadershipParticipant {
   @@index([userId])
 }
 
+enum OneOnOneStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
 model OneOnOne {
-  id              Int       @id @default(autoincrement())
+  id              Int            @id @default(autoincrement())
   managerId       Int
   subordinateId   Int
   scheduledAt     DateTime
-  durationMinutes Int       @default(30)
-  status          String    @default("SCHEDULED")
+  durationMinutes Int            @default(30)
+  status          OneOnOneStatus @default(SCHEDULED)
   agenda          String?
   meetingUrl      String?
   minutes         String?
   actionItems     String?
   nextMeetingDate DateTime?
   completedAt     DateTime?
-  createdAt       DateTime  @default(now())
-  manager         User      @relation("OneOnOneManager", fields: [managerId], references: [id])
-  subordinate     User      @relation("OneOnOneSubordinate", fields: [subordinateId], references: [id])
+  createdAt       DateTime       @default(now())
+  manager         User           @relation("OneOnOneManager", fields: [managerId], references: [id])
+  subordinate     User           @relation("OneOnOneSubordinate", fields: [subordinateId], references: [id])
 
   @@index([managerId])
 }
@@ -2815,13 +2904,21 @@ model LeadershipPulse {
   @@index([leaderId])
 }
 
+enum LeadershipClassification {
+  CRITICAL
+  BELOW_AVERAGE
+  AVERAGE
+  ABOVE_AVERAGE
+  TOP_10
+}
+
 model LeadershipScore {
-  id             Int      @id @default(autoincrement())
-  userId         Int      @unique
-  score          Int      @default(0)
-  classification String   @default("AVERAGE")
-  calculatedAt   DateTime @default(now())
-  user           User     @relation(fields: [userId], references: [id])
+  id             Int                      @id @default(autoincrement())
+  userId         Int                      @unique
+  score          Int                      @default(0)
+  classification LeadershipClassification @default(AVERAGE)
+  calculatedAt   DateTime                 @default(now())
+  user           User                     @relation(fields: [userId], references: [id])
 }
 
 model Mentoring {

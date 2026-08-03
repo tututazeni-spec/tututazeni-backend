@@ -14,60 +14,27 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import {
+  CycleStatus,
+  CycleType,
+  ReviewType,
+  ReviewStatus,
+  PerformanceGoalStatus as GoalStatus,
+  PerformanceCategory,
+  FeedbackType,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum CycleStatus {
-  PLANNED = 'PLANNED',
-  ACTIVE = 'ACTIVE',
-  CLOSED = 'CLOSED',
-  CANCELLED = 'CANCELLED',
-}
-
-export enum CycleType {
-  PROBATION = 'PROBATION',
-  QUARTERLY = 'QUARTERLY',
-  SEMESTER = 'SEMESTER',
-  ANNUAL = 'ANNUAL',
-  AD_HOC = 'AD_HOC',
-}
-
-export enum ReviewType {
-  SELF = 'SELF',
-  MANAGER = 'MANAGER',
-  PEER = 'PEER',
-  R360 = 'R360',
-}
-
-export enum ReviewStatus {
-  DRAFT = 'DRAFT',
-  PENDING_SELF = 'PENDING_SELF',
-  PENDING_MANAGER = 'PENDING_MANAGER',
-  PENDING_360 = 'PENDING_360',
-  CALIBRATION = 'CALIBRATION',
-  PUBLISHED = 'PUBLISHED',
-  DISPUTE = 'DISPUTE',
-  FINALIZED = 'FINALIZED',
-}
-
-export enum GoalStatus {
-  ON_TRACK = 'ON_TRACK',
-  AT_RISK = 'AT_RISK',
-  OFF_TRACK = 'OFF_TRACK',
-  COMPLETED = 'COMPLETED',
-}
-
-export enum PerformanceCategory {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-}
-
-export enum FeedbackType {
-  PRAISE = 'PRAISE',
-  IMPROVEMENT = 'IMPROVEMENT',
-  GENERAL = 'GENERAL',
-}
+export {
+  CycleStatus,
+  CycleType,
+  ReviewType,
+  ReviewStatus,
+  GoalStatus,
+  PerformanceCategory,
+  FeedbackType,
+};
 
 // ─── Review Cycle ─────────────────────────────────────────────────────────────
 

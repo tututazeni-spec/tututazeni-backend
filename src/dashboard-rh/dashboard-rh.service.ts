@@ -1,6 +1,6 @@
 // src/dashboard-rh/dashboard-rh.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { EnrollmentStatus } from '@prisma/client';
+import { EnrollmentStatus, ReviewStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
@@ -354,7 +354,7 @@ export class DashboardRhService {
     // At-risk heuristic: active users + low performance
     const atRiskUsers = await this.prisma.performanceReview
       .findMany({
-        where: { score: { lt: 2.5 }, status: 'COMPLETED' },
+        where: { score: { lt: 2.5 }, status: ReviewStatus.PUBLISHED },
         include: {
           user: {
             select: {
@@ -1017,7 +1017,7 @@ export class DashboardRhService {
           return 0;
         }),
       this.prisma.performanceReview
-        .count({ where: { score: { lt: 2 }, status: 'COMPLETED' } })
+        .count({ where: { score: { lt: 2 }, status: ReviewStatus.PUBLISHED } })
         .catch((e: unknown) => {
           this.logger.warn({
             action: 'DASHBOARD_RH_ALERTS_AT_RISK_PERF',
@@ -1078,7 +1078,7 @@ export class DashboardRhService {
       // Users with low performance + long tenure = turnover risk
       this.prisma.performanceReview
         .findMany({
-          where: { score: { lt: 2.5 }, status: 'COMPLETED' },
+          where: { score: { lt: 2.5 }, status: ReviewStatus.PUBLISHED },
           include: {
             user: {
               select: {
@@ -1111,7 +1111,7 @@ export class DashboardRhService {
           return [] as any[];
         }),
       this.prisma.performanceReview
-        .count({ where: { score: { lt: 2 }, status: 'COMPLETED' } })
+        .count({ where: { score: { lt: 2 }, status: ReviewStatus.PUBLISHED } })
         .catch((e: unknown) => {
           this.logger.warn({
             action: 'DASHBOARD_RH_PREDICTIONS_LOW_PERF',
