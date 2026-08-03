@@ -33,6 +33,149 @@ const Prisma = {
 
 const UserRole = { COLABORADOR: 'COLABORADOR', LIDER: 'LIDER', RH: 'RH', ADMIN: 'ADMIN' };
 
+const CourseLevel = { BEGINNER: 'BEGINNER', INTERMEDIATE: 'INTERMEDIATE', ADVANCED: 'ADVANCED' };
+
+const CourseStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHIVED' };
+
+const ModuleStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED' };
+
+const ModuleType = {
+  THEORETICAL: 'THEORETICAL',
+  PRACTICAL: 'PRACTICAL',
+  ASSESSMENT: 'ASSESSMENT',
+  PROJECT: 'PROJECT',
+};
+
+const ProgressionType = { SEQUENTIAL: 'SEQUENTIAL', FREE: 'FREE', HYBRID: 'HYBRID' };
+
+const CompletionRule = {
+  ALL_LESSONS: 'ALL_LESSONS',
+  MIN_PERCENT: 'MIN_PERCENT',
+  QUIZ_PASS: 'QUIZ_PASS',
+  COMBINED: 'COMBINED',
+};
+
+const LessonType = {
+  VIDEO: 'VIDEO',
+  PDF: 'PDF',
+  TEXT: 'TEXT',
+  AUDIO: 'AUDIO',
+  SLIDE: 'SLIDE',
+  LINK: 'LINK',
+  SCORM: 'SCORM',
+  QUIZ: 'QUIZ',
+};
+
+const EnrollmentOrigin = {
+  MANUAL: 'MANUAL',
+  SELF_ENROLL: 'SELF_ENROLL',
+  LEARNING_PATH: 'LEARNING_PATH',
+  ONBOARDING: 'ONBOARDING',
+  RULE_ENGINE: 'RULE_ENGINE',
+  CAMPAIGN: 'CAMPAIGN',
+  AI_TUTOR: 'AI_TUTOR',
+  INSTRUCTOR: 'INSTRUCTOR',
+};
+
+const QuizQuestionType = {
+  MULTIPLE_CHOICE: 'MULTIPLE_CHOICE',
+  TRUE_FALSE: 'TRUE_FALSE',
+  OPEN: 'OPEN',
+};
+
+const LearningPathLevel = {
+  BEGINNER: 'BEGINNER',
+  INTERMEDIATE: 'INTERMEDIATE',
+  ADVANCED: 'ADVANCED',
+};
+
+const LearningPathType = {
+  ONBOARDING: 'ONBOARDING',
+  UPSKILLING: 'UPSKILLING',
+  RESKILLING: 'RESKILLING',
+  COMPLIANCE: 'COMPLIANCE',
+  LEADERSHIP: 'LEADERSHIP',
+  CERTIFICATION: 'CERTIFICATION',
+  CUSTOM: 'CUSTOM',
+};
+
+const LearningPathStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHIVED' };
+
+const AssignmentTarget = {
+  USER: 'USER',
+  DEPARTMENT: 'DEPARTMENT',
+  POSITION: 'POSITION',
+  UNIT: 'UNIT',
+  ROLE: 'ROLE',
+};
+
+const LearningPathEnrollmentStatus = {
+  NOT_STARTED: 'NOT_STARTED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  EXPIRED: 'EXPIRED',
+};
+
+const AssessmentType = {
+  QUIZ: 'QUIZ',
+  EXAM: 'EXAM',
+  DIAGNOSTIC: 'DIAGNOSTIC',
+  PRACTICAL: 'PRACTICAL',
+  SURVEY: 'SURVEY',
+};
+
+const AssessmentStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHIVED' };
+
+const FeedbackMode = { IMMEDIATE: 'IMMEDIATE', ON_SUBMIT: 'ON_SUBMIT', RESULT_ONLY: 'RESULT_ONLY' };
+
+const QuestionType = {
+  MULTIPLE_CHOICE_SINGLE: 'MULTIPLE_CHOICE_SINGLE',
+  MULTIPLE_CHOICE_MULTI: 'MULTIPLE_CHOICE_MULTI',
+  TRUE_FALSE: 'TRUE_FALSE',
+  OPEN_TEXT: 'OPEN_TEXT',
+  FILE_UPLOAD: 'FILE_UPLOAD',
+  MATCHING: 'MATCHING',
+  ORDERING: 'ORDERING',
+};
+
+const AttemptStatus = {
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUBMITTED: 'SUBMITTED',
+  PASSED: 'PASSED',
+  FAILED: 'FAILED',
+  EXPIRED: 'EXPIRED',
+};
+
+const CompetencyCategory = {
+  HARD_SKILL: 'HARD_SKILL',
+  SOFT_SKILL: 'SOFT_SKILL',
+  LANGUAGE: 'LANGUAGE',
+  TOOL: 'TOOL',
+  LEADERSHIP: 'LEADERSHIP',
+};
+
+const CompetencyType = {
+  BEHAVIORAL: 'BEHAVIORAL',
+  HARD_SKILL: 'HARD_SKILL',
+  SOFT_SKILL: 'SOFT_SKILL',
+  CULTURE: 'CULTURE',
+  LEADERSHIP: 'LEADERSHIP',
+  VITALITY: 'VITALITY',
+  CUSTOM: 'CUSTOM',
+};
+
+const CompetencyStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE' };
+
+const CompetencySource = {
+  MANUAL: 'MANUAL',
+  COURSE: 'COURSE',
+  ASSESSMENT: 'ASSESSMENT',
+  MANAGER: 'MANAGER',
+  HRIS: 'HRIS',
+};
+
+const MappingPriority = { MANDATORY: 'MANDATORY', OPTIONAL: 'OPTIONAL' };
+
 const AccountStatus = {
   ACTIVE: 'ACTIVE',
   INACTIVE: 'INACTIVE',
@@ -877,6 +1020,30 @@ module.exports = {
   Prisma,
   // Enums
   UserRole,
+  CourseLevel,
+  CourseStatus,
+  ModuleStatus,
+  ModuleType,
+  ProgressionType,
+  CompletionRule,
+  LessonType,
+  EnrollmentOrigin,
+  QuizQuestionType,
+  LearningPathLevel,
+  LearningPathType,
+  LearningPathStatus,
+  AssignmentTarget,
+  LearningPathEnrollmentStatus,
+  AssessmentType,
+  AssessmentStatus,
+  FeedbackMode,
+  QuestionType,
+  AttemptStatus,
+  CompetencyCategory,
+  CompetencyType,
+  CompetencyStatus,
+  CompetencySource,
+  MappingPriority,
   AccountStatus,
   HrStatus,
   PermissionAction,

@@ -12,34 +12,16 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import {
+  CompetencyCategory,
+  CompetencyStatus,
+  CompetencySource,
+  MappingPriority,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum CompetencyCategory {
-  HARD_SKILL = 'HARD_SKILL',
-  SOFT_SKILL = 'SOFT_SKILL',
-  LANGUAGE = 'LANGUAGE',
-  TOOL = 'TOOL',
-  LEADERSHIP = 'LEADERSHIP',
-}
-
-export enum CompetencyStatus {
-  ACTIVE = 'ACTIVE',
-  INACTIVE = 'INACTIVE',
-}
-
-export enum CompetencySource {
-  MANUAL = 'MANUAL',
-  COURSE = 'COURSE',
-  ASSESSMENT = 'ASSESSMENT',
-  MANAGER = 'MANAGER',
-  HRIS = 'HRIS',
-}
-
-export enum MappingPriority {
-  MANDATORY = 'MANDATORY',
-  OPTIONAL = 'OPTIONAL',
-}
+export { CompetencyCategory, CompetencyStatus, CompetencySource, MappingPriority };
 
 // ─── Competency ───────────────────────────────────────────────────────────────
 
