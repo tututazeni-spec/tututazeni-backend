@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CareerService } from './career.service';
+import { ReadinessLevel } from '@prisma/client';
 import {
   CreateCareerPathDto,
   UpdateCareerPathDto,
@@ -274,7 +275,7 @@ export class CareerController {
   @HttpCode(HttpStatus.OK)
   updateReadiness(
     @Param('id', ParseIntPipe) id: number,
-    @Body('readiness') readiness: string,
+    @Body('readiness') readiness: ReadinessLevel,
     @Body('justification') justification?: string,
   ) {
     return this.svc.updateSuccessionReadiness(id, readiness, justification);

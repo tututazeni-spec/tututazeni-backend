@@ -728,7 +728,7 @@ export class LeaderService {
 
     await this.prisma.pdiApproval
       .create({
-        data: { planId, approverId: approver.id, decision: 'APPROVED' },
+        data: { planId, approverId: approver.id, decision: 'APPROVE' },
       })
       .catch(e => {
         this.logger.warn({

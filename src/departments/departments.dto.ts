@@ -11,7 +11,13 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { UnitType, PositionLevel, PermissionAction, PermissionSubject } from '@prisma/client';
+import {
+  UnitType,
+  PositionLevel,
+  PermissionAction,
+  PermissionSubject,
+  SeniorityLevel,
+} from '@prisma/client';
 
 // ─── Department ───────────────────────────────────────────────────────────────
 
@@ -241,9 +247,9 @@ export class CreateCareerPositionDto {
   @IsString()
   description: string;
 
-  @ApiProperty({ example: 'JUNIOR' })
-  @IsString()
-  level: string;
+  @ApiProperty({ enum: SeniorityLevel, example: SeniorityLevel.JUNIOR })
+  @IsEnum(SeniorityLevel)
+  level: SeniorityLevel;
 
   @ApiPropertyOptional({ type: [Object] })
   @IsOptional()

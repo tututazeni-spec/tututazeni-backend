@@ -14,46 +14,17 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import {
+  CareerPathType,
+  VacancyType,
+  VacancyStatus,
+  ApplicationStatus,
+  ReadinessLevel,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum CareerPathType {
-  LINEAR = 'LINEAR',
-  Y_SHAPED = 'Y_SHAPED',
-  T_SHAPED = 'T_SHAPED',
-  W_SHAPED = 'W_SHAPED',
-  LATTICE = 'LATTICE',
-}
-
-export enum VacancyType {
-  PROMOTION = 'PROMOTION',
-  LATERAL = 'LATERAL',
-  GIG_PROJECT = 'GIG_PROJECT',
-  JOB_ROTATION = 'JOB_ROTATION',
-  SHADOWING = 'SHADOWING',
-}
-
-export enum VacancyStatus {
-  DRAFT = 'DRAFT',
-  OPEN = 'OPEN',
-  CLOSED = 'CLOSED',
-  FILLED = 'FILLED',
-}
-
-export enum ApplicationStatus {
-  PENDING = 'PENDING',
-  REVIEWING = 'REVIEWING',
-  SHORTLISTED = 'SHORTLISTED',
-  REJECTED = 'REJECTED',
-  ACCEPTED = 'ACCEPTED',
-}
-
-export enum ReadinessLevel {
-  READY_NOW = 'READY_NOW',
-  READY_12M = 'READY_12M',
-  READY_24M = 'READY_24M',
-  NOT_READY = 'NOT_READY',
-}
+export { CareerPathType, VacancyType, VacancyStatus, ApplicationStatus, ReadinessLevel };
 
 export enum GoalTimeframe {
   SHORT_TERM = 'SHORT_TERM', // até 1 ano

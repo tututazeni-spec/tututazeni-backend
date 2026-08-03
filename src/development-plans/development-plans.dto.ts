@@ -13,51 +13,16 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import { PlanStatus, ActionType, ActionStatus, PlanPriority, CheckinType } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum PlanStatus {
-  DRAFT = 'DRAFT',
-  PENDING = 'PENDING_APPROVAL',
-  ACTIVE = 'ACTIVE',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
-  OVERDUE = 'OVERDUE',
-}
+export { PlanStatus, ActionType, ActionStatus, PlanPriority, CheckinType };
 
-export enum ActionType {
-  COURSE = 'COURSE',
-  MENTORING = 'MENTORING',
-  COACHING = 'COACHING',
-  READING = 'READING',
-  PROJECT = 'PROJECT',
-  JOB_ROTATION = 'JOB_ROTATION',
-  MICROLEARNING = 'MICROLEARNING',
-  WORKSHOP = 'WORKSHOP',
-  CERTIFICATION = 'CERTIFICATION',
-  OTHER = 'OTHER',
-}
-
-export enum ActionStatus {
-  TODO = 'TODO',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  BLOCKED = 'BLOCKED',
-  CANCELLED = 'CANCELLED',
-}
-
-export enum PlanPriority {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  URGENT = 'URGENT',
-}
-
-export enum CheckinType {
-  QUICK = 'QUICK',
-  STRUCTURED = 'STRUCTURED',
-}
-
+// ApprovalDecision (input do pedido, minúsculas 'approve'/'reject') é distinto do
+// enum Prisma ApprovalDecision (coluna PdiApproval.decision, maiúsculas APPROVE/
+// REJECT) — mesma convenção usada por executive-reports/onboarding/process-standard
+// para os seus próprios endpoints de aprovação, não é o schema. Não consolidar.
 export enum ApprovalDecision {
   APPROVE = 'approve',
   REJECT = 'reject',

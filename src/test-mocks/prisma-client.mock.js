@@ -418,14 +418,104 @@ const CareerPlanStatus = {
   CANCELLED: 'CANCELLED',
 };
 
-const CareerPathType = { LINEAR: 'LINEAR', LATERAL: 'LATERAL', DIAGONAL: 'DIAGONAL' };
+const CareerPathType = {
+  LINEAR: 'LINEAR',
+  Y_SHAPED: 'Y_SHAPED',
+  T_SHAPED: 'T_SHAPED',
+  W_SHAPED: 'W_SHAPED',
+  LATTICE: 'LATTICE',
+};
 
 const ReadinessLevel = {
-  NOT_READY: 'NOT_READY',
-  DEVELOPING: 'DEVELOPING',
-  READY: 'READY',
-  EXCEEDS: 'EXCEEDS',
+  READY_NOW: 'READY_NOW',
+  READY_SOON: 'READY_SOON',
+  NEEDS_DEVELOPMENT: 'NEEDS_DEVELOPMENT',
 };
+
+const ApplicationStatus = {
+  PENDING: 'PENDING',
+  REVIEWING: 'REVIEWING',
+  SHORTLISTED: 'SHORTLISTED',
+  REJECTED: 'REJECTED',
+  ACCEPTED: 'ACCEPTED',
+};
+
+const VacancyType = {
+  PROMOTION: 'PROMOTION',
+  LATERAL: 'LATERAL',
+  GIG_PROJECT: 'GIG_PROJECT',
+  JOB_ROTATION: 'JOB_ROTATION',
+  SHADOWING: 'SHADOWING',
+};
+
+const VacancyStatus = { DRAFT: 'DRAFT', OPEN: 'OPEN', CLOSED: 'CLOSED', FILLED: 'FILLED' };
+
+const SuccessorPriority = { PRIMARY: 'PRIMARY', SECONDARY: 'SECONDARY', TERTIARY: 'TERTIARY' };
+
+const SuccessionPdiStatus = { ACTIVE: 'ACTIVE' };
+
+const BusinessImpact = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', CRITICAL: 'CRITICAL' };
+
+const ReplacementTime = {
+  IMMEDIATE: 'IMMEDIATE',
+  SHORT_TERM: 'SHORT_TERM',
+  MEDIUM_TERM: 'MEDIUM_TERM',
+  LONG_TERM: 'LONG_TERM',
+};
+
+const RiskLevel = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', CRITICAL: 'CRITICAL' };
+
+const PlanPriority = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  URGENT: 'URGENT',
+  CRITICAL: 'CRITICAL',
+};
+
+const PlanStatus = {
+  DRAFT: 'DRAFT',
+  PENDING_APPROVAL: 'PENDING_APPROVAL',
+  ACTIVE: 'ACTIVE',
+  PAUSED: 'PAUSED',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+  OVERDUE: 'OVERDUE',
+};
+
+const ActionType = {
+  COURSE: 'COURSE',
+  MENTORING: 'MENTORING',
+  COACHING: 'COACHING',
+  READING: 'READING',
+  PROJECT: 'PROJECT',
+  JOB_ROTATION: 'JOB_ROTATION',
+  MICROLEARNING: 'MICROLEARNING',
+  WORKSHOP: 'WORKSHOP',
+  CERTIFICATION: 'CERTIFICATION',
+  SHADOWING: 'SHADOWING',
+  PEER_COACHING: 'PEER_COACHING',
+  FEEDBACK: 'FEEDBACK',
+  CONFERENCE: 'CONFERENCE',
+  OTHER: 'OTHER',
+};
+
+const ActionStatus = {
+  TODO: 'TODO',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  BLOCKED: 'BLOCKED',
+  CANCELLED: 'CANCELLED',
+  OVERDUE: 'OVERDUE',
+};
+
+const EvidenceType = { FILE: 'FILE', LINK: 'LINK', NOTE: 'NOTE' };
+
+const CheckinType = { QUICK: 'QUICK', STRUCTURED: 'STRUCTURED' };
+
+const CheckpointStatus = { PENDING: 'PENDING', COMPLETED: 'COMPLETED' };
+
+const ApprovalDecision = { APPROVE: 'APPROVE', REJECT: 'REJECT' };
 
 const PromotionStatus = {
   DRAFT: 'DRAFT',
@@ -841,6 +931,22 @@ module.exports = {
   CareerPlanStatus,
   CareerPathType,
   ReadinessLevel,
+  ApplicationStatus,
+  VacancyType,
+  VacancyStatus,
+  SuccessorPriority,
+  SuccessionPdiStatus,
+  BusinessImpact,
+  ReplacementTime,
+  RiskLevel,
+  PlanPriority,
+  PlanStatus,
+  ActionType,
+  ActionStatus,
+  EvidenceType,
+  CheckinType,
+  CheckpointStatus,
+  ApprovalDecision,
   PromotionStatus,
   GoalType,
   GoalStatus,

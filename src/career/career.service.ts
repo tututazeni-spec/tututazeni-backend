@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReadinessLevel } from '@prisma/client';
 import {
   CreateCareerPathDto,
   UpdateCareerPathDto,
@@ -981,13 +982,17 @@ export class CareerService {
     return plan;
   }
 
-  async updateSuccessionReadiness(planId: number, readiness: string, justification?: string) {
+  async updateSuccessionReadiness(
+    planId: number,
+    readiness: ReadinessLevel,
+    justification?: string,
+  ) {
     const plan = await this.prisma.read.successionPlan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Plano de sucessão não encontrado');
 
-    return (this.prisma as any).successionPlan.update({
+    return this.prisma.successionPlan.update({
       where: { id: planId },
-      data: { readinessLevel: readiness, notes: justification ?? (plan as any).notes },
+      data: { readinessLevel: readiness, notes: justification ?? plan.notes },
     });
   }
 

@@ -392,15 +392,15 @@ enum CareerPlanStatus {
 enum CareerPathType {
   LINEAR
   Y_SHAPED
+  T_SHAPED
   W_SHAPED
-  HORIZONTAL
-  HYBRID
+  LATTICE
 }
 
 enum ReadinessLevel {
-  READY
-  DEVELOPING
-  STARTING
+  READY_NOW
+  READY_SOON
+  NEEDS_DEVELOPMENT
 }
 
 enum PromotionStatus {
@@ -1209,7 +1209,7 @@ model CareerRole {
   name              String
   description       String?
   department        String
-  seniority         String?
+  seniority         SeniorityLevel?
   level             Int                    @default(1)
   salaryMin         Float?
   salaryMax         Float?
@@ -1234,7 +1234,7 @@ model CareerPosition {
   id           Int                  @id @default(autoincrement())
   title        String
   description  String               @db.Text
-  level        String
+  level        SeniorityLevel
   createdAt    DateTime             @default(now())
   competencies PositionCompetency[]
   users        UserCareer[]
@@ -1275,7 +1275,7 @@ model CareerPath {
   plans        UserCareerPlan[]
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
-  type         String // LINEAR|Y_SHAPED|T_SHAPED|W_SHAPED|LATTICE
+  type         CareerPathType
   departmentId Int?
   department   Department?      @relation(fields: [departmentId], references: [id])
   steps        CareerPathStep[]
@@ -1303,29 +1303,52 @@ model CareerPathStep {
   @@index([careerPathId])
 }
 
+enum ApplicationStatus {
+  PENDING
+  REVIEWING
+  SHORTLISTED
+  REJECTED
+  ACCEPTED
+}
+
 model InternalApplication {
-  id         Int             @id @default(autoincrement())
+  id         Int               @id @default(autoincrement())
   vacancyId  Int
   userId     Int
-  motivation String?         @db.Text
-  status     String          @default("PENDING") // PENDING|REVIEWING|SHORTLISTED|REJECTED|ACCEPTED
+  motivation String?           @db.Text
+  status     ApplicationStatus @default(PENDING)
   feedback   String?
-  appliedAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
-  vacancy    InternalVacancy @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
-  user       User            @relation(fields: [userId], references: [id])
+  appliedAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  vacancy    InternalVacancy   @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id])
 
   @@unique([vacancyId, userId])
   @@index([userId])
   @@index([status])
 }
 
+enum VacancyType {
+  PROMOTION
+  LATERAL
+  GIG_PROJECT
+  JOB_ROTATION
+  SHADOWING
+}
+
+enum VacancyStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  FILLED
+}
+
 model InternalVacancy {
   id                    Int                   @id @default(autoincrement())
   title                 String
   description           String?               @db.Text
-  type                  String // PROMOTION|LATERAL|GIG_PROJECT|JOB_ROTATION|SHADOWING
-  status                String                @default("DRAFT")
+  type                  VacancyType
+  status                VacancyStatus         @default(DRAFT)
   positionId            Int?
   departmentId          Int?
   createdById           Int
@@ -1410,24 +1433,30 @@ model PromotionRequest {
   @@index([userId, status])
 }
 
+enum SuccessorPriority {
+  PRIMARY
+  SECONDARY
+  TERTIARY
+}
+
 model SuccessionPlan {
-  id                 Int              @id @default(autoincrement())
+  id                 Int               @id @default(autoincrement())
   criticalPositionId Int
   candidateId        Int
-  readinessLevel     String // READY_NOW|READY_SOON|NEEDS_DEVELOPMENT
-  priority           String // PRIMARY|SECONDARY|TERTIARY
+  readinessLevel     ReadinessLevel
+  priority           SuccessorPriority
   matchScore         Float?
-  geographicMobility Boolean          @default(true)
-  available          Boolean          @default(true)
+  geographicMobility Boolean           @default(true)
+  available          Boolean           @default(true)
   notes              String?
   readinessByDate    DateTime?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-  criticalPosition   CriticalPosition @relation(fields: [criticalPositionId], references: [id], onDelete: Cascade)
-  candidate          User             @relation(fields: [candidateId], references: [id])
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  criticalPosition   CriticalPosition  @relation(fields: [criticalPositionId], references: [id], onDelete: Cascade)
+  candidate          User              @relation(fields: [candidateId], references: [id])
   pdi                SuccessionPDI?
   positionId         Int // ou String — verificar o tipo de Position.id
-  position           Position         @relation(fields: [positionId], references: [id])
+  position           Position          @relation(fields: [positionId], references: [id])
 
   @@unique([criticalPositionId, candidateId])
   @@index([readinessLevel])
@@ -1435,36 +1464,61 @@ model SuccessionPlan {
 }
 
 model TalentPool {
-  id                 Int      @id @default(autoincrement())
-  userId             Int      @unique
-  readinessLevel     String
+  id                 Int            @id @default(autoincrement())
+  userId             Int            @unique
+  readinessLevel     ReadinessLevel
   mentorId           Int?
   notes              String?
-  geographicMobility Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  user               User     @relation(fields: [userId], references: [id])
-  mentor             User?    @relation("TalentPoolMentor", fields: [mentorId], references: [id])
+  geographicMobility Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  user               User           @relation(fields: [userId], references: [id])
+  mentor             User?          @relation("TalentPoolMentor", fields: [mentorId], references: [id])
+}
+
+enum SuccessionPdiStatus {
+  ACTIVE
 }
 
 model SuccessionPDI {
-  id               Int            @id @default(autoincrement())
-  successionPlanId Int            @unique
+  id               Int                 @id @default(autoincrement())
+  successionPlanId Int                 @unique
   gaps             String // JSON
   developmentGoals String?
   learningPathIds  Int[]
   courseIds        Int[]
-  status           String         @default("ACTIVE")
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  successionPlan   SuccessionPlan @relation(fields: [successionPlanId], references: [id], onDelete: Cascade)
+  status           SuccessionPdiStatus @default(ACTIVE)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  successionPlan   SuccessionPlan      @relation(fields: [successionPlanId], references: [id], onDelete: Cascade)
+}
+
+enum BusinessImpact {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ReplacementTime {
+  IMMEDIATE
+  SHORT_TERM
+  MEDIUM_TERM
+  LONG_TERM
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
 }
 
 model CriticalPosition {
   id                    Int              @id @default(autoincrement())
   positionId            Int              @unique
-  businessImpact        String // LOW|MEDIUM|HIGH|CRITICAL
-  replacementTime       String // IMMEDIATE|SHORT_TERM|MEDIUM_TERM|LONG_TERM
-  exitRisk              String // LOW|MEDIUM|HIGH|CRITICAL
+  businessImpact        BusinessImpact
+  replacementTime       ReplacementTime
+  exitRisk              RiskLevel
   expectedExitDate      DateTime?
   criticalReason        String?
   keyPersonRisk         Boolean          @default(false)
@@ -1479,14 +1533,32 @@ model CriticalPosition {
   @@index([businessImpact])
 }
 
+enum PlanPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+  CRITICAL
+}
+
+enum PlanStatus {
+  DRAFT
+  PENDING_APPROVAL
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+  OVERDUE
+}
+
 model DevelopmentPlan {
   id                 Int                     @id @default(autoincrement())
   name               String
   goal               String                  @db.Text
   userId             Int
   managerId          Int?
-  priority           String                  @default("MEDIUM")
-  status             String                  @default("DRAFT")
+  priority           PlanPriority            @default(MEDIUM)
+  status             PlanStatus              @default(DRAFT)
   period             String?
   startDate          DateTime?
   endDate            DateTime?
@@ -1513,13 +1585,39 @@ model DevelopmentPlan {
   @@index([managerId])
 }
 
+enum ActionType {
+  COURSE
+  MENTORING
+  COACHING
+  READING
+  PROJECT
+  JOB_ROTATION
+  MICROLEARNING
+  WORKSHOP
+  CERTIFICATION
+  SHADOWING
+  PEER_COACHING
+  FEEDBACK
+  CONFERENCE
+  OTHER
+}
+
+enum ActionStatus {
+  TODO
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+  CANCELLED
+  OVERDUE
+}
+
 model DevelopmentPlanAction {
   id            Int             @id @default(autoincrement())
   planId        Int
   title         String
   description   String?         @db.Text
-  type          String
-  status        String          @default("TODO")
+  type          ActionType
+  status        ActionStatus    @default(TODO)
   courseId      Int?
   workloadHours Int?
   dueDate       DateTime?
@@ -1538,6 +1636,12 @@ model DevelopmentPlanAction {
   @@index([status])
 }
 
+enum EvidenceType {
+  FILE
+  LINK
+  NOTE
+}
+
 model PdiEvidence {
   id                      Int                   @id @default(autoincrement())
   developmentPlanActionId Int
@@ -1546,7 +1650,7 @@ model PdiEvidence {
   title                   String
   url                     String?
   notes                   String?               @db.Text
-  evidenceType            String                @default("NOTE")
+  evidenceType            EvidenceType          @default(NOTE)
   createdAt               DateTime              @default(now())
   submittedBy             User                  @relation(fields: [submittedById], references: [id])
 
@@ -1558,8 +1662,8 @@ model PdiAction {
   planId        Int
   title         String
   description   String?         @db.Text
-  type          String // COURSE|MENTORING|COACHING|READING|PROJECT|JOB_ROTATION|MICROLEARNING|WORKSHOP|CERTIFICATION|OTHER
-  status        String          @default("TODO") // TODO|IN_PROGRESS|COMPLETED|BLOCKED|CANCELLED
+  type          ActionType
+  status        ActionStatus    @default(TODO)
   courseId      Int?
   workloadHours Int?
   dueDate       DateTime?
@@ -1595,33 +1699,48 @@ model PdiGoal {
   @@index([planId])
 }
 
+enum CheckinType {
+  QUICK
+  STRUCTURED
+}
+
+enum CheckpointStatus {
+  PENDING
+  COMPLETED
+}
+
 model PdiCheckpoint {
-  id          Int             @id @default(autoincrement())
+  id          Int              @id @default(autoincrement())
   planId      Int
   title       String
   description String?
-  type        String          @default("QUICK")
-  status      String          @default("PENDING")
+  type        CheckinType      @default(QUICK)
+  status      CheckpointStatus @default(PENDING)
   scheduledAt DateTime
   completedAt DateTime?
   selfScore   Int?
   notes       String?
-  createdAt   DateTime        @default(now())
-  plan        DevelopmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+  plan        DevelopmentPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@index([planId])
   @@index([scheduledAt])
 }
 
+enum ApprovalDecision {
+  APPROVE
+  REJECT
+}
+
 model PdiApproval {
-  id         Int             @id @default(autoincrement())
+  id         Int              @id @default(autoincrement())
   planId     Int
   approverId Int
-  decision   String
+  decision   ApprovalDecision
   comment    String?
-  createdAt  DateTime        @default(now())
-  plan       DevelopmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  approver   User            @relation(fields: [approverId], references: [id])
+  createdAt  DateTime         @default(now())
+  plan       DevelopmentPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  approver   User             @relation(fields: [approverId], references: [id])
 
   @@index([planId])
 }

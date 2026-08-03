@@ -14,8 +14,11 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { CareerPathType, SeniorityLevel } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
+
+export { CareerPathType };
 
 export enum CareerPlanStatus {
   DRAFT = 'DRAFT',
@@ -23,14 +26,6 @@ export enum CareerPlanStatus {
   COMPLETED = 'COMPLETED',
   PAUSED = 'PAUSED',
   ARCHIVED = 'ARCHIVED',
-}
-
-export enum CareerPathType {
-  LINEAR = 'LINEAR', // Vertical
-  Y_SHAPED = 'Y_SHAPED', // Gestão vs Especialista
-  W_SHAPED = 'W_SHAPED', // Múltiplos caminhos
-  HORIZONTAL = 'HORIZONTAL', // Mobilidade lateral
-  HYBRID = 'HYBRID',
 }
 
 export enum SkillType {
@@ -77,7 +72,10 @@ export class CareerPlansCreateRoleDto {
   @ApiProperty() @IsString() name!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiProperty() @IsString() department!: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() seniority?: string;
+  @ApiPropertyOptional({ enum: SeniorityLevel })
+  @IsOptional()
+  @IsEnum(SeniorityLevel)
+  seniority?: SeniorityLevel;
   @ApiPropertyOptional() @IsOptional() @IsNumber() salaryMin?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() salaryMax?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() level?: number; // 1=Junior ... 7=C-Level

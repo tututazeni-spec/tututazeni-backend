@@ -230,7 +230,7 @@ export class DevelopmentPlansService {
       data: {
         planId: dto.planId,
         approverId,
-        decision: dto.decision.toUpperCase(),
+        decision: dto.decision === 'approve' ? 'APPROVE' : 'REJECT',
         comment: dto.comment,
       },
     });
