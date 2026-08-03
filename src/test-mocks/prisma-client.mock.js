@@ -129,6 +129,101 @@ const OneOnOneStatus = {
   RESCHEDULED: 'RESCHEDULED',
 };
 
+const EngagementFeedbackType = {
+  OPEN: 'OPEN',
+  ANONYMOUS: 'ANONYMOUS',
+  PEER: 'PEER',
+  MANAGER: 'MANAGER',
+  RECOGNITION: 'RECOGNITION',
+  POSITIVE: 'POSITIVE',
+  CONSTRUCTIVE: 'CONSTRUCTIVE',
+  NEUTRAL: 'NEUTRAL',
+  SBI: 'SBI',
+};
+
+const FeedbackStatus = { OPEN: 'OPEN', REPLIED: 'REPLIED' };
+
+const RecognitionType = {
+  KUDOS: 'KUDOS',
+  BADGE: 'BADGE',
+  ACHIEVEMENT: 'ACHIEVEMENT',
+  MILESTONE: 'MILESTONE',
+};
+
+const ActionPlanStatus = {
+  OPEN: 'OPEN',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+
+const EvaluationModel = {
+  DEG_90: 'DEG_90',
+  DEG_180: 'DEG_180',
+  DEG_270: 'DEG_270',
+  DEG_360: 'DEG_360',
+  HYBRID: 'HYBRID',
+};
+
+const Eval360CycleType = {
+  TRIMESTRAL: 'TRIMESTRAL',
+  SEMESTRAL: 'SEMESTRAL',
+  ANUAL: 'ANUAL',
+  PROJECT: 'PROJECT',
+  CUSTOM: 'CUSTOM',
+};
+
+const Eval360CycleStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  PROCESSING: 'PROCESSING',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+
+const AnonymityMode = { ANONYMOUS: 'ANONYMOUS', SEMI_ANONYMOUS: 'SEMI_ANONYMOUS', OPEN: 'OPEN' };
+
+const EvaluatorRole = {
+  SELF: 'SELF',
+  MANAGER: 'MANAGER',
+  PEER: 'PEER',
+  SUBORDINATE: 'SUBORDINATE',
+  EXTERNAL: 'EXTERNAL',
+};
+
+const EvaluatorAssignmentStatus = {
+  PENDING: 'PENDING',
+  INVITED: 'INVITED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  EXPIRED: 'EXPIRED',
+};
+
+const CycleParticipantStatus = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+};
+
+const Eval360QuestionType = {
+  LIKERT: 'LIKERT',
+  FREQUENCY: 'FREQUENCY',
+  MULTIPLE_CHOICE: 'MULTIPLE_CHOICE',
+  YES_NO: 'YES_NO',
+  OPEN_TEXT: 'OPEN_TEXT',
+  SITUATIONAL: 'SITUATIONAL',
+};
+
+const EvaluationResponseStatus = { DRAFT: 'DRAFT', SUBMITTED: 'SUBMITTED' };
+
+const Eval360FeedbackType = {
+  RECOGNITION: 'RECOGNITION',
+  DEVELOPMENT: 'DEVELOPMENT',
+  CHECK_IN: 'CHECK_IN',
+  PULSE: 'PULSE',
+};
+
 const LeadershipClassification = {
   CRITICAL: 'CRITICAL',
   BELOW_AVERAGE: 'BELOW_AVERAGE',
@@ -1590,6 +1685,20 @@ module.exports = {
   ProgramStatus,
   ParticipantStatus,
   OneOnOneStatus,
+  EngagementFeedbackType,
+  FeedbackStatus,
+  RecognitionType,
+  ActionPlanStatus,
+  EvaluationModel,
+  Eval360CycleType,
+  Eval360CycleStatus,
+  AnonymityMode,
+  EvaluatorRole,
+  EvaluatorAssignmentStatus,
+  CycleParticipantStatus,
+  Eval360QuestionType,
+  EvaluationResponseStatus,
+  Eval360FeedbackType,
   LeadershipClassification,
   CourseLevel,
   CourseStatus,

@@ -13,15 +13,9 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { EngagementFeedbackType } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────
-
-export enum FeedbackType {
-  POSITIVE = 'POSITIVE',
-  CONSTRUCTIVE = 'CONSTRUCTIVE',
-  NEUTRAL = 'NEUTRAL',
-  SBI = 'SBI',
-}
 
 export enum OneOnOneMeetingStatus {
   SCHEDULED = 'SCHEDULED',
@@ -69,7 +63,9 @@ export class TeamFilterDto {
 
 export class GiveFeedbackDto {
   @ApiProperty() @IsInt() recipientId!: number;
-  @ApiProperty({ enum: FeedbackType }) @IsEnum(FeedbackType) type!: FeedbackType;
+  @ApiProperty({ enum: EngagementFeedbackType })
+  @IsEnum(EngagementFeedbackType)
+  type!: EngagementFeedbackType;
   @ApiProperty() @IsString() @MaxLength(2000) content!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() situation?: string; // SBI
   @ApiPropertyOptional() @IsOptional() @IsString() behavior?: string;
