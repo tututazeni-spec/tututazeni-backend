@@ -14,28 +14,11 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { ContentType, ContentLevel, ContentStatus, MicroLearningAction } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum ContentType {
-  VIDEO = 'VIDEO',
-  TEXT = 'TEXT',
-  AUDIO = 'AUDIO',
-  INFOGRAPHIC = 'INFOGRAPHIC',
-  QUIZ = 'QUIZ',
-}
-
-export enum ContentLevel {
-  BEGINNER = 'BEGINNER',
-  INTERMEDIATE = 'INTERMEDIATE',
-  ADVANCED = 'ADVANCED',
-}
-
-export enum ContentStatus {
-  DRAFT = 'DRAFT',
-  PUBLISHED = 'PUBLISHED',
-  ARCHIVED = 'ARCHIVED',
-}
+export { ContentType, ContentLevel, ContentStatus, MicroLearningAction };
 
 export enum FeedSortBy {
   RECENT = 'RECENT',
@@ -245,9 +228,9 @@ export class InteractDto {
   @IsInt()
   microLearningId!: number;
 
-  @ApiProperty({ enum: ['LIKE', 'SAVE', 'SKIP'] })
-  @IsString()
-  action!: 'LIKE' | 'SAVE' | 'SKIP';
+  @ApiProperty({ enum: MicroLearningAction })
+  @IsEnum(MicroLearningAction)
+  action!: MicroLearningAction;
 }
 
 // ─── Filters ──────────────────────────────────────────────────────────────────

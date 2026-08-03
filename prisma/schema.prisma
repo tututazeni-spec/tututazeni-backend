@@ -2979,6 +2979,72 @@ model Kudos {
 // ONBOARDING
 // ══════════════════════════════════════════════════════════════════
 
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+  ON_HOLD
+}
+
+enum TaskCategory {
+  DOCUMENTS
+  IT_ACCESS
+  TRAINING
+  SOCIAL
+  BENEFITS
+  ADMIN
+  MEETING
+}
+
+enum TaskType {
+  TASK
+  COURSE
+  LEARNING_PATH
+  PROCESS
+  DOCUMENT
+  MEETING
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+  SKIPPED
+}
+
+enum TaskPhase {
+  PRE_BOARDING
+  DAY_1
+  WEEK_1
+  DAY_30
+  DAY_60
+  DAY_90
+}
+
+enum ResponsibleRole {
+  SELF
+  HR
+  MANAGER
+  IT
+  BUDDY
+  EXTERNAL
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SurveyMilestone {
+  DAY_1
+  DAY_7
+  DAY_30
+  DAY_90
+}
+
 model OnboardingTemplate {
   id              Int                      @id @default(autoincrement())
   name            String
@@ -3004,10 +3070,10 @@ model OnboardingTemplateTask {
   templateId       Int
   title            String
   description      String?
-  category         String
-  type             String
-  phase            String
-  responsible      String
+  category         TaskCategory
+  type             TaskType
+  phase            TaskPhase
+  responsible      ResponsibleRole
   dueDayOffset     Int?
   dependsOn        Int[]
   courseId         Int?
@@ -3026,7 +3092,7 @@ model OnboardingPlan {
   id              Int                      @id @default(autoincrement())
   userId          Int
   templateId      Int
-  status          String                   @default("NOT_STARTED")
+  status          OnboardingStatus         @default(NOT_STARTED)
   startDate       DateTime                 @default(now())
   expectedEndDate DateTime?
   completedAt     DateTime?
@@ -3053,7 +3119,7 @@ model OnboardingTaskInstance {
   id              Int                    @id @default(autoincrement())
   planId          Int
   templateTaskId  Int
-  status          String                 @default("PENDING")
+  status          TaskStatus             @default(PENDING)
   dueDate         DateTime?
   completedAt     DateTime?
   evidenceComment String?
@@ -3077,7 +3143,7 @@ model OnboardingDocument {
   documentType    String
   fileUrl         String
   notes           String?
-  status          String         @default("PENDING")
+  status          DocumentStatus @default(PENDING)
   uploadedById    Int
   validatedById   Int?
   validatedAt     DateTime?
@@ -3089,14 +3155,14 @@ model OnboardingDocument {
 }
 
 model OnboardingSurvey {
-  id        Int            @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   planId    Int
-  milestone String
+  milestone SurveyMilestone
   score     Int
   enps      Int?
   comment   String?
-  createdAt DateTime       @default(now())
-  plan      OnboardingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  createdAt DateTime        @default(now())
+  plan      OnboardingPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@unique([planId, milestone])
 }
@@ -3105,13 +3171,39 @@ model OnboardingSurvey {
 // MICRO-LEARNING
 // ══════════════════════════════════════════════════════════════════
 
+enum ContentType {
+  VIDEO
+  TEXT
+  AUDIO
+  INFOGRAPHIC
+  QUIZ
+}
+
+enum ContentLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MicroLearningAction {
+  LIKE
+  SAVE
+  SKIP
+}
+
 model MicroLearning {
   id              Int                        @id @default(autoincrement())
   title           String                     @db.VarChar(80)
   description     String?                    @db.VarChar(200)
-  contentType     String
-  level           String
-  status          String                     @default("DRAFT")
+  contentType     ContentType
+  level           ContentLevel
+  status          ContentStatus              @default(DRAFT)
   durationSeconds Int?
   mediaUrl        String?
   textContent     String?                    @db.Text
@@ -3165,13 +3257,13 @@ model MicroLearningProgress {
 }
 
 model MicroLearningInteraction {
-  id              Int           @id @default(autoincrement())
+  id              Int                 @id @default(autoincrement())
   userId          Int
   microLearningId Int
-  action          String
-  createdAt       DateTime      @default(now())
-  user            User          @relation(fields: [userId], references: [id])
-  microLearning   MicroLearning @relation(fields: [microLearningId], references: [id])
+  action          MicroLearningAction
+  createdAt       DateTime            @default(now())
+  user            User                @relation(fields: [userId], references: [id])
+  microLearning   MicroLearning       @relation(fields: [microLearningId], references: [id])
 
   @@index([userId])
   @@index([microLearningId])
@@ -3222,33 +3314,66 @@ model LearningStreak {
 // TREINAMENTOS
 // ══════════════════════════════════════════════════════════════════
 
+enum TrainingType {
+  PRESENTIAL
+  ONLINE
+  HYBRID
+}
+
+enum TrainingLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum TrainingStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum TrainingParticipantStatus {
+  WAITLIST
+  REGISTERED
+  ATTENDED
+  ABSENT
+  CANCELLED
+  COMPLETED
+}
+
+enum SessionModality {
+  PRESENTIAL
+  ONLINE
+  HYBRID
+}
+
 model Training {
-  id                     Int       @id @default(autoincrement())
+  id                     Int            @id @default(autoincrement())
   title                  String
   shortDescription       String?
-  description            String?   @db.Text
+  description            String?        @db.Text
   objectives             String?
   targetAudience         String?
-  type                   String
-  level                  String
-  status                 String    @default("DRAFT")
+  type                   TrainingType
+  level                  TrainingLevel
+  status                 TrainingStatus @default(DRAFT)
   category               String?
   tags                   String[]
-  language               String    @default("pt")
+  language               String         @default("pt")
   workloadHours          Float?
   thumbnailUrl           String?
   prerequisites          String?
   instructorId           Int?
-  mandatory              Boolean   @default(false)
-  passingScore           Int       @default(70)
-  issueCertificate       Boolean   @default(false)
+  mandatory              Boolean        @default(false)
+  passingScore           Int            @default(70)
+  issueCertificate       Boolean        @default(false)
   cost                   Float?
   completionDeadlineDays Int?
   startDate              DateTime?
   endDate                DateTime?
   publishedAt            DateTime?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
 
   instructor   User?                 @relation(fields: [instructorId], references: [id])
   sessions     TrainingSession[]
@@ -3265,7 +3390,7 @@ model TrainingSession {
   sessionDate     DateTime
   sessionEndDate  DateTime?
   durationMinutes Int
-  modality        String
+  modality        SessionModality
   location        String?
   meetingUrl      String?
   maxParticipants Int                   @default(0)
@@ -3280,20 +3405,20 @@ model TrainingSession {
 }
 
 model TrainingParticipant {
-  id                 Int             @id @default(autoincrement())
+  id                 Int                       @id @default(autoincrement())
   sessionId          Int
   userId             Int
   trainingId         Int?
-  status             String          @default("REGISTERED")
+  status             TrainingParticipantStatus @default(REGISTERED)
   finalScore         Float?
   attendedHours      Float?
   cancellationReason String?
   completedAt        DateTime?
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
-  session            TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user               User            @relation(fields: [userId], references: [id])
-  training           Training?       @relation(fields: [trainingId], references: [id])
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  session            TrainingSession           @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user               User                      @relation(fields: [userId], references: [id])
+  training           Training?                 @relation(fields: [trainingId], references: [id])
 
   @@unique([sessionId, userId])
   @@index([userId])
@@ -3318,6 +3443,28 @@ model TrainingRating {
 // CONHECIMENTO
 // ══════════════════════════════════════════════════════════════════
 
+enum ArticleStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ArticleAccess {
+  PUBLIC
+  DEPARTMENT
+  ROLE
+  CONFIDENTIAL
+}
+
+enum InteractionAction {
+  VIEW
+  LIKE
+  DISLIKE
+  BOOKMARK
+  SHARE
+}
+
 model KnowledgeCategory {
   id          Int                 @id @default(autoincrement())
   name        String
@@ -3335,24 +3482,24 @@ model KnowledgeCategory {
 }
 
 model KnowledgeArticle {
-  id                     Int       @id @default(autoincrement())
+  id                     Int           @id @default(autoincrement())
   title                  String
   summary                String?
-  content                String    @db.Text
+  content                String        @db.Text
   authorId               Int
   categoryId             Int?
-  status                 String    @default("DRAFT")
-  accessLevel            String    @default("PUBLIC")
-  mandatory              Boolean   @default(false)
-  readingMinutes         Int       @default(1)
-  viewCount              Int       @default(0)
+  status                 ArticleStatus @default(DRAFT)
+  accessLevel            ArticleAccess @default(PUBLIC)
+  mandatory              Boolean       @default(false)
+  readingMinutes         Int           @default(1)
+  viewCount              Int           @default(0)
   avgRating              Float?
   restrictedDepartmentId Int?
   publishedAt            DateTime?
   expiresAt              DateTime?
   scheduledAt            DateTime?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
 
   author           User                     @relation(fields: [authorId], references: [id])
   category         KnowledgeCategory?       @relation(fields: [categoryId], references: [id])
@@ -3379,13 +3526,13 @@ model KnowledgeTag {
 }
 
 model KnowledgeInteraction {
-  id        Int              @id @default(autoincrement())
+  id        Int               @id @default(autoincrement())
   userId    Int
   articleId Int
-  action    String
-  createdAt DateTime         @default(now())
-  user      User             @relation(fields: [userId], references: [id])
-  article   KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  action    InteractionAction
+  createdAt DateTime          @default(now())
+  user      User              @relation(fields: [userId], references: [id])
+  article   KnowledgeArticle  @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@index([articleId])
   @@index([userId])
