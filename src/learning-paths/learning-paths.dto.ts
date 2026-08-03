@@ -13,49 +13,23 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import {
+  LearningPathStatus,
+  LearningPathLevel,
+  LearningPathType,
+  ProgressionType,
+  AssignmentTarget,
+  LearningPathEnrollmentStatus as PathEnrollmentStatus,
+} from '@prisma/client';
 
-export enum LearningPathStatus {
-  DRAFT = 'DRAFT',
-  PUBLISHED = 'PUBLISHED',
-  ARCHIVED = 'ARCHIVED',
-}
-
-export enum LearningPathLevel {
-  BEGINNER = 'BEGINNER',
-  INTERMEDIATE = 'INTERMEDIATE',
-  ADVANCED = 'ADVANCED',
-}
-
-export enum LearningPathType {
-  ONBOARDING = 'ONBOARDING',
-  UPSKILLING = 'UPSKILLING',
-  RESKILLING = 'RESKILLING',
-  COMPLIANCE = 'COMPLIANCE',
-  LEADERSHIP = 'LEADERSHIP',
-  CERTIFICATION = 'CERTIFICATION',
-  CUSTOM = 'CUSTOM',
-}
-
-export enum ProgressionType {
-  SEQUENTIAL = 'SEQUENTIAL',
-  FREE = 'FREE',
-  HYBRID = 'HYBRID',
-}
-
-export enum AssignmentTarget {
-  USER = 'USER',
-  DEPARTMENT = 'DEPARTMENT',
-  POSITION = 'POSITION',
-  UNIT = 'UNIT',
-  ROLE = 'ROLE',
-}
-
-export enum PathEnrollmentStatus {
-  NOT_STARTED = 'NOT_STARTED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  EXPIRED = 'EXPIRED',
-}
+export {
+  LearningPathStatus,
+  LearningPathLevel,
+  LearningPathType,
+  ProgressionType,
+  AssignmentTarget,
+  PathEnrollmentStatus,
+};
 
 export class LearningPathStepDto {
   @ApiProperty()

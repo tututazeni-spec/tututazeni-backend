@@ -13,32 +13,13 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { CourseLevel, CourseStatus, LessonType, QuizQuestionType } from '@prisma/client';
 
-export enum CourseLevel {
-  BEGINNER = 'BEGINNER',
-  INTERMEDIATE = 'INTERMEDIATE',
-  ADVANCED = 'ADVANCED',
-}
-export enum CourseStatus {
-  DRAFT = 'DRAFT',
-  PUBLISHED = 'PUBLISHED',
-  ARCHIVED = 'ARCHIVED',
-}
-export enum LessonType {
-  VIDEO = 'VIDEO',
-  PDF = 'PDF',
-  TEXT = 'TEXT',
-  AUDIO = 'AUDIO',
-  SLIDE = 'SLIDE',
-  LINK = 'LINK',
-  SCORM = 'SCORM',
-  QUIZ = 'QUIZ',
-}
-export enum QuizQuestionType {
-  MULTIPLE_CHOICE = 'MULTIPLE_CHOICE',
-  TRUE_FALSE = 'TRUE_FALSE',
-  OPEN = 'OPEN',
-}
+export { CourseLevel, CourseStatus, LessonType, QuizQuestionType };
+
+// AssignmentTarget local — usado apenas para despachar destinatários de
+// atribuição de curso (não é persistido directamente como coluna neste
+// modelo); distinto do AssignmentTarget do Prisma (LearningPathAssignment).
 export enum AssignmentTarget {
   USER = 'USER',
   DEPARTMENT = 'DEPARTMENT',

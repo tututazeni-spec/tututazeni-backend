@@ -15,46 +15,17 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import {
+  AssessmentType,
+  AssessmentStatus,
+  FeedbackMode,
+  QuestionType,
+  AttemptStatus,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export enum AssessmentType {
-  QUIZ = 'QUIZ',
-  EXAM = 'EXAM',
-  DIAGNOSTIC = 'DIAGNOSTIC',
-  PRACTICAL = 'PRACTICAL',
-  SURVEY = 'SURVEY',
-}
-
-export enum AssessmentStatus {
-  DRAFT = 'DRAFT',
-  PUBLISHED = 'PUBLISHED',
-  ARCHIVED = 'ARCHIVED',
-}
-
-export enum FeedbackMode {
-  IMMEDIATE = 'IMMEDIATE', // Por pergunta, imediatamente
-  ON_SUBMIT = 'ON_SUBMIT', // Após submissão
-  RESULT_ONLY = 'RESULT_ONLY', // Apenas score final
-}
-
-export enum QuestionType {
-  MULTIPLE_CHOICE_SINGLE = 'MULTIPLE_CHOICE_SINGLE',
-  MULTIPLE_CHOICE_MULTI = 'MULTIPLE_CHOICE_MULTI',
-  TRUE_FALSE = 'TRUE_FALSE',
-  OPEN_TEXT = 'OPEN_TEXT',
-  FILE_UPLOAD = 'FILE_UPLOAD',
-  MATCHING = 'MATCHING',
-  ORDERING = 'ORDERING',
-}
-
-export enum AttemptStatus {
-  IN_PROGRESS = 'IN_PROGRESS',
-  SUBMITTED = 'SUBMITTED',
-  PASSED = 'PASSED',
-  FAILED = 'FAILED',
-  EXPIRED = 'EXPIRED',
-}
+export { AssessmentType, AssessmentStatus, FeedbackMode, QuestionType, AttemptStatus };
 
 // ─── Question ─────────────────────────────────────────────────────────────────
 

@@ -20,16 +20,10 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { CompetencyType, CompetencyCategory } from '@prisma/client';
 
 // ─── ENUMS ───────────────────────────────────────────────────
-export enum CompetencyType {
-  HARD_SKILL = 'HARD_SKILL',
-  SOFT_SKILL = 'SOFT_SKILL',
-  CULTURE = 'CULTURE',
-  LEADERSHIP = 'LEADERSHIP',
-  VITALITY = 'VITALITY',
-  CUSTOM = 'CUSTOM',
-}
+export { CompetencyType };
 export enum EvaluationModel {
   DEG_90 = 'DEG_90',
   DEG_180 = 'DEG_180',
@@ -90,7 +84,10 @@ export class Evaluation360CreateCompetencyDto {
   @ApiProperty() @IsString() @IsNotEmpty() @MaxLength(120) name: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiProperty({ enum: CompetencyType }) @IsEnum(CompetencyType) type: CompetencyType;
-  @ApiPropertyOptional() @IsOptional() @IsString() category?: string;
+  @ApiPropertyOptional({ enum: CompetencyCategory })
+  @IsOptional()
+  @IsEnum(CompetencyCategory)
+  category?: CompetencyCategory;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) scaleMin?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(2) @Max(10) scaleMax?: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isGlobal?: boolean;

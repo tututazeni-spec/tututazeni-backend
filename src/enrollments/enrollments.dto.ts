@@ -11,20 +11,11 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
-import { EnrollmentStatus } from '@prisma/client';
+import { EnrollmentStatus, EnrollmentOrigin } from '@prisma/client';
 
 // ─── Enums (EN — consistentes com toda a plataforma) ─────────────────────────
 
-export { EnrollmentStatus };
-
-export enum EnrollmentOrigin {
-  MANUAL = 'MANUAL', // Admin/RH
-  SELF_ENROLL = 'SELF_ENROLL', // Colaborador se inscreveu
-  LEARNING_PATH = 'LEARNING_PATH', // Herdado de Learning Path
-  ONBOARDING = 'ONBOARDING', // Processo de onboarding
-  RULE_ENGINE = 'RULE_ENGINE', // Atribuição automática
-  CAMPAIGN = 'CAMPAIGN', // Deep link / campanha
-}
+export { EnrollmentStatus, EnrollmentOrigin };
 
 // ─── Create Enrollment ────────────────────────────────────────────────────────
 

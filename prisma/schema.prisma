@@ -1749,6 +1749,18 @@ model PdiApproval {
 // APRENDIZAGEM — CURSOS, MÓDULOS, AULAS
 // ══════════════════════════════════════════════════════════════════
 
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 model Course {
   id                      Int                  @id @default(autoincrement())
   title                   String
@@ -1760,8 +1772,8 @@ model Course {
   introVideoUrl           String?
   workloadHours           Int?
   language                String               @default("pt")
-  level                   String               @default("BEGINNER")
-  status                  String               @default("DRAFT")
+  level                   CourseLevel          @default(BEGINNER)
+  status                  CourseStatus         @default(DRAFT)
   mandatory               Boolean              @default(false)
   internalCode            String?              @unique
   departmentId            Int?
@@ -1793,6 +1805,31 @@ model Course {
   @@index([createdAt])
 }
 
+enum ModuleStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ModuleType {
+  THEORETICAL
+  PRACTICAL
+  ASSESSMENT
+  PROJECT
+}
+
+enum ProgressionType {
+  SEQUENTIAL
+  FREE
+  HYBRID
+}
+
+enum CompletionRule {
+  ALL_LESSONS
+  MIN_PERCENT
+  QUIZ_PASS
+  COMBINED
+}
+
 model CourseModule {
   id                   Int              @id @default(autoincrement())
   courseId             Int
@@ -1800,10 +1837,10 @@ model CourseModule {
   description          String?
   learningObjectives   String[]
   seq                  Int
-  status               String           @default("DRAFT")
-  type                 String?
-  progressionType      String           @default("SEQUENTIAL")
-  completionRule       String           @default("ALL_LESSONS")
+  status               ModuleStatus     @default(DRAFT)
+  type                 ModuleType?
+  progressionType      ProgressionType  @default(SEQUENTIAL)
+  completionRule       CompletionRule   @default(ALL_LESSONS)
   minCompletionPercent Int              @default(100)
   minQuizScore         Int?
   mandatory            Boolean          @default(true)
@@ -1819,12 +1856,23 @@ model CourseModule {
   @@index([seq])
 }
 
+enum LessonType {
+  VIDEO
+  PDF
+  TEXT
+  AUDIO
+  SLIDE
+  LINK
+  SCORM
+  QUIZ
+}
+
 model Lesson {
   id              Int              @id @default(autoincrement())
   moduleId        Int
   title           String
   description     String?
-  type            String           @default("VIDEO")
+  type            LessonType       @default(VIDEO)
   contentUrl      String?          @db.Text
   textContent     String?          @db.Text
   seq             Int
@@ -1879,12 +1927,23 @@ enum EnrollmentStatus {
   OVERDUE
 }
 
+enum EnrollmentOrigin {
+  MANUAL
+  SELF_ENROLL
+  LEARNING_PATH
+  ONBOARDING
+  RULE_ENGINE
+  CAMPAIGN
+  AI_TUTOR
+  INSTRUCTOR
+}
+
 model Enrollment {
   id             Int                 @id @default(autoincrement())
   courseId       Int
   userId         Int
   status         EnrollmentStatus    @default(NOT_STARTED)
-  origin         String              @default("MANUAL")
+  origin         EnrollmentOrigin    @default(MANUAL)
   mandatory      Boolean             @default(false)
   learningPathId Int?
   assignedById   Int?
@@ -1950,16 +2009,22 @@ model Quiz {
   attempts         QuizAttempt[]
 }
 
+enum QuizQuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  OPEN
+}
+
 model QuizQuestion {
-  id            Int     @id @default(autoincrement())
+  id            Int              @id @default(autoincrement())
   quizId        Int
   question      String
-  type          String
+  type          QuizQuestionType
   options       String?
   correctAnswer String?
-  points        Int     @default(1)
+  points        Int              @default(1)
   seq           Int
-  quiz          Quiz    @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  quiz          Quiz             @relation(fields: [quizId], references: [id], onDelete: Cascade)
 }
 
 model QuizAttempt {
@@ -2017,6 +2082,28 @@ model CourseFeedback {
 // TRILHAS DE APRENDIZAGEM
 // ══════════════════════════════════════════════════════════════════
 
+enum LearningPathLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum LearningPathType {
+  ONBOARDING
+  UPSKILLING
+  RESKILLING
+  COMPLIANCE
+  LEADERSHIP
+  CERTIFICATION
+  CUSTOM
+}
+
+enum LearningPathStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 model LearningPath {
   id               Int                      @id @default(autoincrement())
   title            String
@@ -2026,10 +2113,10 @@ model LearningPath {
   thumbnailUrl     String?
   category         String?
   tags             String[]
-  level            String                   @default("BEGINNER")
-  pathType         String                   @default("CUSTOM")
-  progressionType  String                   @default("SEQUENTIAL")
-  status           String                   @default("DRAFT")
+  level            LearningPathLevel        @default(BEGINNER)
+  pathType         LearningPathType         @default(CUSTOM)
+  progressionType  ProgressionType          @default(SEQUENTIAL)
+  status           LearningPathStatus       @default(DRAFT)
   mandatory        Boolean                  @default(false)
   language         String                   @default("pt")
   totalHours       Int                      @default(0)
@@ -2070,30 +2157,45 @@ model LearningPathMilestone {
   learningPath   LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Cascade)
 }
 
+enum AssignmentTarget {
+  USER
+  DEPARTMENT
+  POSITION
+  UNIT
+  ROLE
+}
+
 model LearningPathAssignment {
-  id             Int          @id @default(autoincrement())
+  id             Int              @id @default(autoincrement())
   learningPathId Int
-  targetType     String
+  targetType     AssignmentTarget
   targetId       Int
-  mandatory      Boolean      @default(false)
+  mandatory      Boolean          @default(false)
   deadline       DateTime?
-  createdAt      DateTime     @default(now())
-  learningPath   LearningPath @relation(fields: [learningPathId], references: [id])
+  createdAt      DateTime         @default(now())
+  learningPath   LearningPath     @relation(fields: [learningPathId], references: [id])
 
   @@index([learningPathId])
 }
 
+enum LearningPathEnrollmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+}
+
 model LearningPathEnrollment {
-  id             Int          @id @default(autoincrement())
+  id             Int                          @id @default(autoincrement())
   learningPathId Int
   userId         Int
-  status         String       @default("NOT_STARTED")
-  mandatory      Boolean      @default(false)
+  status         LearningPathEnrollmentStatus @default(NOT_STARTED)
+  mandatory      Boolean                      @default(false)
   deadline       DateTime?
-  enrolledAt     DateTime     @default(now())
+  enrolledAt     DateTime                     @default(now())
   completedAt    DateTime?
-  learningPath   LearningPath @relation(fields: [learningPathId], references: [id])
-  user           User         @relation(fields: [userId], references: [id])
+  learningPath   LearningPath                 @relation(fields: [learningPathId], references: [id])
+  user           User                         @relation(fields: [userId], references: [id])
 
   @@unique([learningPathId, userId])
   @@index([status])
@@ -2104,12 +2206,32 @@ model LearningPathEnrollment {
 // AVALIAÇÕES (ASSESSMENTS)
 // ══════════════════════════════════════════════════════════════════
 
+enum AssessmentType {
+  QUIZ
+  EXAM
+  DIAGNOSTIC
+  PRACTICAL
+  SURVEY
+}
+
+enum AssessmentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum FeedbackMode {
+  IMMEDIATE
+  ON_SUBMIT
+  RESULT_ONLY
+}
+
 model Assessment {
   id                 Int                  @id @default(autoincrement())
   title              String
   description        String?
-  type               String               @default("QUIZ")
-  status             String               @default("DRAFT")
+  type               AssessmentType       @default(QUIZ)
+  status             AssessmentStatus     @default(DRAFT)
   courseId           Int?
   moduleId           Int?
   learningPathId     Int?
@@ -2117,7 +2239,7 @@ model Assessment {
   maxAttempts        Int                  @default(0)
   cooldownHours      Int                  @default(0)
   timeLimitMinutes   Int                  @default(0)
-  feedbackMode       String               @default("ON_SUBMIT")
+  feedbackMode       FeedbackMode         @default(ON_SUBMIT)
   randomizeQuestions Boolean              @default(false)
   randomizeOptions   Boolean              @default(false)
   allowReview        Boolean              @default(true)
@@ -2132,10 +2254,20 @@ model Assessment {
   @@index([status])
 }
 
+enum QuestionType {
+  MULTIPLE_CHOICE_SINGLE
+  MULTIPLE_CHOICE_MULTI
+  TRUE_FALSE
+  OPEN_TEXT
+  FILE_UPLOAD
+  MATCHING
+  ORDERING
+}
+
 model AssessmentQuestion {
   id            Int                       @id @default(autoincrement())
   assessmentId  Int
-  type          String
+  type          QuestionType
   questionText  String
   mediaUrl      String?
   options       String?
@@ -2152,11 +2284,19 @@ model AssessmentQuestion {
   @@index([assessmentId])
 }
 
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  PASSED
+  FAILED
+  EXPIRED
+}
+
 model AssessmentAttempt {
   id                Int                       @id @default(autoincrement())
   assessmentId      Int
   userId            Int
-  status            String                    @default("IN_PROGRESS")
+  status            AttemptStatus             @default(IN_PROGRESS)
   score             Int?
   passed            Boolean?
   startedAt         DateTime                  @default(now())
@@ -2200,14 +2340,37 @@ model AssessmentAttemptAnswer {
 // COMPETÊNCIAS
 // ══════════════════════════════════════════════════════════════════
 
+enum CompetencyCategory {
+  HARD_SKILL
+  SOFT_SKILL
+  LANGUAGE
+  TOOL
+  LEADERSHIP
+}
+
+enum CompetencyType {
+  BEHAVIORAL
+  HARD_SKILL
+  SOFT_SKILL
+  CULTURE
+  LEADERSHIP
+  VITALITY
+  CUSTOM
+}
+
+enum CompetencyStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model Competency {
   id                       Int                      @id @default(autoincrement())
   name                     String                   @unique
   description              String?
-  category                 String                   @default("HARD_SKILL")
-  type                     String                   @default("BEHAVIORAL")
+  category                 CompetencyCategory       @default(HARD_SKILL)
+  type                     CompetencyType           @default(BEHAVIORAL)
   tags                     String[]
-  status                   String                   @default("ACTIVE")
+  status                   CompetencyStatus         @default(ACTIVE)
   isActive                 Boolean                  @default(true)
   isGlobal                 Boolean                  @default(true)
   tenantId                 String?
@@ -2254,36 +2417,44 @@ model ProficiencyLevel {
   @@unique([competencyId, value])
 }
 
+enum CompetencySource {
+  MANUAL
+  COURSE
+  ASSESSMENT
+  MANAGER
+  HRIS
+}
+
 model UserCompetency {
-  id           Int        @id @default(autoincrement())
+  id           Int              @id @default(autoincrement())
   userId       Int
   competencyId Int
-  currentLevel Int        @default(0)
+  currentLevel Int              @default(0)
   targetLevel  Int?
   selfLevel    Int?
   managerLevel Int?
-  source       String     @default("MANUAL")
+  source       CompetencySource @default(MANUAL)
   notes        String?
   evidenceUrl  String?
-  evaluatedAt  DateTime   @default(now())
-  user         User       @relation(fields: [userId], references: [id])
-  competency   Competency @relation(fields: [competencyId], references: [id])
+  evaluatedAt  DateTime         @default(now())
+  user         User             @relation(fields: [userId], references: [id])
+  competency   Competency       @relation(fields: [competencyId], references: [id])
 
   @@unique([userId, competencyId])
   @@index([userId])
 }
 
 model CompetencyEvolutionLog {
-  id            Int        @id @default(autoincrement())
+  id            Int              @id @default(autoincrement())
   userId        Int
   competencyId  Int
   previousLevel Int
   newLevel      Int
-  source        String
+  source        CompetencySource
   updatedById   Int?
-  createdAt     DateTime   @default(now())
-  user          User       @relation(fields: [userId], references: [id])
-  competency    Competency @relation(fields: [competencyId], references: [id])
+  createdAt     DateTime         @default(now())
+  user          User             @relation(fields: [userId], references: [id])
+  competency    Competency       @relation(fields: [competencyId], references: [id])
 
   @@index([userId])
   @@index([competencyId])
@@ -2303,13 +2474,18 @@ model CompetencyEndorsement {
   @@unique([endorserId, userId, competencyId])
 }
 
+enum MappingPriority {
+  MANDATORY
+  OPTIONAL
+}
+
 model PositionCompetency {
   id               Int             @id @default(autoincrement())
   positionId       Int?
   careerPositionId Int?
   competencyId     Int
   requiredLevel    Int
-  priority         String          @default("MANDATORY")
+  priority         MappingPriority @default(MANDATORY)
   weight           Float           @default(1)
   position         Position?       @relation(fields: [positionId], references: [id])
   careerPosition   CareerPosition? @relation(fields: [careerPositionId], references: [id])

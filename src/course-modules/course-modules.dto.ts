@@ -14,42 +14,15 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { MAX_FILE_SIZE_KB } from '../common/validators/allowed-mime-types';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import {
+  ModuleStatus,
+  ModuleType,
+  ProgressionType,
+  CompletionRule,
+  LessonType as LessonContentType,
+} from '@prisma/client';
 
-export enum ModuleStatus {
-  DRAFT = 'DRAFT',
-  PUBLISHED = 'PUBLISHED',
-}
-
-export enum ModuleType {
-  THEORETICAL = 'THEORETICAL',
-  PRACTICAL = 'PRACTICAL',
-  ASSESSMENT = 'ASSESSMENT',
-  PROJECT = 'PROJECT',
-}
-
-export enum ProgressionType {
-  SEQUENTIAL = 'SEQUENTIAL',
-  FREE = 'FREE',
-  HYBRID = 'HYBRID',
-}
-
-export enum CompletionRule {
-  ALL_LESSONS = 'ALL_LESSONS',
-  MIN_PERCENT = 'MIN_PERCENT',
-  QUIZ_PASS = 'QUIZ_PASS',
-  COMBINED = 'COMBINED',
-}
-
-export enum LessonContentType {
-  VIDEO = 'VIDEO',
-  PDF = 'PDF',
-  TEXT = 'TEXT',
-  AUDIO = 'AUDIO',
-  SLIDE = 'SLIDE',
-  LINK = 'LINK',
-  SCORM = 'SCORM',
-  QUIZ = 'QUIZ',
-}
+export { ModuleStatus, ModuleType, ProgressionType, CompletionRule, LessonContentType };
 
 export class CreateModuleDto {
   @ApiProperty()
