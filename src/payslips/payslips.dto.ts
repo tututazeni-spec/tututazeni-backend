@@ -12,13 +12,9 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { PayslipStatus, PayslipAccessAction } from '@prisma/client';
 
-export enum PayslipStatus {
-  DRAFT = 'DRAFT',
-  ISSUED = 'ISSUED',
-  ACKNOWLEDGED = 'ACKNOWLEDGED',
-  DISPUTED = 'DISPUTED',
-}
+export { PayslipStatus, PayslipAccessAction };
 
 // ─── Criação individual ──────────────────────────────────────────────────────
 export class CreatePayslipDto {

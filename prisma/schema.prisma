@@ -222,13 +222,15 @@ enum OvertimeStatus {
   PAID
 }
 
+// Redefinido no lote 8: o enum já existia mas nunca tinha sido usado por
+// nenhum campo — os valores declarados (PENDING/APPROVED/CANCELLED) não
+// correspondiam aos valores reais escritos por payslips.service.ts
+// (DRAFT/ISSUED/ACKNOWLEDGED/DISPUTED, confirmados por grep).
 enum PayslipStatus {
   DRAFT
-  PENDING
-  APPROVED
   ISSUED
   ACKNOWLEDGED
-  CANCELLED
+  DISPUTED
 }
 
 enum PayrollRunStatus {
@@ -2697,8 +2699,15 @@ model CalibrationLog {
   calibrator      User              @relation(fields: [calibratorId], references: [id])
 }
 
+// RESOLVED acrescentado no lote 8 para reutilizar este enum em
+// PayslipDispute.status (mesmo conceito de "disputa aberta/resolvida" que
+// PerformanceDispute) — nenhum dos dois fluxos de resolução está
+// implementado ainda (resolvedAt/resolution existem no schema mas nenhum
+// serviço os escreve), mas o valor é inferido com segurança dos nomes de
+// campo já declarados.
 enum DisputeStatus {
   OPEN
+  RESOLVED
 }
 
 model PerformanceDispute {
@@ -3828,7 +3837,7 @@ model Payslip {
   irtOverride        Float?
   inssOverride       Float?
   taxBracket         String?
-  status             String             @default("DRAFT") // DRAFT | ISSUED | ACKNOWLEDGED | DISPUTED
+  status             PayslipStatus      @default(DRAFT)
   notes              String?
   issuedAt           DateTime?
   acknowledgedAt     DateTime?
@@ -3845,47 +3854,57 @@ model Payslip {
   @@index([runId])
 }
 
+// NOTA: PayslipItem não é escrito por nenhum serviço actualmente (feature
+// planeada mas não ligada — confirmado por grep em todo o src/). type/
+// calcType reutilizam ComponentType/ComponentCalcType, que já existiam
+// declarados no schema sem nenhum campo a usá-los e correspondem
+// semanticamente (EARNING/DEDUCTION, FIXED/PERCENT/FORMULA/TABLE).
 model PayslipItem {
-  id        Int     @id @default(autoincrement())
+  id        Int                @id @default(autoincrement())
   payslipId Int
-  payslip   Payslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  payslip   Payslip            @relation(fields: [payslipId], references: [id], onDelete: Cascade)
   code      String
   name      String
-  type      String
+  type      ComponentType
   value     Float
-  isTaxable Boolean @default(true)
-  calcType  String?
-  order     Int     @default(0)
+  isTaxable Boolean            @default(true)
+  calcType  ComponentCalcType?
+  order     Int                @default(0)
 
   @@index([payslipId])
 }
 
+enum PayslipAccessAction {
+  VIEW
+  ADMIN_VIEW
+}
+
 model PayslipAccessLog {
-  id         Int      @id @default(autoincrement())
+  id         Int                 @id @default(autoincrement())
   payslipId  Int
-  payslip    Payslip  @relation(fields: [payslipId], references: [id])
+  payslip    Payslip             @relation(fields: [payslipId], references: [id])
   userId     Int
-  user       User     @relation(fields: [userId], references: [id])
-  action     String
+  user       User                @relation(fields: [userId], references: [id])
+  action     PayslipAccessAction
   ipAddress  String?
-  createdAt  DateTime @default(now())
-  accessedAt DateTime @default(now())
+  createdAt  DateTime            @default(now())
+  accessedAt DateTime            @default(now())
 
   @@index([payslipId])
   @@index([userId])
 }
 
 model PayslipDispute {
-  id         Int       @id @default(autoincrement())
+  id         Int           @id @default(autoincrement())
   payslipId  Int
   userId     Int
   reason     String
   details    String?
-  status     String    @default("OPEN")
-  createdAt  DateTime  @default(now())
+  status     DisputeStatus @default(OPEN)
+  createdAt  DateTime      @default(now())
   resolvedAt DateTime?
   resolution String?
-  payslip    Payslip   @relation(fields: [payslipId], references: [id])
+  payslip    Payslip       @relation(fields: [payslipId], references: [id])
 }
 
 model CountryConfig {
@@ -5360,6 +5379,19 @@ model Attendance {
   @@index([courseId])
 }
 
+enum DayPeriod {
+  AM
+  PM
+}
+
+enum LeaveDecision {
+  APPROVE
+  REJECT
+  ESCALATE
+  DELEGATE
+  CANCELLED
+}
+
 model LeaveRequest {
   id              Int                 @id @default(autoincrement())
   userId          Int
@@ -5386,23 +5418,23 @@ model LeaveRequest {
   reviewedById    Int?
   reviewedAt      DateTime?
   halfDay         Boolean             @default(false)
-  halfDayPeriod   String?
+  halfDayPeriod   DayPeriod?
 
   @@index([userId, status])
   @@index([startDate, endDate])
 }
 
 model LeaveApproval {
-  id         Int          @id @default(autoincrement())
+  id         Int            @id @default(autoincrement())
   requestId  Int
-  request    LeaveRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request    LeaveRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
   approverId Int
-  approver   User         @relation(fields: [approverId], references: [id])
-  level      Int          @default(1)
-  decision   String?
+  approver   User           @relation(fields: [approverId], references: [id])
+  level      Int            @default(1)
+  decision   LeaveDecision?
   notes      String?
   decidedAt  DateTime?
-  createdAt  DateTime     @default(now())
+  createdAt  DateTime       @default(now())
 
   @@index([requestId])
   @@index([approverId, decidedAt])
@@ -5496,34 +5528,46 @@ model LeavePolicy {
   @@map("leave_policies")
 }
 
+enum JustificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model AttendanceJustification {
-  id           Int               @id @default(autoincrement())
+  id           Int                 @id @default(autoincrement())
   attendanceId Int
-  attendance   Attendance        @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  attendance   Attendance          @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
   userId       Int
-  user         User              @relation(fields: [userId], references: [id])
+  user         User                @relation(fields: [userId], references: [id])
   reason       String
   attachments  String[]
   leaveType    LeaveType?
-  status       String            @default("PENDING")
+  status       JustificationStatus @default(PENDING)
   reviewNotes  String?
   reviewedById Int?
   reviewedAt   DateTime?
-  createdAt    DateTime          @default(now())
+  createdAt    DateTime            @default(now())
   recordId     Int?
-  record       AttendanceRecord? @relation("RecordJustifications", fields: [recordId], references: [id])
+  record       AttendanceRecord?   @relation("RecordJustifications", fields: [recordId], references: [id])
 
   @@index([attendanceId])
   @@index([status])
 }
 
+// status/context/method reutilizam os mesmos enums já usados por Attendance
+// (AttendanceStatus/AttendanceContext/CheckInMethod) — confirmado por grep
+// em attendance.service.ts (que gere ambos os modelos) que usam exactamente
+// o mesmo vocabulário. Attendance (Employee) vs AttendanceRecord (User)
+// continuam modelos quase-duplicados (achado estrutural já documentado,
+// não fundidos aqui), mas passam a partilhar os mesmos tipos de enum.
 model AttendanceRecord {
   id              Int                       @id @default(autoincrement())
   userId          Int
   date            DateTime
-  status          String                    @default("PRESENT")
-  context         String                    @default("WORK")
-  method          String                    @default("MANUAL")
+  status          AttendanceStatus          @default(PRESENT)
+  context         AttendanceContext         @default(WORK)
+  method          CheckInMethod             @default(MANUAL)
   clockIn         String?
   clockOut        String?
   clockInAt       DateTime?
