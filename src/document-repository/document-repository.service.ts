@@ -687,7 +687,7 @@ export class DocumentRepositoryService {
       await this.prisma.docAuditLog.create({
         data: { documentId, userId, action, metadata: metadata },
       });
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         documentId,
         userId,
@@ -702,7 +702,7 @@ export class DocumentRepositoryService {
   private async notify(userId: number, type: string, message: string) {
     try {
       await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } });
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         userId,
         type,

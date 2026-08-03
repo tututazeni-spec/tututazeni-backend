@@ -29,7 +29,7 @@ export class CacheService implements OnModuleDestroy {
         this.cacheCounter.inc({ result: 'hit' });
         return JSON.parse(hit) as T;
       }
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         op: 'get',
         key,
@@ -41,7 +41,7 @@ export class CacheService implements OnModuleDestroy {
     const value = await compute();
     try {
       await this.redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         op: 'set',
         key,
@@ -64,7 +64,7 @@ export class CacheService implements OnModuleDestroy {
       }
       this.cacheCounter.inc({ result: 'miss' });
       return null;
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         op: 'get',
         key,
@@ -80,7 +80,7 @@ export class CacheService implements OnModuleDestroy {
     if (!this.cacheEnabled) return;
     try {
       await this.redis.set(key, JSON.stringify(value), 'EX', ttlSeconds);
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         op: 'set',
         key,
@@ -96,7 +96,7 @@ export class CacheService implements OnModuleDestroy {
     if (!this.cacheEnabled) return;
     try {
       await this.redis.del(key);
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         op: 'del',
         key,

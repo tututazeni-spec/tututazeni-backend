@@ -730,7 +730,7 @@ export class ReportsService {
     const payslips = records.map(r => {
       try {
         return { ...r, ...JSON.parse(r.description ?? '{}') };
-      } catch (e) {
+      } catch (e: unknown) {
         this.logger.warn({
           historyRecordId: r.id,
           period,

@@ -394,7 +394,7 @@ export class AiTutorService {
     try {
       const clean = response.text.replace(/```json|```/g, '').trim();
       parsed = JSON.parse(clean);
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         userId,
         type: dto.type,

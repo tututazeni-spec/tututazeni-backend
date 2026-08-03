@@ -417,7 +417,7 @@ export class ScalabilityService {
           where: { id: rule.id },
           data: { runCount: { increment: 1 }, lastRunAt: new Date(), lastRunStatus: 'SUCCESS' },
         });
-      } catch (err) {
+      } catch (err: unknown) {
         this.logger.error({
           ruleId: rule.id,
           executionId: execution.id,
@@ -505,7 +505,7 @@ export class ScalabilityService {
           default:
             results.push({ type: action.type, status: 'SKIPPED', reason: 'Unknown action type' });
         }
-      } catch (err) {
+      } catch (err: unknown) {
         this.logger.warn({
           tenantId,
           userId: payload.userId,
@@ -641,7 +641,7 @@ export class ScalabilityService {
 
       // Verificar thresholds para gerar alertas
       await this.evaluateAlertThresholds(snapshot);
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.warn({
         action: 'CAPTURE_SYSTEM_METRICS',
         err: { message: err instanceof Error ? err.message : String(err) },
@@ -827,7 +827,7 @@ export class ScalabilityService {
           }
           result.created++;
         }
-      } catch (err) {
+      } catch (err: unknown) {
         this.logger.warn({
           tenantId: dto.tenantId,
           row: i + 1,

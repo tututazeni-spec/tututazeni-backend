@@ -33,7 +33,7 @@ function parseCondition(condition?: string | null): Record<string, any> {
   if (!condition) return {};
   try {
     return JSON.parse(condition);
-  } catch (e) {
+  } catch (e: unknown) {
     helpersLogger.warn({
       condition,
       action: 'PARSE_AUTOMATION_CONDITION',
@@ -48,7 +48,7 @@ function parseParams(params?: string | null): Record<string, any> {
   if (!params) return {};
   try {
     return JSON.parse(params);
-  } catch (e) {
+  } catch (e: unknown) {
     helpersLogger.warn({
       params,
       action: 'PARSE_AUTOMATION_ACTION_PARAMS',
@@ -357,13 +357,14 @@ export class AutomationService {
       try {
         const result = await this.executeRule(rule);
         results.push({ ruleId: rule.id, name: rule.name, success: true, ...result });
-      } catch (e: any) {
-        results.push({ ruleId: rule.id, name: rule.name, success: false, error: e.message });
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        results.push({ ruleId: rule.id, name: rule.name, success: false, error: message });
         this.logger.error({
           ruleId: rule.id,
           ruleName: rule.name,
           action: 'RUN_ALL_ACTIVE_RULES',
-          err: { message: e instanceof Error ? e.message : String(e) },
+          err: { message },
           msg: 'Falha ao executar regra de automação activa',
         });
       }
@@ -642,7 +643,7 @@ export class AutomationService {
           });
 
       return { status: 'SUCCESS', ...result };
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (execId)
         await safeM(this.prisma, 'automationExecution')
           .update({

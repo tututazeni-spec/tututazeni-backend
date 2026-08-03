@@ -20,7 +20,7 @@ export class RedisHealthIndicator {
         ),
       ]);
       return { [key]: { status: 'up', latencyMs: Date.now() - start } };
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         key,
         err: { message: e instanceof Error ? e.message : String(e) },

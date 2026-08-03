@@ -39,7 +39,7 @@ export class Evaluation360EventListeners {
           role: assignment.role,
         }),
       });
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         evaluatorId: assignment.evaluatorId,
         evaluateeId: assignment.evaluateeId,
@@ -64,7 +64,7 @@ export class Evaluation360EventListeners {
         message: `Não esqueça de avaliar ${evaluatee?.fullName ?? 'um colega'}. O prazo está a terminar.`,
         type: 'WARNING',
       });
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         evaluatorId: assignment.evaluatorId,
         evaluateeId: assignment.evaluateeId,
@@ -122,7 +122,7 @@ export class Evaluation360EventListeners {
           });
         }
       }
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         responseId: payload.responseId,
         cycleId: payload.cycleId,
@@ -149,7 +149,7 @@ export class Evaluation360EventListeners {
       this.logger.log(
         `[360] Notificações de resultados enviadas: ${participants.length} participantes`,
       );
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         cycleId: payload.cycleId,
         err: { message: err instanceof Error ? err.message : String(err) },
@@ -177,7 +177,7 @@ export class Evaluation360EventListeners {
           feedback.message.length > 80 ? feedback.message.slice(0, 80) + '...' : feedback.message,
         type: feedback.type === 'RECOGNITION' ? 'SUCCESS' : 'INFO',
       });
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         fromUserId: feedback.fromUserId,
         toUserId: feedback.toUserId,
@@ -199,7 +199,7 @@ export class Evaluation360EventListeners {
       this.logger.log(
         `[360] Criando PDI automático para userId=${payload.userId}, ${payload.gaps.length} gaps identificados`,
       );
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error({
         userId: payload.userId,
         cycleId: payload.cycleId,

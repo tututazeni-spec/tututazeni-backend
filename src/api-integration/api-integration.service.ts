@@ -237,7 +237,7 @@ export class ApiIntegrationService {
         latencyMs,
         message: success ? `Conexão estabelecida (${latencyMs}ms)` : `Erro HTTP ${res.status}`,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       const latencyMs = Date.now() - start;
       this.logger.error({
         integrationId: id,
@@ -723,7 +723,7 @@ export class ApiIntegrationService {
           responseBody: responseBody ? sanitizeForLog(responseBody) : undefined,
           msg: 'Falha ao entregar webhook — HTTP não OK',
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         this.logger.warn({
           webhookId: hook.id,
           url: hook.url,

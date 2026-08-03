@@ -110,7 +110,7 @@ export class PayslipsService {
       await this.prisma.payslipAccessLog.create({
         data: { payslipId, userId, action, ipAddress: ip ?? 'unknown', accessedAt: new Date() },
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.logger.warn({
         payslipId,
         userId,
@@ -272,12 +272,13 @@ export class PayslipsService {
         }
 
         results.created++;
-      } catch (e: any) {
-        results.errors.push(`User ${u.id}: ${e.message}`);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        results.errors.push(`User ${u.id}: ${message}`);
         this.logger.error({
           userId: u.id,
           period,
-          err: { message: e instanceof Error ? e.message : String(e) },
+          err: { message },
           msg: 'Falha ao criar recibo em massa para utilizador',
         });
       }

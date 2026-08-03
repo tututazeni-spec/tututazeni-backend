@@ -49,7 +49,7 @@ export class NotificationsService {
         attempts: 3,
         backoff: 5000,
       });
-    } catch (queueErr) {
+    } catch (queueErr: unknown) {
       this.logger.warn({
         userId: dto.userId,
         type: dto.type,

@@ -293,8 +293,9 @@ export class DepartmentsService {
           reason: dto.reason,
         });
         results.transferred++;
-      } catch (e: any) {
-        results.errors.push(`User ${userId}: ${e.message}`);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        results.errors.push(`User ${userId}: ${message}`);
       }
     }
 

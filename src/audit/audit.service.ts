@@ -82,7 +82,7 @@ export class AuditService {
       );
 
       return entry;
-    } catch (e) {
+    } catch (e: unknown) {
       // Falha aqui quebra a cadeia de hash de compliance — mantém-se sem rethrow
       // para não reverter a operação de negócio que gerou este log, mas fica
       // registada com todo o contexto para investigação (findAll/getStats não

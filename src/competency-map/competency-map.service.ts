@@ -390,7 +390,7 @@ export class CompetencyMapService {
           const order = { HIGH: 0, MEDIUM: 1, LOW: 2 };
           return order[a.priority as GapPriority] - order[b.priority as GapPriority];
         });
-      } catch (e) {
+      } catch (e: unknown) {
         this.logger.warn({
           userId,
           targetRole,
@@ -644,7 +644,7 @@ export class CompetencyMapService {
           take: 5,
         }) ?? []
       );
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         skillIds,
         err: { message: e instanceof Error ? e.message : String(e) },
@@ -660,7 +660,7 @@ export class CompetencyMapService {
       const managerId = (user as any)?.employee?.managerId;
       if (managerId)
         await this.prisma.notificationLog.create({ data: { userId: managerId, type, message } });
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         userId,
         type,

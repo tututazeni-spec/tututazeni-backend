@@ -63,7 +63,7 @@ export class ProcessStandardService {
           createdAt: new Date(),
         },
       });
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.warn({
         userId: opts.userId,
         action: opts.action,
