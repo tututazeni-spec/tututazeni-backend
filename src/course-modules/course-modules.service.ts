@@ -91,7 +91,9 @@ export class CourseModulesService {
   }
 
   async publishModule(id: number) {
-    const mod = (await this.findModuleOrFail(id)) as any;
+    // FIX: `as any` era desnecessário — findModuleOrFail já inclui
+    // `_count: { select: { lessons: true } }`, totalmente inferível.
+    const mod = await this.findModuleOrFail(id);
     if (mod._count.lessons === 0) {
       throw new BadRequestException('Módulo sem aulas não pode ser publicado');
     }
@@ -102,7 +104,10 @@ export class CourseModulesService {
   }
 
   async deleteModule(id: number) {
-    const mod = (await this.findModuleOrFail(id)) as any;
+    // FIX: `mod` nunca era usado depois desta linha — findModuleOrFail só
+    // servia aqui para validar existência (lança NotFoundException). `as
+    // any` escondia uma variável morta em vez de um campo em falta.
+    await this.findModuleOrFail(id);
 
     // Verificar se há progresso activo nas aulas
     const activeProgress = await this.prisma.read.lessonProgress.count({
@@ -156,7 +161,12 @@ export class CourseModulesService {
   // ─── CLONAR MÓDULO ────────────────────────────────────────────────────────
 
   async cloneModule(moduleId: number, dto: CloneModuleDto) {
-    const original = (await this.findModuleOrFail(moduleId)) as any;
+    // FIX: `as any` desnecessário — todos os campos lidos abaixo (title,
+    // description, learningObjectives, type, progressionType,
+    // completionRule, minCompletionPercent, minQuizScore, mandatory,
+    // lessons, materials) são campos/relações reais de CourseModule,
+    // já incluídos por findModuleOrFail.
+    const original = await this.findModuleOrFail(moduleId);
 
     // Verificar curso destino
     const targetCourse = await this.prisma.read.course.findUnique({
@@ -315,7 +325,9 @@ export class CourseModulesService {
     });
     if (!lesson) return { accessible: false, reason: 'Aula não encontrada' };
 
-    const mod = (lesson as any).module;
+    // FIX: `as any` desnecessário — `module`/`module.course` já são
+    // totalmente inferidos pelo `include` acima.
+    const mod = lesson.module;
     const course = mod.course;
 
     if (mod.status !== 'PUBLISHED') {
@@ -341,7 +353,14 @@ export class CourseModulesService {
     }
 
     if (mod.availableFrom && new Date() < new Date(mod.availableFrom)) {
-      return { accessible: false, reason: `Disponível a partir de ${mod.availableFrom}` };
+      // FIX: `mod.availableFrom` deixou de ser `any` — é um `Date`, e o
+      // linter (restrict-template-expressions) passou a acusar a
+      // interpolação directa. Formatado como o resto do codebase (ver
+      // engagement.service.ts/leadership.service.ts).
+      return {
+        accessible: false,
+        reason: `Disponível a partir de ${mod.availableFrom.toLocaleDateString('pt')}`,
+      };
     }
 
     // Verificar progressão sequencial
@@ -368,22 +387,25 @@ export class CourseModulesService {
     });
     if (!mod) return false;
 
-    const lessons = (mod as any).lessons;
+    // FIX: casts desnecessários — `lessons`/`completionRule`/
+    // `minCompletionPercent` são campos/relações reais de CourseModule, já
+    // inferidos pelo `include: { lessons: true }` acima.
+    const lessons = mod.lessons;
     const totalLessons = lessons.length;
     if (totalLessons === 0) return true;
 
     const completedCount = await this.prisma.read.lessonProgress.count({
-      where: { userId, completed: true, lessonId: { in: lessons.map((l: any) => l.id) } },
+      where: { userId, completed: true, lessonId: { in: lessons.map(l => l.id) } },
     });
 
-    const rule = (mod as any).completionRule ?? 'ALL_LESSONS';
+    const rule = mod.completionRule ?? 'ALL_LESSONS';
 
     if (rule === 'ALL_LESSONS') {
       return completedCount >= totalLessons;
     }
 
     if (rule === 'MIN_PERCENT') {
-      const pct = (mod as any).minCompletionPercent ?? 100;
+      const pct = mod.minCompletionPercent ?? 100;
       return (completedCount / totalLessons) * 100 >= pct;
     }
 
@@ -399,7 +421,7 @@ export class CourseModulesService {
     }
 
     if (rule === 'COMBINED') {
-      const pct = (mod as any).minCompletionPercent ?? 80;
+      const pct = mod.minCompletionPercent ?? 80;
       const lessonOk = (completedCount / totalLessons) * 100 >= pct;
       const quiz = await this.prisma.read.quiz.findFirst({ where: { lesson: { moduleId } } });
       const quizOk = quiz
@@ -424,8 +446,11 @@ export class CourseModulesService {
       where: { id: dto.lessonId },
       include: { module: { include: { course: true } } },
     });
-    const courseId = (lesson as any).module.courseId;
-    const moduleId = (lesson as any).moduleId;
+    // FIX: `as any` escondia a ausência da guarda de nulidade (isLessonAccessible
+    // já validou a aula noutra query, mas o TS não tem como saber isso aqui).
+    if (!lesson) throw new NotFoundException('Aula não encontrada');
+    const courseId = lesson.module.courseId;
+    const moduleId = lesson.moduleId;
 
     // Upsert progresso da aula
     const progress = await this.prisma.lessonProgress.upsert({
@@ -538,8 +563,10 @@ export class CourseModulesService {
     const current = await this.prisma.courseModule.findUnique({ where: { id: currentModuleId } });
     if (!current) return;
 
+    // FIX: `current` já está null-guardado acima (`if (!current) return;`) —
+    // `.seq` é um campo real, o cast era desnecessário.
     const nextModule = await this.prisma.read.courseModule.findFirst({
-      where: { courseId, seq: (current as any).seq + 1, status: 'PUBLISHED' },
+      where: { courseId, seq: current.seq + 1, status: 'PUBLISHED' },
       include: { course: { select: { title: true } } },
     });
     if (!nextModule) return;
@@ -580,11 +607,13 @@ export class CourseModulesService {
       },
     });
 
+    // FIX: todos os casts `as any`/`(l: any)` eram desnecessários — `mod` já
+    // vem totalmente tipado do `include` acima (lessons+progress, materials).
     // Verificar acesso a cada módulo (drip, sequencial)
     const result = await Promise.all(
       modules.map(async mod => {
-        const lessons = (mod as any).lessons;
-        const completedCount = lessons.filter((l: any) => l.progress[0]?.completed).length;
+        const lessons = mod.lessons;
+        const completedCount = lessons.filter(l => l.progress[0]?.completed).length;
         const totalCount = lessons.length;
         const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
         const completed = await this.isModuleCompleted(mod.id, userId);
@@ -592,7 +621,7 @@ export class CourseModulesService {
         // Verificar se módulo está bloqueado (progressão sequencial)
         let locked = false;
         let lockedReason: string | undefined;
-        if ((mod as any).progressionType === 'SEQUENTIAL' && (mod as any).seq > 0) {
+        if (mod.progressionType === 'SEQUENTIAL' && mod.seq > 0) {
           const firstLesson = lessons[0];
           if (firstLesson) {
             const access = await this.isLessonAccessible(firstLesson.id, userId);
@@ -604,17 +633,17 @@ export class CourseModulesService {
         return {
           id: mod.id,
           title: mod.title,
-          seq: (mod as any).seq,
-          type: (mod as any).type,
-          mandatory: (mod as any).mandatory,
-          materials: (mod as any).materials,
+          seq: mod.seq,
+          type: mod.type,
+          mandatory: mod.mandatory,
+          materials: mod.materials,
           completedCount,
           totalCount,
           pct,
           completed,
           locked,
           lockedReason,
-          lessons: lessons.map((l: any) => ({
+          lessons: lessons.map(l => ({
             id: l.id,
             title: l.title,
             type: l.type,
