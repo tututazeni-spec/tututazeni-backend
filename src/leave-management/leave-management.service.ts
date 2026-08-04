@@ -8,7 +8,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { LeaveDecision } from '@prisma/client';
+import { LeaveDecision, LeaveType, Prisma } from '@prisma/client';
 import { AuditService } from '../common/services/audit.service';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -24,6 +24,7 @@ import {
   UpdateBalanceDto,
   AccrueBalanceDto,
   CreateLeavePolicyDto,
+  BlackoutPeriodDto,
   LeaveStatus,
   ApprovalAction,
   DurationMode,
@@ -89,12 +90,36 @@ export class LeaveManagementService {
   // LEAVE TYPES
   // ══════════════════════════════════════════════════════════════════
 
+  // requiresApproval/requiresDocument/allowHalfDay/affectsSalary/
+  // salaryDeductionPercent/carryOverExpiryDays existem no DTO mas nunca
+  // foram migrados para LeaveTypeConfig — enviá-los ao Prisma tal-qual
+  // rebentava sempre ("Unknown argument"), por isso createLeaveType()/
+  // updateLeaveType() nunca tinham funcionado. Só os campos reais do
+  // modelo são persistidos abaixo.
   async createLeaveType(dto: CreateLeaveTypeDto) {
     const exists = await this.prisma.leaveTypeConfig.findUnique({
       where: { code: dto.code },
     });
     if (exists) throw new ConflictException(`Tipo de licença "${dto.code}" já existe`);
-    return this.prisma.leaveTypeConfig.create({ data: dto as any });
+    const data: Prisma.LeaveTypeConfigCreateInput = {
+      code: dto.code,
+      name: dto.name,
+      description: dto.description,
+      category: dto.category,
+      isPaid: dto.isPaid,
+      annualLimit: dto.annualLimit,
+      maxConsecutiveDays: dto.maxConsecutiveDays,
+      minNoticeDays: dto.minNoticeDays,
+      allowCarryOver: dto.allowCarryOver,
+      carryOverLimit: dto.carryOverLimit,
+      autoApprove: dto.autoApprove,
+      autoApproveUnderDays: dto.autoApproveUnderDays,
+      color: dto.color,
+      icon: dto.icon,
+      countWorkDaysOnly: dto.countWorkDaysOnly,
+      active: dto.active,
+    };
+    return this.prisma.leaveTypeConfig.create({ data });
   }
 
   async getLeaveTypes(activeOnly = true) {
@@ -107,7 +132,24 @@ export class LeaveManagementService {
   async updateLeaveType(code: string, dto: UpdateLeaveTypeDto) {
     const type = await this.prisma.leaveTypeConfig.findUnique({ where: { code } });
     if (!type) throw new NotFoundException(`Tipo "${code}" não encontrado`);
-    return this.prisma.leaveTypeConfig.update({ where: { code }, data: dto as any });
+    const data: Prisma.LeaveTypeConfigUpdateInput = {
+      name: dto.name,
+      description: dto.description,
+      category: dto.category,
+      isPaid: dto.isPaid,
+      annualLimit: dto.annualLimit,
+      maxConsecutiveDays: dto.maxConsecutiveDays,
+      minNoticeDays: dto.minNoticeDays,
+      allowCarryOver: dto.allowCarryOver,
+      carryOverLimit: dto.carryOverLimit,
+      autoApprove: dto.autoApprove,
+      autoApproveUnderDays: dto.autoApproveUnderDays,
+      color: dto.color,
+      icon: dto.icon,
+      countWorkDaysOnly: dto.countWorkDaysOnly,
+      active: dto.active,
+    };
+    return this.prisma.leaveTypeConfig.update({ where: { code }, data });
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -116,7 +158,10 @@ export class LeaveManagementService {
 
   async createPolicy(dto: CreateLeavePolicyDto) {
     return this.prisma.leavePolicy.create({
-      data: { ...dto, blackoutPeriods: dto.blackoutPeriods as any },
+      data: {
+        ...dto,
+        blackoutPeriods: dto.blackoutPeriods as unknown as Prisma.InputJsonValue,
+      },
     });
   }
 
@@ -127,7 +172,9 @@ export class LeaveManagementService {
     });
   }
 
-  private async getApplicablePolicy(userId: number): Promise<any | null> {
+  private async getApplicablePolicy(
+    userId: number,
+  ): Promise<Prisma.LeavePolicyGetPayload<object> | null> {
     const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
       include: { department: { select: { name: true } } },
@@ -138,7 +185,7 @@ export class LeaveManagementService {
     return this.prisma.leavePolicy.findFirst({
       where: {
         active: true,
-        OR: [{ department: (user as any).department?.name ?? '' }, { department: null }],
+        OR: [{ department: user.department?.name ?? '' }, { department: null }],
       },
       orderBy: { department: 'desc' }, // More specific first
     });
@@ -162,7 +209,7 @@ export class LeaveManagementService {
       sortOrder = 'desc',
     } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.LeaveRequestWhereInput = {};
 
     if (userId) where.userId = userId;
     if (leaveTypeCode) where.leaveTypeCode = leaveTypeCode;
@@ -269,11 +316,19 @@ export class LeaveManagementService {
     const impact = await this.calculateImpact(dto.userId, start, end);
 
     // ── Criar pedido
+    // ACHADO ESTRUTURAL (não corrigido nesta limpeza de tipos, ver
+    // project-innova-leave-type-enum-mismatch): LeaveRequest.leaveType e
+    // LeaveBalance.leaveType são o enum fixo de 10 valores `LeaveType`,
+    // mas LeaveTypeConfig.code (dto.leaveTypeCode) é livre/configurável —
+    // qualquer código customizado (ex. "SICK_SHORT") rebenta em runtime
+    // ("Unknown value" do Prisma). `as LeaveType` documenta a intenção sem
+    // fingir que o compilador consegue provar isto — é uma decisão de
+    // schema/produto por resolver, não um cast a "calar" o linter.
     const request = await this.prisma.leaveRequest.create({
       data: {
         userId: dto.userId,
         leaveTypeCode: dto.leaveTypeCode,
-        leaveType: dto.leaveTypeCode as any,
+        leaveType: dto.leaveTypeCode as LeaveType,
         startDate: start,
         endDate: end,
         durationMode: dto.durationMode ?? DurationMode.FULL_DAY,
@@ -297,13 +352,7 @@ export class LeaveManagementService {
 
     // ── Se auto-aprovado, deduzir saldo
     if (initialStatus === LeaveStatus.APPROVED) {
-      await this.deductBalance(
-        dto.userId,
-        dto.leaveTypeCode,
-        workDays,
-        dto.durationMode,
-        request.id,
-      );
+      await this.deductBalance(dto.userId, dto.leaveTypeCode, workDays, request.id);
       await this.notifyUser(
         dto.userId,
         'LEAVE_AUTO_APPROVED',
@@ -405,13 +454,7 @@ export class LeaveManagementService {
         data: { status: LeaveStatus.APPROVED, finalApprovedAt: new Date() },
       });
 
-      await this.deductBalance(
-        request.userId,
-        (request as any).leaveTypeCode,
-        request.workDays,
-        (request as any).durationMode,
-        requestId,
-      );
+      await this.deductBalance(request.userId, request.leaveTypeCode, request.workDays, requestId);
       await this.applyModuleImpacts(request);
       await this.notifyUser(request.userId, 'LEAVE_APPROVED', `O seu pedido foi aprovado!`);
       await this.audit.log({
@@ -459,13 +502,7 @@ export class LeaveManagementService {
 
     // Devolver saldo se estava aprovado
     if (wasApproved) {
-      await this.returnBalance(
-        userId,
-        (request as any).leaveTypeCode,
-        request.workDays,
-        (request as any).durationMode,
-        requestId,
-      );
+      await this.returnBalance(userId, request.leaveTypeCode, request.workDays, requestId);
       await this.reverseModuleImpacts(request);
     }
 
@@ -532,15 +569,15 @@ export class LeaveManagementService {
     if (!leaveType) throw new NotFoundException(`Tipo "${dto.leaveTypeCode}" não encontrado`);
 
     const updated = await this.prisma.leaveBalance.upsert({
-      where: { userId_leaveType: { userId, leaveType: dto.leaveTypeCode as any } },
-      create: { userId, leaveType: dto.leaveTypeCode as any, balance: dto.balance, used: 0 },
+      where: { userId_leaveType: { userId, leaveType: dto.leaveTypeCode as LeaveType } },
+      create: { userId, leaveType: dto.leaveTypeCode as LeaveType, balance: dto.balance, used: 0 },
       update: { balance: dto.balance },
     });
 
     await this.prisma.leaveBalanceHistory.create({
       data: {
         userId,
-        leaveType: dto.leaveTypeCode as any,
+        leaveType: dto.leaveTypeCode as LeaveType,
         balanceBefore: 0,
         balanceAfter: dto.balance,
         change: dto.balance,
@@ -556,8 +593,8 @@ export class LeaveManagementService {
     const results = await Promise.allSettled(
       dto.userIds.map(userId =>
         this.prisma.leaveBalance.upsert({
-          where: { userId_leaveType: { userId, leaveType: dto.leaveTypeCode as any } },
-          create: { userId, leaveType: dto.leaveTypeCode as any, balance: dto.days, used: 0 },
+          where: { userId_leaveType: { userId, leaveType: dto.leaveTypeCode as LeaveType } },
+          create: { userId, leaveType: dto.leaveTypeCode as LeaveType, balance: dto.days, used: 0 },
           update: { balance: { increment: dto.days } },
         }),
       ),
@@ -570,13 +607,18 @@ export class LeaveManagementService {
       where: { active: true, annualLimit: { gt: 0 } },
     });
 
+    // `leaveTypeCode` não existe em LeaveBalance (só `leaveType`, o enum
+    // fixo) — o createMany rebentava sempre com "Unknown argument", nunca
+    // tinha funcionado. Corrigido o nome do campo; o cast para LeaveType
+    // mantém o mesmo achado estrutural documentado acima (lt.code pode não
+    // ser um dos 10 valores fixos do enum).
     await this.prisma.leaveBalance.createMany({
-      data: leaveTypes.map((lt: any) => ({
+      data: leaveTypes.map(lt => ({
         userId,
-        leaveTypeCode: lt.code,
+        leaveType: lt.code as LeaveType,
         balance: lt.annualLimit ?? 0,
         used: 0,
-      })) as any,
+      })),
       skipDuplicates: true,
     });
   }
@@ -585,18 +627,18 @@ export class LeaveManagementService {
     const leaveTypes = await this.prisma.leaveTypeConfig.findMany({
       where: { allowCarryOver: true },
     });
-    const results: any[] = [];
+    const results: { userId: number; code: string; carryOver: number; newBalance: number }[] = [];
 
     for (const lt of leaveTypes) {
       const balances = await this.prisma.read.leaveBalance.findMany({
-        where: { leaveType: lt.code as any },
+        where: { leaveType: lt.code as LeaveType },
       });
       for (const b of balances) {
         const carryOver = Math.min(b.balance, lt.carryOverLimit ?? b.balance);
         const newBalance = (lt.annualLimit ?? 0) + carryOver;
 
         await this.prisma.leaveBalance.update({
-          where: { userId_leaveType: { userId: b.userId, leaveType: lt.code as any } },
+          where: { userId_leaveType: { userId: b.userId, leaveType: lt.code as LeaveType } },
           data: { balance: lt.annualLimit ?? 0, used: 0 },
         });
 
@@ -608,7 +650,7 @@ export class LeaveManagementService {
   }
 
   async getBalanceHistory(userId: number, leaveTypeCode?: string) {
-    const where: any = { userId };
+    const where: Prisma.LeaveBalanceHistoryWhereInput = { userId };
     if (leaveTypeCode) where.leaveTypeCode = leaveTypeCode;
     return this.prisma.read.leaveBalanceHistory.findMany({
       where,
@@ -628,7 +670,7 @@ export class LeaveManagementService {
       ? new Date(year, filters.month, 0, 23, 59, 59)
       : new Date(year, 11, 31, 23, 59, 59);
 
-    const where: any = {
+    const where: Prisma.LeaveRequestWhereInput = {
       status: { in: [LeaveStatus.APPROVED, LeaveStatus.PENDING] },
       OR: [
         { startDate: { gte: from, lte: to } },
@@ -717,7 +759,7 @@ export class LeaveManagementService {
     const year = now.getFullYear();
     const from = new Date(year, 0, 1);
     const to = new Date(year, 11, 31);
-    const where: any = { startDate: { gte: from, lte: to } };
+    const where: Prisma.LeaveRequestWhereInput = { startDate: { gte: from, lte: to } };
     if (department)
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
@@ -733,8 +775,10 @@ export class LeaveManagementService {
     const totalWorkDays = allRequests
       .filter(r => r.status === LeaveStatus.APPROVED)
       .reduce((a, r) => a + (r.workDays ?? 0), 0);
-    const byType = allRequests.reduce((acc: any, r) => {
-      const code = r.leaveTypeCode ?? (r.leaveType as string);
+    const byType = allRequests.reduce<
+      Record<string, { code: string; count: number; days: number }>
+    >((acc, r) => {
+      const code = r.leaveTypeCode ?? r.leaveType;
       if (!code) return acc;
       if (!acc[code]) acc[code] = { code, count: 0, days: 0 };
       acc[code].count++;
@@ -762,7 +806,7 @@ export class LeaveManagementService {
   }
 
   async getAbsenteeismReport(from: string, to: string, department?: string) {
-    const where: any = {
+    const where: Prisma.LeaveRequestWhereInput = {
       status: LeaveStatus.APPROVED,
       startDate: { gte: new Date(from), lte: new Date(to) },
     };
@@ -776,10 +820,12 @@ export class LeaveManagementService {
       },
     });
 
-    const byUser = records.reduce((acc: any, r) => {
+    const byUser = records.reduce<
+      Record<number, { userId: number; fullName: string; totalDays: number; requests: number }>
+    >((acc, r) => {
       const uid = r.userId;
       if (!acc[uid])
-        acc[uid] = { userId: uid, fullName: (r as any).user?.fullName, totalDays: 0, requests: 0 };
+        acc[uid] = { userId: uid, fullName: r.user.fullName, totalDays: 0, requests: 0 };
       acc[uid].totalDays += r.workDays ?? 0;
       acc[uid].requests++;
       return acc;
@@ -788,12 +834,12 @@ export class LeaveManagementService {
     const workDaysInPeriod = countWorkDays(new Date(from), new Date(to));
 
     return Object.values(byUser)
-      .map((u: any) => ({
+      .map(u => ({
         ...u,
         absenteeismRate:
           workDaysInPeriod > 0 ? +((u.totalDays / workDaysInPeriod) * 100).toFixed(1) : 0,
       }))
-      .sort((a: any, b: any) => b.totalDays - a.totalDays);
+      .sort((a, b) => b.totalDays - a.totalDays);
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -818,7 +864,7 @@ export class LeaveManagementService {
 
   private async runValidations(
     userId: number,
-    leaveType: any,
+    leaveType: Prisma.LeaveTypeConfigGetPayload<object>,
     start: Date,
     end: Date,
     workDays: number,
@@ -844,7 +890,7 @@ export class LeaveManagementService {
     // 3. Saldo disponível
     if (leaveType.annualLimit) {
       const balance = await this.prisma.read.leaveBalance.findUnique({
-        where: { userId_leaveType: { userId, leaveType: leaveType.code as any } },
+        where: { userId_leaveType: { userId, leaveType: leaveType.code as LeaveType } },
       });
       const available = balance?.balance ?? 0;
       if (workDays > available) {
@@ -857,7 +903,7 @@ export class LeaveManagementService {
     // 4. Blackout periods
     const policy = await this.getApplicablePolicy(userId);
     if (policy?.blackoutPeriods) {
-      for (const bp of policy.blackoutPeriods as any[]) {
+      for (const bp of policy.blackoutPeriods as unknown as BlackoutPeriodDto[]) {
         const bpStart = new Date(bp.startDate);
         const bpEnd = new Date(bp.endDate);
         if (start <= bpEnd && end >= bpStart) {
@@ -889,12 +935,16 @@ export class LeaveManagementService {
     }
   }
 
-  private async createApprovalFlow(requestId: number, userId: number, policy: any) {
+  private async createApprovalFlow(
+    requestId: number,
+    userId: number,
+    policy: Prisma.LeavePolicyGetPayload<object> | null,
+  ) {
     const levels = policy?.approvalLevels ?? 1;
     const user = await this.prisma.read.user.findUnique({ where: { id: userId } });
-    const managerId = (user as any)?.managerId;
+    const managerId = user?.managerId;
 
-    const approvals: any[] = [];
+    const approvals: { requestId: number; approverId: number; level: number }[] = [];
 
     // Nível 1: gestor direto
     if (managerId) approvals.push({ requestId, approverId: managerId, level: 1 });
@@ -946,25 +996,29 @@ export class LeaveManagementService {
     userId: number,
     leaveTypeCode: string,
     workDays: number,
-    mode?: DurationMode,
     requestId?: number,
   ) {
     const current = await this.prisma.leaveBalance.findUnique({
-      where: { userId_leaveType: { userId, leaveType: leaveTypeCode as any } },
+      where: { userId_leaveType: { userId, leaveType: leaveTypeCode as LeaveType } },
     });
     const balanceBefore = current?.balance ?? 0;
     const balanceAfter = Math.max(0, balanceBefore - workDays);
 
     await this.prisma.leaveBalance.upsert({
-      where: { userId_leaveType: { userId, leaveType: leaveTypeCode as any } },
-      create: { userId, leaveType: leaveTypeCode as any, balance: balanceAfter, used: workDays },
+      where: { userId_leaveType: { userId, leaveType: leaveTypeCode as LeaveType } },
+      create: {
+        userId,
+        leaveType: leaveTypeCode as LeaveType,
+        balance: balanceAfter,
+        used: workDays,
+      },
       update: { balance: { decrement: workDays }, used: { increment: workDays } },
     });
 
     await this.prisma.leaveBalanceHistory.create({
       data: {
         userId,
-        leaveType: leaveTypeCode as any,
+        leaveType: leaveTypeCode as LeaveType,
         balanceBefore,
         balanceAfter,
         change: -workDays,
@@ -979,24 +1033,23 @@ export class LeaveManagementService {
     userId: number,
     leaveTypeCode: string,
     workDays: number,
-    mode?: DurationMode,
     requestId?: number,
   ) {
     const current = await this.prisma.leaveBalance.findUnique({
-      where: { userId_leaveType: { userId, leaveType: leaveTypeCode as any } },
+      where: { userId_leaveType: { userId, leaveType: leaveTypeCode as LeaveType } },
     });
     const balanceBefore = current?.balance ?? 0;
     const balanceAfter = balanceBefore + workDays;
 
     await this.prisma.leaveBalance.update({
-      where: { userId_leaveType: { userId, leaveType: leaveTypeCode as any } },
+      where: { userId_leaveType: { userId, leaveType: leaveTypeCode as LeaveType } },
       data: { balance: { increment: workDays }, used: { decrement: workDays } },
     });
 
     await this.prisma.leaveBalanceHistory.create({
       data: {
         userId,
-        leaveType: leaveTypeCode as any,
+        leaveType: leaveTypeCode as LeaveType,
         balanceBefore,
         balanceAfter,
         change: workDays,
@@ -1009,37 +1062,46 @@ export class LeaveManagementService {
 
   private async calculateImpact(userId: number, start: Date, end: Date) {
     // Cursos activos no período
-    const activeCourses =
+    type ActiveCourse = Prisma.EnrollmentGetPayload<{
+      include: { course: { select: { id: true; title: true } } };
+    }>;
+    const activeCourses: ActiveCourse[] =
       (await this.prisma.enrollment
         ?.findMany?.({
           where: { userId, completedAt: null },
           include: { course: { select: { id: true, title: true } } },
         })
-        .catch(e => {
+        .catch((e: unknown) => {
           this.logger.warn({
             userId,
             action: 'CALCULATE_LEAVE_IMPACT',
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao obter cursos activos para cálculo de impacto de licença',
           });
-          return [];
+          return [] as ActiveCourse[];
         })) ?? [];
 
     // Eventos no período
-    const events =
+    // FIX: Event.startAt (não startDate) — este where/include rebentava
+    // sempre e era mascarado pelo .catch() abaixo, deixando o preview de
+    // impacto de licença permanentemente sem eventos afectados.
+    type AffectedEvent = Prisma.EventParticipantGetPayload<{
+      include: { event: { select: { id: true; title: true; startAt: true } } };
+    }>;
+    const events: AffectedEvent[] =
       (await this.prisma.eventParticipant
         ?.findMany?.({
-          where: { userId, event: { startDate: { gte: start, lte: end } } } as any,
-          include: { event: { select: { id: true, title: true, startDate: true } } } as any,
+          where: { userId, event: { startAt: { gte: start, lte: end } } },
+          include: { event: { select: { id: true, title: true, startAt: true } } },
         })
-        .catch(e => {
+        .catch((e: unknown) => {
           this.logger.warn({
             userId,
             action: 'CALCULATE_LEAVE_IMPACT',
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao obter eventos para cálculo de impacto de licença',
           });
-          return [];
+          return [] as AffectedEvent[];
         })) ?? [];
 
     if (activeCourses.length === 0 && events.length === 0) return null;
@@ -1051,11 +1113,11 @@ export class LeaveManagementService {
     };
   }
 
-  private async applyModuleImpacts(request: any) {
+  private async applyModuleImpacts(request: Prisma.LeaveRequestGetPayload<object>) {
     try {
       await this.prisma.enrollment?.updateMany?.({
-        where: { userId: request.userId, completedAt: null } as any,
-        data: { pausedAt: new Date() } as any,
+        where: { userId: request.userId, completedAt: null },
+        data: { pausedAt: new Date() },
       });
     } catch (e: unknown) {
       this.logger.warn({
@@ -1068,11 +1130,11 @@ export class LeaveManagementService {
     }
   }
 
-  private async reverseModuleImpacts(request: any) {
+  private async reverseModuleImpacts(request: Prisma.LeaveRequestGetPayload<object>) {
     try {
       await this.prisma.enrollment?.updateMany?.({
-        where: { userId: request.userId, pausedAt: { not: null } } as any,
-        data: { pausedAt: null } as any,
+        where: { userId: request.userId, pausedAt: { not: null } },
+        data: { pausedAt: null },
       });
     } catch (e: unknown) {
       this.logger.warn({
