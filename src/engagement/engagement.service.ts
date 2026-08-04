@@ -1,6 +1,13 @@
 ﻿// src/engagement/engagement.service.ts
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { ReviewStatus, SurveyType, SurveyStatus, RecognitionType } from '@prisma/client';
+import {
+  Prisma,
+  ReviewStatus,
+  SurveyType,
+  SurveyStatus,
+  RecognitionType,
+  ActionPlanStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateSurveyDto,
@@ -56,7 +63,7 @@ export class EngagementService {
   async getSurveys(filters: SurveyFilterDto = {}) {
     const { type, status, departmentId, page = 1, limit = 20 } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.EngagementSurveyWhereInput = {};
     if (type) where.type = type;
     if (status) where.status = status;
 
@@ -129,7 +136,10 @@ export class EngagementService {
 
   async updateSurvey(id: number, dto: UpdateSurveyDto) {
     await this.getSurvey(id);
-    const data: any = { ...dto };
+    // FIX: `data: any` desnecessário — todos os campos de UpdateSurveyDto
+    // (title/description/status/endDate) são colunas reais de
+    // EngagementSurvey.
+    const data: Prisma.EngagementSurveyUpdateInput = { ...dto };
     if (dto.endDate) data.endDate = new Date(dto.endDate);
     return this.prisma.engagementSurvey.update({ where: { id }, data });
   }
@@ -195,13 +205,15 @@ export class EngagementService {
         surveyId: dto.surveyId,
         score: avg,
         anonymous: dto.submitAnonymously ?? false,
+        // FIX: `as any` desnecessário — todos os campos batem certo com
+        // SurveyAnswer (questionId/value/comment/selectedOption).
         answers: {
           create: dto.answers.map(a => ({
             questionId: a.questionId,
             value: a.value,
             comment: a.comment,
             selectedOption: a.selectedOption,
-          })) as any,
+          })),
         },
       },
     });
@@ -253,7 +265,10 @@ export class EngagementService {
     });
     if (!survey) throw new NotFoundException('Inquérito não encontrado');
 
-    const responses = survey.responses as any[];
+    // FIX: todos os casts `as any[]`/`(a: any)` eram desnecessários — `survey`
+    // já vem totalmente tipado do `include` acima (responses+answers+user,
+    // questions).
+    const responses = survey.responses;
 
     // Respect anonymity threshold (min 3 responses to show results)
     const MIN_THRESHOLD = survey.minResponsesForResults ?? 3;
@@ -266,13 +281,11 @@ export class EngagementService {
     const engagementIndex = toIndex(avgScore, 5);
 
     // Per-question stats
-    const questionStats = (survey.questions as any[]).map(q => {
-      const qAnswers = responses.flatMap(r =>
-        (r.answers as any[]).filter(a => a.questionId === q.id),
-      );
+    const questionStats = survey.questions.map(q => {
+      const qAnswers = responses.flatMap(r => r.answers.filter(a => a.questionId === q.id));
       const numeric = qAnswers.filter(a => a.value !== null && a.value !== undefined);
       const avg = numeric.length
-        ? +(numeric.reduce((s: number, a: any) => s + a.value, 0) / numeric.length).toFixed(2)
+        ? +(numeric.reduce((s, a) => s + (a.value ?? 0), 0) / numeric.length).toFixed(2)
         : null;
 
       // Text comments (only if above threshold and not anonymous survey)
@@ -298,7 +311,7 @@ export class EngagementService {
     });
 
     // Department breakdown (if not anonymous)
-    let byDepartment: any[] = [];
+    let byDepartment: { department: string; avgScore: number; responses: number }[] = [];
     if (!survey.anonymous && showDetails) {
       const deptMap: Record<string, { total: number; sum: number }> = {};
       for (const r of responses) {
@@ -363,7 +376,9 @@ export class EngagementService {
 
     if (!survey) throw new NotFoundException('Nenhuma pesquisa eNPS activa no momento');
 
-    const eNPSQuestion = (survey.questions as any[]).find(q => q.type === 'ENPS');
+    // FIX: `as any[]` desnecessário — `survey.questions` já vem tipado do
+    // `include: { questions: true }` acima.
+    const eNPSQuestion = survey.questions.find(q => q.type === 'ENPS');
     if (!eNPSQuestion) throw new BadRequestException('Pesquisa eNPS mal configurada');
 
     return this.submitSurvey(userId, {
@@ -382,10 +397,12 @@ export class EngagementService {
 
     if (!survey) return { enps: null, promoters: 0, passives: 0, detractors: 0, total: 0 };
 
-    const scores = (survey.responses as any[])
-      .flatMap(r => r.answers as any[])
+    // FIX: casts desnecessários — `survey.responses`/`.answers` já vêm
+    // tipados do `include` acima (responses → answers → question).
+    const scores = survey.responses
+      .flatMap(r => r.answers)
       .filter(a => a.question?.type === 'ENPS' && a.value !== null)
-      .map(a => a.value as number);
+      .map(a => a.value);
 
     const enps = calcENPS(scores);
     const promoters = scores.filter(s => s >= 9).length;
@@ -572,7 +589,7 @@ export class EngagementService {
   async getFeedback(filters: FeedbackFilterDto) {
     const { type, toUserId, fromUserId, page = 1, limit = 20 } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.FeedbackWhereInput = {};
     if (type) where.type = type;
     if (toUserId) where.toUserId = toUserId;
     if (fromUserId) where.fromUserId = fromUserId;
@@ -692,7 +709,7 @@ export class EngagementService {
   async getRecognitionFeed(filters: RecognitionFilterDto) {
     const { toUserId, fromUserId, departmentId, page = 1, limit = 20 } = filters;
     const skip = (page - 1) * limit;
-    const where: any = { public: true };
+    const where: Prisma.RecognitionWhereInput = { public: true };
     if (toUserId) where.toUserId = toUserId;
     if (fromUserId) where.fromUserId = fromUserId;
     if (departmentId) {
@@ -727,7 +744,7 @@ export class EngagementService {
     departmentId?: number,
     limit = 10,
   ) {
-    const where: any = { active: true };
+    const where: Prisma.UserWhereInput = { active: true };
     if (departmentId) where.departmentId = departmentId;
 
     if (type === 'points') {
@@ -833,7 +850,7 @@ export class EngagementService {
     // OneOnOneMeeting não tem coluna `completed` (só `completedAt`/`status`)
     // nem `notes` (a coluna real chama-se `minutes`).
     const { completed, notes, ...rest } = dto;
-    const data: any = { ...rest };
+    const data: Prisma.OneOnOneMeetingUpdateInput = { ...rest };
     if (notes !== undefined) data.minutes = notes;
     if (dto.scheduledAt) data.scheduledAt = new Date(dto.scheduledAt);
     if (completed) {
@@ -897,9 +914,14 @@ export class EngagementService {
   ) {
     const { departmentId, status, page = 1, limit = 20 } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.EngagementActionWhereInput = {};
     if (departmentId) where.departmentId = departmentId;
-    if (status) where.status = status;
+    // `status` chega como query string livre do controller — valida contra o
+    // enum antes de passar ao Prisma (um valor fora do enum rebentava com
+    // "Invalid value provided" em vez de simplesmente não filtrar).
+    if (status && (Object.values(ActionPlanStatus) as string[]).includes(status)) {
+      where.status = status as ActionPlanStatus;
+    }
 
     const data = await this.prisma.engagementAction.findMany({
       where,
@@ -918,8 +940,13 @@ export class EngagementService {
   }
 
   async updateActionPlan(id: number, dto: UpdateActionPlanDto) {
-    const data: any = { ...dto };
-    if (dto.dueDate) data.dueDate = new Date(dto.dueDate);
+    // FIX: EngagementAction não tem coluna `notes` (só title/description/
+    // status/progress/dueDate) — `{...dto}` atrás de um `as any` arriscava
+    // "Unknown argument `notes`" em runtime sempre que um chamador
+    // preenchesse esse campo do DTO. `notes` é excluído explicitamente.
+    const { notes: _notes, dueDate, ...rest } = dto;
+    const data: Prisma.EngagementActionUpdateInput = { ...rest };
+    if (dueDate) data.dueDate = new Date(dueDate);
     return this.prisma.engagementAction.update({ where: { id }, data });
   }
 
@@ -937,7 +964,9 @@ export class EngagementService {
     });
 
     const history = surveys.map(s => {
-      const responses = s.responses as any[];
+      // FIX: `as any[]` desnecessário — `responses` já vem tipado do
+      // `include: { responses: true }` acima.
+      const responses = s.responses;
       const avg = responses.length
         ? +(responses.reduce((sum, r) => sum + (r.score ?? 0), 0) / responses.length).toFixed(2)
         : 0;
@@ -982,7 +1011,7 @@ export class EngagementService {
 
   async getDashboard(filters: EngagementFilterDto = {}) {
     const { departmentId } = filters;
-    const userWhere: any = { active: true };
+    const userWhere: Prisma.UserWhereInput = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;
 
     const [
