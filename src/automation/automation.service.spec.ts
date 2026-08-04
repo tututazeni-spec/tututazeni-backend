@@ -14,8 +14,17 @@ const automationRuleMock = {
   delete: jest.fn(),
 };
 
+const automationExecutionMock = {
+  findMany: jest.fn().mockResolvedValue([]),
+  findUnique: jest.fn().mockResolvedValue(null),
+  create: jest.fn().mockResolvedValue({ id: 'exec-1' }),
+  update: jest.fn().mockResolvedValue({}),
+  count: jest.fn().mockResolvedValue(0),
+};
+
 const mockPrisma = {
   automationRule: automationRuleMock,
+  automationExecution: automationExecutionMock,
   user: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
   badge: {
     findMany: jest.fn().mockResolvedValue([]),
