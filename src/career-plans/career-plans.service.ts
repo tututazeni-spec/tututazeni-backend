@@ -1,5 +1,6 @@
 // src/career-plans/career-plans.service.ts
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Prisma, SkillType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { assertCanAccess } from '../common/authz/ownership';
@@ -25,6 +26,17 @@ import {
   PromotionStatus,
   GoalStatus,
 } from './career-plans.dto';
+
+export interface SkillGapEntry {
+  skillId: number;
+  skillName: string;
+  skillType: SkillType;
+  currentLevel: number;
+  requiredLevel: number;
+  gap: number;
+  weight: number;
+  mandatory: boolean;
+}
 
 function getReadinessLevel(score: number): ReadinessLevel {
   if (score >= 80) return ReadinessLevel.READY;
@@ -106,21 +118,44 @@ export class CareerPlansService {
 
   async getSkills(type?: string) {
     return this.prisma.read.careerSkill.findMany({
-      where: { active: true, ...(type ? { type: type as any } : {}) },
+      where: { active: true, ...(type ? { type: type as SkillType } : {}) },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     });
   }
 
   async createCareerPath(dto: CareerPlansCreateCareerPathDto, createdById: number) {
-    const { steps, ...rest } = dto;
+    const { steps, department, ...rest } = dto;
+    // FIX: CareerPath não tem campo `department` (String) — só `departmentId`
+    // (FK para Department). O spread de `...dto` directo para `data` ou
+    // rebentava com "Unknown argument department" (quando fornecido) ou
+    // era silenciosamente ignorado (quando omitido), mascarado pelo `as any`.
+    let departmentId: number | undefined;
+    if (department) {
+      const dept = await this.prisma.read.department.findFirst({
+        where: { name: { equals: department, mode: 'insensitive' } },
+      });
+      if (!dept) throw new NotFoundException(`Departamento "${department}" não encontrado`);
+      departmentId = dept.id;
+    }
     const path = await this.prisma.careerPath.create({
       data: {
         ...rest,
+        departmentId,
         active: dto.active ?? true,
+        // CareerPathStep.positionId é uma FK obrigatória (sem default) para
+        // Position, mas CareerPathStepDto nunca a expõe ao chamador (mesmo
+        // padrão documentado em SuccessionPlan.positionId, ver create() do
+        // SuccessionService) — ao contrário desse caso, aqui não há nenhuma
+        // fonte inequívoca de onde derivar o positionId a partir de um
+        // roleId (CareerRole não tem positionId). Sem uma decisão de
+        // produto/migração (expor positionId no DTO, ou tornar o campo
+        // opcional), isto continua a rebentar sempre com "Argument
+        // positionId is missing" ao criar um career path com steps — any
+        // aqui é o que documenta essa lacuna, não uma correcção.
         steps: {
-          create: steps.map(s => ({ roleId: s.roleId, order: s.order, label: s.label })),
+          create: steps.map(s => ({ roleId: s.roleId, order: s.order, label: s.label })) as any,
         },
-      } as any,
+      },
       include: { steps: { orderBy: { order: 'asc' }, include: { role: true } } },
     });
     return path;
@@ -184,10 +219,10 @@ export class CareerPlansService {
 
     let totalWeight = 0;
     let metWeight = 0;
-    const skillGaps: any[] = [];
-    const missingSkills: any[] = [];
+    const skillGaps: SkillGapEntry[] = [];
+    const missingSkills: SkillGapEntry[] = [];
 
-    for (const req of targetRole.skillRequirements as any[]) {
+    for (const req of targetRole.skillRequirements) {
       totalWeight += req.weight;
       const userLevel = userSkillMap.get(req.skillId) ?? 0;
       const gap = req.requiredLevel - userLevel;
@@ -239,7 +274,7 @@ export class CareerPlansService {
   async findAll(filters: CareerPlanFilterDto) {
     const { page = 1, limit = 20, userId, status, department } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.UserCareerPlanWhereInput = {};
     if (userId) where.userId = userId;
     if (status) where.status = status;
     // FIX: removed employee from UserSelect — User has no employee relation
@@ -393,7 +428,7 @@ export class CareerPlansService {
 
   async update(id: number, dto: CareerPlansUpdateCareerPlanDto, updatedById: number) {
     await this.findOne(id);
-    const data: any = { ...dto };
+    const data: Prisma.UserCareerPlanUpdateInput = { ...dto };
     if (dto.targetDate) data.targetDate = new Date(dto.targetDate);
     return this.prisma.userCareerPlan.update({ where: { id }, data });
   }
@@ -448,7 +483,7 @@ export class CareerPlansService {
 
   async getProgress(planId: number, user?: CurrentUserData) {
     const plan = await this.findOne(planId, user);
-    const goals = ((plan as any).goals as any[]) ?? [];
+    const goals = plan.goals ?? [];
     const total = goals.length;
     const completed = goals.filter(g => g.status === GoalStatus.COMPLETED).length;
     const inProgress = goals.filter(g => g.status === GoalStatus.IN_PROGRESS).length;
@@ -462,7 +497,7 @@ export class CareerPlansService {
       inProgress,
       pending,
       progress,
-      readiness: (plan as any).readiness,
+      readiness: plan.readiness,
       goals,
     };
   }
@@ -475,7 +510,19 @@ export class CareerPlansService {
     if (!user) throw new NotFoundException('Colaborador não encontrado');
     if (!targetRole) throw new NotFoundException('Cargo alvo não encontrado');
 
-    const currentRoleId = (user as any).employee?.currentRoleId;
+    // FIX: lia `user.employee.currentRoleId` — User não tem relação `employee`
+    // (ver CLAUDE.md) — currentRoleId era sempre undefined atrás do `any`, a
+    // validação de regra de progressão nunca disparava. O conceito real de
+    // "cargo actual" neste domínio vive em UserCareerPlan.currentRoleId, não
+    // em User; só é conhecido aqui quando o pedido já referencia um plano.
+    const currentRoleId = dto.careerPlanId
+      ? (
+          await this.prisma.read.userCareerPlan.findUnique({
+            where: { id: dto.careerPlanId },
+            select: { currentRoleId: true },
+          })
+        )?.currentRoleId
+      : undefined;
     if (currentRoleId) {
       const rule = await this.prisma.read.progressionRule.findFirst({
         where: { fromRoleId: currentRoleId, toRoleId: dto.targetRoleId, active: true },
@@ -498,12 +545,12 @@ export class CareerPlansService {
       },
     });
 
-    const managerId = (user as any)?.managerId;
+    const managerId = user.managerId;
     if (managerId)
       await this.notify(
         managerId,
         'PROMOTION_REQUEST_PENDING',
-        `Pedido de promoção de ${(user as any).fullName} para "${targetRole.name}" aguarda aprovação`,
+        `Pedido de promoção de ${user.fullName} para "${targetRole.name}" aguarda aprovação`,
       );
 
     await this.audit.log({
@@ -538,25 +585,38 @@ export class CareerPlansService {
     });
 
     if (dto.approved) {
-      await this.prisma.user
-        .update({
-          where: { id: promotion.userId },
-          data: {
-            employee: {
-              update: { role: promotion.targetRole?.name, currentRoleId: promotion.targetRoleId },
-            },
-          } as any,
-        })
-        .catch(e => {
-          this.logger.error({
-            userId: promotion.userId,
-            promotionId: id,
-            targetRoleId: promotion.targetRoleId,
-            action: 'APPLY_PROMOTION_ROLE_UPDATE',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao actualizar cargo do utilizador após aprovação de promoção',
+      // FIX: escrevia em `user.employee.currentRoleId` — User não tem relação
+      // `employee` (ver CLAUDE.md) — o Prisma rejeitava sempre este update
+      // ("Unknown argument employee"), silenciosamente engolido pelo .catch()
+      // abaixo; a promoção nunca actualizava nenhum registo de cargo, apesar
+      // da notificação/timeline dizerem o contrário. O "cargo actual" deste
+      // domínio vive em UserCareerPlan.currentRoleId — só actualizável aqui
+      // quando o pedido referencia um plano (careerPlanId).
+      if (promotion.careerPlanId) {
+        await this.prisma.userCareerPlan
+          .update({
+            where: { id: promotion.careerPlanId },
+            data: { currentRoleId: promotion.targetRoleId },
+          })
+          .catch(e => {
+            this.logger.error({
+              userId: promotion.userId,
+              promotionId: id,
+              targetRoleId: promotion.targetRoleId,
+              careerPlanId: promotion.careerPlanId,
+              action: 'APPLY_PROMOTION_ROLE_UPDATE',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao actualizar cargo actual do plano de carreira após aprovação de promoção',
+            });
           });
+      } else {
+        this.logger.warn({
+          userId: promotion.userId,
+          promotionId: id,
+          action: 'APPLY_PROMOTION_ROLE_UPDATE_NO_PLAN',
+          msg: 'Promoção aprovada sem careerPlanId associado — nenhum UserCareerPlan.currentRoleId foi actualizado',
         });
+      }
 
       await this.prisma.employeeTimeline
         .create({
@@ -607,7 +667,7 @@ export class CareerPlansService {
   async getPromotions(filters: PromotionFilterDto) {
     const { page = 1, limit = 20, userId, status, department } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.PromotionRequestWhereInput = {};
     if (userId) where.userId = userId;
     if (status) where.status = status;
     // FIX: removed employee from UserSelect
@@ -653,7 +713,7 @@ export class CareerPlansService {
 
     return {
       userId: dto.userId,
-      userName: (user as any).fullName,
+      userName: user.fullName,
       targetRole: { id: targetRole.id, name: targetRole.name, level: targetRole.level },
       readiness,
       estimatedMonths: monthsEst,
@@ -682,16 +742,12 @@ export class CareerPlansService {
       }),
     );
 
-    enriched.sort((a, b) => (b as any).readiness?.score - (a as any).readiness?.score);
+    enriched.sort((a, b) => (b.readiness?.score ?? 0) - (a.readiness?.score ?? 0));
 
     const pipeline = {
-      ready: enriched.filter((c: any) => c.readiness?.readinessLevel === ReadinessLevel.READY),
-      developing: enriched.filter(
-        (c: any) => c.readiness?.readinessLevel === ReadinessLevel.DEVELOPING,
-      ),
-      starting: enriched.filter(
-        (c: any) => c.readiness?.readinessLevel === ReadinessLevel.STARTING,
-      ),
+      ready: enriched.filter(c => c.readiness?.readinessLevel === ReadinessLevel.READY),
+      developing: enriched.filter(c => c.readiness?.readinessLevel === ReadinessLevel.DEVELOPING),
+      starting: enriched.filter(c => c.readiness?.readinessLevel === ReadinessLevel.STARTING),
     };
 
     return {
@@ -738,7 +794,7 @@ export class CareerPlansService {
   }
 
   async getAnalytics(department?: string) {
-    const where: any = {};
+    const where: Prisma.UserCareerPlanWhereInput = {};
     // FIX: removed employee from UserSelect
     if (department)
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
