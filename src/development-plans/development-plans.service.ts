@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateDevelopmentPlanDto,
@@ -36,7 +37,7 @@ export class DevelopmentPlansService {
     const { page = 1, limit = 20, userId, managerId, status, priority, period, overdue } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.DevelopmentPlanWhereInput = {};
     if (userId) where.userId = userId;
     if (managerId) where.managerId = managerId;
     if (status) where.status = status;
@@ -69,14 +70,12 @@ export class DevelopmentPlansService {
     ]);
 
     const enriched = data.map(p => {
-      const actions = p.actions as any[];
-      const goals = p.goals as any[];
+      const actions = p.actions;
+      const goals = p.goals;
       const completed = actions.filter(a => a.status === 'COMPLETED').length;
       const total_a = actions.length;
       const avgGoal =
-        goals.length > 0
-          ? Math.round(goals.reduce((s: number, g: any) => s + g.progress, 0) / goals.length)
-          : 0;
+        goals.length > 0 ? Math.round(goals.reduce((s, g) => s + g.progress, 0) / goals.length) : 0;
       return {
         ...p,
         actionProgress: total_a > 0 ? Math.round((completed / total_a) * 100) : 0,
@@ -116,19 +115,17 @@ export class DevelopmentPlansService {
     // Ownership (A3): dono OU ADMIN/RH/GESTOR; senão 404.
     // Quando chamado sem user (contexto interno de confiança), não filtra.
     if (user) {
-      assertCanAccess(plan, (plan as any)?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+      assertCanAccess(plan, plan?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     } else if (!plan) {
       throw new NotFoundException('Plano de desenvolvimento não encontrado');
     }
 
-    const actions = plan.actions as any[];
+    const actions = plan.actions;
     const completed = actions.filter(a => a.status === 'COMPLETED').length;
     const total_a = actions.length;
-    const goals = plan.goals as any[];
+    const goals = plan.goals;
     const avgGoal =
-      goals.length > 0
-        ? Math.round(goals.reduce((s: number, g: any) => s + g.progress, 0) / goals.length)
-        : 0;
+      goals.length > 0 ? Math.round(goals.reduce((s, g) => s + g.progress, 0) / goals.length) : 0;
 
     return {
       ...plan,
@@ -200,7 +197,7 @@ export class DevelopmentPlansService {
   async submitForApproval(id: number, user: CurrentUserData) {
     // Sem isto, qualquer autenticado podia submeter o PDI de outra pessoa para
     // aprovação (a rota não tinha @Roles nem verificação de dono nenhuma).
-    const plan = (await this.findOne(id, user)) as any;
+    const plan = await this.findOne(id, user);
     if (plan.status !== 'DRAFT') {
       throw new BadRequestException('Apenas planos em DRAFT podem ser submetidos');
     }
@@ -211,7 +208,7 @@ export class DevelopmentPlansService {
   }
 
   async approvePlan(dto: ApprovePlanDto, approver: CurrentUserData) {
-    const plan = (await this.findOne(dto.planId)) as any;
+    const plan = await this.findOne(dto.planId);
     // Ownership: só o gestor designado do plano (managerId) OU ADMIN/RH podem
     // aprovar — um GESTOR de outra equipa não deve poder decidir sobre um PDI
     // que não gere. `findOne` sem `user` não filtra por dono (userId), o que
@@ -268,7 +265,7 @@ export class DevelopmentPlansService {
   }
 
   async complete(id: number) {
-    const plan = (await this.findOne(id)) as any;
+    const plan = await this.findOne(id);
     if (!['ACTIVE', 'PENDING_APPROVAL'].includes(plan.status)) {
       throw new BadRequestException('Apenas planos activos podem ser concluídos');
     }
@@ -349,7 +346,7 @@ export class DevelopmentPlansService {
   }
 
   async remove(id: number) {
-    const plan = (await this.findOne(id)) as any;
+    const plan = await this.findOne(id);
     if (plan.status === 'ACTIVE') {
       throw new ForbiddenException('Plano activo não pode ser eliminado. Cancele-o primeiro.');
     }
@@ -362,7 +359,7 @@ export class DevelopmentPlansService {
   async addAction(dto: CreatePlanActionDto, user: CurrentUserData) {
     // A10-5: findOne sem `user` saltava o ownership — qualquer autenticado
     // podia adicionar acções ao PDI de outra pessoa.
-    const plan = (await this.findOne(dto.planId, user)) as any;
+    const plan = await this.findOne(dto.planId, user);
     if (plan.status === 'COMPLETED' || plan.status === 'CANCELLED') {
       throw new BadRequestException(
         'Não é possível adicionar acções a um plano concluído ou cancelado',
@@ -399,8 +396,8 @@ export class DevelopmentPlansService {
     if (!action) throw new NotFoundException('Acção não encontrada');
     // A10-5: sem isto, qualquer autenticado podia editar/completar a acção de
     // PDI de outra pessoa — incluindo atribuir-se XP alheio (ver abaixo).
-    assertCanAccess(action, (action as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
-    const ownerId = (action as any).plan.userId;
+    assertCanAccess(action, action.plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    const ownerId = action.plan.userId;
 
     const wasCompleted = action.status !== 'COMPLETED' && dto.status === 'COMPLETED';
 
@@ -418,7 +415,7 @@ export class DevelopmentPlansService {
     // quem chamou o endpoint: um ADMIN/RH/GESTOR pode completar a acção de
     // outra pessoa em nome dela, mas o XP é da pessoa a quem o PDI pertence.
     if (wasCompleted) {
-      const xp = (action as any).xpReward ?? 20;
+      const xp = action.xpReward ?? 20;
       await this.prisma.userPoints
         .upsert({
           where: { userId: ownerId },
@@ -437,7 +434,7 @@ export class DevelopmentPlansService {
         });
 
       // Verificar se o plano está todo completo
-      await this.recalcPlanProgress((action as any).planId);
+      await this.recalcPlanProgress(action.planId);
     }
 
     return updated;
@@ -449,7 +446,7 @@ export class DevelopmentPlansService {
       include: { plan: true },
     });
     if (!action) throw new NotFoundException('Acção não encontrada');
-    assertCanAccess(action, (action as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    assertCanAccess(action, action.plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     if (action.status === 'IN_PROGRESS') {
       throw new BadRequestException('Acção em progresso não pode ser removida');
     }
@@ -467,7 +464,7 @@ export class DevelopmentPlansService {
     if (!action) throw new NotFoundException('Acção não encontrada');
     // A10-5: sem isto, qualquer autenticado podia registar evidências na
     // acção de PDI de outra pessoa.
-    assertCanAccess(action, (action as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    assertCanAccess(action, action.plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
 
     const evidence = await this.prisma.pdiEvidence.create({
       data: {
@@ -507,7 +504,7 @@ export class DevelopmentPlansService {
     if (!goal) throw new NotFoundException('Meta não encontrada');
     // A10-5: sem isto, qualquer autenticado podia actualizar o progresso da
     // meta de PDI de outra pessoa.
-    assertCanAccess(goal, (goal as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    assertCanAccess(goal, goal.plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
 
     const updated = await this.prisma.pdiGoal.update({
       where: { id: dto.goalId },
@@ -518,7 +515,7 @@ export class DevelopmentPlansService {
       },
     });
 
-    await this.recalcPlanProgress((goal as any).planId);
+    await this.recalcPlanProgress(goal.planId);
     return updated;
   }
 
@@ -547,7 +544,7 @@ export class DevelopmentPlansService {
     if (!cp) throw new NotFoundException('Checkpoint não encontrado');
     // A10-5: sem isto, qualquer autenticado podia marcar como concluído o
     // checkpoint de PDI de outra pessoa.
-    assertCanAccess(cp, (cp as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    assertCanAccess(cp, cp.plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     return this.prisma.pdiCheckpoint.update({
       where: { id: dto.checkpointId },
       data: {
@@ -576,9 +573,7 @@ export class DevelopmentPlansService {
     const actionPct = totalActions > 0 ? Math.round((completedActions / totalActions) * 100) : 0;
 
     const avgGoal =
-      goals.length > 0
-        ? Math.round(goals.reduce((s: number, g: any) => s + g.progress, 0) / goals.length)
-        : 0;
+      goals.length > 0 ? Math.round(goals.reduce((s, g) => s + g.progress, 0) / goals.length) : 0;
 
     const overallProgress = Math.round((actionPct + avgGoal) / 2);
 
@@ -607,8 +602,8 @@ export class DevelopmentPlansService {
     });
 
     return plans.map(p => {
-      const actions = p.actions as any[];
-      const goals = p.goals as any[];
+      const actions = p.actions;
+      const goals = p.goals;
       const completed = actions.filter(a => a.status === 'COMPLETED').length;
       const overdue = actions.filter(
         a => a.dueDate && new Date(a.dueDate) < new Date() && a.status !== 'COMPLETED',
@@ -619,7 +614,7 @@ export class DevelopmentPlansService {
         actionProgress: actions.length > 0 ? Math.round((completed / actions.length) * 100) : 0,
         avgGoalProgress:
           goals.length > 0
-            ? Math.round(goals.reduce((s: number, g: any) => s + g.progress, 0) / goals.length)
+            ? Math.round(goals.reduce((s, g) => s + g.progress, 0) / goals.length)
             : 0,
         overdueActions: overdue,
       };
@@ -647,7 +642,7 @@ export class DevelopmentPlansService {
 
     return {
       plans: { total, active, completed, cancelled },
-      actions: Object.fromEntries(actionStats.map((s: any) => [s.status, s._count])),
+      actions: Object.fromEntries(actionStats.map(s => [s.status, s._count])),
       completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
       totalXp: totalXp?.points ?? 0,
     };
@@ -672,8 +667,8 @@ export class DevelopmentPlansService {
     });
 
     return plans.map(p => {
-      const actions = p.actions as any[];
-      const goals = p.goals as any[];
+      const actions = p.actions;
+      const goals = p.goals;
       const completed = actions.filter(a => a.status === 'COMPLETED').length;
       const overdue = actions.filter(
         a => a.dueDate && new Date(a.dueDate) < new Date() && a.status !== 'COMPLETED',
@@ -688,7 +683,7 @@ export class DevelopmentPlansService {
         progress: actions.length > 0 ? Math.round((completed / actions.length) * 100) : 0,
         avgGoal:
           goals.length > 0
-            ? Math.round(goals.reduce((s: number, g: any) => s + g.progress, 0) / goals.length)
+            ? Math.round(goals.reduce((s, g) => s + g.progress, 0) / goals.length)
             : 0,
         overdueActions: overdue,
         pendingApproval: p.status === 'PENDING_APPROVAL',
