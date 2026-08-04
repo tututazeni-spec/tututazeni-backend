@@ -6,7 +6,7 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { CertificateType } from '@prisma/client';
+import { CertificateType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   EnrollmentsCreateEnrollmentDto,
@@ -88,7 +88,7 @@ export class EnrollmentsService {
     } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.EnrollmentWhereInput = {};
     if (userId) where.userId = userId;
     if (courseId) where.courseId = courseId;
     if (status) where.status = status;
@@ -117,7 +117,7 @@ export class EnrollmentsService {
     ]);
 
     // Batch progress for all enrollments in this page (eliminates N+1)
-    const courseIds = [...new Set(data.map(e => (e as any).courseId as number))];
+    const courseIds = [...new Set(data.map(e => e.courseId))];
     const enrollmentIds = data.map(e => e.id);
 
     // groupBy on enrollmentId uses direct index — avoids 3-table JOIN (lesson → module → courseId)
@@ -144,7 +144,7 @@ export class EnrollmentsService {
     }
 
     const enriched = data.map(e => {
-      const courseId = (e as any).courseId as number;
+      const courseId = e.courseId;
       const totalLessons = totalLessonsMap[courseId] || 0;
       const completedLessons = completedLessonsMap[e.id] || 0;
       const progressPercent =
@@ -154,7 +154,7 @@ export class EnrollmentsService {
         totalLessons,
         completedLessons,
         progressPercent,
-        isOverdue: this.isOverdue((e as any).deadline, (e as any).status),
+        isOverdue: this.isOverdue(e.deadline, e.status),
       };
     });
 
@@ -175,14 +175,14 @@ export class EnrollmentsService {
     });
     // Ownership (A3): dono OU ADMIN/RH/GESTOR; senão 404.
     // Quando chamado sem user (contexto interno de confiança), não filtra.
-    if (user) assertCanAccess(e, (e as any)?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    if (user) assertCanAccess(e, e?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     else if (!e) throw new NotFoundException('Matrícula não encontrada');
 
-    const prog = await this.computeProgress(id, (e as any).courseId, (e as any).userId);
+    const prog = await this.computeProgress(id, e.courseId, e.userId);
     return {
       ...e,
       ...prog,
-      isOverdue: this.isOverdue((e as any).deadline, (e as any).status),
+      isOverdue: this.isOverdue(e.deadline, e.status),
     };
   }
 
@@ -233,7 +233,7 @@ export class EnrollmentsService {
           where: { courseId: dto.courseId },
           data: { totalEnrollments: { increment: 1 } },
         })
-        .catch((e: any) => {
+        .catch((e: unknown) => {
           this.logger.warn({
             userId: dto.userId,
             courseId: dto.courseId,
@@ -251,7 +251,7 @@ export class EnrollmentsService {
             metadata: JSON.stringify({}),
           },
         })
-        .catch((e: any) => {
+        .catch((e: unknown) => {
           this.logger.warn({
             userId: dto.userId,
             courseId: dto.courseId,
@@ -310,7 +310,7 @@ export class EnrollmentsService {
 
   async updateStatus(id: number, dto: UpdateEnrollmentStatusDto) {
     const e = await this.findOne(id);
-    const current = (e as any).status;
+    const current = e.status;
 
     // Mapa indexado pelo estado ACTUAL (de onde se sai), não pelo estado alvo —
     // bug anterior indexava por dto.status e bloqueava a transição normal
@@ -324,8 +324,8 @@ export class EnrollmentsService {
       throw new BadRequestException(`Transição inválida: ${current} → ${dto.status}`);
     }
 
-    const data: any = { status: dto.status };
-    if (dto.status === 'COMPLETED' && !(e as any).completedAt) {
+    const data: Prisma.EnrollmentUpdateInput = { status: dto.status };
+    if (dto.status === 'COMPLETED' && !e.completedAt) {
       data.completedAt = new Date();
     }
 
@@ -340,7 +340,7 @@ export class EnrollmentsService {
     requestingUser: CurrentUserData,
     bypassMandatoryCheck = false,
   ) {
-    const e = (await this.findOne(id)) as any;
+    const e = await this.findOne(id);
 
     // A10-12: sem isto, qualquer autenticado podia cancelar a matrícula de
     // outra pessoa via PATCH /enrollments/my/:id/cancel.
@@ -369,7 +369,7 @@ export class EnrollmentsService {
         where: { courseId: e.courseId },
         data: { totalEnrollments: { decrement: 1 } },
       })
-      .catch((err: any) => {
+      .catch((err: unknown) => {
         this.logger.warn({
           userId: e.userId,
           courseId: e.courseId,
@@ -398,7 +398,7 @@ export class EnrollmentsService {
   async generateCertificate(enrollmentId: number, user: CurrentUserData) {
     // A10-16: findOne sem `user` saltava o ownership — qualquer autenticado
     // gerava/lia o certificado de outra pessoa a partir do enrollmentId.
-    const e = (await this.findOne(enrollmentId, user)) as any;
+    const e = await this.findOne(enrollmentId, user);
 
     if (e.status !== 'COMPLETED') {
       throw new BadRequestException('Curso ainda não concluído');
@@ -439,7 +439,7 @@ export class EnrollmentsService {
           metadata: JSON.stringify({}),
         },
       })
-      .catch((err: any) => {
+      .catch((err: unknown) => {
         this.logger.warn({
           userId: e.userId,
           courseId: e.courseId,
@@ -456,7 +456,7 @@ export class EnrollmentsService {
   // ─── MATRÍCULAS DO UTILIZADOR ─────────────────────────────────────────────
 
   async getUserEnrollments(userId: number, filters?: Partial<EnrollmentFilterDto>) {
-    const where: any = { userId };
+    const where: Prisma.EnrollmentWhereInput = { userId };
     if (filters?.status) where.status = filters.status;
     if (filters?.mandatory !== undefined) where.mandatory = filters.mandatory;
 
@@ -487,7 +487,7 @@ export class EnrollmentsService {
       };
     }
 
-    const courseIds = [...new Set(enrollments.map(e => (e as any).courseId as number))];
+    const courseIds = [...new Set(enrollments.map(e => e.courseId))];
     const enrollmentIds = enrollments.map(e => e.id);
 
     // groupBy on enrollmentId uses direct index — avoids 3-table JOIN (lesson → module → courseId)
@@ -514,21 +514,21 @@ export class EnrollmentsService {
     }
 
     const enriched = enrollments.map(e => {
-      const courseId = (e as any).courseId as number;
+      const courseId = e.courseId;
       const totalLessons = totalLessonsMap[courseId] || 0;
       const completedLessons = completedLessonsMap[e.id] || 0;
       const progressPercent =
         totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
-      const isOverdue = this.isOverdue((e as any).deadline, (e as any).status);
+      const isOverdue = this.isOverdue(e.deadline, e.status);
       return { ...e, totalLessons, completedLessons, progressPercent, isOverdue };
     });
 
     const groups = {
       overdue: enriched.filter(e => e.isOverdue),
-      inProgress: enriched.filter(e => !e.isOverdue && (e as any).status === 'IN_PROGRESS'),
-      notStarted: enriched.filter(e => !e.isOverdue && (e as any).status === 'NOT_STARTED'),
-      completed: enriched.filter(e => (e as any).status === 'COMPLETED'),
-      cancelled: enriched.filter(e => (e as any).status === 'CANCELLED'),
+      inProgress: enriched.filter(e => !e.isOverdue && e.status === 'IN_PROGRESS'),
+      notStarted: enriched.filter(e => !e.isOverdue && e.status === 'NOT_STARTED'),
+      completed: enriched.filter(e => e.status === 'COMPLETED'),
+      cancelled: enriched.filter(e => e.status === 'CANCELLED'),
     };
 
     return { enrollments: enriched, groups };
@@ -537,7 +537,7 @@ export class EnrollmentsService {
   // ─── COMPLIANCE DASHBOARD (Admin/RH) ─────────────────────────────────────
 
   async getComplianceDashboard(departmentId?: number) {
-    const userWhere: any = { active: true };
+    const userWhere: Prisma.UserWhereInput = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;
 
     const [totalMandatory, completedMandatory, overdueCount, notStartedMandatory] =
@@ -608,7 +608,7 @@ export class EnrollmentsService {
 
     const teamProgress = await Promise.all(
       subordinates.map(async sub => {
-        const where: any = { userId: sub.id };
+        const where: Prisma.EnrollmentWhereInput = { userId: sub.id };
         if (courseId) where.courseId = courseId;
 
         const enrollments = await this.prisma.read.enrollment.findMany({
@@ -622,7 +622,7 @@ export class EnrollmentsService {
           total: enrollments.length,
           completed: enrollments.filter(e => e.status === 'COMPLETED').length,
           inProgress: enrollments.filter(e => e.status === 'IN_PROGRESS').length,
-          overdue: enrollments.filter(e => this.isOverdue((e as any).deadline, e.status)).length,
+          overdue: enrollments.filter(e => this.isOverdue(e.deadline, e.status)).length,
         };
 
         return { ...sub, enrollments, stats };
