@@ -1,5 +1,6 @@
 // src/api-integration/api-integration.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma, ApiIntegrationLog } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateIntegrationDto,
@@ -8,6 +9,7 @@ import {
   CreateApiKeyDto,
   CreateWebhookDto,
   TriggerWebhookDto,
+  WebhookEventType,
 } from './api-integration.dto';
 import * as crypto from 'crypto';
 import { sanitizeForLog } from '../common/logging/sanitize';
@@ -124,7 +126,7 @@ export class ApiIntegrationService {
 
   async createIntegration(dto: CreateIntegrationDto) {
     const tenantId = await this.getDefaultTenantId();
-    const data: any = {
+    const data: Prisma.IntegrationConfigUncheckedCreateInput = {
       name: dto.name,
       type: dto.type,
       endpoint: dto.endpoint,
@@ -162,7 +164,7 @@ export class ApiIntegrationService {
 
   async updateIntegration(id: number, dto: UpdateIntegrationDto) {
     await this.getIntegration(id);
-    return this.prisma.integrationConfig.update({ where: { id }, data: dto as any });
+    return this.prisma.integrationConfig.update({ where: { id }, data: dto });
   }
 
   async toggleIntegration(id: number) {
@@ -271,7 +273,7 @@ export class ApiIntegrationService {
   async getLogs(integrationId: number, filters: IntegrationLogFilterDto = {}) {
     const { page = 1, limit = 50, from, to, status } = filters;
     const skip = (page - 1) * limit;
-    const where: any = { integrationId };
+    const where: Prisma.ApiIntegrationLogWhereInput = { integrationId };
     if (status) where.status = status;
     if (from || to) {
       where.createdAt = {};
@@ -795,6 +797,23 @@ export class ApiIntegrationService {
     const since24h = new Date(Date.now() - 86400000);
     const since7d = new Date(Date.now() - 7 * 86400000);
 
+    // Anotado explicitamente: `.catch()` a seguir a um `.aggregate()` colapsa
+    // o tipo inteiro para `any` sem isto (ver subproject3-any-cleanup.md).
+    const avgLatencyPromise: Promise<{ _avg: { latencyMs: number | null } }> =
+      this.prisma.apiIntegrationLog
+        .aggregate({
+          where: { createdAt: { gte: since24h } },
+          _avg: { latencyMs: true },
+        })
+        .catch((err: unknown) => {
+          this.logger.warn({
+            action: 'STATS_AVG_LATENCY',
+            err: { message: err instanceof Error ? err.message : String(err) },
+            msg: 'Falha ao calcular latência média das integrações — a devolver null',
+          });
+          return { _avg: { latencyMs: null } };
+        });
+
     const [
       totalIntegrations,
       activeIntegrations,
@@ -810,19 +829,7 @@ export class ApiIntegrationService {
       this.prisma.read.apiIntegrationLog.count({
         where: { createdAt: { gte: since24h }, status: 'ERROR' },
       }),
-      this.prisma.apiIntegrationLog
-        .aggregate({
-          where: { createdAt: { gte: since24h } },
-          _avg: { latencyMs: true },
-        } as any)
-        .catch((err: unknown) => {
-          this.logger.warn({
-            action: 'STATS_AVG_LATENCY',
-            err: { message: err instanceof Error ? err.message : String(err) },
-            msg: 'Falha ao calcular latência média das integrações — a devolver null',
-          });
-          return { _avg: { latencyMs: null } };
-        }),
+      avgLatencyPromise,
       safeM(this.prisma, 'webhook')
         .count({ where: { active: true } })
         .catch((err: unknown) => {
@@ -878,9 +885,7 @@ export class ApiIntegrationService {
         totalLogs24h,
         errorLogs24h,
         errorRate24h,
-        avgLatencyMs: (avgLatency as any)._avg.latencyMs
-          ? +(avgLatency as any)._avg.latencyMs.toFixed(0)
-          : null,
+        avgLatencyMs: avgLatency._avg.latencyMs ? +avgLatency._avg.latencyMs.toFixed(0) : null,
         activeWebhooks: totalWebhooks,
         activeApiKeys: apiKeys,
       },
@@ -893,15 +898,15 @@ export class ApiIntegrationService {
   // INTERNAL: emit platform event to webhooks
   // ══════════════════════════════════════════════════════
 
-  async emitPlatformEvent(event: string, payload: any) {
-    return this.triggerWebhook({ event: event as any, payload });
+  async emitPlatformEvent(event: WebhookEventType, payload: Record<string, unknown>) {
+    return this.triggerWebhook({ event, payload });
   }
 
   // ══════════════════════════════════════════════════════
   // HELPERS
   // ══════════════════════════════════════════════════════
 
-  private computeHealth(lastLog: any): string {
+  private computeHealth(lastLog: ApiIntegrationLog | null): string {
     if (!lastLog) return 'UNKNOWN';
     if (lastLog.status === 'ERROR') return 'ERROR';
     const ageMs = Date.now() - new Date(lastLog.createdAt).getTime();
