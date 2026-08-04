@@ -11,6 +11,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/services/audit.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -41,6 +42,36 @@ import {
   AnonymityMode,
 } from './evaluation360.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
+
+type CalcCycle = Prisma.Eval360CycleGetPayload<{
+  include: { competencies: { include: { competency: true } } };
+}>;
+
+type ResponseWithAnswers = Prisma.EvaluationResponseGetPayload<{
+  include: { answers: { include: { question: { include: { competency: true } } } } };
+}>;
+
+interface CompetencyScoreEntry {
+  name: string;
+  score: number | null;
+  selfScore: number | null;
+  othersScore: number | null;
+  gap: number | null;
+}
+
+interface CompetencyGapEntry {
+  competencyId: string;
+  name: string;
+  score: number | null;
+  gap: number | null;
+  priority: string;
+}
+
+interface CompetencyStrengthEntry {
+  competencyId: string;
+  name: string;
+  score: number | null;
+}
 
 @Injectable()
 export class Evaluation360Service {
@@ -93,7 +124,10 @@ export class Evaluation360Service {
   async updateCompetency(id: string, dto: Evaluation360UpdateCompetencyDto, actorId: string) {
     const comp = await this.prisma.competency.findUnique({ where: { id: +id } });
     if (!comp) throw new NotFoundException('Competência não encontrada.');
-    const updated = await this.prisma.competency.update({ where: { id: +id }, data: dto as any });
+    // indicators é uma relação (create aninhado) — não é atribuível
+    // directamente num update de campos escalares.
+    const { indicators, ...data } = dto;
+    const updated = await this.prisma.competency.update({ where: { id: +id }, data });
     await this.audit.log({
       entity: 'Competency',
       entityId: id,
@@ -105,7 +139,7 @@ export class Evaluation360Service {
   }
 
   async listCompetencies(tenantId?: string, query?: Evaluation360PaginationDto) {
-    const where: any = { isActive: true };
+    const where: Prisma.CompetencyWhereInput = { isActive: true };
     if (tenantId) where.OR = [{ isGlobal: true }, { tenantId }];
     else where.isGlobal = true;
     if (query?.search) where.name = { contains: query.search };
@@ -157,7 +191,7 @@ export class Evaluation360Service {
                 weight: c.weight ?? 1,
                 isRequired: c.isRequired ?? true,
                 order: c.order ?? 0,
-              })) as any,
+              })),
             }
           : undefined,
       },
@@ -185,7 +219,11 @@ export class Evaluation360Service {
     }
     if (dto.weightSelf !== undefined || dto.weightManager !== undefined)
       this.validateWeights({ ...cycle, ...dto });
-    const updated = await this.prisma.eval360Cycle.update({ where: { id }, data: dto as any });
+    // competencies é uma relação (create aninhado) — não é atribuível
+    // directamente num update de campos escalares; updateCycle() nunca
+    // implementou a substituição de competências do ciclo.
+    const { competencies, ...data } = dto;
+    const updated = await this.prisma.eval360Cycle.update({ where: { id }, data });
     await this.audit.log({
       entity: 'EvaluationCycle',
       entityId: id,
@@ -238,7 +276,7 @@ export class Evaluation360Service {
   }
 
   async listCycles(tenantId: string, query: Evaluation360PaginationDto) {
-    const where: any = { tenantId };
+    const where: Prisma.Eval360CycleWhereInput = { tenantId };
     if (query.search) where.name = { contains: query.search };
     const [data, total] = await Promise.all([
       this.prisma.eval360Cycle.findMany({
@@ -278,11 +316,15 @@ export class Evaluation360Service {
   async createQuestion(dto: Evaluation360CreateQuestionDto, actorId: string) {
     // Eval360Question.competencyId é Int? — o DTO recebe-o como string (como
     // todos os outros ids neste módulo), tinha de ser convertido antes do create.
+    // isOpen existe no DTO mas nunca foi migrado para Eval360Question — não é
+    // persistido (o resto dos campos do DTO tem correspondência 1:1 no schema).
+    const { isOpen, ...rest } = dto;
     const question = await this.prisma.eval360Question.create({
       data: {
-        ...dto,
+        ...rest,
+        cycleId: dto.cycleId!,
         competencyId: dto.competencyId ? +dto.competencyId : undefined,
-      } as any,
+      },
     });
     await this.audit.log({
       entity: 'EvaluationQuestion',
@@ -295,7 +337,7 @@ export class Evaluation360Service {
   }
 
   async listQuestions(cycleId?: string, competencyId?: string) {
-    const where: any = {};
+    const where: Prisma.Eval360QuestionWhereInput = {};
     if (cycleId) where.cycleId = cycleId;
     if (competencyId) where.competencyId = +competencyId;
     return this.prisma.eval360Question.findMany({ where, orderBy: { order: 'asc' } });
@@ -369,7 +411,10 @@ export class Evaluation360Service {
     });
     if (!evaluatee) throw new NotFoundException('Avaliado não encontrado.');
 
-    const suggestions: { userId: any; role: EvaluatorRole; reason: string }[] = [];
+    // userId consistentemente string — EvaluatorAssignment.evaluatorId/
+    // evaluateeId são String no schema, evaluatee.managerId/peers[].id/
+    // subordinates[].id vêm de User.id (Int) e têm de ser convertidos.
+    const suggestions: { userId: string; role: EvaluatorRole; reason: string }[] = [];
     const maxPerRole = dto.maxPerRole ?? 5;
 
     // 1. Autoavaliação
@@ -382,7 +427,7 @@ export class Evaluation360Service {
     // 2. Gestor direto
     if (evaluatee.managerId) {
       suggestions.push({
-        userId: evaluatee.managerId,
+        userId: String(evaluatee.managerId),
         role: EvaluatorRole.MANAGER,
         reason: 'Gestor directo',
       });
@@ -400,7 +445,7 @@ export class Evaluation360Service {
       });
       peers.forEach(p =>
         suggestions.push({
-          userId: p.id,
+          userId: String(p.id),
           role: EvaluatorRole.PEER,
           reason: 'Par do mesmo departamento',
         }),
@@ -414,7 +459,7 @@ export class Evaluation360Service {
     });
     subordinates.forEach(s =>
       suggestions.push({
-        userId: s.id,
+        userId: String(s.id),
         role: EvaluatorRole.SUBORDINATE,
         reason: 'Subordinado directo',
       }),
@@ -499,7 +544,10 @@ export class Evaluation360Service {
   }
 
   async sendReminders(cycleId: string, dto: SendRemindersDto, actorId: string) {
-    const where: any = { cycleId, status: { in: ['INVITED', 'IN_PROGRESS'] } };
+    const where: Prisma.EvaluatorAssignmentWhereInput = {
+      cycleId,
+      status: { in: ['INVITED', 'IN_PROGRESS'] },
+    };
     if (dto.assignmentIds?.length) where.id = { in: dto.assignmentIds };
 
     const pending = await this.prisma.evaluatorAssignment.findMany({ where });
@@ -695,14 +743,14 @@ export class Evaluation360Service {
     return { processed: participants.length };
   }
 
-  private async calculateParticipantResult(cycle: any, participantId: string) {
+  private async calculateParticipantResult(cycle: CalcCycle, participantId: string) {
     const responses = await this.prisma.evaluationResponse.findMany({
       where: { cycleId: cycle.id, evaluateeId: participantId, status: 'SUBMITTED' },
       include: { answers: { include: { question: { include: { competency: true } } } } },
     });
 
     // Verificar quorum mínimo por grupo
-    const byRole: Record<string, any[]> = {};
+    const byRole: Record<string, ResponseWithAnswers[]> = {};
     for (const r of responses) {
       const role = r.evaluatorRole;
       if (!byRole[role]) byRole[role] = [];
@@ -726,11 +774,9 @@ export class Evaluation360Service {
     }
 
     // Score por tipo de avaliador (média das respostas numéricas)
-    const getAvgScore = (rs: any[]): number | null => {
+    const getAvgScore = (rs: ResponseWithAnswers[]): number | null => {
       const nums = rs.flatMap(r =>
-        r.answers
-          .filter((a: any) => a.numericValue !== null)
-          .map((a: any) => a.numericValue as number),
+        r.answers.filter(a => a.numericValue !== null).map(a => a.numericValue as number),
       );
       return nums.length ? nums.reduce((s, v) => s + v, 0) / nums.length : null;
     };
@@ -775,14 +821,14 @@ export class Evaluation360Service {
     const overallScore = getAvgScore(responses) ?? 0;
 
     // Score por competência
-    const scoresByCompetency: Record<string, any> = {};
-    const allCompetencies = cycle.competencies.map((c: any) => c.competency);
+    const scoresByCompetency: Record<string, CompetencyScoreEntry> = {};
+    const allCompetencies = cycle.competencies.map(c => c.competency);
 
     for (const comp of allCompetencies) {
       const compAnswers = responses.flatMap(r =>
         r.answers
-          .filter((a: any) => a.question?.competencyId === comp.id && a.numericValue !== null)
-          .map((a: any) => ({ role: r.evaluatorRole, value: a.numericValue as number })),
+          .filter(a => a.question?.competencyId === comp.id && a.numericValue !== null)
+          .map(a => ({ role: r.evaluatorRole, value: a.numericValue as number })),
       );
       const allVals = compAnswers.map(a => a.value);
       const selfVals = compAnswers.filter(a => a.role === 'SELF').map(a => a.value);
@@ -806,19 +852,19 @@ export class Evaluation360Service {
     }
 
     // Identificar gaps e forças
-    const entries = Object.entries(scoresByCompetency).filter(([, v]: any) => v.score !== null);
-    const sorted = entries.sort((a: any, b: any) => (a[1].score ?? 0) - (b[1].score ?? 0));
-    const gaps = sorted.slice(0, 3).map(([id, v]: any) => ({
+    const entries = Object.entries(scoresByCompetency).filter(([, v]) => v.score !== null);
+    const sorted = entries.sort((a, b) => (a[1].score ?? 0) - (b[1].score ?? 0));
+    const gaps: CompetencyGapEntry[] = sorted.slice(0, 3).map(([id, v]) => ({
       competencyId: id,
       name: v.name,
       score: v.score,
       gap: v.gap,
       priority: 'HIGH',
     }));
-    const strengths = sorted
+    const strengths: CompetencyStrengthEntry[] = sorted
       .slice(-3)
       .reverse()
-      .map(([id, v]: any) => ({ competencyId: id, name: v.name, score: v.score }));
+      .map(([id, v]) => ({ competencyId: id, name: v.name, score: v.score }));
 
     // Elegibilidade
     const isEligiblePromotion = cycle.cutoffPromotion
@@ -891,21 +937,23 @@ export class Evaluation360Service {
     return result;
   }
 
-  private calculateBonusMultiplier(score: number, cycle: any): number | null {
+  private calculateBonusMultiplier(score: number, cycle: CalcCycle): number | null {
     if (!cycle.linkedToBonus || !cycle.cutoffBonus) return null;
     if (score < cycle.cutoffBonus) return 0;
-    const normalized = (score - cycle.cutoffBonus) / ((cycle.scaleMax ?? 5) - cycle.cutoffBonus);
+    // Eval360Cycle não tem scaleMax (esse campo é por-competência, em
+    // Competency) — fallback fixo em 5, comportamento pré-existente.
+    const normalized = (score - cycle.cutoffBonus) / (5 - cycle.cutoffBonus);
     return Math.min(1 + normalized * 0.5, 1.5); // máx 1.5x
   }
 
   private async generateAutomaticPdi(
     userId: string,
     cycleId: string,
-    gaps: any[],
+    gaps: CompetencyGapEntry[],
     resultId: string,
   ) {
     try {
-      const actions = gaps.map((gap: any) => ({
+      const actions = gaps.map(gap => ({
         title: `Desenvolvimento em ${gap.name}`,
         description: `Gap identificado: ${gap.gap?.toFixed(1) ?? 'N/A'}. Competência com score ${gap.score?.toFixed(1) ?? 'N/A'}.`,
         dueDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 dias
@@ -992,7 +1040,7 @@ export class Evaluation360Service {
   }
 
   async getOrganizationalAnalytics(query: AnalyticsQueryDto) {
-    const where: any = {};
+    const where: Prisma.EvaluationResultWhereInput = {};
     if (query.cycleId) where.cycleId = query.cycleId;
 
     const results = await this.prisma.evaluationResult.findMany({
@@ -1016,8 +1064,8 @@ export class Evaluation360Service {
     // Média por competência (cross-participants)
     const compScores: Record<string, number[]> = {};
     for (const r of results) {
-      const sc = JSON.parse(r.scoresByCompetency);
-      for (const [cId, data] of Object.entries(sc) as any) {
+      const sc: Record<string, CompetencyScoreEntry> = JSON.parse(r.scoresByCompetency ?? '{}');
+      for (const [cId, data] of Object.entries(sc)) {
         if (!compScores[cId]) compScores[cId] = [];
         if (data.score !== null) compScores[cId].push(data.score);
       }
@@ -1172,11 +1220,15 @@ export class Evaluation360Service {
     return this.getOrganizationalAnalytics({ cycleId: dto.cycleId });
   }
 
-  private async generateAiInsights(result: any): Promise<string> {
+  private async generateAiInsights(
+    result: Prisma.EvaluationResultGetPayload<object>,
+  ): Promise<string> {
     // Em produção: integrar com Anthropic API ou OpenAI para análise de texto
-    const gaps = result.gaps ? JSON.parse(result.gaps) : [];
-    const strengths = result.strengths ? JSON.parse(result.strengths) : [];
-    return `Pontos fortes identificados: ${strengths.map((s: any) => s.name).join(', ')}. Áreas prioritárias para desenvolvimento: ${gaps.map((g: any) => g.name).join(', ')}.`;
+    const gaps: CompetencyGapEntry[] = result.gaps ? JSON.parse(result.gaps) : [];
+    const strengths: CompetencyStrengthEntry[] = result.strengths
+      ? JSON.parse(result.strengths)
+      : [];
+    return `Pontos fortes identificados: ${strengths.map(s => s.name).join(', ')}. Áreas prioritárias para desenvolvimento: ${gaps.map(g => g.name).join(', ')}.`;
   }
 
   // ============================================================
@@ -1215,7 +1267,13 @@ export class Evaluation360Service {
     return cycle;
   }
 
-  private validateWeights(dto: any) {
+  private validateWeights(dto: {
+    weightSelf?: number;
+    weightManager?: number;
+    weightPeer?: number;
+    weightSubordinate?: number;
+    weightExternal?: number;
+  }) {
     const total =
       (dto.weightSelf ?? 0) +
       (dto.weightManager ?? 0) +
