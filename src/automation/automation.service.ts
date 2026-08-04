@@ -1,6 +1,6 @@
 ﻿// src/automation/automation.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { EnrollmentStatus } from '@prisma/client';
+import { EnrollmentStatus, Prisma, AutomationTrigger } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateRuleDto,
@@ -16,19 +16,19 @@ import {
 
 const helpersLogger = new Logger('AutomationHelpers');
 
-function safeM(prisma: any, name: string) {
-  return (
-    prisma[name] ?? {
-      findMany: async () => [],
-      findFirst: async () => null,
-      create: async (d: any) => d.data,
-      update: async (d: any) => d.data,
-      count: async () => 0,
-      delete: async () => null,
-    }
-  );
+type AutomationRuleRecord = Prisma.AutomationRuleGetPayload<object>;
+
+interface ActionResult {
+  affected: number;
+  message?: string;
+  points?: number;
+  logged?: boolean;
+  httpStatus?: number;
+  error?: string;
 }
 
+// Condição/parâmetros de acção são JSON livre por regra — o shape varia
+// consoante o tipo de trigger/acção, sem um contrato único possível.
 function parseCondition(condition?: string | null): Record<string, any> {
   if (!condition) return {};
   try {
@@ -163,7 +163,7 @@ export class AutomationService {
   // ══════════════════════════════════════════════════════
 
   async getRules(category?: AutomationCategory) {
-    const where: any = {};
+    const where: Prisma.AutomationRuleWhereInput = {};
     if (category) where.category = category;
 
     const rules = await this.prisma.read.automationRule.findMany({
@@ -175,18 +175,18 @@ export class AutomationService {
     return Promise.all(
       rules.map(async r => {
         const [total, success, failed] = await Promise.all([
-          safeM(this.prisma, 'automationExecution').count({ where: { ruleId: r.id } }),
-          safeM(this.prisma, 'automationExecution').count({
+          this.prisma.automationExecution.count({ where: { ruleId: r.id } }),
+          this.prisma.automationExecution.count({
             where: { ruleId: r.id, status: 'SUCCESS' },
           }),
-          safeM(this.prisma, 'automationExecution').count({
+          this.prisma.automationExecution.count({
             where: { ruleId: r.id, status: 'FAILED' },
           }),
         ]);
         return {
           ...r,
           condition: parseCondition(r.condition),
-          actionParams: parseParams((r as any).actionParams),
+          actionParams: parseParams(r.actionParams),
           stats: {
             total,
             success,
@@ -220,7 +220,7 @@ export class AutomationService {
   // ("COURSE_COMPLETED", "MANUAL", ...). Sem mapeamento, o create() rebentava
   // sempre com "Invalid value for argument triggerType". Mapeia os únicos casos
   // inequívocos e cai em MANUAL para o resto — ver memória sobre este gap.
-  private mapTriggerType(trigger: string): string {
+  private mapTriggerType(trigger: string): AutomationTrigger {
     const known = [
       'USER_HIRED',
       'USER_PROMOTED',
@@ -234,7 +234,7 @@ export class AutomationService {
       'MANUAL',
     ];
     const upper = trigger?.toUpperCase().replace(/\./g, '_');
-    return known.includes(upper) ? upper : 'MANUAL';
+    return (known.includes(upper) ? upper : 'MANUAL') as AutomationTrigger;
   }
 
   async createRule(dto: CreateRuleDto, createdById = 0) {
@@ -248,18 +248,17 @@ export class AutomationService {
         condition: dto.condition ?? '',
         active: dto.active ?? true,
         tenantId,
-        triggerType: this.mapTriggerType(dto.trigger) as any,
+        triggerType: this.mapTriggerType(dto.trigger),
         triggerConfigJson: JSON.stringify({ cronExpression: dto.cronExpression ?? null }),
         actionsJson: JSON.stringify([
           { type: dto.action, params: dto.actionParams ? parseParams(dto.actionParams) : {} },
         ]),
         createdBy: String(createdById),
-        // Extra fields stored in condition JSON if model doesn't have columns
-        ...(dto.description && ({ description: dto.description } as any)),
-        ...(dto.category && ({ category: dto.category } as any)),
-        ...(dto.priority && ({ priority: dto.priority } as any)),
-        ...(dto.actionParams && ({ actionParams: dto.actionParams } as any)),
-        ...(dto.maxRetries !== undefined && ({ maxRetries: dto.maxRetries } as any)),
+        description: dto.description,
+        category: dto.category,
+        priority: dto.priority,
+        actionParams: dto.actionParams,
+        maxRetries: dto.maxRetries,
       },
     });
 
@@ -287,7 +286,7 @@ export class AutomationService {
 
   async updateRule(id: number, dto: UpdateRuleDto) {
     await this.getRule(id);
-    return this.prisma.automationRule.update({ where: { id }, data: dto as any });
+    return this.prisma.automationRule.update({ where: { id }, data: dto });
   }
 
   async toggleRule(id: number) {
@@ -305,7 +304,7 @@ export class AutomationService {
   async cloneRule(id: number) {
     const source = await this.getRule(id);
     return this.prisma.automationRule.create({
-      data: { ...(source as any), id: undefined, name: `Cópia de: ${source.name}`, active: false },
+      data: { ...source, id: undefined, name: `Cópia de: ${source.name}`, active: false },
     });
   }
 
@@ -373,7 +372,7 @@ export class AutomationService {
     return { executed: rules.length, results };
   }
 
-  private async executeRule(rule: any): Promise<any> {
+  private async executeRule(rule: AutomationRuleRecord): Promise<Record<string, unknown>> {
     switch (rule.trigger) {
       case TriggerType.BIRTHDAY_TODAY:
       case 'BIRTHDAY_TODAY':
@@ -396,7 +395,7 @@ export class AutomationService {
   // ══════════════════════════════════════════════════════
 
   private async executeAction(
-    rule: any,
+    rule: AutomationRuleRecord,
     payload: Record<string, any>,
     userId?: number,
   ): Promise<{
@@ -407,7 +406,7 @@ export class AutomationService {
     const params = parseParams(rule.actionParams);
     const targetUserId = userId ?? payload.userId;
 
-    const execId = await safeM(this.prisma, 'automationExecution')
+    const execId = await this.prisma.automationExecution
       .create({
         data: {
           ruleId: rule.id,
@@ -416,7 +415,7 @@ export class AutomationService {
           startedAt: new Date(),
         },
       })
-      .then((e: any) => e.id)
+      .then(e => e.id)
       .catch(e => {
         this.logger.warn({
           ruleId: rule.id,
@@ -428,7 +427,7 @@ export class AutomationService {
       });
 
     try {
-      let result: any;
+      let result: ActionResult;
 
       switch (rule.action) {
         case ActionType.SEND_NOTIFICATION: {
@@ -514,8 +513,10 @@ export class AutomationService {
 
         case ActionType.AWARD_BADGE: {
           if (targetUserId && params.badgeCode) {
+            // FIX: Badge não tem campo `code` (só name/description) — o
+            // cast escondia que esta pesquisa nunca encontrava nada.
             const badge = await this.prisma.badge
-              .findFirst({ where: { code: params.badgeCode } as any })
+              .findFirst({ where: { name: params.badgeCode } })
               .catch(e => {
                 this.logger.warn({
                   badgeCode: params.badgeCode,
@@ -580,7 +581,7 @@ export class AutomationService {
         case ActionType.NOTIFY_MANAGER:
         case ActionType.NOTIFY_HR: {
           const roleCode = rule.action === ActionType.NOTIFY_HR ? 'RH' : undefined;
-          const managers = roleCode
+          const managers: { id: number | null }[] = roleCode
             ? await this.prisma.read.user.findMany({
                 where: { role: { code: roleCode } },
                 select: { id: true },
@@ -591,7 +592,7 @@ export class AutomationService {
                   .findMany({ where: { id: targetUserId }, select: { managerId: true } })
                   .then(us => us.map(u => ({ id: u.managerId })).filter(u => u.id))
               : [];
-          for (const m of managers as any[]) {
+          for (const m of managers) {
             if (m.id)
               await this.prisma.notificationLog
                 .create({
@@ -623,7 +624,7 @@ export class AutomationService {
 
       // Update execution as SUCCESS
       if (execId)
-        await safeM(this.prisma, 'automationExecution')
+        await this.prisma.automationExecution
           .update({
             where: { id: execId },
             data: {
@@ -645,7 +646,7 @@ export class AutomationService {
       return { status: 'SUCCESS', ...result };
     } catch (err: unknown) {
       if (execId)
-        await safeM(this.prisma, 'automationExecution')
+        await this.prisma.automationExecution
           .update({
             where: { id: execId },
             data: {
@@ -671,7 +672,7 @@ export class AutomationService {
   // BUILT-IN RULE EXECUTORS
   // ══════════════════════════════════════════════════════
 
-  private async processBirthdays(): Promise<any> {
+  private async processBirthdays(): Promise<Record<string, unknown>> {
     // dateOfBirth not in base schema — if added, filter here
     this.logger.warn(
       'processBirthdays: campo dateOfBirth não existe no modelo User — adiciona ao schema para activar',
@@ -679,7 +680,7 @@ export class AutomationService {
     return { birthdaysNotified: 0, message: 'Requer campo dateOfBirth no modelo User' };
   }
 
-  private async sendLeaveReminders(): Promise<any> {
+  private async sendLeaveReminders(): Promise<Record<string, unknown>> {
     // leaveRequest model doesn't exist → fallback to HistoryRecord
     const pending = await this.prisma.historyRecord
       .count({
@@ -696,7 +697,7 @@ export class AutomationService {
     return { pending, message: `${pending} pedido(s) de ausência pendentes` };
   }
 
-  private async sendEnrollmentReminders(): Promise<any> {
+  private async sendEnrollmentReminders(): Promise<Record<string, unknown>> {
     const cutoff = new Date(Date.now() - 14 * 86400000);
     const enrollments = await this.prisma.read.enrollment.findMany({
       where: { status: EnrollmentStatus.IN_PROGRESS, enrolledAt: { lte: cutoff } },
@@ -732,7 +733,7 @@ export class AutomationService {
     return { notified };
   }
 
-  private async checkPayslipDue(): Promise<any> {
+  private async checkPayslipDue(): Promise<Record<string, unknown>> {
     const today = new Date();
     if (today.getDate() !== 25) return { message: 'Não é dia 25 — verificação ignorada' };
     const period = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -802,7 +803,7 @@ export class AutomationService {
   async getExecutions(filters: ExecutionFilterDto = {}) {
     const { page = 1, limit = 30, status, ruleId, from, to } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.AutomationExecutionWhereInput = {};
     if (status) where.status = status;
     if (ruleId) where.ruleId = ruleId;
     if (from || to) {
@@ -811,40 +812,39 @@ export class AutomationService {
       if (to) where.startedAt.lte = new Date(to);
     }
 
-    const executions = await safeM(this.prisma, 'automationExecution')
-      .findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { startedAt: 'desc' },
-      })
-      .catch(e => {
-        this.logger.warn({
-          filters,
-          action: 'GET_EXECUTIONS_LIST',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao listar execuções de automação',
+    const executions: Prisma.AutomationExecutionGetPayload<object>[] =
+      await this.prisma.automationExecution
+        .findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { startedAt: 'desc' },
+        })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            filters,
+            action: 'GET_EXECUTIONS_LIST',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao listar execuções de automação',
+          });
+          return [] as Prisma.AutomationExecutionGetPayload<object>[];
         });
-        return [] as any[];
-      });
 
-    const total = await safeM(this.prisma, 'automationExecution')
-      .count({ where })
-      .catch(e => {
-        this.logger.warn({
-          filters,
-          action: 'GET_EXECUTIONS_COUNT',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao contar execuções de automação',
-        });
-        return 0;
+    const total = await this.prisma.automationExecution.count({ where }).catch(e => {
+      this.logger.warn({
+        filters,
+        action: 'GET_EXECUTIONS_COUNT',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao contar execuções de automação',
       });
+      return 0;
+    });
 
     return { data: executions, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async rerunExecution(executionId: string) {
-    const exec = await safeM(this.prisma, 'automationExecution')
+    const exec = await this.prisma.automationExecution
       .findUnique({
         where: { id: executionId },
       })
@@ -886,46 +886,47 @@ export class AutomationService {
     const [total, active, execTotal, execSuccess, execFailed] = await Promise.all([
       this.prisma.read.automationRule.count(),
       this.prisma.read.automationRule.count({ where: { active: true } }),
-      safeM(this.prisma, 'automationExecution').count({}),
-      safeM(this.prisma, 'automationExecution').count({ where: { status: 'SUCCESS' } }),
-      safeM(this.prisma, 'automationExecution').count({ where: { status: 'FAILED' } }),
+      this.prisma.automationExecution.count({}),
+      this.prisma.automationExecution.count({ where: { status: 'SUCCESS' } }),
+      this.prisma.automationExecution.count({ where: { status: 'FAILED' } }),
     ]);
 
     const successRate = execTotal > 0 ? +((execSuccess / execTotal) * 100).toFixed(1) : 0;
 
     const byCategory = await this.prisma.automationRule
       .groupBy({
-        by: ['category' as any],
+        by: ['category'],
         _count: { id: true },
       })
-      .catch(e => {
+      .catch((e: unknown) => {
         this.logger.warn({
           action: 'GET_STATS_BY_CATEGORY',
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao agrupar regras de automação por categoria',
         });
-        return [] as any[];
+        return [] as { category: AutomationCategory | null; _count: { id: number } }[];
       });
 
-    const recentFails = await safeM(this.prisma, 'automationExecution')
-      .findMany({
-        where: { status: 'FAILED' },
-        orderBy: { startedAt: 'desc' },
-        take: 5,
-      })
-      .catch(e => {
-        this.logger.warn({
-          action: 'GET_STATS_RECENT_FAILS',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao listar execuções falhadas recentes',
+    const recentFails: Prisma.AutomationExecutionGetPayload<object>[] =
+      await this.prisma.automationExecution
+        .findMany({
+          where: { status: 'FAILED' },
+          orderBy: { startedAt: 'desc' },
+          take: 5,
+        })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'GET_STATS_RECENT_FAILS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao listar execuções falhadas recentes',
+          });
+          return [] as Prisma.AutomationExecutionGetPayload<object>[];
         });
-        return [] as any[];
-      });
 
     return {
       rules: { total, active, inactive: total - active },
       executions: { total: execTotal, success: execSuccess, failed: execFailed, successRate },
-      byCategory: (byCategory as any[]).map((c: any) => ({
+      byCategory: byCategory.map(c => ({
         category: c.category,
         count: c._count.id,
       })),
