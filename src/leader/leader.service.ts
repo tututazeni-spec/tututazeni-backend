@@ -1,6 +1,6 @@
 ﻿// src/leader/leader.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { EnrollmentStatus } from '@prisma/client';
+import { EnrollmentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateLeaderProfileDto,
@@ -47,16 +47,31 @@ function computeRisk(
   return RiskLevel.NONE;
 }
 
-function safeM(prisma: any, name: string) {
+// LeaderProfile não existe em prisma/schema.prisma (confirmado — sem
+// migration para o modelo). upsertProfile/getProfile são os dois únicos
+// pontos que o tocam; este wrapper mantém o degrade gracioso já documentado
+// no cabeçalho do ficheiro sem espalhar `any` pelo resto da classe (ao
+// contrário de Feedback/OneOnOneMeeting acima, que eram modelos reais e o
+// wrapper genérico nunca teve razão de ser).
+type LeaderProfileDelegate = {
+  upsert: (args: {
+    where: { userId: number };
+    create: Record<string, unknown>;
+    update: Record<string, unknown>;
+    include?: Record<string, unknown>;
+  }) => Promise<Record<string, unknown>>;
+  findUnique: (args: {
+    where: { userId: number };
+    include?: Record<string, unknown>;
+  }) => Promise<Record<string, unknown> | null>;
+};
+
+function safeLeaderProfile(prisma: PrismaService): LeaderProfileDelegate {
+  const delegate = (prisma as unknown as { leaderProfile?: LeaderProfileDelegate }).leaderProfile;
   return (
-    prisma[name] ?? {
-      findMany: async () => [],
-      findFirst: async () => null,
+    delegate ?? {
+      upsert: async args => args.create,
       findUnique: async () => null,
-      create: async (d: any) => d.data,
-      upsert: async (d: any) => d.create,
-      update: async (d: any) => d.data,
-      count: async () => 0,
     }
   );
 }
@@ -240,7 +255,7 @@ export class LeaderService {
   async getTeam(leaderId: number, filters: TeamFilterDto = {}) {
     const { page = 1, limit = 30, search } = filters;
     const skip = (page - 1) * limit;
-    const where: any = { managerId: leaderId, active: true };
+    const where: Prisma.UserWhereInput = { managerId: leaderId, active: true };
     if (search)
       where.OR = [
         { fullName: { contains: search, mode: 'insensitive' } },
@@ -331,7 +346,7 @@ export class LeaderService {
 
   async getMemberProfile(user: CurrentUserData, memberId: number) {
     const leaderId = user.id;
-    const member = (await this.prisma.user.findUnique({
+    const member = await this.prisma.user.findUnique({
       where: { id: memberId },
       select: {
         id: true,
@@ -352,7 +367,7 @@ export class LeaderService {
             type: true,
             createdAt: true,
             cycle: { select: { name: true } },
-          } as any,
+          },
         },
         enrollments: {
           include: { course: { select: { title: true, category: true } } },
@@ -366,8 +381,8 @@ export class LeaderService {
           include: { actions: { select: { status: true, progress: true }, take: 20 } },
         },
         badgeAwards: { include: { badge: true }, orderBy: { awardedAt: 'desc' }, take: 5 },
-      } as any,
-    })) as any;
+      },
+    });
 
     if (!member) throw new NotFoundException('Membro não encontrado');
 
@@ -406,8 +421,12 @@ export class LeaderService {
   // ══════════════════════════════════════════════════════
 
   async getTeamPerformance(leaderId: number, period?: string) {
-    const where: any = { user: { managerId: leaderId } };
-    if (period) where.period = { contains: period };
+    const where: Prisma.PerformanceReviewWhereInput = { user: { managerId: leaderId } };
+    // FIX: PerformanceReview/PerformanceCycle não têm campo `period` — o
+    // filtro escrevia sempre numa chave inexistente (ignorada pelo Prisma
+    // atrás do `any`) e nunca filtrava nada. O conceito mais próximo é o
+    // nome do ciclo de avaliação (ex: "2026-Q1"), acessível via a relação.
+    if (period) where.cycle = { name: { contains: period, mode: 'insensitive' } };
 
     const reviews = await this.prisma.read.performanceReview.findMany({
       where,
@@ -464,7 +483,11 @@ export class LeaderService {
         ? `[SBI] Situação: ${dto.situation ?? '–'} | Comportamento: ${dto.behavior ?? '–'} | Impacto: ${dto.impact ?? '–'}\n\n${dto.content}`
         : dto.content;
 
-    const feedback = await safeM(this.prisma, 'feedback')
+    // FIX: Feedback é um modelo real (mesmo achado de reports.service.ts/
+    // automation.service.ts/dashboard-rh.service.ts — safeM() nunca teve
+    // razão de ser aqui); mantido o .catch() só como resiliência genuína a
+    // falhas de BD.
+    const feedback = await this.prisma.feedback
       .create({
         data: {
           fromUserId: giverId,
@@ -480,7 +503,7 @@ export class LeaderService {
           receiverId: dto.recipientId,
           action: 'giveFeedback.create',
           err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao criar registo de feedback — modelo feedback pode estar ausente',
+          msg: 'Falha ao criar registo de feedback',
         });
         return {
           giverId,
@@ -536,9 +559,9 @@ export class LeaderService {
     // "giver.managerId: leaderId" e passava a devolver feedback recebido por
     // QUALQUER pessoa — não só a equipa do líder chamador. Agora userId só
     // estreita dentro do âmbito da equipa, nunca o substitui.
-    const where: any = { from: { managerId: leaderId } };
+    const where: Prisma.FeedbackWhereInput = { from: { managerId: leaderId } };
     if (userId) where.toUserId = userId;
-    return safeM(this.prisma, 'feedback')
+    return this.prisma.read.feedback
       .findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -550,9 +573,9 @@ export class LeaderService {
           userId,
           action: 'getTeamFeedbacks',
           err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter feedbacks da equipa — modelo feedback pode estar ausente',
+          msg: 'Falha ao obter feedbacks da equipa',
         });
-        return [] as any[];
+        return [];
       });
   }
 
@@ -561,7 +584,8 @@ export class LeaderService {
   // ══════════════════════════════════════════════════════
 
   async createOneOnOne(leaderId: number, dto: LeaderCreateOneOnOneDto) {
-    const meeting = await safeM(this.prisma, 'oneOnOneMeeting')
+    // FIX: OneOnOneMeeting é um modelo real — mesmo achado de Feedback acima.
+    const meeting = await this.prisma.oneOnOneMeeting
       .create({
         data: {
           hostId: leaderId,
@@ -577,7 +601,7 @@ export class LeaderService {
           participantId: dto.participantId,
           action: 'createOneOnOne',
           err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao criar reunião 1:1 — modelo oneOnOneMeeting pode estar ausente',
+          msg: 'Falha ao criar reunião 1:1',
         });
         return { leaderId, participantId: dto.participantId, status: 'SCHEDULED', ...dto };
       });
@@ -604,9 +628,9 @@ export class LeaderService {
   }
 
   async getOneOnOnes(leaderId: number, memberId?: number) {
-    const where: any = { hostId: leaderId };
+    const where: Prisma.OneOnOneMeetingWhereInput = { hostId: leaderId };
     if (memberId) where.participantId = memberId;
-    return safeM(this.prisma, 'oneOnOneMeeting')
+    return this.prisma.read.oneOnOneMeeting
       .findMany({
         where,
         orderBy: { scheduledAt: 'desc' },
@@ -618,14 +642,14 @@ export class LeaderService {
           memberId,
           action: 'getOneOnOnes',
           err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter reuniões 1:1 — modelo oneOnOneMeeting pode estar ausente',
+          msg: 'Falha ao obter reuniões 1:1',
         });
-        return [] as any[];
+        return [];
       });
   }
 
   async completeOneOnOne(meetingId: number, notes: string, user: CurrentUserData) {
-    const meeting = await safeM(this.prisma, 'oneOnOneMeeting')
+    const meeting = await this.prisma.read.oneOnOneMeeting
       .findUnique({ where: { id: meetingId } })
       .catch(e => {
         this.logger.warn({
@@ -633,7 +657,7 @@ export class LeaderService {
           userId: user?.id,
           action: 'completeOneOnOne.findUnique',
           err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao procurar reunião 1:1 — modelo oneOnOneMeeting pode estar ausente',
+          msg: 'Falha ao procurar reunião 1:1',
         });
         return null;
       });
@@ -649,7 +673,9 @@ export class LeaderService {
       throw new NotFoundException('Reunião 1:1 não encontrada');
     }
 
-    return safeM(this.prisma, 'oneOnOneMeeting')
+    // FIX: OneOnOneMeeting é um modelo real — mesmo achado de Feedback/
+    // createOneOnOne/getOneOnOnes acima; o wrapper safeM() nunca disparava.
+    return this.prisma.oneOnOneMeeting
       .update({
         where: { id: meetingId },
         data: { status: 'COMPLETED', minutes: notes, completedAt: new Date() },
@@ -660,7 +686,7 @@ export class LeaderService {
           userId: user?.id,
           action: 'completeOneOnOne.update',
           err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao actualizar reunião 1:1 como concluída — modelo oneOnOneMeeting pode estar ausente',
+          msg: 'Falha ao actualizar reunião 1:1 como concluída',
         });
         return { id: meetingId, status: 'COMPLETED', notes };
       });
@@ -671,7 +697,10 @@ export class LeaderService {
   // ══════════════════════════════════════════════════════
 
   async getTeamPlans(leaderId: number) {
-    const plans = (await this.prisma.developmentPlan.findMany({
+    // FIX: `as any`/`as any[]` eram desnecessários — PdiGoal.progress é um
+    // campo real (goals: PdiGoal[]) e o select/include já é totalmente
+    // inferível pelo Prisma sem casts.
+    const plans = await this.prisma.developmentPlan.findMany({
       where: { user: { managerId: leaderId }, isTemplate: false },
       include: {
         user: {
@@ -683,17 +712,15 @@ export class LeaderService {
           },
         },
         actions: { select: { status: true, progress: true }, take: 30 },
-        goals: { select: { progress: true } as any, take: 10 },
+        goals: { select: { progress: true }, take: 10 },
       },
       orderBy: { updatedAt: 'desc' },
-    })) as any[];
+    });
 
-    return plans.map((p: any) => {
-      const actCompleted = p.actions.filter((a: any) => a.status === 'COMPLETED').length;
+    return plans.map(p => {
+      const actCompleted = p.actions.filter(a => a.status === 'COMPLETED').length;
       const progress = p.actions.length
-        ? Math.round(
-            p.actions.reduce((a: number, ac: any) => a + (ac.progress ?? 0), 0) / p.actions.length,
-          )
+        ? Math.round(p.actions.reduce((a, ac) => a + (ac.progress ?? 0), 0) / p.actions.length)
         : 0;
       return {
         ...p,
@@ -879,7 +906,7 @@ export class LeaderService {
   // ══════════════════════════════════════════════════════
 
   async upsertProfile(dto: CreateLeaderProfileDto) {
-    return safeM(this.prisma, 'leaderProfile')
+    return safeLeaderProfile(this.prisma)
       .upsert({
         where: { userId: dto.userId },
         create: {
@@ -913,7 +940,7 @@ export class LeaderService {
   }
 
   async getProfile(userId: number) {
-    return safeM(this.prisma, 'leaderProfile')
+    return safeLeaderProfile(this.prisma)
       .findUnique({
         where: { userId },
         include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
@@ -960,11 +987,14 @@ export class LeaderService {
           });
           return 0;
         }),
+      // FIX: Course.mandatory é um campo real (mesmo achado confirmado em
+      // dashboard-rh.service.ts/reports.service.ts) — o `as any` era
+      // desnecessário, nunca escondia um campo inexistente.
       this.prisma.enrollment
         .count({
           where: {
             userId: { in: teamIds },
-            course: { mandatory: true } as any,
+            course: { mandatory: true },
             status: EnrollmentStatus.IN_PROGRESS,
           },
         })
@@ -1081,7 +1111,7 @@ export class LeaderService {
         action: 'Criar plano de aceleração e mentoring',
       });
 
-    const overduePlans = planData.filter((p: any) => p.health === '🔴');
+    const overduePlans = planData.filter(p => p.health === '🔴');
     if (overduePlans.length > 0)
       recs.push({
         type: 'DEVELOPMENT',
@@ -1090,7 +1120,7 @@ export class LeaderService {
         action: 'Rever acções e dar suporte activo',
       });
 
-    const lowEngagement = teamData.data.filter((u: any) => u.riskLevel !== 'NONE');
+    const lowEngagement = teamData.data.filter(u => u.riskLevel !== 'NONE');
     if (lowEngagement.length > teamData.meta.total * 0.3)
       recs.push({
         type: 'ENGAGEMENT',
