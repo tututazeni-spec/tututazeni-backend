@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProvidersService } from './ai-providers.service';
 import {
@@ -18,6 +19,19 @@ import {
   TutorPersonality,
   AgentAction,
 } from './ai-tutor.dto';
+
+type StartSessionUser = Prisma.UserGetPayload<{
+  include: {
+    position: { select: { name: true; level: true } };
+    department: { select: { name: true } };
+    userCompetencies: {
+      include: { competency: { select: { name: true; category: true } } };
+      orderBy: { currentLevel: 'desc' };
+      take: 5;
+    };
+    points: { select: { points: true } };
+  };
+}>;
 
 @Injectable()
 export class AiTutorService {
@@ -61,8 +75,8 @@ export class AiTutorService {
       });
       if (course) {
         courseTitle = course.title;
-        const modules = (course as any).modules ?? [];
-        courseContext = `Curso: "${course.title}". ${course.description ?? ''}. Módulos: ${modules.map((m: any) => `${m.title} (${m.lessons?.length ?? 0} lições)`).join(', ')}.`;
+        const modules = course.modules ?? [];
+        courseContext = `Curso: "${course.title}". ${course.description ?? ''}. Módulos: ${modules.map(m => `${m.title} (${m.lessons?.length ?? 0} lições)`).join(', ')}.`;
       }
     }
 
@@ -74,8 +88,8 @@ export class AiTutorService {
         include: { actions: { select: { title: true, status: true, type: true }, take: 5 } },
       });
       if (plan) {
-        const pending = (plan.actions as any[]).filter(a => a.status !== 'COMPLETED');
-        pdiContext = `PDI activo: "${(plan as any).name}". Objectivo: ${(plan as any).goal}. Acções pendentes: ${pending.map((a: any) => a.title).join(', ')}.`;
+        const pending = plan.actions.filter(a => a.status !== 'COMPLETED');
+        pdiContext = `PDI activo: "${plan.name}". Objectivo: ${plan.goal}. Acções pendentes: ${pending.map(a => a.title).join(', ')}.`;
       }
     }
 
@@ -92,12 +106,12 @@ export class AiTutorService {
 
     // 6. System prompt completo e contextualizado
     const systemPrompt = this.buildSystemPrompt({
-      user: user as any,
+      user,
       courseContext,
       pdiContext,
-      memory: (memory as any)?.summary ?? '',
+      memory: memory?.summary ?? '',
       personality: dto.personality ?? TutorPersonality.FRIENDLY,
-      recentCourses: (recentCourses as any[]).map(e => e.course?.title ?? '').filter(Boolean),
+      recentCourses: recentCourses.map(e => e.course?.title ?? '').filter(Boolean),
     });
 
     // 7. Criar sessão
@@ -127,7 +141,7 @@ export class AiTutorService {
       });
 
     const providerInfo = this.aiProviders.getProviderInfo();
-    const userName = (user as any)?.fullName?.split(' ')[0] ?? 'colega';
+    const userName = user?.fullName?.split(' ')[0] ?? 'colega';
 
     return {
       session,
@@ -198,7 +212,7 @@ export class AiTutorService {
     // Actualizar memória de longo prazo (a cada 10 mensagens)
     const msgCount = session.messages.filter(m => m.role === 'USER').length;
     if (msgCount > 0 && msgCount % 10 === 0) {
-      this.updateMemory(userId, session.messages as any[]).catch(e => {
+      this.updateMemory(userId, session.messages).catch(e => {
         this.logger.warn({
           userId,
           sessionId: dto.sessionId,
@@ -262,7 +276,7 @@ export class AiTutorService {
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
 
-    let result: any = null;
+    let result: unknown = null;
     let description = '';
 
     switch (dto.action) {
@@ -359,15 +373,22 @@ export class AiTutorService {
       const course = await this.prisma.read.course.findUnique({
         where: { id: dto.courseId },
         include: {
-          modules: { include: { lessons: { select: { title: true, content: true } } }, take: 3 },
+          // FIX: select tinha `content` (campo legado, nunca escrito — ver
+          // CLAUDE.md, "Lesson: campo é textContent") e faltava `id`, por isso
+          // dto.lessonId nunca conseguia encontrar a lição correspondente.
+          modules: {
+            include: { lessons: { select: { id: true, title: true, textContent: true } } },
+            take: 3,
+          },
         },
       });
       if (course) {
-        const lessons = (course as any).modules.flatMap((m: any) => m.lessons ?? []);
-        contextText = `Curso: "${course.title}". Conteúdo: ${lessons.map((l: any) => l.title).join(', ')}.`;
+        const lessons = course.modules.flatMap(m => m.lessons ?? []);
+        contextText = `Curso: "${course.title}". Conteúdo: ${lessons.map(l => l.title).join(', ')}.`;
         if (dto.lessonId) {
-          const lesson = lessons.find((l: any) => l.id === dto.lessonId);
-          if (lesson?.content) contextText += ` Lição actual: ${lesson.content.slice(0, 800)}`;
+          const lesson = lessons.find(l => l.id === dto.lessonId);
+          if (lesson?.textContent)
+            contextText += ` Lição actual: ${lesson.textContent.slice(0, 800)}`;
         }
       }
     } else if (dto.topic) {
@@ -390,7 +411,9 @@ export class AiTutorService {
     );
 
     // Tentar fazer parse do JSON
-    let parsed: any = null;
+    // Formato do JSON gerado varia por dto.type (quiz/flashcards/resumo/plano) —
+    // sem contrato único possível, ver payloads análogos noutros lotes.
+    let parsed: unknown = null;
     try {
       const clean = response.text.replace(/```json|```/g, '').trim();
       parsed = JSON.parse(clean);
@@ -440,11 +463,11 @@ export class AiTutorService {
     ]);
 
     const completedCategories = [
-      ...new Set(enrollments.map(e => (e.course as any)?.category).filter(Boolean)),
+      ...new Set(enrollments.map(e => e.course?.category).filter(Boolean)),
     ];
     const competencyGaps = competencies
       .filter(c => c.currentLevel < (c.targetLevel ?? 0))
-      .map(c => (c.competency as any).name);
+      .map(c => c.competency.name);
 
     // Cursos não concluídos relacionados com gaps
     const recommended = await this.prisma.read.course.findMany({
@@ -457,10 +480,10 @@ export class AiTutorService {
     });
 
     const systemPrompt = `És um conselheiro de aprendizagem corporativa. Responde em português de forma concisa.`;
-    const userPrompt = `Utilizador: ${(user as any)?.fullName}, Cargo: ${(user as any)?.position?.name ?? 'N/A'}, Departamento: ${(user as any)?.department?.name ?? 'N/A'}.
+    const userPrompt = `Utilizador: ${user?.fullName}, Cargo: ${user?.position?.name ?? 'N/A'}, Departamento: ${user?.department?.name ?? 'N/A'}.
 Cursos concluídos (categorias): ${completedCategories.join(', ') || 'nenhum'}.
 Gaps de competência: ${competencyGaps.join(', ') || 'nenhum identificado'}.
-${activePDI ? `PDI activo: "${(activePDI as any).name}"` : ''}
+${activePDI ? `PDI activo: "${activePDI.name}"` : ''}
 Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevemente o porquê de cada uma.`;
 
     const aiInsight = await this.aiProviders.chat(
@@ -505,7 +528,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
   async getMySessions(userId: number, filters: AiSessionFilterDto) {
     const { page = 1, limit = 20, courseId, activeOnly } = filters;
     const skip = (page - 1) * limit;
-    const where: any = { userId };
+    const where: Prisma.AiTutorSessionWhereInput = { userId };
     if (courseId) where.courseId = courseId;
     if (activeOnly) where.endedAt = null;
 
@@ -528,7 +551,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
 
   // ─── MEMÓRIA PERSISTENTE ──────────────────────────────────────────────────
 
-  private async updateMemory(userId: number, messages: any[]) {
+  private async updateMemory(userId: number, messages: Array<{ role: string; content: string }>) {
     const userMsgs = messages
       .filter(m => m.role === 'USER')
       .slice(-6)
@@ -606,7 +629,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
   }
 
   private buildSystemPrompt(ctx: {
-    user: any;
+    user: StartSessionUser | null;
     courseContext: string;
     pdiContext: string;
     memory: string;
@@ -630,7 +653,7 @@ PERFIL DO UTILIZADOR:
 - Cargo: ${ctx.user?.position?.name ?? 'N/A'} (Nível: ${ctx.user?.position?.level ?? 'N/A'})
 - Departamento: ${ctx.user?.department?.name ?? 'N/A'}
 - XP acumulado: ${ctx.user?.points?.points ?? 0} pontos
-- Competências top: ${ctx.user?.userCompetencies?.map((c: any) => `${c.competency?.name} (${c.currentLevel}/5)`).join(', ') || 'nenhuma registada'}
+- Competências top: ${ctx.user?.userCompetencies?.map(c => `${c.competency?.name} (${c.currentLevel}/5)`).join(', ') || 'nenhuma registada'}
 - Cursos recentes: ${ctx.recentCourses.join(', ') || 'nenhum'}
 
 ${ctx.courseContext ? `CONTEXTO DO CURSO:\n${ctx.courseContext}\n` : ''}
