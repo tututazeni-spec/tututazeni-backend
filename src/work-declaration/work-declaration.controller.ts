@@ -30,6 +30,9 @@ import {
   RequestDeclarationDto,
   SignDeclarationDto,
   DeclarationQueryDto,
+  DeclarationStatus,
+  DeclarationType,
+  DeclarationLocale,
   CreateDeclarationTemplateDto,
   UpdateDeclarationTemplateDto,
   ChangeDeclarationStatusDto,
@@ -42,7 +45,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { IAuthUser } from '../common/interfaces/auth-user.interface';
+import { CurrentUserData } from '../common/types/current-user';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Work Declarations')
@@ -61,8 +64,11 @@ export class WorkDeclarationController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new work declaration (HR/Admin)' })
   @ApiResponse({ status: 201, description: 'Declaration created successfully.' })
-  async create(@Body() dto: CreateDeclarationDto, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.createDeclaration((user as any).tenantId, user.id, dto);
+  // tenantId chega sempre undefined — ver comentário em
+  // WorkDeclarationService.resolveTenantId() (auto-resolve para o tenant
+  // "DEFAULT"). Não existe tenantId em CurrentUserData/User.
+  async create(@Body() dto: CreateDeclarationDto, @CurrentUser() user: CurrentUserData) {
+    return this.workDeclarationService.createDeclaration(undefined, user.id, dto);
   }
 
   @Get()
@@ -76,26 +82,22 @@ export class WorkDeclarationController {
   @ApiQuery({ name: 'employeeId', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  async findAll(@Query() filters: DeclarationQueryDto, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.listDeclarations(
-      (user as any).tenantId,
-      user as any,
-      filters,
-    );
+  async findAll(@Query() filters: DeclarationQueryDto, @CurrentUser() user: CurrentUserData) {
+    return this.workDeclarationService.listDeclarations(undefined, user, filters);
   }
 
   @Get('dashboard/stats')
   @Roles(Role.HR, Role.ADMIN)
   @ApiOperation({ summary: 'Get dashboard statistics for work declarations' })
-  async getDashboardStats(@CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.getStats((user as any).tenantId);
+  async getDashboardStats() {
+    return this.workDeclarationService.getStats(undefined);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single declaration by ID' })
   @ApiParam({ name: 'id', description: 'Declaration ID (cuid)' })
-  async findOne(@Param('id') id: string, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.getDeclaration((user as any).tenantId, user as any, id);
+  async findOne(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.workDeclarationService.getDeclaration(undefined, user, id);
   }
 
   @Patch(':id')
@@ -104,19 +106,19 @@ export class WorkDeclarationController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateDeclarationDto,
-    @CurrentUser() user: IAuthUser,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.workDeclarationService.updateDeclaration((user as any).tenantId, user.id, id, dto);
+    return this.workDeclarationService.updateDeclaration(undefined, user.id, id, dto);
   }
 
   @Delete(':id')
   @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Soft-delete a declaration (Admin only)' })
-  async remove(@Param('id') id: string, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.changeStatus((user as any).tenantId, user.id, id, {
-      status: 'REVOKED',
-    } as any);
+  async remove(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.workDeclarationService.changeStatus(undefined, user.id, id, {
+      status: DeclarationStatus.REVOKED,
+    });
   }
 
   // ─────────────────────────────────────────────
@@ -127,19 +129,18 @@ export class WorkDeclarationController {
   @Roles(Role.EMPLOYEE, Role.HR, Role.ADMIN)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Employee requests a new declaration' })
-  async requestDeclaration(@Body() dto: RequestDeclarationDto, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.requestDeclaration((user as any).tenantId, user.id, dto);
+  async requestDeclaration(
+    @Body() dto: RequestDeclarationDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.workDeclarationService.requestDeclaration(undefined, user.id, dto);
   }
 
   @Get('my/requests')
   @Roles(Role.EMPLOYEE, Role.HR, Role.ADMIN)
   @ApiOperation({ summary: 'Employee fetches their own requests/declarations' })
-  async getMyDeclarations(@CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.listDeclarations(
-      (user as any).tenantId,
-      user as any,
-      {} as any,
-    );
+  async getMyDeclarations(@CurrentUser() user: CurrentUserData) {
+    return this.workDeclarationService.listDeclarations(undefined, user, {});
   }
 
   // ─────────────────────────────────────────────
@@ -149,10 +150,10 @@ export class WorkDeclarationController {
   @Patch(':id/issue')
   @Roles(Role.HR, Role.ADMIN)
   @ApiOperation({ summary: 'Issue (publish) a declaration — draft → issued' })
-  async issueDeclaration(@Param('id') id: string, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.changeStatus((user as any).tenantId, user.id, id, {
-      status: 'ISSUED',
-    } as any);
+  async issueDeclaration(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.workDeclarationService.changeStatus(undefined, user.id, id, {
+      status: DeclarationStatus.ISSUED,
+    });
   }
 
   @Post(':id/sign')
@@ -161,9 +162,9 @@ export class WorkDeclarationController {
   async signDeclaration(
     @Param('id') id: string,
     @Body() dto: SignDeclarationDto,
-    @CurrentUser() user: IAuthUser,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.workDeclarationService.signDeclaration((user as any).tenantId, user.id, id, dto);
+    return this.workDeclarationService.signDeclaration(undefined, user.id, id, dto);
   }
 
   @Patch(':id/revoke')
@@ -172,12 +173,12 @@ export class WorkDeclarationController {
   async revokeDeclaration(
     @Param('id') id: string,
     @Body() dto: ChangeDeclarationStatusDto,
-    @CurrentUser() user: IAuthUser,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.workDeclarationService.changeStatus((user as any).tenantId, user.id, id, {
+    return this.workDeclarationService.changeStatus(undefined, user.id, id, {
       ...dto,
-      status: 'REVOKED',
-    } as any);
+      status: DeclarationStatus.REVOKED,
+    });
   }
 
   // ─────────────────────────────────────────────
@@ -189,15 +190,15 @@ export class WorkDeclarationController {
   async exportPdf(
     @Param('id') id: string,
     @Body() dto: ExportDeclarationDto,
-    @CurrentUser() user: IAuthUser,
+    @CurrentUser() user: CurrentUserData,
     @Response({ passthrough: true }) res: ExpressResponse,
-  ): Promise<any> {
-    const result = await this.workDeclarationService.exportDeclaration(
-      (user as any).tenantId,
-      user.id,
-      id,
-      { format: 'DOCX' } as any,
-    );
+  ) {
+    // FIX: chamava exportDeclaration com format 'DOCX' num endpoint que
+    // devolve/anuncia PDF — nunca gerava mesmo um PDF.
+    const result = await this.workDeclarationService.exportDeclaration(undefined, user.id, id, {
+      format: 'PDF',
+      includeWatermark: dto.includeWatermark,
+    });
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="declaration-${id}.pdf"`,
@@ -209,15 +210,12 @@ export class WorkDeclarationController {
   @ApiOperation({ summary: 'Export declaration as editable DOCX' })
   async exportDocx(
     @Param('id') id: string,
-    @CurrentUser() user: IAuthUser,
+    @CurrentUser() user: CurrentUserData,
     @Response({ passthrough: true }) res: ExpressResponse,
-  ): Promise<any> {
-    const result = await this.workDeclarationService.exportDeclaration(
-      (user as any).tenantId,
-      user.id,
-      id,
-      { format: 'DOCX' } as any,
-    );
+  ) {
+    const result = await this.workDeclarationService.exportDeclaration(undefined, user.id, id, {
+      format: 'DOCX',
+    });
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'Content-Disposition': `attachment; filename="declaration-${id}.docx"`,
@@ -232,18 +230,18 @@ export class WorkDeclarationController {
   async sendByEmail(
     @Param('id') id: string,
     @Body('recipientEmail') recipientEmail: string,
-    @CurrentUser() user: IAuthUser,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.workDeclarationService.sendDeclaration((user as any).tenantId, user.id, id, {
+    return this.workDeclarationService.sendDeclaration(undefined, user.id, id, {
       recipientEmails: [recipientEmail],
       generateSecureLink: false,
-    } as any);
+    });
   }
 
   @Get(':id/secure-link')
   @Roles(Role.HR, Role.ADMIN)
   @ApiOperation({ summary: 'Generate a time-limited secure download link' })
-  async generateSecureLink(@Param('id') id: string, @CurrentUser() user: IAuthUser) {
+  async generateSecureLink(@Param('id') id: string) {
     return { link: this.workDeclarationService.generateSecureLink(id) };
   }
 
@@ -269,28 +267,33 @@ export class WorkDeclarationController {
     @Query('language') language: string,
     @Query('isActive') isActive: string,
     @Query('search') search: string,
-    @CurrentUser() user: IAuthUser,
   ) {
-    return this.workDeclarationService.listTemplates((user as any).tenantId, {
-      type,
-      locale: language,
+    // type/language chegam como string livre de @Query() (sem DTO/ValidationPipe
+    // por trás) — os casts documentam que não há garantia de serem valores
+    // reais dos enums antes de chegar ao Prisma.
+    return this.workDeclarationService.listTemplates(undefined, {
+      type: type as DeclarationType | undefined,
+      locale: language as DeclarationLocale | undefined,
       isActive: isActive !== undefined ? isActive === 'true' : undefined,
       search,
-    } as any);
+    });
   }
 
   @Get('templates/:id')
   @ApiOperation({ summary: 'Get a single template by ID' })
-  async getTemplate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.getTemplate((user as any).tenantId, id);
+  async getTemplate(@Param('id', ParseIntPipe) id: number) {
+    return this.workDeclarationService.getTemplate(undefined, id);
   }
 
   @Post('templates')
   @Roles(Role.HR, Role.ADMIN)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new declaration template' })
-  async createTemplate(@Body() dto: CreateDeclarationTemplateDto, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.createTemplate((user as any).tenantId, user.id, dto);
+  async createTemplate(
+    @Body() dto: CreateDeclarationTemplateDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.workDeclarationService.createTemplate(undefined, user.id, dto);
   }
 
   @Patch('templates/:id')
@@ -299,17 +302,17 @@ export class WorkDeclarationController {
   async updateTemplate(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateDeclarationTemplateDto,
-    @CurrentUser() user: IAuthUser,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.workDeclarationService.updateTemplate((user as any).tenantId, user.id, id, dto);
+    return this.workDeclarationService.updateTemplate(undefined, user.id, id, dto);
   }
 
   @Delete('templates/:id')
   @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a template (Admin only)' })
-  async deleteTemplate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.deleteTemplate((user as any).tenantId, id);
+  async deleteTemplate(@Param('id', ParseIntPipe) id: number) {
+    return this.workDeclarationService.deleteTemplate(undefined, id);
   }
 
   @Post('templates/:id/preview')
@@ -317,12 +320,11 @@ export class WorkDeclarationController {
   async previewTemplate(
     @Param('id', ParseIntPipe) id: number,
     @Body('employeeId') employeeId: number,
-    @CurrentUser() user: IAuthUser,
   ) {
-    return this.workDeclarationService.previewTemplate((user as any).tenantId, {
+    return this.workDeclarationService.previewTemplate(undefined, {
       templateId: id,
       employeeId: employeeId !== undefined ? Number(employeeId) : undefined,
-    } as any);
+    });
   }
 
   // ─────────────────────────────────────────────
@@ -332,8 +334,8 @@ export class WorkDeclarationController {
   @Get(':id/audit-log')
   @Roles(Role.HR, Role.ADMIN)
   @ApiOperation({ summary: 'Retrieve full audit trail for a declaration' })
-  async getAuditLog(@Param('id') id: string, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.getAuditLogs((user as any).tenantId, id);
+  async getAuditLog(@Param('id') id: string) {
+    return this.workDeclarationService.getAuditLogs(undefined, id);
   }
 
   // ─────────────────────────────────────────────
@@ -343,23 +345,23 @@ export class WorkDeclarationController {
   @Post('branding/logo')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Set company logo URL used in declaration header' })
-  async uploadLogo(@Body() dto: UploadLogoDto, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.upsertTenantConfig((user as any).tenantId, {
+  async uploadLogo(@Body() dto: UploadLogoDto) {
+    return this.workDeclarationService.upsertTenantConfig(undefined, {
       logoUrl: dto.fileUrl,
-    } as any);
+    });
   }
 
   @Get('branding/settings')
   @Roles(Role.HR, Role.ADMIN)
   @ApiOperation({ summary: 'Retrieve company branding/layout settings' })
-  async getBrandingSettings(@CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.getTenantConfig((user as any).tenantId);
+  async getBrandingSettings() {
+    return this.workDeclarationService.getTenantConfig(undefined);
   }
 
   @Patch('branding/settings')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Update company branding settings (header, footer, layout)' })
-  async updateBrandingSettings(@Body() dto: UpsertTenantConfigDto, @CurrentUser() user: IAuthUser) {
-    return this.workDeclarationService.upsertTenantConfig((user as any).tenantId, dto);
+  async updateBrandingSettings(@Body() dto: UpsertTenantConfigDto) {
+    return this.workDeclarationService.upsertTenantConfig(undefined, dto);
   }
 }
