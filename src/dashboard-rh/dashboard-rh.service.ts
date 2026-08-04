@@ -29,18 +29,6 @@ function tenureMonths(createdAt: Date): number {
   return Math.floor((Date.now() - createdAt.getTime()) / (30 * 86400000));
 }
 
-function safeM(prisma: any, name: string) {
-  return (
-    prisma[name] ?? {
-      count: async () => 0,
-      findMany: async () => [],
-      findFirst: async () => null,
-      aggregate: async () => ({ _avg: {}, _count: {} }),
-      groupBy: async () => [],
-    }
-  );
-}
-
 // Status health indicator
 function healthStatus(value: number, goodAbove: number, warnAbove: number): '🟢' | '🟡' | '🔴' {
   if (value >= goodAbove) return '🟢';
@@ -80,6 +68,21 @@ export class DashboardRhService {
       const mS = monthStart();
       const mS1 = monthStart(1);
       const mEnd1 = monthEnd(1);
+
+      // Anotados explicitamente: `.catch()` a seguir a groupBy/findMany colapsa
+      // o tipo inteiro para `any` sem isto (ver subproject3-any-cleanup.md).
+      const topBadgeAwardeesPromise = this.prisma.badgeAward.groupBy({
+        by: ['userId'],
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 5,
+      });
+      const recentActivityPromise = this.prisma.auditLog.findMany({
+        where: { timestamp: { gte: mS } },
+        select: { id: true, action: true, entity: true, timestamp: true, userId: true },
+        orderBy: { timestamp: 'desc' },
+        take: 10,
+      });
 
       const [
         totalActive,
@@ -130,7 +133,7 @@ export class DashboardRhService {
         }),
         this.prisma.enrollment
           .count({
-            where: { course: { mandatory: true } as any, status: EnrollmentStatus.COMPLETED },
+            where: { course: { mandatory: true }, status: EnrollmentStatus.COMPLETED },
           })
           .catch((e: unknown) => {
             this.logger.warn({
@@ -144,36 +147,22 @@ export class DashboardRhService {
         this.prisma.read.avatarSession.count({
           where: { status: 'COMPLETED', startedAt: { gte: mS } },
         }),
-        this.prisma.badgeAward
-          .groupBy({
-            by: ['userId'],
-            _count: { id: true },
-            orderBy: { _count: { id: 'desc' } },
-            take: 5,
-          })
-          .catch((e: unknown) => {
-            this.logger.warn({
-              action: 'DASHBOARD_RH_FULL_TOP_BADGES',
-              err: { message: e instanceof Error ? e.message : String(e) },
-              msg: 'Falha ao obter top de atribuições de badges no dashboard RH completo',
-            });
-            return [] as any[];
-          }),
-        this.prisma.auditLog
-          .findMany({
-            where: { timestamp: { gte: mS } },
-            select: { id: true, action: true, entity: true, timestamp: true, userId: true },
-            orderBy: { timestamp: 'desc' },
-            take: 10,
-          })
-          .catch((e: unknown) => {
-            this.logger.warn({
-              action: 'DASHBOARD_RH_FULL_RECENT_ACTIVITY',
-              err: { message: e instanceof Error ? e.message : String(e) },
-              msg: 'Falha ao obter actividade recente (audit log) no dashboard RH completo',
-            });
-            return [] as any[];
-          }),
+        topBadgeAwardeesPromise.catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_FULL_TOP_BADGES',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter top de atribuições de badges no dashboard RH completo',
+          });
+          return [];
+        }),
+        recentActivityPromise.catch((e: unknown) => {
+          this.logger.warn({
+            action: 'DASHBOARD_RH_FULL_RECENT_ACTIVITY',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter actividade recente (audit log) no dashboard RH completo',
+          });
+          return [];
+        }),
       ]);
 
       const total = totalActive + totalInactive;
@@ -228,13 +217,13 @@ export class DashboardRhService {
             .sort((a, b) => b.count - a.count),
           byPosition: posBreakdown
             .map(p => ({
-              ...((posMap.get(p.positionId) ?? {}) as Record<string, any>),
+              ...(posMap.get(p.positionId) ?? {}),
               count: p._count.id,
             }))
-            .sort((a: any, b: any) => b.count - a.count),
+            .sort((a, b) => b.count - a.count),
         },
         alerts,
-        topBadgeAwardees: (topBadgeAwardees as any[]).slice(0, 5),
+        topBadgeAwardees: topBadgeAwardees.slice(0, 5),
         recentActivity,
       };
     });
@@ -297,7 +286,7 @@ export class DashboardRhService {
         id: p.id,
         name: p.name,
         level: p.level,
-        count: (p as any)._count.users,
+        count: p._count.users,
       })),
       byTenure,
     };
@@ -352,31 +341,32 @@ export class DashboardRhService {
       : 0;
 
     // At-risk heuristic: active users + low performance
-    const atRiskUsers = await this.prisma.performanceReview
-      .findMany({
-        where: { score: { lt: 2.5 }, status: ReviewStatus.PUBLISHED },
-        include: {
-          user: {
-            select: {
-              id: true,
-              fullName: true,
-              department: { select: { name: true } },
-              position: { select: { name: true } },
-            },
+    const atRiskUsersQuery = this.prisma.performanceReview.findMany({
+      where: { score: { lt: 2.5 }, status: ReviewStatus.PUBLISHED },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            department: { select: { name: true } },
+            position: { select: { name: true } },
           },
         },
-        orderBy: { score: 'asc' },
-        take: 10,
-      })
-      .catch((e: unknown) => {
+      },
+      orderBy: { score: 'asc' },
+      take: 10,
+    });
+    const atRiskUsers: Awaited<typeof atRiskUsersQuery> = await atRiskUsersQuery.catch(
+      (e: unknown) => {
         this.logger.warn({
           months,
           action: 'DASHBOARD_RH_TURNOVER_AT_RISK',
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter utilizadores em risco de saída no painel de turnover',
         });
-        return [] as any[];
-      });
+        return [];
+      },
+    );
 
     const turnoverRate = pct(inactive, total);
 
@@ -387,10 +377,10 @@ export class DashboardRhService {
       leftLast3Months: recent3,
       avgTenureMonths: avgTenure,
       avgTenureYears: +(avgTenure / 12).toFixed(1),
-      atRiskUsers: (atRiskUsers as any[]).map((r: any) => ({
+      atRiskUsers: atRiskUsers.map(r => ({
         user: r.user,
         score: r.score,
-        risk: r.score < 2 ? 'HIGH' : 'MEDIUM',
+        risk: (r.score ?? 0) < 2 ? 'HIGH' : 'MEDIUM',
       })),
       insights: this.buildTurnoverInsights(turnoverRate, recent3),
     };
@@ -430,7 +420,11 @@ export class DashboardRhService {
           });
           return { _avg: { score: null } };
         }),
-      safeM(this.prisma, 'recognition').count({ where: { createdAt: { gte: mS } } }),
+      // FIX: safeM() degradava para um modelo genuinamente inexistente noutros
+      // ficheiros (ApiKey/Webhook) — Recognition é um modelo real, o wrapper
+      // aqui nunca teve razão de ser (mesmo achado de reports.service.ts/
+      // automation.service.ts).
+      this.prisma.read.recognition.count({ where: { createdAt: { gte: mS } } }),
       this.prisma.read.avatarSession.count({
         where: { status: 'COMPLETED', startedAt: { gte: mS }, user: uWhere },
       }),
@@ -443,7 +437,7 @@ export class DashboardRhService {
       : null;
 
     // Dept breakdown of survey participation
-    const deptBreakdown = await this.prisma.surveyResponse
+    const deptBreakdownQuery = this.prisma.surveyResponse
       .groupBy({
         by: ['userId'],
         where: { createdAt: { gte: mS } },
@@ -470,16 +464,18 @@ export class DashboardRhService {
         return depts
           .map(d => ({ department: d.name, responses: deptC[d.id] ?? 0 }))
           .sort((a, b) => b.responses - a.responses);
-      })
-      .catch((e: unknown) => {
+      });
+    const deptBreakdown: Awaited<typeof deptBreakdownQuery> = await deptBreakdownQuery.catch(
+      (e: unknown) => {
         this.logger.warn({
           departmentId,
           action: 'DASHBOARD_RH_ENGAGEMENT_DEPT_BREAKDOWN',
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter distribuição de participação em surveys por departamento',
         });
-        return [] as any[];
-      });
+        return [];
+      },
+    );
 
     return {
       engagementScore,
@@ -601,33 +597,25 @@ export class DashboardRhService {
   async getSkillsPanel(departmentId?: number) {
     const uWhere = departmentId ? { user: { departmentId } } : {};
 
-    const [competencies, legacySkills, totalUsers] = await Promise.all([
+    // FIX: legacyEmployeeSkill era pedido aqui mas nunca usado no resto da
+    // função (achado ao tipar) — query removida, deixou de desperdiçar uma
+    // consulta a cada carregamento do dashboard.
+    const [competencies, totalUsers] = await Promise.all([
       this.prisma.userCompetency.findMany({
         where: uWhere,
         include: { competency: { select: { id: true, name: true, type: true } } },
       }),
-      this.prisma.legacyEmployeeSkill
-        .findMany({
-          where: uWhere,
-          include: { skill: { select: { id: true, name: true, type: true } } },
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            departmentId,
-            action: 'DASHBOARD_RH_SKILLS_LEGACY',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter competências legadas (legacyEmployeeSkill) no painel de skills',
-          });
-          return [] as any[];
-        }),
       this.prisma.read.user.count({
         where: { active: true, ...(departmentId ? { departmentId } : {}) },
       }),
     ]);
 
     const TARGET = 5;
-    const byComp: Record<string, { comp: any; count: number; totalGap: number; avgLevel: number }> =
-      {};
+    type CompetencyRef = (typeof competencies)[number]['competency'];
+    const byComp: Record<
+      string,
+      { comp: CompetencyRef; count: number; totalGap: number; avgLevel: number }
+    > = {};
     for (const c of competencies) {
       const n = c.competency.name;
       if (!byComp[n]) byComp[n] = { comp: c.competency, count: 0, totalGap: 0, avgLevel: 0 };
@@ -686,7 +674,7 @@ export class DashboardRhService {
         where: { status: EnrollmentStatus.CANCELLED, enrolledAt: { gte: mS }, ...uWhere },
       }),
       this.prisma.enrollment
-        .count({ where: { course: { mandatory: true } as any, ...uWhere } })
+        .count({ where: { course: { mandatory: true }, ...uWhere } })
         .catch((e: unknown) => {
           this.logger.warn({
             departmentId,
@@ -699,7 +687,7 @@ export class DashboardRhService {
       this.prisma.enrollment
         .count({
           where: {
-            course: { mandatory: true } as any,
+            course: { mandatory: true },
             status: EnrollmentStatus.COMPLETED,
             ...uWhere,
           },
@@ -767,9 +755,18 @@ export class DashboardRhService {
   // ══════════════════════════════════════════════════════
 
   async getCompliancePanel() {
+    const certsQuery = this.prisma.certificate.findMany({
+      where: { issuedAt: { gte: monthStart(3) } },
+      include: {
+        user: { select: { id: true, fullName: true, department: { select: { name: true } } } },
+      },
+      orderBy: { issuedAt: 'desc' },
+      take: 10,
+    });
+
     const [mandatory, mandatoryDone, auditLogs, certs] = await Promise.all([
       this.prisma.enrollment
-        .count({ where: { course: { mandatory: true } as any } })
+        .count({ where: { course: { mandatory: true } } })
         .catch((e: unknown) => {
           this.logger.warn({
             action: 'DASHBOARD_RH_COMPLIANCE_MANDATORY',
@@ -780,7 +777,7 @@ export class DashboardRhService {
         }),
       this.prisma.enrollment
         .count({
-          where: { course: { mandatory: true } as any, status: EnrollmentStatus.COMPLETED },
+          where: { course: { mandatory: true }, status: EnrollmentStatus.COMPLETED },
         })
         .catch((e: unknown) => {
           this.logger.warn({
@@ -800,23 +797,14 @@ export class DashboardRhService {
           });
           return 0;
         }),
-      this.prisma.certificate
-        .findMany({
-          where: { issuedAt: { gte: monthStart(3) } },
-          include: {
-            user: { select: { id: true, fullName: true, department: { select: { name: true } } } },
-          },
-          orderBy: { issuedAt: 'desc' },
-          take: 10,
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'DASHBOARD_RH_COMPLIANCE_CERTS',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter certificados recentes no painel de compliance',
-          });
-          return [] as any[];
-        }),
+      certsQuery.catch((e: unknown): Awaited<typeof certsQuery> => {
+        this.logger.warn({
+          action: 'DASHBOARD_RH_COMPLIANCE_CERTS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter certificados recentes no painel de compliance',
+        });
+        return [];
+      }),
     ]);
 
     const mandatoryRate = pct(mandatoryDone, mandatory);
@@ -904,6 +892,29 @@ export class DashboardRhService {
   // ══════════════════════════════════════════════════════
 
   async getTalentPipeline() {
+    const hiPosQuery = this.prisma.userCompetency
+      .groupBy({
+        by: ['userId'],
+        _avg: { currentLevel: true },
+        having: { currentLevel: { _avg: { gte: 4 } } },
+        orderBy: { _avg: { currentLevel: 'desc' } },
+        take: 20,
+      })
+      .then(async rows => {
+        const ids = rows.map(r => r.userId);
+        const users = await this.prisma.read.user.findMany({
+          where: { id: { in: ids }, active: true },
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        });
+        return users;
+      });
+
     const [positions, plans, hiPos] = await Promise.all([
       this.prisma.read.position.findMany({
         select: {
@@ -929,36 +940,14 @@ export class DashboardRhService {
         },
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.userCompetency
-        .groupBy({
-          by: ['userId'],
-          _avg: { currentLevel: true },
-          having: { currentLevel: { _avg: { gte: 4 } } },
-          orderBy: { _avg: { currentLevel: 'desc' } },
-          take: 20,
-        })
-        .then(async rows => {
-          const ids = rows.map(r => r.userId);
-          const users = await this.prisma.read.user.findMany({
-            where: { id: { in: ids }, active: true },
-            select: {
-              id: true,
-              fullName: true,
-              avatarUrl: true,
-              position: { select: { name: true } },
-              department: { select: { name: true } },
-            },
-          });
-          return users;
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'DASHBOARD_RH_TALENT_HIPOS',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter colaboradores de alto potencial no pipeline de talento',
-          });
-          return [] as any[];
-        }),
+      hiPosQuery.catch((e: unknown): Awaited<typeof hiPosQuery> => {
+        this.logger.warn({
+          action: 'DASHBOARD_RH_TALENT_HIPOS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter colaboradores de alto potencial no pipeline de talento',
+        });
+        return [];
+      }),
     ]);
 
     const covered = positions.filter(p => p._count.successionPlans > 0).length;
@@ -971,7 +960,7 @@ export class DashboardRhService {
       positionsAtRisk: atRisk.slice(0, 5),
       successionPlans: plans,
       highPotentials: hiPos,
-      hiPoCount: (hiPos as any[]).length,
+      hiPoCount: hiPos.length,
     };
   }
 
@@ -1004,7 +993,7 @@ export class DashboardRhService {
       this.prisma.enrollment
         .count({
           where: {
-            course: { mandatory: true } as any,
+            course: { mandatory: true },
             status: { not: EnrollmentStatus.COMPLETED },
           },
         })
@@ -1098,7 +1087,7 @@ export class DashboardRhService {
             user: r.user,
             score: r.score,
             tenureMonths: tenureMonths(r.user.createdAt),
-            riskLevel: r.score < 2 ? 'HIGH' : 'MEDIUM',
+            riskLevel: (r.score ?? 0) < 2 ? 'HIGH' : 'MEDIUM',
             reason: 'Baixa performance + histórico de avaliações',
           })),
         )
@@ -1108,7 +1097,7 @@ export class DashboardRhService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular previsão de risco de saída no dashboard RH',
           });
-          return [] as any[];
+          return [];
         }),
       this.prisma.performanceReview
         .count({ where: { score: { lt: 2 }, status: ReviewStatus.PUBLISHED } })
@@ -1126,7 +1115,7 @@ export class DashboardRhService {
     return {
       turnoverRisk,
       summary: {
-        atRiskCount: (turnoverRisk as any[]).length,
+        atRiskCount: turnoverRisk.length,
         lowPerfCount: lowPerf,
         engagementResponses: lowEngagement,
       },

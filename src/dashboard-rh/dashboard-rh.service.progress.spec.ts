@@ -49,6 +49,7 @@ function buildMockPrisma() {
     developmentPlan: crud(),
     legacyEmployeeSkill: crud(),
     engagementSurvey: crud(),
+    recognition: crud(),
   };
 }
 

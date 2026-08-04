@@ -63,6 +63,7 @@ const mockPrismaProxy = new Proxy(mockPrisma, {
       };
     if (prop === 'successionPlan') return { findMany: makeFind(), count: makeCount() };
     if (prop === 'nineBoxPlacement') return { findMany: makeFind(), count: makeCount() };
+    if (prop === 'recognition') return { count: makeCount(), findMany: makeFind() };
     return (target as any)[prop];
   },
 });
