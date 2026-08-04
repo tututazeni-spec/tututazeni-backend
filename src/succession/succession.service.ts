@@ -1,5 +1,6 @@
 ﻿// src/succession/succession.service.ts
 import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateCriticalPositionDto,
@@ -11,6 +12,26 @@ import {
   SuccessionFilterDto,
   CriticalPositionFilterDto,
 } from './succession.dto';
+
+interface AlertInput {
+  _count?: { successionPlans: number };
+  successionPlans?: unknown[];
+  exitRisk: string;
+  expectedExitDate: Date | null;
+}
+
+interface MatchScoreInput {
+  criticalPosition?: {
+    position?: {
+      competencies?: Array<{ competencyId: number; requiredLevel: number }>;
+    } | null;
+  } | null;
+  candidate?: {
+    userCompetencies?: Array<{ competencyId: number; currentLevel: number | null }>;
+    performanceReviews?: Array<{ score: number | null }>;
+    hireDate?: Date | null;
+  } | null;
+}
 
 @Injectable()
 export class SuccessionService {
@@ -56,7 +77,7 @@ export class SuccessionService {
     } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.CriticalPositionWhereInput = {};
     if (businessImpact) where.businessImpact = businessImpact;
     if (exitRisk) where.exitRisk = exitRisk;
     if (departmentId) where.position = { departmentId };
@@ -167,7 +188,7 @@ export class SuccessionService {
     } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.SuccessionPlanWhereInput = {};
     if (criticalPositionId) where.criticalPositionId = criticalPositionId;
     if (candidateId) where.candidateId = candidateId;
     if (readinessLevel) where.readinessLevel = readinessLevel;
@@ -235,7 +256,7 @@ export class SuccessionService {
     if (!s) throw new NotFoundException('Plano de sucessão não encontrado');
 
     // Calcular match
-    const match = await this.calculateMatchScore(s as any);
+    const match = await this.calculateMatchScore(s);
 
     return { ...s, matchScore: match.score, matchDetails: match.details };
   }
@@ -265,25 +286,26 @@ export class SuccessionService {
       matchScore = autoMatch.score;
     }
 
+    const data: Prisma.SuccessionPlanUncheckedCreateInput = {
+      criticalPositionId: dto.criticalPositionId,
+      // SuccessionPlan.positionId é uma FK obrigatória (sem default) para
+      // Position — o próprio schema comenta "verificar o tipo", indício de
+      // ter sido adicionado e nunca ligado ao código; sem isto, criar um
+      // plano de sucessão rebentava sempre com "Argument positionId is
+      // missing". O cargo crítico já referencia a posição, por isso
+      // reutiliza-se o mesmo positionId em vez de o pedir de novo ao caller.
+      positionId: cp.positionId,
+      candidateId: dto.candidateId,
+      readinessLevel: dto.readinessLevel,
+      priority: dto.priority,
+      matchScore,
+      geographicMobility: dto.geographicMobility ?? true,
+      available: dto.available ?? true,
+      notes: dto.notes,
+      readinessByDate: dto.readinessByDate ? new Date(dto.readinessByDate) : null,
+    };
     const plan = await this.prisma.successionPlan.create({
-      data: {
-        criticalPositionId: dto.criticalPositionId,
-        // SuccessionPlan.positionId é uma FK obrigatória (sem default) para
-        // Position — o próprio schema comenta "verificar o tipo", indício de
-        // ter sido adicionado e nunca ligado ao código; sem isto, criar um
-        // plano de sucessão rebentava sempre com "Argument positionId is
-        // missing". O cargo crítico já referencia a posição, por isso
-        // reutiliza-se o mesmo positionId em vez de o pedir de novo ao caller.
-        positionId: cp.positionId,
-        candidateId: dto.candidateId,
-        readinessLevel: dto.readinessLevel,
-        priority: dto.priority,
-        matchScore,
-        geographicMobility: dto.geographicMobility ?? true,
-        available: dto.available ?? true,
-        notes: dto.notes,
-        readinessByDate: dto.readinessByDate ? new Date(dto.readinessByDate) : null,
-      } as any,
+      data,
       include: {
         criticalPosition: { include: { position: true } },
         candidate: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -339,21 +361,19 @@ export class SuccessionService {
       },
     });
 
-    return this.calculateMatchScore({ criticalPosition: cp, candidate } as any);
+    return this.calculateMatchScore({ criticalPosition: cp, candidate });
   }
 
-  private async calculateMatchScore(plan: any) {
+  private async calculateMatchScore(plan: MatchScoreInput) {
     const requiredComps = plan.criticalPosition?.position?.competencies ?? [];
     const userComps = plan.candidate?.userCompetencies ?? [];
-    const userCompMap = new Map(
-      userComps.map((uc: any) => [uc.competencyId, uc.currentLevel ?? 0]),
-    );
+    const userCompMap = new Map(userComps.map(uc => [uc.competencyId, uc.currentLevel ?? 0]));
 
     // Score de competências (40%)
     let compScore = 0;
     if (requiredComps.length > 0) {
       const met = requiredComps.filter(
-        (rc: any) => (userCompMap.get(rc.competencyId) ?? 0) >= rc.requiredLevel,
+        rc => (userCompMap.get(rc.competencyId) ?? 0) >= rc.requiredLevel,
       ).length;
       compScore = (met / requiredComps.length) * 100;
     } else {
@@ -375,8 +395,8 @@ export class SuccessionService {
     const finalScore = Math.round(compScore * 0.4 + perfScore * 0.4 + expScore * 0.2);
 
     const gaps = requiredComps
-      .filter((rc: any) => (userCompMap.get(rc.competencyId) ?? 0) < rc.requiredLevel)
-      .map((rc: any) => ({
+      .filter(rc => (userCompMap.get(rc.competencyId) ?? 0) < rc.requiredLevel)
+      .map(rc => ({
         competencyId: rc.competencyId,
         requiredLevel: rc.requiredLevel,
         currentLevel: userCompMap.get(rc.competencyId) ?? 0,
@@ -445,11 +465,11 @@ export class SuccessionService {
   // ─── PDI ──────────────────────────────────────────────────────────────────
 
   async generatePDI(dto: GeneratePDIDto) {
-    const plan = (await this.findOne(dto.successionPlanId)) as any;
+    const plan = await this.findOne(dto.successionPlanId);
 
     // Buscar gaps automáticos
     const gaps = plan.matchDetails?.gaps ?? [];
-    const gapCompIds = gaps.map((g: any) => g.competencyId);
+    const gapCompIds = gaps.map(g => g.competencyId);
 
     // Sugerir cursos mapeados aos gaps
     const suggestedCourses = await this.prisma.read.courseCompetency.findMany({
@@ -472,8 +492,8 @@ export class SuccessionService {
         developmentGoals:
           dto.developmentGoals ??
           `Desenvolver competências para ${plan.criticalPosition?.position?.name}`,
-        learningPathIds: dto.learningPathIds ?? suggestedLPs.slice(0, 3).map((lp: any) => lp.id),
-        courseIds: dto.courseIds ?? suggestedCourses.slice(0, 5).map((cc: any) => cc.courseId),
+        learningPathIds: dto.learningPathIds ?? suggestedLPs.slice(0, 3).map(lp => lp.id),
+        courseIds: dto.courseIds ?? suggestedCourses.slice(0, 5).map(cc => cc.courseId),
         status: 'ACTIVE',
         createdAt: new Date(),
       },
@@ -485,7 +505,7 @@ export class SuccessionService {
       },
     });
 
-    return { pdi, suggestedCourses: suggestedCourses.map((cc: any) => cc.course), suggestedLPs };
+    return { pdi, suggestedCourses: suggestedCourses.map(cc => cc.course), suggestedLPs };
   }
 
   // ─── SUMÁRIO POR CARGO ────────────────────────────────────────────────────
@@ -546,15 +566,14 @@ export class SuccessionService {
   // ─── ORGANOGRAMA DE SUCESSÃO ──────────────────────────────────────────────
 
   async getOrganizationChart(departmentId?: number) {
-    const where: any = {};
+    const where: Prisma.CriticalPositionWhereInput = {};
     if (departmentId) where.position = { departmentId };
 
     // Position não tem relação `department` (só o escalar `departmentId`) —
-    // sem catch(), isto rebentava sempre (500 incondicional) em qualquer
-    // chamada a GET /succession/org-chart. Sem uma relação para incluir,
-    // faz-se uma segunda query em lote (mesmo padrão já usado noutros
-    // módulos: courses/reports) para anexar o nome do departamento.
-    const criticalPositions = (await this.prisma.criticalPosition.findMany({
+    // sem uma relação para incluir, faz-se uma segunda query em lote (mesmo
+    // padrão já usado noutros módulos: courses/reports) para anexar o nome
+    // do departamento.
+    const criticalPositions = await this.prisma.criticalPosition.findMany({
       where,
       include: {
         position: {
@@ -565,7 +584,7 @@ export class SuccessionService {
             departmentId: true,
             users: { select: { id: true, fullName: true, avatarUrl: true }, take: 1 },
           },
-        } as any,
+        },
         successionPlans: {
           include: {
             candidate: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -574,10 +593,10 @@ export class SuccessionService {
           take: 3,
         },
         _count: { select: { successionPlans: true } },
-      } as any,
-      orderBy: [{ businessImpact: 'desc' }, { exitRisk: 'desc' }] as any,
+      },
+      orderBy: [{ businessImpact: 'desc' }, { exitRisk: 'desc' }],
       take: 50,
-    })) as any[];
+    });
 
     const deptIds = [
       ...new Set(criticalPositions.map(cp => cp.position?.departmentId).filter(Boolean)),
@@ -703,8 +722,8 @@ export class SuccessionService {
     if (!a || !b) throw new NotFoundException('Candidato não encontrado');
 
     const [matchA, matchB] = await Promise.all([
-      this.calculateMatchScore({ criticalPosition: cp, candidate: a } as any),
-      this.calculateMatchScore({ criticalPosition: cp, candidate: b } as any),
+      this.calculateMatchScore({ criticalPosition: cp, candidate: a }),
+      this.calculateMatchScore({ criticalPosition: cp, candidate: b }),
     ]);
 
     return { candidateA: { user: a, match: matchA }, candidateB: { user: b, match: matchB } };
@@ -724,7 +743,7 @@ export class SuccessionService {
     return Math.ceil((new Date(date).getTime() - Date.now()) / (24 * 3600 * 1000));
   }
 
-  private buildAlert(cp: any): string | null {
+  private buildAlert(cp: AlertInput): string | null {
     if (cp._count?.successionPlans === 0 || cp.successionPlans?.length === 0) {
       return '🚨 Cargo crítico sem sucessores';
     }
