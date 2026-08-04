@@ -6,6 +6,7 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   PerformanceCreateCycleDto,
@@ -131,7 +132,7 @@ export class PerformanceService {
     const { page = 1, limit = 20, userId, cycleId, status, type } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.PerformanceReviewWhereInput = {};
     if (userId) where.userId = userId;
     if (cycleId) where.cycleId = cycleId;
     if (status) where.status = status;
@@ -176,9 +177,9 @@ export class PerformanceService {
     // Ownership (A3): avaliado OU avaliador OU ADMIN/RH/GESTOR; senão 404.
     // Quando chamado sem user (contexto interno de confiança), não filtra.
     if (user) {
-      const isReviewer = r != null && String(user.id) === String((r as any).reviewerId);
+      const isReviewer = r != null && String(user.id) === String(r.reviewerId);
       if (!isReviewer) {
-        assertCanAccess(r, (r as any)?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+        assertCanAccess(r, r?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
       } else if (!r) {
         throw new NotFoundException('Avaliação não encontrada');
       }
@@ -254,7 +255,7 @@ export class PerformanceService {
 
   async update(id: number, dto: UpdatePerformanceReviewDto) {
     const r = await this.findOne(id);
-    if ((r as any).status === 'FINALIZED') {
+    if (r.status === 'FINALIZED') {
       throw new ForbiddenException('Avaliação finalizada não pode ser editada');
     }
     return this.prisma.performanceReview.update({ where: { id }, data: dto });
@@ -284,7 +285,7 @@ export class PerformanceService {
   // ─── SUBMETER AVALIAÇÃO ───────────────────────────────────────────────────
 
   async submitReview(submitterId: number, dto: SubmitReviewDto) {
-    const review = (await this.findOne(dto.reviewId)) as any;
+    const review = await this.findOne(dto.reviewId);
 
     // A10-4: sem isto, qualquer utilizador autenticado podia submeter a
     // auto-avaliação ou a avaliação de gestor de outra pessoa (findOne acima
@@ -438,12 +439,9 @@ export class PerformanceService {
   async updateGoalProgress(goalId: number, userId: number, dto: UpdatePerformanceGoalProgressDto) {
     const goal = await this.prisma.performanceGoal.findUnique({ where: { id: goalId } });
     if (!goal) throw new NotFoundException('Goal não encontrado');
-    if ((goal as any).userId !== userId) throw new ForbiddenException('Sem permissão');
+    if (goal.userId !== userId) throw new ForbiddenException('Sem permissão');
 
-    const progress = Math.min(
-      100,
-      Math.round((dto.currentValue / ((goal as any).targetValue || 1)) * 100),
-    );
+    const progress = Math.min(100, Math.round((dto.currentValue / (goal.targetValue || 1)) * 100));
 
     let status: GoalStatus = GoalStatus.ON_TRACK;
     if (progress >= 100) status = GoalStatus.COMPLETED;
@@ -457,7 +455,7 @@ export class PerformanceService {
   }
 
   async getUserGoals(userId: number, cycleId?: number) {
-    const where: any = { userId };
+    const where: Prisma.PerformanceGoalWhereInput = { userId };
     if (cycleId) where.cycleId = cycleId;
     return this.prisma.read.performanceGoal.findMany({
       where,
@@ -504,7 +502,7 @@ export class PerformanceService {
   }
 
   async getUserFeedback(userId: number, cycleId?: number) {
-    const where: any = { userId, visibleToUser: true };
+    const where: Prisma.ContinuousFeedbackWhereInput = { userId, visibleToUser: true };
     if (cycleId) where.cycleId = cycleId;
     return this.prisma.read.continuousFeedback.findMany({
       where,
@@ -525,7 +523,7 @@ export class PerformanceService {
   // ─── CALIBRAÇÃO ───────────────────────────────────────────────────────────
 
   async calibrateReview(calibratorId: number, dto: CalibrateReviewDto) {
-    const review = (await this.findOne(dto.reviewId)) as any;
+    const review = await this.findOne(dto.reviewId);
     if (review.status !== 'CALIBRATION') {
       throw new BadRequestException('Avaliação não está em fase de calibração');
     }
@@ -576,7 +574,7 @@ export class PerformanceService {
   // ─── DISPUTA ──────────────────────────────────────────────────────────────
 
   async createDispute(userId: number, dto: PerformanceCreateDisputeDto) {
-    const review = (await this.findOne(dto.reviewId)) as any;
+    const review = await this.findOne(dto.reviewId);
     if (review.userId !== userId) throw new ForbiddenException('Sem permissão');
     if (review.status !== 'PUBLISHED') {
       throw new BadRequestException('Apenas avaliações publicadas podem ser contestadas');
@@ -649,7 +647,7 @@ export class PerformanceService {
     ]);
 
     const avgScore = reviews.length
-      ? reviews.reduce((s, r) => s + ((r as any).score ?? 0), 0) / reviews.length
+      ? reviews.reduce((s, r) => s + (r.score ?? 0), 0) / reviews.length
       : 0;
 
     return { reviews, goals, feedback, avgScore: Math.round(avgScore * 10) / 10 };
@@ -663,7 +661,7 @@ export class PerformanceService {
 
     const teamData = await Promise.all(
       team.map(async member => {
-        const where: any = { userId: member.id };
+        const where: Prisma.PerformanceReviewWhereInput = { userId: member.id };
         if (cycleId) where.cycleId = cycleId;
 
         const [latestReview, goals, feedbackCount] = await Promise.all([
@@ -678,7 +676,7 @@ export class PerformanceService {
         ]);
 
         const avgGoalProgress = goals.length
-          ? goals.reduce((s, g) => s + ((g as any).progress ?? 0), 0) / goals.length
+          ? goals.reduce((s, g) => s + (g.progress ?? 0), 0) / goals.length
           : 0;
 
         const pendingSelfReview = await this.prisma.read.performanceReview.findFirst({
@@ -692,7 +690,7 @@ export class PerformanceService {
           goalCount: goals.length,
           feedbackCount,
           pendingSelfReview: !!pendingSelfReview,
-          status: latestReview ? (latestReview as any).status : 'NOT_STARTED',
+          status: latestReview ? latestReview.status : 'NOT_STARTED',
         };
       }),
     );
@@ -705,9 +703,9 @@ export class PerformanceService {
       where: { departmentId, active: true },
       select: { id: true },
     });
-    const userIds = users.map((u: any) => u.id);
+    const userIds = users.map(u => u.id);
 
-    const where: any = { userId: { in: userIds } };
+    const where: Prisma.PerformanceReviewWhereInput = { userId: { in: userIds } };
     if (cycleId) where.cycleId = cycleId;
 
     const [stats, categoryDist, avgScore] = await Promise.all([
@@ -784,7 +782,11 @@ export class PerformanceService {
     });
 
     // Montar grid 3x3
-    const grid: Record<string, any[]> = {};
+    type GridEntry = {
+      user: (typeof placements)[number]['user'];
+      placement: (typeof placements)[number];
+    };
+    const grid: Record<string, GridEntry[]> = {};
     for (let p = 1; p <= 3; p++) {
       for (let pot = 1; pot <= 3; pot++) {
         grid[`${p}-${pot}`] = [];
@@ -792,10 +794,10 @@ export class PerformanceService {
     }
 
     for (const pl of placements) {
-      if (!(pl as any).user) continue;
-      const key = `${(pl as any).performanceAxis}-${(pl as any).potentialAxis}`;
+      if (!pl.user) continue;
+      const key = `${pl.performanceAxis}-${pl.potentialAxis}`;
       if (!grid[key]) continue;
-      grid[key].push({ user: (pl as any).user, placement: pl });
+      grid[key].push({ user: pl.user, placement: pl });
     }
 
     return { grid, cycleId, departmentId };
@@ -804,7 +806,7 @@ export class PerformanceService {
   // ─── ANALYTICS ────────────────────────────────────────────────────────────
 
   async getPerformanceAnalytics(cycleId?: number) {
-    const where: any = {};
+    const where: Prisma.PerformanceReviewWhereInput = {};
     if (cycleId) where.cycleId = cycleId;
 
     const [totalReviews, byStatus, byCategory, avgScores] = await Promise.all([
@@ -842,10 +844,10 @@ export class PerformanceService {
     });
 
     const selfMap = new Map<number, number>(
-      selfReviews.map((r: any) => [r.userId, r.score ?? 0] as [number, number]),
+      selfReviews.map(r => [r.userId, r.score ?? 0] as [number, number]),
     );
     const divergences = mgRviews
-      .map((r: any) => ({
+      .map(r => ({
         userId: r.userId,
         divergence: Math.abs((r.score ?? 0) - (selfMap.get(r.userId) ?? 0)),
       }))
