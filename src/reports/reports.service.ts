@@ -39,6 +39,23 @@ function userWhere(filter: ReportFilterDto): Prisma.UserWhereInput | undefined {
 
 const TARGET_SKILL_LEVEL = 5;
 
+export interface SkillGapUser {
+  id: number;
+  fullName: string;
+  dept?: string;
+  level: number;
+  gap: number;
+}
+
+export interface SkillGapEntry {
+  competency?: { id: number; name: string; type: string };
+  name?: string;
+  count: number;
+  totalGap: number;
+  usersWithGap: number;
+  users?: SkillGapUser[];
+}
+
 // ─────────────────────────────────────────────────────────────────
 // SERVICE
 // ─────────────────────────────────────────────────────────────────
@@ -48,19 +65,6 @@ export class ReportsService {
   private readonly logger = new Logger(ReportsService.name);
 
   constructor(private readonly prisma: PrismaService) {}
-
-  /**
-   * Cliente de leitura: usa a réplica (this.prisma.db) quando disponível,
-   * caindo para o primary quando .db não existe (ex.: mocks de teste).
-   *
-   * NOTA: mantém-se tipado `any` porque ainda usa `_count` em select e vários
-   * `where: any` que só compilam com `any`. Os modelos do antigo "Grupo A"
-   * (recognition→Kudos, feedback→ContinuousFeedback, moodCheckin→LeadershipPulse)
-   * já estão remapeados para os modelos reais.
-   */
-  private get prismaRead(): any {
-    return this.prisma.db ?? this.prisma;
-  }
 
   // ══════════════════════════════════════════════════════
   // HR REPORTS
@@ -72,12 +76,12 @@ export class ReportsService {
     const baseWhere = uWhere ? { ...uWhere } : {};
 
     const [total, active, newHires, prevHires] = await Promise.all([
-      this.prismaRead.user.count({ where: baseWhere }),
-      this.prismaRead.user.count({ where: { ...baseWhere, active: true } }),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({ where: baseWhere }),
+      this.prisma.read.user.count({ where: { ...baseWhere, active: true } }),
+      this.prisma.read.user.count({
         where: { ...baseWhere, createdAt: { gte: range.gte, lte: range.lte } },
       }),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({
         where: {
           ...baseWhere,
           createdAt: {
@@ -88,11 +92,11 @@ export class ReportsService {
       }),
     ]);
 
-    const byDept = await this.prismaRead.department.findMany({
+    const byDept = await this.prisma.read.department.findMany({
       select: { id: true, name: true, _count: { select: { users: true } } },
     });
 
-    const byPosition = await this.prismaRead.position.findMany({
+    const byPosition = await this.prisma.read.position.findMany({
       select: { id: true, name: true, level: true, _count: { select: { users: true } } },
       // Ordenar um findMany por contagem de relação usa { relação: { _count } },
       // não { _count: { relação } } (essa forma é só válida em groupBy/aggregate)
@@ -129,12 +133,12 @@ export class ReportsService {
     const uWhere = userWhere(filter);
 
     const [total, inactive, newInPeriod, leftInPeriod] = await Promise.all([
-      this.prismaRead.user.count({ where: uWhere ?? {} }),
-      this.prismaRead.user.count({ where: { ...uWhere, active: false } }),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({ where: uWhere ?? {} }),
+      this.prisma.read.user.count({ where: { ...uWhere, active: false } }),
+      this.prisma.read.user.count({
         where: { ...uWhere, createdAt: { gte: range.gte, lte: range.lte } },
       }),
-      this.prismaRead.user.count({
+      this.prisma.read.user.count({
         where: { ...uWhere, active: false, updatedAt: { gte: range.gte, lte: range.lte } },
       }),
     ]);
@@ -163,23 +167,23 @@ export class ReportsService {
   async trainingReportFull(filter: ReportFilterDto) {
     const range = dateRange(filter);
     const uWhere = userWhere(filter);
-    const where: any = { enrolledAt: { gte: range.gte, lte: range.lte } };
+    const where: Prisma.EnrollmentWhereInput = { enrolledAt: { gte: range.gte, lte: range.lte } };
     if (uWhere) where.user = uWhere;
 
     const [enrollments, completed, inProgress, cancelled, byCourseFull, byDept, avgScore] =
       await Promise.all([
-        this.prismaRead.enrollment.count({ where }),
-        this.prismaRead.enrollment.count({
+        this.prisma.read.enrollment.count({ where }),
+        this.prisma.read.enrollment.count({
           where: { ...where, status: EnrollmentStatus.COMPLETED },
         }),
-        this.prismaRead.enrollment.count({
+        this.prisma.read.enrollment.count({
           where: { ...where, status: EnrollmentStatus.IN_PROGRESS },
         }),
-        this.prismaRead.enrollment.count({
+        this.prisma.read.enrollment.count({
           where: { ...where, status: EnrollmentStatus.CANCELLED },
         }),
         // Top courses
-        this.prismaRead.enrollment
+        this.prisma.read.enrollment
           .groupBy({
             by: ['courseId'],
             where,
@@ -189,17 +193,17 @@ export class ReportsService {
           })
           .then(async rows => {
             const ids = rows.map(r => r.courseId);
-            const courses = await this.prismaRead.course.findMany({
+            const courses = await this.prisma.read.course.findMany({
               where: { id: { in: ids } },
               select: { id: true, title: true, category: true },
             });
             const cMap = new Map(courses.map(c => [c.id, c]));
-            const compls = await this.prismaRead.enrollment.groupBy({
+            const compls = await this.prisma.read.enrollment.groupBy({
               by: ['courseId'],
               where: { ...where, status: EnrollmentStatus.COMPLETED },
               _count: { id: true },
             });
-            const compMap = new Map<any, number>(compls.map((c: any) => [c.courseId, c._count.id]));
+            const compMap = new Map<number, number>(compls.map(c => [c.courseId, c._count.id]));
             return rows.map(r => ({
               course: cMap.get(r.courseId),
               enrollments: r._count.id,
@@ -208,7 +212,7 @@ export class ReportsService {
             }));
           }),
         // By department
-        this.prismaRead.enrollment
+        this.prisma.read.enrollment
           .groupBy({
             by: ['userId'],
             where: { ...where, status: EnrollmentStatus.COMPLETED },
@@ -217,7 +221,7 @@ export class ReportsService {
             take: 200,
           })
           .then(async rows => {
-            const users = await this.prismaRead.user.findMany({
+            const users = await this.prisma.read.user.findMany({
               where: { id: { in: rows.map(r => r.userId) } },
               select: { id: true, departmentId: true },
             });
@@ -227,7 +231,7 @@ export class ReportsService {
               const dId = u?.departmentId ?? 0;
               deptCount[dId] = (deptCount[dId] ?? 0) + r._count.id;
             }
-            const depts = await this.prismaRead.department.findMany({
+            const depts = await this.prisma.read.department.findMany({
               where: { id: { in: Object.keys(deptCount).map(Number) } },
               select: { id: true, name: true },
             });
@@ -235,7 +239,7 @@ export class ReportsService {
               .map(d => ({ department: d.name, completions: deptCount[d.id] ?? 0 }))
               .sort((a, b) => b.completions - a.completions);
           }),
-        this.prismaRead.performanceReview
+        this.prisma.read.performanceReview
           .aggregate({
             where: {
               ...(uWhere ? { user: uWhere } : {}),
@@ -279,10 +283,10 @@ export class ReportsService {
 
   async skillGapReport(filter: ReportFilterDto) {
     const uWhere = userWhere(filter);
-    const where: any = {};
+    const where: Prisma.UserCompetencyWhereInput = {};
     if (uWhere) where.user = uWhere;
 
-    const records = await this.prismaRead.userCompetency.findMany({
+    const records = await this.prisma.read.userCompetency.findMany({
       where,
       include: {
         competency: { select: { id: true, name: true, type: true } },
@@ -298,7 +302,7 @@ export class ReportsService {
     });
 
     const TARGET = TARGET_SKILL_LEVEL;
-    const bySkill: Record<string, any> = {};
+    const bySkill: Record<string, SkillGapEntry> = {};
 
     for (const r of records) {
       const cName = r.competency.name;
@@ -315,7 +319,7 @@ export class ReportsService {
       if (gap > 0) {
         bySkill[cName].totalGap += gap;
         bySkill[cName].usersWithGap++;
-        bySkill[cName].users.push({
+        bySkill[cName].users?.push({
           id: r.user.id,
           fullName: r.user.fullName,
           dept: r.user.department?.name,
@@ -326,13 +330,13 @@ export class ReportsService {
     }
 
     const skills = Object.values(bySkill)
-      .map((c: any) => ({ ...c, avgGap: c.count ? +(c.totalGap / c.count).toFixed(1) : 0 }))
-      .sort((a: any, b: any) => b.avgGap - a.avgGap);
+      .map(c => ({ ...c, avgGap: c.count ? +(c.totalGap / c.count).toFixed(1) : 0 }))
+      .sort((a, b) => b.avgGap - a.avgGap);
 
     return {
       report: 'SKILL_GAP',
       totalAssessed: records.length,
-      criticalGaps: skills.filter((s: any) => s.avgGap >= 2).length,
+      criticalGaps: skills.filter(s => s.avgGap >= 2).length,
       skills,
       generatedAt: new Date(),
     };
@@ -349,7 +353,7 @@ export class ReportsService {
 
   async performanceReportFull(filter: ReportFilterDto) {
     const uWhere = userWhere(filter);
-    const where: any = {};
+    const where: Prisma.PerformanceReviewWhereInput = {};
     // PerformanceReview não tem coluna `period` (usa `cycleId` → PerformanceCycle,
     // que também não tem `period`) — este filtro nunca teve um campo real para
     // mapear e rebentava sempre com PrismaClientValidationError quando ?period=
@@ -363,7 +367,7 @@ export class ReportsService {
       };
     if (uWhere) where.user = uWhere;
 
-    const reviews = await this.prismaRead.performanceReview.findMany({
+    const reviews = await this.prisma.read.performanceReview.findMany({
       where,
       include: {
         user: {
@@ -437,14 +441,14 @@ export class ReportsService {
 
     const [activeSurveys, totalResponses, surveys, recognitions, feedbackCount, avgMoodRecent] =
       await Promise.all([
-        this.prismaRead.engagementSurvey.count({ where: { status: 'ACTIVE' } }),
-        this.prismaRead.surveyResponse.count({
+        this.prisma.read.engagementSurvey.count({ where: { status: 'ACTIVE' } }),
+        this.prisma.read.surveyResponse.count({
           where: {
             createdAt: { gte: range.gte, lte: range.lte },
             ...(uWhere ? { user: uWhere } : {}),
           },
         }),
-        this.prismaRead.engagementSurvey.findMany({
+        this.prisma.read.engagementSurvey.findMany({
           where: { status: { in: ['ACTIVE', 'COMPLETED'] } },
           include: {
             _count: { select: { responses: true } },
@@ -453,32 +457,32 @@ export class ReportsService {
           orderBy: { createdAt: 'desc' },
           take: 6,
         }),
-        this.prismaRead.kudos.count({
+        this.prisma.read.kudos.count({
           where: { createdAt: { gte: range.gte, lte: range.lte } },
         }),
-        this.prismaRead.continuousFeedback.count({
+        this.prisma.read.continuousFeedback.count({
           where: { createdAt: { gte: range.gte, lte: range.lte } },
         }),
-        this.prismaRead.leadershipPulse.aggregate({
+        this.prisma.read.leadershipPulse.aggregate({
           _avg: { overallScore: true },
           where: { createdAt: { gte: range.gte } },
         }),
       ]);
 
-    const totalUsers = await this.prismaRead.user.count({
+    const totalUsers = await this.prisma.read.user.count({
       where: { active: true, ...(uWhere ?? {}) },
     });
     const participationRate = pct(totalResponses, totalUsers);
 
     const surveyData = surveys.map(s => {
-      const responses = s.responses as any[];
+      const responses = s.responses;
       const avgScore = responses.length
         ? +(responses.reduce((a, r) => a + (r.score ?? 0), 0) / responses.length).toFixed(2)
         : null;
       return {
         id: s.id,
-        title: (s as any).title,
-        type: (s as any).type,
+        title: s.title,
+        type: s.type,
         responses: s._count.responses,
         avgScore,
       };
@@ -523,8 +527,8 @@ export class ReportsService {
       avgCompetency,
       avgPerf,
     ] = await Promise.all([
-      this.prismaRead.user.count({ where: { active: true, ...(uWhere ?? {}) } }),
-      this.prismaRead.userCompetency
+      this.prisma.read.user.count({ where: { active: true, ...(uWhere ?? {}) } }),
+      this.prisma.read.userCompetency
         .groupBy({
           by: ['userId'],
           where: uWhere ? { user: uWhere } : {},
@@ -543,24 +547,24 @@ export class ReportsService {
           });
           return 0;
         }),
-      this.prismaRead.successionPlan.findMany({
+      this.prisma.read.successionPlan.findMany({
         include: {
           position: { select: { name: true, level: true } },
           candidate: { select: { id: true, fullName: true } },
         },
         take: 20,
       }),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.developmentPlan.count({
         where: { status: 'ACTIVE', isTemplate: false, ...(uWhere ? { user: uWhere } : {}) },
       }),
-      this.prismaRead.developmentPlan.count({
+      this.prisma.read.developmentPlan.count({
         where: { status: 'COMPLETED', isTemplate: false, ...(uWhere ? { user: uWhere } : {}) },
       }),
-      this.prismaRead.userCompetency.aggregate({
+      this.prisma.read.userCompetency.aggregate({
         _avg: { currentLevel: true },
         where: uWhere ? { user: uWhere } : {},
       }),
-      this.prismaRead.performanceReview.aggregate({
+      this.prisma.read.performanceReview.aggregate({
         _avg: { score: true },
         where: uWhere ? { user: uWhere } : {},
       }),
@@ -587,7 +591,7 @@ export class ReportsService {
       successionPlans: successionPlans.map(s => ({
         position: s.position,
         candidate: s.candidate,
-        readiness: (s as any).readiness,
+        readiness: s.readinessLevel,
       })),
       insights: this.buildTalentInsights(hiPos, totalUsers, pdpCoverage, succession),
       generatedAt: new Date(),
@@ -603,9 +607,9 @@ export class ReportsService {
     const range = dateRange(filter);
 
     const [mandatoryTotal, mandatoryCompleted, auditLogs, certifications] = await Promise.all([
-      this.prismaRead.enrollment
+      this.prisma.read.enrollment
         .count({
-          where: { course: { mandatory: true } as any, ...(uWhere ? { user: uWhere } : {}) },
+          where: { course: { mandatory: true }, ...(uWhere ? { user: uWhere } : {}) },
         })
         .catch(e => {
           this.logger.warn({
@@ -616,10 +620,10 @@ export class ReportsService {
           });
           return 0;
         }),
-      this.prismaRead.enrollment
+      this.prisma.read.enrollment
         .count({
           where: {
-            course: { mandatory: true } as any,
+            course: { mandatory: true },
             status: EnrollmentStatus.COMPLETED,
             ...(uWhere ? { user: uWhere } : {}),
           },
@@ -633,7 +637,7 @@ export class ReportsService {
           });
           return 0;
         }),
-      this.prismaRead.auditLog
+      this.prisma.read.auditLog
         .count({
           where: { timestamp: { gte: range.gte, lte: range.lte } },
         })
@@ -646,7 +650,7 @@ export class ReportsService {
           });
           return 0;
         }),
-      this.prismaRead.certificate
+      this.prisma.read.certificate
         .findMany({
           where: { issuedAt: { gte: range.gte, lte: range.lte } },
           include: {
@@ -655,14 +659,20 @@ export class ReportsService {
           orderBy: { issuedAt: 'desc' },
           take: 20,
         })
-        .catch(e => {
+        .catch((e: unknown) => {
           this.logger.warn({
             filter,
             metric: 'certifications',
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao obter certificações emitidas para relatório de compliance',
           });
-          return [] as any[];
+          return [] as Prisma.CertificateGetPayload<{
+            include: {
+              user: {
+                select: { id: true; fullName: true; department: { select: { name: true } } };
+              };
+            };
+          }>[];
         }),
     ]);
 
@@ -676,9 +686,9 @@ export class ReportsService {
         mandatoryCompleted,
         mandatoryRate,
         auditEvents: auditLogs,
-        certificationsIssued: (certifications as any[]).length,
+        certificationsIssued: certifications.length,
       },
-      recentCertifications: (certifications as any[]).slice(0, 10),
+      recentCertifications: certifications.slice(0, 10),
       riskLevel: mandatoryRate < 70 ? 'HIGH' : mandatoryRate < 90 ? 'MEDIUM' : 'LOW',
       insights:
         mandatoryRate < 80
@@ -695,8 +705,10 @@ export class ReportsService {
   // ══════════════════════════════════════════════════════
 
   async attendanceReport(from: string, to: string, departmentId?: number) {
-    const where: any = { date: { gte: new Date(from), lte: new Date(to) } };
-    const records = await this.prismaRead.attendanceRecord.findMany({
+    const where: Prisma.AttendanceRecordWhereInput = {
+      date: { gte: new Date(from), lte: new Date(to) },
+    };
+    const records = await this.prisma.read.attendanceRecord.findMany({
       where,
       include: { user: { select: { id: true, fullName: true, email: true } } },
     });
@@ -723,11 +735,22 @@ export class ReportsService {
   // ══════════════════════════════════════════════════════
 
   async payrollSummary(period: string) {
-    const records = await this.prismaRead.historyRecord.findMany({
+    const records = await this.prisma.read.historyRecord.findMany({
       where: { action: 'PAYSLIP', description: { contains: `"period":"${period}"` } },
       include: { user: { select: { id: true, fullName: true, department: true } } },
     });
-    const payslips = records.map(r => {
+    // description é JSON livre (histórico legado) — os campos de payslip
+    // (grossSalary/netSalary/totalDeductions) não têm garantia de shape em
+    // tempo de compilação, só em runtime a partir do que foi lá escrito.
+    interface PayslipFields {
+      grossSalary?: number;
+      netSalary?: number;
+      totalDeductions?: number;
+    }
+    const payslips: (Prisma.HistoryRecordGetPayload<{
+      include: { user: { select: { id: true; fullName: true; department: true } } };
+    }> &
+      PayslipFields)[] = records.map(r => {
       try {
         return { ...r, ...JSON.parse(r.description ?? '{}') };
       } catch (e: unknown) {
@@ -738,11 +761,11 @@ export class ReportsService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao interpretar JSON de registo de folha de pagamento — a usar registo em bruto',
         });
-        return r as any;
+        return r;
       }
     });
     const totals = payslips.reduce(
-      (acc: any, p: any) => ({
+      (acc, p) => ({
         grossSalary: acc.grossSalary + (p.grossSalary ?? 0),
         netSalary: acc.netSalary + (p.netSalary ?? 0),
         totalDeductions: acc.totalDeductions + (p.totalDeductions ?? 0),
@@ -765,16 +788,16 @@ export class ReportsService {
   // ══════════════════════════════════════════════════════
 
   async competencyGapReport(departmentId?: number) {
-    const where: any = {};
+    const where: Prisma.UserCompetencyWhereInput = {};
     if (departmentId) where.user = { departmentId };
-    const records = await this.prismaRead.userCompetency.findMany({
+    const records = await this.prisma.read.userCompetency.findMany({
       where,
       include: {
         competency: true,
         user: { select: { id: true, fullName: true, department: true } },
       },
     });
-    const byComp: Record<string, any> = {};
+    const byComp: Record<string, SkillGapEntry> = {};
     for (const g of records) {
       const n = g.competency.name;
       if (!byComp[n]) byComp[n] = { name: n, count: 0, totalGap: 0, usersWithGap: 0 };
@@ -786,8 +809,8 @@ export class ReportsService {
       }
     }
     return Object.values(byComp)
-      .map((c: any) => ({ ...c, avgGap: c.count ? +(c.totalGap / c.count).toFixed(1) : 0 }))
-      .sort((a: any, b: any) => b.avgGap - a.avgGap);
+      .map(c => ({ ...c, avgGap: c.count ? +(c.totalGap / c.count).toFixed(1) : 0 }))
+      .sort((a, b) => b.avgGap - a.avgGap);
   }
 
   // ══════════════════════════════════════════════════════
@@ -799,7 +822,7 @@ export class ReportsService {
 
     const [contentViews, topContent, avatarSessions, surveySubmissions, auditActions, activeUsers] =
       await Promise.all([
-        this.prismaRead.auditLog
+        this.prisma.read.auditLog
           .count({
             where: {
               action: 'CONTENT_VIEW',
@@ -816,7 +839,7 @@ export class ReportsService {
             });
             return 0;
           }),
-        this.prismaRead.auditLog
+        this.prisma.read.auditLog
           .groupBy({
             by: ['entityId'],
             where: {
@@ -828,22 +851,22 @@ export class ReportsService {
             orderBy: { _count: { id: 'desc' } },
             take: 10,
           })
-          .catch(e => {
+          .catch((e: unknown) => {
             this.logger.warn({
               filter,
               metric: 'topContent',
               err: { message: e instanceof Error ? e.message : String(e) },
               msg: 'Falha ao obter conteúdo mais visto para relatório de uso da plataforma',
             });
-            return [] as any[];
+            return [] as { entityId: number | null; _count: { id: number } }[];
           }),
-        this.prismaRead.avatarSession.count({
+        this.prisma.read.avatarSession.count({
           where: { startedAt: { gte: range.gte, lte: range.lte } },
         }),
-        this.prismaRead.surveyResponse.count({
+        this.prisma.read.surveyResponse.count({
           where: { createdAt: { gte: range.gte, lte: range.lte } },
         }),
-        this.prismaRead.auditLog
+        this.prisma.read.auditLog
           .count({ where: { timestamp: { gte: range.gte, lte: range.lte } } })
           .catch(e => {
             this.logger.warn({
@@ -854,7 +877,7 @@ export class ReportsService {
             });
             return 0;
           }),
-        this.prismaRead.auditLog
+        this.prisma.read.auditLog
           .groupBy({
             by: ['userId'],
             where: { timestamp: { gte: range.gte, lte: range.lte } },
@@ -875,9 +898,9 @@ export class ReportsService {
       ]);
 
     // Enrich top content
-    const contentIds = (topContent as any[]).map((v: any) => v.entityId).filter(Boolean);
+    const contentIds = topContent.map(v => v.entityId).filter((id): id is number => id !== null);
     const contents = contentIds.length
-      ? await this.prismaRead.contentAsset.findMany({
+      ? await this.prisma.read.contentAsset.findMany({
           where: { id: { in: contentIds } },
           select: { id: true, title: true, type: true },
         })
@@ -888,12 +911,12 @@ export class ReportsService {
       report: 'PLATFORM_USAGE',
       period: { from: range.gte, to: range.lte },
       summary: { contentViews, avatarSessions, surveySubmissions, auditActions, activeUsers },
-      topContent: (topContent as any[])
-        .map((v: any) => ({
-          content: cMap.get(v.entityId),
+      topContent: topContent
+        .map(v => ({
+          content: v.entityId !== null ? cMap.get(v.entityId) : undefined,
           views: v._count.id,
         }))
-        .filter((v: any) => v.content),
+        .filter(v => v.content),
       generatedAt: new Date(),
     };
   }
@@ -918,16 +941,18 @@ export class ReportsService {
   }
 
   async listSavedReports(userId: number, category?: ReportCategory) {
-    const where: any = { OR: [{ createdById: userId }, { isTemplate: true }] };
+    const where: Prisma.SavedReportWhereInput = {
+      OR: [{ createdById: userId }, { isTemplate: true }],
+    };
     if (category) where.category = category;
-    return this.prismaRead.savedReport.findMany({
+    return this.prisma.read.savedReport.findMany({
       where,
       orderBy: { updatedAt: 'desc' },
     });
   }
 
   async getTemplates() {
-    const templates = await this.prismaRead.savedReport.findMany({
+    const templates = await this.prisma.read.savedReport.findMany({
       where: { isTemplate: true },
       orderBy: { category: 'asc' },
     });
@@ -973,7 +998,7 @@ export class ReportsService {
   }
 
   async listSchedules(userId: number) {
-    return this.prismaRead.reportSchedule.findMany({
+    return this.prisma.read.reportSchedule.findMany({
       where: { createdById: userId, active: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -998,7 +1023,10 @@ export class ReportsService {
   // CSV / XLSX EXPORT HELPERS
   // ══════════════════════════════════════════════════════
 
-  async exportToCsv(data: any[], headers: string[]): Promise<string> {
+  async exportToCsv<T extends Record<string, unknown>>(
+    data: T[],
+    headers: (keyof T & string)[],
+  ): Promise<string> {
     const rows = data.map(row =>
       headers
         .map(h => {
