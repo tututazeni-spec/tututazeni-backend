@@ -1,5 +1,6 @@
 ﻿// ─── src/competency-map/competency-map.service.ts ────────────────────────────
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import {
@@ -17,6 +18,20 @@ import {
 } from './competency-map.dto';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+export interface GapEntry {
+  skillId: number;
+  skillName: string;
+  skillType: string;
+  category: string | undefined;
+  currentLevel: number;
+  requiredLevel: number;
+  gap: number;
+  weight: number;
+  mandatory: boolean;
+  priority: GapPriority;
+  hasGap: boolean;
+}
 
 function getGapPriority(gap: number, mandatory: boolean): GapPriority {
   if (mandatory && gap >= 2) return GapPriority.HIGH;
@@ -94,7 +109,7 @@ export class CompetencyMapService {
   async getSkills(filters: SkillFilterDto) {
     const { page = 1, limit = 50, search, type, categoryId, active = true } = filters;
     const skip = (page - 1) * limit;
-    const where: any = { active };
+    const where: Prisma.SkillWhereInput = { active };
     if (search) where.name = { contains: search, mode: 'insensitive' };
     if (type) where.type = type;
     if (categoryId) where.categoryId = categoryId;
@@ -133,7 +148,7 @@ export class CompetencyMapService {
 
   async updateSkill(id: number, dto: UpdateSkillDto) {
     await this.getSkill(id);
-    return this.prisma.skill.update({ where: { id }, data: dto as any });
+    return this.prisma.skill.update({ where: { id }, data: dto });
   }
 
   // ══════════════════════════════════════════════════════════════════
@@ -315,12 +330,15 @@ export class CompetencyMapService {
       orderBy: [{ skill: { type: 'asc' } }, { currentLevel: 'desc' }],
     });
 
-    const byType = skills.reduce((acc: any, s) => {
-      const type = s.skill.type;
-      if (!acc[type]) acc[type] = [];
-      acc[type].push(s);
-      return acc;
-    }, {});
+    const byType = skills.reduce(
+      (acc: Record<string, typeof skills>, s) => {
+        const type = s.skill.type;
+        if (!acc[type]) acc[type] = [];
+        acc[type].push(s);
+        return acc;
+      },
+      {} as Record<string, typeof skills>,
+    );
 
     const avgScore = skills.length
       ? +(skills.reduce((a, s) => a + s.currentLevel, 0) / skills.length).toFixed(2)
@@ -346,11 +364,15 @@ export class CompetencyMapService {
   // ══════════════════════════════════════════════════════════════════
 
   async getUserGapAnalysis(userId: number, roleCode?: string) {
-    // Buscar role code do colaborador se não fornecido
+    // Buscar role code do colaborador se não fornecido.
+    // FIX: `user.employee` nunca existiu (User não tem essa relação — ver
+    // CLAUDE.md) e ficava sempre undefined atrás do `as any`; o campo real
+    // equivalente é `user.role.code` (Role.code, usado em RoleSkillMatrix.roleCode).
     const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
+      include: { role: true },
     });
-    const targetRole = roleCode ?? (user as any)?.employee?.role;
+    const targetRole = roleCode ?? user?.role?.code ?? undefined;
 
     // Skills do colaborador
     const employeeSkills = await this.prisma.read.legacyEmployeeSkill.findMany({
@@ -360,13 +382,13 @@ export class CompetencyMapService {
     const skillMap = new Map(employeeSkills.map(s => [s.skillId, s.currentLevel]));
 
     let matrix = null;
-    let gaps: any[] = [];
+    let gaps: GapEntry[] = [];
     let readinessScore = 0;
 
     if (targetRole) {
       try {
         matrix = await this.getRoleSkillMatrix(targetRole);
-        for (const req of matrix.requirements as any[]) {
+        for (const req of matrix.requirements) {
           const current = skillMap.get(req.skillId) ?? 0;
           const gap = req.requiredLevel - current;
           const priority = getGapPriority(gap, req.mandatory);
@@ -385,10 +407,10 @@ export class CompetencyMapService {
             hasGap: gap > 0,
           });
         }
-        readinessScore = calcWeightedScore(skillMap, matrix.requirements as any[]);
+        readinessScore = calcWeightedScore(skillMap, matrix.requirements);
         gaps = gaps.sort((a, b) => {
           const order = { HIGH: 0, MEDIUM: 1, LOW: 2 };
-          return order[a.priority as GapPriority] - order[b.priority as GapPriority];
+          return order[a.priority] - order[b.priority];
         });
       } catch (e: unknown) {
         this.logger.warn({
@@ -424,9 +446,12 @@ export class CompetencyMapService {
   }
 
   async getOrganisationalGapAnalysis(filters: GapAnalysisFilterDto) {
-    const where: any = {};
+    const where: Prisma.LegacyEmployeeSkillWhereInput = {};
+    // FIX: o filtro de departamento nunca foi implementado (comentário
+    // "no direct relation" datava de antes de `User.department` existir como
+    // relação real) — o parâmetro `filters.department` era sempre ignorado.
     if (filters.department)
-      where.user = {/* employee department filter removed — no direct relation */} as any;
+      where.user = { department: { name: { contains: filters.department, mode: 'insensitive' } } };
     if (filters.userId) where.userId = filters.userId;
     if (filters.skillType) where.skill = { type: filters.skillType };
 
@@ -434,12 +459,27 @@ export class CompetencyMapService {
       where,
       include: {
         skill: { include: { category: true } },
-        user: { select: { id: true, fullName: true, avatarUrl: true } as any },
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            department: { select: { name: true } },
+          },
+        },
       },
     });
 
     // Agrupar por skill: média, distribuição de níveis
-    const bySkill: Record<number, any> = {};
+    type SkillGapAgg = {
+      skillId: number;
+      skillName: string;
+      skillType: string;
+      category: string | undefined;
+      levels: number[];
+      count: number;
+    };
+    const bySkill: Record<number, SkillGapAgg> = {};
     for (const es of allEmployeeSkills) {
       const id = es.skillId;
       if (!bySkill[id]) {
@@ -457,11 +497,9 @@ export class CompetencyMapService {
     }
 
     const skillSummary = Object.values(bySkill)
-      .map((s: any) => {
-        const avg = +(
-          s.levels.reduce((a: number, b: number) => a + b, 0) / s.levels.length
-        ).toFixed(2);
-        const below3 = s.levels.filter((l: number) => l < 3).length;
+      .map(s => {
+        const avg = +(s.levels.reduce((a, b) => a + b, 0) / s.levels.length).toFixed(2);
+        const below3 = s.levels.filter(l => l < 3).length;
         return {
           ...s,
           avgLevel: avg,
@@ -469,7 +507,7 @@ export class CompetencyMapService {
           belowThresholdRate: +((below3 / s.levels.length) * 100).toFixed(1),
           levelDistribution: [1, 2, 3, 4, 5].map(l => ({
             level: l,
-            count: s.levels.filter((x: number) => x === l).length,
+            count: s.levels.filter(x => x === l).length,
           })),
         };
       })
@@ -479,19 +517,25 @@ export class CompetencyMapService {
     const criticalGaps = skillSummary.filter(s => s.belowThresholdRate > 30);
 
     // Departamento summary
-    const deptSummary = allEmployeeSkills.reduce((acc: any, es) => {
-      const dept = (es.user as any)?.employee?.department ?? 'N/A';
-      if (!acc[dept]) acc[dept] = { department: dept, totalAssessments: 0, sumLevels: 0 };
-      acc[dept].totalAssessments++;
-      acc[dept].sumLevels += es.currentLevel;
-      return acc;
-    }, {});
+    // FIX: `es.user.employee` nunca existiu — grupo caía sempre em 'N/A'; o
+    // campo real é `user.department.name` (agora incluído acima).
+    type DeptAgg = { department: string; totalAssessments: number; sumLevels: number };
+    const deptSummary = allEmployeeSkills.reduce(
+      (acc: Record<string, DeptAgg>, es) => {
+        const dept = es.user.department?.name ?? 'N/A';
+        if (!acc[dept]) acc[dept] = { department: dept, totalAssessments: 0, sumLevels: 0 };
+        acc[dept].totalAssessments++;
+        acc[dept].sumLevels += es.currentLevel;
+        return acc;
+      },
+      {} as Record<string, DeptAgg>,
+    );
 
     return {
       totalAssessments: allEmployeeSkills.length,
       skillSummary,
       criticalGaps,
-      departmentSummary: Object.values(deptSummary).map((d: any) => ({
+      departmentSummary: Object.values(deptSummary).map(d => ({
         ...d,
         avgLevel: +(d.sumLevels / d.totalAssessments).toFixed(2),
       })),
@@ -511,18 +555,26 @@ export class CompetencyMapService {
   }
 
   async getDepartmentMap(department: string) {
+    // FIX: o filtro de departamento nunca foi implementado (mesmo comentário
+    // desactualizado de getOrganisationalGapAnalysis) — devolvia sempre TODOS
+    // os utilizadores, independentemente do departamento pedido.
     const users = await this.prisma.read.user.findMany({
-      where: {/* employee department filter removed — no direct relation */} as any,
-      select: { id: true, fullName: true, avatarUrl: true } as any,
+      where: { department: { name: { contains: department, mode: 'insensitive' } } },
+      select: { id: true, fullName: true, avatarUrl: true },
     });
 
     const allSkills = await this.prisma.read.legacyEmployeeSkill.findMany({
-      where: { userId: { in: users.map((u: any) => u.id) } },
+      where: { userId: { in: users.map(u => u.id) } },
       include: { skill: { include: { category: true } } },
     });
 
     // Média por skill
-    const bySkill: Record<number, any> = {};
+    type DeptSkillAgg = {
+      skill: (typeof allSkills)[number]['skill'];
+      levels: number[];
+      count: number;
+    };
+    const bySkill: Record<number, DeptSkillAgg> = {};
     for (const s of allSkills) {
       if (!bySkill[s.skillId]) bySkill[s.skillId] = { skill: s.skill, levels: [], count: 0 };
       bySkill[s.skillId].levels.push(s.currentLevel);
@@ -530,11 +582,9 @@ export class CompetencyMapService {
     }
 
     const summary = Object.values(bySkill)
-      .map((s: any) => ({
+      .map(s => ({
         skill: s.skill,
-        avgLevel: +(s.levels.reduce((a: number, b: number) => a + b, 0) / s.levels.length).toFixed(
-          2,
-        ),
+        avgLevel: +(s.levels.reduce((a, b) => a + b, 0) / s.levels.length).toFixed(2),
         count: s.count,
       }))
       .sort((a, b) => b.avgLevel - a.avgLevel);
@@ -552,11 +602,11 @@ export class CompetencyMapService {
   async getTeamMap(managerId: number) {
     const subordinates = await this.prisma.read.user.findMany({
       where: { managerId },
-      select: { id: true, fullName: true, avatarUrl: true } as any,
+      select: { id: true, fullName: true, avatarUrl: true },
     });
 
     const teamSkills = await Promise.all(
-      subordinates.map(async (s: any) => {
+      subordinates.map(async s => {
         const gap = await this.getUserGapAnalysis(s.id);
         return {
           user: s,
@@ -588,20 +638,24 @@ export class CompetencyMapService {
     const { skills, gapAnalysis } = await this.getMap(userId);
 
     // Para radar chart: agrupar por tipo de skill
+    type RadarAgg = { type: string; current: number; required: number; count: number };
     const radarByType = Object.entries(
-      skills.reduce((acc: any, s) => {
-        const type = s.skill.type;
-        if (!acc[type]) acc[type] = { type, current: 0, required: 0, count: 0 };
-        acc[type].current += s.currentLevel;
+      skills.reduce(
+        (acc: Record<string, RadarAgg>, s) => {
+          const type = s.skill.type;
+          if (!acc[type]) acc[type] = { type, current: 0, required: 0, count: 0 };
+          acc[type].current += s.currentLevel;
 
-        // Buscar required do gap analysis
-        const gap = gapAnalysis.gaps?.all?.find((g: any) => g.skillId === s.skillId);
-        if (gap) acc[type].required += gap.requiredLevel;
-        else acc[type].required += s.currentLevel;
-        acc[type].count++;
-        return acc;
-      }, {}),
-    ).map(([_, v]: any) => ({
+          // Buscar required do gap analysis
+          const gap = gapAnalysis.gaps?.all?.find(g => g.skillId === s.skillId);
+          if (gap) acc[type].required += gap.requiredLevel;
+          else acc[type].required += s.currentLevel;
+          acc[type].count++;
+          return acc;
+        },
+        {} as Record<string, RadarAgg>,
+      ),
+    ).map(([, v]) => ({
       type: v.type,
       avgCurrent: +(v.current / v.count).toFixed(2),
       avgRequired: +(v.required / v.count).toFixed(2),
@@ -612,9 +666,10 @@ export class CompetencyMapService {
   }
 
   async getHeatmapData(department?: string) {
-    const where: any = {};
+    const where: Prisma.LegacyEmployeeSkillWhereInput = {};
+    // FIX: mesmo filtro de departamento morto de getOrganisationalGapAnalysis/getDepartmentMap.
     if (department)
-      where.user = {/* employee department filter removed — no direct relation */} as any;
+      where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const data = await this.prisma.read.legacyEmployeeSkill.findMany({
       where,
@@ -623,7 +678,7 @@ export class CompetencyMapService {
         skillId: true,
         currentLevel: true,
         skill: { select: { name: true, type: true } },
-        user: { select: { fullName: true, avatarUrl: true } as any },
+        user: { select: { fullName: true, avatarUrl: true } },
       },
     });
 
@@ -637,9 +692,12 @@ export class CompetencyMapService {
   private async getCoursesForGaps(skillIds: number[]) {
     if (!skillIds.length) return [];
     try {
+      // Course não tem relação `skills` (ver CLAUDE.md) — não há como filtrar
+      // cursos pelos skillIds dos gaps; devolve-se uma amostra genérica.
+      const where: Prisma.CourseWhereInput = {};
       return (
         this.prisma.course?.findMany?.({
-          where: {/* skills filter removed — Course has no skills relation */} as any,
+          where,
           select: { id: true, title: true },
           take: 5,
         }) ?? []
@@ -656,8 +714,10 @@ export class CompetencyMapService {
 
   private async notifyManager(userId: number, type: string, message: string) {
     try {
+      // FIX: `user.employee` nunca existiu; `managerId` já é um campo escalar
+      // directo em `User` (FK `managerId`), não precisa de nenhum include.
       const user = await this.prisma.read.user.findUnique({ where: { id: userId } });
-      const managerId = (user as any)?.employee?.managerId;
+      const managerId = user?.managerId;
       if (managerId)
         await this.prisma.notificationLog.create({ data: { userId: managerId, type, message } });
     } catch (e: unknown) {
