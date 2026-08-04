@@ -25,11 +25,18 @@ import {
   LegacyCareerPlanStatus,
   LegacyPdiStatus,
   EmployeeDocumentStatus,
+  AttendanceStatus,
 } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export { EmployeeStatus, LegacyCareerPlanStatus, LegacyPdiStatus, EmployeeDocumentStatus };
+export {
+  EmployeeStatus,
+  LegacyCareerPlanStatus,
+  LegacyPdiStatus,
+  EmployeeDocumentStatus,
+  AttendanceStatus,
+};
 
 /**
  * Tipos de contrato de trabalho — Angola
@@ -331,7 +338,7 @@ export class CreateEmployeeAttendanceDto {
   @ApiProperty() @IsInt() employeeId!: number;
   @ApiProperty() @IsDateString() date!: string;
   @ApiProperty() @IsNumber() @Min(0) @Max(24) hoursWorked!: number;
-  @ApiProperty() @IsString() status!: string;
+  @ApiProperty({ enum: AttendanceStatus }) @IsEnum(AttendanceStatus) status!: AttendanceStatus;
   @ApiPropertyOptional() @IsOptional() @IsString() checkIn?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() checkOut?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
@@ -382,7 +389,7 @@ export class EmployeeFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) managerId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() joinedFrom?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() joinedTo?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() pdiStatus?: string;
+  @ApiPropertyOptional() @IsOptional() @IsEnum(LegacyPdiStatus) pdiStatus?: LegacyPdiStatus;
   @ApiPropertyOptional() @IsOptional() @IsString() skillName?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) skillLevel?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() costCenter?: string;
