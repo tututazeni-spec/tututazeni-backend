@@ -13,7 +13,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
-import { PlanStatus, ActionType, ActionStatus, PlanPriority } from '@prisma/client';
+import { PlanStatus, ActionType, ActionStatus, PlanPriority, SkillType } from '@prisma/client';
 
 // ─── Enums ───────────────────────────────────────────────────────
 
@@ -218,7 +218,7 @@ export class MentoringFilterDto {
 
 export class SkillGapFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
-  @ApiPropertyOptional() @IsOptional() @IsString() skillType?: string;
+  @ApiPropertyOptional({ enum: SkillType }) @IsOptional() @IsEnum(SkillType) skillType?: SkillType;
 }
 
 // ─── Simulation ──────────────────────────────────────────────────
