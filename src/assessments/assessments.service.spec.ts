@@ -215,10 +215,20 @@ describe('AssessmentsService', () => {
 
   describe('publish', () => {
     it('deve publicar avaliação', async () => {
-      mockPrisma.assessment.findUnique.mockResolvedValue(baseAssessment);
+      mockPrisma.assessment.findUnique.mockResolvedValue({
+        ...baseAssessment,
+        questions: [{ id: 1 }],
+      });
       mockPrisma.assessment.update.mockResolvedValue({ ...baseAssessment, status: 'ACTIVE' });
       const result = await service.publish(1);
       expect(result).toBeDefined();
+    });
+
+    it('deve rejeitar publicação sem perguntas', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue(baseAssessment);
+      await expect(service.publish(1)).rejects.toThrow(
+        'Avaliação sem perguntas não pode ser publicada',
+      );
     });
   });
 
