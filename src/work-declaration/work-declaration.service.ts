@@ -5,7 +5,12 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfService } from '../pdf/pdf.service';
-import { DeclarationAuditAction } from '@prisma/client';
+import {
+  DeclarationAuditAction,
+  DeclarationStatus as PrismaDeclarationStatus,
+  DeclarationTenantConfig,
+  Prisma,
+} from '@prisma/client';
 import * as crypto from 'crypto';
 import { isPrivileged, assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -27,6 +32,26 @@ import {
   UpsertTenantConfigDto,
   VerifyDeclarationDto,
 } from './work-declaration.dto';
+
+interface EmployeeSnapshot {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  department: string;
+  admissionDate: Date | null;
+  nationalId: string | null;
+}
+
+type DeclarationWithRelations = Prisma.DeclarationGetPayload<{
+  include: {
+    template: true;
+    employee: { select: { id: true; fullName: true; email: true } };
+    requestedBy: { select: { id: true; fullName: true; email: true } };
+    assignedTo: { select: { id: true; fullName: true; email: true } };
+    signatures: { include: { signer: { select: { id: true; fullName: true } } } };
+  };
+}>;
 
 @Injectable()
 export class WorkDeclarationService {
@@ -68,19 +93,19 @@ export class WorkDeclarationService {
     // Se novo template for default, remover default anterior do mesmo tipo
     if (dto.isDefault) {
       await this.prisma.declarationTemplate.updateMany({
-        where: { tenantId, type: (dto as any).type, isDefault: true },
+        where: { tenantId, type: dto.type, isDefault: true },
         data: { isDefault: false },
       });
     }
 
-    return this.prisma.declarationTemplate.create({
-      data: {
-        ...dto,
-        content: dto.bodyContent,
-        tenantId,
-        createdById: userId,
-      } as any,
-    });
+    const data: Prisma.DeclarationTemplateUncheckedCreateInput = {
+      ...dto,
+      content: dto.bodyContent,
+      variables: [],
+      tenantId,
+      createdById: userId,
+    };
+    return this.prisma.declarationTemplate.create({ data });
   }
 
   async updateTemplate(
@@ -93,8 +118,13 @@ export class WorkDeclarationService {
     const template = await this.findTemplateOrThrow(tenantId, templateId);
 
     if (dto.isDefault) {
+      // FIX: UpdateDeclarationTemplateDto não tem campo `type` — o filtro
+      // acedia sempre `undefined` atrás do `as any`, e o Prisma ignora chaves
+      // `undefined` em `where`, pelo que isto desmarcava o `isDefault` de
+      // TODOS os templates do tenant (de qualquer tipo), não só do mesmo
+      // tipo do template a actualizar. Usa-se o tipo real do próprio template.
       await this.prisma.declarationTemplate.updateMany({
-        where: { tenantId, type: (dto as any).type, isDefault: true },
+        where: { tenantId, type: template.type, isDefault: true },
         data: { isDefault: false },
       });
     }
@@ -107,7 +137,7 @@ export class WorkDeclarationService {
 
   async listTemplates(tenantId: string, query: TemplateQueryDto) {
     tenantId = await this.resolveTenantId(tenantId);
-    const where: any = { tenantId };
+    const where: Prisma.DeclarationTemplateWhereInput = { tenantId };
     if (query.type) where.type = query.type;
     if (query.locale) where.locale = query.locale;
     if (query.isActive !== undefined) where.isActive = query.isActive;
@@ -284,7 +314,7 @@ export class WorkDeclarationService {
       const template = await this.findTemplateOrThrow(tenantId, declaration.templateId);
       const config = await this.getTenantConfig(tenantId);
       const variables = this.buildVariableMap(
-        declaration.employeeSnapshot,
+        declaration.employeeSnapshot as unknown as EmployeeSnapshot,
         tenantId,
         config,
         dto.customFields,
@@ -292,9 +322,12 @@ export class WorkDeclarationService {
       renderedContent = this.renderTemplate(template.bodyContent, variables);
     }
 
+    // customFields não é uma coluna de Declaration — só usado acima para
+    // decidir se há que re-renderizar; excluído explicitamente do update.
+    const { customFields: _customFields, ...updateFields } = dto;
     const updated = await this.prisma.declaration.update({
       where: { id: declarationId },
-      data: { ...dto, renderedContent } as any,
+      data: { ...updateFields, renderedContent },
       include: this.declarationIncludes(),
     });
 
@@ -312,7 +345,7 @@ export class WorkDeclarationService {
   async listDeclarations(tenantId: string, user: CurrentUserData, query: DeclarationQueryDto) {
     tenantId = await this.resolveTenantId(tenantId);
     const privileged = isPrivileged(user, [Role.ADMIN, Role.RH]);
-    const where: any = { tenantId };
+    const where: Prisma.DeclarationWhereInput = { tenantId };
 
     // Colaborador vê apenas as suas.
     if (!privileged) where.employeeId = user.id;
@@ -382,7 +415,7 @@ export class WorkDeclarationService {
       throw new BadRequestException('Motivo é obrigatório para revogar uma declaração.');
     }
 
-    const data: any = {
+    const data: Prisma.DeclarationUpdateInput = {
       status: dto.status,
       revokedReason: dto.status === DeclarationStatus.REVOKED ? dto.reason : undefined,
       revokedAt: dto.status === DeclarationStatus.REVOKED ? new Date() : undefined,
@@ -456,12 +489,12 @@ export class WorkDeclarationService {
         signerRole: dto.signerRole,
         type: dto.type,
         signatureUrl: dto.signatureUrl,
-        certificateData: dto.certificateData as any,
+        certificateData: dto.certificateData as Prisma.InputJsonValue,
       },
       update: {
         type: dto.type,
         signatureUrl: dto.signatureUrl,
-        certificateData: dto.certificateData as any,
+        certificateData: dto.certificateData as Prisma.InputJsonValue,
         signedAt: new Date(),
       },
     });
@@ -582,25 +615,25 @@ export class WorkDeclarationService {
       },
     });
 
-    const decl = declaration as any;
-    const isExpired = decl.expiresAt && new Date() > decl.expiresAt;
-    const isRevoked = decl.status === DeclarationStatus.REVOKED;
+    const isExpired = !!declaration.expiresAt && new Date() > declaration.expiresAt;
+    const isRevoked = declaration.status === DeclarationStatus.REVOKED;
+    const snapshot = declaration.employeeSnapshot as unknown as EmployeeSnapshot;
 
     return {
-      valid: !isExpired && !isRevoked && decl.status === DeclarationStatus.ISSUED,
-      code: decl.code,
-      title: decl.title,
-      type: decl.type,
-      status: decl.status,
-      issuedAt: decl.issuedAt,
-      expiresAt: decl.expiresAt,
-      company: decl.tenant?.tenantName,
+      valid: !isExpired && !isRevoked && declaration.status === DeclarationStatus.ISSUED,
+      code: declaration.code,
+      title: declaration.title,
+      type: declaration.type,
+      status: declaration.status,
+      issuedAt: declaration.issuedAt,
+      expiresAt: declaration.expiresAt,
+      company: declaration.tenant?.tenantName,
       employee: {
-        name: decl.employeeSnapshot?.name,
-        role: decl.employeeSnapshot?.role,
+        name: snapshot?.name,
+        role: snapshot?.role,
       },
-      signatures: decl.signatures,
-      hash: decl.verificationHash,
+      signatures: declaration.signatures,
+      hash: declaration.verificationHash,
     };
   }
 
@@ -769,22 +802,21 @@ export class WorkDeclarationService {
       },
     });
     if (!employee) throw new NotFoundException('Colaborador não encontrado.');
-    const emp = employee as any;
     return {
-      id: emp.id,
-      name: emp.fullName,
-      email: emp.email,
-      role: emp.position?.name ?? '',
-      department: emp.department?.name ?? '',
-      admissionDate: emp.hireDate ?? null,
-      nationalId: emp.nif ?? null,
+      id: employee.id,
+      name: employee.fullName,
+      email: employee.email,
+      role: employee.position?.name ?? '',
+      department: employee.department?.name ?? '',
+      admissionDate: employee.hireDate ?? null,
+      nationalId: employee.nif ?? null,
     };
   }
 
   private buildVariableMap(
-    snapshot: any,
+    snapshot: EmployeeSnapshot,
     tenantId: string,
-    config?: any,
+    config?: DeclarationTenantConfig | null,
     customFields?: Record<string, string>,
   ): Record<string, string> {
     const now = new Date();
@@ -830,7 +862,10 @@ export class WorkDeclarationService {
     }
   }
 
-  private async checkAndAdvanceStatus(declaration: any, config: any) {
+  private async checkAndAdvanceStatus(
+    declaration: DeclarationWithRelations,
+    config: DeclarationTenantConfig | null,
+  ) {
     const signatures = await this.prisma.declarationSignature.findMany({
       where: { declarationId: declaration.id },
     });
@@ -849,7 +884,7 @@ export class WorkDeclarationService {
     }
   }
 
-  private async generateDocument(declaration: any, withWatermark = false) {
+  private async generateDocument(declaration: DeclarationWithRelations, withWatermark = false) {
     const config = await this.getTenantConfig(declaration.tenantId);
     const content = declaration.renderedContent ?? '';
 
@@ -872,7 +907,7 @@ export class WorkDeclarationService {
     return { pdfUrl, qrCodeUrl, verificationHash };
   }
 
-  private async generateDocx(declaration: any): Promise<string> {
+  private async generateDocx(declaration: DeclarationWithRelations): Promise<string> {
     // Integração com biblioteca docx (eg: docx npm)
     // Placeholder — implementar via docx service
     const docxKey = `declarations/${declaration.tenantId}/${declaration.code}.docx`;
@@ -885,11 +920,11 @@ export class WorkDeclarationService {
     return `${process.env.APP_URL}/declarations/secure/${code}?token=${token}`;
   }
 
-  private async notifyHrTeam(tenantId: string, declaration: any) {
+  private async notifyHrTeam(tenantId: string, declaration: DeclarationWithRelations) {
     // TODO: notificar via NotificationsService quando disponível
   }
 
-  private async notifyEmployeeIssued(declaration: any) {
+  private async notifyEmployeeIssued(declaration: DeclarationWithRelations) {
     // TODO: notificar via NotificationsService quando disponível
   }
 
@@ -901,13 +936,17 @@ export class WorkDeclarationService {
     toStatus: string | null,
     details?: object,
   ) {
+    // Chamadores passam tanto o enum local do DTO (work-declaration.dto.ts)
+    // como o enum do Prisma — nominalmente distintos em TS apesar de os
+    // valores baterem sempre certo; cast pontual e seguro para o enum real
+    // do campo (mantido como string aqui para aceitar qualquer um dos dois).
     await this.prisma.declarationAuditLog.create({
       data: {
         declarationId,
         actorId,
         action,
-        fromStatus: fromStatus as any,
-        toStatus: toStatus as any,
+        fromStatus: fromStatus as PrismaDeclarationStatus | null,
+        toStatus: toStatus as PrismaDeclarationStatus | null,
         details: details ?? {},
       },
     });
