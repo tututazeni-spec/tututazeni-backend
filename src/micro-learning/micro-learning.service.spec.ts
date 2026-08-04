@@ -49,6 +49,8 @@ const baseMicro = {
   type: 'ARTICLE',
   status: 'DRAFT',
   durationSeconds: 60,
+  quizQuestions: [],
+  _count: { progress: 0, interactions: 0, quizAttempts: 0 },
 };
 
 describe('MicroLearningService', () => {
