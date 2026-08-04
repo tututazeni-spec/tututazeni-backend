@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Prisma, ScenarioCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateAvatarDto,
@@ -35,6 +36,18 @@ const safeM = (prisma: any, name: string) =>
     count: async () => 0,
     groupBy: async () => [],
   };
+
+// AvatarSession.conversationHistory é uma String (JSON serializado à mão) —
+// esta interface documenta a forma real das mensagens (confirmada nos
+// próprios .push() deste ficheiro), já que não há tipo gerado pelo Prisma
+// para o conteúdo de uma coluna de texto.
+export interface ConversationMessage {
+  role: 'USER' | 'AVATAR';
+  content: string;
+  timestamp: Date;
+  score?: number;
+  behavioral?: Record<string, number>;
+}
 
 /** Base XP per difficulty */
 const DIFFICULTY_XP: Record<string, number> = {
@@ -84,9 +97,17 @@ function scoreUserMessage(
 
 /** Build AI avatar prompt */
 function buildAvatarPrompt(
-  avatar: any,
-  scenario: any,
-  conversationHistory: any[],
+  avatar: {
+    systemPrompt?: string | null;
+    role?: string;
+    personality?: string;
+    language?: string;
+  } | null,
+  // context/objective não existem em AvatarScenario (achado estrutural, ver
+  // comentário em createScenario) — este parâmetro nunca os fornece de
+  // facto, ficam sempre como string vazia.
+  scenario: { context?: string; objective?: string } | null,
+  conversationHistory: ConversationMessage[],
   userMessage: string,
 ): string {
   const persona =
@@ -96,7 +117,7 @@ function buildAvatarPrompt(
   const objective = scenario?.objective ?? '';
   const history = conversationHistory
     .slice(-6)
-    .map((m: any) => `${m.role === 'USER' ? 'Utilizador' : 'Avatar'}: ${m.content}`)
+    .map(m => `${m.role === 'USER' ? 'Utilizador' : 'Avatar'}: ${m.content}`)
     .join('\n');
 
   return `${persona}
@@ -299,7 +320,7 @@ export class AvatarTrainingService {
   async getScenarios(filters: ScenarioFilterDto = {}) {
     const { page = 1, limit = 20, category, difficulty, competencyId, search } = filters;
     const skip = (page - 1) * limit;
-    const where: any = { active: true };
+    const where: Prisma.AvatarScenarioWhereInput = { active: true };
     if (category) where.category = category;
     if (difficulty) where.difficulty = difficulty;
     if (competencyId) where.competencyId = competencyId;
@@ -336,23 +357,35 @@ export class AvatarTrainingService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter estatísticas de conclusão dos cenários',
         });
-        return [] as any[];
+        return [] as {
+          scenarioId: number;
+          _count: { id: number };
+          _avg: { score: number | null };
+        }[];
       });
-    const cMap = new Map((completions as any[]).map((c: any) => [c.scenarioId, c]));
+    const cMap = new Map(
+      completions.map((c): [number, (typeof completions)[number]] => [c.scenarioId, c]),
+    );
 
     return {
       data: data.map(s => ({
         ...s,
         completions: cMap.get(s.id)?._count.id ?? 0,
-        avgScore: cMap.get(s.id)?._avg.score ? +cMap.get(s.id)._avg.score.toFixed(1) : null,
-        xpReward: (s as any).xpReward ?? DIFFICULTY_XP[(s as any).difficulty ?? 'BEGINNER'],
+        avgScore: cMap.get(s.id)?._avg.score ? +cMap.get(s.id)!._avg.score!.toFixed(1) : null,
+        // xpReward não existe em AvatarScenario (achado estrutural, ver
+        // comentário acima de createScenario) — sempre cai no valor por
+        // difficulty.
+        xpReward: DIFFICULTY_XP[s.difficulty],
       })),
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
 
   async getScenario(id: number, userId?: number) {
-    const s = await (this.prisma as any).avatarScenario
+    type ScenarioWithCompetency = Prisma.AvatarScenarioGetPayload<{
+      include: { competency: { select: { id: true; name: true } } };
+    }>;
+    const s: ScenarioWithCompetency | null = await this.prisma.avatarScenario
       .findUnique({
         where: { id },
         include: {
@@ -371,7 +404,7 @@ export class AvatarTrainingService {
     if (!s) throw new NotFoundException('Cenário não encontrado');
 
     // User best attempt
-    let bestSession = null;
+    let bestSession: Prisma.AvatarSessionGetPayload<object> | null = null;
     if (userId) {
       bestSession = await this.prisma.avatarSession
         .findFirst({
@@ -393,7 +426,12 @@ export class AvatarTrainingService {
     return {
       ...s,
       bestSession,
-      xpReward: s.xpReward ?? DIFFICULTY_XP[s.difficulty ?? 'BEGINNER'],
+      // avatarId/xpReward não existem em AvatarScenario (achado estrutural,
+      // ver comentário em createScenario) — avatarId fica sempre undefined
+      // (startSession's `dto.avatarId ?? scenario.avatarId` depende só do
+      // override explícito do DTO); xpReward cai sempre no valor por
+      // difficulty.
+      xpReward: DIFFICULTY_XP[s.difficulty],
     };
   }
 
@@ -421,7 +459,7 @@ export class AvatarTrainingService {
       });
 
     // Get avatar (from scenario or override)
-    const avatarId = dto.avatarId ?? scenario.avatarId;
+    const avatarId = dto.avatarId;
     const avatar = avatarId
       ? await safeM(this.prisma, 'trainingAvatar')
           .findUnique({ where: { id: avatarId } })
@@ -437,18 +475,20 @@ export class AvatarTrainingService {
       : null;
 
     // Build opening line
+    // NOTA: scenario.context não existe em AvatarScenario (achado
+    // estrutural, ver comentário em createScenario) — sempre vazio.
     const openingMessage = avatar
-      ? `Olá! Sou ${avatar.name}. ${scenario.context ?? ''} Vamos começar o treino?`
+      ? `Olá! Sou ${avatar.name}. Vamos começar o treino?`
       : `Bem-vindo ao cenário "${scenario.title}". Está pronto para começar?`;
 
-    const session = await (this.prisma as any).avatarSession.create({
+    const session = await this.prisma.avatarSession.create({
       data: {
         userId,
         scenarioId: dto.scenarioId,
         status: 'IN_PROGRESS',
         startedAt: new Date(),
-        ...(avatarId && ({ avatarId } as any)),
-        ...(dto.language && ({ language: dto.language } as any)),
+        ...(avatarId && { avatarId }),
+        ...(dto.language && { language: dto.language }),
         conversationHistory: JSON.stringify([
           { role: 'AVATAR', content: openingMessage, timestamp: new Date() },
         ]),
@@ -481,12 +521,14 @@ export class AvatarTrainingService {
       session,
       avatar,
       openingMessage,
-      scenario: { title: scenario.title, objective: scenario.objective },
+      // objective não existe em AvatarScenario (mesmo achado estrutural).
+      scenario: { title: scenario.title },
     };
   }
 
   async sendMessage(sessionId: number, userId: number, dto: SendMessageDto) {
-    const session = await (this.prisma as any).avatarSession
+    type SessionWithScenario = Prisma.AvatarSessionGetPayload<{ include: { scenario: true } }>;
+    const session: SessionWithScenario | null = await this.prisma.avatarSession
       .findUnique({
         where: { id: sessionId },
         include: {
@@ -509,15 +551,25 @@ export class AvatarTrainingService {
     if (session.status !== SessionStatus.IN_PROGRESS)
       throw new BadRequestException('Sessão não está activa');
 
-    const history: any[] = session.conversationHistory
+    const history: ConversationMessage[] = session.conversationHistory
       ? JSON.parse(session.conversationHistory as string)
       : [];
 
     history.push({ role: 'USER', content: dto.message, timestamp: new Date() });
 
-    // Get current turn
-    const turns = session.scenario.turns ?? [];
-    const turnIndex = dto.turnIndex ?? history.filter((m: any) => m.role === 'USER').length - 1;
+    // Get current turn — "turns" (diálogo ramificado) não existe em
+    // AvatarScenario (achado estrutural, ver comentário em createScenario)
+    // — é sempre [], por isso currentTurn é sempre undefined e o fluxo cai
+    // sempre no "Free-form AI response" abaixo. Comportamento pré-existente,
+    // não alterado aqui.
+    const turns: {
+      expectedKeywords?: string[];
+      successPath?: string;
+      avatarLine?: string;
+      failPath?: string;
+      hint?: string;
+    }[] = (session.scenario as unknown as { turns?: typeof turns }).turns ?? [];
+    const turnIndex = dto.turnIndex ?? history.filter(m => m.role === 'USER').length - 1;
     const currentTurn = turns[Math.min(turnIndex, turns.length - 1)];
 
     // Score user message
@@ -571,17 +623,15 @@ export class AvatarTrainingService {
     // Update session
     await this.prisma.avatarSession.update({
       where: { id: sessionId },
-      data: { conversationHistory: JSON.stringify(history) } as any,
+      data: { conversationHistory: JSON.stringify(history) },
     });
 
     // Check if all turns completed
-    const userTurns = history.filter((m: any) => m.role === 'USER').length;
+    const userTurns = history.filter(m => m.role === 'USER').length;
     const isLastTurn = turns.length > 0 && userTurns >= turns.length;
     const avgTurnScore =
-      history
-        .filter((m: any) => m.score !== undefined)
-        .reduce((a: number, m: any) => a + m.score, 0) /
-      Math.max(history.filter((m: any) => m.score !== undefined).length, 1);
+      history.filter(m => m.score !== undefined).reduce((a: number, m) => a + (m.score ?? 0), 0) /
+      Math.max(history.filter(m => m.score !== undefined).length, 1);
 
     return {
       avatarResponse,
@@ -596,7 +646,8 @@ export class AvatarTrainingService {
   }
 
   async completeSession(sessionId: number, userId: number, dto: CompleteSessionDto) {
-    const session = await this.prisma.avatarSession
+    type SessionWithScenario = Prisma.AvatarSessionGetPayload<{ include: { scenario: true } }>;
+    const session: SessionWithScenario | null = await this.prisma.avatarSession
       .findUnique({
         where: { id: sessionId },
         include: { scenario: true },
@@ -618,20 +669,20 @@ export class AvatarTrainingService {
     // Calculate score from conversation history if not provided
     let finalScore = dto.score;
     if (finalScore === undefined) {
-      const history: any[] = session.conversationHistory
+      const history: ConversationMessage[] = session.conversationHistory
         ? JSON.parse(session.conversationHistory as string)
         : [];
-      const scored = history.filter((m: any) => m.score !== undefined);
+      const scored = history.filter(m => m.score !== undefined);
       finalScore = scored.length
-        ? Math.round(scored.reduce((a: number, m: any) => a + m.score, 0) / scored.length)
+        ? Math.round(scored.reduce((a: number, m) => a + (m.score ?? 0), 0) / scored.length)
         : 70;
     }
 
     // Behavioral aggregate
-    const history: any[] = session.conversationHistory
+    const history: ConversationMessage[] = session.conversationHistory
       ? JSON.parse(session.conversationHistory as string)
       : [];
-    const behavioralMsgs = history.filter((m: any) => m.behavioral);
+    const behavioralMsgs = history.filter(m => m.behavioral);
     const behavioral: Record<string, number> = {};
     for (const m of behavioralMsgs) {
       for (const [k, v] of Object.entries(m.behavioral as Record<string, number>)) {
@@ -655,18 +706,18 @@ export class AvatarTrainingService {
         completedAt: new Date(),
         score: finalScore,
         feedback: dto.feedback,
-        ...(dto.userRating && ({ userRating: dto.userRating } as any)),
-        ...(dto.confidenceLevel && ({ confidenceLevel: dto.confidenceLevel } as any)),
-        ...(dto.reflection && ({ reflection: dto.reflection } as any)),
-        ...(duration && ({ durationSeconds: duration } as any)),
-        ...(behavioral && ({ behavioralScore: JSON.stringify(behavioral) } as any)),
+        ...(dto.userRating && { userRating: dto.userRating }),
+        ...(dto.confidenceLevel && { confidenceLevel: dto.confidenceLevel }),
+        ...(dto.reflection && { reflection: dto.reflection }),
+        ...(duration && { durationSeconds: duration }),
+        ...(behavioral && { behavioralScore: JSON.stringify(behavioral) }),
       },
       include: { scenario: { include: { competency: true } } },
     });
 
-    // XP award
-    const xpBase =
-      session.scenario.xpReward ?? DIFFICULTY_XP[session.scenario.difficulty ?? 'BEGINNER'];
+    // XP award — xpReward não existe em AvatarScenario (achado estrutural),
+    // cai sempre no valor por difficulty.
+    const xpBase = DIFFICULTY_XP[session.scenario.difficulty];
     const xpBonus = finalScore >= 90 ? Math.round(xpBase * 0.5) : 0;
     const xpEarned = finalScore >= 40 ? xpBase + xpBonus : Math.round(xpBase * 0.25);
 
@@ -680,7 +731,13 @@ export class AvatarTrainingService {
     if (finalScore >= 90) {
       const perfectBadge = await this.prisma.badge
         .findFirst({
-          where: { code: 'AVATAR_PERFECT' } as any,
+          // Badge não tem coluna `code` — só `name` é único. Este badge
+          // nunca foi semeado em prisma/seed*, por isso esta procura
+          // devolve sempre null tanto antes como depois desta correcção;
+          // a diferença é que antes rebentava sempre com erro de validação
+          // do Prisma (código escondido pelo .catch()) em vez de
+          // simplesmente não encontrar nada.
+          where: { name: 'AVATAR_PERFECT' },
         })
         .catch(e => {
           this.logger.warn({
@@ -811,12 +868,15 @@ export class AvatarTrainingService {
   }
 
   async getSessionDetail(sessionId: number, userId: number) {
-    const s = await this.prisma.avatarSession
+    type SessionWithScenario = Prisma.AvatarSessionGetPayload<{
+      include: { scenario: { include: { competency: true } } };
+    }>;
+    const s: SessionWithScenario | null = await this.prisma.avatarSession
       .findUnique({
         where: { id: sessionId },
         include: {
           scenario: { include: { competency: true } },
-        } as any,
+        },
       })
       .catch(e => {
         this.logger.warn({
@@ -831,7 +891,9 @@ export class AvatarTrainingService {
     if (!s) throw new NotFoundException('Sessão não encontrada');
     if (s.userId !== userId) throw new ForbiddenException();
 
-    const history = s.conversationHistory ? JSON.parse(s.conversationHistory as string) : [];
+    const history: ConversationMessage[] = s.conversationHistory
+      ? JSON.parse(s.conversationHistory)
+      : [];
     const behavioral = s.behavioralScore ? JSON.parse(s.behavioralScore) : {};
 
     return { ...s, conversationHistory: history, behavioral };
@@ -860,16 +922,16 @@ export class AvatarTrainingService {
 
     return sessions.map((s, i) => ({
       rank: i + 1,
-      user: (s as any).user,
+      user: s.user,
       score: s.score,
       grade: gradeScore(s.score ?? 0),
-      duration: (s as any).durationSeconds,
+      duration: s.durationSeconds,
       completedAt: s.completedAt,
     }));
   }
 
   async getGlobalLeaderboard(departmentId?: number, limit = 20) {
-    const where: any = { status: 'COMPLETED' };
+    const where: Prisma.AvatarSessionWhereInput = { status: 'COMPLETED' };
     if (departmentId) where.user = { departmentId };
 
     const grouped = await this.prisma.avatarSession
@@ -888,10 +950,14 @@ export class AvatarTrainingService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao calcular ranking global de sessões de treino com avatar',
         });
-        return [] as any[];
+        return [] as {
+          userId: number;
+          _avg: { score: number | null };
+          _count: { id: number };
+        }[];
       });
 
-    const userIds = (grouped as any[]).map((g: any) => g.userId);
+    const userIds = grouped.map(g => g.userId);
     const users = await this.prisma.read.user.findMany({
       where: { id: { in: userIds } },
       select: {
@@ -904,10 +970,10 @@ export class AvatarTrainingService {
     });
     const uMap = new Map(users.map(u => [u.id, u]));
 
-    return (grouped as any[]).map((g: any, i: number) => ({
+    return grouped.map((g, i) => ({
       rank: i + 1,
       user: uMap.get(g.userId),
-      avgScore: +g._avg.score.toFixed(1),
+      avgScore: +(g._avg.score ?? 0).toFixed(1),
       sessions: g._count.id,
     }));
   }
@@ -918,10 +984,13 @@ export class AvatarTrainingService {
 
   async getDashboard(filters: AvatarTrainingAnalyticsFilterDto = {}) {
     const { departmentId, category } = filters;
-    const userWhere: any = { active: true };
+    // NOTA: userWhere é construído mas nunca aplicado a nenhuma query abaixo
+    // — achado pré-existente, não corrigido aqui (mesmo padrão encontrado em
+    // content-library.service.ts#getAnalyticsDashboard).
+    const userWhere: Prisma.UserWhereInput = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;
 
-    const sessionsWhere: any = {};
+    const sessionsWhere: Prisma.AvatarSessionWhereInput = {};
     if (category) sessionsWhere.scenario = { category };
     if (departmentId) sessionsWhere.user = { departmentId };
 
@@ -955,10 +1024,14 @@ export class AvatarTrainingService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular top cenários por conclusões no dashboard',
           });
-          return [] as any[];
+          return [] as {
+            scenarioId: number;
+            _count: { id: number };
+            _avg: { score: number | null };
+          }[];
         }),
       // By category
-      (this.prisma as any).avatarScenario
+      this.prisma.avatarScenario
         .groupBy({
           by: ['category'],
           where: { active: true },
@@ -972,10 +1045,10 @@ export class AvatarTrainingService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular distribuição de cenários por categoria no dashboard',
           });
-          return [] as any[];
+          return [] as { category: ScenarioCategory | null; _count: { id: number } }[];
         }),
       // Recent completions
-      (this.prisma as any).avatarSession.findMany({
+      this.prisma.avatarSession.findMany({
         where: { ...sessionsWhere, status: 'COMPLETED' },
         include: {
           user: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -1003,9 +1076,9 @@ export class AvatarTrainingService {
     ]);
 
     // Enrich top scenarios with titles
-    const scenarioIds = (topScenarios as any[]).map((s: any) => s.scenarioId);
+    const scenarioIds = topScenarios.map(s => s.scenarioId);
     const scenarios = scenarioIds.length
-      ? await (this.prisma as any).avatarScenario.findMany({
+      ? await this.prisma.avatarScenario.findMany({
           where: { id: { in: scenarioIds } },
           select: { id: true, title: true, category: true },
         })
@@ -1019,12 +1092,12 @@ export class AvatarTrainingService {
         completedSessions,
         avgScore: avgScoreResult._avg.score ? +avgScoreResult._avg.score.toFixed(1) : null,
       },
-      topScenarios: (topScenarios as any[]).map((s: any) => ({
+      topScenarios: topScenarios.map(s => ({
         scenario: sMap.get(s.scenarioId),
         completions: s._count.id,
         avgScore: s._avg.score ? +s._avg.score.toFixed(1) : null,
       })),
-      categoryBreakdown: (categoryBreakdown as any[]).map((c: any) => ({
+      categoryBreakdown: categoryBreakdown.map(c => ({
         category: c.category,
         count: c._count.id,
       })),
@@ -1033,15 +1106,15 @@ export class AvatarTrainingService {
   }
 
   async getUserAnalytics(userId: number) {
-    const sessions = await (this.prisma as any).avatarSession.findMany({
+    const sessions = await this.prisma.avatarSession.findMany({
       where: { userId },
       include: { scenario: { select: { category: true, difficulty: true, title: true } } },
       orderBy: { startedAt: 'asc' },
     });
 
     const completed = sessions.filter(s => s.status === 'COMPLETED');
-    const byCategory = (completed as any[]).reduce(
-      (acc: Record<string, { count: number; totalScore: number }>, s: any) => {
+    const byCategory = completed.reduce(
+      (acc: Record<string, { count: number; totalScore: number }>, s) => {
         const cat = s.scenario?.category ?? 'OTHER';
         if (!acc[cat]) acc[cat] = { count: 0, totalScore: 0 };
         acc[cat].count++;
@@ -1064,8 +1137,8 @@ export class AvatarTrainingService {
       streak: this.calculateStreak(sessions),
       byCategory: Object.entries(byCategory).map(([cat, d]) => ({
         category: cat,
-        count: (d as any).count,
-        avgScore: +((d as any).totalScore / (d as any).count).toFixed(1),
+        count: d.count,
+        avgScore: +(d.totalScore / d.count).toFixed(1),
       })),
       evolution: completed.map(s => ({
         date: s.completedAt,
@@ -1145,7 +1218,7 @@ export class AvatarTrainingService {
         return [] as number[];
       });
 
-    const where: any = {
+    const where: Prisma.AvatarScenarioWhereInput = {
       active: true,
       id: completedIds.length ? { notIn: completedIds } : undefined,
     };
@@ -1213,7 +1286,7 @@ export class AvatarTrainingService {
   // HELPERS
   // ══════════════════════════════════════════════════════
 
-  private calculateStreak(sessions: any[]): number {
+  private calculateStreak(sessions: { status: string; completedAt: Date | null }[]): number {
     const completed = sessions
       .filter(s => s.status === 'COMPLETED' && s.completedAt)
       .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());

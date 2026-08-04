@@ -6,6 +6,7 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateCycleDto,
@@ -18,6 +19,7 @@ import {
   CalibrateScoreDto,
   EvaluationAnalyticsFilterDto,
   CreateEvaluationDto,
+  EvaluatorWeightDto,
   EvalType,
   CycleStatus,
   RequestStatus,
@@ -86,6 +88,22 @@ export class EvaluationService {
 
   // ══════════════════════════════════════════════════════
   // CYCLES
+  //
+  // ACHADO ESTRUTURAL (não corrigido nesta limpeza de tipos): o modelo
+  // Prisma real "EvaluationCycle" (prisma/schema.prisma) pertence de facto
+  // ao módulo monitoring (src/monitoring/monitoring.service.ts, OKRs) — tem
+  // id cuid, type/status como enums fixos, createdById, sem "model",
+  // "formId", "selfEvalIncludedInScore", "weights" nem "targetDeptIds", que
+  // é o shape que este bloco assume. Como safeM() só degrada quando a
+  // PROPRIEDADE do modelo não existe (e evaluationCycle existe mesmo,
+  // pertence só a outro domínio), create()/update() aqui rebentam sempre
+  // com erro de validação do Prisma — apanhado pelo .catch() — e caem
+  // sempre no fallback "modo compatibilidade": nenhum ciclo de avaliação
+  // real é alguma vez persistido por este bloco. Corrigir isto é uma
+  // decisão de arquitectura (criar um modelo próprio, ou decidir que este
+  // módulo deve reutilizar o EvaluationCycle real do monitoring), fora do
+  // âmbito de uma limpeza de `any` — os tipos aqui ficam propositadamente
+  // pouco fiáveis para não mascarar o problema.
   // ══════════════════════════════════════════════════════
 
   async createCycle(dto: CreateCycleDto, createdById: number) {
@@ -187,7 +205,7 @@ export class EvaluationService {
     if (!cycle) throw new NotFoundException('Ciclo não encontrado');
 
     // Participation stats
-    const requests = await (this.prisma as any).evaluationRequest
+    const requests = await this.prisma.evaluationRequest
       .findMany({
         where: cycle.id ? { cycleId: cycle.id } : {},
       })
@@ -198,11 +216,11 @@ export class EvaluationService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao listar pedidos de avaliação do ciclo — a devolver lista vazia',
         });
-        return [] as any[];
+        return [] as Prisma.EvaluationRequestGetPayload<object>[];
       });
 
     const total = requests.length;
-    const completed = requests.filter((r: any) => r.status === 'COMPLETED').length;
+    const completed = requests.filter(r => r.status === 'COMPLETED').length;
 
     return {
       ...cycle,
@@ -270,7 +288,7 @@ export class EvaluationService {
       });
 
     // Notify all participants
-    const requests = await (this.prisma as any).evaluationRequest
+    const requests = await this.prisma.evaluationRequest
       .findMany({
         where: { ...(id ? { cycleId: id } : {}) },
         select: { evaluatorId: true },
@@ -282,10 +300,10 @@ export class EvaluationService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao listar avaliadores do ciclo para notificação — a devolver lista vazia',
         });
-        return [] as any[];
+        return [] as { evaluatorId: number }[];
       });
 
-    const uniqueIds = [...new Set((requests as any[]).map((r: any) => r.evaluatorId))];
+    const uniqueIds = [...new Set(requests.map(r => r.evaluatorId))];
     await this.prisma.notificationLog
       .createMany({
         data: uniqueIds.map(uid => ({
@@ -311,7 +329,7 @@ export class EvaluationService {
 
   private async autoAssignCycleRequests(cycleId: number, cycle: any) {
     const weights = cycle.weights ? JSON.parse(cycle.weights ?? '[]') : [];
-    const deptFilter: any = {};
+    const deptFilter: Prisma.UserWhereInput = {};
     if (cycle.targetDeptIds?.length) deptFilter.departmentId = { in: cycle.targetDeptIds };
 
     const users = await this.prisma.read.user.findMany({
@@ -319,7 +337,7 @@ export class EvaluationService {
       select: { id: true, managerId: true },
     });
 
-    const assignments: any[] = [];
+    const assignments: Prisma.EvaluationRequestCreateManyInput[] = [];
 
     for (const u of users) {
       const model = cycle.model ?? '360';
@@ -440,12 +458,12 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async assignEvaluator(dto: AssignEvaluatorDto) {
-    const existing = await (this.prisma as any).evaluationRequest
+    const existing = await this.prisma.evaluationRequest
       .findFirst({
         where: {
           evaluatorId: dto.evaluatorId,
           evaluatedId: dto.evaluatedId,
-          type: dto.type as any,
+          type: dto.type,
           ...(dto.cycleId ? { cycleId: dto.cycleId } : {}),
         },
       })
@@ -463,11 +481,11 @@ export class EvaluationService {
 
     if (existing) throw new ConflictException('Avaliador já atribuído para este par neste ciclo');
 
-    const request = await (this.prisma as any).evaluationRequest.create({
+    const request = await this.prisma.evaluationRequest.create({
       data: {
         evaluatorId: dto.evaluatorId,
         evaluatedId: dto.evaluatedId,
-        type: dto.type as any,
+        type: dto.type,
         cycleId: dto.cycleId,
         status: RequestStatus.PENDING,
         dueDate: new Date(Date.now() + 14 * 86400000),
@@ -515,21 +533,27 @@ export class EvaluationService {
 
   async submitEvaluation(evaluatorId: number, dto: SubmitEvaluationDto) {
     // EvaluationRequest não tem relação `cycle` (só o escalar cycleId) —
-    // incluir a relação rebentava sempre ("Unknown field cycle").
-    const request = await (this.prisma as any).evaluationRequest
-      .findUnique({
-        where: { id: dto.requestId },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_REQUEST_FETCH',
-          requestId: dto.requestId,
-          evaluatorId,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter pedido de avaliação — a devolver null',
+    // incluir a relação rebentava sempre ("Unknown field cycle"). Isto
+    // significa que todas as referências a `request.cycle` abaixo SEMPRE
+    // avaliaram para undefined mesmo antes desta limpeza de tipos (o
+    // optional chaining escondia-o) — o bloco de competencyScores por
+    // pergunta nunca executou de facto, e `period` cai sempre no fallback
+    // do ano corrente. Comportamento pré-existente, não alterado aqui.
+    const request: Prisma.EvaluationRequestGetPayload<object> | null =
+      await this.prisma.evaluationRequest
+        .findUnique({
+          where: { id: dto.requestId },
+        })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_REQUEST_FETCH',
+            requestId: dto.requestId,
+            evaluatorId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter pedido de avaliação — a devolver null',
+          });
+          return null;
         });
-        return null;
-      });
 
     if (!request) throw new NotFoundException('Pedido de avaliação não encontrado');
     if (request.evaluatorId !== evaluatorId) {
@@ -545,27 +569,34 @@ export class EvaluationService {
       : 0;
 
     // Group scores by competency (questionId → competency via form)
+    // cycleFormId fica sempre undefined — dependia de request.cycle, que
+    // nunca existiu (ver nota acima) — por isso este bloco nunca executou
+    // de facto. Comportamento pré-existente, não alterado aqui.
     const competencyScores: Record<number, number[]> = {};
-    if (request.cycle?.formId) {
-      const questions = await safeM(this.prisma, 'evaluationQuestion')
+    const cycleFormId: number | undefined = undefined;
+    if (cycleFormId) {
+      const questions: { id: number; competencyId: number | null; weight: number }[] = await safeM(
+        this.prisma,
+        'evaluationQuestion',
+      )
         .findMany({
-          where: { formId: request.cycle.formId, competencyId: { not: null } },
+          where: { formId: cycleFormId, competencyId: { not: null } },
           select: { id: true, competencyId: true, weight: true },
         })
         .catch((e: unknown) => {
           this.logger.warn({
             action: 'EVALUATION_QUESTION_LIST',
-            formId: request.cycle.formId,
+            formId: cycleFormId,
             requestId: dto.requestId,
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao listar perguntas do formulário — a devolver lista vazia',
           });
-          return [] as any[];
+          return [] as { id: number; competencyId: number | null; weight: number }[];
         });
 
-      for (const q of questions as any[]) {
+      for (const q of questions) {
         const ans = dto.answers.find(a => a.questionId === q.id);
-        if (ans && !ans.notApplicable && ans.score !== undefined) {
+        if (ans && !ans.notApplicable && ans.score !== undefined && q.competencyId !== null) {
           if (!competencyScores[q.competencyId]) competencyScores[q.competencyId] = [];
           competencyScores[q.competencyId].push(ans.score);
         }
@@ -584,8 +615,10 @@ export class EvaluationService {
       evaluatorId,
       evaluatedId: request.evaluatedId,
       type: request.type,
-      period: request.cycle?.name ?? new Date().getFullYear().toString(),
-      criteria: dto.answers as any,
+      // period cai sempre no fallback do ano corrente (request.cycle nunca
+      // existiu, ver nota acima).
+      period: new Date().getFullYear().toString(),
+      criteria: dto.answers as unknown as Prisma.InputJsonValue,
       overallScore: avgScore,
       competencyScores: JSON.stringify(compAvg),
       strengths: dto.strengths,
@@ -611,14 +644,14 @@ export class EvaluationService {
     const evaluation = existingEval
       ? await this.prisma.performanceEvaluation.update({
           where: { id: existingEval.id },
-          data: evalData as any,
+          data: evalData,
           include: {
             evaluator: { select: { id: true, fullName: true } },
             evaluated: { select: { id: true, fullName: true } },
           },
         })
       : await this.prisma.performanceEvaluation.create({
-          data: evalData as any,
+          data: evalData,
           include: {
             evaluator: { select: { id: true, fullName: true } },
             evaluated: { select: { id: true, fullName: true } },
@@ -627,7 +660,7 @@ export class EvaluationService {
 
     // Mark request as completed
     if (!dto.isDraft) {
-      await (this.prisma as any).evaluationRequest
+      await this.prisma.evaluationRequest
         .update({
           where: { id: dto.requestId },
           data: { status: 'COMPLETED', completedAt: new Date() },
@@ -658,24 +691,23 @@ export class EvaluationService {
 
   private async checkCycleCompletion(evaluatedId: number, cycleId?: number) {
     if (!cycleId) return;
-    const allRequests = await (this.prisma as any).evaluationRequest
-      .findMany({
-        where: { evaluatedId, cycleId },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_REQUEST_LIST_FOR_COMPLETION',
-          evaluatedId,
-          cycleId,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao listar pedidos de avaliação para verificar conclusão do ciclo — a devolver lista vazia',
+    const allRequests: Prisma.EvaluationRequestGetPayload<object>[] =
+      await this.prisma.evaluationRequest
+        .findMany({
+          where: { evaluatedId, cycleId },
+        })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_REQUEST_LIST_FOR_COMPLETION',
+            evaluatedId,
+            cycleId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao listar pedidos de avaliação para verificar conclusão do ciclo — a devolver lista vazia',
+          });
+          return [] as Prisma.EvaluationRequestGetPayload<object>[];
         });
-        return [] as any[];
-      });
 
-    const allDone =
-      (allRequests as any[]).length > 0 &&
-      (allRequests as any[]).every((r: any) => r.status === 'COMPLETED');
+    const allDone = allRequests.length > 0 && allRequests.every(r => r.status === 'COMPLETED');
 
     if (allDone) {
       await this.prisma.notificationLog
@@ -712,9 +744,9 @@ export class EvaluationService {
       data: {
         evaluatorId,
         evaluatedId: dto.evaluatedId,
-        type: dto.type as any,
+        type: dto.type,
         period: dto.period,
-        criteria: dto.criteria as any,
+        criteria: dto.criteria as unknown as Prisma.InputJsonValue,
         generalComment: dto.generalComment,
         overallScore: avgScore,
       },
@@ -733,7 +765,20 @@ export class EvaluationService {
     // EvaluationRequest não tem relação `cycle` (só o escalar cycleId) — este
     // include rebentava sempre e era mascarado pelo .catch() abaixo, deixando
     // /evaluations/pending permanentemente vazio para todos os utilizadores.
-    return (this.prisma as any).evaluationRequest
+    type PendingRequest = Prisma.EvaluationRequestGetPayload<{
+      include: {
+        evaluated: {
+          select: {
+            id: true;
+            fullName: true;
+            avatarUrl: true;
+            position: { select: { name: true } };
+            department: { select: { name: true } };
+          };
+        };
+      };
+    }>;
+    const pending: PendingRequest[] = await this.prisma.evaluationRequest
       .findMany({
         where: { evaluatorId, status: 'PENDING' },
         include: {
@@ -756,8 +801,9 @@ export class EvaluationService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao listar avaliações pendentes — a devolver lista vazia',
         });
-        return [] as any[];
+        return [] as PendingRequest[];
       });
+    return pending;
   }
 
   async getMyProgress(evaluatorId: number) {
@@ -795,7 +841,7 @@ export class EvaluationService {
   }
 
   async findByUser(userId: number, period?: string) {
-    const where: any = { evaluatedId: userId };
+    const where: Prisma.PerformanceEvaluationWhereInput = { evaluatedId: userId };
     if (period) where.period = { contains: period };
 
     return this.prisma.read.performanceEvaluation.findMany({
@@ -822,7 +868,7 @@ export class EvaluationService {
     });
     if (!evaluated) throw new NotFoundException('Utilizador não encontrado');
 
-    const where: any = { evaluatedId };
+    const where: Prisma.PerformanceEvaluationWhereInput = { evaluatedId };
     if (cycleId) where.cycleId = cycleId;
 
     const evaluations = await this.prisma.read.performanceEvaluation.findMany({
@@ -834,7 +880,10 @@ export class EvaluationService {
     if (!evaluations.length) return { evaluated, hasResults: false, message: 'Sem avaliações' };
 
     // Get cycle weights
-    let weights: any[] = [];
+    // selfEvalIncluded nunca é persistido por peso (só existe
+    // dto.selfEvalIncludedInScore ao nível do ciclo) — o campo abaixo é
+    // sempre undefined após o JSON.parse, comportamento pré-existente.
+    let weights: (EvaluatorWeightDto & { selfEvalIncluded?: boolean })[] = [];
     if (cycleId) {
       const cycle = await safeM(this.prisma, 'evaluationCycle')
         .findUnique({ where: { id: cycleId } })
@@ -880,11 +929,11 @@ export class EvaluationService {
     // Competency breakdown
     const compScores: Record<string, number[]> = {};
     for (const e of evaluations) {
-      if ((e as any).competencyScores) {
-        const cs = JSON.parse((e as any).competencyScores ?? '{}');
+      if (e.competencyScores) {
+        const cs: Record<string, number> = JSON.parse(e.competencyScores ?? '{}');
         for (const [cid, score] of Object.entries(cs)) {
           if (!compScores[cid]) compScores[cid] = [];
-          compScores[cid].push(score as number);
+          compScores[cid].push(score);
         }
       }
     }
@@ -935,13 +984,9 @@ export class EvaluationService {
       concordance,
       totalEvaluators: evaluations.length,
       qualitative: {
-        strengths: evaluations.filter(e => (e as any).strengths).map(e => (e as any).strengths),
-        improvements: evaluations
-          .filter(e => (e as any).improvements)
-          .map(e => (e as any).improvements),
-        recommendations: evaluations
-          .filter(e => (e as any).recommendations)
-          .map(e => (e as any).recommendations),
+        strengths: evaluations.filter(e => e.strengths).map(e => e.strengths),
+        improvements: evaluations.filter(e => e.improvements).map(e => e.improvements),
+        recommendations: evaluations.filter(e => e.recommendations).map(e => e.recommendations),
       },
     };
   }
@@ -966,8 +1011,23 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async getCycleForCalibration(cycleId: number) {
-    const evals = await this.prisma.read.performanceEvaluation.findMany({
-      where: { ...(cycleId ? ({ cycleId } as any) : {}) },
+    type CalibrationEval = Prisma.PerformanceEvaluationGetPayload<{
+      include: {
+        evaluated: {
+          select: {
+            id: true;
+            fullName: true;
+            avatarUrl: true;
+            department: { select: { name: true } };
+            position: { select: { name: true } };
+          };
+        };
+        evaluator: { select: { id: true; fullName: true } };
+      };
+    }>;
+
+    const evals: CalibrationEval[] = await this.prisma.read.performanceEvaluation.findMany({
+      where: { ...(cycleId ? { cycleId } : {}) },
       include: {
         evaluated: {
           select: {
@@ -983,10 +1043,13 @@ export class EvaluationService {
     });
 
     // Group by evaluated
-    const byEval: Record<number, any> = {};
+    const byEval: Record<
+      number,
+      { evaluated: CalibrationEval['evaluated']; scores: number[]; types: Record<string, number> }
+    > = {};
     for (const e of evals) {
       const id = e.evaluatedId;
-      if (!byEval[id]) byEval[id] = { evaluated: (e as any).evaluated, scores: [], types: {} };
+      if (!byEval[id]) byEval[id] = { evaluated: e.evaluated, scores: [], types: {} };
       byEval[id].scores.push(e.overallScore ?? 0);
       byEval[id].types[e.type] = e.overallScore;
     }
@@ -996,7 +1059,7 @@ export class EvaluationService {
     );
 
     const result = Object.values(byEval)
-      .map((b: any) => {
+      .map(b => {
         const avg = +(
           b.scores.reduce((a: number, v: number) => a + v, 0) / b.scores.length
         ).toFixed(2);
@@ -1035,13 +1098,13 @@ export class EvaluationService {
   }
 
   async calibrateScore(cycleId: number, dto: CalibrateScoreDto, calibratedById: number) {
-    const where: any = { evaluatedId: dto.evaluatedId };
+    const where: Prisma.PerformanceEvaluationWhereInput = { evaluatedId: dto.evaluatedId };
     if (cycleId) where.cycleId = cycleId;
 
     await this.prisma.performanceEvaluation
       .updateMany({
         where,
-        data: { overallScore: dto.calibratedScore } as any,
+        data: { overallScore: dto.calibratedScore },
       })
       .catch((e: unknown) => {
         this.logger.warn({
@@ -1105,8 +1168,21 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async getAnalyticsDashboard(filters: EvaluationAnalyticsFilterDto = {}) {
+    type DashboardEval = Prisma.PerformanceEvaluationGetPayload<{
+      include: {
+        evaluated: {
+          select: {
+            id: true;
+            fullName: true;
+            avatarUrl: true;
+            department: { select: { name: true } };
+          };
+        };
+      };
+    }>;
+
     const { cycleId, departmentId } = filters;
-    const where: any = {};
+    const where: Prisma.PerformanceEvaluationWhereInput = {};
     if (cycleId) where.cycleId = cycleId;
     if (departmentId) where.evaluated = { departmentId };
 
@@ -1124,7 +1200,7 @@ export class EvaluationService {
           },
         },
       }),
-      (this.prisma as any).evaluationRequest
+      this.prisma.evaluationRequest
         .count({ where: cycleId ? { cycleId } : {} })
         .catch((e: unknown) => {
           this.logger.warn({
@@ -1136,7 +1212,7 @@ export class EvaluationService {
           });
           return 0;
         }),
-      (this.prisma as any).evaluationRequest
+      this.prisma.evaluationRequest
         .count({
           where: { ...(cycleId ? { cycleId } : {}), status: 'COMPLETED' },
         })
@@ -1170,7 +1246,7 @@ export class EvaluationService {
     // By department
     const deptMap: Record<string, number[]> = {};
     for (const e of evals) {
-      const dept = (e as any).evaluated?.department?.name ?? 'N/A';
+      const dept = e.evaluated?.department?.name ?? 'N/A';
       if (!deptMap[dept]) deptMap[dept] = [];
       deptMap[dept].push(e.overallScore ?? 0);
     }
@@ -1183,10 +1259,10 @@ export class EvaluationService {
       .sort((a, b) => b.avgScore - a.avgScore);
 
     // Top performers
-    const userAvg: Record<number, { user: any; scores: number[] }> = {};
+    const userAvg: Record<number, { user: DashboardEval['evaluated']; scores: number[] }> = {};
     for (const e of evals) {
       const id = e.evaluatedId;
-      if (!userAvg[id]) userAvg[id] = { user: (e as any).evaluated, scores: [] };
+      if (!userAvg[id]) userAvg[id] = { user: e.evaluated, scores: [] };
       userAvg[id].scores.push(e.overallScore ?? 0);
     }
 
@@ -1235,32 +1311,33 @@ export class EvaluationService {
     if (!team.length) return { team: [], message: 'Sem equipa directa' };
 
     const teamIds = team.map(u => u.id);
-    const where: any = { evaluatedId: { in: teamIds } };
+    const where: Prisma.PerformanceEvaluationWhereInput = { evaluatedId: { in: teamIds } };
     if (cycleId) where.cycleId = cycleId;
 
     const evals = await this.prisma.read.performanceEvaluation.findMany({ where });
 
-    const pending = await this.prisma.evaluationRequest
-      .findMany({
-        where: { evaluatorId: managerId, status: 'PENDING' },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_REQUEST_LIST_TEAM_PENDING',
-          managerId,
-          cycleId,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao listar avaliações pendentes da equipa — a devolver lista vazia',
+    const pending: Prisma.EvaluationRequestGetPayload<object>[] =
+      await this.prisma.evaluationRequest
+        .findMany({
+          where: { evaluatorId: managerId, status: 'PENDING' },
+        })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_REQUEST_LIST_TEAM_PENDING',
+            managerId,
+            cycleId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao listar avaliações pendentes da equipa — a devolver lista vazia',
+          });
+          return [] as Prisma.EvaluationRequestGetPayload<object>[];
         });
-        return [] as any[];
-      });
 
     const enriched = team.map(u => {
       const uEvals = evals.filter(e => e.evaluatedId === u.id);
       const avg = uEvals.length
         ? +(uEvals.reduce((s, e) => s + (e.overallScore ?? 0), 0) / uEvals.length).toFixed(2)
         : null;
-      const hasPending = (pending as any[]).some((r: any) => r.evaluatedId === u.id);
+      const hasPending = pending.some(r => r.evaluatedId === u.id);
       return {
         user: u,
         avgScore: avg,
@@ -1277,7 +1354,7 @@ export class EvaluationService {
 
     return {
       teamAvg,
-      pendingCount: (pending as any[]).length,
+      pendingCount: pending.length,
       team: enriched.map(u => ({
         ...u,
         percentile: u.avgScore !== null ? percentile(u.avgScore, withScores) : null,
@@ -1317,17 +1394,19 @@ export class EvaluationService {
 
   async triggerPDIFromResults(evaluatedId: number, cycleId?: number) {
     const results = await this.getResults(evaluatedId, cycleId);
-    if (!(results as any).competencies)
+    if (!('competencies' in results) || !results.competencies)
       return { message: 'Sem dados de competências para gerar PDI' };
 
     // Identify top 3 gap competencies (lowest scores)
-    const gaps = Object.entries((results as any).competencies as Record<string, number>)
+    const gaps = Object.entries(results.competencies)
       .map(([cid, score]) => ({ competencyId: +cid, score }))
       .sort((a, b) => a.score - b.score)
       .slice(0, 3);
 
     // Create notification for manager to create PDI
-    const user = await this.prisma.user
+    const user: Prisma.UserGetPayload<{
+      select: { id: true; fullName: true; managerId: true };
+    }> | null = await this.prisma.user
       .findUnique({
         where: { id: evaluatedId },
         select: { id: true, fullName: true, managerId: true },
