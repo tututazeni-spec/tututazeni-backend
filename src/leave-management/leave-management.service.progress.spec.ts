@@ -310,7 +310,7 @@ describe('LeaveManagementService (progress)', () => {
         expect.objectContaining({
           skipDuplicates: true,
           data: expect.arrayContaining([
-            expect.objectContaining({ userId: 7, leaveTypeCode: 'ANNUAL', balance: 22 }),
+            expect.objectContaining({ userId: 7, leaveType: 'ANNUAL', balance: 22 }),
           ]),
         }),
       );
