@@ -6,6 +6,7 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateOnboardingTemplateDto,
@@ -105,7 +106,7 @@ export class OnboardingService {
     const { page = 1, limit = 20, status, departmentId, templateId } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.OnboardingPlanWhereInput = {};
     if (status) where.status = status;
     if (templateId) where.templateId = templateId;
     if (departmentId) where.user = { departmentId };
@@ -217,9 +218,11 @@ export class OnboardingService {
     const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     // Agrupar tarefas por fase e categoria
-    const byPhase: Record<string, any[]> = {};
+    // FIX: `(t.templateTask as any).phase` era desnecessário — `templateTask`
+    // já vem tipado do `include` acima, `phase` é uma coluna real.
+    const byPhase: Record<string, (typeof tasks)[number][]> = {};
     for (const t of tasks) {
-      const phase = (t.templateTask as any).phase;
+      const phase = t.templateTask.phase;
       if (!byPhase[phase]) byPhase[phase] = [];
       byPhase[phase].push(t);
     }
@@ -228,7 +231,9 @@ export class OnboardingService {
   }
 
   async create(dto: CreateOnboardingPlanDto) {
-    const template = (await this.findOneTemplate(dto.templateId)) as any;
+    // FIX: `as any` desnecessário — findOneTemplate() já devolve
+    // OnboardingTemplate totalmente tipado (incl. `tasks`).
+    const template = await this.findOneTemplate(dto.templateId);
 
     // Verificar se já existe plano activo para este utilizador
     const existing = await this.prisma.onboardingPlan.findFirst({
@@ -255,7 +260,7 @@ export class OnboardingService {
     // Criar instâncias de cada tarefa do template
     if (template.tasks.length > 0) {
       await this.prisma.onboardingTaskInstance.createMany({
-        data: template.tasks.map((task: any) => ({
+        data: template.tasks.map(task => ({
           planId: plan.id,
           templateTaskId: task.id,
           status: 'PENDING',
@@ -350,17 +355,21 @@ export class OnboardingService {
       include: { templateTask: true, plan: true },
     });
     if (!instance) throw new NotFoundException('Tarefa não encontrada');
-    if ((instance.plan as any).userId !== userId) throw new ForbiddenException('Sem permissão');
+    // FIX: todos os casts `as any` deste método eram desnecessários —
+    // `instance.plan`/`instance.templateTask` já vêm totalmente tipados do
+    // `include` acima (userId/planId/dependsOn/requiresApproval/xpReward
+    // são campos reais).
+    if (instance.plan.userId !== userId) throw new ForbiddenException('Sem permissão');
     if (instance.status === 'COMPLETED') throw new ConflictException('Tarefa já concluída');
     if (instance.status === 'BLOCKED')
       throw new BadRequestException('Tarefa bloqueada por dependências');
 
     // Verificar dependências
-    const dependencies = (instance.templateTask as any).dependsOn ?? [];
+    const dependencies = instance.templateTask.dependsOn ?? [];
     if (dependencies.length > 0) {
       const blockers = await this.prisma.read.onboardingTaskInstance.findMany({
         where: {
-          planId: (instance as any).planId,
+          planId: instance.planId,
           templateTaskId: { in: dependencies },
           status: { not: 'COMPLETED' },
         },
@@ -370,7 +379,7 @@ export class OnboardingService {
       }
     }
 
-    const needsApproval = (instance.templateTask as any).requiresApproval;
+    const needsApproval = instance.templateTask.requiresApproval;
 
     await this.prisma.onboardingTaskInstance.update({
       where: { id: dto.taskInstanceId },
@@ -384,10 +393,10 @@ export class OnboardingService {
 
     if (!needsApproval) {
       // Atribuir XP
-      const xp = (instance.templateTask as any).xpReward ?? 0;
+      const xp = instance.templateTask.xpReward ?? 0;
       if (xp > 0) {
         await this.prisma.onboardingPlan.update({
-          where: { id: (instance as any).planId },
+          where: { id: instance.planId },
           data: { xpEarned: { increment: xp } },
         });
         await this.prisma.userPoints
@@ -409,7 +418,7 @@ export class OnboardingService {
       }
 
       // Verificar se o plano está 100% concluído
-      await this.checkPlanCompletion((instance as any).planId);
+      await this.checkPlanCompletion(instance.planId);
     }
 
     return { completed: !needsApproval, pendingApproval: needsApproval };
@@ -452,17 +461,19 @@ export class OnboardingService {
     });
 
     if (dto.decision === 'approve') {
-      const xp = (instance.templateTask as any).xpReward ?? 0;
+      // FIX: casts `as any` desnecessários — `templateTask`/`plan` já vêm
+      // tipados do `include` acima.
+      const xp = instance.templateTask.xpReward ?? 0;
       if (xp > 0) {
         await this.prisma.userPoints
           .upsert({
-            where: { userId: (instance.plan as any).userId },
-            create: { userId: (instance.plan as any).userId, points: xp },
+            where: { userId: instance.plan.userId },
+            create: { userId: instance.plan.userId, points: xp },
             update: { points: { increment: xp } },
           })
           .catch(e => {
             this.logger.warn({
-              userId: (instance.plan as any).userId,
+              userId: instance.plan.userId,
               action: 'approveTask.awardXp',
               taskInstanceId: dto.taskInstanceId,
               xp,
@@ -471,7 +482,7 @@ export class OnboardingService {
             });
           });
       }
-      await this.checkPlanCompletion((instance as any).planId);
+      await this.checkPlanCompletion(instance.planId);
     }
 
     return { decision: dto.decision, taskId: dto.taskInstanceId };
@@ -518,7 +529,9 @@ export class OnboardingService {
           data: {
             userId: plan.userId,
             type: 'ONBOARDING_COMPLETED',
-            message: `🎉 Parabéns! Concluíste o onboarding "${(plan.template as any)?.name}"`,
+            // FIX: `as any` desnecessário — `plan.template` já vem tipado do
+            // `select` acima (relação obrigatória, nunca null).
+            message: `🎉 Parabéns! Concluíste o onboarding "${plan.template.name}"`,
             metadata: JSON.stringify({}),
           },
         })
@@ -606,7 +619,7 @@ export class OnboardingService {
   // ─── DASHBOARD ────────────────────────────────────────────────────────────
 
   async getDashboard(managerId?: number) {
-    const where: any = {};
+    const where: Prisma.OnboardingPlanWhereInput = {};
     if (managerId) where.managerId = managerId;
 
     const [totalPlans, byStatus, activeWithProgress, overdueTasks, avgSurveyScore] =
