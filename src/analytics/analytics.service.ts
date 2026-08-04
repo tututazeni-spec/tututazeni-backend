@@ -1,6 +1,7 @@
 // src/analytics/analytics.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { AnalyticsFilterDto, AnalyticsPeriod } from './analytics.dto';
 
 @Injectable()
@@ -134,19 +135,17 @@ export class AnalyticsService {
       .reduce((s, e) => s + (e.course.workloadHours ?? 0), 0);
 
     const pdiProgress = myPDI.map(p => {
-      const actions = p.actions as any[];
+      const actions = p.actions;
       const completed_a = actions.filter(a => a.status === 'COMPLETED').length;
       const overdue = actions.filter(
         a => a.dueDate && new Date(a.dueDate) < new Date() && a.status !== 'COMPLETED',
       ).length;
-      const goals = p.goals as any[];
+      const goals = p.goals;
       const avgGoal =
-        goals.length > 0
-          ? Math.round(goals.reduce((s: number, g: any) => s + g.progress, 0) / goals.length)
-          : 0;
+        goals.length > 0 ? Math.round(goals.reduce((s, g) => s + g.progress, 0) / goals.length) : 0;
       return {
         id: p.id,
-        name: (p as any).name,
+        name: p.name,
         status: p.status,
         actionsDone: completed_a,
         actionsTotal: actions.length,
@@ -159,13 +158,13 @@ export class AnalyticsService {
       learning: { completed, inProgress, totalHours, totalCourses: myEnrollments.length },
       xp: { total: myPoints?.points ?? 0, badges: myBadges },
       streak: {
-        current: (myStreak as any)?.currentStreak ?? 0,
-        longest: (myStreak as any)?.longestStreak ?? 0,
+        current: myStreak?.currentStreak ?? 0,
+        longest: myStreak?.longestStreak ?? 0,
       },
       pdi: pdiProgress,
       competencies: myCompetencies.map(c => ({
-        name: (c.competency as any).name,
-        category: (c.competency as any).category,
+        name: c.competency.name,
+        category: c.competency.category,
         currentLevel: c.currentLevel,
         targetLevel: c.targetLevel,
       })),
@@ -228,7 +227,7 @@ export class AnalyticsService {
     for (const uc of competencyGaps) {
       const gap = (uc.targetLevel ?? 0) - uc.currentLevel;
       if (gap <= 0) continue;
-      const key = (uc.competency as any).name;
+      const key = uc.competency.name;
       if (!gapMap[key]) gapMap[key] = { name: key, totalGap: 0, count: 0 };
       gapMap[key].totalGap += gap;
       gapMap[key].count++;
@@ -240,8 +239,8 @@ export class AnalyticsService {
 
     const nineBox = nineBoxData.map(p => ({
       userId: p.userId,
-      fullName: (p.user as any).fullName,
-      avatarUrl: (p.user as any).avatarUrl,
+      fullName: p.user.fullName,
+      avatarUrl: p.user.avatarUrl,
       performanceAxis: p.performanceAxis,
       potentialAxis: p.potentialAxis,
       quadrant: `${p.performanceAxis}-${p.potentialAxis}`,
@@ -276,7 +275,7 @@ export class AnalyticsService {
 
   async getHRDashboard(filters: AnalyticsFilterDto) {
     const { from, to } = this.getDateRange(filters.period, filters.fromDate, filters.toDate);
-    const userWhere: any = { active: true };
+    const userWhere: Prisma.UserWhereInput = { active: true };
     if (filters.departmentId) userWhere.departmentId = filters.departmentId;
 
     const [
@@ -372,7 +371,7 @@ export class AnalyticsService {
 
   async getLearningAnalytics(filters: AnalyticsFilterDto) {
     const { from, to } = this.getDateRange(filters.period, filters.fromDate, filters.toDate);
-    const enrollWhere: any = { enrolledAt: { gte: from, lte: to } };
+    const enrollWhere: Prisma.EnrollmentWhereInput = { enrolledAt: { gte: from, lte: to } };
     if (filters.departmentId) enrollWhere.user = { departmentId: filters.departmentId };
     if (filters.courseId) enrollWhere.courseId = filters.courseId;
 
@@ -421,10 +420,7 @@ export class AnalyticsService {
       where: { status: 'COMPLETED' },
       include: { course: { select: { workloadHours: true } } },
     });
-    const totalHours = completedEnrollments.reduce(
-      (s, e) => s + ((e.course as any)?.workloadHours ?? 0),
-      0,
-    );
+    const totalHours = completedEnrollments.reduce((s, e) => s + (e.course.workloadHours ?? 0), 0);
 
     return {
       byStatus: Object.fromEntries(byStatus.map(s => [s.status, s._count])),
@@ -473,7 +469,7 @@ export class AnalyticsService {
   }
 
   async getCompetencyGapAnalytics(filters: AnalyticsFilterDto) {
-    const userWhere: any = {};
+    const userWhere: Prisma.UserWhereInput = {};
     if (filters.departmentId) userWhere.departmentId = filters.departmentId;
 
     const competencies = await this.prisma.read.userCompetency.findMany({
@@ -490,11 +486,11 @@ export class AnalyticsService {
     > = {};
 
     for (const uc of competencies) {
-      const key = String((uc.competency as any).id);
+      const key = String(uc.competency.id);
       if (!map[key])
         map[key] = {
-          name: (uc.competency as any).name,
-          category: (uc.competency as any).category,
+          name: uc.competency.name,
+          category: uc.competency.category,
           totalCurrent: 0,
           totalTarget: 0,
           count: 0,
@@ -517,7 +513,7 @@ export class AnalyticsService {
   }
 
   async getPDIAnalytics(filters: AnalyticsFilterDto) {
-    const planWhere: any = {};
+    const planWhere: Prisma.DevelopmentPlanWhereInput = {};
     if (filters.departmentId) planWhere.user = { departmentId: filters.departmentId };
 
     const [byStatus, avgProgress, overdueCount, completedThisMonth] = await Promise.all([
@@ -561,12 +557,12 @@ export class AnalyticsService {
       overdueActions: overdueCount,
       completedThisMonth,
       // FIX: explicit type annotation
-      actionsByType: actionStats.map((a: any) => ({ type: a.type, count: a._count })),
+      actionsByType: actionStats.map(a => ({ type: a.type, count: a._count })),
     };
   }
 
   async getRiskAlerts(filters: AnalyticsFilterDto) {
-    const userWhere: any = { active: true };
+    const userWhere: Prisma.UserWhereInput = { active: true };
     if (filters.departmentId) userWhere.departmentId = filters.departmentId;
 
     const users = await this.prisma.read.user.findMany({
@@ -607,15 +603,14 @@ export class AnalyticsService {
       inactiveCollaborators: inactiveUsers.slice(0, 20),
       overduePDIs: overduePDIs.map(p => ({
         planId: p.id,
-        planName: (p as any).name,
-        user: (p as any).user,
+        planName: p.name,
+        user: p.user,
         endDate: p.endDate,
         daysOverdue: p.endDate
           ? Math.floor((Date.now() - new Date(p.endDate).getTime()) / (1000 * 60 * 60 * 24))
           : 0,
       })),
-      // FIX: explicit type
-      criticalActions: criticalActions.map((a: any) => ({
+      criticalActions: criticalActions.map(a => ({
         actionId: a.id,
         actionTitle: a.title,
         user: a.plan.user,
@@ -633,7 +628,7 @@ export class AnalyticsService {
   }
 
   async getCoursePerformance(courseId?: number) {
-    const where: any = {};
+    const where: Prisma.CourseAnalyticsWhereInput = {};
     if (courseId) where.courseId = courseId;
 
     const [analytics, feedbackStats, assessmentStats] = await Promise.all([
@@ -688,11 +683,11 @@ export class AnalyticsService {
       { name: string; category: string; count: number; totalLevel: number }
     > = {};
     for (const uc of competencies) {
-      const key = (uc.competency as any).name;
+      const key = uc.competency.name;
       if (!compMap[key])
         compMap[key] = {
           name: key,
-          category: (uc.competency as any).category,
+          category: uc.competency.category,
           count: 0,
           totalLevel: 0,
         };
@@ -716,7 +711,7 @@ export class AnalyticsService {
   }
 
   async getEngagementMetrics(filters: AnalyticsFilterDto) {
-    const userWhere: any = { active: true };
+    const userWhere: Prisma.UserWhereInput = { active: true };
     if (filters.departmentId) userWhere.departmentId = filters.departmentId;
 
     const users = await this.prisma.read.user.findMany({ where: userWhere, select: { id: true } });
@@ -755,8 +750,8 @@ export class AnalyticsService {
       microLearningAccess: microProgress,
       leaderboard: leaderboard.map(u => ({
         userId: u.userId,
-        fullName: (u.user as any).fullName,
-        avatarUrl: (u.user as any).avatarUrl,
+        fullName: u.user.fullName,
+        avatarUrl: u.user.avatarUrl,
         points: u.points,
       })),
     };
@@ -772,7 +767,7 @@ export class AnalyticsService {
     ]);
 
     const totalHours = courseAnalytics.reduce(
-      (s, ca) => s + ((ca.course as any).workloadHours ?? 0) * ca.totalCompleted,
+      (s, ca) => s + (ca.course.workloadHours ?? 0) * ca.totalCompleted,
       0,
     );
     const totalCompleted = courseAnalytics.reduce((s, ca) => s + ca.totalCompleted, 0);
@@ -786,7 +781,7 @@ export class AnalyticsService {
   }
 
   async generateDashboardSnapshot(departmentId?: number) {
-    const where: any = {};
+    const where: Prisma.UserWhereInput = {};
     if (departmentId) where.departmentId = departmentId;
 
     // Estado derivado gravado imediatamente abaixo: força primary (consistência forte).
