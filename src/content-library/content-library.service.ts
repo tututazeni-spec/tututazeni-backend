@@ -12,6 +12,7 @@ import {
   CreateLearningPathDto,
   ContentLibraryLearningPathFilterDto,
   ContentStatus,
+  ContentFormat,
 } from './content-library.dto';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -36,6 +37,39 @@ function safeModel(prisma: any, model: string) {
       groupBy: async () => [],
     }
   );
+}
+
+// contentProgress/contentRating/contentNote não existem em prisma/schema.prisma
+// — acedidos via safeModel() (degrada com graça se o modelo não existir), por
+// isso não têm tipos gerados pelo Prisma. Estas interfaces documentam a forma
+// real dos registos (confirmada nos próprios .create()/.upsert() deste
+// ficheiro) para remover `any` do lado do consumo, mesmo que o lado da
+// produção (safeModel) continue dinâmico.
+export interface ContentProgressRow {
+  userId: number;
+  contentId: number;
+  progress: number;
+  timeSpent?: number | null;
+  lastPosition?: number | null;
+  lastAccessedAt?: Date;
+  completedAt?: Date | null;
+}
+
+export interface ContentRatingRow {
+  userId: number;
+  contentId: number;
+  rating: number;
+  comment?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface ContentNoteRow {
+  userId: number;
+  contentId: number;
+  note: string;
+  timestamp?: number | null;
+  updatedAt?: Date;
 }
 
 function buildWhereFromFilters(filters: ContentFilterDto): Prisma.ContentAssetWhereInput {
@@ -124,10 +158,12 @@ export class ContentLibraryService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter contagens de visualizações de conteúdo',
         });
-        return [] as any[];
+        return [] as { entityId: number | null; _count: { id: number } }[];
       });
 
-    const vcMap = new Map((viewCounts as any[]).map((v: any) => [v.entityId, v._count.id]));
+    const vcMap = new Map(
+      viewCounts.map((v): [number | null, number] => [v.entityId, v._count.id]),
+    );
 
     return {
       data: data.map(c => ({ ...c, viewCount: vcMap.get(c.id) ?? 0 })),
@@ -160,7 +196,10 @@ export class ContentLibraryService {
           _avg: { rating: true },
           _count: { id: true },
         })
-        .then((r: any[]) => r[0] ?? null)
+        .then(
+          (r: { contentId: number; _avg: { rating: number | null }; _count: { id: number } }[]) =>
+            r[0] ?? null,
+        )
         .catch(e => {
           this.logger.warn({
             contentId: id,
@@ -278,9 +317,9 @@ export class ContentLibraryService {
     if (!existing) throw new NotFoundException('Conteúdo não encontrado');
     // Ownership (IDOR fix): só o autor (createdById) OU ADMIN/RH pode editar.
     // INSTRUCTOR só pode editar o próprio conteúdo — não o de outro instrutor.
-    if (user) assertCanAccess(existing, (existing as any).createdById, user, [Role.ADMIN, Role.RH]);
+    if (user) assertCanAccess(existing, existing.createdById ?? 0, user, [Role.ADMIN, Role.RH]);
 
-    const data: any = {};
+    const data: Prisma.ContentAssetUpdateInput = {};
     if (dto.title) data.title = dto.title;
     if (dto.description) data.description = dto.description;
     if (dto.format) data.type = dto.format;
@@ -328,7 +367,7 @@ export class ContentLibraryService {
   }
 
   async publish(id: number, publishedById: number) {
-    return this.update(id, { status: ContentStatus.ACTIVE } as any, publishedById);
+    return this.update(id, { status: ContentStatus.ACTIVE }, publishedById);
   }
 
   async deprecate(id: number) {
@@ -478,7 +517,7 @@ export class ContentLibraryService {
   }
 
   async getMyProgress(userId: number) {
-    const progresses = await safeModel(this.prisma, 'contentProgress')
+    const progresses: ContentProgressRow[] = await safeModel(this.prisma, 'contentProgress')
       .findMany({
         where: { userId },
         orderBy: { lastAccessedAt: 'desc' },
@@ -490,23 +529,22 @@ export class ContentLibraryService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter progresso de conteúdo — modelo contentProgress pode estar ausente',
         });
-        return [] as any[];
+        return [] as ContentProgressRow[];
       });
 
-    if (!(progresses as any[]).length)
-      return { data: [], stats: { total: 0, completed: 0, inProgress: 0 } };
+    if (!progresses.length) return { data: [], stats: { total: 0, completed: 0, inProgress: 0 } };
 
-    const ids = (progresses as any[]).map((p: any) => p.contentId);
+    const ids = progresses.map(p => p.contentId);
     const contents = await this.prisma.read.contentAsset.findMany({ where: { id: { in: ids } } });
     const cMap = new Map(contents.map(c => [c.id, c]));
 
-    const enriched = (progresses as any[]).map((p: any) => ({
+    const enriched = progresses.map(p => ({
       ...p,
       content: cMap.get(p.contentId) ?? null,
     }));
 
-    const completed = enriched.filter((p: any) => p.progress === 100).length;
-    const inProgress = enriched.filter((p: any) => p.progress > 0 && p.progress < 100).length;
+    const completed = enriched.filter(p => p.progress === 100).length;
+    const inProgress = enriched.filter(p => p.progress > 0 && p.progress < 100).length;
 
     return {
       data: enriched,
@@ -515,7 +553,7 @@ export class ContentLibraryService {
   }
 
   async getContinueWatching(userId: number, limit = 5) {
-    const progresses = await safeModel(this.prisma, 'contentProgress')
+    const progresses: ContentProgressRow[] = await safeModel(this.prisma, 'contentProgress')
       .findMany({
         where: { userId, progress: { gt: 0, lt: 100 } },
         orderBy: { lastAccessedAt: 'desc' },
@@ -528,16 +566,16 @@ export class ContentLibraryService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter conteúdos em progresso — modelo contentProgress pode estar ausente',
         });
-        return [] as any[];
+        return [] as ContentProgressRow[];
       });
 
-    const ids = (progresses as any[]).map((p: any) => p.contentId);
+    const ids = progresses.map(p => p.contentId);
     if (!ids.length) return [];
 
     const contents = await this.prisma.read.contentAsset.findMany({ where: { id: { in: ids } } });
     const cMap = new Map(contents.map(c => [c.id, c]));
 
-    return (progresses as any[]).map((p: any) => ({
+    return progresses.map(p => ({
       ...cMap.get(p.contentId),
       progress: p.progress,
       lastPosition: p.lastPosition,
@@ -575,7 +613,7 @@ export class ContentLibraryService {
   async getContentRatings(contentId: number) {
     await this.findOne(contentId);
 
-    const ratings = await safeModel(this.prisma, 'contentRating')
+    const ratings: ContentRatingRow[] = await safeModel(this.prisma, 'contentRating')
       .findMany({
         where: { contentId },
         orderBy: { createdAt: 'desc' },
@@ -587,25 +625,22 @@ export class ContentLibraryService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter avaliações — modelo contentRating pode estar ausente',
         });
-        return [] as any[];
+        return [] as ContentRatingRow[];
       });
 
     // Distribution 1–5
     const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    for (const r of ratings as any[]) dist[r.rating as keyof typeof dist]++;
+    for (const r of ratings) dist[r.rating as keyof typeof dist]++;
 
-    const avg = (ratings as any[]).length
-      ? +(
-          (ratings as any[]).reduce((s: number, r: any) => s + r.rating, 0) /
-          (ratings as any[]).length
-        ).toFixed(1)
+    const avg = ratings.length
+      ? +(ratings.reduce((s, r) => s + r.rating, 0) / ratings.length).toFixed(1)
       : null;
 
     return {
       avg,
-      total: (ratings as any[]).length,
+      total: ratings.length,
       distribution: dist,
-      recent: (ratings as any[]).slice(0, 10),
+      recent: ratings.slice(0, 10),
     };
   }
 
@@ -677,7 +712,10 @@ export class ContentLibraryService {
     const viewedIds = viewed.map(v => v.entityId).filter(Boolean);
 
     // 2. In-progress content has priority
-    const inProgress = await safeModel(this.prisma, 'contentProgress')
+    const inProgress: Pick<ContentProgressRow, 'contentId'>[] = await safeModel(
+      this.prisma,
+      'contentProgress',
+    )
       .findMany({
         where: { userId, progress: { gt: 0, lt: 100 } },
         select: { contentId: true },
@@ -689,10 +727,10 @@ export class ContentLibraryService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter conteúdos em progresso — modelo contentProgress pode estar ausente',
         });
-        return [] as any[];
+        return [] as Pick<ContentProgressRow, 'contentId'>[];
       });
 
-    const inProgressIds = (inProgress as any[]).map((p: any) => p.contentId);
+    const inProgressIds = inProgress.map(p => p.contentId);
 
     // 3. Recommend content not yet viewed
     const fresh = await this.prisma.read.contentAsset.findMany({
@@ -720,14 +758,14 @@ export class ContentLibraryService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao calcular formato mais usado pelo utilizador',
         });
-        return [] as any[];
+        return [] as { entityId: number | null; _count: { id: number } }[];
       });
 
     const scored = fresh
       .map(c => {
         let score = 0;
-        if ((c as any).mandatory) score += 5;
-        if ((c as any).isMicrolearning) score += 2;
+        if (c.mandatory) score += 5;
+        if (c.isMicrolearning) score += 2;
         if (mostUsedFormat.length) score += 1;
         return { ...c, recommendationScore: score };
       })
@@ -753,10 +791,10 @@ export class ContentLibraryService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao calcular conteúdos em alta (mais vistos na semana)',
         });
-        return [] as any[];
+        return [] as { entityId: number | null; _count: { id: number } }[];
       });
 
-    const ids = (topViews as any[]).map((v: any) => v.entityId).filter(Boolean) as number[];
+    const ids = topViews.map(v => v.entityId).filter((id): id is number => id !== null);
     if (!ids.length) {
       return this.prisma.read.contentAsset.findMany({
         where: { active: true },
@@ -766,7 +804,7 @@ export class ContentLibraryService {
     }
 
     const contents = await this.prisma.read.contentAsset.findMany({ where: { id: { in: ids } } });
-    const vcMap = new Map((topViews as any[]).map((v: any) => [v.entityId, v._count.id]));
+    const vcMap = new Map(topViews.map((v): [number | null, number] => [v.entityId, v._count.id]));
 
     return contents
       .map(c => ({ ...c, weeklyViews: vcMap.get(c.id) ?? 0 }))
@@ -783,12 +821,12 @@ export class ContentLibraryService {
 
   async getMandatory(userId: number) {
     const mandatory = await this.prisma.read.contentAsset.findMany({
-      where: { active: true, ...({ mandatory: true } as any) },
+      where: { active: true, mandatory: true },
     });
 
     // Enrich with user progress
     const ids = mandatory.map(c => c.id);
-    const progs = await safeModel(this.prisma, 'contentProgress')
+    const progs: ContentProgressRow[] = await safeModel(this.prisma, 'contentProgress')
       .findMany({
         where: { userId, contentId: { in: ids } },
       })
@@ -799,9 +837,9 @@ export class ContentLibraryService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter progresso de conteúdos obrigatórios — modelo contentProgress pode estar ausente',
         });
-        return [] as any[];
+        return [] as ContentProgressRow[];
       });
-    const pMap = new Map((progs as any[]).map((p: any) => [p.contentId, p]));
+    const pMap = new Map(progs.map(p => [p.contentId, p]));
 
     return mandatory.map(c => ({
       ...c,
@@ -812,6 +850,22 @@ export class ContentLibraryService {
 
   // ══════════════════════════════════════════════════════
   // LEARNING PATHS
+  //
+  // ACHADO ESTRUTURAL (não corrigido nesta limpeza de tipos): o modelo real
+  // "LearningPath" em prisma/schema.prisma tem um shape completamente
+  // diferente do que este bloco assume — sem hasCertification, xpReward,
+  // createdById nem relação "items" (tem antes courses/milestones/
+  // assignments). O enrollLearningPath também usa a chave composta errada
+  // ("userId_pathId" em vez de "learningPathId_userId") e campos
+  // inexistentes (pathId, resumedAt). Como estas chamadas passam sempre por
+  // safeModel(), qualquer erro de validação do Prisma é apanhado pelo
+  // .catch() e degrada silenciosamente — na prática, este bloco NUNCA
+  // persiste um learning path real, sempre cai no fallback "modo
+  // compatibilidade". Corrigir isto é uma decisão de produto (que campos
+  // reais mapear, ou se este módulo deve passar a usar directamente o
+  // LearningPath real) e fica fora do âmbito de uma limpeza de `any` — os
+  // tipos aqui ficam propositadamente pouco fiáveis para não mascarar o
+  // problema com uma falsa sensação de segurança de tipos.
   // ══════════════════════════════════════════════════════
 
   async createLearningPath(dto: CreateLearningPathDto, createdById: number) {
@@ -969,7 +1023,12 @@ export class ContentLibraryService {
   // ══════════════════════════════════════════════════════
 
   async getAnalyticsDashboard(departmentId?: number) {
-    const userWhere: any = { active: true };
+    // NOTA: userWhere é construído mas nunca aplicado a nenhuma query abaixo
+    // — o filtro por departamento neste dashboard é, e sempre foi, um no-op
+    // (achado pré-existente, não introduzido por esta limpeza de tipos;
+    // corrigi-lo implica decidir como relacionar ContentAsset/AuditLog com
+    // departamento, fora do âmbito desta limpeza).
+    const userWhere: Prisma.UserWhereInput = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;
 
     const [
@@ -1016,7 +1075,7 @@ export class ContentLibraryService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular conteúdos mais vistos',
           });
-          return [] as any[];
+          return [] as { entityId: number | null; _count: { id: number } }[];
         }),
       // Most completed
       safeModel(this.prisma, 'contentProgress')
@@ -1033,7 +1092,7 @@ export class ContentLibraryService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular conteúdos mais concluídos — modelo contentProgress pode estar ausente',
           });
-          return [] as any[];
+          return [] as { contentId: number; _count: { id: number } }[];
         }),
       // By format
       this.prisma.contentAsset
@@ -1048,7 +1107,7 @@ export class ContentLibraryService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao calcular distribuição de conteúdos por formato',
           });
-          return [] as any[];
+          return [] as { type: ContentFormat; _count: { id: number } }[];
         }),
       this.prisma.read.contentAsset.findMany({
         where: { active: true },
@@ -1059,8 +1118,8 @@ export class ContentLibraryService {
     ]);
 
     // Enrich most viewed with titles
-    const mvIds = (mostViewed as any[]).map((v: any) => v.entityId).filter(Boolean);
-    const mcIds = (mostCompleted as any[]).map((v: any) => v.contentId).filter(Boolean);
+    const mvIds = mostViewed.map(v => v.entityId).filter((id): id is number => id !== null);
+    const mcIds = mostCompleted.map(v => v.contentId).filter(Boolean);
     const allIds = [...new Set([...mvIds, ...mcIds])];
 
     const contents = allIds.length
@@ -1078,19 +1137,19 @@ export class ContentLibraryService {
         totalViews,
         totalCompletions,
       },
-      mostViewed: (mostViewed as any[])
-        .map((v: any) => ({
-          content: cMap.get(v.entityId),
+      mostViewed: mostViewed
+        .map(v => ({
+          content: v.entityId === null ? undefined : cMap.get(v.entityId),
           weeklyViews: v._count.id,
         }))
-        .filter((v: any) => v.content),
-      mostCompleted: (mostCompleted as any[])
-        .map((v: any) => ({
+        .filter(v => v.content),
+      mostCompleted: mostCompleted
+        .map(v => ({
           content: cMap.get(v.contentId),
           completions: v._count.id,
         }))
-        .filter((v: any) => v.content),
-      formatBreakdown: (formatBreakdown as any[]).map((f: any) => ({
+        .filter(v => v.content),
+      formatBreakdown: formatBreakdown.map(f => ({
         format: f.type,
         count: f._count.id,
       })),
@@ -1122,7 +1181,9 @@ export class ContentLibraryService {
           where: { userId },
           select: { timeSpent: true },
         })
-        .then((ps: any[]) => ps.reduce((s: number, p: any) => s + (p.timeSpent ?? 0), 0))
+        .then((ps: Pick<ContentProgressRow, 'timeSpent'>[]) =>
+          ps.reduce((s, p) => s + (p.timeSpent ?? 0), 0),
+        )
         .catch(e => {
           this.logger.warn({
             userId,
@@ -1162,11 +1223,15 @@ export class ContentLibraryService {
   }
 
   async getAllTags() {
-    const contents = await this.prisma.contentAsset
+    // NOTA: `contents` é obtido mas nunca usado — a função devolve sempre
+    // {tags: []}. ContentAsset.tags existe de facto no schema (String[]
+    // @default([])), ao contrário do que o comentário original assumia;
+    // achado pré-existente, não corrigido aqui (extrair tags distintas é
+    // uma mudança de comportamento, fora do âmbito desta limpeza de tipos).
+    await this.prisma.contentAsset
       .findMany({
         where: { active: true },
         select: { id: true },
-        // tags not guaranteed in schema — cast safe
       })
       .catch(e => {
         this.logger.warn({
@@ -1174,10 +1239,9 @@ export class ContentLibraryService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter conteúdos para extrair tags',
         });
-        return [] as any[];
+        return [] as { id: number }[];
       });
 
-    // Return empty array if tags field doesn't exist
     return { tags: [] as string[] };
   }
 }
