@@ -21,6 +21,11 @@ const mockPrisma = {
   badgeAward: { findMany: makeFind(), count: makeCount() },
   auditLog: { findMany: makeFind(), create: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
+  // Feedback é um modelo real (ver leader.service.ts) — o mock precisa de o
+  // definir explicitamente, ou o mesmo achado do lote dashboard-rh repete-se
+  // aqui: sem isto, `mockPrisma.feedback` é `undefined` e a chamada real
+  // rebenta com TypeError em vez de exercitar o caminho feliz.
+  feedback: { create: jest.fn().mockResolvedValue({}), findMany: makeFind() },
   oneOnOneMeeting: {
     findUnique: jest.fn(),
     update: jest.fn().mockResolvedValue({}),
