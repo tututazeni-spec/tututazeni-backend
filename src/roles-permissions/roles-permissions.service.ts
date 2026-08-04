@@ -1,11 +1,6 @@
 ﻿// src/roles-permissions/roles-permissions.service.ts
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  ConflictException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
+import { Permission } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   RolesPermissionsCreateRoleDto,
@@ -68,8 +63,15 @@ export class RolesPermissionsService {
       ...r,
       effectivePermissions: r.permissions.length,
       usersCount: r._count.users,
-      isSystem: (r as any).isSystem ?? false,
-      priority: (r as any).priority ?? 0,
+      // FIX (achado, não corrigido — precisa de migração/decisão de produto):
+      // Role.isSystem/Role.priority NUNCA existiram no schema (confirmado —
+      // nenhuma migration os criou). Antes liam-se via `as any` e caíam
+      // sempre no fallback; mantido o mesmo comportamento (`false`/`0`)
+      // explicitamente, em vez de esconder atrás de um cast. Consequência:
+      // as guardas "role de sistema não pode ser renomeado/removido" em
+      // update()/remove() nunca dispararam — nenhum role está protegido hoje.
+      isSystem: false,
+      priority: 0,
     }));
   }
 
@@ -136,10 +138,10 @@ export class RolesPermissionsService {
   }
 
   async update(id: number, dto: RolesPermissionsUpdateRoleDto) {
-    const existing = await this.findOne(id);
-    if ((existing as any).isSystem && dto.name !== existing.name) {
-      throw new BadRequestException('Não é possível renomear um role de sistema');
-    }
+    // Guarda "role de sistema não pode ser renomeado" removida daqui — lia
+    // Role.isSystem, campo que nunca existiu no schema (ver findAll()), pelo
+    // que nunca disparou. Ver findAll() para o achado completo.
+    await this.findOne(id);
 
     const { permissionIds, ...data } = dto;
     const updated = await this.prisma.role.update({
@@ -179,20 +181,20 @@ export class RolesPermissionsService {
   }
 
   async remove(id: number) {
+    // Guarda "role de sistema não pode ser removido" removida daqui — lia
+    // Role.isSystem, campo que nunca existiu no schema (ver findAll()).
     const role = await this.findOne(id);
-    if ((role as any).isSystem)
-      throw new BadRequestException('Não é possível remover roles de sistema');
-    if ((role._count as any).users > 0)
+    if (role._count.users > 0)
       throw new ConflictException(
-        `Role tem ${(role._count as any).users} utilizador(es) atribuídos — reatribua antes de remover`,
+        `Role tem ${role._count.users} utilizador(es) atribuídos — reatribua antes de remover`,
       );
     // Permission.roleId → Role é ON DELETE CASCADE: sem este guard, remover
     // um role apagaria PERMANENTEMENTE todas as permissões que ele possui
     // (não apenas a associação) — usa setRolePermissions(id, []) primeiro
     // para libertar as permissões para o ADMIN antes de remover o role.
-    if (((role as any).permissions as any[])?.length > 0) {
+    if (role.permissions.length > 0) {
       throw new ConflictException(
-        `Role tem ${(role as any).permissions.length} permissão(ões) associada(s) — reatribua-as (setRolePermissions) antes de remover, para não as perder em cascata`,
+        `Role tem ${role.permissions.length} permissão(ões) associada(s) — reatribua-as (setRolePermissions) antes de remover, para não as perder em cascata`,
       );
     }
 
@@ -229,7 +231,7 @@ export class RolesPermissionsService {
         name: newName,
         code: newName.toUpperCase().replace(/\s+/g, '_'),
         description: `Clone de: ${source.name}`,
-        permissions: { connect: (source as any).permissions.map((p: any) => ({ id: p.id })) },
+        permissions: { connect: source.permissions.map(p => ({ id: p.id })) },
       },
       include: { permissions: true },
     });
@@ -334,7 +336,7 @@ export class RolesPermissionsService {
     // Em vez disso, reatribui-se directamente pelo FK: o que sai vai para o
     // ADMIN (dono lógico de permissões libertadas), o que entra passa a
     // pertencer a este role.
-    const currentIds = ((role as any).permissions as any[]).map(p => p.id);
+    const currentIds = role.permissions.map(p => p.id);
     const toRelease = currentIds.filter(id => !permissionIds.includes(id));
 
     if (toRelease.length) {
@@ -366,7 +368,7 @@ export class RolesPermissionsService {
     ]);
 
     // Group permissions by subject
-    const grouped: Record<string, any[]> = {};
+    const grouped: Record<string, Permission[]> = {};
     for (const p of permissions) {
       if (!grouped[p.subject]) grouped[p.subject] = [];
       grouped[p.subject].push(p);
@@ -379,7 +381,7 @@ export class RolesPermissionsService {
     });
 
     return {
-      roles: roles.map(r => ({ id: r.id, name: r.name, code: (r as any).code })),
+      roles: roles.map(r => ({ id: r.id, name: r.name, code: r.code })),
       permissions,
       grouped: Object.entries(grouped).map(([subject, perms]) => ({ subject, permissions: perms })),
       matrix,
@@ -392,8 +394,8 @@ export class RolesPermissionsService {
 
   async compareRoles(roleIdA: number, roleIdB: number) {
     const [a, b] = await Promise.all([this.findOne(roleIdA), this.findOne(roleIdB)]);
-    const permsA = new Set((a as any).permissions.map((p: any) => p.name));
-    const permsB = new Set((b as any).permissions.map((p: any) => p.name));
+    const permsA = new Set(a.permissions.map(p => p.name));
+    const permsB = new Set(b.permissions.map(p => p.name));
 
     const onlyInA = [...permsA].filter(p => !permsB.has(p));
     const onlyInB = [...permsB].filter(p => !permsA.has(p));
@@ -422,19 +424,22 @@ export class RolesPermissionsService {
     });
     if (!user) throw new NotFoundException('Utilizador não encontrado');
 
-    const rolePerms = (user.role as any)?.permissions ?? [];
+    const rolePerms = user.role?.permissions ?? [];
     const permName = `${dto.resource.toLowerCase()}:${dto.action.toLowerCase()}`;
-    const hasWildcard = rolePerms.some((p: any) => p.name === '*' || p.action === '*');
+    // `p.action === '*'` removido: Permission.action é o enum PermissionAction
+    // (VIEW/CREATE/UPDATE/DELETE), nunca tem valor '*' — só Permission.name
+    // (String livre) representa wildcard, mesma convenção de acl.service.ts.
+    const hasWildcard = rolePerms.some(p => p.name === '*');
     const hasPerm =
       hasWildcard ||
       rolePerms.some(
-        (p: any) =>
+        p =>
           p.name === permName ||
           (p.subject === dto.resource.toUpperCase() && p.action === dto.action.toUpperCase()),
       );
 
     const matchedPerm = rolePerms.find(
-      (p: any) =>
+      p =>
         p.name === permName ||
         (p.subject === dto.resource.toUpperCase() && p.action === dto.action.toUpperCase()),
     );
@@ -442,7 +447,7 @@ export class RolesPermissionsService {
     return {
       userId: dto.userId,
       user: { id: user.id, fullName: user.fullName, email: user.email },
-      role: { id: user.role?.id, name: user.role?.name, code: (user.role as any)?.code },
+      role: { id: user.role?.id, name: user.role?.name, code: user.role?.code },
       resource: dto.resource,
       action: dto.action,
       allowed: hasPerm,
@@ -479,19 +484,23 @@ export class RolesPermissionsService {
   // ══════════════════════════════════════════════════════
 
   async getPositionTemplates() {
-    return this.prisma.roleTemplate
-      .findMany({
-        include: { role: { select: { id: true, name: true, code: true } } },
-        orderBy: { positionName: 'asc' },
-      })
-      .catch(e => {
-        this.logger.warn({
-          entity: 'roleTemplate',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter templates de posição (modelo roleTemplate pode estar ausente)',
-        });
-        return [] as any[];
+    // RoleTemplate é um modelo real (não é o caso ApiKey/Webhook do
+    // api-integration.service.ts) — o .catch() aqui é só resiliência a
+    // falhas de BD genuínas, não degradação de modelo ausente.
+    const query = this.prisma.roleTemplate.findMany({
+      include: { role: { select: { id: true, name: true, code: true } } },
+      orderBy: { positionName: 'asc' },
+    });
+    type PositionTemplate = Awaited<typeof query>;
+    const result: PositionTemplate = await query.catch((e: unknown) => {
+      this.logger.warn({
+        entity: 'roleTemplate',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter templates de posição',
       });
+      return [];
+    });
+    return result;
   }
 
   async createPositionTemplate(dto: RoleTemplateDto) {

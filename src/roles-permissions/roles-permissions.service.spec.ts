@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, ConflictException } from '@nestjs/common';
 import { RolesPermissionsService } from './roles-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -130,9 +130,11 @@ describe('RolesPermissionsService', () => {
       await expect(service.update(99, { name: 'X' })).rejects.toThrow(NotFoundException);
     });
 
-    it('deve lançar BadRequestException ao renomear role de sistema', async () => {
+    it('actualiza mesmo quando o registo devolvido tem isSystem=true (campo nunca existiu no schema real — a "protecção" nunca funcionou em produção, ver findAll())', async () => {
       mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, isSystem: true });
-      await expect(service.update(1, { name: 'NOVO_NOME' })).rejects.toThrow(BadRequestException);
+      mockPrisma.role.update.mockResolvedValue({ ...baseRole, name: 'NOVO_NOME' });
+      const result = await service.update(1, { name: 'NOVO_NOME' });
+      expect(result.name).toBe('NOVO_NOME');
     });
   });
 });
