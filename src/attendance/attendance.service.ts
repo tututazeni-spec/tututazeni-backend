@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CacheService } from '../cache/cache.service';
+import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import {
   AttendanceFilterDto,
@@ -34,9 +35,18 @@ import {
   OvertimeStatus,
 } from './attendance.dto';
 
+interface QrPayload {
+  context: AttendanceContext;
+  eventId?: number;
+  sessionId?: number;
+  requireGeolocation: boolean;
+  generatedById: number;
+  generatedAt: string;
+}
+
 interface QrEntry {
   userId?: number;
-  payload: any;
+  payload: QrPayload;
   expiresAt: number;
 }
 function qrKey(token: string): string {
@@ -77,6 +87,12 @@ function determineStatus(
   return late ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
 }
 
+const PRESENT_LIKE_STATUSES: AttendanceStatus[] = [
+  AttendanceStatus.PRESENT,
+  AttendanceStatus.LATE,
+  AttendanceStatus.REMOTE,
+];
+
 function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -111,7 +127,7 @@ export class AttendanceService {
       sortOrder = 'desc',
     } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.AttendanceRecordWhereInput = {};
 
     if (userId) where.userId = userId;
     if (status) where.status = status;
@@ -148,7 +164,7 @@ export class AttendanceService {
   }
 
   async findByUser(userId: number, from?: string, to?: string) {
-    const where: any = { userId };
+    const where: Prisma.AttendanceRecordWhereInput = { userId };
     if (from || to) {
       where.date = {};
       if (from) where.date.gte = new Date(from);
@@ -161,12 +177,10 @@ export class AttendanceService {
       include: { justifications: true },
     });
 
-    const totalMinutes = records.reduce((a: number, r: any) => a + (r.workMinutes ?? 0), 0);
-    const presentDays = records.filter((r: any) =>
-      [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.REMOTE].includes(r.status),
-    ).length;
-    const absentDays = records.filter((r: any) => r.status === AttendanceStatus.ABSENT).length;
-    const lateDays = records.filter((r: any) => r.status === AttendanceStatus.LATE).length;
+    const totalMinutes = records.reduce((a, r) => a + (r.workMinutes ?? 0), 0);
+    const presentDays = records.filter(r => PRESENT_LIKE_STATUSES.includes(r.status)).length;
+    const absentDays = records.filter(r => r.status === AttendanceStatus.ABSENT).length;
+    const lateDays = records.filter(r => r.status === AttendanceStatus.LATE).length;
 
     return {
       records,
@@ -220,7 +234,7 @@ export class AttendanceService {
       schedule?.startTime ?? '08:00',
     );
 
-    const data: any = {
+    const data: Prisma.AttendanceRecordUncheckedCreateInput = {
       userId,
       date: today,
       clockIn: clockInTime,
@@ -356,19 +370,34 @@ export class AttendanceService {
     });
   }
 
+  // ACHADO ESTRUTURAL (não corrigido nesta limpeza de tipos): tal como
+  // AttendanceJustification, AttendanceAdjustment.attendanceId é FK
+  // obrigatória para o modelo legacy `Attendance` (ligado a Employee, não
+  // User) — este módulo opera inteiramente sobre AttendanceRecord/User.
+  // `recordId` (FK opcional já existente, relação "RecordAdjustments") é o
+  // campo correcto para o que este código quer fazer, mas attendanceId
+  // continua obrigatório no schema, por isso este create() rebenta sempre
+  // com violação de FK sempre que há um campo alterado a registar. Precisa
+  // de decisão de schema/produto, não de correcção mecânica.
   async update(id: number, dto: UpdateAttendanceDto, updatedById: number) {
     const record = await this.findOne(id);
 
-    const changedFields = Object.keys(dto).filter(k => record[k] !== (dto as any)[k]);
+    const changedFields = (Object.keys(dto) as (keyof UpdateAttendanceDto)[]).filter(
+      k => record[k] !== dto[k],
+    );
     if (changedFields.length > 0) {
+      const changes = changedFields.reduce<Record<string, { from: unknown; to: unknown }>>(
+        (acc, k) => {
+          acc[k] = { from: record[k], to: dto[k] };
+          return acc;
+        },
+        {},
+      );
       await this.prisma.attendanceAdjustment.create({
         data: {
           attendanceId: id,
           adjustedById: updatedById,
-          changes: changedFields.reduce((acc, k) => {
-            acc[k] = { from: record[k], to: (dto as any)[k] };
-            return acc;
-          }, {} as any),
+          changes: changes as unknown as Prisma.InputJsonValue,
           reason: 'Actualização manual',
         },
       });
@@ -380,11 +409,11 @@ export class AttendanceService {
         dto.clockOut,
         dto.breakMinutes ?? record.breakMinutes ?? 0,
       );
-      (dto as any).workMinutes = wm;
-      (dto as any).hoursWorked = minutesToHours(wm);
+      dto.workMinutes = wm;
+      dto.hoursWorked = minutesToHours(wm);
     }
 
-    return this.prisma.attendanceRecord.update({ where: { id }, data: dto as any });
+    return this.prisma.attendanceRecord.update({ where: { id }, data: dto });
   }
 
   async remove(id: number) {
@@ -415,7 +444,7 @@ export class AttendanceService {
     return this.prisma.leaveRequest.create({
       data: {
         userId,
-        leaveType: dto.type as any,
+        leaveType: dto.type,
         startDate: start,
         endDate: end,
         reason: dto.reason,
@@ -453,7 +482,7 @@ export class AttendanceService {
   async getLeaves(filters: AttendanceLeaveFilterDto) {
     const { page = 1, limit = 20, userId, type, status, from, to } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.LeaveRequestWhereInput = {};
     if (userId) where.userId = userId;
     if (type) where.leaveType = type;
     if (status) where.status = status;
@@ -512,7 +541,7 @@ export class AttendanceService {
   }
 
   async createWorkSchedule(dto: CreateWorkScheduleDto) {
-    return this.prisma.workSchedule.create({ data: dto as any });
+    return this.prisma.workSchedule.create({ data: dto });
   }
 
   async getWorkSchedules() {
@@ -626,13 +655,16 @@ export class AttendanceService {
   }
 
   async getPendingJustifications(managerId?: number) {
-    const where: any = { status: 'PENDING' };
+    const where: Prisma.AttendanceJustificationWhereInput = { status: 'PENDING' };
     return this.prisma.read.attendanceJustification.findMany({
       where,
       include: {
-        // FIX: attendance.user → cast as any since Attendance uses Employee not User
-        attendance: {
-          include: { user: { select: { id: true, fullName: true, email: true } } } as any,
+        // FIX: a relação `attendance` aponta para o modelo legacy Attendance
+        // (ligado a Employee, não User) — o cast `as any` escondia que
+        // `attendance.user` não existe. `record` é a relação correcta para
+        // AttendanceRecord/User, que é o que este módulo usa de facto.
+        record: {
+          include: { user: { select: { id: true, fullName: true, email: true } } },
         },
       },
       orderBy: { createdAt: 'asc' },
@@ -690,7 +722,7 @@ export class AttendanceService {
   async getMonthlyReport(year: number, month: number, department?: string) {
     const from = new Date(year, month - 1, 1);
     const to = new Date(year, month, 0, 23, 59, 59);
-    const where: any = { date: { gte: from, lte: to } };
+    const where: Prisma.AttendanceRecordWhereInput = { date: { gte: from, lte: to } };
     if (department)
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
@@ -701,7 +733,18 @@ export class AttendanceService {
 
     const workdays = this.countWorkdays(from, to);
 
-    const userMap = new Map<number, any>();
+    interface UserMonthlyStats {
+      userId: number;
+      name: string;
+      present: number;
+      late: number;
+      absent: number;
+      justified: number;
+      remote: number;
+      totalWorkMin: number;
+      overtimeMin: number;
+    }
+    const userMap = new Map<number, UserMonthlyStats>();
     for (const r of records) {
       const uid = r.userId;
       if (!userMap.has(uid)) {
@@ -766,7 +809,7 @@ export class AttendanceService {
   async getDashboard(department?: string) {
     const today = todayMidnight();
     const todayEnd = new Date(today.getTime() + 86399999);
-    const where: any = { date: { gte: today, lte: todayEnd } };
+    const where: Prisma.AttendanceRecordWhereInput = { date: { gte: today, lte: todayEnd } };
     if (department)
       where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
@@ -780,12 +823,10 @@ export class AttendanceService {
       this.prisma.read.overtimeRecord.count({ where: { status: OvertimeStatus.PENDING } }),
     ]);
 
-    const present = records.filter((r: any) =>
-      [AttendanceStatus.PRESENT, AttendanceStatus.REMOTE, AttendanceStatus.LATE].includes(r.status),
-    );
-    const absent = records.filter((r: any) => r.status === AttendanceStatus.ABSENT);
-    const late = records.filter((r: any) => r.status === AttendanceStatus.LATE);
-    const checkedIn = records.filter((r: any) => r.clockIn && !r.clockOut);
+    const present = records.filter(r => PRESENT_LIKE_STATUSES.includes(r.status));
+    const absent = records.filter(r => r.status === AttendanceStatus.ABSENT);
+    const late = records.filter(r => r.status === AttendanceStatus.LATE);
+    const checkedIn = records.filter(r => r.clockIn && !r.clockOut);
 
     return {
       date: today.toISOString().split('T')[0],
@@ -800,14 +841,14 @@ export class AttendanceService {
         attendanceRate:
           records.length > 0 ? +((present.length / records.length) * 100).toFixed(1) : 0,
       },
-      presentList: present.map((r: any) => ({
+      presentList: present.map(r => ({
         id: r.userId,
         name: r.user?.fullName,
         clockIn: r.clockIn,
         status: r.status,
       })),
-      absentList: absent.map((r: any) => ({ id: r.userId, name: r.user?.fullName })),
-      lateList: late.map((r: any) => ({
+      absentList: absent.map(r => ({ id: r.userId, name: r.user?.fullName })),
+      lateList: late.map(r => ({
         id: r.userId,
         name: r.user?.fullName,
         clockIn: r.clockIn,
@@ -817,7 +858,7 @@ export class AttendanceService {
 
   async getKpiTrend(userId?: number, days = 30) {
     const from = new Date(Date.now() - days * 86400000);
-    const where: any = { date: { gte: from } };
+    const where: Prisma.AttendanceRecordWhereInput = { date: { gte: from } };
     if (userId) where.userId = userId;
 
     const records = await this.prisma.attendanceRecord.findMany({
@@ -825,15 +866,15 @@ export class AttendanceService {
       orderBy: { date: 'asc' },
     });
 
-    const byDate = records.reduce((acc: any, r: any) => {
+    const byDate = records.reduce<
+      Record<
+        string,
+        { date: string; present: number; absent: number; late: number; totalHours: number }
+      >
+    >((acc, r) => {
       const key = r.date.toISOString().split('T')[0];
       if (!acc[key]) acc[key] = { date: key, present: 0, absent: 0, late: 0, totalHours: 0 };
-      if (
-        [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.REMOTE].includes(
-          r.status,
-        )
-      )
-        acc[key].present++;
+      if (PRESENT_LIKE_STATUSES.includes(r.status)) acc[key].present++;
       if (r.status === AttendanceStatus.ABSENT) acc[key].absent++;
       if (r.status === AttendanceStatus.LATE) acc[key].late++;
       acc[key].totalHours = +(acc[key].totalHours + (r.hoursWorked ?? 0)).toFixed(2);
@@ -844,7 +885,7 @@ export class AttendanceService {
   }
 
   async getAbsenteeismReport(from: string, to: string, department?: string) {
-    const where: any = {
+    const where: Prisma.AttendanceRecordWhereInput = {
       status: AttendanceStatus.ABSENT,
       date: { gte: new Date(from), lte: new Date(to) },
     };
@@ -856,14 +897,16 @@ export class AttendanceService {
       include: { user: { select: { id: true, fullName: true } } },
     });
 
-    const byUser = records.reduce((acc: any, r: any) => {
+    const byUser = records.reduce<
+      Record<number, { userId: number; name: string; absences: number }>
+    >((acc, r) => {
       const uid = r.userId;
       if (!acc[uid]) acc[uid] = { userId: uid, name: r.user?.fullName, absences: 0 };
       acc[uid].absences++;
       return acc;
     }, {});
 
-    return Object.values(byUser).sort((a: any, b: any) => b.absences - a.absences);
+    return Object.values(byUser).sort((a, b) => b.absences - a.absences);
   }
 
   async checkInToEvent(userId: number, eventId: number, dto: ClockInDto) {
@@ -881,7 +924,7 @@ export class AttendanceService {
       orderBy: { clockIn: 'asc' },
     });
 
-    const present = records.filter((r: any) => r.status !== AttendanceStatus.ABSENT).length;
+    const present = records.filter(r => r.status !== AttendanceStatus.ABSENT).length;
 
     return {
       eventId,
@@ -921,7 +964,7 @@ export class AttendanceService {
     }
   }
 
-  private async createLeaveAttendanceRecords(leave: any) {
+  private async createLeaveAttendanceRecords(leave: Prisma.LeaveRequestGetPayload<object>) {
     const dates: Date[] = [];
     const cur = new Date(leave.startDate);
     const end = new Date(leave.endDate);
