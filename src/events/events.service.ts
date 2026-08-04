@@ -6,6 +6,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateEventDto,
@@ -39,7 +40,7 @@ export class EventsService {
     } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.EventWhereInput = {};
     if (search) where.title = { contains: search, mode: 'insensitive' };
     if (organizerId) where.organizerId = organizerId;
     if (type) where.type = type;
@@ -66,10 +67,10 @@ export class EventsService {
     return {
       data: data.map(e => ({
         ...e,
-        isFull: (e as any).maxCapacity ? e._count.participants >= (e as any).maxCapacity : false,
+        isFull: e.maxCapacity ? e._count.participants >= e.maxCapacity : false,
         occupancyRate:
-          (e as any).maxCapacity && (e as any).maxCapacity > 0
-            ? Math.round((e._count.participants / (e as any).maxCapacity) * 100)
+          e.maxCapacity && e.maxCapacity > 0
+            ? Math.round((e._count.participants / e.maxCapacity) * 100)
             : null,
       })),
       total,
@@ -95,23 +96,19 @@ export class EventsService {
     if (!e) throw new NotFoundException('Evento não encontrado');
 
     // Calcular NPS e métricas de feedback
-    const feedbacks = e.feedbacks as any[];
+    const feedbacks = e.feedbacks;
     const avgNps =
       feedbacks.length > 0
-        ? Math.round(
-            (feedbacks.reduce((s: number, f: any) => s + f.nps, 0) / feedbacks.length) * 10,
-          ) / 10
+        ? Math.round((feedbacks.reduce((s, f) => s + f.nps, 0) / feedbacks.length) * 10) / 10
         : null;
     const avgRating =
       feedbacks.length > 0
-        ? Math.round(
-            (feedbacks.reduce((s: number, f: any) => s + (f.rating ?? 0), 0) / feedbacks.length) *
-              10,
-          ) / 10
+        ? Math.round((feedbacks.reduce((s, f) => s + (f.rating ?? 0), 0) / feedbacks.length) * 10) /
+          10
         : null;
 
     const participantCount = e._count.participants;
-    const maxCapacity = (e as any).maxCapacity;
+    const maxCapacity = e.maxCapacity;
 
     return {
       ...e,
@@ -156,14 +153,14 @@ export class EventsService {
 
   async update(id: number, dto: UpdateEventDto) {
     await this.findOne(id);
-    const data: any = { ...dto };
+    const data: Prisma.EventUpdateInput = { ...dto };
     if (dto.startAt) data.startAt = new Date(dto.startAt);
     if (dto.endAt) data.endAt = new Date(dto.endAt);
     return this.prisma.event.update({ where: { id }, data });
   }
 
   async publish(id: number) {
-    const e = (await this.findOne(id)) as any;
+    const e = await this.findOne(id);
     if (!e.title || !e.startAt) throw new BadRequestException('Evento incompleto para publicação');
     return this.prisma.event.update({ where: { id }, data: { status: 'PUBLISHED' } });
   }
@@ -204,7 +201,7 @@ export class EventsService {
   }
 
   async remove(id: number) {
-    const e = (await this.findOne(id)) as any;
+    const e = await this.findOne(id);
     if (e.status === 'PUBLISHED' || e.status === 'LIVE') {
       throw new BadRequestException('Evento publicado não pode ser eliminado. Cancele-o primeiro.');
     }
@@ -215,7 +212,7 @@ export class EventsService {
   // ─── INSCRIÇÃO ────────────────────────────────────────────────────────────
 
   async join(eventId: number, userId: number) {
-    const event = (await this.findOne(eventId)) as any;
+    const event = await this.findOne(eventId);
     if (event.status === 'CANCELLED') throw new BadRequestException('Evento cancelado');
     if (event.status === 'ENDED') throw new BadRequestException('Evento já encerrado');
 
@@ -304,7 +301,7 @@ export class EventsService {
 
     // Promover da lista de espera
     const event = await this.prisma.read.event.findUnique({ where: { id: eventId } });
-    if ((event as any)?.waitlistEnabled) {
+    if (event?.waitlistEnabled) {
       const nextOnWaitlist = await this.prisma.read.eventParticipant.findFirst({
         where: { eventId, status: 'WAITLIST' },
         orderBy: { registeredAt: 'asc' },
@@ -432,7 +429,7 @@ export class EventsService {
 
   private async autoIssueCertificate(eventId: number, userId: number) {
     const event = await this.prisma.read.event.findUnique({ where: { id: eventId } });
-    if (!(event as any)?.certificateEnabled) return;
+    if (!event?.certificateEnabled) return;
 
     const participant = await this.prisma.read.eventParticipant.findUnique({
       where: { eventId_userId: { eventId, userId } },
@@ -499,14 +496,12 @@ export class EventsService {
     ]);
 
     const events = myEvents.map(e => {
-      const feedbacks = e.feedbacks as any[];
+      const feedbacks = e.feedbacks;
       const avgNps =
         feedbacks.length > 0
-          ? Math.round(
-              (feedbacks.reduce((s: number, f: any) => s + f.nps, 0) / feedbacks.length) * 10,
-            ) / 10
+          ? Math.round((feedbacks.reduce((s, f) => s + f.nps, 0) / feedbacks.length) * 10) / 10
           : null;
-      const maxCap = (e as any).maxCapacity;
+      const maxCap = e.maxCapacity;
       const pCount = e._count.participants;
       return {
         id: e.id,
@@ -562,8 +557,8 @@ export class EventsService {
 
     const now = new Date();
     return {
-      upcoming: participations.filter(p => new Date((p.event as any).startAt) >= now),
-      past: participations.filter(p => new Date((p.event as any).startAt) < now),
+      upcoming: participations.filter(p => new Date(p.event.startAt) >= now),
+      past: participations.filter(p => new Date(p.event.startAt) < now),
     };
   }
 
@@ -580,9 +575,9 @@ export class EventsService {
 
     return data.map(e => ({
       ...e,
-      isFull: (e as any).maxCapacity ? e._count.participants >= (e as any).maxCapacity : false,
-      occupancyRate: (e as any).maxCapacity
-        ? Math.round((e._count.participants / (e as any).maxCapacity) * 100)
+      isFull: e.maxCapacity ? e._count.participants >= e.maxCapacity : false,
+      occupancyRate: e.maxCapacity
+        ? Math.round((e._count.participants / e.maxCapacity) * 100)
         : null,
     }));
   }
