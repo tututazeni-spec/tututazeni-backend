@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ReadinessLevel, ReviewStatus } from '@prisma/client';
+import { Prisma, ReadinessLevel, ReviewStatus, CareerPlanStatus, GoalType } from '@prisma/client';
 import {
   CreateCareerPathDto,
   UpdateCareerPathDto,
@@ -33,7 +33,10 @@ export class CareerService {
   // ─── PERFIL DE CARREIRA DO COLABORADOR ───────────────────────────────────
 
   async getCareerProfile(userId: number) {
-    const user = await (this.prisma as any).user.findUnique({
+    // FIX: `(this.prisma as any).user` era um cast em bruto sem propósito —
+    // User é o modelo mais básico do client, sempre esteve totalmente
+    // tipado (mesmo padrão repetido 5x neste ficheiro).
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
         position: { select: { id: true, name: true, level: true } },
@@ -137,7 +140,7 @@ export class CareerService {
   // ─── GAP DE COMPETÊNCIAS ──────────────────────────────────────────────────
 
   async getCompetencyGapsForUser(userId: number) {
-    const user = await (this.prisma as any).user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { positionId: true },
     });
@@ -173,7 +176,7 @@ export class CareerService {
   // ─── SIMULADOR DE CARREIRA (Próximo cargo) ────────────────────────────────
 
   async simulateNextRole(userId: number, targetPositionId: number) {
-    const user = await (this.prisma as any).user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { positionId: true, hireDate: true },
     });
@@ -366,7 +369,10 @@ export class CareerService {
 
     const roleId = await this.getOrCreateCareerRole(dto.positionId);
 
-    return (this.prisma as any).careerPathStep.create({
+    // FIX: CareerPathStep é um modelo real, já usado sem cast noutros
+    // métodos deste ficheiro (findFirst/delete acima) — `as any` aqui era
+    // desnecessário.
+    return this.prisma.careerPathStep.create({
       data: {
         careerPathId: pathId,
         positionId: dto.positionId,
@@ -419,7 +425,9 @@ export class CareerService {
       );
     }
 
-    return (this.prisma as any).userCareerPlan.create({
+    // FIX: UserCareerPlan é um modelo real, já usado sem cast noutros
+    // métodos (findFirst/update abaixo) — `as any` desnecessário.
+    return this.prisma.userCareerPlan.create({
       data: {
         userId,
         title: dto.title,
@@ -439,10 +447,27 @@ export class CareerService {
     const plan = await this.prisma.read.userCareerPlan.findFirst({ where: { id: planId, userId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
-    return (this.prisma as any).userCareerPlan.update({
+    // FIX: `...dto` era espalhado directamente para `data` atrás de um `as
+    // any` — UserCareerPlan não tem coluna `targetPositionId` (esse campo do
+    // DTO nunca teve onde ser persistido; createCareerPlan() ao lado nunca
+    // o usa, só updateCareerPlan() o fazia, silenciosamente). E `dto.status`
+    // é validado no DTO como `string` livre, não como o enum
+    // `CareerPlanStatus` que a coluna exige — um valor fora do enum
+    // rebentava em runtime com "Invalid value provided". Passa a listar os
+    // campos reais explicitamente (mesmo padrão de createCareerPlan) e a
+    // validar `status` contra o enum antes de o incluir no update.
+    const status =
+      dto.status && (Object.values(CareerPlanStatus) as string[]).includes(dto.status)
+        ? (dto.status as CareerPlanStatus)
+        : undefined;
+
+    return this.prisma.userCareerPlan.update({
       where: { id: planId },
       data: {
-        ...dto,
+        title: dto.title,
+        description: dto.description,
+        mentorId: dto.mentorId,
+        status,
         targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
       },
       include: {
@@ -458,17 +483,19 @@ export class CareerService {
   // (SKILL|EXPERIENCE|CERTIFICATION|PROMOTION, texto livre) é mapeado para
   // GoalType (cai em OTHER se não corresponder); dto.timeframe não tem coluna
   // correspondente e não é persistido.
-  private mapGoalType(category?: string): string {
-    const known = ['COURSE', 'PROJECT', 'MENTORING', 'CERTIFICATION', 'SKILL', 'OTHER'];
+  private mapGoalType(category?: string): GoalType {
+    const known = Object.values(GoalType) as string[];
     const upper = category?.toUpperCase();
-    return upper && known.includes(upper) ? upper : 'OTHER';
+    return upper && known.includes(upper) ? (upper as GoalType) : GoalType.OTHER;
   }
 
   async addGoalToPlan(planId: number, userId: number, dto: AddCareerGoalDto) {
     const plan = await this.prisma.read.userCareerPlan.findFirst({ where: { id: planId, userId } });
     if (!plan) throw new NotFoundException('Plano não encontrado');
 
-    return (this.prisma as any).careerGoal.create({
+    // FIX: CareerGoal é um modelo real, já usado sem cast noutros métodos
+    // (findUnique/update abaixo) — `as any` desnecessário.
+    return this.prisma.careerGoal.create({
       data: {
         careerPlanId: planId,
         title: dto.title,
@@ -507,7 +534,7 @@ export class CareerService {
     const { page = 1, limit = 20, search, type, status, departmentId } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.InternalVacancyWhereInput = {};
     if (search) where.title = { contains: search, mode: 'insensitive' };
     if (type) where.type = type;
     if (departmentId) where.departmentId = departmentId;
@@ -530,43 +557,48 @@ export class CareerService {
       this.prisma.read.internalVacancy.count({ where }),
     ]);
 
-    // Se userId fornecido, enriquecer com match score e status de candidatura
-    let enriched = data as any[];
-    if (userId) {
-      const userComps = await this.prisma.read.userCompetency.findMany({
-        where: { userId },
-        select: { competencyId: true, currentLevel: true },
-      });
-      const userCompMap = new Map(userComps.map(uc => [uc.competencyId, uc.currentLevel]));
-
-      const myApplications = await this.prisma.read.internalApplication.findMany({
-        where: { userId, vacancyId: { in: data.map(v => v.id) } },
-        select: { vacancyId: true, status: true },
-      });
-      const appliedMap = new Map(myApplications.map(a => [a.vacancyId, a.status]));
-
-      enriched = data.map(v => {
-        const reqIds = (v as any).requiredCompetencyIds as number[];
-        const matchScore =
-          reqIds.length === 0
-            ? 100
-            : Math.round(
-                (reqIds.filter(id => {
-                  const lvl = userCompMap.get(id) ?? 0;
-                  return lvl >= 1;
-                }).length /
-                  reqIds.length) *
-                  100,
-              );
-
-        return {
-          ...v,
-          matchScore,
-          applied: appliedMap.has(v.id),
-          applicationStatus: appliedMap.get(v.id) ?? null,
-        };
-      });
+    // FIX: `let enriched = data as any[]` + `(v as any).requiredCompetencyIds`
+    // eram desnecessários — `requiredCompetencyIds` é `Int[]` real no
+    // schema. Restruturado com early-return em vez de reatribuir `enriched`
+    // com uma forma diferente (evita precisar de `any[]` para acomodar os
+    // dois shapes possíveis).
+    if (!userId) {
+      return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
     }
+
+    const userComps = await this.prisma.read.userCompetency.findMany({
+      where: { userId },
+      select: { competencyId: true, currentLevel: true },
+    });
+    const userCompMap = new Map(userComps.map(uc => [uc.competencyId, uc.currentLevel]));
+
+    const myApplications = await this.prisma.read.internalApplication.findMany({
+      where: { userId, vacancyId: { in: data.map(v => v.id) } },
+      select: { vacancyId: true, status: true },
+    });
+    const appliedMap = new Map(myApplications.map(a => [a.vacancyId, a.status]));
+
+    const enriched = data.map(v => {
+      const reqIds = v.requiredCompetencyIds;
+      const matchScore =
+        reqIds.length === 0
+          ? 100
+          : Math.round(
+              (reqIds.filter(id => {
+                const lvl = userCompMap.get(id) ?? 0;
+                return lvl >= 1;
+              }).length /
+                reqIds.length) *
+                100,
+            );
+
+      return {
+        ...v,
+        matchScore,
+        applied: appliedMap.has(v.id),
+        applicationStatus: appliedMap.get(v.id) ?? null,
+      };
+    });
 
     return { data: enriched, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -731,7 +763,7 @@ export class CareerService {
 
     return openVacancies
       .map(v => {
-        const reqIds = (v as any).requiredCompetencyIds as number[];
+        const reqIds = v.requiredCompetencyIds;
         const matchScore =
           reqIds.length === 0
             ? 100
@@ -752,7 +784,7 @@ export class CareerService {
     });
     if (!vacancy) return;
 
-    const reqIds = (vacancy as any).requiredCompetencyIds as number[];
+    const reqIds = vacancy.requiredCompetencyIds;
     if (!reqIds.length) return;
 
     // Encontrar utilizadores que têm ≥50% das competências exigidas
@@ -792,7 +824,7 @@ export class CareerService {
   // ─── ELEGIBILIDADE PARA PROMOÇÃO ─────────────────────────────────────────
 
   async checkPromotionEligibility(userId: number) {
-    const user = await (this.prisma as any).user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { positionId: true, hireDate: true },
     });
@@ -857,7 +889,7 @@ export class CareerService {
     }
 
     // Criar notificação para RH e gestor
-    const user = await (this.prisma as any).user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { fullName: true, managerId: true },
     });
@@ -943,7 +975,9 @@ export class CareerService {
     const priority =
       existingCount === 0 ? 'PRIMARY' : existingCount === 1 ? 'SECONDARY' : 'TERTIARY';
 
-    const plan = await (this.prisma as any).successionPlan.create({
+    // FIX: SuccessionPlan é um modelo real, já usado sem cast noutros
+    // métodos (findMany/findUnique/update abaixo) — `as any` desnecessário.
+    const plan = await this.prisma.successionPlan.create({
       data: {
         criticalPositionId: criticalPosition.id,
         positionId: dto.positionId,
@@ -1031,7 +1065,7 @@ export class CareerService {
     const startDate = new Date(`${year}-01-01`);
     const endDate = new Date(`${year}-12-31`);
 
-    const where: any = {};
+    const where: Prisma.UserWhereInput = {};
     if (departmentId) where.departmentId = departmentId;
 
     const [
@@ -1064,27 +1098,27 @@ export class CareerService {
     const pdiEngagementRate = totalUsers > 0 ? Math.round((usersWithPlan / totalUsers) * 100) : 0;
 
     // Risco de saída (utilizadores sem PDI + sem avaliação recente)
-    let riskUsers: any[] = [];
+    const riskUsersSelect = {
+      id: true,
+      fullName: true,
+      avatarUrl: true,
+      hireDate: true,
+      position: { select: { name: true } },
+      department: { select: { name: true } },
+    } satisfies Prisma.UserSelect;
+    let riskUsers: Prisma.UserGetPayload<{ select: typeof riskUsersSelect }>[] = [];
     if (includeRisk) {
       const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 3600 * 1000);
-      const usersAtRisk = await this.prisma.read.user.findMany({
+      riskUsers = await this.prisma.read.user.findMany({
         where: {
           ...where,
           active: true,
           userCareerPlans: { none: { status: 'ACTIVE' } },
           performanceReviews: { none: { createdAt: { gte: sixMonthsAgo } } },
         },
-        select: {
-          id: true,
-          fullName: true,
-          avatarUrl: true,
-          hireDate: true,
-          position: { select: { name: true } },
-          department: { select: { name: true } },
-        },
+        select: riskUsersSelect,
         take: 20,
       });
-      riskUsers = usersAtRisk;
     }
 
     // Carreira mais populares (vagas)
@@ -1103,16 +1137,21 @@ export class CareerService {
         totalApplications,
       },
       topVacancyTypes,
+      // FIX: bug real escondido pelo `as any` — o groupBy pede `_count: true`
+      // (forma booleana), por isso `g._count` já É o número de linhas do
+      // grupo, não um objecto por-campo. `(g._count as any).competencyId`
+      // era sempre `undefined`, e `positionCount` caía sempre no `?? 0` —
+      // o ranking de "skills mais em falta" nunca reflectia dados reais.
       topSkillGaps: topSkillGaps.map(g => ({
         competencyId: g.competencyId,
-        positionCount: (g._count as any).competencyId ?? 0,
+        positionCount: g._count,
       })),
       riskUsers: includeRisk ? riskUsers : undefined,
     };
   }
 
   async getTalentHeatmap(departmentId?: number) {
-    const where: any = { active: true };
+    const where: Prisma.UserWhereInput = { active: true };
     if (departmentId) where.departmentId = departmentId;
 
     const users = await this.prisma.read.user.findMany({
