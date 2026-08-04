@@ -28,7 +28,17 @@ const mockSvc = {
   getTenantConfig: jest.fn().mockResolvedValue({}),
 };
 
-const mockUser = { id: 1, tenantId: 'tenant-1', role: 'ADMIN', email: 'test@innova.com' };
+// tenantId nunca existe em CurrentUserData/User (ver comentário em
+// WorkDeclarationController#create) — o controller passa sempre `undefined`
+// ao serviço, que o auto-resolve para o tenant "DEFAULT". mockUser reflecte
+// o shape real de CurrentUserData, não o antigo IAuthUser fictício.
+const mockUser = {
+  id: 1,
+  email: 'test@innova.com',
+  active: true,
+  roleId: 1,
+  role: { id: 1, name: 'ADMIN' },
+};
 const mockRes = { set: jest.fn() } as any;
 
 describe('WorkDeclarationController', () => {
@@ -51,35 +61,35 @@ describe('WorkDeclarationController', () => {
   it('create → createDeclaration(tenantId, userId, dto)', async () => {
     const dto = {} as any;
     await controller.create(dto, mockUser as any);
-    expect(mockSvc.createDeclaration).toHaveBeenCalledWith('tenant-1', 1, dto);
+    expect(mockSvc.createDeclaration).toHaveBeenCalledWith(undefined, 1, dto);
   });
 
   it('findAll → listDeclarations(tenantId, user, filters)', async () => {
     const filters = {} as any;
     await controller.findAll(filters, mockUser as any);
-    expect(mockSvc.listDeclarations).toHaveBeenCalledWith('tenant-1', mockUser, filters);
+    expect(mockSvc.listDeclarations).toHaveBeenCalledWith(undefined, mockUser, filters);
   });
 
   it('getDashboardStats → getStats(tenantId)', async () => {
-    await controller.getDashboardStats(mockUser as any);
-    expect(mockSvc.getStats).toHaveBeenCalledWith('tenant-1');
+    await controller.getDashboardStats();
+    expect(mockSvc.getStats).toHaveBeenCalledWith(undefined);
   });
 
   it('findOne → getDeclaration(tenantId, user, id)', async () => {
     await controller.findOne('uuid-1', mockUser as any);
-    expect(mockSvc.getDeclaration).toHaveBeenCalledWith('tenant-1', mockUser, 'uuid-1');
+    expect(mockSvc.getDeclaration).toHaveBeenCalledWith(undefined, mockUser, 'uuid-1');
   });
 
   it('update → updateDeclaration(tenantId, userId, id, dto)', async () => {
     const dto = {} as any;
     await controller.update('uuid-1', dto, mockUser as any);
-    expect(mockSvc.updateDeclaration).toHaveBeenCalledWith('tenant-1', 1, 'uuid-1', dto);
+    expect(mockSvc.updateDeclaration).toHaveBeenCalledWith(undefined, 1, 'uuid-1', dto);
   });
 
   it('remove → changeStatus (REVOKED)', async () => {
     await controller.remove('uuid-1', mockUser as any);
     expect(mockSvc.changeStatus).toHaveBeenCalledWith(
-      'tenant-1',
+      undefined,
       1,
       'uuid-1',
       expect.objectContaining({ status: 'REVOKED' }),
@@ -89,18 +99,18 @@ describe('WorkDeclarationController', () => {
   it('requestDeclaration → requestDeclaration(tenantId, userId, dto)', async () => {
     const dto = {} as any;
     await controller.requestDeclaration(dto, mockUser as any);
-    expect(mockSvc.requestDeclaration).toHaveBeenCalledWith('tenant-1', 1, dto);
+    expect(mockSvc.requestDeclaration).toHaveBeenCalledWith(undefined, 1, dto);
   });
 
   it('getMyDeclarations → listDeclarations(tenantId, user, query)', async () => {
     await controller.getMyDeclarations(mockUser as any);
-    expect(mockSvc.listDeclarations).toHaveBeenCalledWith('tenant-1', mockUser, expect.anything());
+    expect(mockSvc.listDeclarations).toHaveBeenCalledWith(undefined, mockUser, expect.anything());
   });
 
   it('issueDeclaration → changeStatus(ISSUED)', async () => {
     await controller.issueDeclaration('uuid-1', mockUser as any);
     expect(mockSvc.changeStatus).toHaveBeenCalledWith(
-      'tenant-1',
+      undefined,
       1,
       'uuid-1',
       expect.objectContaining({ status: 'ISSUED' }),
@@ -113,58 +123,52 @@ describe('WorkDeclarationController', () => {
   });
 
   it('getTemplates → listTemplates(tenantId)', async () => {
-    await controller.getTemplates(
-      'TYPE',
-      'pt',
-      undefined as any,
-      undefined as any,
-      mockUser as any,
-    );
-    expect(mockSvc.listTemplates).toHaveBeenCalledWith('tenant-1', expect.anything());
+    await controller.getTemplates('TYPE', 'pt', undefined as any, undefined as any);
+    expect(mockSvc.listTemplates).toHaveBeenCalledWith(undefined, expect.anything());
   });
 
   it('getTemplate → getTemplate(tenantId, id)', async () => {
-    await controller.getTemplate(1, mockUser as any);
-    expect(mockSvc.getTemplate).toHaveBeenCalledWith('tenant-1', 1);
+    await controller.getTemplate(1);
+    expect(mockSvc.getTemplate).toHaveBeenCalledWith(undefined, 1);
   });
 
   it('createTemplate → createTemplate(tenantId, userId, dto)', async () => {
     const dto = {} as any;
     await controller.createTemplate(dto, mockUser as any);
-    expect(mockSvc.createTemplate).toHaveBeenCalledWith('tenant-1', 1, dto);
+    expect(mockSvc.createTemplate).toHaveBeenCalledWith(undefined, 1, dto);
   });
 
   it('updateTemplate → updateTemplate(tenantId, userId, id, dto)', async () => {
     const dto = {} as any;
     await controller.updateTemplate(1, dto, mockUser as any);
-    expect(mockSvc.updateTemplate).toHaveBeenCalledWith('tenant-1', 1, 1, dto);
+    expect(mockSvc.updateTemplate).toHaveBeenCalledWith(undefined, 1, 1, dto);
   });
 
   it('deleteTemplate → deleteTemplate(tenantId, id)', async () => {
-    await controller.deleteTemplate(1, mockUser as any);
-    expect(mockSvc.deleteTemplate).toHaveBeenCalledWith('tenant-1', 1);
+    await controller.deleteTemplate(1);
+    expect(mockSvc.deleteTemplate).toHaveBeenCalledWith(undefined, 1);
   });
 
   it('getAuditLog → getAuditLogs(tenantId, id)', async () => {
-    await controller.getAuditLog('uuid-1', mockUser as any);
-    expect(mockSvc.getAuditLogs).toHaveBeenCalledWith('tenant-1', 'uuid-1');
+    await controller.getAuditLog('uuid-1');
+    expect(mockSvc.getAuditLogs).toHaveBeenCalledWith(undefined, 'uuid-1');
   });
 
   it('getBrandingSettings → getTenantConfig(tenantId)', async () => {
-    await controller.getBrandingSettings(mockUser as any);
-    expect(mockSvc.getTenantConfig).toHaveBeenCalledWith('tenant-1');
+    await controller.getBrandingSettings();
+    expect(mockSvc.getTenantConfig).toHaveBeenCalledWith(undefined);
   });
 
   it('updateBrandingSettings → upsertTenantConfig(tenantId, settings)', async () => {
-    const settings = { companyName: 'Test' };
-    await controller.updateBrandingSettings(settings, mockUser as any);
-    expect(mockSvc.upsertTenantConfig).toHaveBeenCalledWith('tenant-1', settings);
+    const settings = { companyName: 'Test' } as any;
+    await controller.updateBrandingSettings(settings);
+    expect(mockSvc.upsertTenantConfig).toHaveBeenCalledWith(undefined, settings);
   });
 
   it('uploadLogo → upsertTenantConfig(tenantId, { logoUrl: dto.fileUrl })', async () => {
     const dto = { fileUrl: 'https://storage.innova.ao/logo.png' };
-    await controller.uploadLogo(dto as any, mockUser as any);
-    expect(mockSvc.upsertTenantConfig).toHaveBeenCalledWith('tenant-1', {
+    await controller.uploadLogo(dto as any);
+    expect(mockSvc.upsertTenantConfig).toHaveBeenCalledWith(undefined, {
       logoUrl: 'https://storage.innova.ao/logo.png',
     });
   });
@@ -172,6 +176,22 @@ describe('WorkDeclarationController', () => {
   it('signDeclaration → signDeclaration(tenantId, userId, id, dto) sem signatureFile', async () => {
     const dto = { type: 'DIGITAL', signatureUrl: undefined } as any;
     await controller.signDeclaration('uuid-1', dto, mockUser as any);
-    expect(mockSvc.signDeclaration).toHaveBeenCalledWith('tenant-1', 1, 'uuid-1', dto);
+    expect(mockSvc.signDeclaration).toHaveBeenCalledWith(undefined, 1, 'uuid-1', dto);
+  });
+
+  it('exportPdf → exportDeclaration(tenantId, userId, id, { format: PDF })', async () => {
+    const dto = { includeWatermark: true } as any;
+    await controller.exportPdf('uuid-1', dto, mockUser as any, mockRes);
+    expect(mockSvc.exportDeclaration).toHaveBeenCalledWith(undefined, 1, 'uuid-1', {
+      format: 'PDF',
+      includeWatermark: true,
+    });
+  });
+
+  it('exportDocx → exportDeclaration(tenantId, userId, id, { format: DOCX })', async () => {
+    await controller.exportDocx('uuid-1', mockUser as any, mockRes);
+    expect(mockSvc.exportDeclaration).toHaveBeenCalledWith(undefined, 1, 'uuid-1', {
+      format: 'DOCX',
+    });
   });
 });
