@@ -7,7 +7,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ReviewStatus } from '@prisma/client';
+import { Prisma, ReviewStatus } from '@prisma/client';
 import {
   PlanFilterDto,
   TalentDevelopmentCreateDevelopmentPlanDto,
@@ -40,7 +40,16 @@ import type { CurrentUserData } from '../common/types/current-user';
 
 const PRIORITY_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 
-function getPlanStats(actions: any[], goals: any[]) {
+interface PlanStatsAction {
+  status: string;
+  dueDate: Date | null;
+  progress: number | null;
+}
+interface PlanStatsGoal {
+  progress: number | null;
+}
+
+function getPlanStats(actions: PlanStatsAction[], goals: PlanStatsGoal[]) {
   const total = actions.length;
   const completed = actions.filter(a => a.status === 'COMPLETED').length;
   const inProgress = actions.filter(a => a.status === 'IN_PROGRESS').length;
@@ -97,7 +106,7 @@ export class TalentDevelopmentService {
   async getTalentPool(filters: TalentFilterDto = {}) {
     const { page = 1, limit = 50, departmentId, positionId, tier } = filters;
 
-    const where: any = { active: true };
+    const where: Prisma.UserWhereInput = { active: true };
     if (departmentId) where.departmentId = departmentId;
     if (positionId) where.positionId = positionId;
 
@@ -215,7 +224,7 @@ export class TalentDevelopmentService {
       '1_1': '🔴 Needs Action — Baixo-Baixo',
     };
 
-    const boxes: Record<string, any[]> = {};
+    const boxes: Record<string, (typeof pool.data)[number][]> = {};
     for (const u of pool.data) {
       const py = u.scores.performance >= 4 ? 3 : u.scores.performance >= 2.5 ? 2 : 1;
       const px = u.scores.competency >= 4 ? 3 : u.scores.competency >= 2.5 ? 2 : 1;
@@ -265,7 +274,7 @@ export class TalentDevelopmentService {
     return plans.map(p => ({
       id: p.id,
       position: p.position,
-      readiness: (p as any).readiness ?? p.readinessLevel,
+      readiness: p.readinessLevel,
       createdAt: p.createdAt,
       candidate: {
         ...p.candidate,
@@ -381,7 +390,7 @@ export class TalentDevelopmentService {
   async getPlans(filters: PlanFilterDto) {
     const { page = 1, limit = 20, userId, managerId, status, isTemplate } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.DevelopmentPlanWhereInput = {};
     if (userId !== undefined) where.userId = userId;
     if (managerId !== undefined) where.managerId = managerId;
     if (status) where.status = status;
@@ -446,7 +455,11 @@ export class TalentDevelopmentService {
 
   async updatePlan(id: number, dto: TalentDevelopmentUpdateDevelopmentPlanDto) {
     await this.getPlan(id);
-    const data: any = { ...dto };
+    const data: Prisma.DevelopmentPlanUpdateInput = {
+      ...dto,
+      startDate: undefined,
+      endDate: undefined,
+    };
     if (dto.startDate) data.startDate = new Date(dto.startDate);
     if (dto.endDate) data.endDate = new Date(dto.endDate);
     return this.prisma.developmentPlan.update({ where: { id }, data });
@@ -504,7 +517,7 @@ export class TalentDevelopmentService {
   async completePlan(id: number) {
     const plan = await this.getPlan(id);
 
-    const totalXp = (plan.actions as any[]).reduce((s: number, a: any) => s + (a.xpReward ?? 0), 0);
+    const totalXp = plan.actions.reduce((s, a) => s + (a.xpReward ?? 0), 0);
 
     await this.prisma.developmentPlan.update({
       where: { id },
@@ -573,7 +586,7 @@ export class TalentDevelopmentService {
         goal: template.goal,
         userId: dto.userId,
         managerId: dto.managerId,
-        priority: template.priority as any,
+        priority: template.priority,
         notes: template.notes ?? undefined,
         isTemplate: false,
       },
@@ -583,7 +596,7 @@ export class TalentDevelopmentService {
     // Clone actions
     if (template.actions.length > 0) {
       await this.prisma.developmentPlanAction.createMany({
-        data: (template.actions as any[]).map(a => ({
+        data: template.actions.map(a => ({
           planId: plan.id,
           title: a.title,
           description: a.description,
@@ -603,7 +616,7 @@ export class TalentDevelopmentService {
     // Clone goals
     if (template.goals.length > 0) {
       await this.prisma.pdiGoal.createMany({
-        data: (template.goals as any[]).map(g => ({
+        data: template.goals.map(g => ({
           planId: plan.id,
           title: g.title,
           description: g.description,
@@ -649,9 +662,9 @@ export class TalentDevelopmentService {
     if (!goal) throw new NotFoundException('Meta não encontrada');
     // A10-6: sem isto, qualquer autenticado podia alterar a meta de PDI de
     // outra pessoa via PATCH /talent/goals/:id.
-    assertCanAccess(goal, (goal as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
+    assertCanAccess(goal, goal.plan.userId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
 
-    const data: any = { ...dto };
+    const data: Prisma.PdiGoalUpdateInput = { ...dto, dueDate: undefined };
     if (dto.dueDate) data.dueDate = new Date(dto.dueDate);
     if (dto.progress === 100 && !goal.completedAt) data.completedAt = new Date();
 
@@ -723,7 +736,7 @@ export class TalentDevelopmentService {
     });
     if (!action) throw new NotFoundException('Acção não encontrada');
 
-    const data: any = { ...dto };
+    const data: Prisma.DevelopmentPlanActionUpdateInput = { ...dto, dueDate: undefined };
     if (dto.dueDate) data.dueDate = new Date(dto.dueDate);
     if (dto.status === ActionStatus.COMPLETED && !action.completedAt) {
       data.completedAt = new Date();
@@ -751,7 +764,7 @@ export class TalentDevelopmentService {
     // A10-6: a rota diz "colaborador actualiza o seu próprio progresso" mas
     // nunca comparava o dono do plano com quem chamava — qualquer autenticado
     // podia adulterar o progresso de PDI de outra pessoa.
-    assertCanAccess(action, (action as any).plan.userId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
+    assertCanAccess(action, action.plan.userId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
     const userId = user.id;
 
     const newStatus =
@@ -779,7 +792,7 @@ export class TalentDevelopmentService {
           url: dto.evidenceUrl,
           notes: dto.notes,
           evidenceType: dto.evidenceUrl ? 'LINK' : 'NOTE',
-        } as any,
+        },
       });
     }
 
@@ -889,7 +902,10 @@ export class TalentDevelopmentService {
     const skillMap = new Map(userSkills.map(s => [s.skillId, s]));
 
     // Role skill requirements via RoleSkillMatrix
-    let requirements: any[] = [];
+    type RoleRequirement = Prisma.RoleSkillRequirementGetPayload<{
+      include: { skill: { include: { category: true } } };
+    }>;
+    let requirements: RoleRequirement[] = [];
     if (user.role) {
       const matrix = await this.prisma.read.roleSkillMatrix.findFirst({
         where: { roleCode: { contains: user.role.name, mode: 'insensitive' } },
@@ -956,7 +972,7 @@ export class TalentDevelopmentService {
   }
 
   async getTrainingNeeds(filters: SkillGapFilterDto = {}) {
-    const where: any = {};
+    const where: Prisma.LegacyEmployeeSkillWhereInput = {};
     if (filters.departmentId) where.user = { departmentId: filters.departmentId };
     if (filters.skillType) where.skill = { type: filters.skillType };
 
@@ -970,7 +986,21 @@ export class TalentDevelopmentService {
       },
     });
 
-    const bySkill: Record<number, any> = {};
+    interface TrainingNeed {
+      skill: { id: number; name: string; type: string };
+      category: string | null;
+      users: {
+        id: number;
+        fullName: string;
+        department: { id: number; name: string } | null;
+        currentLevel: number;
+        targetLevel: number;
+        gap: number;
+      }[];
+      totalGap: number;
+      count: number;
+    }
+    const bySkill: Record<number, TrainingNeed> = {};
     for (const es of records) {
       const id = es.skillId;
       const gap = (es.targetLevel ?? es.skill.maxLevel) - es.currentLevel;
@@ -1003,7 +1033,7 @@ export class TalentDevelopmentService {
   }
 
   async getOrgSkillHeatmap(departmentId?: number) {
-    const where: any = {};
+    const where: Prisma.LegacyEmployeeSkillWhereInput = {};
     if (departmentId) where.user = { departmentId };
 
     const data = await this.prisma.read.legacyEmployeeSkill.findMany({
@@ -1043,7 +1073,7 @@ export class TalentDevelopmentService {
   async getMentorings(filters: MentoringFilterDto) {
     const { page = 1, limit = 20, mentorId, menteeId, status } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.MentoringWhereInput = {};
     if (mentorId) where.mentorId = mentorId;
     if (menteeId) where.menteeId = menteeId;
     if (status) where.status = status;
@@ -1175,10 +1205,10 @@ export class TalentDevelopmentService {
     // ownerId de cada vez, por isso testamos mentee primeiro e só recorremos
     // à verificação de papel privilegiado uma vez (evita duplicar a checagem).
     if (user) {
-      const isMentor = String(user.id) === String((m as any).mentorId);
-      const isMentee = String(user.id) === String((m as any).menteeId);
+      const isMentor = String(user.id) === String(m.mentorId);
+      const isMentee = String(user.id) === String(m.menteeId);
       if (!isMentor && !isMentee) {
-        assertCanAccess(m, (m as any).menteeId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
+        assertCanAccess(m, m.menteeId, user, [Role.ADMIN, Role.RH, Role.LIDER]);
       }
     }
 
@@ -1282,7 +1312,7 @@ export class TalentDevelopmentService {
 
   async getDashboard(filters: TalentDevelopmentDashboardFilterDto = {}) {
     const { departmentId, managerId } = filters;
-    const userWhere: any = { active: true };
+    const userWhere: Prisma.UserWhereInput = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;
     if (managerId) userWhere.managerId = managerId;
 
@@ -1354,7 +1384,7 @@ export class TalentDevelopmentService {
   }
 
   async getTalentHealthScore(departmentId?: number) {
-    const userWhere: any = { active: true };
+    const userWhere: Prisma.UserWhereInput = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;
 
     const [total, withPlan, withSkills, withReview, withMentoring, hiPos] = await Promise.all([
@@ -1517,7 +1547,7 @@ export class TalentDevelopmentService {
       // não { _count: { relação } } (só válido em groupBy/aggregate) — ver
       // padrão correcto em analytics.service.ts. Rebentava sempre
       // (PrismaClientValidationError) em GET /talent/recommendations/:userId.
-      orderBy: { enrollments: { _count: 'desc' } } as any,
+      orderBy: { enrollments: { _count: 'desc' } },
       take: 10,
     });
 
@@ -1528,7 +1558,11 @@ export class TalentDevelopmentService {
     return { courses, mentors: mentors.slice(0, 5), insights, actions };
   }
 
-  private buildInsights(gapData: any, plans: any[], points: any): string[] {
+  private buildInsights(
+    gapData: Awaited<ReturnType<TalentDevelopmentService['getUserSkillGaps']>>,
+    plans: { status: string }[],
+    points: { points: number } | null,
+  ): string[] {
     const i: string[] = [];
     const active = plans.filter(p => p.status === 'ACTIVE');
     if (active.length === 0) i.push('⚠️ Não tens um PDI activo — considera criar um');
@@ -1540,7 +1574,9 @@ export class TalentDevelopmentService {
     return i;
   }
 
-  private buildActionRecs(gapData: any): string[] {
+  private buildActionRecs(
+    gapData: Awaited<ReturnType<TalentDevelopmentService['getUserSkillGaps']>>,
+  ): string[] {
     const r: string[] = [];
     if (gapData.criticalGaps > 0) r.push('Iniciar PDI focado nas skills críticas');
     if (gapData.gaps.length > 5) r.push('Registar autoavaliação de skills actualizada');
@@ -1568,7 +1604,7 @@ export class TalentDevelopmentService {
     const regular = gapData.gaps.length - critical;
     const months = Math.max(6, critical * 3 + regular * 1.5);
 
-    const steps: any[] = [];
+    const steps: { phase: number; title: string; duration: string; type: string }[] = [];
     if (critical > 0)
       steps.push({
         phase: 1,
@@ -1598,7 +1634,7 @@ export class TalentDevelopmentService {
       readinessLevel: gapData.readinessLevel,
       estimatedMonths: Math.round(months),
       estimatedDate: new Date(Date.now() + months * 30 * 86400000).toISOString().split('T')[0],
-      criticalGaps: gapData.gaps.filter((g: any) => g.priority === 'HIGH'),
+      criticalGaps: gapData.gaps.filter(g => g.priority === 'HIGH'),
       recommendedPath: steps,
       feasible: !dto.targetMonths || months <= dto.targetMonths,
       targetMonths: dto.targetMonths ?? null,
