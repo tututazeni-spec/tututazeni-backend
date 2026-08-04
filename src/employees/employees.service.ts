@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
+import { Prisma, RequestStatus } from '@prisma/client';
 import {
   CreateEmployeeDto,
   UpdateEmployeeDto,
@@ -27,6 +28,8 @@ import {
   EmployeeStatus,
   TimelineEventType,
   LegacyCareerPlanStatus,
+  AssignSkillDto,
+  UpdateSkillLevelDto,
 } from './employees.dto';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -39,6 +42,22 @@ function buildOrderBy(sortBy = 'name', sortOrder: 'asc' | 'desc' = 'asc') {
   const allowedFields = ['name', 'joinedAt', 'department', 'role', 'seniority', 'createdAt'];
   const field = allowedFields.includes(sortBy) ? sortBy : 'name';
   return { [field]: sortOrder };
+}
+
+export type OrgEmployeeNode = Prisma.EmployeeGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    role: true;
+    jobTitle: true;
+    department: true;
+    avatarUrl: true;
+    managerId: true;
+    _count: { select: { subordinates: true } };
+  };
+}>;
+export interface OrgTreeNode extends OrgEmployeeNode {
+  children: OrgTreeNode[];
 }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
@@ -81,7 +100,7 @@ export class EmployeesService {
 
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.EmployeeWhereInput = {};
 
     // Texto livre / busca semântica básica
     if (search) {
@@ -179,8 +198,8 @@ export class EmployeesService {
         attendances: { orderBy: { date: 'desc' }, take: 30 },
         documents: { orderBy: { createdAt: 'desc' } },
         employeeSkills: {
-          include: { skill: true } as any,
-          orderBy: [{ skill: { type: 'asc' } }, { currentLevel: 'desc' }] as any,
+          include: { skill: true },
+          orderBy: [{ skill: { type: 'asc' } }, { currentLevel: 'desc' }],
         },
         timeline: {
           orderBy: { occurredAt: 'desc' },
@@ -233,8 +252,10 @@ export class EmployeesService {
         joinedAt: new Date(dto.joinedAt),
         birthDate: toDate(dto.birthDate),
         status: dto.status ?? EmployeeStatus.ACTIVE,
-        address: dto.address ? (dto.address as any) : undefined,
-        emergencyContact: dto.emergencyContact ? (dto.emergencyContact as any) : undefined,
+        address: dto.address ? (dto.address as unknown as Prisma.InputJsonValue) : undefined,
+        emergencyContact: dto.emergencyContact
+          ? (dto.emergencyContact as unknown as Prisma.InputJsonValue)
+          : undefined,
       },
     });
 
@@ -262,11 +283,18 @@ export class EmployeesService {
   async update(id: number, dto: UpdateEmployeeDto, updatedById: number) {
     const current = await this.findOne(id);
 
-    const data: any = { ...dto };
+    const data: Prisma.EmployeeUpdateInput = {
+      ...dto,
+      joinedAt: undefined,
+      birthDate: undefined,
+      address: undefined,
+      emergencyContact: undefined,
+    };
     if (dto.joinedAt) data.joinedAt = new Date(dto.joinedAt);
     if (dto.birthDate) data.birthDate = new Date(dto.birthDate);
-    if (dto.address) data.address = dto.address;
-    if (dto.emergencyContact) data.emergencyContact = dto.emergencyContact;
+    if (dto.address) data.address = dto.address as unknown as Prisma.InputJsonValue;
+    if (dto.emergencyContact)
+      data.emergencyContact = dto.emergencyContact as unknown as Prisma.InputJsonValue;
 
     const updated = await this.prisma.employee.update({ where: { id }, data });
 
@@ -460,13 +488,24 @@ export class EmployeesService {
     });
     if (existing) throw new ConflictException('Presença já registada para esta data');
 
+    // FIX: dto.checkIn/checkOut nunca existiram no modelo Attendance (campos
+    // reais clockIn/clockOut) — um `{...dto}` cego rebentava sempre que o
+    // chamador fornecia estes campos opcionais ("Unknown argument").
     return this.prisma.attendance.create({
-      data: { ...dto, date: new Date(dto.date), status: dto.status as any },
+      data: {
+        employeeId: dto.employeeId,
+        date: new Date(dto.date),
+        hoursWorked: dto.hoursWorked,
+        status: dto.status,
+        clockIn: dto.checkIn,
+        clockOut: dto.checkOut,
+        notes: dto.notes,
+      },
     });
   }
 
   async getAttendance(employeeId: number, from?: string, to?: string) {
-    const where: any = { employeeId };
+    const where: Prisma.AttendanceWhereInput = { employeeId };
     if (from || to) {
       where.date = {};
       if (from) where.date.gte = new Date(from);
@@ -510,7 +549,7 @@ export class EmployeesService {
   }
 
   async getFeedback360(employeeId: number, cycle?: string) {
-    const where: any = { employeeId };
+    const where: Prisma.Feedback360WhereInput = { employeeId };
     if (cycle) where.cycle = cycle;
 
     const feedbacks = await this.prisma.read.feedback360.findMany({
@@ -521,7 +560,7 @@ export class EmployeesService {
       ? +(feedbacks.reduce((a, f) => a + f.score, 0) / feedbacks.length).toFixed(2)
       : 0;
 
-    const byCycle = feedbacks.reduce((acc: any, f: any) => {
+    const byCycle = feedbacks.reduce<Record<string, typeof feedbacks>>((acc, f) => {
       const key = f.cycle ?? 'sem-ciclo';
       if (!acc[key]) acc[key] = [];
       acc[key].push(f);
@@ -621,21 +660,18 @@ export class EmployeesService {
     await this.findOne(employeeId);
     const skills = await this.prisma.read.employeeSkill.findMany({
       where: { employeeId },
-      include: { skill: true } as any,
-      orderBy: [{ skill: { type: 'asc' } }, { currentLevel: 'desc' }] as any,
+      include: { skill: true },
+      orderBy: [{ skill: { type: 'asc' } }, { currentLevel: 'desc' }],
     });
 
     // Gap analysis
     const gapAnalysis = skills.map(s => ({
       ...s,
-      gap:
-        ((s as any).desiredLevel ?? (s as any).currentLevel ?? 0) - ((s as any).currentLevel ?? 0),
-      gapLabel: this.getGapLabel(
-        ((s as any).desiredLevel ?? (s as any).currentLevel ?? 0) - ((s as any).currentLevel ?? 0),
-      ),
+      gap: (s.desiredLevel ?? s.currentLevel ?? 0) - (s.currentLevel ?? 0),
+      gapLabel: this.getGapLabel((s.desiredLevel ?? s.currentLevel ?? 0) - (s.currentLevel ?? 0)),
     }));
 
-    const byType = skills.reduce((acc: any, s: any) => {
+    const byType = skills.reduce<Record<string, typeof skills>>((acc, s) => {
       const type = s.skill.type;
       if (!acc[type]) acc[type] = [];
       acc[type].push(s);
@@ -645,37 +681,56 @@ export class EmployeesService {
     return { skills: gapAnalysis, byType, total: skills.length };
   }
 
-  async assignSkill(dto: any, assignedById: number) {
+  // selfAssessed/managerValidated existem em AssignSkillDto/UpdateSkillLevelDto
+  // mas nunca foram migrados para EmployeeSkill — não são persistidos.
+  async assignSkill(dto: AssignSkillDto, assignedById: number) {
     const skill = await this.prisma.skill.findUnique({ where: { id: dto.skillId } });
     if (!skill) throw new NotFoundException(`Skill #${dto.skillId} não encontrada`);
 
     const existing = await this.prisma.employeeSkill.findUnique({
-      where: { employeeId_skillId: { employeeId: dto.employeeId, skillId: dto.skillId } } as any,
+      where: { employeeId_skillId: { employeeId: dto.employeeId, skillId: dto.skillId } },
     });
+    const data: Prisma.EmployeeSkillUncheckedUpdateInput = {
+      currentLevel: dto.currentLevel,
+      desiredLevel: dto.desiredLevel,
+      notes: dto.notes,
+    };
     if (existing) {
       return this.prisma.employeeSkill.update({
-        where: { employeeId_skillId: { employeeId: dto.employeeId, skillId: dto.skillId } } as any,
-        data: dto,
+        where: { employeeId_skillId: { employeeId: dto.employeeId, skillId: dto.skillId } },
+        data,
         include: { skill: true },
       });
     }
     return this.prisma.employeeSkill.create({
-      data: { ...dto, skillName: skill.name },
+      data: {
+        employeeId: dto.employeeId,
+        skillId: dto.skillId,
+        skillName: skill.name,
+        currentLevel: dto.currentLevel,
+        desiredLevel: dto.desiredLevel,
+        notes: dto.notes,
+      },
       include: { skill: true },
     });
   }
 
-  async updateSkillLevel(employeeId: number, skillId: number, dto: any) {
+  async updateSkillLevel(employeeId: number, skillId: number, dto: UpdateSkillLevelDto) {
     return this.prisma.employeeSkill.update({
-      where: { employeeId_skillId: { employeeId, skillId } } as any,
-      data: { ...dto, updatedAt: new Date() },
+      where: { employeeId_skillId: { employeeId, skillId } },
+      data: {
+        currentLevel: dto.currentLevel,
+        desiredLevel: dto.desiredLevel,
+        notes: dto.notes,
+        updatedAt: new Date(),
+      },
       include: { skill: true },
     });
   }
 
   async removeSkill(employeeId: number, skillId: number) {
     return this.prisma.employeeSkill.delete({
-      where: { employeeId_skillId: { employeeId, skillId } } as any,
+      where: { employeeId_skillId: { employeeId, skillId } },
     });
   }
 
@@ -755,7 +810,7 @@ export class EmployeesService {
         type: dto.type ?? TimelineEventType.NOTE,
         title: dto.title ?? '',
         description: dto.description,
-        metadata: dto.metadata ? (dto.metadata as any) : undefined,
+        metadata: dto.metadata ? (dto.metadata as unknown as Prisma.InputJsonValue) : undefined,
         isPublic: dto.isPublic ?? true,
         occurredAt: dto.occurredAt ? new Date(dto.occurredAt) : new Date(),
       },
@@ -764,8 +819,8 @@ export class EmployeesService {
 
   async getTimeline(employeeId: number, type?: string, limit = 50) {
     await this.findOne(employeeId);
-    const where: any = { employeeId };
-    if (type) where.type = type;
+    const where: Prisma.EmployeeTimelineWhereInput = { employeeId };
+    if (type) where.type = type as TimelineEventType;
 
     return this.prisma.read.employeeTimeline.findMany({
       where,
@@ -784,15 +839,15 @@ export class EmployeesService {
       data: {
         ...dto,
         status: 'PENDING',
-        payload: dto.payload ? (dto.payload as any) : undefined,
+        payload: dto.payload ? (dto.payload as unknown as Prisma.InputJsonValue) : undefined,
         attachments: dto.attachments ?? [],
       },
     });
   }
 
   async getRequests(employeeId: number, status?: string) {
-    const where: any = { employeeId };
-    if (status) where.status = status;
+    const where: Prisma.SelfServiceRequestWhereInput = { employeeId };
+    if (status) where.status = status as RequestStatus;
     return this.prisma.read.selfServiceRequest.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -814,9 +869,11 @@ export class EmployeesService {
       },
     });
 
-    // Aplicar mudança automaticamente se aprovada
+    // Aplicar mudança automaticamente se aprovada — payload é JSON livre
+    // submetido pelo colaborador (SelfServiceRequest.payload), não há como
+    // confirmar o shape em tempo de compilação.
     if (dto.status === 'APPROVED' && req.type === 'DATA_CHANGE' && req.payload) {
-      const payload = req.payload as any;
+      const payload = req.payload as unknown as Prisma.EmployeeUpdateInput;
       await this.prisma.employee.update({
         where: { id: req.employeeId },
         data: payload,
@@ -831,7 +888,7 @@ export class EmployeesService {
   // ══════════════════════════════════════════════════════════════════
 
   async getOrgChart(rootId?: number) {
-    const where: any = { status: EmployeeStatus.ACTIVE };
+    const where: Prisma.EmployeeWhereInput = { status: EmployeeStatus.ACTIVE };
     if (rootId) where.managerId = rootId;
     else where.managerId = null;
 
@@ -852,7 +909,7 @@ export class EmployeesService {
     return this.buildTree(root);
   }
 
-  private async buildTree(nodes: any[]): Promise<any[]> {
+  private async buildTree(nodes: OrgEmployeeNode[]): Promise<OrgTreeNode[]> {
     return Promise.all(
       nodes.map(async node => {
         const children = await this.prisma.read.employee.findMany({
@@ -924,9 +981,12 @@ export class EmployeesService {
     return { updated: result.count };
   }
 
-  async exportEmployees(filters: EmployeeFilterDto): Promise<any[]> {
+  async exportEmployees(filters: EmployeeFilterDto) {
     const { data } = await this.findAll({ ...filters, limit: 10000, page: 1 });
-    return data.map((e: any) => ({
+    // FIX: manager só selecciona id/name/avatarUrl (Employee não tem
+    // fullName, esse campo é do modelo User) — e.manager?.fullName era
+    // sempre undefined, o CSV exportava sempre o gestor em branco.
+    return data.map(e => ({
       matricula: e.matricula,
       name: e.name,
       email: e.email,
@@ -938,7 +998,7 @@ export class EmployeesService {
       contractType: e.contractType,
       workMode: e.workMode,
       location: e.location,
-      manager: e.manager?.fullName ?? '',
+      manager: e.manager?.name ?? '',
     }));
   }
 
