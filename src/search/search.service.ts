@@ -1,5 +1,6 @@
 // src/search/search.service.ts
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma, CompetencyType, ScenarioCategory, Difficulty } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GlobalSearchDto, TypedSearchDto, SearchEntityType } from './search.dto';
 
@@ -26,12 +27,22 @@ function safeM(prisma: any, name: string) {
   );
 }
 
+// searchHistory não existe em prisma/schema.prisma — sem tipos gerados pelo
+// Prisma. Forma confirmada nos próprios .create() deste ficheiro.
+export interface SearchHistoryRow {
+  userId: number;
+  query: string;
+  searchType: string;
+  resultsCount: number;
+  createdAt: Date;
+}
+
 /** Compute a simple relevance score (0–100) based on field match quality */
-function relevanceScore(item: any, q: string, fields: string[]): number {
+function relevanceScore(item: Record<string, unknown>, q: string, fields: string[]): number {
   const lq = q.toLowerCase();
   let score = 0;
   for (const f of fields) {
-    const val = (item[f] ?? '').toLowerCase();
+    const val = String(item[f] ?? '').toLowerCase();
     if (val === lq)
       score += 100; // exact match
     else if (val.startsWith(lq))
@@ -84,7 +95,7 @@ export class SearchService {
       }),
     );
 
-    const fetchers: Promise<any[]>[] = [];
+    const fetchers: Promise<ReturnType<typeof normalise>[]>[] = [];
 
     if (types.includes(SearchEntityType.USER))
       fetchers.push(
@@ -162,8 +173,8 @@ export class SearchService {
   private async searchUsers(
     q: string,
     opts: { limit: number; departmentId?: number; activeOnly?: boolean },
-  ): Promise<any[]> {
-    const where: any = {
+  ) {
+    const where: Prisma.UserWhereInput = {
       OR: [
         { fullName: iLike(q) },
         { email: iLike(q) },
@@ -206,8 +217,8 @@ export class SearchService {
   private async searchCourses(
     q: string,
     opts: { limit: number; category?: string; activeOnly?: boolean },
-  ): Promise<any[]> {
-    const where: any = {
+  ) {
+    const where: Prisma.CourseWhereInput = {
       OR: [{ title: iLike(q) }, { description: iLike(q) }, { category: iLike(q) }],
     };
     // Course não tem coluna `active` — o estado real é `status` (String,
@@ -243,13 +254,19 @@ export class SearchService {
     );
   }
 
-  private async searchDocuments(q: string, opts: { limit: number }): Promise<any[]> {
+  private async searchDocuments(q: string, opts: { limit: number }) {
     // KnowledgeArticle não tem campo `description` (é `summary`) nem `tags`
     // como coluna escalar (é a relação KnowledgeTag[]) — esta query rebentava
     // sempre a nível do Prisma; o .catch() escondia-o silenciosamente,
     // tornando a pesquisa de documentos permanentemente muda (0 resultados,
     // sem erro visível) desde sempre.
-    const articles = await safeM(this.prisma, 'knowledgeArticle')
+    type ArticleRow = {
+      id: number;
+      title: string;
+      summary: string | null;
+      category: { name: string } | null;
+    };
+    const articles: ArticleRow[] = await safeM(this.prisma, 'knowledgeArticle')
       .findMany({
         where: {
           OR: [{ title: iLike(q) }, { summary: iLike(q) }, { tags: { some: { name: iLike(q) } } }],
@@ -269,10 +286,10 @@ export class SearchService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao pesquisar documentos (knowledgeArticle)',
         });
-        return [] as any[];
+        return [] as ArticleRow[];
       });
 
-    return (articles as any[]).map((d: any) =>
+    return articles.map(d =>
       normalise(
         SearchEntityType.DOCUMENT,
         d.id,
@@ -284,13 +301,12 @@ export class SearchService {
     );
   }
 
-  private async searchContent(
-    q: string,
-    opts: { limit: number; activeOnly?: boolean },
-  ): Promise<any[]> {
-    const where: any = { OR: [{ title: iLike(q) }, { description: iLike(q) }] };
+  private async searchContent(q: string, opts: { limit: number; activeOnly?: boolean }) {
+    const where: Prisma.ContentAssetWhereInput = {
+      OR: [{ title: iLike(q) }, { description: iLike(q) }],
+    };
     if (opts.activeOnly !== false) where.active = true;
-    const assets = await (this.prisma as any).contentAsset.findMany({
+    const assets = await this.prisma.contentAsset.findMany({
       where,
       select: { id: true, title: true, type: true, description: true, thumbnailUrl: true },
       take: opts.limit,
@@ -308,7 +324,7 @@ export class SearchService {
     );
   }
 
-  private async searchPdis(q: string, opts: { limit: number; userId: number }): Promise<any[]> {
+  private async searchPdis(q: string, opts: { limit: number; userId: number }) {
     const plans = await this.prisma.read.developmentPlan.findMany({
       where: {
         OR: [{ name: iLike(q) }, { goal: iLike(q) }],
@@ -336,7 +352,7 @@ export class SearchService {
     );
   }
 
-  private async searchCompetencies(q: string, opts: { limit: number }): Promise<any[]> {
+  private async searchCompetencies(q: string, opts: { limit: number }) {
     const comps = await this.prisma.competency
       .findMany({
         where: { OR: [{ name: iLike(q) }, { description: iLike(q) }] },
@@ -350,10 +366,15 @@ export class SearchService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao pesquisar competências',
         });
-        return [] as any[];
+        return [] as {
+          id: number;
+          name: string;
+          type: CompetencyType;
+          description: string | null;
+        }[];
       });
 
-    return (comps as any[]).map((c: any) =>
+    return comps.map(c =>
       normalise(
         SearchEntityType.COMPETENCY,
         c.id,
@@ -365,13 +386,12 @@ export class SearchService {
     );
   }
 
-  private async searchScenarios(
-    q: string,
-    opts: { limit: number; activeOnly?: boolean },
-  ): Promise<any[]> {
-    const where: any = { OR: [{ title: iLike(q) }, { description: iLike(q) }] };
+  private async searchScenarios(q: string, opts: { limit: number; activeOnly?: boolean }) {
+    const where: Prisma.AvatarScenarioWhereInput = {
+      OR: [{ title: iLike(q) }, { description: iLike(q) }],
+    };
     if (opts.activeOnly !== false) where.active = true;
-    const scenarios = await (this.prisma as any).avatarScenario
+    const scenarios = await this.prisma.avatarScenario
       .findMany({
         where,
         select: { id: true, title: true, category: true, difficulty: true },
@@ -384,10 +404,15 @@ export class SearchService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao pesquisar cenários de avatar',
         });
-        return [] as any[];
+        return [] as {
+          id: number;
+          title: string;
+          category: ScenarioCategory | null;
+          difficulty: Difficulty;
+        }[];
       });
 
-    return (scenarios as any[]).map((s: any) =>
+    return scenarios.map(s =>
       normalise(
         SearchEntityType.SCENARIO,
         s.id,
@@ -407,7 +432,7 @@ export class SearchService {
     const { limit = 20, page = 1 } = dto;
     const opts = { limit, departmentId: dto.departmentId, category: dto.category };
 
-    let results: any[] = [];
+    let results: ReturnType<typeof normalise>[] = [];
     switch (type) {
       case SearchEntityType.USER:
         results = await this.searchUsers(q, opts);
@@ -460,7 +485,7 @@ export class SearchService {
         select: { fullName: true },
         take: limit,
       }),
-      (this.prisma as any).course.findMany({
+      this.prisma.course.findMany({
         where: { title: iLike(q), status: 'PUBLISHED' },
         select: { title: true },
         take: limit,
@@ -472,8 +497,9 @@ export class SearchService {
       }),
     ]);
 
-    // Recent searches for this user
-    const recentHistory = await safeM(this.prisma, 'searchHistory')
+    // Recent searches for this user — searchHistory não existe em
+    // prisma/schema.prisma (ver safeM acima), por isso sem tipos gerados.
+    const recentHistory: { query: string }[] = await safeM(this.prisma, 'searchHistory')
       .findMany({
         where: { userId, query: iLike(q) },
         select: { query: true },
@@ -488,11 +514,11 @@ export class SearchService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter histórico recente para autocomplete',
         });
-        return [] as any[];
+        return [] as { query: string }[];
       });
 
     const allSuggestions = [
-      ...(recentHistory as any[]).map((h: any) => ({ text: h.query, type: 'recent' })),
+      ...recentHistory.map(h => ({ text: h.query, type: 'recent' })),
       ...users.map(u => ({ text: u.fullName, type: 'user' })),
       ...courses.map(c => ({ text: c.title, type: 'course' })),
       ...content.map(c => ({ text: c.title, type: 'content' })),
@@ -532,7 +558,7 @@ export class SearchService {
       })
       .then(es => es.map(e => e.courseId));
 
-    const suggestedCourses = await (this.prisma as any).course.findMany({
+    const suggestedCourses = await this.prisma.course.findMany({
       where: { status: 'PUBLISHED', id: { notIn: enrolled } },
       select: { id: true, title: true, category: true, thumbnailUrl: true },
       take: 5,
@@ -543,15 +569,19 @@ export class SearchService {
     // rebentava sempre (500 incondicional). Sem uma métrica real de
     // popularidade disponível, usa-se recência como proxy em vez de
     // inventar uma coluna que não existe.
-    const popularContent = await (this.prisma as any).contentAsset.findMany({
+    const popularContent = await this.prisma.contentAsset.findMany({
       where: { active: true },
       select: { id: true, title: true, type: true },
       orderBy: { createdAt: 'desc' },
       take: 5,
     });
 
-    // Trending search terms (top from history)
-    const trending = await safeM(this.prisma, 'searchHistory')
+    // Trending search terms (top from history) — searchHistory não existe
+    // em prisma/schema.prisma (ver safeM no topo do ficheiro).
+    const trending: { query: string; _count: { id: number } }[] = await safeM(
+      this.prisma,
+      'searchHistory',
+    )
       .groupBy({
         by: ['query'],
         _count: { id: true },
@@ -565,7 +595,7 @@ export class SearchService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter termos de pesquisa em tendência',
         });
-        return [] as any[];
+        return [] as { query: string; _count: { id: number } }[];
       });
 
     return {
@@ -582,7 +612,7 @@ export class SearchService {
       popularContent: popularContent.map(c =>
         normalise(SearchEntityType.CONTENT, c.id, c.title, c.type ?? '', {}, `/content/${c.id}`),
       ),
-      trendingSearches: (trending as any[]).map((t: any) => t.query),
+      trendingSearches: trending.map(t => t.query),
     };
   }
 
@@ -591,7 +621,7 @@ export class SearchService {
   // ══════════════════════════════════════════════════════
 
   async getHistory(userId: number, limit = 20) {
-    const history = await safeM(this.prisma, 'searchHistory')
+    const history: SearchHistoryRow[] = await safeM(this.prisma, 'searchHistory')
       .findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
@@ -604,10 +634,10 @@ export class SearchService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter histórico de pesquisas do utilizador',
         });
-        return [] as any[];
+        return [] as SearchHistoryRow[];
       });
 
-    return { history, count: (history as any[]).length };
+    return { history, count: history.length };
   }
 
   async clearHistory(userId: number) {
@@ -642,7 +672,7 @@ export class SearchService {
         }),
       safeM(this.prisma, 'searchHistory')
         .groupBy({ by: ['userId'], _count: { id: true } })
-        .then((r: any[]) => r.length)
+        .then((r: { userId: number; _count: { id: number } }[]) => r.length)
         .catch(e => {
           this.logger.warn({
             metric: 'uniqueUsers',
@@ -664,7 +694,7 @@ export class SearchService {
             err: { message: e instanceof Error ? e.message : String(e) },
             msg: 'Falha ao obter termos mais pesquisados para analytics',
           });
-          return [] as any[];
+          return [] as { query: string; _count: { id: number } }[];
         }),
       safeM(this.prisma, 'searchHistory')
         .count({ where: { resultsCount: 0 } })
@@ -682,7 +712,7 @@ export class SearchService {
       totalSearches,
       uniqueUsers,
       zeroResultsCount: zeroResults,
-      topTerms: (topTerms as any[]).map((t: any) => ({ term: t.query, count: t._count.id })),
+      topTerms: topTerms.map(t => ({ term: t.query, count: t._count.id })),
       generatedAt: new Date(),
     };
   }
