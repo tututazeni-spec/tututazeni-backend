@@ -80,7 +80,8 @@ const baseMl = {
   xpReward: 10,
   author: { id: 1, fullName: 'Admin', position: { name: 'CTO' } },
   category: { id: 1, name: 'Programação' },
-  _count: { progress: 50, likes: 20 },
+  quizQuestions: [],
+  _count: { progress: 50, interactions: 20, quizAttempts: 0 },
 };
 
 describe('MicroLearningService (additional)', () => {
