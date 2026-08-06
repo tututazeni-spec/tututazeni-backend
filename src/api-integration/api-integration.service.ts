@@ -16,19 +16,80 @@ import { sanitizeForLog } from '../common/logging/sanitize';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
+// `prisma: any` é o único `any` deliberadamente mantido neste ficheiro —
+// apiKey/webhook/webhookDelivery não existem em prisma/schema.prisma (ver
+// [[project-innova-schema-code-drift]]), por isso não há nenhum tipo gerado
+// pelo Prisma para acesso dinâmico `prisma[name]` a um modelo que pode não
+// existir. Mesmo problema resolvido da mesma forma noutros serviços do
+// projecto que usam safeM()/safeModel() (search.service.ts,
+// content-library.service.ts, evaluation.service.ts,
+// avatar-training.service.ts): o lado da produção fica dinâmico, mas o lado
+// do consumo é tipado com as interfaces ApiKeyRecord/WebhookRecord/
+// WebhookDeliveryRecord abaixo (forma confirmada nos próprios .create()
+// deste ficheiro). Os métodos do stub de fallback também deixam de usar
+// `any` — `{ data: unknown }`/`{ create: unknown }` chega para os satisfazer
+// sem fingir conhecer o shape real do modelo.
 function safeM(prisma: any, name: string) {
   return (
     prisma[name] ?? {
       findMany: async () => [],
       findFirst: async () => null,
       findUnique: async () => null,
-      create: async (d: any) => d.data,
-      update: async (d: any) => d.data,
+      create: async (d: { data: unknown }) => d.data,
+      update: async (d: { data: unknown }) => d.data,
       delete: async () => null,
       count: async () => 0,
-      upsert: async (d: any) => d.create,
+      upsert: async (d: { create: unknown }) => d.create,
     }
   );
+}
+
+// apiKey não existe em prisma/schema.prisma — sem tipos gerados pelo Prisma.
+export interface ApiKeyRecord {
+  id: number;
+  name: string;
+  description?: string | null;
+  keyHash: string;
+  keyPreview: string;
+  scopes: string[];
+  expiresAt?: Date | null;
+  allowedIps?: string[];
+  rateLimit?: number;
+  createdById: number;
+  active: boolean;
+  lastUsedAt?: Date | null;
+  createdAt: Date;
+}
+
+// webhook não existe em prisma/schema.prisma — sem tipos gerados pelo Prisma.
+export interface WebhookRecord {
+  id: number;
+  name: string;
+  url: string;
+  events: string[];
+  secret: string;
+  active: boolean;
+  retryMax: number;
+  createdById: number;
+  createdAt: Date;
+}
+
+// webhookDelivery não existe em prisma/schema.prisma — sem tipos gerados
+// pelo Prisma. `id` é string (cuid) — o header X-Innova-Delivery interpola-o
+// directamente num Record<string,string>, o que só type-checa se `id` for
+// string (mesma convenção dos restantes modelos "log" com @default(cuid())
+// deste domínio, ex. SystemAlert/ScalabilityMetric).
+export interface WebhookDeliveryRecord {
+  id: string;
+  webhookId: number;
+  event: string;
+  payload: string;
+  status: 'PENDING' | 'DELIVERED' | 'FAILED';
+  attempt: number;
+  attempts?: number;
+  deliveredAt?: Date | null;
+  responseCode?: number | null;
+  createdAt?: Date;
 }
 
 /** Compute HMAC-SHA256 signature for webhook payloads */
@@ -372,7 +433,7 @@ export class ApiIntegrationService {
 
   async getApiKeys(createdById?: number) {
     const where = createdById ? { createdById } : {};
-    const keys = await safeM(this.prisma, 'apiKey')
+    const keys: ApiKeyRecord[] = await safeM(this.prisma, 'apiKey')
       .findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -384,10 +445,10 @@ export class ApiIntegrationService {
           err: { message: err instanceof Error ? err.message : String(err) },
           msg: 'Falha ao listar API keys — a devolver lista vazia',
         });
-        return [] as any[];
+        return [];
       });
 
-    return (keys as any[]).map((k: any) => ({
+    return keys.map(k => ({
       id: k.id,
       name: k.name,
       description: k.description,
@@ -469,7 +530,7 @@ export class ApiIntegrationService {
     rawKey: string,
   ): Promise<{ valid: boolean; scopes: string[]; name: string } | null> {
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
-    const key = await safeM(this.prisma, 'apiKey')
+    const key: ApiKeyRecord | null = await safeM(this.prisma, 'apiKey')
       .findFirst({
         where: { keyHash, active: true },
       })
@@ -539,7 +600,7 @@ export class ApiIntegrationService {
   }
 
   async getWebhooks() {
-    const hooks = await safeM(this.prisma, 'webhook')
+    const hooks: WebhookRecord[] = await safeM(this.prisma, 'webhook')
       .findMany({ orderBy: { createdAt: 'desc' } })
       .catch((err: unknown) => {
         this.logger.warn({
@@ -547,11 +608,11 @@ export class ApiIntegrationService {
           err: { message: err instanceof Error ? err.message : String(err) },
           msg: 'Falha ao listar webhooks — a devolver lista vazia',
         });
-        return [] as any[];
+        return [];
       });
     // Enrich with delivery stats
     return Promise.all(
-      (hooks as any[]).map(async (h: any) => {
+      hooks.map(async h => {
         const delivered = await safeM(this.prisma, 'webhookDelivery')
           .count({ where: { webhookId: h.id, status: 'DELIVERED' } })
           .catch((err: unknown) => {
@@ -582,10 +643,22 @@ export class ApiIntegrationService {
   }
 
   async toggleWebhook(id: number) {
+    // Achado real: `data: { active: (hook: any) => !hook.active }` passava uma
+    // função como valor de campo — mesmo com o modelo `webhook` migrado, o
+    // Prisma nunca aceita uma função em `data` (rebentaria com "Invalid
+    // value provided. Expected Boolean, provided Function"); no estado
+    // actual (modelo ausente), o fallback do safeM() só devolve `d.data`
+    // sem a avaliar, ou seja a função nunca era sequer invocada — o
+    // endpoint "funcionava" (200) mas nunca alternava nada. Mascarado pelo
+    // `any` do parâmetro. Corrigido para o mesmo padrão de leitura-antes-
+    // de-escrever de toggleIntegration() acima.
+    const hook: WebhookRecord | null = await safeM(this.prisma, 'webhook').findUnique({
+      where: { id },
+    });
     return safeM(this.prisma, 'webhook')
       .update({
         where: { id },
-        data: { active: (hook: any) => !hook.active },
+        data: { active: !hook?.active },
       })
       .catch((err: unknown) => {
         this.logger.warn({
@@ -614,7 +687,7 @@ export class ApiIntegrationService {
 
   async triggerWebhook(dto: TriggerWebhookDto) {
     // Find all active webhooks subscribed to this event
-    const hooks = await safeM(this.prisma, 'webhook')
+    const hooks: WebhookRecord[] = await safeM(this.prisma, 'webhook')
       .findMany({
         where: { active: true },
       })
@@ -625,16 +698,16 @@ export class ApiIntegrationService {
           err: { message: err instanceof Error ? err.message : String(err) },
           msg: 'Falha ao carregar webhooks activos — evento não será entregue a nenhum subscriber',
         });
-        return [] as any[];
+        return [];
       });
 
-    const subscribers = (hooks as any[]).filter(
-      (h: any) => (h.events ?? []).includes(dto.event) || (h.events ?? []).includes('*'),
+    const subscribers = hooks.filter(
+      h => (h.events ?? []).includes(dto.event) || (h.events ?? []).includes('*'),
     );
 
     if (!subscribers.length) return { dispatched: 0, message: 'Sem subscribers para este evento' };
 
-    const dispatched: any[] = [];
+    const dispatched: { webhookId: number; url: string }[] = [];
     for (const hook of subscribers) {
       await this.dispatchWebhook(hook, dto.event, dto.payload);
       dispatched.push({ webhookId: hook.id, url: hook.url });
@@ -643,15 +716,19 @@ export class ApiIntegrationService {
     return { dispatched: dispatched.length, webhooks: dispatched };
   }
 
-  private async dispatchWebhook(hook: any, event: string, payload: any): Promise<void> {
+  private async dispatchWebhook(
+    hook: WebhookRecord,
+    event: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
     const body = JSON.stringify({ event, data: payload, timestamp: new Date().toISOString() });
     const signature = hook.secret ? signPayload(hook.secret, body) : undefined;
 
-    const deliveryId = await safeM(this.prisma, 'webhookDelivery')
+    const deliveryId: string | null = await safeM(this.prisma, 'webhookDelivery')
       .create({
         data: { webhookId: hook.id, event, payload: body, status: 'PENDING', attempt: 1 },
       })
-      .then((d: any) => d.id)
+      .then((d: WebhookDeliveryRecord) => d.id)
       .catch((err: unknown) => {
         this.logger.error({
           webhookId: hook.id,
@@ -771,7 +848,7 @@ export class ApiIntegrationService {
     });
   }
 
-  async getWebhookDeliveries(webhookId: number, limit = 20) {
+  async getWebhookDeliveries(webhookId: number, limit = 20): Promise<WebhookDeliveryRecord[]> {
     return safeM(this.prisma, 'webhookDelivery')
       .findMany({
         where: { webhookId },
@@ -785,7 +862,7 @@ export class ApiIntegrationService {
           err: { message: err instanceof Error ? err.message : String(err) },
           msg: 'Falha ao listar entregas de webhook — a devolver lista vazia',
         });
-        return [] as any[];
+        return [];
       });
   }
 
