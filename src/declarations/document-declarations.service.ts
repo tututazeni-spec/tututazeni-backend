@@ -15,7 +15,7 @@ import {
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
-import { DeclarationType } from '@prisma/client';
+import { DeclarationType, Prisma, TemplateLanguage } from '@prisma/client';
 
 // ─── Variable resolver ────────────────────────────────────────────────────────
 
@@ -23,8 +23,17 @@ function resolveVariables(content: string, vars: Record<string, string>): string
   return content.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `[${key}]`);
 }
 
+interface DeclarationUserData {
+  fullName: string;
+  email: string;
+  employeeNumber: string | null;
+  hireDate: Date | null;
+  position: { name: string } | null;
+  department: { name: string } | null;
+}
+
 function buildVariablesFromUser(
-  user: any,
+  user: DeclarationUserData | null,
   extra: Record<string, string> = {},
 ): Record<string, string> {
   const today = new Date().toLocaleDateString('pt-AO', {
@@ -35,14 +44,18 @@ function buildVariablesFromUser(
   return {
     // FIX: user.name → user.fullName (User model)
     employee_name: user?.fullName ?? '',
-    // FIX: user.employee doesn't exist — use (user as any).employee for legacy compat
-    employee_position: user.employee?.role ?? user.employee?.jobTitle ?? '',
-    employee_department: user.employee?.department ?? '',
-    employee_matricula: user.employee?.matricula ?? '',
+    // Achado real: `user.employee?.role/.jobTitle/.department/.matricula/
+    // .joinedAt` — User NUNCA teve relação `employee` (nem loadUserData()
+    // sequer a seleccionava); estes campos avaliavam sempre para `''`,
+    // mascarado pelo `any` — toda declaração gerada saía sempre sem
+    // posição/departamento/matrícula/data de admissão preenchidos. Estes
+    // dados existem directamente em User (position/department/
+    // employeeNumber/hireDate), agora seleccionados em loadUserData().
+    employee_position: user?.position?.name ?? '',
+    employee_department: user?.department?.name ?? '',
+    employee_matricula: user?.employeeNumber ?? '',
     employee_email: user?.email ?? '',
-    hire_date: user.employee?.joinedAt
-      ? new Date(user.employee.joinedAt).toLocaleDateString('pt-AO')
-      : '',
+    hire_date: user?.hireDate ? new Date(user.hireDate).toLocaleDateString('pt-AO') : '',
     company_name: 'INNOVA Platform',
     today_date: today,
     ...extra,
@@ -113,10 +126,25 @@ export class DocumentDeclarationsService {
   }
 
   async getTemplates(purposeId?: number, language?: string, activeOnly = true) {
-    const where: any = {};
+    const where: Prisma.DeclarationTemplateWhereInput = {};
     if (activeOnly) where.active = true;
     if (purposeId) where.purposeId = purposeId;
-    if (language) where.language = language;
+    // Achado real: `language` chega como query string livre do controller
+    // (nunca validado contra o enum) e ia directo para where.language — um
+    // valor fora de PT/EN/FR (ou em minúsculas, convenção habitual de query
+    // params) rebentava com "Invalid value provided" (GET 500). Mascarado
+    // antes pelo `where: any`. Normalizado para maiúsculas antes de validar
+    // — TemplateLanguage é sempre maiúsculo no schema, mas query params
+    // costumam chegar em minúsculas.
+    if (language) {
+      const normalized = language.toUpperCase();
+      if (!(Object.values(TemplateLanguage) as string[]).includes(normalized)) {
+        throw new BadRequestException(
+          `language inválido. Valores aceites: ${Object.values(TemplateLanguage).join(', ')}`,
+        );
+      }
+      where.language = normalized as TemplateLanguage;
+    }
 
     return this.prisma.read.declarationTemplate.findMany({
       where,
@@ -190,7 +218,7 @@ export class DocumentDeclarationsService {
       to,
     } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.DeclarationRequestWhereInput = {};
 
     if (userId) where.userId = userId;
     if (templateId) where.templateId = templateId;
@@ -240,7 +268,7 @@ export class DocumentDeclarationsService {
     });
     // Ownership (A3): dono OU ADMIN/RH; senão 404.
     // Quando chamado sem user (contexto interno de confiança), não filtra.
-    if (user) assertCanAccess(r, (r as any)?.userId, user, [Role.ADMIN, Role.RH]);
+    if (user) assertCanAccess(r, r?.userId, user, [Role.ADMIN, Role.RH]);
     else if (!r) throw new NotFoundException('Declaração não encontrada');
 
     if (user) {
@@ -278,7 +306,7 @@ export class DocumentDeclarationsService {
         language: dto.language ?? template.language,
         addressedTo: dto.addressedTo,
         observations: dto.observations,
-        extraVariables: dto.extraVariables as any,
+        extraVariables: dto.extraVariables,
         status: initialStatus,
       },
     });
@@ -338,11 +366,11 @@ export class DocumentDeclarationsService {
         where: { id },
         data: { status: DocumentRequestStatus.REJECTED },
       });
-      // FIX: req.template → (req as any).template (not included in findOne by default)
+      // findOne() já inclui `template` por omissão — cast desnecessário.
       await this.notifyUser(
         req.userId,
         'DECLARATION_REJECTED',
-        `O seu pedido de "${(req as any).template?.name}" foi rejeitado`,
+        `O seu pedido de "${req.template?.name}" foi rejeitado`,
       );
     }
 
@@ -359,24 +387,23 @@ export class DocumentDeclarationsService {
   async generate(id: number, generatedById: number) {
     const req = await this.findOne(id);
 
-    // FIX: req.template → (req as any).template
-    if (!(req as any).template) throw new BadRequestException('Template não encontrado');
+    // findOne() já inclui `template`/`purpose` por omissão — casts abaixo
+    // desnecessários.
+    if (!req.template) throw new BadRequestException('Template não encontrado');
 
     const user = await this.loadUserData(req.userId);
     const vars = buildVariablesFromUser(user, {
-      // FIX: req.purpose → (req as any).purpose
-      purpose: (req as any).purpose?.name ?? req.observations ?? '',
+      purpose: req.purpose?.name ?? req.observations ?? '',
       addressed_to: req.addressedTo ?? '',
       ...((req.extraVariables as Record<string, string>) ?? {}),
     });
 
-    const resolvedContent = resolveVariables((req as any).template?.content, vars);
+    const resolvedContent = resolveVariables(req.template.content, vars);
     const refNumber = `DEC-${new Date().getFullYear()}-${String(id).padStart(5, '0')}`;
     const verificationCode = crypto.randomBytes(8).toString('hex').toUpperCase();
 
-    // FIX: req.template → (req as any).template
-    const expiresAt = (req as any).template.validDays
-      ? new Date(Date.now() + (req as any).template.validDays * 86400000)
+    const expiresAt = req.template.validDays
+      ? new Date(Date.now() + req.template.validDays * 86400000)
       : null;
 
     await this.prisma.declarationRequest.update({
@@ -391,11 +418,10 @@ export class DocumentDeclarationsService {
       },
     });
 
-    // FIX: req.template → (req as any).template
     await this.notifyUser(
       req.userId,
       'DECLARATION_READY',
-      `A sua declaração "${(req as any).template.name}" está disponível`,
+      `A sua declaração "${req.template.name}" está disponível`,
     );
 
     await this.audit.log({
@@ -446,8 +472,8 @@ export class DocumentDeclarationsService {
       issuedAt: req.issuedAt ?? req.generatedAt,
       expiresAt: req.expiresAt,
       // FIX: user.name → user.fullName
-      employee: (req as any).user?.fullName,
-      document: (req as any).template?.name,
+      employee: req.user?.fullName,
+      document: req.template?.name,
     };
   }
 
@@ -487,10 +513,21 @@ export class DocumentDeclarationsService {
   }
 
   private async loadUserData(userId: number) {
-    // FIX: removed employee sub-select — User has no employee relation
+    // FIX: removed employee sub-select — User has no employee relation.
+    // position/department/employeeNumber/hireDate seleccionados para
+    // preencher as variáveis employee_position/employee_department/
+    // employee_matricula/hire_date em buildVariablesFromUser() (ver nota lá).
     return this.prisma.read.user.findUnique({
       where: { id: userId },
-      select: { id: true, fullName: true, email: true },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        employeeNumber: true,
+        hireDate: true,
+        position: { select: { name: true } },
+        department: { select: { name: true } },
+      },
     });
   }
 
