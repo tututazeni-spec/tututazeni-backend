@@ -5,6 +5,7 @@
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateOrgDepartmentDto,
@@ -18,6 +19,22 @@ import {
   RecordOrgChangeDto,
   OrgChartFilterDto,
 } from './organization.dto';
+
+const ORG_CHART_SELECT = {
+  id: true,
+  fullName: true,
+  email: true,
+  avatarUrl: true,
+  managerId: true,
+  position: { select: { id: true, name: true, level: true } },
+  department: { select: { id: true, name: true, color: true } },
+  _count: { select: { subordinates: true } },
+} satisfies Prisma.UserSelect;
+
+type OrgChartUser = Prisma.UserGetPayload<{ select: typeof ORG_CHART_SELECT }>;
+export interface OrgChartNode extends OrgChartUser {
+  children: OrgChartNode[];
+}
 
 @Injectable()
 export class OrganizationService {
@@ -128,7 +145,7 @@ export class OrganizationService {
     const { departmentId, rootUserId, depth = 3 } = filters;
 
     // Ponto de partida
-    const rootWhere: any = { active: true };
+    const rootWhere: Prisma.UserWhereInput = { active: true };
     if (rootUserId) rootWhere.id = rootUserId;
     else if (!departmentId)
       rootWhere.managerId = null; // raízes da org
@@ -146,20 +163,15 @@ export class OrganizationService {
   }
 
   private orgChartSelect() {
-    return {
-      id: true,
-      fullName: true,
-      email: true,
-      avatarUrl: true,
-      managerId: true,
-      position: { select: { id: true, name: true, level: true } },
-      department: { select: { id: true, name: true, color: true } },
-      _count: { select: { subordinates: true } },
-    };
+    return ORG_CHART_SELECT;
   }
 
-  private async buildSubtree(user: any, maxDepth: number, currentDepth: number): Promise<any> {
-    const node: any = { ...user, children: [] };
+  private async buildSubtree(
+    user: OrgChartUser,
+    maxDepth: number,
+    currentDepth: number,
+  ): Promise<OrgChartNode> {
+    const node: OrgChartNode = { ...user, children: [] };
 
     if (currentDepth < maxDepth) {
       const children = await this.prisma.read.user.findMany({
@@ -180,7 +192,7 @@ export class OrganizationService {
     const { page = 1, limit = 30, search, status, parentId, unitId, rootOnly } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.DepartmentWhereInput = {};
     if (status) where.status = status;
     if (unitId) where.unitId = unitId;
     if (rootOnly) where.parentId = null;
@@ -304,7 +316,7 @@ export class OrganizationService {
     const { page = 1, limit = 30, search, level, departmentId } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.PositionWhereInput = {};
     if (level) where.level = level;
     if (departmentId) where.departmentId = departmentId;
     if (search) where.name = { contains: search, mode: 'insensitive' };
@@ -470,9 +482,12 @@ export class OrganizationService {
   }
 
   async getOrgTimeline(fromDate?: string, toDate?: string) {
-    const where: any = {};
-    if (fromDate) where.effectiveDate = { gte: new Date(fromDate) };
-    if (toDate) where.effectiveDate = { ...where.effectiveDate, lte: new Date(toDate) };
+    const where: Prisma.OrgChangeLogWhereInput = {};
+    if (fromDate || toDate) {
+      where.effectiveDate = {};
+      if (fromDate) where.effectiveDate.gte = new Date(fromDate);
+      if (toDate) where.effectiveDate.lte = new Date(toDate);
+    }
 
     return this.prisma.read.orgChangeLog.findMany({
       where,
