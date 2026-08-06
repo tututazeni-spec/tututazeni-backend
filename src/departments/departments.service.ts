@@ -6,6 +6,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateDepartmentDto,
@@ -53,7 +54,7 @@ export class DepartmentsService {
     const { page = 1, limit = 30, search, active, parentId, rootOnly } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.DepartmentWhereInput = {};
     if (active !== undefined) where.active = active;
     if (parentId !== undefined) where.parentId = parentId;
     if (rootOnly) where.parentId = null;
@@ -199,7 +200,7 @@ export class DepartmentsService {
     }
 
     // Gestor mudou → registar histórico
-    if (dto.headId && dto.headId !== (existing as any).headId) {
+    if (dto.headId && dto.headId !== existing.headId) {
       await this.prisma.departmentHeadHistory.updateMany({
         where: { departmentId: id, endedAt: null },
         data: { endedAt: new Date() },
@@ -223,7 +224,7 @@ export class DepartmentsService {
   // Soft deactivate — preserva histórico
   async deactivate(id: number) {
     const d = await this.findOne(id);
-    const activeUsers = (d as any)._count.users;
+    const activeUsers = d._count.users;
     if (activeUsers > 0) {
       throw new BadRequestException(
         `Departamento tem ${activeUsers} colaboradores activos. Transfira-os primeiro.`,
@@ -359,8 +360,8 @@ export class DepartmentsService {
       id: d.id,
       name: d.name,
       code: d.code,
-      headName: (d.head as any)?.fullName ?? '—',
-      totalMembers: (d._count as any).users,
+      headName: d.head?.fullName ?? '—',
+      totalMembers: d._count.users,
       active: d.active,
     }));
   }
@@ -509,7 +510,7 @@ export class RolesService {
     if (!adminRole) {
       throw new Error("Role 'ADMIN' não encontrado — não é possível criar permissões sem ele");
     }
-    return this.prisma.permission.create({ data: { ...dto, roleId: adminRole.id } as any });
+    return this.prisma.permission.create({ data: { ...dto, roleId: adminRole.id } });
   }
 
   async removePermission(permissionId: number) {
@@ -618,7 +619,7 @@ export class CareersService {
 
   async createPosition(dto: CreateCareerPositionDto) {
     const { competencies, ...data } = dto;
-    const position = await this.prisma.careerPosition.create({ data: data as any });
+    const position = await this.prisma.careerPosition.create({ data });
     if (competencies?.length) {
       await this.prisma.positionCompetency.createMany({
         data: competencies.map(c => ({ positionId: position.id, ...c })),
