@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ApprovalDecision } from '@prisma/client';
+import { ApprovalDecision, Prisma } from '@prisma/client';
 import {
   CreateExecutiveReportDto,
   UpdateExecutiveReportDto,
@@ -28,7 +28,7 @@ export class ExecutiveReportsService {
   async findAll(filters: ExecutiveReportsReportFilterDto) {
     const { page = 1, limit = 20, type, status, departmentId, period } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.ExecutiveReportWhereInput = {};
     if (type) where.type = type;
     if (status) where.status = status;
     if (departmentId) where.departmentId = departmentId;
@@ -158,7 +158,7 @@ export class ExecutiveReportsService {
   }
 
   async update(id: number, dto: UpdateExecutiveReportDto) {
-    const report = (await this.findOne(id)) as any;
+    const report = await this.findOne(id);
     if (report.status === 'PUBLISHED' || report.status === 'APPROVED') {
       throw new BadRequestException('Relatório publicado não pode ser editado');
     }
@@ -195,14 +195,14 @@ export class ExecutiveReportsService {
   // ─── WORKFLOW ─────────────────────────────────────────────────────────────
 
   async submitForReview(id: number) {
-    const r = (await this.findOne(id)) as any;
+    const r = await this.findOne(id);
     if (r.status !== 'DRAFT')
       throw new BadRequestException('Apenas relatórios DRAFT podem ser submetidos');
     return this.prisma.executiveReport.update({ where: { id }, data: { status: 'IN_REVIEW' } });
   }
 
   async approveReport(dto: ApproveReportDto, approverId: number) {
-    const r = (await this.findOne(dto.reportId)) as any;
+    const r = await this.findOne(dto.reportId);
     if (r.status !== 'IN_REVIEW') throw new BadRequestException('Relatório não está em revisão');
 
     const newStatus = dto.decision === 'approve' ? 'APPROVED' : 'DRAFT';
@@ -223,7 +223,7 @@ export class ExecutiveReportsService {
   }
 
   async publishReport(id: number) {
-    const r = (await this.findOne(id)) as any;
+    const r = await this.findOne(id);
     if (r.status !== 'APPROVED')
       throw new BadRequestException('Apenas relatórios aprovados podem ser publicados');
     return this.prisma.executiveReport.update({
@@ -238,7 +238,7 @@ export class ExecutiveReportsService {
   }
 
   async remove(id: number) {
-    const r = (await this.findOne(id)) as any;
+    const r = await this.findOne(id);
     if (r.status === 'PUBLISHED')
       throw new ForbiddenException('Relatório publicado não pode ser eliminado');
     await this.prisma.executiveReport.delete({ where: { id } });
@@ -252,7 +252,7 @@ export class ExecutiveReportsService {
     type: ReportType = ReportType.MONTHLY,
     departmentId?: number,
   ) {
-    const userWhere: any = { active: true };
+    const userWhere: Prisma.UserWhereInput = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;
 
     const now = new Date();
