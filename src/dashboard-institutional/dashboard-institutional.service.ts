@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
+import { SnapshotType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSnapshotDto, CreateWidgetDto, UpdateWidgetDto, FilterSnapshotDto } from './dto';
 import { AuditService } from '../common/services/audit.service';
@@ -65,7 +71,7 @@ export class DashboardInstitutionalService {
           }),
         ]);
 
-        const totalFunding = (totalFundingAgg as any)?._sum?.amount || 0;
+        const totalFunding = totalFundingAgg?._sum?.amount || 0;
         const completionRate = users > 0 ? (completedThisYear / users) * 100 : 0;
 
         return {
@@ -128,7 +134,7 @@ export class DashboardInstitutionalService {
   // ─── DISTRIBUIÇÃO GEOGRÁFICA ─────────────────────────
 
   async getGeographicDistribution() {
-    const beneficiariesByProvince = await (this.prisma.read.beneficiary.groupBy as any)({
+    const beneficiariesByProvince = await this.prisma.read.beneficiary.groupBy({
       by: ['province'],
       where: { deletedAt: null, province: { not: null } },
       _count: { id: true },
@@ -249,13 +255,21 @@ export class DashboardInstitutionalService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async compareSnapshots(period1: string, period2: string, type = 'MONTHLY') {
+  async compareSnapshots(period1: string, period2: string, type: string = SnapshotType.MONTHLY) {
+    // `type` chega da query string sem validação de DTO (ver controller) — antes
+    // disto era passado directo com `as any`, o que deixava um valor inválido
+    // rebentar como erro de validação do Prisma (500) em vez de 400.
+    if (!Object.values(SnapshotType).includes(type as SnapshotType)) {
+      throw new BadRequestException(`Tipo de snapshot inválido: ${type}`);
+    }
+    const snapshotType = type as SnapshotType;
+
     const [s1, s2] = await this.prisma.$transaction([
       this.prisma.read.institutionalSnapshot.findUnique({
-        where: { period_type: { period: period1, type: type as any } },
+        where: { period_type: { period: period1, type: snapshotType } },
       }),
       this.prisma.read.institutionalSnapshot.findUnique({
-        where: { period_type: { period: period2, type: type as any } },
+        where: { period_type: { period: period2, type: snapshotType } },
       }),
     ]);
     if (!s1 || !s2) throw new NotFoundException('Um dos snapshots não existe');
