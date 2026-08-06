@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CohortParticipantStatus } from '@prisma/client';
+import { Prisma, CohortParticipantStatus } from '@prisma/client';
 import {
   CreateInstructorProfileDto,
   UpdateInstructorProfileDto,
@@ -32,7 +32,7 @@ export class InstructorService {
     const { page = 1, limit = 20, approved, search, instructorType } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.InstructorProfileWhereInput = {};
     if (approved !== undefined) where.approved = approved;
     if (instructorType) where.instructorType = instructorType;
     if (search)
@@ -171,24 +171,30 @@ export class InstructorService {
       }),
     ]);
 
+    // FIX: todos os casts `as any[]`/`(c: any)`/`(p: any)` eram desnecessários
+    // — `cohorts` já vem tipado do `include` acima; name/modalidade são
+    // colunas reais de InstructorCohort.
     // Calcular métricas dos cohorts activos
     const activeCohorts = cohorts.map(c => {
-      const participants = c.participants as any[];
+      const participants = c.participants;
       const total = participants.length;
-      const completed = participants.filter(p => p.status === 'COMPLETED').length;
-      const atRisk = participants.filter(p => p.status === 'AT_RISK').length;
+      // FIX: CohortParticipantStatus só tem o valor ACTIVE (ver comentário no
+      // schema — fluxo de conclusão/risco nunca foi implementado). Comparar
+      // `p.status` com 'COMPLETED'/'AT_RISK' nunca podia ser verdadeiro; o
+      // `any` escondia isto do compilador (TS2367 assim que tipado). Mantido
+      // como 0 explícito em vez de um filtro morto, até esse fluxo existir.
+      const completed = 0;
+      const atRisk = 0;
       const avgProgress =
-        total > 0
-          ? Math.round(participants.reduce((s: number, p: any) => s + (p.progress ?? 0), 0) / total)
-          : 0;
+        total > 0 ? Math.round(participants.reduce((s, p) => s + (p.progress ?? 0), 0) / total) : 0;
       return {
         id: c.id,
-        name: (c as any).name,
+        name: c.name,
         course: c.course,
         status: c.status,
         startDate: c.startDate,
         endDate: c.endDate,
-        modalidade: (c as any).modalidade,
+        modalidade: c.modalidade,
         totalStudents: total,
         completed,
         atRisk,
@@ -207,11 +213,11 @@ export class InstructorService {
     return {
       profile: {
         id: profile.id,
-        fullName: (profile as any).user?.fullName,
+        fullName: profile.user?.fullName,
         expertiseArea: profile.expertiseArea,
         ratingAverage: profile.ratingAverage,
         totalCourses: profile.totalCourses,
-        instructorType: (profile as any).instructorType,
+        instructorType: profile.instructorType,
       },
       metrics: {
         activeCohorts: activeCohorts.length,
@@ -278,7 +284,7 @@ export class InstructorService {
     const { page = 1, limit = 20, courseId, status } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = { instructorId: profile.id };
+    const where: Prisma.InstructorCohortWhereInput = { instructorId: profile.id };
     if (courseId) where.courseId = courseId;
     if (status) where.status = status;
 
@@ -323,12 +329,14 @@ export class InstructorService {
       },
     });
 
+    // FIX: casts `as any[]`/`(cohort as any)` desnecessários — `cohort` já
+    // vem tipado do `include` acima; `courseId` é coluna real.
     // Enriquecer com progresso real de enrollment
-    const participants = cohort?.participants as any[];
+    const participants = cohort?.participants ?? [];
     const enriched = await Promise.all(
       participants.map(async p => {
         const enrollment = await this.prisma.read.enrollment.findFirst({
-          where: { userId: p.userId, courseId: (cohort as any).courseId },
+          where: { userId: p.userId, courseId: cohort?.courseId },
           select: { progress: true, status: true, completedAt: true },
         });
         return {
@@ -356,10 +364,12 @@ export class InstructorService {
   }
 
   async addParticipants(cohortId: number, userId: number, dto: InstructorAddParticipantsDto) {
+    // FIX: casts `as any` desnecessários — getCohortOrFail() já devolve
+    // InstructorCohort totalmente tipado (maxParticipants/courseId reais).
     const cohort = await this.getCohortOrFail(cohortId, userId);
-    if ((cohort as any).maxParticipants) {
+    if (cohort.maxParticipants) {
       const current = await this.prisma.read.cohortParticipant.count({ where: { cohortId } });
-      if (current + dto.userIds.length > (cohort as any).maxParticipants) {
+      if (current + dto.userIds.length > cohort.maxParticipants) {
         throw new BadRequestException('Capacidade máxima da turma atingida');
       }
     }
@@ -374,7 +384,7 @@ export class InstructorService {
     await this.prisma.cohortParticipant.createMany({ data, skipDuplicates: true });
 
     // Inscrever automaticamente no curso se não estiver
-    const courseId = (cohort as any).courseId;
+    const courseId = cohort.courseId;
     if (courseId) {
       for (const uid of dto.userIds) {
         await this.prisma.enrollment.upsert({
@@ -447,7 +457,7 @@ export class InstructorService {
       },
       recentCohorts: allCohorts.slice(0, 5).map(c => ({
         id: c.id,
-        name: (c as any).name,
+        name: c.name,
         course: c.course,
         status: c.status,
         participants: c._count.participants,
@@ -470,12 +480,23 @@ export class InstructorService {
       },
     });
 
-    const atRisk: any[] = [];
+    const atRisk: {
+      userId: number;
+      fullName: string | undefined;
+      avatarUrl: string | null | undefined;
+      cohortId: number;
+      cohortName: string;
+      course: (typeof cohorts)[number]['course'];
+      progress: number;
+      daysSinceEnroll: number;
+    }[] = [];
 
+    // FIX: casts `as any[]`/`(cohort as any)` desnecessários — `cohorts` já
+    // vem tipado do `include` acima; `courseId`/`name` são colunas reais.
     for (const cohort of cohorts) {
-      for (const p of cohort.participants as any[]) {
+      for (const p of cohort.participants) {
         const enrollment = await this.prisma.read.enrollment.findFirst({
-          where: { userId: p.userId, courseId: (cohort as any).courseId },
+          where: { userId: p.userId, courseId: cohort.courseId },
           select: { progress: true, status: true, enrolledAt: true },
         });
 
@@ -495,7 +516,7 @@ export class InstructorService {
             fullName: p.user?.fullName,
             avatarUrl: p.user?.avatarUrl,
             cohortId: cohort.id,
-            cohortName: (cohort as any).name,
+            cohortName: cohort.name,
             course: cohort.course,
             progress: enrollment?.progress ?? 0,
             daysSinceEnroll,
