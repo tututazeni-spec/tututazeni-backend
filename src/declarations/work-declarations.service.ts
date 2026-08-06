@@ -3,6 +3,7 @@
 // Responsabilidade: formulários dinâmicos de compliance, onboarding, periódicos
 // ─────────────────────────────────────────────────────────────────────────────
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Prisma, WorkDeclSubmission } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { assertCanAccess } from '../common/authz/ownership';
@@ -96,7 +97,7 @@ export class WorkDeclarationsService {
 
   async updateForm(id: number, dto: UpdateWorkDeclFormDto, updatedById: number) {
     const { questions, ...rest } = dto;
-    const updated: any = { ...rest };
+    const updated: Prisma.WorkDeclFormUpdateInput = { ...rest };
     if (rest.validFrom) updated.validFrom = new Date(rest.validFrom);
     if (rest.validTo) updated.validTo = new Date(rest.validTo);
 
@@ -174,7 +175,7 @@ export class WorkDeclarationsService {
   async findSubmissions(filters: WorkDeclFilterDto) {
     const { page = 1, limit = 20, userId, formId, type, status, department, from, to } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.WorkDeclSubmissionWhereInput = {};
 
     if (userId) where.userId = userId;
     if (formId) where.formId = formId;
@@ -259,7 +260,7 @@ export class WorkDeclarationsService {
 
     // Upsert: qualquer submissão anterior (DRAFT/REJECTED/EXPIRED) é actualizada in-place —
     // o par [userId, formId] é único, nunca se pode criar uma segunda linha.
-    let submission: any;
+    let submission: WorkDeclSubmission;
     if (existing) {
       // Apagar respostas antigas
       await this.prisma.workDeclAnswer.deleteMany({ where: { submissionId: existing.id } });
@@ -344,8 +345,8 @@ export class WorkDeclarationsService {
     });
 
     const msg = dto.approved
-      ? `A sua declaração "${(sub as any).form?.title}" foi aprovada`
-      : `A sua declaração "${(sub as any).form?.title}" foi rejeitada${dto.notes ? `: ${dto.notes}` : ''}`;
+      ? `A sua declaração "${sub.form?.title}" foi aprovada`
+      : `A sua declaração "${sub.form?.title}" foi rejeitada${dto.notes ? `: ${dto.notes}` : ''}`;
     await this.notifyUser(
       sub.userId,
       dto.approved ? 'WORK_DECL_APPROVED' : 'WORK_DECL_REJECTED',
@@ -383,7 +384,7 @@ export class WorkDeclarationsService {
     });
     const submittedIds = new Set(submitted.map(s => s.userId));
 
-    const where: any = {};
+    const where: Prisma.UserWhereInput = {};
     if (department) where.department = { name: { contains: department, mode: 'insensitive' } };
 
     const users = await this.prisma.read.user.findMany({ where, select: { id: true } });
@@ -426,9 +427,14 @@ export class WorkDeclarationsService {
   // ══════════════════════════════════════════════════════════════════
 
   async getDashboard(department?: string) {
-    const where: any = {};
+    const where: Prisma.WorkDeclSubmissionWhereInput = {};
+    // Achado real: `user.employee` — User NUNCA teve relação `employee`
+    // (mesmo achado já corrigido em document-declarations.service.ts) —
+    // este where rebentava sempre com "Unknown argument employee" sempre
+    // que o parâmetro `department` era fornecido, mascarado pelo
+    // `where: any`. User.department é a relação real.
     if (department)
-      where.user = { employee: { department: { contains: department, mode: 'insensitive' } } };
+      where.user = { department: { name: { contains: department, mode: 'insensitive' } } };
 
     const [total, pending, approved, rejected, expired] = await Promise.all([
       this.prisma.read.workDeclSubmission.count({ where }),
@@ -464,7 +470,7 @@ export class WorkDeclarationsService {
     const forms = await this.prisma.read.workDeclForm.findMany({
       where: { active: true, mandatory: true },
     });
-    const where: any = { active: true };
+    const where: Prisma.UserWhereInput = { active: true };
     if (department) where.department = { name: { contains: department, mode: 'insensitive' } };
 
     const users = await this.prisma.read.user.findMany({
