@@ -1,6 +1,6 @@
 // src/roi-impact/roi-impact.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { EnrollmentStatus } from '@prisma/client';
+import { EnrollmentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoiFilterDto, CalculateRoiDto, WhatIfDto, RoiConfidence } from './roi-impact.dto';
 
@@ -82,7 +82,7 @@ export class RoiImpactService {
     const costPerEnroll = params.costPerEnrollment ?? DEFAULTS.costPerEnrollment;
     const benefitPerC = params.benefitPerCompletion ?? DEFAULTS.benefitPerCompletion;
 
-    const where: any = {
+    const where: Prisma.EnrollmentWhereInput = {
       enrolledAt: { gte: range.gte, lte: range.lte },
       ...uWhere,
       ...(filter.courseId ? { courseId: filter.courseId } : {}),
@@ -107,9 +107,16 @@ export class RoiImpactService {
       this.prisma.read.enrollment.count({
         where: { ...where, status: EnrollmentStatus.IN_PROGRESS },
       }),
+      // Achado real: AssessmentAttempt NÃO tem coluna `createdAt` (só
+      // startedAt/submittedAt/deadline/lastSavedAt) — este where rebentava
+      // sempre com "Unknown argument createdAt", mascarado pelo `as any` E
+      // pelo .catch() (que engolia o erro e devolvia score:null em
+      // silêncio) — avgAssessmentScore ficava sempre null em todos os
+      // relatórios de ROI. `submittedAt` é o campo correcto (quando a
+      // tentativa foi entregue).
       this.prisma.assessmentAttempt
         .aggregate({
-          where: { createdAt: { gte: range.gte, lte: range.lte } } as any,
+          where: { submittedAt: { gte: range.gte, lte: range.lte } },
           _avg: { score: true },
         })
         .catch(e => {
@@ -121,9 +128,12 @@ export class RoiImpactService {
           });
           return { _avg: { score: null } };
         }),
+      // Achado real: LessonProgress NÃO tem coluna `updatedAt` (só
+      // completedAt) — mesmo problema de avgAssessmentScore acima,
+      // totalLessonCompletions ficava sempre 0.
       this.prisma.lessonProgress
         .count({
-          where: { completed: true, updatedAt: { gte: range.gte, lte: range.lte } } as any,
+          where: { completed: true, completedAt: { gte: range.gte, lte: range.lte } },
         })
         .catch(e => {
           this.logger.warn({
@@ -321,9 +331,12 @@ export class RoiImpactService {
           ...(filter.courseId ? { courseId: filter.courseId } : {}),
         },
       }),
+      // Mesmos achados reais de calculateRoiFull() acima — AssessmentAttempt
+      // não tem `createdAt` (usar submittedAt) e LessonProgress não tem
+      // `updatedAt` (usar completedAt).
       this.prisma.assessmentAttempt
         .aggregate({
-          where: { createdAt: { gte: range.gte, lte: range.lte } } as any,
+          where: { submittedAt: { gte: range.gte, lte: range.lte } },
           _avg: { score: true },
         })
         .catch(e => {
@@ -336,7 +349,7 @@ export class RoiImpactService {
           return { _avg: { score: null } };
         }),
       this.prisma.lessonProgress
-        .count({ where: { completed: true, updatedAt: { gte: range.gte } } as any })
+        .count({ where: { completed: true, completedAt: { gte: range.gte } } })
         .catch(e => {
           this.logger.warn({
             departmentId: filter.departmentId,
@@ -628,7 +641,7 @@ export class RoiImpactService {
   async getLearningImpact(filter: RoiFilterDto = {}) {
     const range = dateRange(filter);
     const uWhere = filter.departmentId ? { user: { departmentId: filter.departmentId } } : {};
-    const where: any = {
+    const where: Prisma.EnrollmentWhereInput = {
       enrolledAt: { gte: range.gte, lte: range.lte },
       ...uWhere,
       ...(filter.courseId ? { courseId: filter.courseId } : {}),
@@ -675,14 +688,14 @@ export class RoiImpactService {
       this.prisma.enrollment
         .count({
           where: {
-            course: { mandatory: true } as any,
+            course: { mandatory: true },
             status: EnrollmentStatus.COMPLETED,
             ...uWhere,
           },
         })
         .then(async mandC => {
           const mandT = await this.prisma.enrollment
-            .count({ where: { course: { mandatory: true } as any, ...uWhere } })
+            .count({ where: { course: { mandatory: true }, ...uWhere } })
             .catch(e => {
               this.logger.warn({
                 departmentId: filter.departmentId,
