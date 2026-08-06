@@ -5,6 +5,7 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateKnowledgeCategoryDto,
@@ -76,7 +77,7 @@ export class KnowledgeService {
     } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.KnowledgeArticleWhereInput = {};
     if (status) where.status = status;
     else where.status = 'PUBLISHED'; // por defeito apenas publicados
     if (accessLevel) where.accessLevel = accessLevel;
@@ -95,7 +96,7 @@ export class KnowledgeService {
     }
 
     // Ordenação
-    let orderBy: any = { createdAt: 'desc' };
+    let orderBy: Prisma.KnowledgeArticleOrderByWithRelationInput = { createdAt: 'desc' };
     if (sortBy === 'POPULAR') orderBy = { viewCount: 'desc' };
     if (sortBy === 'RATING') orderBy = { avgRating: 'desc' };
     if (sortBy === 'UPDATED') orderBy = { updatedAt: 'desc' };
@@ -285,14 +286,14 @@ export class KnowledgeService {
     });
 
     // Guardar nova versão se conteúdo mudou
-    if (dto.content && dto.content !== (existing as any).content) {
+    if (dto.content && dto.content !== existing.content) {
       await this.prisma.articleVersion.create({
         data: {
           articleId: id,
-          version: (existing._count as any).versions + 1,
+          version: existing._count.versions + 1,
           title: updated.title,
           content: dto.content,
-          authorId: updatedById ?? (existing as any).authorId,
+          authorId: updatedById ?? existing.authorId,
           changeReason: changeReason ?? 'Actualização de conteúdo',
         },
       });
@@ -347,7 +348,7 @@ export class KnowledgeService {
       include: { _count: { select: { acknowledgements: true } } },
     });
     if (!article) throw new NotFoundException('Artigo não encontrado');
-    if ((article._count as any).acknowledgements > 0 && article.mandatory) {
+    if (article._count.acknowledgements > 0 && article.mandatory) {
       throw new ForbiddenException(
         'Artigo obrigatório com confirmações não pode ser eliminado. Archive-o.',
       );
@@ -478,7 +479,7 @@ export class KnowledgeService {
   async deleteComment(commentId: number, userId: number) {
     const comment = await this.prisma.read.articleComment.findUnique({ where: { id: commentId } });
     if (!comment) throw new NotFoundException('Comentário não encontrado');
-    if ((comment as any).authorId !== userId) throw new ForbiddenException('Sem permissão');
+    if (comment.authorId !== userId) throw new ForbiddenException('Sem permissão');
     await this.prisma.articleComment.delete({ where: { id: commentId } });
     return { message: 'Comentário removido' };
   }
@@ -508,11 +509,11 @@ export class KnowledgeService {
     });
 
     // Notificar quem perguntou
-    if ((question as any).askedById !== userId) {
+    if (question.askedById !== userId) {
       await this.prisma.notificationLog
         .create({
           data: {
-            userId: (question as any).askedById,
+            userId: question.askedById,
             type: 'KNOWLEDGE_ANSWER',
             message: `A sua pergunta foi respondida`,
             metadata: JSON.stringify({}),
@@ -520,7 +521,7 @@ export class KnowledgeService {
         })
         .catch((e: unknown) => {
           this.logger.warn({
-            userId: (question as any).askedById,
+            userId: question.askedById,
             action: 'KNOWLEDGE_ANSWER_NOTIFY',
             entityId: dto.questionId,
             err: { message: e instanceof Error ? e.message : String(e) },
