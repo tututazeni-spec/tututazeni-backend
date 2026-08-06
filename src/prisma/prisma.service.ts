@@ -78,7 +78,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       // `omit` muda o tipo de retorno genérico do client — o campo replicaClient
       // é tipado como PrismaClient "base" porque só é usado para o ciclo de vida
       // da ligação ($connect/$disconnect/$on); as queries passam por `this.db`,
-      // que já trata este client como `any` (readReplicas abaixo).
+      // que faz a ponte de tipos via `unknown` (readReplicas abaixo, em buildDbClient).
       this.replicaClient = new PrismaClient({
         adapter: new PrismaPg(readPool),
         log: [{ emit: 'event', level: 'query' }],
@@ -92,18 +92,27 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     this.pino.setContext('PrismaService');
   }
 
-  private buildDbClient() {
+  // $extends()/readReplicas() devolvem um tipo de client estendido que não é
+  // nominalmente PrismaService (nem o PrismaClient de @prisma/client —
+  // readReplicas espera o PrismaClient de @prisma/client/extension, uma
+  // declaração distinta) — daí o `unknown` intermédio em vez de um cast
+  // directo. `db`/`read` continuam a expor a mesma API em runtime, só o
+  // tipo estático é que precisa desta ponte.
+  private buildDbClient(): PrismaService {
     if (!this.replicaClient) {
       this.logger.warn(
         'Read replicas DESLIGADAS (USE_REPLICAS!=true ou sem DATABASE_REPLICA_URL) — ' +
           'todas as queries vão para o primary.',
       );
       // Sem réplica: devolve o próprio cliente; API idêntica, tudo no primary.
-      return this.$extends({}) as any;
+      return this.$extends({}) as unknown as PrismaService;
     }
 
     this.logger.log('Read replicas ACTIVAS — leituras encaminhadas para a réplica.');
-    return this.$extends(readReplicas({ replicas: [this.replicaClient as any] })) as any;
+    type ReplicaClient = Parameters<typeof readReplicas>[0]['replicas'][number];
+    return this.$extends(
+      readReplicas({ replicas: [this.replicaClient as unknown as ReplicaClient] }),
+    ) as unknown as PrismaService;
   }
 
   async onModuleInit() {
