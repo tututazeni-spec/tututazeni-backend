@@ -41,11 +41,11 @@ export class MobileService {
 
   // Obter dados mobile para dashboard simplificado
   async getUserMobileDashboard(userId: number) {
-    const enrollments = await (this.prisma as any).read.enrollment.findMany({
+    const enrollments = await this.prisma.read.enrollment.findMany({
       where: { userId },
     });
 
-    const evaluations = await (this.prisma as any).read.evaluationAttempt.findMany({
+    const evaluations = await this.prisma.read.evaluationAttempt.findMany({
       where: { enrollment: { userId } },
     });
 
