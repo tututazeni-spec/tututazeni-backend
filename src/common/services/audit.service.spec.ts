@@ -51,6 +51,42 @@ describe('AuditService (common)', () => {
     expect(mockPrisma.auditLog.create).toHaveBeenCalled();
   });
 
+  it('log() stringifica metadata (objecto bruto rebentava o AuditProcessor)', async () => {
+    await service.log({
+      entity: 'Document',
+      entityId: 1,
+      action: 'CREATE',
+      userId: 1,
+      metadata: { docId: 'd1' },
+    });
+    expect(mockQueue.add).toHaveBeenCalledWith(
+      'write',
+      expect.objectContaining({ metadata: JSON.stringify({ docId: 'd1' }) }),
+      expect.any(Object),
+    );
+  });
+
+  it('log() stringifica details (alias de metadata)', async () => {
+    await service.log({
+      entity: 'Employee',
+      entityId: 2,
+      action: 'UPDATE',
+      userId: 1,
+      details: { field: 'salary' },
+    });
+    expect(mockQueue.add).toHaveBeenCalledWith(
+      'write',
+      expect.objectContaining({ metadata: JSON.stringify({ field: 'salary' }) }),
+      expect.any(Object),
+    );
+  });
+
+  it('log() sem metadata/details não define o campo', async () => {
+    await service.log({ entity: 'User', entityId: 1, action: 'CREATE', userId: 1 });
+    const [, data] = mockQueue.add.mock.calls[0];
+    expect(data.metadata).toBeUndefined();
+  });
+
   it('logEntity enfileira com metadata stringificada', async () => {
     await service.logEntity(7, 'CREATE', 'FundingGrant', 'cuid123', { funderId: 'f1' });
     expect(mockQueue.add).toHaveBeenCalledWith(

@@ -11,8 +11,21 @@ interface AuditLogInput {
   entityType?: string;
   entityId?: number | string;
   userId: number | string;
-  metadata?: Record<string, any>;
-  details?: Record<string, any>;
+  // `object` (não Record<string, unknown>) porque dezenas de chamadores
+  // passam directamente uma instância de DTO (sem index signature) em vez
+  // de um objecto literal — ambos serializam bem com JSON.stringify.
+  metadata?: object;
+  details?: object;
+}
+
+// Forma real do que é persistido em AuditLog — metadata é sempre uma String
+// (campo String? @db.Text no schema), nunca o objecto bruto.
+interface AuditWriteData {
+  userId: number;
+  action: string;
+  entity: string;
+  entityId?: number;
+  metadata?: string;
 }
 
 @Injectable()
@@ -30,12 +43,20 @@ export class AuditService {
   }
 
   async log(input: AuditLogInput): Promise<void> {
+    // AuditLog.metadata é String? no schema — nenhum chamador de log() (nem
+    // via `metadata`, nem via o alias `details`) alguma vez pré-serializava
+    // isto; passar o objecto bruto (antes escondido pelo `as any`) rebentava
+    // sempre com erro de validação do Prisma quando o AuditProcessor (fila
+    // 'audit') tentava escrever job.data directamente — silenciosamente, já
+    // que os 3 retries do Bull esgotavam e a escrita de auditoria perdia-se
+    // (ver comentário "não perder compliance" em enqueueOrWrite abaixo).
+    const rawMetadata = input.metadata ?? input.details;
     await this.enqueueOrWrite({
       action: input.action,
       entity: input.entity ?? input.entityType ?? 'Unknown',
       entityId: input.entityId !== undefined ? Number(input.entityId) : undefined,
       userId: Number(input.userId),
-      metadata: (input.metadata ?? input.details) as any,
+      metadata: rawMetadata !== undefined ? JSON.stringify(rawMetadata) : undefined,
     });
   }
 
@@ -49,7 +70,7 @@ export class AuditService {
     action: string,
     entity: string,
     entityId: string,
-    meta: Record<string, any> = {},
+    meta: object = {},
   ): Promise<void> {
     await this.enqueueOrWrite({
       userId,
@@ -61,7 +82,7 @@ export class AuditService {
 
   /** Enfileira o write de auditoria; cai para escrita síncrona se a fila estiver
    *  desligada (QUEUE_ENABLED=false) ou se falhar a enfileirar (Redis em baixo). */
-  private async enqueueOrWrite(data: any): Promise<void> {
+  private async enqueueOrWrite(data: AuditWriteData): Promise<void> {
     if (!this.queueEnabled) {
       await this.prisma.auditLog.create({ data });
       return;
