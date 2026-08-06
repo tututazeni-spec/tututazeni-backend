@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateBeneficiaryDto,
@@ -63,7 +64,7 @@ export class CrmBeneficiariesService {
       page = 1,
       limit = 20,
     } = filters;
-    const where: any = {
+    const where: Prisma.BeneficiaryWhereInput = {
       deletedAt: null,
       ...(type && { type }),
       ...(status && { status }),
