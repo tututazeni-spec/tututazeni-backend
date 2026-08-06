@@ -25,6 +25,30 @@ export interface AiResponse {
   model: string;
 }
 
+interface ProviderInfo {
+  provider: string;
+  model: string;
+  free: boolean;
+  docs: string;
+}
+
+// Formas das respostas JSON de cada fornecedor — só os campos consumidos
+// abaixo, o resto da resposta real é ignorado.
+interface GroqChatResponse {
+  choices?: { message?: { content?: string } }[];
+  usage?: { completion_tokens?: number };
+}
+
+interface GeminiChatResponse {
+  candidates?: { content?: { parts?: { text?: string }[] } }[];
+  usageMetadata?: { candidatesTokenCount?: number };
+}
+
+interface OllamaChatResponse {
+  message?: { content?: string };
+  eval_count?: number;
+}
+
 @Injectable()
 export class AiProvidersService {
   private readonly logger = new Logger(AiProvidersService.name);
@@ -66,7 +90,7 @@ export class AiProvidersService {
   }
 
   getProviderInfo(): { provider: string; model: string; free: boolean; docs: string } {
-    const info: Record<string, any> = {
+    const info: Record<string, ProviderInfo> = {
       groq: {
         provider: 'Groq',
         model: this.groqModel,
@@ -134,7 +158,7 @@ export class AiProvidersService {
     }
 
     try {
-      const data: any = await res.json();
+      const data = (await res.json()) as GroqChatResponse;
       return {
         text: data.choices?.[0]?.message?.content ?? '',
         tokensUsed: data.usage?.completion_tokens ?? 0,
@@ -201,7 +225,7 @@ export class AiProvidersService {
     }
 
     try {
-      const data: any = await res.json();
+      const data = (await res.json()) as GeminiChatResponse;
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
       const tokensUsed = data.usageMetadata?.candidatesTokenCount ?? 0;
 
@@ -256,7 +280,7 @@ export class AiProvidersService {
     }
 
     try {
-      const data: any = await res.json();
+      const data = (await res.json()) as OllamaChatResponse;
       return {
         text: data.message?.content ?? '',
         tokensUsed: data.eval_count ?? 0,
