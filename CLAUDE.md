@@ -936,6 +936,7 @@ O histórico do repositório mostra uma auditoria extensa de IDOR (commits `A10-
 12. **Auditoria/compliance**: `src/audit/audit.service.ts` (cadeia de hash) está desligado da actividade real da app — o registo de eventos de negócio passa por `src/common/services/audit.service.ts`, sem hash chain
 13. **Testes de integração**: `DB_POOL_MAX` tem de estar baixo em `.env.test`; `afterAll` elimina sempre filhos antes de pais (FK RESTRICT) e nunca assumas que `userId` num log de acesso é o dono do recurso
 14. **Verificações de ownership (`assertCanAccess`)** não estão garantidamente completas mesmo em módulos já auditados — confirma sempre por método, nunca por módulo
+15. **CI obrigatório antes de qualquer merge para `main`** — regra dura, não só convenção. Nenhum PR é dado como "pronto" ou mergeado sem o check `quality` (workflow `Code Quality`, `.github/workflows/quality.yml`) verde. Isto está aplicado directamente no GitHub como branch protection em `main` (`required_status_checks: ["quality"]`, `strict: true`, `enforce_admins: true`) — nem administradores conseguem fazer merge/push directo sem o check passar. Se o CI estiver indisponível (ex.: outage da plataforma GitHub Actions), a resposta correcta é esperar e vigiar a recuperação — nunca contornar a protecção do branch, desligar o required check, ou fazer merge manual à força.
 
 ---
 
