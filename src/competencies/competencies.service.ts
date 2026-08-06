@@ -6,6 +6,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateCompetencyDto,
@@ -33,7 +34,7 @@ export class CompetenciesService {
     const { page = 1, limit = 20, search, category, status, tag } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.CompetencyWhereInput = {};
     if (search)
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -109,7 +110,7 @@ export class CompetenciesService {
   }
 
   async remove(id: number) {
-    const c = (await this.findOne(id)) as any;
+    const c = await this.findOne(id);
     if (c._count.userCompetencies > 0) {
       throw new BadRequestException(
         `Competência tem ${c._count.userCompetencies} utilizadores associados. Archive-a em vez de eliminar.`,
@@ -320,7 +321,7 @@ export class CompetenciesService {
   }
 
   async getCompetencyEvolution(userId: number, competencyId?: number) {
-    const where: any = { userId };
+    const where: Prisma.CompetencyEvolutionLogWhereInput = { userId };
     if (competencyId) where.competencyId = competencyId;
 
     return this.prisma.read.competencyEvolutionLog.findMany({
@@ -360,9 +361,9 @@ export class CompetenciesService {
         currentLevel: current,
         gap: gapValue,
         met: current >= req.requiredLevel,
-        priority: (req as any).priority ?? 'MANDATORY',
-        weight: (req as any).weight ?? 1,
-        recommendedCourses: (req.competency as any).courses?.map((cc: any) => cc.course) ?? [],
+        priority: req.priority ?? 'MANDATORY',
+        weight: req.weight ?? 1,
+        recommendedCourses: req.competency.courses?.map(cc => cc.course) ?? [],
       };
     });
 
@@ -485,7 +486,7 @@ export class CompetenciesService {
   // ─── SKILL MATRIX ─────────────────────────────────────────────────────────
 
   async getSkillMatrix(departmentId?: number, positionId?: number) {
-    const userWhere: any = { active: true };
+    const userWhere: Prisma.UserWhereInput = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;
     if (positionId) userWhere.positionId = positionId;
 
@@ -553,7 +554,7 @@ export class CompetenciesService {
   }
 
   async getOrgGapDashboard(departmentId?: number) {
-    const userWhere: any = { active: true };
+    const userWhere: Prisma.UserWhereInput = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;
 
     const users = await this.prisma.read.user.findMany({
@@ -627,10 +628,7 @@ export class CompetenciesService {
       const existing = await this.prisma.userCompetency.findFirst({
         where: { userId, competencyId: cc.competencyId },
       });
-      const newLevel = Math.min(
-        5,
-        Math.max(existing?.currentLevel ?? 0, (cc as any).levelGained ?? 1),
-      );
+      const newLevel = Math.min(5, Math.max(existing?.currentLevel ?? 0, cc.levelGained ?? 1));
 
       if (!existing || existing.currentLevel < newLevel) {
         await this.upsertUserCompetency({
