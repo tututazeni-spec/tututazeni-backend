@@ -59,7 +59,7 @@ interface CompetencyScoreEntry {
   gap: number | null;
 }
 
-interface CompetencyGapEntry {
+export interface CompetencyGapEntry {
   competencyId: string;
   name: string;
   score: number | null;

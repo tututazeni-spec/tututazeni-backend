@@ -1,8 +1,21 @@
 ﻿// src/evaluation360/evaluation360.events.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { EvaluatorAssignment, Eval360Feedback } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CompetencyGapEntry } from './evaluation360.service';
+
+// Forma real emitida por generateAutoPdi() em evaluation360.service.ts —
+// não é um tipo Prisma (o PDI ainda não foi criado, é só o "esqueleto" de
+// acções que o módulo PDI vai consumir por este evento).
+interface AutoPdiAction {
+  title: string;
+  description: string;
+  dueDate: Date;
+  status: string;
+  priority: string;
+}
 
 @Injectable()
 export class Evaluation360EventListeners {
@@ -14,7 +27,7 @@ export class Evaluation360EventListeners {
   ) {}
 
   @OnEvent('evaluation.invitation.send')
-  async onInvitationSend(payload: { assignment: any }) {
+  async onInvitationSend(payload: { assignment: EvaluatorAssignment }) {
     const { assignment } = payload;
     try {
       const evaluator = await this.prisma.user.findUnique({
@@ -59,7 +72,7 @@ export class Evaluation360EventListeners {
   }
 
   @OnEvent('evaluation.reminder.send')
-  async onReminderSend(payload: { assignment: any; channels: string[] }) {
+  async onReminderSend(payload: { assignment: EvaluatorAssignment; channels: string[] }) {
     const { assignment } = payload;
     try {
       const evaluatee = await this.prisma.user.findUnique({
@@ -172,7 +185,7 @@ export class Evaluation360EventListeners {
   }
 
   @OnEvent('feedback.continuous.created')
-  async onFeedbackCreated(payload: { feedback: any }) {
+  async onFeedbackCreated(payload: { feedback: Eval360Feedback }) {
     const { feedback } = payload;
     if (feedback.isPrivate) return;
     try {
@@ -199,8 +212,8 @@ export class Evaluation360EventListeners {
   async onPdiAutoCreate(payload: {
     userId: string;
     cycleId: string;
-    gaps: any[];
-    actions: any[];
+    gaps: CompetencyGapEntry[];
+    actions: AutoPdiAction[];
     sourceResultId: string;
   }) {
     try {
