@@ -1,6 +1,6 @@
 // src/dashboard/dashboard.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { EnrollmentStatus } from '@prisma/client';
+import { EnrollmentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
@@ -41,18 +41,6 @@ function trend(current: number, previous: number): number {
   return +(((current - previous) / previous) * 100).toFixed(1);
 }
 
-function safeM(prisma: any, name: string) {
-  return (
-    prisma[name] ?? {
-      findMany: async () => [],
-      findFirst: async () => null,
-      count: async () => 0,
-      aggregate: async () => ({ _avg: {}, _sum: {}, _count: {} }),
-      groupBy: async () => [],
-    }
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────
 // SERVICE
 // ─────────────────────────────────────────────────────────────────
@@ -71,6 +59,16 @@ export class DashboardService {
   // ══════════════════════════════════════════════════════
 
   async getMyDashboard(userId: number) {
+    // FIX: `.catch()` a seguir a uma promise Prisma colapsa o tipo inteiro
+    // para `any` sem isto — a query extraída para variável preserva o tipo
+    // real via `Awaited<typeof query>` (mesmo padrão de history.service.ts).
+    const notificationsQuery = this.prisma.notificationLog.findMany({
+      where: { userId, read: false },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: { id: true, type: true, message: true, createdAt: true },
+    });
+
     const [
       user,
       inProgress,
@@ -141,22 +139,15 @@ export class DashboardService {
         include: { competency: { select: { name: true } } },
         take: 5,
       }),
-      this.prisma.notificationLog
-        .findMany({
-          where: { userId, read: false },
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-          select: { id: true, type: true, message: true, createdAt: true },
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            userId,
-            action: 'DASHBOARD_MY_NOTIFICATIONS',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter notificações não lidas para o dashboard pessoal',
-          });
-          return [] as any[];
-        }),
+      notificationsQuery.catch((e: unknown): Awaited<typeof notificationsQuery> => {
+        this.logger.warn({
+          userId,
+          action: 'DASHBOARD_MY_NOTIFICATIONS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter notificações não lidas para o dashboard pessoal',
+        });
+        return [];
+      }),
     ]);
 
     // PDI stats
@@ -248,7 +239,7 @@ export class DashboardService {
       select: { departmentId: true, fullName: true },
     });
     const deptId = filters.departmentId ?? user?.departmentId;
-    const teamWhere: any = { managerId: userId, active: true };
+    const teamWhere: Prisma.UserWhereInput = { managerId: userId, active: true };
 
     const team = await this.prisma.read.user.findMany({
       where: teamWhere,
@@ -456,6 +447,16 @@ export class DashboardService {
     const prev = prevPeriodStart(filters.period);
     const deptFilter = filters.departmentId ? { departmentId: filters.departmentId } : {};
 
+    // FIX: `.catch()` a seguir a uma promise Prisma colapsa o tipo inteiro
+    // para `any` sem isto — mesmo padrão de getMyDashboard() acima.
+    const topContentQuery = this.prisma.auditLog.groupBy({
+      by: ['entityId'],
+      where: { action: 'CONTENT_VIEW', entity: 'ContentAsset', timestamp: { gte: since } },
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 5,
+    });
+
     const [
       totalUsers,
       activeUsers,
@@ -584,24 +585,16 @@ export class DashboardService {
           return 0;
         }),
       // Top content
-      this.prisma.auditLog
-        .groupBy({
-          by: ['entityId'],
-          where: { action: 'CONTENT_VIEW', entity: 'ContentAsset', timestamp: { gte: since } },
-          _count: { id: true },
-          orderBy: { _count: { id: 'desc' } },
-          take: 5,
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            departmentId: filters.departmentId,
-            period: filters.period,
-            action: 'DASHBOARD_ORG_TOP_CONTENT',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter conteúdos mais vistos a nível organizacional',
-          });
-          return [] as any[];
-        }),
+      topContentQuery.catch((e: unknown): Awaited<typeof topContentQuery> => {
+        this.logger.warn({
+          departmentId: filters.departmentId,
+          period: filters.period,
+          action: 'DASHBOARD_ORG_TOP_CONTENT',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter conteúdos mais vistos a nível organizacional',
+        });
+        return [];
+      }),
       // Training hours estimate (completions × avg course workload)
       this.prisma.enrollment
         .count({
@@ -625,7 +618,7 @@ export class DashboardService {
     ]);
 
     // Enrich top content
-    const contentIds = (topContentViews as any[]).map((v: any) => v.entityId).filter(Boolean);
+    const contentIds = topContentViews.map(v => v.entityId).filter((id): id is number => id != null);
     const contents = contentIds.length
       ? await this.prisma.read.contentAsset.findMany({
           where: { id: { in: contentIds } },
@@ -667,12 +660,12 @@ export class DashboardService {
         name: d.name,
         headcount: d._count.users,
       })),
-      topContent: (topContentViews as any[])
-        .map((v: any) => ({
-          content: cMap.get(v.entityId),
+      topContent: topContentViews
+        .map(v => ({
+          content: v.entityId != null ? cMap.get(v.entityId) : undefined,
           views: v._count.id,
         }))
-        .filter((v: any) => v.content),
+        .filter(v => v.content),
       insights: this.buildOrgInsights({
         hiPoCount,
         successionCoverage,
@@ -856,12 +849,14 @@ export class DashboardService {
       });
 
     // Mandatory training not completed
+    // FIX: `as any` desnecessário — `enrollments` é uma relação real de
+    // Course, o where já é um Prisma.CourseWhereInput válido sem cast.
     const mandatoryPending = await this.prisma.course
       .count({
         where: {
           mandatory: true,
           enrollments: { none: { userId, status: EnrollmentStatus.COMPLETED } },
-        } as any,
+        },
       })
       .catch((e: unknown) => {
         this.logger.warn({
@@ -910,7 +905,7 @@ export class DashboardService {
   // ══════════════════════════════════════════════════════
 
   async getLeaderboard(departmentId?: number, limit = 10) {
-    const where: any = { active: true };
+    const where: Prisma.UserWhereInput = { active: true };
     if (departmentId) where.departmentId = departmentId;
 
     const users = await this.prisma.read.user.findMany({
@@ -964,6 +959,13 @@ export class DashboardService {
   async globalSearch(query: string, limit = 10) {
     if (!query || query.length < 2) return { users: [], courses: [], skills: [] };
 
+    // FIX: mesmo padrão de getMyDashboard()/getOrganizationSummary() acima.
+    const competenciesQuery = this.prisma.competency.findMany({
+      where: { name: { contains: query, mode: 'insensitive' } },
+      select: { id: true, name: true, type: true },
+      take: 5,
+    });
+
     const [users, courses, competencies] = await Promise.all([
       this.prisma.read.user.findMany({
         where: {
@@ -988,21 +990,15 @@ export class DashboardService {
         select: { id: true, title: true, category: true, thumbnailUrl: true },
         take: limit,
       }),
-      this.prisma.competency
-        .findMany({
-          where: { name: { contains: query, mode: 'insensitive' } },
-          select: { id: true, name: true, type: true },
-          take: 5,
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            query,
-            action: 'DASHBOARD_GLOBAL_SEARCH_COMPETENCIES',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao pesquisar competências na pesquisa global',
-          });
-          return [] as any[];
-        }),
+      competenciesQuery.catch((e: unknown): Awaited<typeof competenciesQuery> => {
+        this.logger.warn({
+          query,
+          action: 'DASHBOARD_GLOBAL_SEARCH_COMPETENCIES',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao pesquisar competências na pesquisa global',
+        });
+        return [];
+      }),
     ]);
 
     return { users, courses, competencies };
@@ -1073,9 +1069,12 @@ export class DashboardService {
     return insights;
   }
 
+  // Superfícies mínimas usadas por buildExecutiveRisks() — getOrganizationSummary()
+  // e getTalentHealthScore() devolvem objectos muito maiores, mas só estes
+  // campos são lidos aqui.
   private buildExecutiveRisks(
-    org: any,
-    talentHealth: any,
+    org: { kpis: { talent?: { successionCoverage?: number }; development?: { coverage?: number } } },
+    talentHealth: { healthScore?: number } | null,
   ): { type: string; label: string; severity: string }[] {
     const risks = [];
     if ((org.kpis.talent?.successionCoverage ?? 0) < 30)
@@ -1135,10 +1134,12 @@ export class DashboardService {
       });
     if (!survey) return null;
 
-    const scores = (survey?.responses ?? [])
-      .flatMap((r: any) => r.answers)
-      .filter((a: any) => a.question?.type === 'ENPS' && a.value !== null)
-      .map((a: any) => a.value as number);
+    // FIX: casts `any` desnecessários — `survey.responses`/`.answers`/
+    // `.question` já vêm totalmente tipados do `include` acima.
+    const scores = survey.responses
+      .flatMap(r => r.answers)
+      .filter(a => a.question?.type === 'ENPS' && a.value !== null)
+      .map(a => a.value as number);
 
     if (!scores.length) return null;
     const p = scores.filter(s => s >= 9).length;
