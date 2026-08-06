@@ -300,12 +300,12 @@ describe('CertificationService', () => {
 
   describe('getDashboard', () => {
     it('deve retornar totais de certificados e badges', async () => {
+      mockPrisma.read.issuedCertificate.groupBy.mockResolvedValue([]);
       mockPrisma.$transaction.mockResolvedValue([
         20,
         5,
         2,
         1,
-        [],
         3,
         8,
         4,
