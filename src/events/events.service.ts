@@ -6,7 +6,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, CertificateType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateEventDto,
@@ -445,7 +445,10 @@ export class EventsService {
     const code = `EVT-${Date.now()}-${eventId}-${userId}`;
     await this.prisma.certificate.create({
       data: {
-        type: 'COURSE' as any,
+        // CertificateType não tem valor EVENT (achado estrutural, ver
+        // schema.prisma) — usa-se COURSE como o mais próximo disponível.
+        // Enum real, não 'as any': mesmo comportamento em runtime.
+        type: CertificateType.COURSE,
         userId,
         eventId,
         validationCode: code,
