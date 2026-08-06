@@ -29,15 +29,23 @@ export class Evaluation360EventListeners {
         `[360] Enviando convite: ${evaluator.fullName} vai avaliar ${evaluatee.fullName} (${assignment.role})`,
       );
 
+      // Achado real: `metadata` já vinha convertido em string via
+      // JSON.stringify() aqui, mas notifications.service.ts#send() volta a
+      // fazer JSON.stringify() sobre o valor recebido — o NotificationLog
+      // gravado por este caminho ficava com metadata duplamente escapado
+      // (uma string JSON dentro doutra), rebentando qualquer JSON.parse()
+      // a jusante que espere o objecto original. Mascarado antes pelo
+      // `metadata?: any` de sendToUser(). Corrigido para passar o objecto
+      // directamente — send() é responsável por serializar uma única vez.
       await this.notifications.sendToUser(+assignment.evaluatorId, {
         title: 'Convite para Avaliação 360°',
         message: `Você foi convidado a avaliar ${evaluatee.fullName}. Aceda ao INNOVA para responder.`,
         type: 'INFO',
-        metadata: JSON.stringify({
+        metadata: {
           cycleId: assignment.cycleId,
           evaluateeId: assignment.evaluateeId,
           role: assignment.role,
-        }),
+        },
       });
     } catch (err: unknown) {
       this.logger.error({
