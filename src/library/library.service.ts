@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateCollectionDto,
@@ -77,7 +78,7 @@ export class LibraryService {
 
   async findAllItems(filters: FilterItemDto) {
     const { type, collectionId, category, search, isApproved, page = 1, limit = 20 } = filters;
-    const where: any = {
+    const where: Prisma.LibraryItemWhereInput = {
       deletedAt: null,
       ...(type && { type }),
       ...(collectionId && { collectionId }),
@@ -276,7 +277,7 @@ export class LibraryService {
         where: { createdAt: { gte: startOfMonth } },
       }),
       this.prisma.read.libraryCollection.count({ where: { deletedAt: null } }),
-      (this.prisma.read.libraryItem.groupBy as any)({
+      this.prisma.read.libraryItem.groupBy({
         by: ['type'],
         where: { deletedAt: null },
         _count: { id: true },
