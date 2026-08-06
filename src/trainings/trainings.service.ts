@@ -7,6 +7,7 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateTrainingDto,
@@ -43,7 +44,7 @@ export class TrainingService {
     } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.TrainingWhereInput = {};
     if (status) where.status = status;
     else where.status = 'PUBLISHED';
     if (type) where.type = type;
@@ -182,7 +183,9 @@ export class TrainingService {
   }
 
   async remove(id: number) {
-    const t = (await this.findOne(id)) as any;
+    // FIX: `as any` desnecessário — findOne() já devolve `_count`/`status`
+    // totalmente tipados via o `include` da própria query.
+    const t = await this.findOne(id);
     if (t._count.participants > 0 && t.status === 'PUBLISHED') {
       throw new ForbiddenException(
         'Treinamento com participantes não pode ser eliminado. Archive-o primeiro.',
@@ -231,7 +234,8 @@ export class TrainingService {
       include: { _count: { select: { participants: true } } },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
-    if ((session._count as any).participants > 0) {
+    // FIX: `as any` desnecessário — `_count` já vem tipado do `include` acima.
+    if (session._count.participants > 0) {
       throw new BadRequestException('Sessão com participantes não pode ser eliminada');
     }
     await this.prisma.trainingSession.delete({ where: { id } });
@@ -258,13 +262,15 @@ export class TrainingService {
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
 
+    // FIX: casts `as any` desnecessários — `session` já vem tipado do
+    // findUnique() acima (maxParticipants/waitlistEnabled são colunas
+    // directas de TrainingSession; `_count.participants` vem do `include`).
     // Verificar vagas
     const hasVacancy =
-      (session as any).maxParticipants === 0 ||
-      (session._count as any).participants < (session as any).maxParticipants;
+      session.maxParticipants === 0 || session._count.participants < session.maxParticipants;
 
     const status =
-      !hasVacancy && (session as any).waitlistEnabled
+      !hasVacancy && session.waitlistEnabled
         ? ParticipantStatus.WAITLIST
         : !hasVacancy
           ? (() => {
@@ -320,7 +326,9 @@ export class TrainingService {
       where: { id: participantId },
     });
     if (!p) throw new NotFoundException('Inscrição não encontrada');
-    if ((p as any).userId !== userId) throw new ForbiddenException('Sem permissão');
+    // FIX: casts `as any` desnecessários — `p` já vem tipado do findUnique()
+    // acima (userId/sessionId são colunas directas de TrainingParticipant).
+    if (p.userId !== userId) throw new ForbiddenException('Sem permissão');
 
     await this.prisma.trainingParticipant.update({
       where: { id: participantId },
@@ -329,7 +337,7 @@ export class TrainingService {
 
     // Promover o primeiro da lista de espera
     const nextWaitlist = await this.prisma.read.trainingParticipant.findFirst({
-      where: { sessionId: (p as any).sessionId, status: 'WAITLIST' },
+      where: { sessionId: p.sessionId, status: 'WAITLIST' },
       orderBy: { createdAt: 'asc' },
     });
     if (nextWaitlist) {
@@ -375,31 +383,33 @@ export class TrainingService {
       },
     });
 
+    // FIX: casts `as any` desnecessários — `p` já vem tipado do findUnique()
+    // acima, e `session`/`session.training` já vêm tipados do `include`.
     // Emitir certificado automaticamente se COMPLETED e passou
     if (dto.status === 'COMPLETED') {
       const session = await this.prisma.read.trainingSession.findUnique({
-        where: { id: (p as any).sessionId },
+        where: { id: p.sessionId },
         include: { training: true },
       });
-      const training = (session as any)?.training;
+      const training = session?.training;
 
       if (training?.issueCertificate) {
         const score = dto.finalScore ?? 100;
         if (score >= (training.passingScore ?? 70)) {
-          await this.issueCertificate((p as any).userId, (p as any).sessionId, score);
+          await this.issueCertificate(p.userId, p.sessionId, score);
         }
       }
 
       // XP
       await this.prisma.userPoints
         .upsert({
-          where: { userId: (p as any).userId },
-          create: { userId: (p as any).userId, points: 100 },
+          where: { userId: p.userId },
+          create: { userId: p.userId, points: 100 },
           update: { points: { increment: 100 } },
         })
         .catch(e =>
           this.logger.warn({
-            userId: (p as any).userId,
+            userId: p.userId,
             participantId: id,
             action: 'TRAINING_COMPLETED_XP',
             err: { message: e instanceof Error ? e.message : String(e) },
@@ -428,7 +438,7 @@ export class TrainingService {
     let absent = 0;
 
     for (const p of participants) {
-      const isPresent = presentSet.has((p as any).userId);
+      const isPresent = presentSet.has(p.userId);
       await this.prisma.trainingParticipant.update({
         where: { id: p.id },
         data: { status: isPresent ? 'ATTENDED' : 'ABSENT' },
@@ -565,7 +575,9 @@ export class TrainingService {
   // ─── RELATÓRIO DE PRESENÇA ────────────────────────────────────────────────
 
   async getAttendanceReport(trainingId: number) {
-    const training = (await this.findOne(trainingId)) as any;
+    // FIX: `as any` desnecessário — findOne() já devolve title/type/
+    // workloadHours totalmente tipados.
+    const training = await this.findOne(trainingId);
 
     const sessions = await this.prisma.read.trainingSession.findMany({
       where: { trainingId },
@@ -580,7 +592,9 @@ export class TrainingService {
     });
 
     const report = sessions.map(session => {
-      const participants = session.participants as any[];
+      // FIX: `as any[]` desnecessário — `session.participants` já vem
+      // tipado do `include` acima.
+      const participants = session.participants;
       const total = participants.filter(p => p.status !== 'WAITLIST').length;
       const attended = participants.filter(
         p => p.status === 'ATTENDED' || p.status === 'COMPLETED',
