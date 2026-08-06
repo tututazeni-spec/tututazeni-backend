@@ -2,7 +2,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
-import { PermissionAction, PermissionSubject } from '@prisma/client';
+import { Prisma, PermissionAction, PermissionSubject } from '@prisma/client';
 import {
   CreatePermissionDto,
   BulkAssignPermissionsDto,
@@ -22,6 +22,47 @@ const PERM_CACHE_TTL_SECONDS = 60;
 
 function permKey(userId: number): string {
   return `acl:perm:${userId}`;
+}
+
+// accessPolicy não existe em prisma/schema.prisma. `prisma: any` é o único
+// `any` deliberadamente mantido — acesso dinâmico `prisma[name]` a um
+// modelo que pode não existir não tem tipo gerado pelo Prisma (mesmo
+// padrão de safeM()/safeModel() noutros serviços do projecto).
+//
+// Achado real corrigido ao introduzir este helper: o código anterior fazia
+// `(this.prisma as any).accessPolicy?.findMany(...).catch(...)` — o `?.`
+// faz short-circuit de TODA a cadeia opcional quando `accessPolicy` é
+// undefined, incluindo o `.catch()` encadeado a seguir; `getPolicies()`
+// devolvia `undefined` em vez de `[]`, e em evaluatePolicies() o `for
+// (const policy of policies as any[])` sobre `undefined` REBENTAVA sempre
+// com TypeError — no caminho mais comum de checkPermission() (qualquer
+// verificação em que o utilizador TEM a permissão). safeM() garante sempre
+// um objecto com métodos reais (nunca undefined), por isso o .catch()
+// encadeado a seguir passa a funcionar como esperado.
+function safeM(prisma: any, name: string) {
+  return (
+    prisma[name] ?? {
+      findMany: async () => [],
+      findFirst: async () => null,
+      create: async (d: { data: unknown }) => d.data,
+    }
+  );
+}
+
+// Forma real de um registo accessPolicy (confirmada no próprio .create()
+// deste ficheiro) — sem tipos gerados pelo Prisma.
+export interface AccessPolicyRow {
+  id: number;
+  name: string;
+  description?: string | null;
+  subject: string;
+  action: string;
+  condition: string;
+  effect: 'ALLOW' | 'DENY';
+  priority: number;
+  requiresJustification: boolean;
+  createdById: number;
+  active: boolean;
 }
 
 // ─── Built-in permission matrix ──────────────────────────────────
@@ -204,14 +245,15 @@ export class AclService {
 
   async createPermission(dto: CreatePermissionDto) {
     const roleId = await this.getAdminRoleId();
+    // Achado real: Permission não tem coluna `sensitive` (nem `description`)
+    // no schema real — `dto.sensitive` ia escondido atrás de `as any` e,
+    // quando efectivamente enviado pelo cliente (campo público e
+    // documentado no DTO, @IsOptional mas aceite), rebentava sempre com
+    // "Unknown argument sensitive" (500 em bruto do Prisma). Sem migração
+    // ao schema, sensitive/description não podem ser persistidos —
+    // omitidos deliberadamente do create() em vez de fingir que existem.
     return this.prisma.permission.create({
-      data: {
-        name: dto.name,
-        action: dto.action,
-        subject: dto.subject,
-        roleId,
-        ...(dto.sensitive !== undefined && ({ sensitive: dto.sensitive } as any)),
-      },
+      data: { name: dto.name, action: dto.action, subject: dto.subject, roleId },
     });
   }
 
@@ -267,7 +309,12 @@ export class AclService {
   }
 
   async updateRole(id: number, dto: Partial<CreateRoleDto>) {
-    return this.prisma.role.update({ where: { id }, data: dto as any });
+    // Achado real: CreateRoleDto tem `priority`/`parentRoleId`, mas Role não
+    // tem essas colunas no schema real (só id/name/description/code) —
+    // enviá-los rebentava sempre com "Unknown argument priority/
+    // parentRoleId" (500 em bruto do Prisma), mascarado pelo `as any`.
+    const { priority: _priority, parentRoleId: _parentRoleId, ...data } = dto;
+    return this.prisma.role.update({ where: { id }, data });
   }
 
   async cloneRole(id: number, dto: CloneRoleDto) {
@@ -398,7 +445,7 @@ export class AclService {
     });
 
     const roleCode = user?.role?.code ?? user?.role?.name ?? 'COLABORADOR';
-    const permissions = (user?.role as any)?.permissions?.map((p: any) => p.name) ?? [];
+    const permissions = user?.role?.permissions?.map(p => p.name) ?? [];
 
     // Add wildcard if ADMIN
     const effective =
@@ -447,21 +494,21 @@ export class AclService {
   // POLICIES (ABAC / PBAC)
   // ══════════════════════════════════════════════════════
 
-  async getPolicies() {
-    return (this.prisma as any).accessPolicy
-      ?.findMany({ orderBy: { priority: 'desc' } })
-      .catch(e => {
+  async getPolicies(): Promise<AccessPolicyRow[]> {
+    return safeM(this.prisma, 'accessPolicy')
+      .findMany({ orderBy: { priority: 'desc' } })
+      .catch((e: unknown) => {
         this.logger.warn({
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao ler políticas de acesso (accessPolicy)',
         });
-        return [] as any[];
+        return [];
       });
   }
 
   async createPolicy(dto: CreatePolicyDto, createdById: number) {
-    return (this.prisma as any).accessPolicy
-      ?.create({
+    return safeM(this.prisma, 'accessPolicy')
+      .create({
         data: {
           name: dto.name,
           description: dto.description,
@@ -475,7 +522,7 @@ export class AclService {
           active: true,
         },
       })
-      .catch(e => {
+      .catch((e: unknown) => {
         this.logger.warn({
           createdById,
           action: 'createPolicy',
@@ -493,11 +540,11 @@ export class AclService {
     userId: number,
     action: string,
     subject: string,
-    context?: Record<string, any>,
+    context?: Record<string, unknown>,
   ): Promise<boolean> {
     // DENY = true means access denied
-    const policies = await (this.prisma as any).accessPolicy
-      ?.findMany({
+    const policies: AccessPolicyRow[] = await safeM(this.prisma, 'accessPolicy')
+      .findMany({
         where: {
           active: true,
           effect: 'DENY',
@@ -506,7 +553,7 @@ export class AclService {
         },
         orderBy: { priority: 'desc' },
       })
-      .catch(e => {
+      .catch((e: unknown) => {
         this.logger.warn({
           userId,
           action,
@@ -514,10 +561,10 @@ export class AclService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao ler políticas DENY — modelo accessPolicy pode estar ausente',
         });
-        return [] as any[];
+        return [];
       });
 
-    for (const policy of policies as any[]) {
+    for (const policy of policies) {
       try {
         const condition = JSON.parse(policy.condition);
         // Simple condition evaluator
@@ -547,7 +594,9 @@ export class AclService {
   async getAuditLog(filters: AclAuditFilterDto) {
     const { page = 1, limit = 30, userId, action, from, to } = filters;
     const skip = (page - 1) * limit;
-    const where: any = { entity: { in: ['User', 'Role', 'Permission', 'ACL'] } };
+    const where: Prisma.AuditLogWhereInput = {
+      entity: { in: ['User', 'Role', 'Permission', 'ACL'] },
+    };
     if (userId) where.userId = userId;
     if (action) where.action = { contains: action, mode: 'insensitive' };
     if (from || to) {
@@ -573,7 +622,7 @@ export class AclService {
   async getDeniedLog(filters: AclAuditFilterDto) {
     const { page = 1, limit = 30 } = filters;
     const skip = (page - 1) * limit;
-    const where: any = { action: 'ACCESS_DENIED' };
+    const where: Prisma.AuditLogWhereInput = { action: 'ACCESS_DENIED' };
     if (filters.userId) where.userId = filters.userId;
 
     const [data, total] = await Promise.all([
@@ -646,12 +695,18 @@ export class AclService {
   // ══════════════════════════════════════════════════════
 
   async seedBuiltinPermissions() {
-    const created: any[] = [];
+    // Achado real: `roleId` (obrigatório no schema — ver nota em
+    // getAdminRoleId()) nunca era incluído no create() aqui, ao contrário de
+    // createPermission() que já o resolve correctamente — cada permissão
+    // nova que este seed tentasse criar rebentava sempre com "Argument
+    // roleId is missing", mascarado pelo `as any`.
+    const roleId = await this.getAdminRoleId();
+    const created: Prisma.PermissionGetPayload<object>[] = [];
     for (const p of BUILTIN_PERMISSIONS) {
       const existing = await this.prisma.permission.findFirst({ where: { name: p.name } });
       if (!existing) {
-        const perm = await (this.prisma as any).permission.create({
-          data: { name: p.name, action: p.action, subject: p.subject },
+        const perm = await this.prisma.permission.create({
+          data: { name: p.name, action: p.action, subject: p.subject, roleId },
         });
         created.push(perm);
       }
@@ -687,6 +742,17 @@ export class AclService {
   // ══════════════════════════════════════════════════════
 
   async getStats() {
+    // FIX: `.catch()` a seguir a uma promise Prisma colapsa o tipo inteiro
+    // para `any` sem isto — a query extraída para variável preserva o tipo
+    // real via `Awaited<typeof query>` (mesmo padrão usado noutros
+    // serviços do projecto).
+    const recentDeniedQuery = this.prisma.auditLog.findMany({
+      where: { action: 'ACCESS_DENIED' },
+      include: { user: { select: { id: true, fullName: true } } },
+      orderBy: { timestamp: 'desc' },
+      take: 5,
+    });
+
     const [totalUsers, totalRoles, totalPermissions, deniedCount, recentDenied] = await Promise.all(
       [
         this.prisma.read.user.count({ where: { active: true } }),
@@ -700,21 +766,14 @@ export class AclService {
           });
           return 0;
         }),
-        this.prisma.auditLog
-          .findMany({
-            where: { action: 'ACCESS_DENIED' },
-            include: { user: { select: { id: true, fullName: true } } },
-            orderBy: { timestamp: 'desc' },
-            take: 5,
-          })
-          .catch(e => {
-            this.logger.warn({
-              action: 'getStats',
-              err: { message: e instanceof Error ? e.message : String(e) },
-              msg: 'Falha ao obter acessos negados recentes para estatísticas ACL',
-            });
-            return [] as any[];
-          }),
+        recentDeniedQuery.catch((e: unknown): Awaited<typeof recentDeniedQuery> => {
+          this.logger.warn({
+            action: 'getStats',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter acessos negados recentes para estatísticas ACL',
+          });
+          return [];
+        }),
       ],
     );
 
