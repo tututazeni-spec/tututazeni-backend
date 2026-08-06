@@ -61,20 +61,46 @@ function percentile(value: number, allValues: number[]): number {
   return Math.round((below / allValues.length) * 100);
 }
 
-/** Safe model access for optional Prisma models */
+/**
+ * Safe model access for optional Prisma models.
+ * `prisma: any` é o único `any` deliberadamente mantido — acesso dinâmico
+ * `prisma[name]` a um modelo que pode não existir não tem nenhum tipo
+ * gerado pelo Prisma para se agarrar (mesmo problema/solução de
+ * api-integration.service.ts/content-library.service.ts). Os métodos do
+ * stub de fallback usam `{ data: unknown }`/`{ create: unknown }` em vez de
+ * `(d: any)`.
+ */
 const safeM = (prisma: any, name: string) =>
   prisma[name] ?? {
     findMany: async () => [],
     findFirst: async () => null,
     findUnique: async () => null,
-    create: async (d: any) => d.data,
+    create: async (d: { data: unknown }) => d.data,
     createMany: async () => ({ count: 0 }),
-    upsert: async (d: any) => d.create,
-    update: async (d: any) => d.data,
+    upsert: async (d: { create: unknown }) => d.create,
+    update: async (d: { data: unknown }) => d.data,
     delete: async () => null,
     count: async () => 0,
     groupBy: async () => [],
   };
+
+// EvaluationCycle existe em prisma/schema.prisma, mas pertence a outro
+// domínio (monitoring/OKRs — id cuid, type/status como enums fixos, sem
+// formId/weights/targetDeptIds/selfEvalIncludedInScore); evaluationForm não
+// existe de todo. Ver nota estrutural junto de createCycle() abaixo — os
+// campos aqui ficam deliberadamente permissivos (index signature) em vez de
+// fingir conhecer a forma real de um registo que nunca chega a persistir
+// através deste ficheiro.
+export interface EvaluationCycleRow {
+  id?: number | string | null;
+  name?: string;
+  model?: string;
+  status?: string;
+  endDate?: string | Date;
+  weights?: string | null;
+  targetDeptIds?: number[];
+  [key: string]: unknown;
+}
 
 // ─────────────────────────────────────────────────────────────────
 // SERVICE
@@ -151,10 +177,13 @@ export class EvaluationService {
   async getCycles(filters: CycleFilterDto = {}) {
     const { page = 1, limit = 20, status } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    // Record<string, unknown> em vez de `any` — não há
+    // Prisma.EvaluationCycleWhereInput real a que amarrar este filtro (ver
+    // nota estrutural em createCycle() abaixo).
+    const where: Record<string, unknown> = {};
     if (status) where.status = status;
 
-    const data = await safeM(this.prisma, 'evaluationCycle')
+    const data: EvaluationCycleRow[] = await safeM(this.prisma, 'evaluationCycle')
       .findMany({
         where,
         skip,
@@ -168,7 +197,7 @@ export class EvaluationService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao listar ciclos de avaliação — a devolver lista vazia',
         });
-        return [] as any[];
+        return [];
       });
 
     const total = await safeM(this.prisma, 'evaluationCycle')
@@ -187,7 +216,7 @@ export class EvaluationService {
   }
 
   async getCycle(id: number) {
-    const cycle = await safeM(this.prisma, 'evaluationCycle')
+    const cycle: EvaluationCycleRow | null = await safeM(this.prisma, 'evaluationCycle')
       .findUnique({
         where: { id },
         include: { form: true },
@@ -205,9 +234,13 @@ export class EvaluationService {
     if (!cycle) throw new NotFoundException('Ciclo não encontrado');
 
     // Participation stats
+    // EvaluationRequest.cycleId (Int?) e EvaluationCycle.id (cuid real, ou
+    // null em modo compatibilidade) são conceitos de "cycle" completamente
+    // diferentes — cast pontual documentado, não uma correcção de tipo real
+    // (ver nota estrutural em createCycle() acima).
     const requests = await this.prisma.evaluationRequest
       .findMany({
-        where: cycle.id ? { cycleId: cycle.id } : {},
+        where: cycle.id ? { cycleId: cycle.id as number } : {},
       })
       .catch((e: unknown) => {
         this.logger.warn({
@@ -233,7 +266,8 @@ export class EvaluationService {
   }
 
   async updateCycle(id: number, dto: UpdateCycleDto) {
-    const data: any = { ...dto };
+    // Record<string, unknown> pela mesma razão de getCycles() acima.
+    const data: Record<string, unknown> = { ...dto };
     if (dto.endDate) data.endDate = new Date(dto.endDate);
 
     return safeM(this.prisma, 'evaluationCycle')
@@ -327,7 +361,7 @@ export class EvaluationService {
     return updated;
   }
 
-  private async autoAssignCycleRequests(cycleId: number, cycle: any) {
+  private async autoAssignCycleRequests(cycleId: number, cycle: EvaluationCycleRow) {
     const weights = cycle.weights ? JSON.parse(cycle.weights ?? '[]') : [];
     const deptFilter: Prisma.UserWhereInput = {};
     if (cycle.targetDeptIds?.length) deptFilter.departmentId = { in: cycle.targetDeptIds };
@@ -430,7 +464,7 @@ export class EvaluationService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao listar formulários de avaliação — a devolver lista vazia',
         });
-        return [] as any[];
+        return [];
       });
   }
 
