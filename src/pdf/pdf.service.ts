@@ -36,8 +36,15 @@ export class PdfService {
 
   async generateDeclarationPdf(data: {
     content: string;
-    config: any;
-    declaration: any;
+    // Só `config.companyName` é lido abaixo — tipado estruturalmente em vez
+    // de importar o tipo real do módulo work-declaration (único chamador),
+    // para não criar uma dependência inversa de um serviço PDF genérico
+    // para um módulo de domínio específico.
+    config: { companyName?: string } | null;
+    // Não usado dentro deste método — mantido na assinatura porque o
+    // chamador (work-declaration.service.ts) já o passa, mas nada aqui lê
+    // o seu conteúdo.
+    declaration: unknown;
     withWatermark?: boolean;
   }): Promise<Buffer> {
     const doc = this.createDoc('Declaração');
