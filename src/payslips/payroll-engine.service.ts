@@ -7,6 +7,15 @@ import { PrismaService } from '../prisma/prisma.service';
 
 // ─── Internal Types ───────────────────────────────────────────────────────────
 
+// CountryConfig.socialSecurity é Json no schema — esta interface documenta
+// a forma real, confirmada nos consumidores (employeeRate/employerRate/
+// ceiling) e no fallback getDefaultAngolaConfig() abaixo.
+interface SocialSecurityConfig {
+  employeeRate: number;
+  employerRate: number;
+  ceiling: number | null;
+}
+
 export interface PayrollContext {
   userId: number;
   baseSalary: number;
@@ -344,7 +353,7 @@ export class PayrollEngineService {
 
     return {
       ...config,
-      socialSecurity: config.socialSecurity as any,
+      socialSecurity: config.socialSecurity as unknown as SocialSecurityConfig,
     };
   }
 
