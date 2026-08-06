@@ -19,6 +19,7 @@ const mockPrisma = {
   },
   payslipDispute: { create: jest.fn() },
   user: { findMany: jest.fn().mockResolvedValue([]) },
+  employeeCompensation: { findFirst: jest.fn().mockResolvedValue(null) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
@@ -246,10 +247,12 @@ describe('PayslipsService — bulkCreate', () => {
   });
 
   it('cria recibos para utilizadores activos sem recibo existente no período', async () => {
-    mockPrisma.user.findMany.mockResolvedValue([
-      { id: 1, position: { baseSalary: 200_000 } },
-      { id: 2, position: { baseSalary: 300_000 } },
-    ]);
+    // Salário base real vem de EmployeeCompensation, não de Position (que
+    // nunca teve coluna baseSalary — ver commit de correcção do any-cleanup).
+    mockPrisma.user.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+    mockPrisma.employeeCompensation.findFirst
+      .mockResolvedValueOnce({ baseSalary: 200_000 })
+      .mockResolvedValueOnce({ baseSalary: 300_000 });
     mockPrisma.payslip.findFirst.mockResolvedValue(null);
     mockPrisma.payslip.create.mockResolvedValue({});
 
@@ -264,7 +267,7 @@ describe('PayslipsService — bulkCreate', () => {
   });
 
   it('salta utilizadores que já têm recibo no período (sem duplicar)', async () => {
-    mockPrisma.user.findMany.mockResolvedValue([{ id: 1, position: { baseSalary: 200_000 } }]);
+    mockPrisma.user.findMany.mockResolvedValue([{ id: 1 }]);
     mockPrisma.payslip.findFirst.mockResolvedValue({ id: 99 });
 
     const out = await service.bulkCreate({ period: '2026-04', paymentDate: '2026-04-25' } as any);
@@ -275,7 +278,8 @@ describe('PayslipsService — bulkCreate', () => {
   });
 
   it('issueImmediately: emite e notifica de imediato cada recibo criado', async () => {
-    mockPrisma.user.findMany.mockResolvedValue([{ id: 1, position: { baseSalary: 200_000 } }]);
+    mockPrisma.user.findMany.mockResolvedValue([{ id: 1 }]);
+    mockPrisma.employeeCompensation.findFirst.mockResolvedValue({ baseSalary: 200_000 });
     mockPrisma.payslip.findFirst.mockResolvedValue(null);
     mockPrisma.payslip.create.mockResolvedValue({});
 
@@ -294,10 +298,8 @@ describe('PayslipsService — bulkCreate', () => {
   });
 
   it('erro ao criar recibo de um utilizador não interrompe o lote — é recolhido em errors', async () => {
-    mockPrisma.user.findMany.mockResolvedValue([
-      { id: 1, position: { baseSalary: 200_000 } },
-      { id: 2, position: { baseSalary: 200_000 } },
-    ]);
+    mockPrisma.user.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+    mockPrisma.employeeCompensation.findFirst.mockResolvedValue({ baseSalary: 200_000 });
     mockPrisma.payslip.findFirst.mockResolvedValue(null);
     mockPrisma.payslip.create
       .mockRejectedValueOnce(new Error('falha db'))
@@ -310,7 +312,8 @@ describe('PayslipsService — bulkCreate', () => {
   });
 
   it('userIds filtra o universo de utilizadores considerados', async () => {
-    mockPrisma.user.findMany.mockResolvedValue([{ id: 5, position: { baseSalary: 100_000 } }]);
+    mockPrisma.user.findMany.mockResolvedValue([{ id: 5 }]);
+    mockPrisma.employeeCompensation.findFirst.mockResolvedValue({ baseSalary: 100_000 });
     mockPrisma.payslip.findFirst.mockResolvedValue(null);
     mockPrisma.payslip.create.mockResolvedValue({});
 

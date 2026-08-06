@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { PayslipAccessAction } from '@prisma/client';
+import { Prisma, PayslipAccessAction } from '@prisma/client';
 import {
   CreatePayslipDto,
   UpdatePayslipDto,
@@ -42,6 +42,23 @@ const IRT_TABLE_2026: IrtBracket[] = [
 
 const INSS_EMPLOYEE_RATE = 0.03; // 3%
 const INSS_EMPLOYER_RATE = 0.08; // 8%
+
+// Campos monetários de Payslip usados dinamicamente por sum()/diff() abaixo
+// — em vez de `(p as any)[field]`, agora restrito às chaves reais do modelo.
+type PayslipAmountField =
+  | 'baseSalary'
+  | 'mealAllowance'
+  | 'vacationAllowance'
+  | 'christmasAllowance'
+  | 'overtime'
+  | 'bonuses'
+  | 'otherAllowances'
+  | 'grossSalary'
+  | 'netSalary'
+  | 'incomeTax'
+  | 'socialSecurity'
+  | 'employerInss'
+  | 'totalDeductions';
 
 @Injectable()
 export class PayslipsService {
@@ -126,7 +143,7 @@ export class PayslipsService {
     const { page = 1, limit = 20, userId, period, year, status } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.PayslipWhereInput = {};
     if (userId) where.userId = userId;
     if (status) where.status = status;
     if (period) where.period = period;
@@ -158,7 +175,7 @@ export class PayslipsService {
 
   // ─── DETALHE ───────────────────────────────────────────────────────────────
   async findOne(id: number, user?: CurrentUserData) {
-    const p = await (this.prisma as any).payslip.findUnique({
+    const p = await this.prisma.payslip.findUnique({
       where: { id },
       include: {
         user: {
@@ -195,7 +212,7 @@ export class PayslipsService {
     const totals = this.computeTotals(dto);
     const code = this.generateReceiptCode(dto.userId, dto.period);
 
-    return (this.prisma as any).payslip.create({
+    return this.prisma.payslip.create({
       data: {
         ...dto,
         receiptCode: code,
@@ -216,13 +233,10 @@ export class PayslipsService {
   // ─── CRIAR EM MASSA ────────────────────────────────────────────────────────
   async bulkCreate(dto: BulkCreatePayslipDto) {
     const { period, paymentDate, userIds, issueImmediately = false } = dto;
-    const where: any = { active: true };
+    const where: Prisma.UserWhereInput = { active: true };
     if (userIds?.length) where.id = { in: userIds };
 
-    const users = await this.prisma.read.user.findMany({
-      where,
-      include: { position: true },
-    });
+    const users = await this.prisma.read.user.findMany({ where });
 
     const results = { created: 0, skipped: 0, errors: [] as string[], period };
 
@@ -236,11 +250,28 @@ export class PayslipsService {
           continue;
         }
 
-        const base = (u.position as any)?.baseSalary ?? 0;
+        // Achado real: `(u.position as any)?.baseSalary` — Position NÃO tem
+        // (nunca teve) coluna `baseSalary` no schema real (só salaryMin/
+        // salaryMax); esta expressão avaliava sempre `undefined ?? 0`, ou
+        // seja todos os recibos gerados em massa saíam sempre com
+        // baseSalary=0 (e, em cascata, grossSalary/incomeTax/netSalary
+        // também errados) — mascarado pelo `any`, nunca apanhado pelos
+        // testes unitários porque o mock da suite também inventa
+        // `position.baseSalary`. O dado real de salário-base por
+        // colaborador vive em EmployeeCompensation (mesmo modelo usado por
+        // payroll-engine.service.ts#loadEmployeeCompensation).
+        const compensation = await this.prisma.read.employeeCompensation.findFirst({
+          where: {
+            userId: u.id,
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+          },
+          orderBy: { effectiveFrom: 'desc' },
+        });
+        const base = compensation?.baseSalary ?? 0;
         const totals = this.computeTotals({ baseSalary: base });
         const code = this.generateReceiptCode(u.id, period);
 
-        const payslip = await (this.prisma as any).payslip.create({
+        const payslip = await this.prisma.payslip.create({
           data: {
             userId: u.id,
             period,
@@ -372,11 +403,11 @@ export class PayslipsService {
     const { page = 1, limit = 12, year } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = { userId, status: { not: 'DRAFT' } };
+    const where: Prisma.PayslipWhereInput = { userId, status: { not: 'DRAFT' } };
     if (year) where.period = { startsWith: year };
 
     const [data, total] = await Promise.all([
-      (this.prisma as any).payslip.findMany({
+      this.prisma.read.payslip.findMany({
         where,
         skip,
         take: limit,
@@ -410,7 +441,8 @@ export class PayslipsService {
       throw new NotFoundException(`Sem recibos para ${year}`);
     }
 
-    const sum = (field: string) => payslips.reduce((acc, p) => acc + ((p as any)[field] ?? 0), 0);
+    const sum = (field: PayslipAmountField) =>
+      payslips.reduce((acc, p) => acc + (p[field] ?? 0), 0);
 
     return {
       year,
@@ -428,10 +460,10 @@ export class PayslipsService {
       totalDeductions: sum('totalDeductions'),
       monthlySeries: payslips.map(p => ({
         period: p.period,
-        grossSalary: (p as any).grossSalary,
-        netSalary: (p as any).netSalary,
-        incomeTax: (p as any).incomeTax,
-        socialSecurity: (p as any).socialSecurity,
+        grossSalary: p.grossSalary,
+        netSalary: p.netSalary,
+        incomeTax: p.incomeTax,
+        socialSecurity: p.socialSecurity,
       })),
     };
   }
@@ -446,9 +478,9 @@ export class PayslipsService {
     if (!a) throw new NotFoundException(`Recibo de ${periodA} não encontrado`);
     if (!b) throw new NotFoundException(`Recibo de ${periodB} não encontrado`);
 
-    const diff = (field: string) => {
-      const va = (a as any)[field] ?? 0;
-      const vb = (b as any)[field] ?? 0;
+    const diff = (field: PayslipAmountField) => {
+      const va = a[field] ?? 0;
+      const vb = b[field] ?? 0;
       return { a: va, b: vb, delta: vb - va, pct: va ? ((vb - va) / va) * 100 : null };
     };
 
