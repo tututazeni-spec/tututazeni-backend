@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreatePartnerDto,
@@ -55,7 +56,7 @@ export class CrmPartnersService {
 
   async findAll(filters: FilterPartnerDto) {
     const { type, tier, status, search, assignedToId, page = 1, limit = 20 } = filters;
-    const where: any = {
+    const where: Prisma.PartnerWhereInput = {
       deletedAt: null,
       ...(type && { type }),
       ...(tier && { tier }),
