@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Prisma, SessionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   LmsCreateLearningPathDto,
@@ -8,6 +9,23 @@ import {
   FilterPathDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
+
+/**
+ * Incrementos numéricos aplicados a LmsLearningAnalytics — só os campos
+ * numéricos do modelo fazem sentido com `{ increment: n }` (ver updateAnalytics).
+ */
+type LmsAnalyticsIncrements = Partial<
+  Record<
+    | 'totalHours'
+    | 'coursesStarted'
+    | 'coursesCompleted'
+    | 'pathsCompleted'
+    | 'sessionsAttended'
+    | 'avgQuizScore'
+    | 'streakDays',
+    number
+  >
+>;
 
 @Injectable()
 export class LmsService {
@@ -36,13 +54,28 @@ export class LmsService {
     if (existing && !existing.deletedAt) {
       throw new ConflictException(`Código ${dto.code} já existe`);
     }
-    const path = await this.prisma.lmsLearningPath.create({
-      data: {
-        ...dto,
-        courseOrder: dto.courseOrder || dto.courseIds,
-        createdById: userId,
-      },
-    });
+    // `code` é @unique na BD sem excepção para registos soft-deleted — criar
+    // um novo registo com o mesmo código de um percurso já removido rebentava
+    // sempre com violação de unicidade (P2002) apesar de o check acima
+    // implicar que a reutilização era suposta ser permitida. Reactivamos o
+    // registo existente em vez de tentar inserir um duplicado.
+    const path = existing
+      ? await this.prisma.lmsLearningPath.update({
+          where: { id: existing.id },
+          data: {
+            ...dto,
+            courseOrder: dto.courseOrder || dto.courseIds,
+            createdById: userId,
+            deletedAt: null,
+          },
+        })
+      : await this.prisma.lmsLearningPath.create({
+          data: {
+            ...dto,
+            courseOrder: dto.courseOrder || dto.courseIds,
+            createdById: userId,
+          },
+        });
     await this.audit.logEntity(userId, 'CREATE', 'LmsLearningPath', path.id, {
       code: dto.code,
     });
@@ -51,7 +84,7 @@ export class LmsService {
 
   async findAllPaths(filters: FilterPathDto) {
     const { level, search, isFeatured, page = 1, limit = 20 } = filters;
-    const where: any = {
+    const where: Prisma.LmsLearningPathWhereInput = {
       deletedAt: null,
       isActive: true,
       ...(level && { level }),
@@ -224,9 +257,9 @@ export class LmsService {
   }
 
   async findUpcomingSessions(page = 1, limit = 20) {
-    const where = {
+    const where: Prisma.LmsLiveSessionWhereInput = {
       deletedAt: null,
-      status: { in: ['SCHEDULED', 'LIVE'] as any },
+      status: { in: [SessionStatus.SCHEDULED, SessionStatus.LIVE] },
       scheduledAt: { gte: new Date() },
     };
     const [data, total] = await Promise.all([
@@ -367,7 +400,7 @@ export class LmsService {
         },
       }),
       this.prisma.read.lmsLiveSession.count({ where: { deletedAt: null } }),
-      (this.prisma.read.lmsLearningPath.groupBy as any)({
+      this.prisma.read.lmsLearningPath.groupBy({
         by: ['level'],
         where: { deletedAt: null },
         _count: { id: true },
@@ -389,7 +422,7 @@ export class LmsService {
 
   // ─── HELPERS ─────────────────────────────────────────
 
-  private async updateAnalytics(userId: number, increments: any) {
+  private async updateAnalytics(userId: number, increments: LmsAnalyticsIncrements) {
     const existing = await this.prisma.lmsLearningAnalytics.findUnique({
       where: { userId },
     });
@@ -399,9 +432,12 @@ export class LmsService {
       });
       return;
     }
-    const data: any = { lastActivityAt: new Date() };
-    for (const key of Object.keys(increments)) {
-      data[key] = { increment: increments[key] };
+    const data: Prisma.LmsLearningAnalyticsUpdateInput = { lastActivityAt: new Date() };
+    for (const [key, value] of Object.entries(increments) as [
+      keyof LmsAnalyticsIncrements,
+      number,
+    ][]) {
+      data[key] = { increment: value };
     }
     await this.prisma.lmsLearningAnalytics.update({
       where: { userId },
