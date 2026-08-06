@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateYearDto,
@@ -110,7 +111,7 @@ export class AcademicService {
 
   async findAllPrograms(filters: FilterProgramDto) {
     const { level, category, search, isMandatory, page = 1, limit = 20 } = filters;
-    const where: any = {
+    const where: Prisma.AcademicProgramWhereInput = {
       deletedAt: null,
       isActive: true,
       ...(level && { level }),
@@ -426,7 +427,7 @@ export class AcademicService {
           _avg: { finalScore: true },
           where: { finalScore: { not: null } },
         }),
-        (this.prisma.read.academicProgram.groupBy as any)({
+        this.prisma.read.academicProgram.groupBy({
           by: ['level'],
           where: { deletedAt: null },
           _count: { id: true },
