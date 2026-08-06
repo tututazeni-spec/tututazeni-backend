@@ -6,7 +6,7 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { CertificateType } from '@prisma/client';
+import { CertificateType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateCourseDto,
@@ -51,7 +51,7 @@ export class CoursesService {
     } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.CourseWhereInput = {};
     if (status) where.status = status;
     if (category) where.category = category;
     if (level) where.level = level;
@@ -145,7 +145,7 @@ export class CoursesService {
 
   async publish(id: number) {
     const course = await this.findOne(id);
-    if ((course as any)._count.modules === 0) {
+    if (course._count.modules === 0) {
       throw new BadRequestException('Curso sem módulos não pode ser publicado');
     }
     return this.prisma.course.update({
@@ -160,7 +160,16 @@ export class CoursesService {
   }
 
   async duplicate(id: number) {
-    const original = (await this.findOne(id)) as any;
+    const original = await this.findOne(id);
+    // Achado real: `department`/`competencies` (objectos de relação vindos do
+    // `include` de findOne()) não estavam excluídos deste destructure e
+    // vazavam para `...data` → `course.create({ data: {...data, ...} })`
+    // abaixo rebentava sempre em runtime real ("Unknown argument department/
+    // competencies") — mascarado pelo `as any` e nunca apanhado pelos testes
+    // unitários (mock de Prisma não valida argumentos). `competencies` nunca
+    // foi copiado para o curso duplicado (só modules/lessons o são, no loop
+    // abaixo), por isso fica excluído aqui tal como já era feito com
+    // modules/feedbacks/_count.
     const {
       id: _id,
       createdAt,
@@ -169,6 +178,8 @@ export class CoursesService {
       modules,
       feedbacks,
       _count,
+      department: _department,
+      competencies: _competencies,
       ...data
     } = original;
 
@@ -181,7 +192,7 @@ export class CoursesService {
       },
     });
 
-    for (const mod of modules as any[]) {
+    for (const mod of modules) {
       const newMod = await this.prisma.courseModule.create({
         data: { courseId: copy.id, title: mod.title, description: mod.description, seq: mod.seq },
       });
@@ -211,7 +222,7 @@ export class CoursesService {
   }
 
   async remove(id: number) {
-    const course = (await this.findOne(id)) as any;
+    const course = await this.findOne(id);
     if (course.status === 'PUBLISHED' && course._count.enrollments > 0) {
       throw new ForbiddenException(
         'Curso publicado com matrículas não pode ser eliminado. Archive-o primeiro.',
@@ -294,7 +305,7 @@ export class CoursesService {
   // ─── Matrículas ───────────────────────────────────────────────────────────
 
   async enroll(courseId: number, userId: number, dto: EnrollDto) {
-    const course = (await this.findOne(courseId)) as any;
+    const course = await this.findOne(courseId);
     if (course.status !== 'PUBLISHED') {
       throw new BadRequestException('Apenas cursos publicados aceitam matrículas');
     }
@@ -333,7 +344,7 @@ export class CoursesService {
   }
 
   async assignCourse(courseId: number, dto: AssignCourseDto, assignedById: number) {
-    const course = (await this.findOne(courseId)) as any;
+    const course = await this.findOne(courseId);
     if (course.status !== 'PUBLISHED') {
       throw new BadRequestException('Apenas cursos publicados podem ser atribuídos');
     }
@@ -429,7 +440,7 @@ export class CoursesService {
     });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
 
-    const courseId = (lesson as any).module.courseId;
+    const courseId = lesson.module.courseId;
     // Lê matrícula no primary: o estado decide a escrita (transição NOT_STARTED→IN_PROGRESS).
     const enrollment = await this.prisma.enrollment.findFirst({ where: { userId, courseId } });
     if (!enrollment) throw new ForbiddenException('Não está matriculado neste curso');
@@ -520,10 +531,10 @@ export class CoursesService {
           title: l.title,
           type: l.type,
           seq: l.seq,
-          completed: (l as any).progress[0]?.completed ?? false,
-          resumePosition: (l as any).progress[0]?.resumePosition ?? 0,
+          completed: l.progress[0]?.completed ?? false,
+          resumePosition: l.progress[0]?.resumePosition ?? 0,
         })),
-        completedCount: mod.lessons.filter(l => (l as any).progress[0]?.completed).length,
+        completedCount: mod.lessons.filter(l => l.progress[0]?.completed).length,
         totalCount: mod.lessons.length,
       })),
     };
@@ -637,15 +648,23 @@ export class CoursesService {
 
     let totalPoints = 0;
     let earnedPoints = 0;
-    const results: any[] = [];
+    const results: {
+      questionId: number;
+      answer: string | undefined;
+      correct: boolean | null;
+      correctAnswer?: string | null;
+      note?: string;
+    }[] = [];
 
-    for (const q of quiz.questions as any[]) {
+    for (const q of quiz.questions) {
       const answer = dto.answers[String(q.id)];
       totalPoints += q.points;
 
       if (q.type === 'MULTIPLE_CHOICE' || q.type === 'TRUE_FALSE') {
-        const options = q.options ? JSON.parse(q.options) : [];
-        const correct = options.find((o: any) => o.isCorrect)?.text ?? q.correctAnswer;
+        const options: { text?: string; isCorrect?: boolean }[] = q.options
+          ? JSON.parse(q.options)
+          : [];
+        const correct = options.find(o => o.isCorrect)?.text ?? q.correctAnswer;
         const isCorrect = answer?.toLowerCase() === correct?.toLowerCase();
         if (isCorrect) earnedPoints += q.points;
         results.push({ questionId: q.id, answer, correct: isCorrect, correctAnswer: correct });
@@ -751,7 +770,7 @@ export class CoursesService {
       lessonCompletion: lessonCompletion.map(l => ({
         id: l.id,
         title: l.title,
-        completions: (l as any)._count.progress,
+        completions: l._count.progress,
       })),
     };
   }
