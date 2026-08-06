@@ -5,9 +5,10 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { AutomationRule, SystemAlert } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScalabilityService } from './scalability.service';
-import { AutomationTrigger } from './scalability.dto';
+import { AutomationTrigger, LoadTestConfigDto } from './scalability.dto';
 
 @Injectable()
 export class ScalabilityEventListeners {
@@ -148,7 +149,7 @@ export class ScalabilityEventListeners {
   @OnEvent('automation.rule.execute')
   async onAutomationExecute(payload: {
     executionId: string;
-    rule: any;
+    rule: AutomationRule;
     targetUserId?: string;
     actorId: string;
   }) {
@@ -161,9 +162,18 @@ export class ScalabilityEventListeners {
         data: { status: 'RUNNING' },
       });
 
-      await this.service.processAutomationEvent(payload.rule.tenantId, payload.rule.triggerType, {
-        userId: payload.targetUserId,
-      });
+      // rule.triggerType vem do enum real do Prisma ($Enums.AutomationTrigger);
+      // processAutomationEvent() espera o enum espelhado do DTO
+      // (scalability.dto.ts). Ao contrário da direcção DTO→Prisma (ver notas
+      // em createIntegration()/createAutomationRule() — literal unions
+      // estruturalmente compatíveis, sem cast necessário), aqui são dois
+      // `enum` nominais do TS com os mesmos valores em runtime — precisa do
+      // cast, mas via `unknown` para não reintroduzir `any`.
+      await this.service.processAutomationEvent(
+        payload.rule.tenantId,
+        payload.rule.triggerType as unknown as AutomationTrigger,
+        { userId: payload.targetUserId },
+      );
 
       await this.prisma.automationExecution.update({
         where: { id: payload.executionId },
@@ -185,7 +195,7 @@ export class ScalabilityEventListeners {
    * Alertas → Notificar via Email
    */
   @OnEvent('alert.notify.email')
-  async onAlertEmail(payload: { alert: any }) {
+  async onAlertEmail(payload: { alert: SystemAlert }) {
     const { alert } = payload;
     this.logger.warn(`[Alert:EMAIL] [${alert.severity}] ${alert.title}: ${alert.message}`);
     // TODO: Integrar com MailService (nodemailer / SES / SendGrid)
@@ -195,7 +205,7 @@ export class ScalabilityEventListeners {
    * Alertas → Notificar via Push
    */
   @OnEvent('alert.notify.push')
-  async onAlertPush(payload: { alert: any }) {
+  async onAlertPush(payload: { alert: SystemAlert }) {
     const { alert } = payload;
     this.logger.warn(`[Alert:PUSH] [${alert.severity}] ${alert.title}`);
     // TODO: Integrar com Firebase FCM / OneSignal
@@ -205,7 +215,7 @@ export class ScalabilityEventListeners {
    * Alertas → Notificar via Slack
    */
   @OnEvent('alert.notify.slack')
-  async onAlertSlack(payload: { alert: any }) {
+  async onAlertSlack(payload: { alert: SystemAlert }) {
     const { alert } = payload;
     this.logger.warn(`[Alert:SLACK] [${alert.severity}] ${alert.title}`);
     // TODO: Enviar para webhook do Slack configurado na IntegrationConfig do tenant
@@ -224,7 +234,7 @@ export class ScalabilityEventListeners {
    * Teste de carga agendado
    */
   @OnEvent('loadtest.scheduled')
-  async onLoadTestScheduled(payload: any) {
+  async onLoadTestScheduled(payload: LoadTestConfigDto & { scheduledBy: string }) {
     this.logger.log(
       `[LoadTest] Scheduled: ${payload.concurrentUsers} users, ${payload.durationSeconds}s on ${payload.targetEndpoint}`,
     );
