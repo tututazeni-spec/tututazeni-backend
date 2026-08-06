@@ -31,6 +31,8 @@ import {
   ReviewJustificationDto,
   GenerateQrDto,
   ValidateQrDto,
+  LeaveStatus,
+  CheckInMethod,
 } from './attendance.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -210,7 +212,7 @@ export class AttendanceController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Licenças pendentes de aprovação' })
   getPendingLeaves() {
-    return this.svc.getLeaves({ status: 'PENDING' as any });
+    return this.svc.getLeaves({ status: LeaveStatus.PENDING });
   }
 
   @Post('leaves')
@@ -326,7 +328,7 @@ export class AttendanceController {
   @ApiOperation({ summary: 'Validar QR code e efectuar check-in' })
   validateQr(@CurrentUser() user: CurrentUserData, @Body() dto: ValidateQrDto) {
     return this.svc.clockIn(user.id, {
-      method: 'QR_DYNAMIC' as any,
+      method: CheckInMethod.QR_DYNAMIC,
       qrToken: dto.token,
       location: dto.location,
       deviceInfo: dto.deviceInfo,

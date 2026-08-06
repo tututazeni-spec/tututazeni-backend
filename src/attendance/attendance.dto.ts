@@ -200,8 +200,8 @@ export class ValidateQrDto {
 export class CreateAdjustmentDto {
   @ApiProperty() @IsInt() attendanceId!: number;
   @ApiProperty() @IsString() field!: string; // Ex: 'clockIn', 'clockOut', 'status'
-  @ApiProperty() oldValue!: any;
-  @ApiProperty() newValue!: any;
+  @ApiProperty() oldValue!: unknown;
+  @ApiProperty() newValue!: unknown;
   @ApiProperty() @IsString() reason!: string;
 }
 
