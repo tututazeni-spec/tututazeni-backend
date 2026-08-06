@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
@@ -69,7 +70,12 @@ export class UsersService {
   ) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
-  private sanitize(user: { password?: string | null }) {
+  // FIX: era `sanitize(user: { password?: string | null })` (não genérico) —
+  // o retorno ficava amarrado a esse tipo mínimo declarado, não à forma real
+  // do argumento passado em cada chamada, obrigando todos os chamadores a
+  // fazer `(user as any).id`/`.email`/etc. depois de chamar sanitize().
+  // Genérico preserva o shape real do argumento menos `password`.
+  private sanitize<T extends { password?: string | null }>(user: T): Omit<T, 'password'> {
     const { password, ...rest } = user;
     return rest;
   }
@@ -92,7 +98,7 @@ export class UsersService {
     } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.UserWhereInput = {};
 
     if (active !== undefined) where.active = active;
     if (departmentId) where.departmentId = departmentId;
@@ -246,7 +252,7 @@ export class UsersService {
           message: `Bem-vindo à plataforma INNOVA, ${user.fullName}!`,
         },
       })
-      .catch((e: any) => {
+      .catch((e: unknown) => {
         this.logger.warn({
           userId: user.id,
           action: 'USER_CREATED',
@@ -266,7 +272,7 @@ export class UsersService {
   async update(id: number, dto: UpdateUserDto, updatedById?: number) {
     const existing = await this.findOne(id);
 
-    if (dto.email && dto.email !== (existing as any).email) {
+    if (dto.email && dto.email !== existing.email) {
       // Guards de unicidade antes da escrita: força primary.
       const emailExists = await this.prisma.user.findFirst({
         where: { email: dto.email, id: { not: id } },
@@ -274,14 +280,14 @@ export class UsersService {
       if (emailExists) throw new ConflictException('Email já em uso');
     }
 
-    if (dto.employeeNumber && dto.employeeNumber !== (existing as any).employeeNumber) {
+    if (dto.employeeNumber && dto.employeeNumber !== existing.employeeNumber) {
       const empExists = await this.prisma.user.findFirst({
         where: { employeeNumber: dto.employeeNumber, id: { not: id } },
       });
       if (empExists) throw new ConflictException('Número de funcionário já em uso');
     }
 
-    const data: any = { ...dto };
+    const data: Prisma.UserUpdateInput = { ...dto };
     if (dto.password) data.password = await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR);
     if (dto.birthDate) data.birthDate = new Date(dto.birthDate);
     if (dto.hireDate) data.hireDate = new Date(dto.hireDate);
@@ -321,7 +327,7 @@ export class UsersService {
   }
 
   async deactivate(id: number, reason?: string) {
-    const user = (await this.findOne(id)) as any;
+    const user = await this.findOne(id);
     if (user.accountStatus === 'INACTIVE') return user;
 
     const updated = await this.prisma.user.update({
@@ -345,7 +351,7 @@ export class UsersService {
   // ─── SOFT DELETE ──────────────────────────────────────────────────────────
 
   async remove(id: number) {
-    const user = (await this.findOne(id)) as any;
+    const user = await this.findOne(id);
 
     // Soft delete — preservar histórico
     await this.prisma.user.update({
@@ -479,7 +485,7 @@ export class UsersService {
   // ─── DIRETÓRIO INTERNO ────────────────────────────────────────────────────
 
   async getDirectory(search?: string, departmentId?: number) {
-    const where: any = { active: true };
+    const where: Prisma.UserWhereInput = { active: true };
     if (departmentId) where.departmentId = departmentId;
     if (search) {
       where.OR = [
@@ -553,7 +559,7 @@ export class UsersService {
       try {
         const user = await this.create(users[i]);
         results.success++;
-        results.created.push((user as any).id);
+        results.created.push(user.id);
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);
         results.errors.push({ line: i + 1, email: users[i].email, error: message });
@@ -590,21 +596,21 @@ export class UsersService {
     await this.prisma.notificationLog
       .create({
         data: {
-          userId: (user as any).id,
+          userId: user.id,
           type: 'INVITE_SENT',
           message: `Convite enviado para ${dto.email}`,
         },
       })
-      .catch((e: any) => {
+      .catch((e: unknown) => {
         this.logger.warn({
-          userId: (user as any).id,
+          userId: user.id,
           action: 'INVITE_SENT',
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao registar notificação de convite',
         });
       });
 
-    return { message: 'Convite enviado', userId: (user as any).id };
+    return { message: 'Convite enviado', userId: user.id };
   }
 
   // ─── AUDIT LOGS ───────────────────────────────────────────────────────────
@@ -678,7 +684,7 @@ export class UsersService {
       byDepartment: byDepartment.map(d => ({
         id: d.id,
         name: d.name,
-        count: (d._count as any).users,
+        count: d._count.users,
       })),
     };
   }
