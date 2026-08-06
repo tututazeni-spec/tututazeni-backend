@@ -21,6 +21,7 @@ import {
   CreateDocCategoryDto,
 } from './document-repository.dto';
 import {
+  Prisma,
   DocSensitivity,
   DocStatus,
   DocCategoryType,
@@ -41,6 +42,26 @@ const DEFAULT_RETENTION: Partial<Record<DocCategoryType, number>> = {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// sortBy vem de DocumentFilterDto só com @IsString() (sem whitelist) — um
+// valor arbitrário usado directo como chave dinâmica no orderBy do Prisma
+// rebentava sempre com erro de validação (500) em vez de simplesmente
+// ignorar/cair no default. Restringido aqui aos campos ordenáveis reais.
+const SORTABLE_DOCUMENT_FIELDS = [
+  'createdAt',
+  'updatedAt',
+  'title',
+  'downloadCount',
+  'expiresAt',
+  'fileSize',
+] as const;
+type SortableDocumentField = (typeof SORTABLE_DOCUMENT_FIELDS)[number];
+
+function resolveSortBy(sortBy: string | undefined): SortableDocumentField {
+  return SORTABLE_DOCUMENT_FIELDS.includes(sortBy as SortableDocumentField)
+    ? (sortBy as SortableDocumentField)
+    : 'createdAt';
+}
 
 function buildAccessWhere(userId: number, userDept?: string, role?: string) {
   if (role === 'ADMIN' || role === 'RH') return {}; // acesso total
@@ -112,10 +133,11 @@ export class DocumentRepositoryService {
       to,
       expiringSoon,
       expired,
-      sortBy = 'createdAt',
+      sortBy,
       sortOrder = 'desc',
     } = filters;
     const skip = (page - 1) * limit;
+    const orderByField = resolveSortBy(sortBy);
 
     // CurrentUserData não carrega o departamento do chamador (User não tem
     // relação `employee`) — resolve-se aqui em vez de confiar num campo que
@@ -130,7 +152,7 @@ export class DocumentRepositoryService {
     }
 
     const accessWhere = buildAccessWhere(userId, userDept, role);
-    const where: any = { ...accessWhere, status };
+    const where: Prisma.DocumentWhereInput = { ...accessWhere, status };
 
     if (search) {
       where.AND = [
@@ -169,7 +191,7 @@ export class DocumentRepositoryService {
         where,
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy: { [orderByField]: sortOrder },
         include: {
           createdBy: { select: { id: true, fullName: true, avatarUrl: true } },
           owner: { select: { id: true, fullName: true } },
@@ -624,7 +646,7 @@ export class DocumentRepositoryService {
   }
 
   async getStats(department?: string) {
-    const where: any = { status: DocStatus.ACTIVE };
+    const where: Prisma.DocumentWhereInput = { status: DocStatus.ACTIVE };
     if (department) where.department = { contains: department, mode: 'insensitive' };
 
     const [byCategory, bySensitivity, topDownloaded, recentUploads] = await Promise.all([
@@ -681,7 +703,7 @@ export class DocumentRepositoryService {
     documentId: number,
     userId: number,
     action: DocAuditAction,
-    metadata?: any,
+    metadata?: Prisma.InputJsonValue,
   ) {
     try {
       await this.prisma.docAuditLog.create({
