@@ -6,6 +6,7 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   LearningPathsCreateLearningPathDto,
@@ -30,7 +31,7 @@ export class LearningPathsService {
       where: { learningPathId },
       include: { course: { select: { workloadHours: true } } },
     });
-    return steps.reduce((sum, s) => sum + ((s.course as any)?.workloadHours ?? 0), 0);
+    return steps.reduce((sum, s) => sum + (s.course?.workloadHours ?? 0), 0);
   }
 
   // ─── CATÁLOGO ─────────────────────────────────────────────────────────────
@@ -39,7 +40,7 @@ export class LearningPathsService {
     const { page = 1, limit = 20, search, status, level, pathType, mandatory, category } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.LearningPathWhereInput = {};
     if (status) where.status = status;
     if (level) where.level = level;
     if (pathType) where.pathType = pathType;
@@ -174,7 +175,7 @@ export class LearningPathsService {
   }
 
   async publish(id: number) {
-    const lp = (await this.findOne(id)) as any;
+    const lp = await this.findOne(id);
     if (lp._count.courses === 0) {
       throw new BadRequestException('Trilha sem conteúdos não pode ser publicada');
     }
@@ -190,7 +191,7 @@ export class LearningPathsService {
   }
 
   async duplicate(id: number) {
-    const original = (await this.findOne(id)) as any;
+    const original = await this.findOne(id);
     const {
       id: _,
       courses,
@@ -213,7 +214,7 @@ export class LearningPathsService {
     // Clonar steps
     if (courses.length) {
       await this.prisma.learningPathCourse.createMany({
-        data: courses.map((lpc: any) => ({
+        data: courses.map(lpc => ({
           learningPathId: clone.id,
           courseId: lpc.courseId,
           seq: lpc.seq,
@@ -241,7 +242,7 @@ export class LearningPathsService {
   }
 
   async remove(id: number) {
-    const lp = (await this.findOne(id)) as any;
+    const lp = await this.findOne(id);
     // LearningPathEnrollment/LearningPathAssignment não têm onDelete: Cascade —
     // verificar por contagem, não por status, ou uma trilha ARCHIVED com
     // matrículas/atribuições antigas 500a por violação de FK RESTRICT.
@@ -325,7 +326,7 @@ export class LearningPathsService {
   // ─── ATRIBUIÇÃO ───────────────────────────────────────────────────────────
 
   async assign(dto: AssignLearningPathDto) {
-    const lp = (await this.findOne(dto.learningPathId)) as any;
+    const lp = await this.findOne(dto.learningPathId);
     if (lp.status !== 'PUBLISHED') {
       throw new BadRequestException('Apenas trilhas publicadas podem ser atribuídas');
     }
@@ -394,8 +395,8 @@ export class LearningPathsService {
     userIds: number[],
     opts: { mandatory?: boolean; deadline?: string } = {},
   ) {
-    const lp = (await this.findOne(learningPathId)) as any;
-    const courses: any[] = lp.courses;
+    const lp = await this.findOne(learningPathId);
+    const courses = lp.courses;
 
     const results = { enrolled: 0, skipped: 0, total: userIds.length };
 
@@ -458,7 +459,7 @@ export class LearningPathsService {
   }
 
   async selfEnroll(learningPathId: number, userId: number) {
-    const lp = (await this.findOne(learningPathId)) as any;
+    const lp = await this.findOne(learningPathId);
     if (lp.status !== 'PUBLISHED') {
       throw new BadRequestException('Apenas trilhas publicadas aceitam matrículas');
     }
@@ -474,16 +475,16 @@ export class LearningPathsService {
   // ─── PROGRESSO ────────────────────────────────────────────────────────────
 
   async getMyProgress(learningPathId: number, userId: number) {
-    const lp = (await this.findOne(learningPathId)) as any;
+    const lp = await this.findOne(learningPathId);
     const enrollment = await this.prisma.read.learningPathEnrollment.findFirst({
       where: { learningPathId, userId },
     });
 
-    const steps: any[] = lp.courses;
+    const steps = lp.courses;
     const progressionType = lp.progressionType ?? 'SEQUENTIAL';
 
     const stepsWithProgress = await Promise.all(
-      steps.map(async (step: any, idx: number) => {
+      steps.map(async (step, idx) => {
         const courseEnrollment = await this.prisma.read.enrollment.findFirst({
           where: { userId, courseId: step.courseId },
         });
@@ -643,9 +644,9 @@ export class LearningPathsService {
       totalEnrollments > 0 ? Math.round((completed / totalEnrollments) * 100) : 0;
 
     // Step-level drop-off
-    const lp = (await this.findOne(learningPathId)) as any;
+    const lp = await this.findOne(learningPathId);
     const stepDropoff = await Promise.all(
-      (lp.courses as any[]).map(async (step: any) => {
+      lp.courses.map(async step => {
         const stepCompleted = await this.prisma.read.enrollment.count({
           where: { courseId: step.courseId, status: 'COMPLETED' },
         });
