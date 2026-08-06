@@ -22,16 +22,23 @@ import { CurrentUserData } from '../common/types/current-user';
 // HELPERS
 // ─────────────────────────────────────────────────────────────────
 
-/** Safe access to models that may not exist in the schema yet */
+/**
+ * Safe access to models that may not exist in the schema yet.
+ * `prisma: any` é o único `any` deliberadamente mantido — acesso dinâmico
+ * `prisma[model]` a um modelo que pode não existir não tem nenhum tipo
+ * gerado pelo Prisma para se agarrar (mesmo problema/solução de
+ * api-integration.service.ts). Os métodos do stub de fallback usam
+ * `{ data: unknown }`/`{ create: unknown }` em vez de `(d: any)`.
+ */
 function safeModel(prisma: any, model: string) {
   return (
     prisma[model] ?? {
       findMany: async () => [],
       findFirst: async () => null,
       findUnique: async () => null,
-      create: async (d: any) => d.data,
-      upsert: async (d: any) => d.create,
-      update: async (d: any) => d.data,
+      create: async (d: { data: unknown }) => d.data,
+      upsert: async (d: { create: unknown }) => d.create,
+      update: async (d: { data: unknown }) => d.data,
       delete: async () => null,
       count: async () => 0,
       groupBy: async () => [],
@@ -70,6 +77,17 @@ export interface ContentNoteRow {
   note: string;
   timestamp?: number | null;
   updatedAt?: Date;
+}
+
+// learningPath/learningPathEnrollment também não existem em
+// prisma/schema.prisma, e o shape assumido por este ficheiro (items/
+// hasCertification/xpReward) diverge do modelo real "LearningPath" que lá
+// existe (ver nota estrutural junto de createLearningPath() abaixo) — por
+// isso este tipo é deliberadamente permissivo (index signature) em vez de
+// fingir conhecer a forma real de um registo que nunca chega a persistir.
+export interface LearningPathItemRow {
+  contentId: number;
+  [key: string]: unknown;
 }
 
 function buildWhereFromFilters(filters: ContentFilterDto): Prisma.ContentAssetWhereInput {
@@ -903,7 +921,10 @@ export class ContentLibraryService {
   async getLearningPaths(filters: ContentLibraryLearningPathFilterDto = {}) {
     const { page = 1, limit = 20, search } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    // Record<string, unknown> em vez de `any` — learningPath não existe em
+    // prisma/schema.prisma (ver nota estrutural acima), por isso não há
+    // Prisma.LearningPathWhereInput real a que amarrar este filtro.
+    const where: Record<string, unknown> = {};
     if (search) where.title = { contains: search, mode: 'insensitive' };
 
     const data = await safeModel(this.prisma, 'learningPath')
@@ -919,7 +940,7 @@ export class ContentLibraryService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter learning paths — modelo learningPath pode estar ausente',
         });
-        return [] as any[];
+        return [];
       });
 
     const total = await safeModel(this.prisma, 'learningPath')
@@ -936,7 +957,10 @@ export class ContentLibraryService {
   }
 
   async getLearningPath(id: number, userId?: number) {
-    const path = await safeModel(this.prisma, 'learningPath')
+    const path: { items?: LearningPathItemRow[]; [key: string]: unknown } | null = await safeModel(
+      this.prisma,
+      'learningPath',
+    )
       .findUnique({
         where: { id },
         include: {
@@ -961,8 +985,8 @@ export class ContentLibraryService {
     if (!userId) return path;
 
     // Enrich items with user progress
-    const contentIds = (path.items ?? []).map((i: any) => i.contentId);
-    const progs = await safeModel(this.prisma, 'contentProgress')
+    const contentIds = (path.items ?? []).map(i => i.contentId);
+    const progs: ContentProgressRow[] = await safeModel(this.prisma, 'contentProgress')
       .findMany({
         where: { userId, contentId: { in: contentIds } },
       })
@@ -974,18 +998,18 @@ export class ContentLibraryService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao obter progresso da learning path — modelo contentProgress pode estar ausente',
         });
-        return [] as any[];
+        return [];
       });
-    const pMap = new Map((progs as any[]).map((p: any) => [p.contentId, p]));
+    const pMap = new Map(progs.map(p => [p.contentId, p]));
 
-    const enrichedItems = (path.items ?? []).map((item: any) => ({
+    const enrichedItems = (path.items ?? []).map(item => ({
       ...item,
       progress: pMap.get(item.contentId)?.progress ?? 0,
       completed: pMap.get(item.contentId)?.progress === 100,
     }));
 
     const totalItems = enrichedItems.length;
-    const completedItems = enrichedItems.filter((i: any) => i.completed).length;
+    const completedItems = enrichedItems.filter(i => i.completed).length;
     const overallPct = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
 
     return {
