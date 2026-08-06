@@ -6,7 +6,7 @@
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ReviewStatus, LeadershipClassification } from '@prisma/client';
+import { Prisma, ReviewStatus, LeadershipClassification } from '@prisma/client';
 import {
   CreateLeadershipProgramDto,
   UpdateLeadershipProgramDto,
@@ -38,7 +38,7 @@ export class LeadershipService {
     const { page = 1, limit = 20, level, status, mandatory } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.LeadershipProgramWhereInput = {};
     if (level) where.level = level;
     if (status) where.status = status;
     if (mandatory !== undefined) where.mandatory = mandatory;
@@ -105,7 +105,7 @@ export class LeadershipService {
   }
 
   async remove(id: number) {
-    const p = (await this.findOne(id)) as any;
+    const p = await this.findOne(id);
     if (p._count.participants > 0) {
       throw new BadRequestException(
         'Programa com participantes não pode ser eliminado. Archive-o primeiro.',
@@ -444,7 +444,7 @@ export class LeadershipService {
   }
 
   async getOneOnOnes(managerId: number, subordinateId?: number) {
-    const where: any = { managerId };
+    const where: Prisma.OneOnOneWhereInput = { managerId };
     if (subordinateId) where.subordinateId = subordinateId;
 
     return this.prisma.read.oneOnOne.findMany({
@@ -705,7 +705,7 @@ export class LeadershipService {
   }
 
   async getKudosWall(userId?: number) {
-    const where: any = {};
+    const where: Prisma.KudosWhereInput = {};
     if (userId) where.receiverId = userId;
 
     return this.prisma.read.kudos.findMany({
@@ -731,7 +731,7 @@ export class LeadershipService {
       this.prisma.read.oneOnOne.count({ where: { managerId: leaderId, status: 'COMPLETED' } }),
     ]);
 
-    const teamHealthScore = teamHealth ? ((teamHealth as any).engagementScore ?? 0) : 0;
+    const teamHealthScore = teamHealth ? (teamHealth.engagementScore ?? 0) : 0;
     const developmentScore = Math.min(100, programsCompleted * 20); // 5 programas = 100
     const feedback360Score = feedback360.avgScore > 0 ? (feedback360.avgScore / 5) * 100 : 0;
     const punctualityScore = Math.min(100, oneOnOnes * 10); // 10 reuniões = 100
