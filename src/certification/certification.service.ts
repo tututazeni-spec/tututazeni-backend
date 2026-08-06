@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
 import {
@@ -136,7 +137,7 @@ export class CertificationService {
 
   async findAllCertificates(filters: FilterCertificateDto) {
     const { type, userId, search, isRevoked, page = 1, limit = 20 } = filters;
-    const where: any = {
+    const where: Prisma.IssuedCertificateWhereInput = {
       deletedAt: null,
       ...(type && { type }),
       ...(userId && { userId }),
@@ -182,7 +183,7 @@ export class CertificationService {
 
   // ─── VERIFICAÇÃO PÚBLICA ─────────────────────────────
 
-  async verify(verificationCode: string): Promise<any> {
+  async verify(verificationCode: string) {
     const cert = await this.prisma.read.issuedCertificate.findUnique({
       where: { verificationCode },
       include: {
@@ -384,12 +385,23 @@ export class CertificationService {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    // groupBy() fica fora do $transaction abaixo: dentro do array o TS tenta
+    // inferir um tipo partilhado para o tuplo inteiro e o
+    // IssuedCertificateScalarWhereWithAggregatesInput do groupBy entra em
+    // referência circular nesse contexto (TS2615) — não acontece chamado
+    // isoladamente. Sem impacto prático: é uma leitura de dashboard, não
+    // precisa de atomicidade com as restantes contagens.
+    const byTypePromise = this.prisma.read.issuedCertificate.groupBy({
+      by: ['type'],
+      where: { deletedAt: null },
+      _count: { id: true },
+    });
+
     const [
       totalCerts,
       issuedThisMonth,
       revoked,
       expired,
-      byType,
       totalBadges,
       badgesIssued,
       totalTemplates,
@@ -405,11 +417,6 @@ export class CertificationService {
       }),
       this.prisma.read.issuedCertificate.count({
         where: { expiresAt: { lt: now }, isRevoked: false, deletedAt: null },
-      }),
-      (this.prisma.read.issuedCertificate.groupBy as any)({
-        by: ['type'],
-        where: { deletedAt: null },
-        _count: { id: true },
       }),
       this.prisma.read.digitalBadge.count({
         where: { deletedAt: null, isActive: true },
@@ -431,6 +438,7 @@ export class CertificationService {
         include: { user: { select: { fullName: true } } },
       }),
     ]);
+    const byType = await byTypePromise;
 
     return {
       totals: {
