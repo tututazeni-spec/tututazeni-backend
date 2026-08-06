@@ -618,7 +618,9 @@ export class DashboardService {
     ]);
 
     // Enrich top content
-    const contentIds = topContentViews.map(v => v.entityId).filter((id): id is number => id != null);
+    const contentIds = topContentViews
+      .map(v => v.entityId)
+      .filter((id): id is number => id != null);
     const contents = contentIds.length
       ? await this.prisma.read.contentAsset.findMany({
           where: { id: { in: contentIds } },
@@ -1073,7 +1075,9 @@ export class DashboardService {
   // e getTalentHealthScore() devolvem objectos muito maiores, mas só estes
   // campos são lidos aqui.
   private buildExecutiveRisks(
-    org: { kpis: { talent?: { successionCoverage?: number }; development?: { coverage?: number } } },
+    org: {
+      kpis: { talent?: { successionCoverage?: number }; development?: { coverage?: number } };
+    },
     talentHealth: { healthScore?: number } | null,
   ): { type: string; label: string; severity: string }[] {
     const risks = [];
