@@ -528,7 +528,7 @@ export class AuditService {
       action: 'EXPORT',
       entity: 'AuditLog',
       severity: AuditSeverity.HIGH,
-      metadata: JSON.stringify({}),
+      metadata: { exported: result.total },
     });
 
     return {

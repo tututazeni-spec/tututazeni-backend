@@ -102,15 +102,15 @@ export class LogAuditDto {
   entity!: string;
   entityId?: number;
   entityName?: string;
-  before?: any;
-  after?: any;
-  changes?: Record<string, { from: any; to: any }>;
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  changes?: Record<string, { from: unknown; to: unknown }>;
   status?: AuditStatus;
   severity?: AuditSeverity;
   ip?: string;
   userAgent?: string;
   reason?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 // ADICIONAR NO FINAL de src/audit/audit.dto.ts
