@@ -3,6 +3,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { ConfigService } from '@nestjs/config';
+import { AutomationTrigger, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateNotificationDto,
@@ -88,7 +89,7 @@ export class NotificationsService {
 
     // Verificar categorias desactivadas
     if (prefs && dto.category) {
-      const disabled = (prefs as any).disabledCategories ?? [];
+      const disabled = prefs.disabledCategories ?? [];
       if (disabled.includes(dto.category)) {
         this.logger.debug(
           `Notificação ignorada — categoria ${dto.category} desactivada para user ${dto.userId}`,
@@ -134,9 +135,7 @@ export class NotificationsService {
         select: { userId: true, disabledCategories: true },
       });
       const blockedUsers = new Set(
-        prefs
-          .filter(p => ((p as any).disabledCategories ?? []).includes(dto.category))
-          .map(p => p.userId),
+        prefs.filter(p => (p.disabledCategories ?? []).includes(dto.category)).map(p => p.userId),
       );
       targetIds = dto.userIds.filter(id => !blockedUsers.has(id));
     }
@@ -173,7 +172,7 @@ export class NotificationsService {
 
   async sendToUser(
     userId: number,
-    data: { title?: string; message: string; type: string; metadata?: any },
+    data: { title?: string; message: string; type: string; metadata?: Record<string, unknown> },
   ) {
     return this.send({
       userId,
@@ -190,7 +189,7 @@ export class NotificationsService {
     const { page = 1, limit = 20, type, category, priority, read } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {
+    const where: Prisma.NotificationLogWhereInput = {
       userId,
       OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }],
     };
@@ -295,7 +294,7 @@ export class NotificationsService {
     const { page = 1, limit = 20, type, category, priority } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.NotificationLogWhereInput = {};
     if (type) where.type = type;
     if (category) where.category = category;
     if (priority) where.priority = priority;
@@ -416,9 +415,9 @@ export class NotificationsService {
       userId,
       type: eventType,
       title: template.titleTemplate ? interpolate(template.titleTemplate) : undefined,
-      message: interpolate((template as any).messageTemplate),
-      priority: (template as any).priority ?? 'MEDIUM',
-      category: (template as any).category,
+      message: interpolate(template.messageTemplate),
+      priority: template.priority ?? 'MEDIUM',
+      category: template.category ?? undefined,
       actionUrl: template.actionUrlTemplate ? interpolate(template.actionUrlTemplate) : undefined,
     });
   }
@@ -429,13 +428,45 @@ export class NotificationsService {
     return this.prisma.read.automationRule.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
+  // AutomationRule.tenantId/triggerType/triggerConfigJson/actionsJson/
+  // createdBy são obrigatórios no schema (sem default) — ver mesmo achado
+  // em scalability.service.ts#createAutomationRule(). Este método legado só
+  // recebe name/trigger/action/condition (CreateAutomationRuleBodyDto não
+  // expõe os campos modernos), por isso `data: data as any` escondia que
+  // POST /notifications/automation-rules rebentava SEMPRE com "Argument
+  // tenantId is missing" — endpoint 100% inoperante. Resolvido com um
+  // tenant/trigger por omissão (mesmo padrão de getDefaultTenantId() usado
+  // noutros serviços do projecto) em vez de expandir o contrato público
+  // desta rota legada.
+  private async getDefaultTenantId(): Promise<string> {
+    const existing = await this.prisma.tenantConfig.findFirst();
+    if (existing) return existing.id;
+    const created = await this.prisma.tenantConfig.create({
+      data: { tenantCode: 'DEFAULT', tenantName: 'Default Tenant' },
+    });
+    return created.id;
+  }
+
   async createAutomationRule(data: {
     name: string;
     trigger: string;
     action: string;
     condition: string;
   }) {
-    return this.prisma.automationRule.create({ data: data as any });
+    const tenantId = await this.getDefaultTenantId();
+    return this.prisma.automationRule.create({
+      data: {
+        name: data.name,
+        trigger: data.trigger,
+        action: data.action,
+        condition: data.condition,
+        tenantId,
+        triggerType: AutomationTrigger.MANUAL,
+        triggerConfigJson: JSON.stringify({ trigger: data.trigger }),
+        actionsJson: JSON.stringify([{ type: data.action }]),
+        createdBy: 'SYSTEM',
+      },
+    });
   }
 
   async toggleAutomationRule(id: number) {
