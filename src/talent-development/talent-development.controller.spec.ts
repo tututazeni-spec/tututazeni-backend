@@ -45,7 +45,6 @@ const mockSvc = {
 };
 
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
-const mockReq = { user: { id: 1 } };
 
 describe('TalentDevelopmentController', () => {
   let controller: TalentDevelopmentController;
@@ -97,13 +96,13 @@ describe('TalentDevelopmentController', () => {
 
   it('fromTemplate → createFromTemplate(templateId, dto, userId)', async () => {
     const dto = {} as any;
-    await controller.fromTemplate(2, dto, mockReq as any);
+    await controller.fromTemplate(2, dto, mockUser as any);
     expect(mockSvc.createFromTemplate).toHaveBeenCalledWith(2, dto, 1);
   });
 
   it('createPlan → createPlan(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.createPlan(dto, mockReq as any);
+    await controller.createPlan(dto, mockUser as any);
     expect(mockSvc.createPlan).toHaveBeenCalledWith(dto, 1);
   });
 
@@ -125,7 +124,7 @@ describe('TalentDevelopmentController', () => {
   });
 
   it('activate → activatePlan(id, userId)', async () => {
-    await controller.activate(2, mockReq as any);
+    await controller.activate(2, mockUser as any);
     expect(mockSvc.activatePlan).toHaveBeenCalledWith(2, 1);
   });
 
@@ -182,7 +181,7 @@ describe('TalentDevelopmentController', () => {
 
   it('approveAction → approveActionEvidence(id, dto, userId)', async () => {
     const dto = {} as any;
-    await controller.approveAction(4, dto, mockReq as any);
+    await controller.approveAction(4, dto, mockUser as any);
     expect(mockSvc.approveActionEvidence).toHaveBeenCalledWith(4, dto, 1);
   });
 
