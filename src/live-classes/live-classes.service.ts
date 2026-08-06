@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateLiveClassDto,
@@ -15,7 +16,7 @@ export class LiveClassesService {
   async findAll(filters: LiveClassFilterDto) {
     const { page = 1, limit = 20, courseId } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.LiveClassWhereInput = {};
     if (courseId) where.courseId = courseId;
 
     const [data, total] = await Promise.all([
@@ -62,7 +63,7 @@ export class LiveClassesService {
 
   async update(id: number, dto: UpdateLiveClassDto) {
     await this.findOne(id);
-    const data: any = { ...dto };
+    const data: Prisma.LiveClassUpdateInput = { ...dto };
     if (dto.scheduledAt) data.scheduledAt = new Date(dto.scheduledAt);
     return this.prisma.liveClass.update({ where: { id }, data });
   }
