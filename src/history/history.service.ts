@@ -1,6 +1,6 @@
 // src/history/history.service.ts
 import { Injectable, Logger } from '@nestjs/common';
-import { EnrollmentStatus, AuditLog, User } from '@prisma/client';
+import { Prisma, EnrollmentStatus, AuditLog, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   HistoryFilterDto,
@@ -135,6 +135,41 @@ type AuditLogEntry = AuditLog & {
   user?: Partial<Pick<User, 'id' | 'fullName' | 'email' | 'avatarUrl'>> | null;
 };
 
+// Evento unificado da smart timeline — as 7 fontes (AuditLog, Enrollment,
+// PerformanceReview, BadgeAward, DevelopmentPlan, AvatarSession, Certificate)
+// têm campos próprios muito distintos; este é o shape comum que todas
+// conseguem preencher (user/description/metadata só vêm preenchidos na
+// fonte AUDIT, via enrichEntry()).
+export interface TimelineEvent {
+  id: string;
+  source: string;
+  timestamp: Date;
+  category: EventCategory;
+  module: EventModule;
+  impactScore: number;
+  milestone: boolean;
+  icon: string;
+  title: string;
+  action: string;
+  entity: string;
+  entityId: number | null;
+  userId: number | null;
+  user?: Partial<Pick<User, 'id' | 'fullName' | 'email' | 'avatarUrl'>> | null;
+  description?: string | null;
+  metadata?: string | null;
+}
+
+// Marco unificado (getUserMilestones) — as 5 fontes (DevelopmentPlan,
+// Certificate, BadgeAward, HistoryRecord, PerformanceReview) só precisam de
+// expor tipo/ícone/título/data/impacto para a listagem.
+export interface Milestone {
+  type: string;
+  icon: string;
+  title: string;
+  date: Date;
+  impactScore: number;
+}
+
 function enrichEntry(log: AuditLogEntry) {
   const category = categorise(log.action, log.entity);
   const module = deriveModule(log.action, log.entity);
@@ -189,7 +224,7 @@ export class HistoryService {
       module,
     } = filters;
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.AuditLogWhereInput = {};
     if (userId) where.userId = userId;
     if (entity) where.entity = { contains: entity, mode: 'insensitive' };
     if (action) where.action = { contains: action, mode: 'insensitive' };
@@ -266,7 +301,7 @@ export class HistoryService {
   async getUserTimeline(userId: number, filters: TimelineFilterDto) {
     const { page = 1, limit = 20 } = filters;
     const skip = (page - 1) * limit;
-    const where: any = { userId };
+    const where: Prisma.AuditLogWhereInput = { userId };
     if (filters.from || filters.to) {
       where.timestamp = {};
       if (filters.from) where.timestamp.gte = new Date(filters.from);
@@ -328,35 +363,44 @@ export class HistoryService {
     });
 
     // --- Source 7: Certificates ---
-    const certs = await this.prisma.certificate
-      .findMany({
-        where: { userId, ...(filters.from && { issuedAt: { gte: new Date(filters.from) } }) },
-        orderBy: { issuedAt: 'desc' },
-        take: 20,
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          userId,
-          action: 'HISTORY_TIMELINE_CERTIFICATES',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter certificados para a timeline do utilizador',
-        });
-        return [] as any[];
+    // FIX: `.catch()` a seguir a uma promise Prisma colapsa o tipo inteiro
+    // para `any` sem isto — a query extraída para variável preserva o tipo
+    // real via `Awaited<typeof certsQuery>`.
+    const certsQuery = this.prisma.certificate.findMany({
+      where: { userId, ...(filters.from && { issuedAt: { gte: new Date(filters.from) } }) },
+      orderBy: { issuedAt: 'desc' },
+      take: 20,
+    });
+    const certs: Awaited<typeof certsQuery> = await certsQuery.catch((e: unknown) => {
+      this.logger.warn({
+        userId,
+        action: 'HISTORY_TIMELINE_CERTIFICATES',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter certificados para a timeline do utilizador',
       });
+      return [];
+    });
 
     // ── Merge into unified timeline events ──────────────
 
-    const events: any[] = [];
+    const events: TimelineEvent[] = [];
 
     // AuditLog events
     for (const e of auditEntries) {
       const cat = categorise(e.action, e.entity);
       if (filters.category && cat !== filters.category) continue;
+      // FIX: `...enrichEntry(e)` vinha DEPOIS de `id`/`source`, por isso o
+      // spread sobrescrevia sempre o `id` prefixado (`audit-42`) com o
+      // `log.id` numérico puro de enrichEntry() — os eventos AUDIT da
+      // timeline tinham `id` numérico, inconsistente com o formato
+      // `<fonte>-<id>` de todas as outras fontes (enroll-/perf-/badge-/…).
+      // Mascarado antes pelo `any[]`; agora o spread vem primeiro para que
+      // as chaves explícitas abaixo vençam.
       events.push({
+        ...enrichEntry(e),
         id: `audit-${e.id}`,
         source: 'AUDIT',
         timestamp: e.timestamp,
-        ...enrichEntry(e),
       });
     }
 
@@ -464,7 +508,7 @@ export class HistoryService {
     }
 
     // Certificates
-    for (const c of certs as any[]) {
+    for (const c of certs) {
       if (filters.category && filters.category !== EventCategory.LEARNING) continue;
       events.push({
         id: `cert-${c.id}`,
@@ -489,7 +533,7 @@ export class HistoryService {
     const paged = events.slice(skip, skip + limit);
 
     // Group by month for frontend grouping
-    const grouped: Record<string, any[]> = {};
+    const grouped: Record<string, TimelineEvent[]> = {};
     for (const e of paged) {
       const key = new Date(e.timestamp).toISOString().slice(0, 7); // YYYY-MM
       if (!grouped[key]) grouped[key] = [];
@@ -513,7 +557,7 @@ export class HistoryService {
     if (!team.length) return { data: [], meta: {} };
 
     const teamIds = team.map(u => u.id);
-    const where: any = { userId: { in: teamIds } };
+    const where: Prisma.AuditLogWhereInput = { userId: { in: teamIds } };
     if (filters.from || filters.to) {
       where.timestamp = {};
       if (filters.from) where.timestamp.gte = new Date(filters.from);
@@ -546,47 +590,50 @@ export class HistoryService {
   // ══════════════════════════════════════════════════════
 
   async getUserMilestones(userId: number) {
+    // FIX: `.catch()` a seguir a uma promise Prisma colapsa o tipo inteiro
+    // para `any` sem isto — as queries extraídas para variável preservam o
+    // tipo real via `Awaited<typeof query>` (mesmo padrão de
+    // getUserTimeline() acima).
+    const certsQuery = this.prisma.certificate.findMany({
+      where: { userId },
+      orderBy: { issuedAt: 'desc' },
+    });
+    const promotionsQuery = this.prisma.historyRecord.findMany({
+      where: { userId, action: { contains: 'PROMOTION' } },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+
     const [completedPlans, certs, badges, promotions, highPerfReviews] = await Promise.all([
       this.prisma.read.developmentPlan.findMany({
         where: { userId, status: 'COMPLETED', isTemplate: false },
         select: { id: true, name: true, completedAt: true, createdAt: true },
         orderBy: { completedAt: 'desc' },
       }),
-      this.prisma.certificate
-        .findMany({
-          where: { userId },
-          orderBy: { issuedAt: 'desc' },
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            userId,
-            action: 'HISTORY_MILESTONES_CERTIFICATES',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter certificados para os marcos do utilizador',
-          });
-          return [] as any[];
-        }),
+      certsQuery.catch((e: unknown): Awaited<typeof certsQuery> => {
+        this.logger.warn({
+          userId,
+          action: 'HISTORY_MILESTONES_CERTIFICATES',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter certificados para os marcos do utilizador',
+        });
+        return [];
+      }),
       this.prisma.read.badgeAward.findMany({
         where: { userId },
         include: { badge: true },
         orderBy: { awardedAt: 'desc' },
       }),
       // Promotions via HistoryRecord
-      this.prisma.historyRecord
-        .findMany({
-          where: { userId, action: { contains: 'PROMOTION' } },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            userId,
-            action: 'HISTORY_MILESTONES_PROMOTIONS',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter registos de promoção para os marcos do utilizador',
-          });
-          return [] as any[];
-        }),
+      promotionsQuery.catch((e: unknown): Awaited<typeof promotionsQuery> => {
+        this.logger.warn({
+          userId,
+          action: 'HISTORY_MILESTONES_PROMOTIONS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter registos de promoção para os marcos do utilizador',
+        });
+        return [];
+      }),
       this.prisma.read.performanceReview.findMany({
         where: { userId, score: { gte: 4 } },
         select: { id: true, score: true, createdAt: true },
@@ -595,7 +642,7 @@ export class HistoryService {
       }),
     ]);
 
-    const milestones: any[] = [];
+    const milestones: Milestone[] = [];
 
     for (const p of completedPlans) {
       milestones.push({
@@ -606,7 +653,7 @@ export class HistoryService {
         impactScore: 80,
       });
     }
-    for (const c of certs as any[]) {
+    for (const c of certs) {
       milestones.push({
         type: 'CERTIFICATE',
         icon: '🎓',
@@ -624,7 +671,7 @@ export class HistoryService {
         impactScore: 60,
       });
     }
-    for (const r of promotions as any[]) {
+    for (const r of promotions) {
       milestones.push({
         type: 'PROMOTION',
         icon: '🚀',
@@ -717,6 +764,14 @@ export class HistoryService {
     const now = new Date();
     const month = now.getMonth() + 1;
 
+    // FIX: mesmo padrão do resto do ficheiro — extrair a query preserva o
+    // tipo real de retorno através do `.catch()`, em vez de colapsar para
+    // `any[]`.
+    const expiringCertsQuery = this.prisma.certificate.findMany({
+      where: { expiresAt: { gte: now, lte: new Date(Date.now() + 30 * 86400000) } },
+      include: { user: { select: { id: true, fullName: true } } },
+    });
+
     const [anniversaries, expiring] = await Promise.all([
       // Anniversaries based on createdAt (proxy for hire date)
       this.prisma.user
@@ -747,19 +802,14 @@ export class HistoryService {
             .sort((a, b) => b.years - a.years),
         ),
       // Certificates expiring in next 30 days
-      this.prisma.certificate
-        .findMany({
-          where: { expiresAt: { gte: now, lte: new Date(Date.now() + 30 * 86400000) } },
-          include: { user: { select: { id: true, fullName: true } } },
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'HISTORY_UPCOMING_EXPIRING_CERTS',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter certificados a expirar nos próximos 30 dias',
-          });
-          return [] as any[];
-        }),
+      expiringCertsQuery.catch((e: unknown): Awaited<typeof expiringCertsQuery> => {
+        this.logger.warn({
+          action: 'HISTORY_UPCOMING_EXPIRING_CERTS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter certificados a expirar nos próximos 30 dias',
+        });
+        return [];
+      }),
     ]);
 
     return { anniversaries, expiringCertificates: expiring };
@@ -770,81 +820,83 @@ export class HistoryService {
   // ══════════════════════════════════════════════════════
 
   async getAuditStats(from?: string, to?: string) {
-    const where: any = {};
+    const where: Prisma.AuditLogWhereInput = {};
     if (from || to) {
       where.timestamp = {};
       if (from) where.timestamp.gte = new Date(from);
       if (to) where.timestamp.lte = new Date(to);
     }
 
+    // FIX: mesmo padrão do resto do ficheiro — extrair a query preserva o
+    // tipo real de retorno através do `.catch()`, em vez de colapsar para
+    // `any[]`.
+    const byActionQuery = this.prisma.auditLog.groupBy({
+      by: ['action'],
+      where,
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 10,
+    });
+    const topUsersQuery = this.prisma.auditLog
+      .groupBy({
+        by: ['userId'],
+        where,
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 5,
+      })
+      .then(async rows => {
+        const ids = rows.map(r => r.userId).filter(Boolean);
+        const users = await this.prisma.read.user.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, fullName: true },
+        });
+        const uMap = new Map(users.map(u => [u.id, u]));
+        return rows.map(r => ({ user: uMap.get(r.userId), count: r._count.id }));
+      });
+    const recentAlertsQuery = this.prisma.auditLog.findMany({
+      where: {
+        action: {
+          in: ['PERMISSION_CHANGED', 'ADMIN_ACTION', 'USER_DELETED', 'BULK_OPERATION'],
+        },
+        ...where,
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 5,
+      include: { user: { select: { id: true, fullName: true } } },
+    });
+
     const [total, byAction, topUsers, recentAlerts] = await Promise.all([
       this.prisma.read.auditLog.count({ where }),
-      this.prisma.auditLog
-        .groupBy({
-          by: ['action'],
-          where,
-          _count: { id: true },
-          orderBy: { _count: { id: 'desc' } },
-          take: 10,
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'HISTORY_AUDIT_STATS_BY_ACTION',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao agrupar audit logs por acção nas estatísticas',
-          });
-          return [] as any[];
-        }),
-      this.prisma.auditLog
-        .groupBy({
-          by: ['userId'],
-          where,
-          _count: { id: true },
-          orderBy: { _count: { id: 'desc' } },
-          take: 5,
-        })
-        .then(async rows => {
-          const ids = rows.map(r => r.userId).filter(Boolean);
-          const users = await this.prisma.read.user.findMany({
-            where: { id: { in: ids } },
-            select: { id: true, fullName: true },
-          });
-          const uMap = new Map(users.map(u => [u.id, u]));
-          return rows.map(r => ({ user: uMap.get(r.userId), count: r._count.id }));
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'HISTORY_AUDIT_STATS_TOP_USERS',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao calcular utilizadores com mais actividade nas estatísticas de audit',
-          });
-          return [] as any[];
-        }),
-      this.prisma.auditLog
-        .findMany({
-          where: {
-            action: {
-              in: ['PERMISSION_CHANGED', 'ADMIN_ACTION', 'USER_DELETED', 'BULK_OPERATION'],
-            },
-            ...where,
-          },
-          orderBy: { timestamp: 'desc' },
-          take: 5,
-          include: { user: { select: { id: true, fullName: true } } },
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'HISTORY_AUDIT_STATS_RECENT_ALERTS',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter alertas administrativos recentes nas estatísticas de audit',
-          });
-          return [] as any[];
-        }),
+      byActionQuery.catch((e: unknown): Awaited<typeof byActionQuery> => {
+        this.logger.warn({
+          action: 'HISTORY_AUDIT_STATS_BY_ACTION',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao agrupar audit logs por acção nas estatísticas',
+        });
+        return [];
+      }),
+      topUsersQuery.catch((e: unknown): Awaited<typeof topUsersQuery> => {
+        this.logger.warn({
+          action: 'HISTORY_AUDIT_STATS_TOP_USERS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao calcular utilizadores com mais actividade nas estatísticas de audit',
+        });
+        return [];
+      }),
+      recentAlertsQuery.catch((e: unknown): Awaited<typeof recentAlertsQuery> => {
+        this.logger.warn({
+          action: 'HISTORY_AUDIT_STATS_RECENT_ALERTS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter alertas administrativos recentes nas estatísticas de audit',
+        });
+        return [];
+      }),
     ]);
 
     return {
       total,
-      byAction: (byAction as any[]).map((r: any) => ({ action: r.action, count: r._count.id })),
+      byAction: byAction.map(r => ({ action: r.action, count: r._count.id })),
       topUsers,
       recentAlerts,
       generatedAt: new Date(),
