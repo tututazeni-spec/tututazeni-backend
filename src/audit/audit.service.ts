@@ -1,8 +1,17 @@
 // src/audit/audit.service.ts
 import { Injectable, Logger } from '@nestjs/common';
+import { AuditLog, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditFilterDto, LogAuditDto, AuditSeverity, AuditStatus } from './audit.dto';
 import * as crypto from 'crypto';
+
+// Shape mínimo de um Request Express usado por logCreate/logUpdate/logDelete
+// — só ip/headers são lidos, por isso não vale a pena importar o tipo real
+// do Express aqui.
+interface AuditRequestLike {
+  ip?: string;
+  headers?: Record<string, string | string[] | undefined>;
+}
 
 @Injectable()
 export class AuditService {
@@ -30,7 +39,7 @@ export class AuditService {
       orderBy: { timestamp: 'desc' },
       select: { hash: true },
     });
-    return (last as any)?.hash ?? 'GENESIS';
+    return last?.hash ?? 'GENESIS';
   }
 
   // ─── LOG PRINCIPAL ────────────────────────────────────────────────────────
@@ -102,7 +111,13 @@ export class AuditService {
   }
 
   // Atalhos semânticos usados pelos outros módulos
-  async logCreate(userId: number, entity: string, entityId: number, after?: any, req?: any) {
+  async logCreate(
+    userId: number,
+    entity: string,
+    entityId: number,
+    after?: Record<string, unknown>,
+    req?: AuditRequestLike,
+  ) {
     return this.log({
       userId,
       action: 'CREATE',
@@ -110,7 +125,7 @@ export class AuditService {
       entityId,
       after,
       ip: req?.ip,
-      userAgent: req?.headers?.['user-agent'],
+      userAgent: req?.headers?.['user-agent'] as string | undefined,
     });
   }
 
@@ -118,9 +133,9 @@ export class AuditService {
     userId: number,
     entity: string,
     entityId: number,
-    before?: any,
-    after?: any,
-    req?: any,
+    before?: Record<string, unknown>,
+    after?: Record<string, unknown>,
+    req?: AuditRequestLike,
   ) {
     const changes = this.diffObjects(before, after);
     return this.log({
@@ -132,11 +147,17 @@ export class AuditService {
       after,
       changes,
       ip: req?.ip,
-      userAgent: req?.headers?.['user-agent'],
+      userAgent: req?.headers?.['user-agent'] as string | undefined,
     });
   }
 
-  async logDelete(userId: number, entity: string, entityId: number, before?: any, req?: any) {
+  async logDelete(
+    userId: number,
+    entity: string,
+    entityId: number,
+    before?: Record<string, unknown>,
+    req?: AuditRequestLike,
+  ) {
     return this.log({
       userId,
       action: 'DELETE',
@@ -145,7 +166,7 @@ export class AuditService {
       before,
       severity: AuditSeverity.HIGH,
       ip: req?.ip,
-      userAgent: req?.headers?.['user-agent'],
+      userAgent: req?.headers?.['user-agent'] as string | undefined,
     });
   }
 
@@ -185,9 +206,12 @@ export class AuditService {
 
   // ─── DIFF ─────────────────────────────────────────────────────────────────
 
-  private diffObjects(before: any, after: any): Record<string, { from: any; to: any }> {
+  private diffObjects(
+    before?: Record<string, unknown>,
+    after?: Record<string, unknown>,
+  ): Record<string, { from: unknown; to: unknown }> {
     if (!before || !after) return {};
-    const changes: Record<string, { from: any; to: any }> = {};
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
     const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
     for (const key of keys) {
       if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) {
@@ -210,7 +234,7 @@ export class AuditService {
 
   // ─── DETECÇÃO DE ANOMALIAS ────────────────────────────────────────────────
 
-  private async detectAnomalies(entry: any) {
+  private async detectAnomalies(entry: AuditLog) {
     const userId = entry.userId;
     if (!userId) return;
 
@@ -300,7 +324,7 @@ export class AuditService {
     } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.AuditLogWhereInput = {};
     if (userId) where.userId = userId;
     if (entityId) where.entityId = entityId;
     if (ip) where.ip = { contains: ip };
@@ -354,9 +378,9 @@ export class AuditService {
         action: l.action,
         severity: l.severity,
         status: l.status,
-        user: (l as any).user,
+        user: l.user,
         timestamp: l.timestamp,
-        changes: l.changes ? JSON.parse(l.changes as any) : null,
+        changes: l.changes ? JSON.parse(l.changes) : null,
         reason: l.reason,
         ip: l.ip,
       })),
@@ -512,7 +536,7 @@ export class AuditService {
       data: result.data.map(log => ({
         id: log.id,
         timestamp: log.timestamp,
-        user: `${(log as any).user?.fullName ?? 'Sistema'} (${(log as any).user?.email ?? '—'})`,
+        user: `${log.user?.fullName ?? 'Sistema'} (${log.user?.email ?? '—'})`,
         action: log.action,
         entity: log.entity,
         entityId: log.entityId,
