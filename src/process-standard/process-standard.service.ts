@@ -7,12 +7,13 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { createHash } from 'crypto';
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
-import { ApprovalDecision } from '@prisma/client';
+import { ApprovalDecision, InstanceStatus } from '@prisma/client';
 import {
   CreateProcessDto,
   UpdateProcessDto,
@@ -81,7 +82,7 @@ export class ProcessStandardService {
     const { page = 1, limit = 20, search, status, riskLevel, departmentId, category } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.ProcessStandardWhereInput = {};
     if (status) where.status = status;
     if (riskLevel) where.riskLevel = riskLevel;
     if (departmentId) where.departmentId = departmentId;
@@ -224,7 +225,7 @@ export class ProcessStandardService {
       // reinicia o status, sem tocar nas ProcessStep) tendo já instâncias
       // antigas com progresso registado contra os steps actuais — substituir
       // os steps rebentava com uma violação de FK em bruto (500).
-      const existingStepIds = (existing.steps as any[]).map(s => s.id);
+      const existingStepIds = existing.steps.map(s => s.id);
       if (existingStepIds.length) {
         const progressCount = await this.prisma.stepProgress.count({
           where: { stepId: { in: existingStepIds } },
@@ -307,7 +308,7 @@ export class ProcessStandardService {
     if (p.status !== 'DRAFT') {
       throw new BadRequestException('Apenas processos em DRAFT podem ser submetidos para revisão');
     }
-    if ((p.steps as any[]).length === 0) {
+    if (p.steps.length === 0) {
       throw new BadRequestException('Processo sem etapas não pode ser submetido');
     }
 
@@ -321,7 +322,7 @@ export class ProcessStandardService {
     // Notificar aprovadores
     await this.prisma.notificationLog.create({
       data: {
-        userId: (p as any).ownerId,
+        userId: p.ownerId,
         type: 'PROCESS_REVIEW_REQUESTED',
         message: `Processo ${p.code} submetido para revisão`,
         metadata: JSON.stringify({}),
@@ -387,16 +388,24 @@ export class ProcessStandardService {
       where: { processId: id, version: { in: [versionA, versionB] } },
     });
 
-    if (versions.length < 2) {
+    // Achado real: `versions.length < 2` só verifica a CONTAGEM total, não
+    // que versionA e versionB específicos foram de facto encontrados — com
+    // 2+ versões na BD mas nenhuma a corresponder a versionA/versionB, os
+    // .find() abaixo devolvem `undefined` e `.snapshot` rebentava com
+    // "Cannot read properties of undefined" (500 em bruto), mascarado pelo
+    // `as any`. Verificados explicitamente antes de aceder.
+    const versionRecordA = versions.find(v => v.version === versionA);
+    const versionRecordB = versions.find(v => v.version === versionB);
+    if (!versionRecordA || !versionRecordB) {
       throw new NotFoundException('Uma ou ambas as versões não encontradas');
     }
 
-    const a = JSON.parse((versions.find(v => v.version === versionA) as any).snapshot);
-    const b = JSON.parse((versions.find(v => v.version === versionB) as any).snapshot);
+    const a = JSON.parse(versionRecordA.snapshot);
+    const b = JSON.parse(versionRecordB.snapshot);
 
-    const diffFields = (obj1: any, obj2: any) => {
+    const diffFields = (obj1: Record<string, unknown>, obj2: Record<string, unknown>) => {
       const keys = new Set([...Object.keys(obj1), ...Object.keys(obj2)]);
-      const diff: any = {};
+      const diff: Record<string, { a: unknown; b: unknown }> = {};
       for (const k of keys) {
         if (JSON.stringify(obj1[k]) !== JSON.stringify(obj2[k])) {
           diff[k] = { a: obj1[k], b: obj2[k] };
@@ -436,7 +445,7 @@ export class ProcessStandardService {
           ? new Date(Date.now() + process.defaultSlaHours * 3600 * 1000)
           : null,
         stepProgress: {
-          create: (process.steps as any[]).map((s, idx) => ({
+          create: process.steps.map((s, idx) => ({
             stepId: s.id,
             stepOrder: s.order,
             status: idx === 0 ? 'PENDING' : 'WAITING',
@@ -483,9 +492,20 @@ export class ProcessStandardService {
     const { page = 1, limit = 20, processId, status, userId } = filters;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.ProcessInstanceWhereInput = {};
     if (processId) where.processId = processId;
-    if (status) where.status = status;
+    // Achado real: `status` chega como query string livre do controller
+    // (nunca validado contra o enum InstanceStatus) e ia directo para
+    // where.status — um valor inválido rebentava com "Invalid value
+    // provided" (GET 500). Mascarado antes pelo `where: any`.
+    if (status) {
+      if (!(Object.values(InstanceStatus) as string[]).includes(status)) {
+        throw new BadRequestException(
+          `status inválido. Valores aceites: ${Object.values(InstanceStatus).join(', ')}`,
+        );
+      }
+      where.status = status as InstanceStatus;
+    }
     if (userId) where.OR = [{ initiatedById: userId }, { targetUserId: userId }];
 
     const [data, total] = await Promise.all([
@@ -565,7 +585,7 @@ export class ProcessStandardService {
     }
 
     // Validar upload obrigatório
-    if ((step as any)?.requiresUpload && (!dto.evidenceIds || dto.evidenceIds.length === 0)) {
+    if (step?.requiresUpload && (!dto.evidenceIds || dto.evidenceIds.length === 0)) {
       throw new BadRequestException('Esta etapa requer upload de evidência');
     }
 
@@ -756,7 +776,7 @@ export class ProcessStandardService {
 
   async getAuditLogs(processId?: number, instanceId?: number, page = 1, limit = 50) {
     const skip = (page - 1) * limit;
-    const where: any = {};
+    const where: Prisma.ProcessAuditLogWhereInput = {};
     if (processId) where.processId = processId;
     if (instanceId) where.instanceId = instanceId;
 
