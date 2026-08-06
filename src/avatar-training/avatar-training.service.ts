@@ -23,19 +23,52 @@ import {
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
+// `prisma: any` é o único `any` deliberadamente mantido neste ficheiro —
+// trainingAvatar/avatarKnowledge não existem em prisma/schema.prisma (ver
+// [[project-innova-schema-code-drift]]), por isso não há nenhum tipo gerado
+// pelo Prisma para acesso dinâmico `prisma[name]` a um modelo que pode não
+// existir. Mesmo padrão usado noutros serviços do projecto que usam
+// safeM()/safeModel() (api-integration.service.ts, content-library.service.ts,
+// evaluation.service.ts, acl.service.ts): o lado da produção fica dinâmico,
+// mas o lado do consumo é tipado com a interface TrainingAvatarRecord abaixo
+// (forma confirmada nos próprios .create()/.findMany() deste ficheiro). Os
+// métodos do stub de fallback também deixam de usar `any` — `{ data: unknown }`/
+// `{ create: unknown }` chega para os satisfazer sem fingir conhecer o shape
+// real do modelo.
 const safeM = (prisma: any, name: string) =>
   prisma[name] ?? {
     findMany: async () => [],
     findFirst: async () => null,
     findUnique: async () => null,
-    create: async (d: any) => d.data,
+    create: async (d: { data: unknown }) => d.data,
     createMany: async () => ({ count: 0 }),
-    upsert: async (d: any) => d.create,
-    update: async (d: any) => d.data,
+    upsert: async (d: { create: unknown }) => d.create,
+    update: async (d: { data: unknown }) => d.data,
     delete: async () => null,
     count: async () => 0,
     groupBy: async () => [],
   };
+
+// trainingAvatar não existe em prisma/schema.prisma — sem tipos gerados
+// pelo Prisma. Forma confirmada nos .create()/.update() deste ficheiro.
+export interface TrainingAvatarRecord {
+  id: number;
+  name: string;
+  description?: string | null;
+  role?: string;
+  style: string;
+  personality: string;
+  language: string;
+  voiceId?: string | null;
+  avatarImageUrl?: string | null;
+  systemPrompt?: string | null;
+  isPublic: boolean;
+  hasMemory: boolean;
+  knowledgeUrls: string[];
+  brandingColor?: string | null;
+  createdById: number;
+  active: boolean;
+}
 
 // AvatarSession.conversationHistory é uma String (JSON serializado à mão) —
 // esta interface documenta a forma real das mensagens (confirmada nos
@@ -151,7 +184,10 @@ export class AvatarTrainingService {
   // ══════════════════════════════════════════════════════
 
   async createAvatar(userId: number, dto: CreateAvatarDto) {
-    const avatar = await safeM(this.prisma, 'trainingAvatar')
+    const avatar: TrainingAvatarRecord | (Record<string, unknown> & { id: null }) = await safeM(
+      this.prisma,
+      'trainingAvatar',
+    )
       .create({
         data: {
           name: dto.name,
@@ -192,11 +228,11 @@ export class AvatarTrainingService {
   async getAvatars(filters: AvatarFilterDto = {}) {
     const { page = 1, limit = 20, role, isPublic } = filters;
     const skip = (page - 1) * limit;
-    const where: any = { active: true };
+    const where: Partial<TrainingAvatarRecord> = { active: true };
     if (role) where.role = role;
     if (isPublic !== undefined) where.isPublic = isPublic;
 
-    const data = await safeM(this.prisma, 'trainingAvatar')
+    const data: TrainingAvatarRecord[] = await safeM(this.prisma, 'trainingAvatar')
       .findMany({
         where,
         skip,
@@ -210,7 +246,7 @@ export class AvatarTrainingService {
           err: { message: e instanceof Error ? e.message : String(e) },
           msg: 'Falha ao listar avatares de treino',
         });
-        return [] as any[];
+        return [] as TrainingAvatarRecord[];
       });
     const total = await safeM(this.prisma, 'trainingAvatar')
       .count({ where })
@@ -228,7 +264,7 @@ export class AvatarTrainingService {
   }
 
   async getAvatar(id: number) {
-    const a = await safeM(this.prisma, 'trainingAvatar')
+    const a: TrainingAvatarRecord | null = await safeM(this.prisma, 'trainingAvatar')
       .findUnique({ where: { id } })
       .catch(e => {
         this.logger.warn({
