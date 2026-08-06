@@ -8,7 +8,6 @@ import {
   Param,
   Body,
   Query,
-  Req,
   ParseIntPipe,
   UseGuards,
   HttpCode,
@@ -112,16 +111,19 @@ export class TalentDevelopmentController {
   fromTemplate(
     @Param('templateId', ParseIntPipe) templateId: number,
     @Body() dto: CreateFromTemplateDto,
-    @Req() req: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.createFromTemplate(templateId, dto, req.user.id);
+    return this.svc.createFromTemplate(templateId, dto, user.id);
   }
 
   @Post('plans')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Criar plano de desenvolvimento (PDI)' })
-  createPlan(@Body() dto: TalentDevelopmentCreateDevelopmentPlanDto, @Req() req: any) {
-    return this.svc.createPlan(dto, req.user.id);
+  createPlan(
+    @Body() dto: TalentDevelopmentCreateDevelopmentPlanDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.createPlan(dto, user.id);
   }
 
   @Get('plans')
@@ -151,8 +153,8 @@ export class TalentDevelopmentController {
   @Post('plans/:id/activate')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Activar plano' })
-  activate(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
-    return this.svc.activatePlan(id, req.user.id);
+  activate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.activatePlan(id, user.id);
   }
 
   @Post('plans/:id/pause')
@@ -237,9 +239,9 @@ export class TalentDevelopmentController {
   approveAction(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ApproveActionDto,
-    @Req() req: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.approveActionEvidence(id, dto, req.user.id);
+    return this.svc.approveActionEvidence(id, dto, user.id);
   }
 
   @Delete('actions/:id')
