@@ -178,11 +178,19 @@ describe('DocumentDeclarationsService (additional)', () => {
 
     it('deve filtrar por purposeId e language', async () => {
       mockPrisma.declarationTemplate.findMany.mockResolvedValue([]);
+      // language chega em minúsculas (convenção de query param) e é
+      // normalizado para o enum real (PT/EN/FR) antes de ir para o where.
       await service.getTemplates(1, 'pt');
       expect(mockPrisma.declarationTemplate.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ purposeId: 1, language: 'pt' }),
+          where: expect.objectContaining({ purposeId: 1, language: 'PT' }),
         }),
+      );
+    });
+
+    it('rejeita language inválido com BadRequestException', async () => {
+      await expect(service.getTemplates(undefined, 'xx')).rejects.toBeInstanceOf(
+        BadRequestException,
       );
     });
   });
