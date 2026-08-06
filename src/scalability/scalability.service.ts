@@ -10,6 +10,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
+import { Prisma, AuthType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/services/audit.service';
@@ -39,6 +40,61 @@ import {
 } from './scalability.dto';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+
+// Condição de uma AutomationRule (JSON.parse de AutomationRule.conditionsJson) —
+// shape livre definido pelo utilizador na criação da regra, por isso `value`
+// fica `unknown` (os operadores GT/LT assumem numérico por convenção, nunca
+// validada em runtime).
+interface AutomationCondition {
+  field: string;
+  operator: 'EQ' | 'NEQ' | 'IN' | 'NOT_IN' | 'GT' | 'LT';
+  value: unknown;
+}
+
+// Acção de uma AutomationRule (JSON.parse de AutomationRule.actionsJson).
+interface AutomationAction {
+  type: string;
+  payload?: Record<string, unknown>;
+}
+
+interface AutomationActionResult {
+  type: string;
+  status: 'OK' | 'SKIPPED' | 'ERROR';
+  payload?: Record<string, unknown>;
+  note?: string;
+  reason?: string;
+  error?: string;
+}
+
+// Snapshot de métricas do sistema — mesmas colunas usadas para criar um
+// ScalabilityMetric (sem id/tenantId/capturedAt, que são geridos à parte).
+interface SystemMetricsSnapshot {
+  activeUsers: number;
+  concurrentSessions: number;
+  cpuUsagePercent: number;
+  memoryUsagePercent: number;
+  diskUsagePercent: number;
+  avgLatencyMs: number;
+  p95LatencyMs: number;
+  p99LatencyMs: number;
+  requestsPerMinute: number;
+  errorRate: number;
+  uptimePercent: number;
+  storageUsedGb: number;
+  bandwidthMbps: number;
+  videoStreamCount: number;
+  apiCallsPerMin: number;
+}
+
+// Linha de importação em massa — vem de CSV (todos os valores são string) ou
+// JSON decodificado (shape livre); só email/fullName são validados antes de
+// qualquer uso (ver validateUserRow()).
+interface BulkImportRow {
+  email?: string;
+  fullName?: string;
+  departmentId?: number | string;
+  positionId?: number | string;
+}
 
 @Injectable()
 export class ScalabilityService {
@@ -167,14 +223,29 @@ export class ScalabilityService {
     // equivalentes modernos. Sem isto, a criação rebentava sempre com
     // "Argument endpoint is missing" (nunca detectado porque este módulo
     // nunca esteve registado em app.module.ts).
-    const integration = await this.prisma.integrationConfig.create({
-      data: {
-        ...dto,
-        credentialsJson: safeCredentials,
-        endpoint: dto.baseUrl ?? '',
-        config: dto.configJson ? JSON.parse(dto.configJson) : {},
-      } as any,
-    });
+    // FIX: `as any` desnecessário — os enums espelhados do DTO (ver topo de
+    // scalability.dto.ts) são literal unions estruturalmente compatíveis com
+    // os enums reais do Prisma, por isso `type`/`syncFrequency` não
+    // precisam de nenhum cast.
+    //
+    // Achado real: `authType` chega como `@IsString()` livre no DTO (nunca
+    // `@IsEnum`), mas a coluna Prisma é o enum `AuthType` (OAUTH2/API_KEY/
+    // BASIC/BEARER) — um valor fora dessas 4 opções não era rejeitado pelo
+    // ValidationPipe e só rebentava mais tarde como 500 em bruto do Prisma
+    // ("Invalid value provided"). Validado aqui explicitamente.
+    if (dto.authType && !(Object.values(AuthType) as string[]).includes(dto.authType)) {
+      throw new BadRequestException(
+        `authType inválido. Valores aceites: ${Object.values(AuthType).join(', ')}`,
+      );
+    }
+    const data: Prisma.IntegrationConfigUncheckedCreateInput = {
+      ...dto,
+      authType: dto.authType as AuthType | undefined,
+      credentialsJson: safeCredentials,
+      endpoint: dto.baseUrl ?? '',
+      config: dto.configJson ? JSON.parse(dto.configJson) : {},
+    };
+    const integration = await this.prisma.integrationConfig.create({ data });
     await this.audit.log({
       entity: 'IntegrationConfig',
       entityId: integration.id,
@@ -193,16 +264,22 @@ export class ScalabilityService {
       ? this.encryptSensitiveData(dto.credentialsJson)
       : undefined;
     if (dto.configJson) this.validateJsonField(dto.configJson, 'configJson');
+    if (dto.authType && !(Object.values(AuthType) as string[]).includes(dto.authType)) {
+      throw new BadRequestException(
+        `authType inválido. Valores aceites: ${Object.values(AuthType).join(', ')}`,
+      );
+    }
 
-    const updated = await this.prisma.integrationConfig.update({
-      where: { id },
-      data: {
-        ...dto,
-        credentialsJson: safeCredentials ?? existing.credentialsJson,
-        ...(dto.baseUrl !== undefined && { endpoint: dto.baseUrl }),
-        ...(dto.configJson !== undefined && { config: JSON.parse(dto.configJson) }),
-      } as any,
-    });
+    // FIX: mesmo padrão de createIntegration() acima — `as any` desnecessário;
+    // só `authType` precisa de cast pontual (ver nota acima).
+    const data: Prisma.IntegrationConfigUncheckedUpdateInput = {
+      ...dto,
+      authType: dto.authType as AuthType | undefined,
+      credentialsJson: safeCredentials ?? existing.credentialsJson,
+      ...(dto.baseUrl !== undefined && { endpoint: dto.baseUrl }),
+      ...(dto.configJson !== undefined && { config: JSON.parse(dto.configJson) }),
+    };
+    const updated = await this.prisma.integrationConfig.update({ where: { id }, data });
     await this.audit.log({
       entity: 'IntegrationConfig',
       entityId: id,
@@ -214,7 +291,7 @@ export class ScalabilityService {
   }
 
   async listIntegrations(tenantId: string, query: PaginationDto) {
-    const where: any = { tenantId };
+    const where: Prisma.IntegrationConfigWhereInput = { tenantId };
     if (query.search) where.name = { contains: query.search };
     const [data, total] = await Promise.all([
       this.prisma.read.integrationConfig.findMany({
@@ -276,19 +353,20 @@ export class ScalabilityService {
     // são os equivalentes modernos. Sem isto, a criação rebentava sempre com
     // "Argument trigger is missing" (nunca detectado porque este módulo nunca
     // esteve registado em app.module.ts).
-    const rule = await this.prisma.automationRule.create({
-      data: {
-        ...dto,
-        // createdBy é String (guarda o userId como texto) — actorId chega
-        // aqui como o número real do JWT apesar do parâmetro estar (mal)
-        // tipado como string; sem o String() explícito, o Prisma rejeita
-        // sempre com "Expected String, provided Int".
-        createdBy: String(actorId),
-        trigger: dto.triggerType,
-        action: dto.actionsJson,
-        condition: dto.conditionsJson ?? '',
-      } as any,
-    });
+    // FIX: `as any` desnecessário — ver nota sobre enums espelhados em
+    // createIntegration() acima (nenhum cast necessário aqui).
+    const data: Prisma.AutomationRuleUncheckedCreateInput = {
+      ...dto,
+      // createdBy é String (guarda o userId como texto) — actorId chega
+      // aqui como o número real do JWT apesar do parâmetro estar (mal)
+      // tipado como string; sem o String() explícito, o Prisma rejeita
+      // sempre com "Expected String, provided Int".
+      createdBy: String(actorId),
+      trigger: dto.triggerType,
+      action: dto.actionsJson,
+      condition: dto.conditionsJson ?? '',
+    };
+    const rule = await this.prisma.automationRule.create({ data });
     await this.audit.log({
       entity: 'AutomationRule',
       entityId: rule.id,
@@ -306,15 +384,14 @@ export class ScalabilityService {
     if (dto.triggerConfigJson) this.validateJsonField(dto.triggerConfigJson, 'triggerConfigJson');
     if (dto.actionsJson) this.validateJsonField(dto.actionsJson, 'actionsJson');
 
-    const updated = await this.prisma.automationRule.update({
-      where: { id },
-      data: {
-        ...dto,
-        ...(dto.triggerType !== undefined && { trigger: dto.triggerType }),
-        ...(dto.actionsJson !== undefined && { action: dto.actionsJson }),
-        ...(dto.conditionsJson !== undefined && { condition: dto.conditionsJson }),
-      } as any,
-    });
+    // FIX: `as any` desnecessário — ver nota em createAutomationRule() acima.
+    const data: Prisma.AutomationRuleUncheckedUpdateInput = {
+      ...dto,
+      ...(dto.triggerType !== undefined && { trigger: dto.triggerType }),
+      ...(dto.actionsJson !== undefined && { action: dto.actionsJson }),
+      ...(dto.conditionsJson !== undefined && { condition: dto.conditionsJson }),
+    };
+    const updated = await this.prisma.automationRule.update({ where: { id }, data });
     await this.audit.log({
       entity: 'AutomationRule',
       entityId: id,
@@ -326,7 +403,7 @@ export class ScalabilityService {
   }
 
   async listAutomationRules(tenantId: string, query: PaginationDto) {
-    const where: any = { tenantId };
+    const where: Prisma.AutomationRuleWhereInput = { tenantId };
     if (query.search) where.name = { contains: query.search };
     const [data, total] = await Promise.all([
       this.prisma.read.automationRule.findMany({
@@ -375,7 +452,7 @@ export class ScalabilityService {
   async processAutomationEvent(
     tenantId: string,
     triggerType: AutomationTrigger,
-    payload: Record<string, any>,
+    payload: Record<string, unknown>,
   ) {
     const rules = await this.prisma.read.automationRule.findMany({
       where: { tenantId, triggerType, isActive: true },
@@ -383,7 +460,9 @@ export class ScalabilityService {
     });
 
     for (const rule of rules) {
-      const conditions = rule.conditionsJson ? JSON.parse(rule.conditionsJson) : [];
+      const conditions: AutomationCondition[] = rule.conditionsJson
+        ? JSON.parse(rule.conditionsJson)
+        : [];
       const matches = this.evaluateConditions(conditions, payload);
       if (!matches) continue;
 
@@ -402,7 +481,7 @@ export class ScalabilityService {
       });
 
       try {
-        const actions = JSON.parse(rule.actionsJson);
+        const actions: AutomationAction[] = JSON.parse(rule.actionsJson);
         const actionsLog = await this.executeActions(actions, payload, rule.tenantId);
 
         await this.prisma.automationExecution.update({
@@ -442,7 +521,10 @@ export class ScalabilityService {
     }
   }
 
-  private evaluateConditions(conditions: any[], payload: Record<string, any>): boolean {
+  private evaluateConditions(
+    conditions: AutomationCondition[],
+    payload: Record<string, unknown>,
+  ): boolean {
     if (!conditions || conditions.length === 0) return true;
     return conditions.every(cond => {
       const val = payload[cond.field];
@@ -455,40 +537,50 @@ export class ScalabilityService {
           return Array.isArray(cond.value) && cond.value.includes(val);
         case 'NOT_IN':
           return Array.isArray(cond.value) && !cond.value.includes(val);
+        // GT/LT assumem valores numéricos por convenção (config JSON livre,
+        // nunca validada em runtime) — mesmo comportamento de antes, agora
+        // explícito em vez de escondido atrás de `any`.
         case 'GT':
-          return val > cond.value;
+          return (val as number) > (cond.value as number);
         case 'LT':
-          return val < cond.value;
+          return (val as number) < (cond.value as number);
         default:
           return false;
       }
     });
   }
 
-  private async executeActions(actions: any[], payload: Record<string, any>, tenantId: string) {
-    const results: any[] = [];
+  private async executeActions(
+    actions: AutomationAction[],
+    payload: Record<string, unknown>,
+    tenantId: string,
+  ): Promise<AutomationActionResult[]> {
+    const results: AutomationActionResult[] = [];
     for (const action of actions) {
       try {
         switch (action.type) {
-          case 'ENROLL_COURSE':
+          case 'ENROLL_COURSE': {
             // Matricular usuário no curso
-            if (payload.userId && action.payload?.courseId) {
+            // Config JSON livre (payload/action.payload nunca validados em
+            // runtime) — mesmos casts pontuais de evaluateConditions() acima.
+            const courseId = action.payload?.courseId as number | undefined;
+            const userId = payload.userId as number | undefined;
+            if (userId && courseId) {
               await this.prisma.enrollment.upsert({
-                where: {
-                  courseId_userId: { courseId: action.payload.courseId, userId: payload.userId },
-                },
-                create: { courseId: action.payload.courseId, userId: payload.userId },
+                where: { courseId_userId: { courseId, userId } },
+                create: { courseId, userId },
                 update: {},
               });
             }
             results.push({ type: action.type, status: 'OK', payload: action.payload });
             break;
+          }
 
           case 'SEND_NOTIFICATION':
-            await this.notifications.sendToUser(payload.userId, {
-              title: action.payload?.title ?? 'INNOVA',
-              message: action.payload?.message ?? '',
-              type: action.payload?.type ?? 'INFO',
+            await this.notifications.sendToUser(payload.userId as number, {
+              title: (action.payload?.title as string | undefined) ?? 'INNOVA',
+              message: (action.payload?.message as string | undefined) ?? '',
+              type: (action.payload?.type as string | undefined) ?? 'INFO',
             });
             results.push({ type: action.type, status: 'OK' });
             break;
@@ -585,7 +677,7 @@ export class ScalabilityService {
     const from = query.from ? new Date(query.from) : this.windowToDate(query.window ?? '24h');
     const to = query.to ? new Date(query.to) : new Date();
 
-    const where: any = { capturedAt: { gte: from, lte: to } };
+    const where: Prisma.ScalabilityMetricWhereInput = { capturedAt: { gte: from, lte: to } };
     if (query.tenantId) where.tenantId = query.tenantId;
 
     const metrics = await this.prisma.scalabilityMetric.findMany({
@@ -610,7 +702,7 @@ export class ScalabilityService {
   }
 
   async getRealtimeMetrics(tenantId?: string) {
-    const where: any = {};
+    const where: Prisma.ScalabilityMetricWhereInput = {};
     if (tenantId) where.tenantId = tenantId;
 
     const latest = await this.prisma.scalabilityMetric.findFirst({
@@ -650,7 +742,7 @@ export class ScalabilityService {
     }
   }
 
-  private async collectSystemSnapshot(): Promise<any> {
+  private async collectSystemSnapshot(): Promise<SystemMetricsSnapshot> {
     // Em produção: buscar via API interna de infraestrutura
     // Placeholder que pode ser substituído por integração real com Prometheus/CloudWatch
     return {
@@ -672,7 +764,7 @@ export class ScalabilityService {
     };
   }
 
-  private async evaluateAlertThresholds(snapshot: any) {
+  private async evaluateAlertThresholds(snapshot: SystemMetricsSnapshot) {
     const slas = await this.prisma.slaConfig.findMany({ where: { isActive: true } });
     for (const sla of slas) {
       if (snapshot.avgLatencyMs > sla.maxLatencyMs) {
@@ -741,7 +833,7 @@ export class ScalabilityService {
   }
 
   async listAlerts(query: AlertsQueryDto) {
-    const where: any = {};
+    const where: Prisma.SystemAlertWhereInput = {};
     if (query.tenantId) where.tenantId = query.tenantId;
     if (query.severity) where.severity = query.severity;
     if (query.category) where.category = query.category;
@@ -775,7 +867,11 @@ export class ScalabilityService {
       errors: [],
     };
 
-    let rows: any[] = [];
+    // FIX: `any[]` desnecessário — CSV/JSON decodificado tem shape livre por
+    // definição (nunca validado contra um schema antes de validateUserRow()),
+    // mas os campos realmente usados abaixo (email/fullName/departmentId/
+    // positionId) já ficam documentados em BulkImportRow em vez de `any`.
+    let rows: BulkImportRow[] = [];
     try {
       const decoded = Buffer.from(dto.payload, 'base64').toString('utf-8');
       if (dto.format === 'CSV') {
@@ -806,12 +902,19 @@ export class ScalabilityService {
             result.skipped++;
           }
         } else {
+          // Achado real: `departmentId`/`positionId` vêm sempre como string
+          // quando o import é CSV (parseCSV() devolve Record<string,string>)
+          // — passados directamente (sem Number()) para colunas Int do
+          // Prisma, uma importação CSV com estas colunas preenchidas
+          // rebentava sempre com "Expected Int, provided String". Mascarado
+          // antes pelo `any[]` de `rows`. Number() é um no-op inofensivo
+          // para o caminho JSON (já vêm numéricos).
           const user = await this.prisma.user.create({
             data: {
               fullName: row.fullName,
               email: row.email,
-              departmentId: row.departmentId ?? null,
-              positionId: row.positionId ?? null,
+              departmentId: row.departmentId != null ? Number(row.departmentId) : null,
+              positionId: row.positionId != null ? Number(row.positionId) : null,
             },
           });
 
@@ -854,7 +957,7 @@ export class ScalabilityService {
     return result;
   }
 
-  private validateUserRow(row: any, rowNum: number) {
+  private validateUserRow(row: BulkImportRow, rowNum: number) {
     if (!row.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
       throw new Error(`Email inválido (linha ${rowNum})`);
     }
