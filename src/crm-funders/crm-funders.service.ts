@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Prisma, GrantStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateFunderDto,
@@ -76,7 +77,7 @@ export class CrmFundersService {
 
   async findAll(filters: FilterFunderDto) {
     const { type, status, search, country, assignedToId, page = 1, limit = 20 } = filters;
-    const where: any = {
+    const where: Prisma.FunderWhereInput = {
       deletedAt: null,
       ...(type && { type }),
       ...(status && { status }),
@@ -223,13 +224,20 @@ export class CrmFundersService {
   }
 
   async updateGrantStatus(grantId: string, status: string, userId: number) {
+    // `status` chega de @Body('status') status: string no controller, sem
+    // validação de DTO/enum — antes disto era passado directo com `as any`,
+    // deixando um valor inválido rebentar como erro de validação do Prisma
+    // (500) em vez de 400.
+    if (!Object.values(GrantStatus).includes(status as GrantStatus)) {
+      throw new BadRequestException(`Status de grant inválido: ${status}`);
+    }
     const grant = await this.prisma.fundingGrant.findUnique({
       where: { id: grantId },
     });
     if (!grant) throw new NotFoundException('Grant não encontrado');
     const updated = await this.prisma.fundingGrant.update({
       where: { id: grantId },
-      data: { status: status as any },
+      data: { status: status as GrantStatus },
     });
     await this.updateFunderTotals(grant.funderId);
     await this.audit.logEntity(userId, 'UPDATE', 'FundingGrant', grantId, { status });
@@ -366,7 +374,7 @@ export class CrmFundersService {
   async getOverdueReports(page = 1, limit = DEFAULT_PAGE_SIZE) {
     const safePage = Math.max(page, 1);
     const safeLimit = Math.min(Math.max(limit, 1), MAX_PAGE_SIZE);
-    const where: any = {
+    const where: Prisma.FunderReportWhereInput = {
       status: { in: ['PENDING', 'REJECTED'] },
       dueDate: { lt: new Date() },
       deletedAt: null,
