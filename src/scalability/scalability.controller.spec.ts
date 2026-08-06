@@ -3,6 +3,7 @@ import { ScalabilityController } from './scalability.controller';
 import { ScalabilityService } from './scalability.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { CurrentUserData } from '../common/types/current-user';
 
 const mockSvc = {
   getDashboard: jest.fn().mockResolvedValue({}),
@@ -33,7 +34,10 @@ const mockSvc = {
   scheduleLoadTest: jest.fn().mockResolvedValue({ scheduled: true }),
 };
 
-const mockReq = { user: { id: 1 } };
+// Controller passa String(user.id) ao serviço — ver scalability.service.ts
+// (actorId: string, mesmo o valor real vindo do JWT ser number; documentado
+// nos comentários createAutomationRule()/executeAutomationRule()).
+const mockUser = { id: 1 } as CurrentUserData;
 
 describe('ScalabilityController', () => {
   let controller: ScalabilityController;
@@ -59,14 +63,14 @@ describe('ScalabilityController', () => {
 
   it('createTenant → createTenant(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.createTenant(dto, mockReq as any);
-    expect(mockSvc.createTenant).toHaveBeenCalledWith(dto, 1);
+    await controller.createTenant(dto, mockUser);
+    expect(mockSvc.createTenant).toHaveBeenCalledWith(dto, '1');
   });
 
   it('updateTenant → updateTenant(id, dto, userId)', async () => {
     const dto = {} as any;
-    await controller.updateTenant('tenant-1', dto, mockReq as any);
-    expect(mockSvc.updateTenant).toHaveBeenCalledWith('tenant-1', dto, 1);
+    await controller.updateTenant('tenant-1', dto, mockUser);
+    expect(mockSvc.updateTenant).toHaveBeenCalledWith('tenant-1', dto, '1');
   });
 
   it('listTenants → listTenants(query)', async () => {
@@ -82,14 +86,14 @@ describe('ScalabilityController', () => {
 
   it('createIntegration → createIntegration(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.createIntegration(dto, mockReq as any);
-    expect(mockSvc.createIntegration).toHaveBeenCalledWith(dto, 1);
+    await controller.createIntegration(dto, mockUser);
+    expect(mockSvc.createIntegration).toHaveBeenCalledWith(dto, '1');
   });
 
   it('updateIntegration → updateIntegration(id, dto, userId)', async () => {
     const dto = {} as any;
-    await controller.updateIntegration('int-1', dto, mockReq as any);
-    expect(mockSvc.updateIntegration).toHaveBeenCalledWith('int-1', dto, 1);
+    await controller.updateIntegration('int-1', dto, mockUser);
+    expect(mockSvc.updateIntegration).toHaveBeenCalledWith('int-1', dto, '1');
   });
 
   it('listIntegrations → listIntegrations(tenantId, query)', async () => {
@@ -100,8 +104,8 @@ describe('ScalabilityController', () => {
 
   it('triggerSync → triggerSync(integrationId, userId)', async () => {
     const dto = { integrationId: 'int-1' } as any;
-    await controller.triggerSync(dto, mockReq as any);
-    expect(mockSvc.triggerSync).toHaveBeenCalledWith('int-1', 1);
+    await controller.triggerSync(dto, mockUser);
+    expect(mockSvc.triggerSync).toHaveBeenCalledWith('int-1', '1');
   });
 
   it('getSyncLogs → getIntegrationSyncLogs(integrationId, limit)', async () => {
@@ -111,14 +115,14 @@ describe('ScalabilityController', () => {
 
   it('createAutomationRule → createAutomationRule(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.createAutomationRule(dto, mockReq as any);
-    expect(mockSvc.createAutomationRule).toHaveBeenCalledWith(dto, 1);
+    await controller.createAutomationRule(dto, mockUser);
+    expect(mockSvc.createAutomationRule).toHaveBeenCalledWith(dto, '1');
   });
 
   it('updateAutomationRule → updateAutomationRule(id, dto, userId)', async () => {
     const dto = {} as any;
-    await controller.updateAutomationRule('auto-1', dto, mockReq as any);
-    expect(mockSvc.updateAutomationRule).toHaveBeenCalledWith('auto-1', dto, 1);
+    await controller.updateAutomationRule('auto-1', dto, mockUser);
+    expect(mockSvc.updateAutomationRule).toHaveBeenCalledWith('auto-1', dto, '1');
   });
 
   it('listAutomationRules → listAutomationRules(tenantId, query)', async () => {
@@ -129,20 +133,20 @@ describe('ScalabilityController', () => {
 
   it('executeAutomationRule → executeAutomationRule(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.executeAutomationRule(dto, mockReq as any);
-    expect(mockSvc.executeAutomationRule).toHaveBeenCalledWith(dto, 1);
+    await controller.executeAutomationRule(dto, mockUser);
+    expect(mockSvc.executeAutomationRule).toHaveBeenCalledWith(dto, '1');
   });
 
   it('createSla → createSlaConfig(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.createSla(dto, mockReq as any);
-    expect(mockSvc.createSlaConfig).toHaveBeenCalledWith(dto, 1);
+    await controller.createSla(dto, mockUser);
+    expect(mockSvc.createSlaConfig).toHaveBeenCalledWith(dto, '1');
   });
 
   it('updateSla → updateSlaConfig(id, dto, userId)', async () => {
     const dto = {} as any;
-    await controller.updateSla('sla-1', dto, mockReq as any);
-    expect(mockSvc.updateSlaConfig).toHaveBeenCalledWith('sla-1', dto, 1);
+    await controller.updateSla('sla-1', dto, mockUser);
+    expect(mockSvc.updateSlaConfig).toHaveBeenCalledWith('sla-1', dto, '1');
   });
 
   it('listSlas → listSlaConfigs(tenantId)', async () => {
@@ -157,8 +161,8 @@ describe('ScalabilityController', () => {
 
   it('updateContentDelivery → updateContentDeliveryConfig(tenantId, dto, userId)', async () => {
     const dto = {} as any;
-    await controller.updateContentDelivery('tenant-1', dto, mockReq as any);
-    expect(mockSvc.updateContentDeliveryConfig).toHaveBeenCalledWith('tenant-1', dto, 1);
+    await controller.updateContentDelivery('tenant-1', dto, mockUser);
+    expect(mockSvc.updateContentDeliveryConfig).toHaveBeenCalledWith('tenant-1', dto, '1');
   });
 
   it('getMetrics → getMetrics(query)', async () => {
@@ -174,8 +178,8 @@ describe('ScalabilityController', () => {
 
   it('createAlert → createAlert(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.createAlert(dto, mockReq as any);
-    expect(mockSvc.createAlert).toHaveBeenCalledWith(dto, 1);
+    await controller.createAlert(dto, mockUser);
+    expect(mockSvc.createAlert).toHaveBeenCalledWith(dto, '1');
   });
 
   it('resolveAlert → resolveAlert(id, dto)', async () => {
@@ -192,13 +196,13 @@ describe('ScalabilityController', () => {
 
   it('bulkImport → bulkImportUsers(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.bulkImport(dto, mockReq as any);
-    expect(mockSvc.bulkImportUsers).toHaveBeenCalledWith(dto, 1);
+    await controller.bulkImport(dto, mockUser);
+    expect(mockSvc.bulkImportUsers).toHaveBeenCalledWith(dto, '1');
   });
 
   it('scheduleLoadTest → scheduleLoadTest(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.scheduleLoadTest(dto, mockReq as any);
-    expect(mockSvc.scheduleLoadTest).toHaveBeenCalledWith(dto, 1);
+    await controller.scheduleLoadTest(dto, mockUser);
+    expect(mockSvc.scheduleLoadTest).toHaveBeenCalledWith(dto, '1');
   });
 });

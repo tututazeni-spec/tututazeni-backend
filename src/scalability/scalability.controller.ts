@@ -12,7 +12,6 @@ import {
   Param,
   Query,
   UseGuards,
-  Request,
   HttpCode,
   HttpStatus,
   DefaultValuePipe,
@@ -43,6 +42,8 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CurrentUserData } from '../common/types/current-user';
 import { Role } from '../auth/enums/role.enum';
 
 @ApiTags('Escalabilidade')
@@ -71,8 +72,8 @@ export class ScalabilityController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Criar novo tenant (empresa)' })
   @ApiResponse({ status: 201, description: 'Tenant criado com sucesso' })
-  async createTenant(@Body() dto: CreateTenantConfigDto, @Request() req: any) {
-    return this.service.createTenant(dto, req.user.id);
+  async createTenant(@Body() dto: CreateTenantConfigDto, @CurrentUser() user: CurrentUserData) {
+    return this.service.createTenant(dto, String(user.id));
   }
 
   @Patch('tenants/:id')
@@ -81,9 +82,9 @@ export class ScalabilityController {
   async updateTenant(
     @Param('id') id: string,
     @Body() dto: UpdateTenantConfigDto,
-    @Request() req: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.service.updateTenant(id, dto, req.user.id);
+    return this.service.updateTenant(id, dto, String(user.id));
   }
 
   @Get('tenants')
@@ -107,8 +108,11 @@ export class ScalabilityController {
   @Post('integrations')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Adicionar nova integração (ERP, Slack, Teams...)' })
-  async createIntegration(@Body() dto: CreateIntegrationConfigDto, @Request() req: any) {
-    return this.service.createIntegration(dto, req.user.id);
+  async createIntegration(
+    @Body() dto: CreateIntegrationConfigDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.createIntegration(dto, String(user.id));
   }
 
   @Patch('integrations/:id')
@@ -117,9 +121,9 @@ export class ScalabilityController {
   async updateIntegration(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateIntegrationConfigDto,
-    @Request() req: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.service.updateIntegration(id, dto, req.user.id);
+    return this.service.updateIntegration(id, dto, String(user.id));
   }
 
   @Get('integrations/tenant/:tenantId')
@@ -133,8 +137,8 @@ export class ScalabilityController {
   @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Disparar sincronização manual de integração' })
-  async triggerSync(@Body() dto: TriggerSyncDto, @Request() req: any) {
-    return this.service.triggerSync(dto.integrationId, req.user.id);
+  async triggerSync(@Body() dto: TriggerSyncDto, @CurrentUser() user: CurrentUserData) {
+    return this.service.triggerSync(dto.integrationId, String(user.id));
   }
 
   @Get('integrations/:integrationId/sync-logs')
@@ -155,8 +159,11 @@ export class ScalabilityController {
   @Post('automations')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar regra de automação' })
-  async createAutomationRule(@Body() dto: CreateAutomationRuleDto, @Request() req: any) {
-    return this.service.createAutomationRule(dto, req.user.id);
+  async createAutomationRule(
+    @Body() dto: CreateAutomationRuleDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.createAutomationRule(dto, String(user.id));
   }
 
   @Patch('automations/:id')
@@ -165,9 +172,9 @@ export class ScalabilityController {
   async updateAutomationRule(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateAutomationRuleDto,
-    @Request() req: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.service.updateAutomationRule(id, dto, req.user.id);
+    return this.service.updateAutomationRule(id, dto, String(user.id));
   }
 
   @Get('automations/tenant/:tenantId')
@@ -181,8 +188,11 @@ export class ScalabilityController {
   @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Executar uma regra de automação manualmente' })
-  async executeAutomationRule(@Body() dto: ExecuteAutomationRuleDto, @Request() req: any) {
-    return this.service.executeAutomationRule(dto, req.user.id);
+  async executeAutomationRule(
+    @Body() dto: ExecuteAutomationRuleDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.executeAutomationRule(dto, String(user.id));
   }
 
   // ============================================================
@@ -192,15 +202,19 @@ export class ScalabilityController {
   @Post('sla')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Criar configuração de SLA' })
-  async createSla(@Body() dto: CreateSlaConfigDto, @Request() req: any) {
-    return this.service.createSlaConfig(dto, req.user.id);
+  async createSla(@Body() dto: CreateSlaConfigDto, @CurrentUser() user: CurrentUserData) {
+    return this.service.createSlaConfig(dto, String(user.id));
   }
 
   @Patch('sla/:id')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Actualizar SLA' })
-  async updateSla(@Param('id') id: string, @Body() dto: UpdateSlaConfigDto, @Request() req: any) {
-    return this.service.updateSlaConfig(id, dto, req.user.id);
+  async updateSla(
+    @Param('id') id: string,
+    @Body() dto: UpdateSlaConfigDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateSlaConfig(id, dto, String(user.id));
   }
 
   @Get('sla/tenant/:tenantId')
@@ -227,9 +241,9 @@ export class ScalabilityController {
   async updateContentDelivery(
     @Param('tenantId') tenantId: string,
     @Body() dto: UpdateContentDeliveryConfigDto,
-    @Request() req: any,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.service.updateContentDeliveryConfig(tenantId, dto, req.user.id);
+    return this.service.updateContentDeliveryConfig(tenantId, dto, String(user.id));
   }
 
   // ============================================================
@@ -258,8 +272,8 @@ export class ScalabilityController {
   @Post('alerts')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Criar alerta de sistema' })
-  async createAlert(@Body() dto: CreateAlertDto, @Request() req: any) {
-    return this.service.createAlert(dto, req.user.id);
+  async createAlert(@Body() dto: CreateAlertDto, @CurrentUser() user: CurrentUserData) {
+    return this.service.createAlert(dto, String(user.id));
   }
 
   @Patch('alerts/:id/resolve')
@@ -284,8 +298,8 @@ export class ScalabilityController {
   @Roles(Role.ADMIN, Role.RH)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Importação em massa de utilizadores (CSV ou JSON base64)' })
-  async bulkImport(@Body() dto: BulkUserImportDto, @Request() req: any) {
-    return this.service.bulkImportUsers(dto, req.user.id);
+  async bulkImport(@Body() dto: BulkUserImportDto, @CurrentUser() user: CurrentUserData) {
+    return this.service.bulkImportUsers(dto, String(user.id));
   }
 
   // ============================================================
@@ -296,7 +310,7 @@ export class ScalabilityController {
   @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Agendar teste de carga (stress test)' })
-  async scheduleLoadTest(@Body() dto: LoadTestConfigDto, @Request() req: any) {
-    return this.service.scheduleLoadTest(dto, req.user.id);
+  async scheduleLoadTest(@Body() dto: LoadTestConfigDto, @CurrentUser() user: CurrentUserData) {
+    return this.service.scheduleLoadTest(dto, String(user.id));
   }
 }
