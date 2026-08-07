@@ -116,6 +116,11 @@ export class CareerPathStepDto {
   @ApiProperty() @IsInt() roleId!: number;
   @ApiProperty() @IsInt() @Min(1) order!: number;
   @ApiPropertyOptional() @IsOptional() @IsString() label?: string;
+  // CareerPathStep.positionId é uma FK obrigatória para Position e não há
+  // forma inequívoca de a derivar de roleId (CareerRole não tem
+  // positionId) — o chamador tem de a fornecer explicitamente. Ver
+  // createCareerPath() em career-plans.service.ts.
+  @ApiProperty() @IsInt() positionId!: number;
 }
 
 export class CareerPlansCreateCareerPathDto {
