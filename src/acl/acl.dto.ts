@@ -80,7 +80,7 @@ export class CheckPermissionDto {
   @ApiProperty() @IsInt() userId!: number;
   @ApiProperty({ enum: PermissionAction }) @IsEnum(PermissionAction) action!: PermissionAction;
   @ApiProperty({ enum: PermissionSubject }) @IsEnum(PermissionSubject) subject!: PermissionSubject;
-  @ApiPropertyOptional() @IsOptional() context?: Record<string, any>;
+  @ApiPropertyOptional() @IsOptional() context?: Record<string, unknown>;
 }
 
 export class AssignRoleToUserDto {

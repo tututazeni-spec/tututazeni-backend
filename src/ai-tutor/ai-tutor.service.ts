@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, ActionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProvidersService } from './ai-providers.service';
 import {
@@ -281,7 +281,7 @@ export class AiTutorService {
 
     switch (dto.action) {
       case AgentAction.ENROLL_COURSE: {
-        const { courseId } = dto.params;
+        const { courseId } = dto.params as { courseId?: number };
         if (!courseId) throw new BadRequestException('courseId obrigatório');
         const existing = await this.prisma.enrollment.findFirst({ where: { userId, courseId } });
         if (existing) throw new BadRequestException('Já inscrito neste curso');
@@ -293,7 +293,7 @@ export class AiTutorService {
       }
 
       case AgentAction.UPDATE_PDI_ACTION: {
-        const { actionId, status } = dto.params;
+        const { actionId, status } = dto.params as { actionId?: number; status?: ActionStatus };
         if (!actionId) throw new BadRequestException('actionId obrigatório');
         const action = await this.prisma.read.pdiAction.findFirst({
           where: { id: actionId, plan: { userId } },
@@ -308,7 +308,7 @@ export class AiTutorService {
       }
 
       case AgentAction.NOTIFY_MANAGER: {
-        const { message } = dto.params;
+        const { message } = dto.params as { message?: string };
         const user = await this.prisma.read.user.findUnique({
           where: { id: userId },
           select: { managerId: true, fullName: true },
@@ -332,6 +332,11 @@ export class AiTutorService {
       case AgentAction.GENERATE_SUMMARY:
       case AgentAction.GENERATE_FLASHCARDS: {
         // Delegar para generateContent
+        const { courseId, topic, count } = dto.params as {
+          courseId?: number;
+          topic?: string;
+          count?: number;
+        };
         result = await this.generateContent(userId, {
           type:
             dto.action === AgentAction.GENERATE_QUIZ
@@ -339,9 +344,9 @@ export class AiTutorService {
               : dto.action === AgentAction.GENERATE_SUMMARY
                 ? 'SUMMARY'
                 : 'FLASHCARDS',
-          courseId: dto.params.courseId,
-          topic: dto.params.topic,
-          count: dto.params.count,
+          courseId,
+          topic,
+          count,
         });
         description = `Conteúdo gerado: ${dto.action}`;
         break;

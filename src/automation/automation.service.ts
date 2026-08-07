@@ -1,6 +1,6 @@
 ﻿// src/automation/automation.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { EnrollmentStatus, Prisma, AutomationTrigger } from '@prisma/client';
+import { EnrollmentStatus, Prisma, AutomationTrigger, PlanStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateRuleDto,
@@ -18,6 +18,24 @@ const helpersLogger = new Logger('AutomationHelpers');
 
 type AutomationRuleRecord = Prisma.AutomationRuleGetPayload<object>;
 
+// Condição/parâmetros de acção são JSON livre por regra (parseCondition()/
+// parseParams() acima devolvem Record<string, unknown>) — este shape
+// cobre apenas os campos realmente lidos em executeAction() abaixo, sem
+// fingir conhecer o contrato completo de todas as regras possíveis.
+interface AutomationActionParams {
+  type?: string;
+  message?: string;
+  courseId?: number;
+  name?: string;
+  status?: PlanStatus;
+  goal?: string;
+  points?: number;
+  badgeCode?: string;
+  url?: string;
+  method?: string;
+  headers?: Record<string, string>;
+}
+
 interface ActionResult {
   affected: number;
   message?: string;
@@ -29,7 +47,7 @@ interface ActionResult {
 
 // Condição/parâmetros de acção são JSON livre por regra — o shape varia
 // consoante o tipo de trigger/acção, sem um contrato único possível.
-function parseCondition(condition?: string | null): Record<string, any> {
+function parseCondition(condition?: string | null): Record<string, unknown> {
   if (!condition) return {};
   try {
     return JSON.parse(condition);
@@ -44,7 +62,7 @@ function parseCondition(condition?: string | null): Record<string, any> {
   }
 }
 
-function parseParams(params?: string | null): Record<string, any> {
+function parseParams(params?: string | null): Record<string, unknown> {
   if (!params) return {};
   try {
     return JSON.parse(params);
@@ -396,15 +414,15 @@ export class AutomationService {
 
   private async executeAction(
     rule: AutomationRuleRecord,
-    payload: Record<string, any>,
+    payload: Record<string, unknown>,
     userId?: number,
   ): Promise<{
     status: string;
     affected?: number;
     message?: string;
   }> {
-    const params = parseParams(rule.actionParams);
-    const targetUserId = userId ?? payload.userId;
+    const params = parseParams(rule.actionParams) as AutomationActionParams;
+    const targetUserId = userId ?? (payload.userId as number | undefined);
 
     const execId = await this.prisma.automationExecution
       .create({
@@ -782,13 +800,28 @@ export class AutomationService {
   // CONDITION EVALUATOR
   // ══════════════════════════════════════════════════════
 
-  private evaluateCondition(condition: Record<string, any>, payload: Record<string, any>): boolean {
+  private evaluateCondition(
+    condition: Record<string, unknown>,
+    payload: Record<string, unknown>,
+  ): boolean {
     if (!Object.keys(condition).length) return true;
 
     for (const [key, value] of Object.entries(condition)) {
       const payloadVal = payload[key];
-      if (key === 'minScore' && typeof payloadVal === 'number' && payloadVal < value) return false;
-      if (key === 'maxScore' && typeof payloadVal === 'number' && payloadVal > value) return false;
+      if (
+        key === 'minScore' &&
+        typeof payloadVal === 'number' &&
+        typeof value === 'number' &&
+        payloadVal < value
+      )
+        return false;
+      if (
+        key === 'maxScore' &&
+        typeof payloadVal === 'number' &&
+        typeof value === 'number' &&
+        payloadVal > value
+      )
+        return false;
       if (key === 'departmentId' && payloadVal !== value) return false;
       if (key === 'roleCode' && payloadVal !== value) return false;
       if (key === 'equals' && payloadVal !== value) return false;

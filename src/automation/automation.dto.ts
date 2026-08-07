@@ -124,7 +124,7 @@ export class UpdateRuleDto {
 
 export class TriggerEventDto {
   @ApiProperty({ enum: TriggerType }) @IsEnum(TriggerType) event!: TriggerType;
-  @ApiPropertyOptional() @IsOptional() payload?: Record<string, any>;
+  @ApiPropertyOptional() @IsOptional() payload?: Record<string, unknown>;
   @ApiPropertyOptional() @IsOptional() @IsInt() userId?: number;
 }
 

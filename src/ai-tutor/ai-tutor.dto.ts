@@ -116,7 +116,7 @@ export class ExecuteAgentActionDto {
 
   @ApiProperty({ description: 'Parâmetros da acção (ex: { courseId: 5 })' })
   @IsObject()
-  params!: Record<string, any>;
+  params!: Record<string, unknown>;
 
   @ApiProperty({ description: 'Confirmação explícita obrigatória' })
   @IsBoolean()

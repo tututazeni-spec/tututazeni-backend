@@ -59,7 +59,7 @@ export class CreateIntegrationDto {
   @ApiPropertyOptional() @IsOptional() @IsString() apiKey?: string;
   @ApiPropertyOptional({ enum: AuthType }) @IsOptional() @IsEnum(AuthType) authType?: AuthType;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
-  @ApiPropertyOptional() @IsOptional() config?: Record<string, any>;
+  @ApiPropertyOptional() @IsOptional() config?: Record<string, unknown>;
   @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() allowedIps?: string[];
 }
 
@@ -69,7 +69,7 @@ export class UpdateIntegrationDto {
   @ApiPropertyOptional() @IsOptional() @IsString() baseUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() apiKey?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
-  @ApiPropertyOptional() @IsOptional() config?: Record<string, any>;
+  @ApiPropertyOptional() @IsOptional() config?: Record<string, unknown>;
 }
 
 export class IntegrationLogFilterDto {
@@ -123,7 +123,7 @@ export class CreateWebhookDto {
 
 export class TriggerWebhookDto {
   @ApiProperty({ enum: WebhookEventType }) @IsEnum(WebhookEventType) event!: WebhookEventType;
-  @ApiProperty() @IsObject() payload!: Record<string, any>;
+  @ApiProperty() @IsObject() payload!: Record<string, unknown>;
 }
 
 // ─── ValidateApiKeyBodyDto ────────────────────────────────────────────────────
