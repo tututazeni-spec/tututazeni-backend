@@ -155,7 +155,7 @@ export class DeclarationQuestionDto {
   @ApiPropertyOptional() @IsOptional() @IsBoolean() required?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsString({ each: true }) options?: string[];
   @ApiPropertyOptional() @IsOptional() @IsString() conditionalKey?: string; // mostrar se...
-  @ApiPropertyOptional() @IsOptional() conditionalValue?: any; // ...este campo = este valor
+  @ApiPropertyOptional() @IsOptional() @IsString() conditionalValue?: string; // ...este campo = este valor
   @ApiPropertyOptional() @IsOptional() @IsInt() order?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() placeholder?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() validationRegex?: string;
@@ -200,7 +200,7 @@ export class UpdateWorkDeclFormDto extends PartialType(CreateWorkDeclFormDto) {}
 
 export class SubmitAnswerDto {
   @ApiProperty() @IsString() key!: string;
-  @ApiProperty() @IsDefined() value!: any;
+  @ApiProperty() @IsDefined() value!: unknown;
 }
 
 export class SubmitWorkDeclDto {
