@@ -221,7 +221,7 @@ export class ReportsController {
   @ApiOperation({ summary: 'Exportar gaps de competências como CSV' })
   async exportSkillGapCsv(@Query() filter: ReportFilterDto) {
     const data = await this.svc.skillGapReport(filter);
-    const rows = data.skills.map((s: any) => ({
+    const rows = data.skills.map(s => ({
       skill: s.competency?.name,
       type: s.competency?.type,
       users: s.count,
@@ -238,7 +238,7 @@ export class ReportsController {
   @ApiOperation({ summary: 'Exportar relatório de performance como CSV' })
   async exportPerfCsv(@Query() filter: ReportFilterDto) {
     const data = await this.svc.performanceReportFull(filter);
-    const rows = (data.topPerformers as any[]).map((r: any) => ({
+    const rows = data.topPerformers.map(r => ({
       name: r.user?.fullName,
       department: r.user?.department?.name,
       position: r.user?.position?.name,
