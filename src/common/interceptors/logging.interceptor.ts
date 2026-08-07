@@ -10,7 +10,7 @@ export class LoggingInterceptor implements NestInterceptor {
     private readonly logger: PinoLogger,
   ) {}
 
-  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest();
     const { method, user } = req;
     const now = Date.now();
