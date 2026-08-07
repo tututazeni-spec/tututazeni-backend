@@ -21,6 +21,7 @@ import {
   BulkEnrollDto,
   CancelEnrollmentDto,
   UpdateDeadlineDto,
+  EnrollmentOrigin,
 } from './enrollments.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -51,7 +52,12 @@ export class EnrollmentsController {
     return this.svc.enroll({
       userId: user.id,
       courseId,
-      origin: 'MANUAL' as any,
+      // EnrollmentOrigin.SELF_ENROLL existe no schema exactamente para este
+      // caso mas nunca é usado em lado nenhum do código (grep confirma) —
+      // mantido MANUAL para não alterar o comportamento coberto pelo teste
+      // existente ('selfEnroll → enroll com origin MANUAL'); acender aqui
+      // como candidato a correcção de produto, não decidido nesta PR.
+      origin: EnrollmentOrigin.MANUAL,
     });
   }
 
