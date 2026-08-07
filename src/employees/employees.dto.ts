@@ -322,7 +322,7 @@ export class CreateSelfServiceRequestDto {
   @ApiProperty() @IsInt() employeeId!: number;
   @ApiProperty() @IsEnum(RequestType) type!: RequestType;
   @ApiProperty() @IsString() reason!: string;
-  @ApiPropertyOptional() @IsOptional() @IsObject() payload?: Record<string, any>;
+  @ApiPropertyOptional() @IsOptional() @IsObject() payload?: Record<string, unknown>;
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsString({ each: true }) attachments?: string[];
 }
 
@@ -351,7 +351,7 @@ export class CreateTimelineEventDto {
   @ApiProperty() @IsEnum(TimelineEventType) type!: TimelineEventType;
   @ApiProperty() @IsString() title!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
-  @ApiPropertyOptional() @IsOptional() @IsObject() metadata?: Record<string, any>;
+  @ApiPropertyOptional() @IsOptional() @IsObject() metadata?: Record<string, unknown>;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isPublic?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsDateString() occurredAt?: string;
 }

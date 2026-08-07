@@ -191,7 +191,7 @@ export class ApiIntegrationService {
       name: dto.name,
       type: dto.type,
       endpoint: dto.endpoint,
-      config: dto.config ?? {},
+      config: (dto.config ?? {}) as Prisma.InputJsonValue,
       baseUrl: dto.baseUrl,
       apiKey: dto.apiKey,
       active: dto.active ?? true,
@@ -225,7 +225,10 @@ export class ApiIntegrationService {
 
   async updateIntegration(id: number, dto: UpdateIntegrationDto) {
     await this.getIntegration(id);
-    return this.prisma.integrationConfig.update({ where: { id }, data: dto });
+    return this.prisma.integrationConfig.update({
+      where: { id },
+      data: { ...dto, config: dto.config as Prisma.InputJsonValue | undefined },
+    });
   }
 
   async toggleIntegration(id: number) {

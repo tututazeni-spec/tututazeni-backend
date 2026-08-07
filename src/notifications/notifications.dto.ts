@@ -68,7 +68,7 @@ export class CreateNotificationDto {
   @ApiPropertyOptional({ description: 'Metadados extras (JSON)' })
   @IsOptional()
   @IsObject()
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 
   @ApiPropertyOptional({ description: 'Data de expiração' })
   @IsOptional()
@@ -116,7 +116,7 @@ export class BulkNotificationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsObject()
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 // ─── Template ─────────────────────────────────────────────────────────────────

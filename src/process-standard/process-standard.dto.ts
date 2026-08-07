@@ -74,11 +74,11 @@ export class ProcessStepDto {
 
   @ApiPropertyOptional({ description: 'Formulário em JSON (campos input)' })
   @IsOptional()
-  formSchema?: Record<string, any>;
+  formSchema?: Record<string, unknown>;
 
   @ApiPropertyOptional({ description: 'Condições de saída do nó (JSON)' })
   @IsOptional()
-  exitConditions?: Record<string, any>;
+  exitConditions?: Record<string, unknown>;
 
   @ApiPropertyOptional({ description: 'IDs de documentos associados' })
   @IsOptional()
@@ -234,7 +234,7 @@ export class CompleteStepDto {
 
   @ApiPropertyOptional({ description: 'Dados do formulário preenchido (JSON)' })
   @IsOptional()
-  formData?: Record<string, any>;
+  formData?: Record<string, unknown>;
 
   @ApiPropertyOptional({ description: 'IDs de evidências/uploads' })
   @IsOptional()
