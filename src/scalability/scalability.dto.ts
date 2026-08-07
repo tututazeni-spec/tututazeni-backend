@@ -161,12 +161,12 @@ export class TriggerSyncDto {
 export class AutomationConditionDto {
   @ApiProperty() @IsString() field: string; // ex: "departmentId"
   @ApiProperty() @IsString() operator: string; // EQ | NEQ | IN | NOT_IN | GT | LT
-  @ApiProperty() value: any; // valor da condição
+  @ApiProperty() value: unknown; // valor da condição
 }
 
 export class AutomationActionDto {
   @ApiProperty() @IsString() type: string; // ENROLL_COURSE | ASSIGN_TRAIL | SEND_NOTIFICATION | GRANT_BADGE | REVOKE_ACCESS
-  @ApiProperty() payload: Record<string, any>; // dados específicos da ação
+  @ApiProperty() payload: Record<string, unknown>; // dados específicos da ação
 }
 
 export class CreateAutomationRuleDto {
