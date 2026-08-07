@@ -23,27 +23,27 @@ import {
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
-// `prisma: any` é o único `any` deliberadamente mantido neste ficheiro —
 // trainingAvatar/avatarKnowledge não existem em prisma/schema.prisma (ver
 // [[project-innova-schema-code-drift]]), por isso não há nenhum tipo gerado
 // pelo Prisma para acesso dinâmico `prisma[name]` a um modelo que pode não
 // existir. Mesmo padrão usado noutros serviços do projecto que usam
 // safeM()/safeModel() (api-integration.service.ts, content-library.service.ts,
-// evaluation.service.ts, acl.service.ts): o lado da produção fica dinâmico,
-// mas o lado do consumo é tipado com a interface TrainingAvatarRecord abaixo
-// (forma confirmada nos próprios .create()/.findMany() deste ficheiro). Os
-// métodos do stub de fallback também deixam de usar `any` — `{ data: unknown }`/
-// `{ create: unknown }` chega para os satisfazer sem fingir conhecer o shape
-// real do modelo.
-const safeM = (prisma: any, name: string) =>
-  prisma[name] ?? {
+// evaluation.service.ts, acl.service.ts): o lado da produção fica dinâmico
+// (tipado como unknown, com `as` explícito em cada chamador — sem `any` em
+// lado nenhum), mas o lado do consumo é tipado com a interface
+// TrainingAvatarRecord abaixo (forma confirmada nos próprios
+// .create()/.findMany() deste ficheiro).
+type DynamicModelDelegate = Record<string, (...args: unknown[]) => Promise<unknown>>;
+
+const safeM = (prisma: PrismaService, name: string): DynamicModelDelegate =>
+  (prisma as unknown as Record<string, DynamicModelDelegate | undefined>)[name] ?? {
     findMany: async () => [],
     findFirst: async () => null,
     findUnique: async () => null,
-    create: async (d: { data: unknown }) => d.data,
+    create: async (d: unknown) => (d as { data: unknown }).data,
     createMany: async () => ({ count: 0 }),
-    upsert: async (d: { create: unknown }) => d.create,
-    update: async (d: { data: unknown }) => d.data,
+    upsert: async (d: unknown) => (d as { create: unknown }).create,
+    update: async (d: unknown) => (d as { data: unknown }).data,
     delete: async () => null,
     count: async () => 0,
     groupBy: async () => [],
@@ -184,11 +184,8 @@ export class AvatarTrainingService {
   // ══════════════════════════════════════════════════════
 
   async createAvatar(userId: number, dto: CreateAvatarDto) {
-    const avatar: TrainingAvatarRecord | (Record<string, unknown> & { id: null }) = await safeM(
-      this.prisma,
-      'trainingAvatar',
-    )
-      .create({
+    const avatar: TrainingAvatarRecord | (Record<string, unknown> & { id: null }) = await (
+      safeM(this.prisma, 'trainingAvatar').create({
         data: {
           name: dto.name,
           description: dto.description,
@@ -206,21 +203,21 @@ export class AvatarTrainingService {
           createdById: userId,
           active: true,
         },
-      })
-      .catch(async e => {
-        // Fallback for Prisma model not yet created
-        this.logger.warn({
-          userId,
-          action: 'CREATE_AVATAR',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao criar avatar — possivelmente modelo trainingAvatar ausente (migration pendente)',
-        });
-        return {
-          id: null,
-          ...dto,
-          message: 'Avatar registado (modelo trainingAvatar ausente — execute migration)',
-        };
+      }) as Promise<TrainingAvatarRecord>
+    ).catch(async e => {
+      // Fallback for Prisma model not yet created
+      this.logger.warn({
+        userId,
+        action: 'CREATE_AVATAR',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao criar avatar — possivelmente modelo trainingAvatar ausente (migration pendente)',
       });
+      return {
+        id: null,
+        ...dto,
+        message: 'Avatar registado (modelo trainingAvatar ausente — execute migration)',
+      };
+    });
 
     return avatar;
   }
@@ -232,49 +229,51 @@ export class AvatarTrainingService {
     if (role) where.role = role;
     if (isPublic !== undefined) where.isPublic = isPublic;
 
-    const data: TrainingAvatarRecord[] = await safeM(this.prisma, 'trainingAvatar')
-      .findMany({
+    const data: TrainingAvatarRecord[] = await (
+      safeM(this.prisma, 'trainingAvatar').findMany({
         where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-      })
-      .catch(e => {
-        this.logger.warn({
-          filters,
-          action: 'GET_AVATARS_LIST',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao listar avatares de treino',
-        });
-        return [] as TrainingAvatarRecord[];
+      }) as Promise<TrainingAvatarRecord[]>
+    ).catch(e => {
+      this.logger.warn({
+        filters,
+        action: 'GET_AVATARS_LIST',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao listar avatares de treino',
       });
-    const total = await safeM(this.prisma, 'trainingAvatar')
-      .count({ where })
-      .catch(e => {
-        this.logger.warn({
-          filters,
-          action: 'GET_AVATARS_COUNT',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao contar avatares de treino',
-        });
-        return 0;
+      return [] as TrainingAvatarRecord[];
+    });
+    const total = await (
+      safeM(this.prisma, 'trainingAvatar').count({ where }) as Promise<number>
+    ).catch(e => {
+      this.logger.warn({
+        filters,
+        action: 'GET_AVATARS_COUNT',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao contar avatares de treino',
       });
+      return 0;
+    });
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async getAvatar(id: number) {
-    const a: TrainingAvatarRecord | null = await safeM(this.prisma, 'trainingAvatar')
-      .findUnique({ where: { id } })
-      .catch(e => {
-        this.logger.warn({
-          avatarId: id,
-          action: 'GET_AVATAR',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter avatar de treino',
-        });
-        return null;
+    const a: TrainingAvatarRecord | null = await (
+      safeM(this.prisma, 'trainingAvatar').findUnique({
+        where: { id },
+      }) as Promise<TrainingAvatarRecord | null>
+    ).catch(e => {
+      this.logger.warn({
+        avatarId: id,
+        action: 'GET_AVATAR',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter avatar de treino',
       });
+      return null;
+    });
     if (!a) throw new NotFoundException('Avatar não encontrado');
     return a;
   }
@@ -497,17 +496,19 @@ export class AvatarTrainingService {
     // Get avatar (from scenario or override)
     const avatarId = dto.avatarId;
     const avatar = avatarId
-      ? await safeM(this.prisma, 'trainingAvatar')
-          .findUnique({ where: { id: avatarId } })
-          .catch(e => {
-            this.logger.warn({
-              avatarId,
-              action: 'START_SESSION_GET_AVATAR',
-              err: { message: e instanceof Error ? e.message : String(e) },
-              msg: 'Falha ao obter avatar para iniciar sessão',
-            });
-            return null;
-          })
+      ? await (
+          safeM(this.prisma, 'trainingAvatar').findUnique({
+            where: { id: avatarId },
+          }) as Promise<TrainingAvatarRecord | null>
+        ).catch(e => {
+          this.logger.warn({
+            avatarId,
+            action: 'START_SESSION_GET_AVATAR',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter avatar para iniciar sessão',
+          });
+          return null;
+        })
       : null;
 
     // Build opening line
@@ -629,18 +630,20 @@ export class AvatarTrainingService {
     } else {
       // Free-form AI response (no structured turn)
       const avatar = session.avatarId
-        ? await safeM(this.prisma, 'trainingAvatar')
-            .findUnique({ where: { id: session.avatarId } })
-            .catch(e => {
-              this.logger.warn({
-                avatarId: session.avatarId,
-                sessionId,
-                action: 'SEND_MESSAGE_GET_AVATAR',
-                err: { message: e instanceof Error ? e.message : String(e) },
-                msg: 'Falha ao obter avatar para gerar resposta livre',
-              });
-              return null;
-            })
+        ? await (
+            safeM(this.prisma, 'trainingAvatar').findUnique({
+              where: { id: session.avatarId },
+            }) as Promise<TrainingAvatarRecord | null>
+          ).catch(e => {
+            this.logger.warn({
+              avatarId: session.avatarId,
+              sessionId,
+              action: 'SEND_MESSAGE_GET_AVATAR',
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao obter avatar para gerar resposta livre',
+            });
+            return null;
+          })
         : null;
 
       avatarResponse = avatar?.systemPrompt
