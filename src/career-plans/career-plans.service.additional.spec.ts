@@ -54,6 +54,7 @@ const mockPrisma = {
   },
   legacyEmployeeSkill: { findMany: makeFindMany([]) },
   user: { findUnique: makeFind(null) },
+  position: { findMany: makeFindMany([{ id: 1 }]) },
   course: { findMany: makeFindMany([]) },
   notificationLog: { create: makeFind({}) },
   employeeTimeline: { create: makeFind({}) },
@@ -135,10 +136,19 @@ describe('CareerPlansService — additional coverage', () => {
       });
 
       const result = await service.createCareerPath(
-        { name: 'Tech Lead', steps: [{ roleId: 1, order: 1 }] } as any,
+        { name: 'Tech Lead', steps: [{ roleId: 1, order: 1, positionId: 1 }] } as any,
         1,
       );
       expect(result).toBeDefined();
+    });
+
+    it('deve rejeitar positionId inexistente', async () => {
+      await expect(
+        service.createCareerPath(
+          { name: 'Tech Lead', steps: [{ roleId: 1, order: 1, positionId: 999 }] } as any,
+          1,
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

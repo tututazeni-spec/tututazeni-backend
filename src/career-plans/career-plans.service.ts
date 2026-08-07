@@ -137,23 +137,36 @@ export class CareerPlansService {
       if (!dept) throw new NotFoundException(`Departamento "${department}" não encontrado`);
       departmentId = dept.id;
     }
+
+    // CareerPathStep.positionId é uma FK obrigatória (sem default) para
+    // Position e não há forma inequívoca de a derivar de roleId (CareerRole
+    // não tem positionId) — CareerPathStepDto.positionId expõe-a
+    // explicitamente ao chamador (mesmo padrão de
+    // SuccessionService.createCriticalPosition: validar que a posição
+    // existe antes de a usar como FK).
+    const positionIds = [...new Set(steps.map(s => s.positionId))];
+    const positions = await this.prisma.read.position.findMany({
+      where: { id: { in: positionIds } },
+      select: { id: true },
+    });
+    const foundIds = new Set(positions.map(p => p.id));
+    const missingIds = positionIds.filter(id => !foundIds.has(id));
+    if (missingIds.length) {
+      throw new NotFoundException(`Posição(ões) não encontrada(s): ${missingIds.join(', ')}`);
+    }
+
     const path = await this.prisma.careerPath.create({
       data: {
         ...rest,
         departmentId,
         active: dto.active ?? true,
-        // CareerPathStep.positionId é uma FK obrigatória (sem default) para
-        // Position, mas CareerPathStepDto nunca a expõe ao chamador (mesmo
-        // padrão documentado em SuccessionPlan.positionId, ver create() do
-        // SuccessionService) — ao contrário desse caso, aqui não há nenhuma
-        // fonte inequívoca de onde derivar o positionId a partir de um
-        // roleId (CareerRole não tem positionId). Sem uma decisão de
-        // produto/migração (expor positionId no DTO, ou tornar o campo
-        // opcional), isto continua a rebentar sempre com "Argument
-        // positionId is missing" ao criar um career path com steps — any
-        // aqui é o que documenta essa lacuna, não uma correcção.
         steps: {
-          create: steps.map(s => ({ roleId: s.roleId, order: s.order, label: s.label })) as any,
+          create: steps.map(s => ({
+            roleId: s.roleId,
+            order: s.order,
+            label: s.label,
+            positionId: s.positionId,
+          })),
         },
       },
       include: { steps: { orderBy: { order: 'asc' }, include: { role: true } } },
