@@ -24,10 +24,12 @@ function permKey(userId: number): string {
   return `acl:perm:${userId}`;
 }
 
-// accessPolicy não existe em prisma/schema.prisma. `prisma: any` é o único
-// `any` deliberadamente mantido — acesso dinâmico `prisma[name]` a um
-// modelo que pode não existir não tem tipo gerado pelo Prisma (mesmo
-// padrão de safeM()/safeModel() noutros serviços do projecto).
+// accessPolicy não existe em prisma/schema.prisma — acesso dinâmico
+// `prisma[name]` a um modelo que pode não existir não tem tipo gerado pelo
+// Prisma. O único cast que sobra é o `as unknown as DynamicModelDelegate`
+// abaixo, confinado a esta linha (antes era `prisma: any` no parâmetro
+// inteiro, o que desligava a verificação de tipos em toda a função); mesmo
+// padrão de safeM()/safeModel() noutros serviços do projecto.
 //
 // Achado real corrigido ao introduzir este helper: o código anterior fazia
 // `(this.prisma as any).accessPolicy?.findMany(...).catch(...)` — o `?.`
@@ -39,12 +41,14 @@ function permKey(userId: number): string {
 // verificação em que o utilizador TEM a permissão). safeM() garante sempre
 // um objecto com métodos reais (nunca undefined), por isso o .catch()
 // encadeado a seguir passa a funcionar como esperado.
-function safeM(prisma: any, name: string) {
+type DynamicModelDelegate = Record<string, (...args: unknown[]) => Promise<unknown>>;
+
+function safeM(prisma: PrismaService, name: string): DynamicModelDelegate {
   return (
-    prisma[name] ?? {
+    (prisma as unknown as Record<string, DynamicModelDelegate | undefined>)[name] ?? {
       findMany: async () => [],
       findFirst: async () => null,
-      create: async (d: { data: unknown }) => d.data,
+      create: async (d: unknown) => (d as { data: unknown }).data,
     }
   );
 }
@@ -495,15 +499,17 @@ export class AclService {
   // ══════════════════════════════════════════════════════
 
   async getPolicies(): Promise<AccessPolicyRow[]> {
-    return safeM(this.prisma, 'accessPolicy')
-      .findMany({ orderBy: { priority: 'desc' } })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao ler políticas de acesso (accessPolicy)',
-        });
-        return [];
+    return (
+      safeM(this.prisma, 'accessPolicy').findMany({
+        orderBy: { priority: 'desc' },
+      }) as Promise<AccessPolicyRow[]>
+    ).catch((e: unknown) => {
+      this.logger.warn({
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao ler políticas de acesso (accessPolicy)',
       });
+      return [];
+    });
   }
 
   async createPolicy(dto: CreatePolicyDto, createdById: number) {
@@ -543,8 +549,8 @@ export class AclService {
     context?: Record<string, unknown>,
   ): Promise<boolean> {
     // DENY = true means access denied
-    const policies: AccessPolicyRow[] = await safeM(this.prisma, 'accessPolicy')
-      .findMany({
+    const policies: AccessPolicyRow[] = await (
+      safeM(this.prisma, 'accessPolicy').findMany({
         where: {
           active: true,
           effect: 'DENY',
@@ -552,17 +558,17 @@ export class AclService {
           ...(action ? { action } : {}),
         },
         orderBy: { priority: 'desc' },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          userId,
-          action,
-          subject,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao ler políticas DENY — modelo accessPolicy pode estar ausente',
-        });
-        return [];
+      }) as Promise<AccessPolicyRow[]>
+    ).catch((e: unknown) => {
+      this.logger.warn({
+        userId,
+        action,
+        subject,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao ler políticas DENY — modelo accessPolicy pode estar ausente',
       });
+      return [];
+    });
 
     for (const policy of policies) {
       try {

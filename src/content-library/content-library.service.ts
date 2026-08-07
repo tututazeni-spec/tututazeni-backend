@@ -24,21 +24,24 @@ import { CurrentUserData } from '../common/types/current-user';
 
 /**
  * Safe access to models that may not exist in the schema yet.
- * `prisma: any` é o único `any` deliberadamente mantido — acesso dinâmico
- * `prisma[model]` a um modelo que pode não existir não tem nenhum tipo
- * gerado pelo Prisma para se agarrar (mesmo problema/solução de
- * api-integration.service.ts). Os métodos do stub de fallback usam
- * `{ data: unknown }`/`{ create: unknown }` em vez de `(d: any)`.
+ * Acesso dinâmico `prisma[model]` a um modelo que pode não existir não tem
+ * nenhum tipo gerado pelo Prisma para se agarrar (mesmo problema/solução de
+ * api-integration.service.ts) — o único cast é o `as unknown as
+ * DynamicModelDelegate` abaixo, confinado a esta linha; sem `any` em lado
+ * nenhum. Os métodos do stub de fallback usam `{ data: unknown }`/
+ * `{ create: unknown }` em vez de `(d: any)`.
  */
-function safeModel(prisma: any, model: string) {
+type DynamicModelDelegate = Record<string, (...args: unknown[]) => Promise<unknown>>;
+
+function safeModel(prisma: PrismaService, model: string): DynamicModelDelegate {
   return (
-    prisma[model] ?? {
+    (prisma as unknown as Record<string, DynamicModelDelegate | undefined>)[model] ?? {
       findMany: async () => [],
       findFirst: async () => null,
       findUnique: async () => null,
-      create: async (d: { data: unknown }) => d.data,
-      upsert: async (d: { create: unknown }) => d.create,
-      update: async (d: { data: unknown }) => d.data,
+      create: async (d: unknown) => (d as { data: unknown }).data,
+      upsert: async (d: unknown) => (d as { create: unknown }).create,
+      update: async (d: unknown) => (d as { data: unknown }).data,
       delete: async () => null,
       count: async () => 0,
       groupBy: async () => [],
@@ -535,20 +538,20 @@ export class ContentLibraryService {
   }
 
   async getMyProgress(userId: number) {
-    const progresses: ContentProgressRow[] = await safeModel(this.prisma, 'contentProgress')
-      .findMany({
+    const progresses: ContentProgressRow[] = await (
+      safeModel(this.prisma, 'contentProgress').findMany({
         where: { userId },
         orderBy: { lastAccessedAt: 'desc' },
-      })
-      .catch(e => {
-        this.logger.warn({
-          userId,
-          action: 'getMyProgress',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter progresso de conteúdo — modelo contentProgress pode estar ausente',
-        });
-        return [] as ContentProgressRow[];
+      }) as Promise<ContentProgressRow[]>
+    ).catch(e => {
+      this.logger.warn({
+        userId,
+        action: 'getMyProgress',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter progresso de conteúdo — modelo contentProgress pode estar ausente',
       });
+      return [] as ContentProgressRow[];
+    });
 
     if (!progresses.length) return { data: [], stats: { total: 0, completed: 0, inProgress: 0 } };
 
@@ -571,21 +574,21 @@ export class ContentLibraryService {
   }
 
   async getContinueWatching(userId: number, limit = 5) {
-    const progresses: ContentProgressRow[] = await safeModel(this.prisma, 'contentProgress')
-      .findMany({
+    const progresses: ContentProgressRow[] = await (
+      safeModel(this.prisma, 'contentProgress').findMany({
         where: { userId, progress: { gt: 0, lt: 100 } },
         orderBy: { lastAccessedAt: 'desc' },
         take: limit,
-      })
-      .catch(e => {
-        this.logger.warn({
-          userId,
-          action: 'getContinueWatching',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter conteúdos em progresso — modelo contentProgress pode estar ausente',
-        });
-        return [] as ContentProgressRow[];
+      }) as Promise<ContentProgressRow[]>
+    ).catch(e => {
+      this.logger.warn({
+        userId,
+        action: 'getContinueWatching',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter conteúdos em progresso — modelo contentProgress pode estar ausente',
       });
+      return [] as ContentProgressRow[];
+    });
 
     const ids = progresses.map(p => p.contentId);
     if (!ids.length) return [];
@@ -631,20 +634,20 @@ export class ContentLibraryService {
   async getContentRatings(contentId: number) {
     await this.findOne(contentId);
 
-    const ratings: ContentRatingRow[] = await safeModel(this.prisma, 'contentRating')
-      .findMany({
+    const ratings: ContentRatingRow[] = await (
+      safeModel(this.prisma, 'contentRating').findMany({
         where: { contentId },
         orderBy: { createdAt: 'desc' },
-      })
-      .catch(e => {
-        this.logger.warn({
-          contentId,
-          action: 'getContentRatings',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter avaliações — modelo contentRating pode estar ausente',
-        });
-        return [] as ContentRatingRow[];
+      }) as Promise<ContentRatingRow[]>
+    ).catch(e => {
+      this.logger.warn({
+        contentId,
+        action: 'getContentRatings',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter avaliações — modelo contentRating pode estar ausente',
       });
+      return [] as ContentRatingRow[];
+    });
 
     // Distribution 1–5
     const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -730,23 +733,20 @@ export class ContentLibraryService {
     const viewedIds = viewed.map(v => v.entityId).filter(Boolean);
 
     // 2. In-progress content has priority
-    const inProgress: Pick<ContentProgressRow, 'contentId'>[] = await safeModel(
-      this.prisma,
-      'contentProgress',
-    )
-      .findMany({
+    const inProgress: Pick<ContentProgressRow, 'contentId'>[] = await (
+      safeModel(this.prisma, 'contentProgress').findMany({
         where: { userId, progress: { gt: 0, lt: 100 } },
         select: { contentId: true },
-      })
-      .catch(e => {
-        this.logger.warn({
-          userId,
-          action: 'getRecommended.inProgress',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter conteúdos em progresso — modelo contentProgress pode estar ausente',
-        });
-        return [] as Pick<ContentProgressRow, 'contentId'>[];
+      }) as Promise<Pick<ContentProgressRow, 'contentId'>[]>
+    ).catch(e => {
+      this.logger.warn({
+        userId,
+        action: 'getRecommended.inProgress',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter conteúdos em progresso — modelo contentProgress pode estar ausente',
       });
+      return [] as Pick<ContentProgressRow, 'contentId'>[];
+    });
 
     const inProgressIds = inProgress.map(p => p.contentId);
 
@@ -844,19 +844,19 @@ export class ContentLibraryService {
 
     // Enrich with user progress
     const ids = mandatory.map(c => c.id);
-    const progs: ContentProgressRow[] = await safeModel(this.prisma, 'contentProgress')
-      .findMany({
+    const progs: ContentProgressRow[] = await (
+      safeModel(this.prisma, 'contentProgress').findMany({
         where: { userId, contentId: { in: ids } },
-      })
-      .catch(e => {
-        this.logger.warn({
-          userId,
-          action: 'getMandatory',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter progresso de conteúdos obrigatórios — modelo contentProgress pode estar ausente',
-        });
-        return [] as ContentProgressRow[];
+      }) as Promise<ContentProgressRow[]>
+    ).catch(e => {
+      this.logger.warn({
+        userId,
+        action: 'getMandatory',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter progresso de conteúdos obrigatórios — modelo contentProgress pode estar ausente',
       });
+      return [] as ContentProgressRow[];
+    });
     const pMap = new Map(progs.map(p => [p.contentId, p]));
 
     return mandatory.map(c => ({
@@ -943,25 +943,22 @@ export class ContentLibraryService {
         return [];
       });
 
-    const total = await safeModel(this.prisma, 'learningPath')
-      .count({ where })
-      .catch(e => {
-        this.logger.warn({
-          action: 'getLearningPaths.count',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao contar learning paths — modelo learningPath pode estar ausente',
-        });
-        return 0;
+    const total = await (
+      safeModel(this.prisma, 'learningPath').count({ where }) as Promise<number>
+    ).catch(e => {
+      this.logger.warn({
+        action: 'getLearningPaths.count',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao contar learning paths — modelo learningPath pode estar ausente',
       });
+      return 0;
+    });
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async getLearningPath(id: number, userId?: number) {
-    const path: { items?: LearningPathItemRow[]; [key: string]: unknown } | null = await safeModel(
-      this.prisma,
-      'learningPath',
-    )
-      .findUnique({
+    const path: { items?: LearningPathItemRow[]; [key: string]: unknown } | null = await (
+      safeModel(this.prisma, 'learningPath').findUnique({
         where: { id },
         include: {
           items: {
@@ -969,16 +966,16 @@ export class ContentLibraryService {
             include: { content: true },
           },
         },
-      })
-      .catch(e => {
-        this.logger.warn({
-          learningPathId: id,
-          action: 'getLearningPath.findUnique',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter learning path — modelo learningPath pode estar ausente',
-        });
-        return null;
+      }) as Promise<{ items?: LearningPathItemRow[]; [key: string]: unknown } | null>
+    ).catch(e => {
+      this.logger.warn({
+        learningPathId: id,
+        action: 'getLearningPath.findUnique',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter learning path — modelo learningPath pode estar ausente',
       });
+      return null;
+    });
 
     if (!path) throw new NotFoundException('Learning Path não encontrada');
 
@@ -986,20 +983,20 @@ export class ContentLibraryService {
 
     // Enrich items with user progress
     const contentIds = (path.items ?? []).map(i => i.contentId);
-    const progs: ContentProgressRow[] = await safeModel(this.prisma, 'contentProgress')
-      .findMany({
+    const progs: ContentProgressRow[] = await (
+      safeModel(this.prisma, 'contentProgress').findMany({
         where: { userId, contentId: { in: contentIds } },
-      })
-      .catch(e => {
-        this.logger.warn({
-          userId,
-          learningPathId: id,
-          action: 'getLearningPath.progress',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter progresso da learning path — modelo contentProgress pode estar ausente',
-        });
-        return [];
+      }) as Promise<ContentProgressRow[]>
+    ).catch(e => {
+      this.logger.warn({
+        userId,
+        learningPathId: id,
+        action: 'getLearningPath.progress',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter progresso da learning path — modelo contentProgress pode estar ausente',
       });
+      return [];
+    });
     const pMap = new Map(progs.map(p => [p.contentId, p]));
 
     const enrichedItems = (path.items ?? []).map(item => ({
@@ -1102,22 +1099,22 @@ export class ContentLibraryService {
           return [] as { entityId: number | null; _count: { id: number } }[];
         }),
       // Most completed
-      safeModel(this.prisma, 'contentProgress')
-        .groupBy({
+      (
+        safeModel(this.prisma, 'contentProgress').groupBy({
           by: ['contentId'],
           where: { progress: 100 },
           _count: { id: true },
           orderBy: { _count: { id: 'desc' } },
           take: 5,
-        })
-        .catch(e => {
-          this.logger.warn({
-            action: 'getAnalyticsDashboard.mostCompleted',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao calcular conteúdos mais concluídos — modelo contentProgress pode estar ausente',
-          });
-          return [] as { contentId: number; _count: { id: number } }[];
-        }),
+        }) as Promise<{ contentId: number; _count: { id: number } }[]>
+      ).catch(e => {
+        this.logger.warn({
+          action: 'getAnalyticsDashboard.mostCompleted',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao calcular conteúdos mais concluídos — modelo contentProgress pode estar ausente',
+        });
+        return [] as { contentId: number; _count: { id: number } }[];
+      }),
       // By format
       this.prisma.contentAsset
         .groupBy({
@@ -1186,28 +1183,29 @@ export class ContentLibraryService {
       this.prisma.read.auditLog.count({
         where: { userId, action: 'CONTENT_VIEW', entity: 'ContentAsset' },
       }),
-      safeModel(this.prisma, 'contentProgress')
-        .count({ where: { userId, progress: 100 } })
-        .catch(e => {
-          this.logger.warn({
-            userId,
-            action: 'getUserAnalytics.completions',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao contar conclusões do utilizador — modelo contentProgress pode estar ausente',
-          });
-          return 0;
-        }),
+      (
+        safeModel(this.prisma, 'contentProgress').count({
+          where: { userId, progress: 100 },
+        }) as Promise<number>
+      ).catch(e => {
+        this.logger.warn({
+          userId,
+          action: 'getUserAnalytics.completions',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao contar conclusões do utilizador — modelo contentProgress pode estar ausente',
+        });
+        return 0;
+      }),
       this.prisma.read.auditLog.count({
         where: { userId, action: 'CONTENT_BOOKMARK', entity: 'ContentAsset' },
       }),
-      safeModel(this.prisma, 'contentProgress')
-        .findMany({
+      (
+        safeModel(this.prisma, 'contentProgress').findMany({
           where: { userId },
           select: { timeSpent: true },
-        })
-        .then((ps: Pick<ContentProgressRow, 'timeSpent'>[]) =>
-          ps.reduce((s, p) => s + (p.timeSpent ?? 0), 0),
-        )
+        }) as Promise<Pick<ContentProgressRow, 'timeSpent'>[]>
+      )
+        .then(ps => ps.reduce((s, p) => s + (p.timeSpent ?? 0), 0))
         .catch(e => {
           this.logger.warn({
             userId,

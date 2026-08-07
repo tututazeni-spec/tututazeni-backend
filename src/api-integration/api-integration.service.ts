@@ -16,30 +16,30 @@ import { sanitizeForLog } from '../common/logging/sanitize';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
-// `prisma: any` é o único `any` deliberadamente mantido neste ficheiro —
 // apiKey/webhook/webhookDelivery não existem em prisma/schema.prisma (ver
 // [[project-innova-schema-code-drift]]), por isso não há nenhum tipo gerado
 // pelo Prisma para acesso dinâmico `prisma[name]` a um modelo que pode não
 // existir. Mesmo problema resolvido da mesma forma noutros serviços do
 // projecto que usam safeM()/safeModel() (search.service.ts,
 // content-library.service.ts, evaluation.service.ts,
-// avatar-training.service.ts): o lado da produção fica dinâmico, mas o lado
-// do consumo é tipado com as interfaces ApiKeyRecord/WebhookRecord/
-// WebhookDeliveryRecord abaixo (forma confirmada nos próprios .create()
-// deste ficheiro). Os métodos do stub de fallback também deixam de usar
-// `any` — `{ data: unknown }`/`{ create: unknown }` chega para os satisfazer
-// sem fingir conhecer o shape real do modelo.
-function safeM(prisma: any, name: string) {
+// avatar-training.service.ts): o lado da produção fica dinâmico (tipado como
+// unknown, com `as` explícito em cada chamador — sem `any` em lado nenhum),
+// mas o lado do consumo é tipado com as interfaces ApiKeyRecord/
+// WebhookRecord/WebhookDeliveryRecord abaixo (forma confirmada nos próprios
+// .create() deste ficheiro).
+type DynamicModelDelegate = Record<string, (...args: unknown[]) => Promise<unknown>>;
+
+function safeM(prisma: PrismaService, name: string): DynamicModelDelegate {
   return (
-    prisma[name] ?? {
+    (prisma as unknown as Record<string, DynamicModelDelegate | undefined>)[name] ?? {
       findMany: async () => [],
       findFirst: async () => null,
       findUnique: async () => null,
-      create: async (d: { data: unknown }) => d.data,
-      update: async (d: { data: unknown }) => d.data,
+      create: async (d: unknown) => (d as { data: unknown }).data,
+      update: async (d: unknown) => (d as { data: unknown }).data,
       delete: async () => null,
       count: async () => 0,
-      upsert: async (d: { create: unknown }) => d.create,
+      upsert: async (d: unknown) => (d as { create: unknown }).create,
     }
   );
 }
@@ -377,8 +377,8 @@ export class ApiIntegrationService {
     const rawKey = generateApiKey();
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
 
-    const apiKey = await safeM(this.prisma, 'apiKey')
-      .create({
+    const apiKey = await (
+      safeM(this.prisma, 'apiKey').create({
         data: {
           name: dto.name,
           description: dto.description,
@@ -391,21 +391,21 @@ export class ApiIntegrationService {
           createdById,
           active: true,
         },
-      })
-      .catch((err: unknown) => {
-        this.logger.error({
-          createdById,
-          keyName: dto.name,
-          action: 'API_KEY_CREATED',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao criar API key (modelo apiKey ausente ou erro de BD) — a devolver fallback sem persistência',
-        });
-        return {
-          name: dto.name,
-          scopes: dto.scopes,
-          message: 'API Key registada (modelo apiKey ausente — execute migration)',
-        };
+      }) as Promise<ApiKeyRecord>
+    ).catch((err: unknown) => {
+      this.logger.error({
+        createdById,
+        keyName: dto.name,
+        action: 'API_KEY_CREATED',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao criar API key (modelo apiKey ausente ou erro de BD) — a devolver fallback sem persistência',
       });
+      return {
+        name: dto.name,
+        scopes: dto.scopes,
+        message: 'API Key registada (modelo apiKey ausente — execute migration)',
+      };
+    });
 
     await this.prisma.auditLog
       .create({
@@ -433,20 +433,20 @@ export class ApiIntegrationService {
 
   async getApiKeys(createdById?: number) {
     const where = createdById ? { createdById } : {};
-    const keys: ApiKeyRecord[] = await safeM(this.prisma, 'apiKey')
-      .findMany({
+    const keys: ApiKeyRecord[] = await (
+      safeM(this.prisma, 'apiKey').findMany({
         where,
         orderBy: { createdAt: 'desc' },
-      })
-      .catch((err: unknown) => {
-        this.logger.warn({
-          createdById,
-          action: 'API_KEY_LIST',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao listar API keys — a devolver lista vazia',
-        });
-        return [];
+      }) as Promise<ApiKeyRecord[]>
+    ).catch((err: unknown) => {
+      this.logger.warn({
+        createdById,
+        action: 'API_KEY_LIST',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao listar API keys — a devolver lista vazia',
       });
+      return [];
+    });
 
     return keys.map(k => ({
       id: k.id,
@@ -530,18 +530,18 @@ export class ApiIntegrationService {
     rawKey: string,
   ): Promise<{ valid: boolean; scopes: string[]; name: string } | null> {
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
-    const key: ApiKeyRecord | null = await safeM(this.prisma, 'apiKey')
-      .findFirst({
+    const key: ApiKeyRecord | null = await (
+      safeM(this.prisma, 'apiKey').findFirst({
         where: { keyHash, active: true },
-      })
-      .catch((err: unknown) => {
-        this.logger.error({
-          action: 'API_KEY_VALIDATE',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao validar API key — pedido será tratado como não autenticado',
-        });
-        return null;
+      }) as Promise<ApiKeyRecord | null>
+    ).catch((err: unknown) => {
+      this.logger.error({
+        action: 'API_KEY_VALIDATE',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao validar API key — pedido será tratado como não autenticado',
       });
+      return null;
+    });
 
     if (!key) return null;
     if (key.expiresAt && new Date(key.expiresAt) < new Date()) return null;
@@ -600,16 +600,18 @@ export class ApiIntegrationService {
   }
 
   async getWebhooks() {
-    const hooks: WebhookRecord[] = await safeM(this.prisma, 'webhook')
-      .findMany({ orderBy: { createdAt: 'desc' } })
-      .catch((err: unknown) => {
-        this.logger.warn({
-          action: 'WEBHOOK_LIST',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao listar webhooks — a devolver lista vazia',
-        });
-        return [];
+    const hooks: WebhookRecord[] = await (
+      safeM(this.prisma, 'webhook').findMany({
+        orderBy: { createdAt: 'desc' },
+      }) as Promise<WebhookRecord[]>
+    ).catch((err: unknown) => {
+      this.logger.warn({
+        action: 'WEBHOOK_LIST',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao listar webhooks — a devolver lista vazia',
       });
+      return [];
+    });
     // Enrich with delivery stats
     return Promise.all(
       hooks.map(async h => {
@@ -652,9 +654,9 @@ export class ApiIntegrationService {
     // endpoint "funcionava" (200) mas nunca alternava nada. Mascarado pelo
     // `any` do parâmetro. Corrigido para o mesmo padrão de leitura-antes-
     // de-escrever de toggleIntegration() acima.
-    const hook: WebhookRecord | null = await safeM(this.prisma, 'webhook').findUnique({
+    const hook = (await safeM(this.prisma, 'webhook').findUnique({
       where: { id },
-    });
+    })) as WebhookRecord | null;
     return safeM(this.prisma, 'webhook')
       .update({
         where: { id },
@@ -687,19 +689,19 @@ export class ApiIntegrationService {
 
   async triggerWebhook(dto: TriggerWebhookDto) {
     // Find all active webhooks subscribed to this event
-    const hooks: WebhookRecord[] = await safeM(this.prisma, 'webhook')
-      .findMany({
+    const hooks: WebhookRecord[] = await (
+      safeM(this.prisma, 'webhook').findMany({
         where: { active: true },
-      })
-      .catch((err: unknown) => {
-        this.logger.error({
-          event: dto.event,
-          action: 'WEBHOOK_TRIGGER',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao carregar webhooks activos — evento não será entregue a nenhum subscriber',
-        });
-        return [];
+      }) as Promise<WebhookRecord[]>
+    ).catch((err: unknown) => {
+      this.logger.error({
+        event: dto.event,
+        action: 'WEBHOOK_TRIGGER',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao carregar webhooks activos — evento não será entregue a nenhum subscriber',
       });
+      return [];
+    });
 
     const subscribers = hooks.filter(
       h => (h.events ?? []).includes(dto.event) || (h.events ?? []).includes('*'),
@@ -849,21 +851,21 @@ export class ApiIntegrationService {
   }
 
   async getWebhookDeliveries(webhookId: number, limit = 20): Promise<WebhookDeliveryRecord[]> {
-    return safeM(this.prisma, 'webhookDelivery')
-      .findMany({
+    return (
+      safeM(this.prisma, 'webhookDelivery').findMany({
         where: { webhookId },
         orderBy: { createdAt: 'desc' },
         take: limit,
-      })
-      .catch((err: unknown) => {
-        this.logger.warn({
-          webhookId,
-          action: 'WEBHOOK_DELIVERIES_LIST',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao listar entregas de webhook — a devolver lista vazia',
-        });
-        return [];
+      }) as Promise<WebhookDeliveryRecord[]>
+    ).catch((err: unknown) => {
+      this.logger.warn({
+        webhookId,
+        action: 'WEBHOOK_DELIVERIES_LIST',
+        err: { message: err instanceof Error ? err.message : String(err) },
+        msg: 'Falha ao listar entregas de webhook — a devolver lista vazia',
       });
+      return [];
+    });
   }
 
   // ══════════════════════════════════════════════════════
