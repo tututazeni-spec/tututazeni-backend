@@ -26,7 +26,12 @@ export function buildJwtExtractors(allowBearer: boolean): JwtFromRequestFunction
 export class JwtStrategy extends PassportStrategy(Strategy) {
   // Cache por utilizador para evitar ~6 queries (user + 4 relações) em cada
   // pedido autenticado. Staleness máximo = TTL (inferior ao tempo de vida do JWT).
-  private readonly userCache = new Map<number, { user: any; expiresAt: number }>();
+  // `user` derivado do próprio retorno de loadUser() — evita `any` e mantém-se
+  // sincronizado se a query `include` mudar.
+  private readonly userCache = new Map<
+    number,
+    { user: Awaited<ReturnType<JwtStrategy['loadUser']>>; expiresAt: number }
+  >();
   private readonly cacheTtlMs = parseInt(process.env.JWT_USER_CACHE_TTL_MS || '30000', 10);
 
   constructor(
