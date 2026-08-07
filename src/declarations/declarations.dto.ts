@@ -13,6 +13,7 @@ import {
   IsDateString,
   IsNotEmpty,
   MaxLength,
+  IsIn,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -172,7 +173,10 @@ export class CreateWorkDeclFormDto {
   @ApiProperty() @IsString() title!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiProperty() @IsEnum(WorkDeclType) type!: WorkDeclType;
-  @ApiPropertyOptional() @IsOptional() @IsString() periodicity?: string; // ONCE | ANNUAL | MONTHLY
+  @ApiPropertyOptional({ enum: ['ONCE', 'ANNUAL', 'MONTHLY'] })
+  @IsOptional()
+  @IsIn(['ONCE', 'ANNUAL', 'MONTHLY'])
+  periodicity?: 'ONCE' | 'ANNUAL' | 'MONTHLY';
   @ApiPropertyOptional() @IsOptional() @IsDateString() validFrom?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() validTo?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() mandatory?: boolean;

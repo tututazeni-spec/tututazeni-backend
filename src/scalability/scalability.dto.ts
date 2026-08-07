@@ -18,6 +18,7 @@ import {
   IsNotEmpty,
   MaxLength,
   IsPositive,
+  IsIn,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
@@ -160,12 +161,18 @@ export class TriggerSyncDto {
 // -------------------------------------------------------
 export class AutomationConditionDto {
   @ApiProperty() @IsString() field: string; // ex: "departmentId"
-  @ApiProperty() @IsString() operator: string; // EQ | NEQ | IN | NOT_IN | GT | LT
+  @ApiProperty({ enum: ['EQ', 'NEQ', 'IN', 'NOT_IN', 'GT', 'LT'] })
+  @IsIn(['EQ', 'NEQ', 'IN', 'NOT_IN', 'GT', 'LT'])
+  operator: 'EQ' | 'NEQ' | 'IN' | 'NOT_IN' | 'GT' | 'LT';
   @ApiProperty() value: unknown; // valor da condição
 }
 
 export class AutomationActionDto {
-  @ApiProperty() @IsString() type: string; // ENROLL_COURSE | ASSIGN_TRAIL | SEND_NOTIFICATION | GRANT_BADGE | REVOKE_ACCESS
+  @ApiProperty({
+    enum: ['ENROLL_COURSE', 'ASSIGN_TRAIL', 'SEND_NOTIFICATION', 'GRANT_BADGE', 'REVOKE_ACCESS'],
+  })
+  @IsIn(['ENROLL_COURSE', 'ASSIGN_TRAIL', 'SEND_NOTIFICATION', 'GRANT_BADGE', 'REVOKE_ACCESS'])
+  type: 'ENROLL_COURSE' | 'ASSIGN_TRAIL' | 'SEND_NOTIFICATION' | 'GRANT_BADGE' | 'REVOKE_ACCESS';
   @ApiProperty() payload: Record<string, unknown>; // dados específicos da ação
 }
 
