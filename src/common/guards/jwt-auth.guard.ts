@@ -4,6 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { setRequestUserId } from '../logging/request-context';
+import { CurrentUserData } from '../types/current-user';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -22,11 +23,11 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     return super.canActivate(context);
   }
 
-  handleRequest(err: any, user: any) {
+  handleRequest<TUser = CurrentUserData>(err: Error | null, user: CurrentUserData | false): TUser {
     if (err || !user) {
       throw err || new UnauthorizedException('Token inválido ou expirado');
     }
     setRequestUserId(user?.id);
-    return user;
+    return user as TUser;
   }
 }
