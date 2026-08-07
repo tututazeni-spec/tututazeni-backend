@@ -63,22 +63,24 @@ function percentile(value: number, allValues: number[]): number {
 
 /**
  * Safe model access for optional Prisma models.
- * `prisma: any` é o único `any` deliberadamente mantido — acesso dinâmico
- * `prisma[name]` a um modelo que pode não existir não tem nenhum tipo
- * gerado pelo Prisma para se agarrar (mesmo problema/solução de
- * api-integration.service.ts/content-library.service.ts). Os métodos do
- * stub de fallback usam `{ data: unknown }`/`{ create: unknown }` em vez de
- * `(d: any)`.
+ * Acesso dinâmico `prisma[name]` a um modelo que pode não existir não tem
+ * nenhum tipo gerado pelo Prisma para se agarrar (mesmo problema/solução de
+ * api-integration.service.ts/content-library.service.ts) — o único cast é
+ * o `as unknown as DynamicModelDelegate` abaixo, confinado a esta linha;
+ * sem `any` em lado nenhum. Os métodos do stub de fallback usam
+ * `{ data: unknown }`/`{ create: unknown }` em vez de `(d: any)`.
  */
-const safeM = (prisma: any, name: string) =>
-  prisma[name] ?? {
+type DynamicModelDelegate = Record<string, (...args: unknown[]) => Promise<unknown>>;
+
+const safeM = (prisma: PrismaService, name: string): DynamicModelDelegate =>
+  (prisma as unknown as Record<string, DynamicModelDelegate | undefined>)[name] ?? {
     findMany: async () => [],
     findFirst: async () => null,
     findUnique: async () => null,
-    create: async (d: { data: unknown }) => d.data,
+    create: async (d: unknown) => (d as { data: unknown }).data,
     createMany: async () => ({ count: 0 }),
-    upsert: async (d: { create: unknown }) => d.create,
-    update: async (d: { data: unknown }) => d.data,
+    upsert: async (d: unknown) => (d as { create: unknown }).create,
+    update: async (d: unknown) => (d as { data: unknown }).data,
     delete: async () => null,
     count: async () => 0,
     groupBy: async () => [],
@@ -183,53 +185,53 @@ export class EvaluationService {
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
 
-    const data: EvaluationCycleRow[] = await safeM(this.prisma, 'evaluationCycle')
-      .findMany({
+    const data: EvaluationCycleRow[] = await (
+      safeM(this.prisma, 'evaluationCycle').findMany({
         where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_CYCLE_LIST',
-          filters,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao listar ciclos de avaliação — a devolver lista vazia',
-        });
-        return [];
+      }) as Promise<EvaluationCycleRow[]>
+    ).catch((e: unknown) => {
+      this.logger.warn({
+        action: 'EVALUATION_CYCLE_LIST',
+        filters,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao listar ciclos de avaliação — a devolver lista vazia',
       });
+      return [];
+    });
 
-    const total = await safeM(this.prisma, 'evaluationCycle')
-      .count({ where })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_CYCLE_COUNT',
-          filters,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao contar ciclos de avaliação — a devolver 0',
-        });
-        return 0;
+    const total = await (
+      safeM(this.prisma, 'evaluationCycle').count({ where }) as Promise<number>
+    ).catch((e: unknown) => {
+      this.logger.warn({
+        action: 'EVALUATION_CYCLE_COUNT',
+        filters,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao contar ciclos de avaliação — a devolver 0',
       });
+      return 0;
+    });
 
     return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
   }
 
   async getCycle(id: number) {
-    const cycle: EvaluationCycleRow | null = await safeM(this.prisma, 'evaluationCycle')
-      .findUnique({
+    const cycle: EvaluationCycleRow | null = await (
+      safeM(this.prisma, 'evaluationCycle').findUnique({
         where: { id },
         include: { form: true },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_CYCLE_FETCH',
-          cycleId: id,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter ciclo de avaliação — a devolver null',
-        });
-        return null;
+      }) as Promise<EvaluationCycleRow | null>
+    ).catch((e: unknown) => {
+      this.logger.warn({
+        action: 'EVALUATION_CYCLE_FETCH',
+        cycleId: id,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter ciclo de avaliação — a devolver null',
       });
+      return null;
+    });
 
     if (!cycle) throw new NotFoundException('Ciclo não encontrado');
 
@@ -609,24 +611,21 @@ export class EvaluationService {
     const competencyScores: Record<number, number[]> = {};
     const cycleFormId: number | undefined = undefined;
     if (cycleFormId) {
-      const questions: { id: number; competencyId: number | null; weight: number }[] = await safeM(
-        this.prisma,
-        'evaluationQuestion',
-      )
-        .findMany({
+      const questions: { id: number; competencyId: number | null; weight: number }[] = await (
+        safeM(this.prisma, 'evaluationQuestion').findMany({
           where: { formId: cycleFormId, competencyId: { not: null } },
           select: { id: true, competencyId: true, weight: true },
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'EVALUATION_QUESTION_LIST',
-            formId: cycleFormId,
-            requestId: dto.requestId,
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao listar perguntas do formulário — a devolver lista vazia',
-          });
-          return [] as { id: number; competencyId: number | null; weight: number }[];
+        }) as Promise<{ id: number; competencyId: number | null; weight: number }[]>
+      ).catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_QUESTION_LIST',
+          formId: cycleFormId,
+          requestId: dto.requestId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao listar perguntas do formulário — a devolver lista vazia',
         });
+        return [] as { id: number; competencyId: number | null; weight: number }[];
+      });
 
       for (const q of questions) {
         const ans = dto.answers.find(a => a.questionId === q.id);
@@ -919,18 +918,20 @@ export class EvaluationService {
     // sempre undefined após o JSON.parse, comportamento pré-existente.
     let weights: (EvaluatorWeightDto & { selfEvalIncluded?: boolean })[] = [];
     if (cycleId) {
-      const cycle = await safeM(this.prisma, 'evaluationCycle')
-        .findUnique({ where: { id: cycleId } })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'EVALUATION_CYCLE_FETCH_WEIGHTS',
-            cycleId,
-            evaluatedId,
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter pesos do ciclo para cálculo de resultados — a devolver null',
-          });
-          return null;
+      const cycle = await (
+        safeM(this.prisma, 'evaluationCycle').findUnique({
+          where: { id: cycleId },
+        }) as Promise<EvaluationCycleRow | null>
+      ).catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_CYCLE_FETCH_WEIGHTS',
+          cycleId,
+          evaluatedId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter pesos do ciclo para cálculo de resultados — a devolver null',
         });
+        return null;
+      });
       if (cycle?.weights) weights = JSON.parse(cycle.weights);
     }
 
