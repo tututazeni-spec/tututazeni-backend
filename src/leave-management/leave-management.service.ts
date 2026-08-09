@@ -75,6 +75,18 @@ function addWorkDays(start: Date, days: number, holidays: string[] = ANGOLA_HOLI
   return cur;
 }
 
+// Ver project-innova-leave-type-enum-mismatch: LeaveTypeConfig.code é livre
+// (admin pode criar "SICK_SHORT", etc.), mas o enum fixo `LeaveType` só tem
+// 10 valores. `leaveTypeCode` é agora a chave real usada em todo este
+// ficheiro; `leaveType` fica best-effort — só preenchido quando o código
+// coincide literalmente com um dos 10 membros do enum, para manter leitores
+// antigos a funcionar sem voltar a rebentar em códigos customizados.
+const LEAVE_TYPE_ENUM_VALUES = new Set<string>(Object.values(LeaveType));
+
+function toLeaveTypeEnum(code: string): LeaveType | null {
+  return LEAVE_TYPE_ENUM_VALUES.has(code) ? (code as LeaveType) : null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -316,19 +328,14 @@ export class LeaveManagementService {
     const impact = await this.calculateImpact(dto.userId, start, end);
 
     // ── Criar pedido
-    // ACHADO ESTRUTURAL (não corrigido nesta limpeza de tipos, ver
-    // project-innova-leave-type-enum-mismatch): LeaveRequest.leaveType e
-    // LeaveBalance.leaveType são o enum fixo de 10 valores `LeaveType`,
-    // mas LeaveTypeConfig.code (dto.leaveTypeCode) é livre/configurável —
-    // qualquer código customizado (ex. "SICK_SHORT") rebenta em runtime
-    // ("Unknown value" do Prisma). `as LeaveType` documenta a intenção sem
-    // fingir que o compilador consegue provar isto — é uma decisão de
-    // schema/produto por resolver, não um cast a "calar" o linter.
+    // FIXED (project-innova-leave-type-enum-mismatch): leaveTypeCode é a
+    // chave real; leaveType só é preenchido quando corresponde a um dos 10
+    // valores fixos do enum (toLeaveTypeEnum), nunca forçado por cast.
     const request = await this.prisma.leaveRequest.create({
       data: {
         userId: dto.userId,
         leaveTypeCode: dto.leaveTypeCode,
-        leaveType: dto.leaveTypeCode as LeaveType,
+        leaveType: toLeaveTypeEnum(dto.leaveTypeCode),
         startDate: start,
         endDate: end,
         durationMode: dto.durationMode ?? DurationMode.FULL_DAY,
@@ -544,14 +551,10 @@ export class LeaveManagementService {
 
     return balances.map(b => {
       const pendingDays = future
-        .filter(
-          f => f.leaveTypeCode === (b.leaveType as string) && f.status === LeaveStatus.PENDING,
-        )
+        .filter(f => f.leaveTypeCode === b.leaveTypeCode && f.status === LeaveStatus.PENDING)
         .reduce((a, f) => a + (f.workDays ?? 0), 0);
       const approvedFuture = future
-        .filter(
-          f => f.leaveTypeCode === (b.leaveType as string) && f.status === LeaveStatus.APPROVED,
-        )
+        .filter(f => f.leaveTypeCode === b.leaveTypeCode && f.status === LeaveStatus.APPROVED)
         .reduce((a, f) => a + (f.workDays ?? 0), 0);
       return {
         ...b,
@@ -569,15 +572,22 @@ export class LeaveManagementService {
     if (!leaveType) throw new NotFoundException(`Tipo "${dto.leaveTypeCode}" não encontrado`);
 
     const updated = await this.prisma.leaveBalance.upsert({
-      where: { userId_leaveType: { userId, leaveType: dto.leaveTypeCode as LeaveType } },
-      create: { userId, leaveType: dto.leaveTypeCode as LeaveType, balance: dto.balance, used: 0 },
+      where: { userId_leaveTypeCode: { userId, leaveTypeCode: dto.leaveTypeCode } },
+      create: {
+        userId,
+        leaveTypeCode: dto.leaveTypeCode,
+        leaveType: toLeaveTypeEnum(dto.leaveTypeCode),
+        balance: dto.balance,
+        used: 0,
+      },
       update: { balance: dto.balance },
     });
 
     await this.prisma.leaveBalanceHistory.create({
       data: {
         userId,
-        leaveType: dto.leaveTypeCode as LeaveType,
+        leaveTypeCode: dto.leaveTypeCode,
+        leaveType: toLeaveTypeEnum(dto.leaveTypeCode),
         balanceBefore: 0,
         balanceAfter: dto.balance,
         change: dto.balance,
@@ -593,8 +603,14 @@ export class LeaveManagementService {
     const results = await Promise.allSettled(
       dto.userIds.map(userId =>
         this.prisma.leaveBalance.upsert({
-          where: { userId_leaveType: { userId, leaveType: dto.leaveTypeCode as LeaveType } },
-          create: { userId, leaveType: dto.leaveTypeCode as LeaveType, balance: dto.days, used: 0 },
+          where: { userId_leaveTypeCode: { userId, leaveTypeCode: dto.leaveTypeCode } },
+          create: {
+            userId,
+            leaveTypeCode: dto.leaveTypeCode,
+            leaveType: toLeaveTypeEnum(dto.leaveTypeCode),
+            balance: dto.days,
+            used: 0,
+          },
           update: { balance: { increment: dto.days } },
         }),
       ),
@@ -607,15 +623,13 @@ export class LeaveManagementService {
       where: { active: true, annualLimit: { gt: 0 } },
     });
 
-    // `leaveTypeCode` não existe em LeaveBalance (só `leaveType`, o enum
-    // fixo) — o createMany rebentava sempre com "Unknown argument", nunca
-    // tinha funcionado. Corrigido o nome do campo; o cast para LeaveType
-    // mantém o mesmo achado estrutural documentado acima (lt.code pode não
-    // ser um dos 10 valores fixos do enum).
+    // FIXED (project-innova-leave-type-enum-mismatch): leaveTypeCode existe
+    // agora em LeaveBalance e é a chave real; leaveType é best-effort.
     await this.prisma.leaveBalance.createMany({
       data: leaveTypes.map(lt => ({
         userId,
-        leaveType: lt.code as LeaveType,
+        leaveTypeCode: lt.code,
+        leaveType: toLeaveTypeEnum(lt.code),
         balance: lt.annualLimit ?? 0,
         used: 0,
       })),
@@ -631,14 +645,14 @@ export class LeaveManagementService {
 
     for (const lt of leaveTypes) {
       const balances = await this.prisma.read.leaveBalance.findMany({
-        where: { leaveType: lt.code as LeaveType },
+        where: { leaveTypeCode: lt.code },
       });
       for (const b of balances) {
         const carryOver = Math.min(b.balance, lt.carryOverLimit ?? b.balance);
         const newBalance = (lt.annualLimit ?? 0) + carryOver;
 
         await this.prisma.leaveBalance.update({
-          where: { userId_leaveType: { userId: b.userId, leaveType: lt.code as LeaveType } },
+          where: { userId_leaveTypeCode: { userId: b.userId, leaveTypeCode: lt.code } },
           data: { balance: lt.annualLimit ?? 0, used: 0 },
         });
 
@@ -890,7 +904,7 @@ export class LeaveManagementService {
     // 3. Saldo disponível
     if (leaveType.annualLimit) {
       const balance = await this.prisma.read.leaveBalance.findUnique({
-        where: { userId_leaveType: { userId, leaveType: leaveType.code as LeaveType } },
+        where: { userId_leaveTypeCode: { userId, leaveTypeCode: leaveType.code } },
       });
       const available = balance?.balance ?? 0;
       if (workDays > available) {
@@ -999,16 +1013,17 @@ export class LeaveManagementService {
     requestId?: number,
   ) {
     const current = await this.prisma.leaveBalance.findUnique({
-      where: { userId_leaveType: { userId, leaveType: leaveTypeCode as LeaveType } },
+      where: { userId_leaveTypeCode: { userId, leaveTypeCode } },
     });
     const balanceBefore = current?.balance ?? 0;
     const balanceAfter = Math.max(0, balanceBefore - workDays);
 
     await this.prisma.leaveBalance.upsert({
-      where: { userId_leaveType: { userId, leaveType: leaveTypeCode as LeaveType } },
+      where: { userId_leaveTypeCode: { userId, leaveTypeCode } },
       create: {
         userId,
-        leaveType: leaveTypeCode as LeaveType,
+        leaveTypeCode,
+        leaveType: toLeaveTypeEnum(leaveTypeCode),
         balance: balanceAfter,
         used: workDays,
       },
@@ -1018,7 +1033,8 @@ export class LeaveManagementService {
     await this.prisma.leaveBalanceHistory.create({
       data: {
         userId,
-        leaveType: leaveTypeCode as LeaveType,
+        leaveTypeCode,
+        leaveType: toLeaveTypeEnum(leaveTypeCode),
         balanceBefore,
         balanceAfter,
         change: -workDays,
@@ -1036,20 +1052,21 @@ export class LeaveManagementService {
     requestId?: number,
   ) {
     const current = await this.prisma.leaveBalance.findUnique({
-      where: { userId_leaveType: { userId, leaveType: leaveTypeCode as LeaveType } },
+      where: { userId_leaveTypeCode: { userId, leaveTypeCode } },
     });
     const balanceBefore = current?.balance ?? 0;
     const balanceAfter = balanceBefore + workDays;
 
     await this.prisma.leaveBalance.update({
-      where: { userId_leaveType: { userId, leaveType: leaveTypeCode as LeaveType } },
+      where: { userId_leaveTypeCode: { userId, leaveTypeCode } },
       data: { balance: { increment: workDays }, used: { decrement: workDays } },
     });
 
     await this.prisma.leaveBalanceHistory.create({
       data: {
         userId,
-        leaveType: leaveTypeCode as LeaveType,
+        leaveTypeCode,
+        leaveType: toLeaveTypeEnum(leaveTypeCode),
         balanceBefore,
         balanceAfter,
         change: workDays,

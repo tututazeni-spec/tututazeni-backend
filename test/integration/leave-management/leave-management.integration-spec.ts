@@ -8,10 +8,14 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
 const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
-// LeaveBalance/LeaveRequest.leaveType is a fixed Prisma enum (LeaveType), not the
-// free-form LeaveTypeConfig.code string — must use a real enum member here or every
-// balance/request operation throws (documented architecture gap, not fixed here).
+// FIXED (project-innova-leave-type-enum-mismatch): leaveTypeCode (livre,
+// LeaveTypeConfig.code) é agora a chave real em LeaveBalance/LeaveRequest;
+// leaveType (enum fixo de 10 valores) ficou opcional/best-effort. Usar aqui
+// um valor real do enum (VACATION) continua válido — só deixou de ser
+// obrigatório para não rebentar — e um segundo describe abaixo prova
+// explicitamente que um código customizado fora do enum também funciona.
 const LEAVE_TYPE_CODE = 'VACATION';
+const CUSTOM_LEAVE_TYPE_CODE = 'SICK_SHORT';
 
 describe('Leave Management Integration', () => {
   let app: INestApplication;
@@ -27,6 +31,7 @@ describe('Leave Management Integration', () => {
   const prisma = new PrismaClient({ adapter } as any);
 
   let requestId: number;
+  let customRequestId: number;
   let originalEmployeeManagerId: number | null;
   let originalEmployeeDeptId: number | null;
   let testDeptId: number;
@@ -87,9 +92,44 @@ describe('Leave Management Integration', () => {
       },
     });
     await prisma.leaveBalance.upsert({
-      where: { userId_leaveType: { userId: employeeId, leaveType: 'VACATION' } },
+      where: { userId_leaveTypeCode: { userId: employeeId, leaveTypeCode: LEAVE_TYPE_CODE } },
       update: { balance: 22, used: 0 },
-      create: { userId: employeeId, leaveType: 'VACATION', balance: 22, used: 0 },
+      create: {
+        userId: employeeId,
+        leaveTypeCode: LEAVE_TYPE_CODE,
+        leaveType: 'VACATION',
+        balance: 22,
+        used: 0,
+      },
+    });
+
+    // Código customizado (fora dos 10 valores do enum LeaveType) — prova que
+    // deixou de rebentar (project-innova-leave-type-enum-mismatch).
+    await prisma.leaveTypeConfig.upsert({
+      where: { code: CUSTOM_LEAVE_TYPE_CODE },
+      update: {},
+      create: {
+        code: CUSTOM_LEAVE_TYPE_CODE,
+        name: 'Baixa Médica Curta',
+        category: 'MEDICAL',
+        isPaid: true,
+        annualLimit: 5,
+        active: true,
+        countWorkDaysOnly: true,
+      },
+    });
+    await prisma.leaveBalance.upsert({
+      where: {
+        userId_leaveTypeCode: { userId: employeeId, leaveTypeCode: CUSTOM_LEAVE_TYPE_CODE },
+      },
+      update: { balance: 5, used: 0 },
+      create: {
+        userId: employeeId,
+        leaveTypeCode: CUSTOM_LEAVE_TYPE_CODE,
+        leaveType: null,
+        balance: 5,
+        used: 0,
+      },
     });
   });
 
@@ -105,12 +145,20 @@ describe('Leave Management Integration', () => {
       await prisma.leaveApproval.deleteMany({ where: { requestId } }).catch(() => undefined);
       await prisma.leaveRequest.deleteMany({ where: { id: requestId } }).catch(() => undefined);
     }
+    if (customRequestId) {
+      await prisma.leaveApproval
+        .deleteMany({ where: { requestId: customRequestId } })
+        .catch(() => undefined);
+      await prisma.leaveRequest
+        .deleteMany({ where: { id: customRequestId } })
+        .catch(() => undefined);
+    }
     await prisma.leaveBalanceHistory
       .deleteMany({ where: { userId: employeeId } })
       .catch(() => undefined);
     await prisma.leaveBalance.deleteMany({ where: { userId: employeeId } }).catch(() => undefined);
     await prisma.leaveTypeConfig
-      .deleteMany({ where: { code: LEAVE_TYPE_CODE } })
+      .deleteMany({ where: { code: { in: [LEAVE_TYPE_CODE, CUSTOM_LEAVE_TYPE_CODE] } } })
       .catch(() => undefined);
     await prisma.notificationLog
       .deleteMany({ where: { userId: { in: [employeeId, managerId] } } })
@@ -256,7 +304,7 @@ describe('Leave Management Integration', () => {
       expect(res.body.status).toBe('APPROVED');
 
       const balance = await prisma.leaveBalance.findUnique({
-        where: { userId_leaveType: { userId: employeeId, leaveType: 'VACATION' } },
+        where: { userId_leaveTypeCode: { userId: employeeId, leaveTypeCode: LEAVE_TYPE_CODE } },
       });
       expect(balance!.balance).toBeLessThan(22);
 
@@ -274,7 +322,7 @@ describe('Leave Management Integration', () => {
         .get('/leave/my/balance')
         .set('Authorization', `Bearer ${employeeToken}`)
         .expect(200);
-      const vacation = res.body.find((b: any) => b.leaveType === 'VACATION');
+      const vacation = res.body.find((b: any) => b.leaveTypeCode === LEAVE_TYPE_CODE);
       expect(vacation.balance).toBeLessThan(22);
     });
 
@@ -293,9 +341,65 @@ describe('Leave Management Integration', () => {
         .expect(200);
 
       const balance = await prisma.leaveBalance.findUnique({
-        where: { userId_leaveType: { userId: employeeId, leaveType: 'VACATION' } },
+        where: { userId_leaveTypeCode: { userId: employeeId, leaveTypeCode: LEAVE_TYPE_CODE } },
       });
       expect(balance!.balance).toBe(22);
+    });
+  });
+
+  describe('Código de licença customizado (fix: project-innova-leave-type-enum-mismatch)', () => {
+    // Antes desta correcção, qualquer LeaveTypeConfig.code fora dos 10
+    // valores fixos do enum LeaveType rebentava com PrismaClientValidationError
+    // ("Unknown value") em create()/deductBalance()/returnBalance() — não uma
+    // excepção de negócio, um erro 500. SICK_SHORT é exactamente o exemplo
+    // dado pelo doc comment do CreateLeaveTypeDto como uso normal.
+    it('colaborador submete pedido com código customizado → não rebenta, fica PENDING', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/leave')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({
+          userId: employeeId,
+          leaveTypeCode: CUSTOM_LEAVE_TYPE_CODE,
+          startDate: '2026-10-05',
+          endDate: '2026-10-06',
+        })
+        .expect(201);
+      customRequestId = res.body.id;
+      expect(res.body.status).toBe('PENDING');
+      expect(res.body.leaveTypeCode).toBe(CUSTOM_LEAVE_TYPE_CODE);
+    });
+
+    it('gestor aprova → saldo do código customizado é deduzido sem rebentar', async () => {
+      await request(app.getHttpServer())
+        .patch(`/leave/${customRequestId}/approve`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ action: 'APPROVE' })
+        .expect(200);
+
+      const balance = await prisma.leaveBalance.findUnique({
+        where: {
+          userId_leaveTypeCode: { userId: employeeId, leaveTypeCode: CUSTOM_LEAVE_TYPE_CODE },
+        },
+      });
+      expect(balance).toBeTruthy();
+      expect(balance!.balance).toBeLessThan(5); // saldo inicial 5, deduzido sem rebentar
+      // leaveType (enum fixo) fica null para um código que não é um dos 10
+      // valores — best-effort, não força um valor inventado.
+      expect(balance!.leaveType).toBeNull();
+    });
+
+    it('colaborador cancela → devolve saldo do código customizado sem rebentar', async () => {
+      await request(app.getHttpServer())
+        .patch(`/leave/${customRequestId}/cancel`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+
+      const balance = await prisma.leaveBalance.findUnique({
+        where: {
+          userId_leaveTypeCode: { userId: employeeId, leaveTypeCode: CUSTOM_LEAVE_TYPE_CODE },
+        },
+      });
+      expect(balance!.balance).toBe(5);
     });
   });
 
@@ -318,7 +422,7 @@ describe('Leave Management Integration', () => {
       expect(res.body.accrued).toBe(1);
 
       const balance = await prisma.leaveBalance.findUnique({
-        where: { userId_leaveType: { userId: employeeId, leaveType: 'VACATION' } },
+        where: { userId_leaveTypeCode: { userId: employeeId, leaveTypeCode: LEAVE_TYPE_CODE } },
       });
       expect(balance!.balance).toBe(12);
     });
