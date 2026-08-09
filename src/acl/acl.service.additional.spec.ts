@@ -35,6 +35,11 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  rolePermission: {
+    upsert: jest.fn().mockResolvedValue({}),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   user: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
@@ -55,7 +60,7 @@ const baseRole = {
   id: 1,
   name: 'COLABORADOR',
   code: 'COLABORADOR',
-  permissions: [],
+  rolePermissions: [],
   _count: { users: 5 },
 };
 const baseUser = {
@@ -64,7 +69,7 @@ const baseUser = {
   email: 'test@test.com',
   active: true,
   roleId: 1,
-  role: { ...baseRole, permissions: [basePerm] },
+  role: { ...baseRole, rolePermissions: [{ permission: basePerm }] },
 };
 
 describe('AclService (additional)', () => {
@@ -92,7 +97,6 @@ describe('AclService (additional)', () => {
 
   describe('createPermission', () => {
     it('deve criar permissão com sucesso', async () => {
-      mockPrisma.role.findFirst.mockResolvedValue({ ...baseRole, id: 9, name: 'ADMIN' });
       mockPrisma.permission.create.mockResolvedValue(basePerm);
       const result = await service.createPermission({
         name: 'dashboard:view',
@@ -100,11 +104,12 @@ describe('AclService (additional)', () => {
         subject: 'DASHBOARD' as any,
       });
       expect(result).toBeDefined();
-      expect(mockPrisma.permission.create).toHaveBeenCalled();
+      expect(mockPrisma.permission.create).toHaveBeenCalledWith({
+        data: { name: 'dashboard:view', action: 'VIEW', subject: 'DASHBOARD' },
+      });
     });
 
-    it('deve criar permissão com sensitive flag', async () => {
-      mockPrisma.role.findFirst.mockResolvedValue({ ...baseRole, id: 9, name: 'ADMIN' });
+    it('deve criar permissão com sensitive flag (campo ignorado — não existe no schema real)', async () => {
       mockPrisma.permission.create.mockResolvedValue({ ...basePerm, sensitive: true });
       const result = await service.createPermission({
         name: 'payroll:view',
@@ -113,17 +118,6 @@ describe('AclService (additional)', () => {
         sensitive: true,
       });
       expect(result).toBeDefined();
-    });
-
-    it('lança erro se o role ADMIN não existir', async () => {
-      mockPrisma.role.findFirst.mockResolvedValue(null);
-      await expect(
-        service.createPermission({
-          name: 'dashboard:view',
-          action: 'VIEW' as any,
-          subject: 'DASHBOARD' as any,
-        }),
-      ).rejects.toThrow("Role 'ADMIN' não encontrado");
     });
   });
 
@@ -138,19 +132,23 @@ describe('AclService (additional)', () => {
   });
 
   // ─── cloneRole ────────────────────────────────────────────────
+  // M2M via RolePermission: clonar cria novas linhas de associação (createMany),
+  // nunca reatribui a posse da permissão original — ver acl.service.ts.
 
   describe('cloneRole', () => {
-    it('deve clonar role com permissões', async () => {
-      const roleWithPerms = { ...baseRole, permissions: [basePerm] };
+    it('deve clonar role com permissões (duplica via rolePermission.createMany)', async () => {
+      const roleWithPerms = { ...baseRole, rolePermissions: [{ permission: basePerm }] };
       mockPrisma.role.findUnique
         .mockResolvedValueOnce(roleWithPerms)
         .mockResolvedValueOnce({ ...baseRole, id: 2, name: 'COLABORADOR_CLONE' });
       mockPrisma.role.create.mockResolvedValue({ ...baseRole, id: 2, name: 'COLABORADOR_CLONE' });
-      mockPrisma.role.update.mockResolvedValue({ ...baseRole, id: 2 });
 
       const result = await service.cloneRole(1, { newName: 'COLABORADOR_CLONE' });
       expect(result).toBeDefined();
       expect(mockPrisma.role.create).toHaveBeenCalled();
+      expect(mockPrisma.rolePermission.createMany).toHaveBeenCalledWith({
+        data: [{ roleId: 2, permissionId: basePerm.id }],
+      });
     });
 
     it('deve lançar erro se role não encontrado', async () => {
@@ -161,15 +159,15 @@ describe('AclService (additional)', () => {
     });
 
     it('deve clonar role sem permissões', async () => {
-      const roleNoPerms = { ...baseRole, permissions: [] };
+      const roleNoPerms = { ...baseRole, rolePermissions: [] };
       mockPrisma.role.findUnique
         .mockResolvedValueOnce(roleNoPerms)
-        .mockResolvedValueOnce({ ...baseRole, id: 2 });
+        .mockResolvedValueOnce({ ...baseRole, id: 2, rolePermissions: [] });
       mockPrisma.role.create.mockResolvedValue({ ...baseRole, id: 2 });
 
       const result = await service.cloneRole(1, { newName: 'EMPTY_CLONE' });
       expect(result).toBeDefined();
-      expect(mockPrisma.role.update).not.toHaveBeenCalled();
+      expect(mockPrisma.rolePermission.createMany).not.toHaveBeenCalled();
     });
   });
 
@@ -177,39 +175,46 @@ describe('AclService (additional)', () => {
 
   describe('getRolePermissions', () => {
     it('deve retornar permissões do role', async () => {
-      mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, permissions: [basePerm] });
+      mockPrisma.role.findUnique.mockResolvedValue({
+        ...baseRole,
+        rolePermissions: [{ permission: basePerm }],
+      });
       const result = await service.getRolePermissions(1);
       expect(result).toBeDefined();
+      expect((result as any).permissions).toEqual([basePerm]);
     });
   });
 
   // ─── assignPermissionToRole ────────────────────────────────────
 
   describe('assignPermissionToRole', () => {
-    it('deve atribuir permissão a role', async () => {
-      mockPrisma.role.update.mockResolvedValue({ ...baseRole, permissions: [basePerm] });
+    it('deve atribuir permissão a role via upsert idempotente', async () => {
+      mockPrisma.role.findUnique.mockResolvedValue({
+        ...baseRole,
+        rolePermissions: [{ permission: basePerm }],
+      });
       const result = await service.assignPermissionToRole(1, 1);
       expect(result).toBeDefined();
-      expect(mockPrisma.role.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 1 } }),
-      );
+      expect(mockPrisma.rolePermission.upsert).toHaveBeenCalledWith({
+        where: { roleId_permissionId: { roleId: 1, permissionId: 1 } },
+        create: { roleId: 1, permissionId: 1 },
+        update: {},
+      });
     });
   });
 
   // ─── revokePermissionFromRole ──────────────────────────────────
 
   describe('revokePermissionFromRole', () => {
-    it('deve reatribuir a permissão ao role ADMIN (Permission.roleId é required)', async () => {
-      mockPrisma.role.findFirst.mockResolvedValue({ ...baseRole, id: 9, name: 'ADMIN' });
-      mockPrisma.permission.update.mockResolvedValue({ ...basePerm, roleId: 9 });
-      mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, permissions: [] });
+    it('deve remover a associação RolePermission (delete real, permissão continua no catálogo)', async () => {
+      mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, rolePermissions: [] });
 
       const result = await service.revokePermissionFromRole(1, 1);
 
-      expect(mockPrisma.permission.update).toHaveBeenCalledWith({
-        where: { id: 1 },
-        data: { roleId: 9 },
+      expect(mockPrisma.rolePermission.deleteMany).toHaveBeenCalledWith({
+        where: { roleId: 1, permissionId: 1 },
       });
+      expect(mockPrisma.permission.update).not.toHaveBeenCalled();
       expect(result).toBeDefined();
     });
   });
@@ -217,10 +222,21 @@ describe('AclService (additional)', () => {
   // ─── bulkAssignPermissions ─────────────────────────────────────
 
   describe('bulkAssignPermissions', () => {
-    it('deve atribuir múltiplas permissões', async () => {
-      mockPrisma.role.update.mockResolvedValue({ ...baseRole, permissions: [basePerm] });
+    it('deve atribuir múltiplas permissões via rolePermission.createMany', async () => {
+      mockPrisma.role.findUnique.mockResolvedValue({
+        ...baseRole,
+        rolePermissions: [{ permission: basePerm }],
+      });
       const result = await service.bulkAssignPermissions({ roleId: 1, permissionIds: [1, 2, 3] });
       expect(result).toBeDefined();
+      expect(mockPrisma.rolePermission.createMany).toHaveBeenCalledWith({
+        data: [
+          { roleId: 1, permissionId: 1 },
+          { roleId: 1, permissionId: 2 },
+          { roleId: 1, permissionId: 3 },
+        ],
+        skipDuplicates: true,
+      });
     });
   });
 
@@ -260,7 +276,7 @@ describe('AclService (additional)', () => {
       const adminUser = {
         ...baseUser,
         id: 10,
-        role: { ...baseRole, code: 'ADMIN', permissions: [basePerm] },
+        role: { ...baseRole, code: 'ADMIN', rolePermissions: [{ permission: basePerm }] },
       };
       mockPrisma.user.findUnique.mockResolvedValue(adminUser);
       const result = await service.getUserPermissions(10);
@@ -305,7 +321,7 @@ describe('AclService (additional)', () => {
     });
 
     it('deve retornar allowed=false para permissão não concedida', async () => {
-      const userNoPerms = { ...baseUser, id: 40, role: { ...baseRole, permissions: [] } };
+      const userNoPerms = { ...baseUser, id: 40, role: { ...baseRole, rolePermissions: [] } };
       mockPrisma.user.findUnique.mockResolvedValue(userNoPerms);
       mockPrisma.auditLog.create.mockResolvedValue({});
       const result = await service.checkPermission({
@@ -321,7 +337,7 @@ describe('AclService (additional)', () => {
       const adminUser = {
         ...baseUser,
         id: 50,
-        role: { ...baseRole, code: 'ADMIN', permissions: [] },
+        role: { ...baseRole, code: 'ADMIN', rolePermissions: [] },
       };
       mockPrisma.user.findUnique.mockResolvedValue(adminUser);
       const result = await service.checkPermission({
@@ -388,7 +404,9 @@ describe('AclService (additional)', () => {
 
   describe('getPermissionMatrix', () => {
     it('deve retornar matriz de permissões por role', async () => {
-      mockPrisma.role.findMany.mockResolvedValue([{ ...baseRole, permissions: [basePerm] }]);
+      mockPrisma.role.findMany.mockResolvedValue([
+        { ...baseRole, rolePermissions: [{ permission: basePerm }] },
+      ]);
       mockPrisma.permission.findMany.mockResolvedValue([basePerm]);
       const result = await service.getPermissionMatrix();
       expect(result).toHaveProperty('roles');
@@ -425,25 +443,28 @@ describe('AclService (additional)', () => {
   // ─── seedDefaultPermissionsForRole ────────────────────────────
 
   describe('seedDefaultPermissionsForRole', () => {
-    it('deve atribuir permissões wildcard ao ADMIN', async () => {
+    it('deve atribuir permissões wildcard ao ADMIN via rolePermission.createMany', async () => {
       mockPrisma.permission.findMany.mockResolvedValue([basePerm]);
-      mockPrisma.role.update.mockResolvedValue(baseRole);
       await service.seedDefaultPermissionsForRole(1, 'ADMIN', ['*']);
-      expect(mockPrisma.role.update).toHaveBeenCalled();
+      expect(mockPrisma.rolePermission.createMany).toHaveBeenCalledWith({
+        data: [{ roleId: 1, permissionId: basePerm.id }],
+        skipDuplicates: true,
+      });
     });
 
-    it('deve atribuir permissões nomeadas a role não-ADMIN', async () => {
+    it('deve atribuir permissões nomeadas a role não-ADMIN via rolePermission.createMany', async () => {
       mockPrisma.permission.findMany.mockResolvedValue([basePerm]);
-      mockPrisma.role.update.mockResolvedValue(baseRole);
       await service.seedDefaultPermissionsForRole(1, 'COLABORADOR', ['dashboard:view']);
-      expect(mockPrisma.role.update).toHaveBeenCalled();
+      expect(mockPrisma.rolePermission.createMany).toHaveBeenCalledWith({
+        data: [{ roleId: 1, permissionId: basePerm.id }],
+        skipDuplicates: true,
+      });
     });
 
     it('deve ignorar se nenhuma permissão encontrada', async () => {
       mockPrisma.permission.findMany.mockResolvedValue([]);
-      mockPrisma.role.update.mockClear();
       await service.seedDefaultPermissionsForRole(1, 'COLABORADOR', ['dashboard:view']);
-      expect(mockPrisma.role.update).not.toHaveBeenCalled();
+      expect(mockPrisma.rolePermission.createMany).not.toHaveBeenCalled();
     });
   });
 

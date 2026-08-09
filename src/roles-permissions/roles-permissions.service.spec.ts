@@ -21,6 +21,11 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  rolePermission: {
+    findMany: jest.fn().mockResolvedValue([]),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   user: {
     findMany: jest.fn(),
     update: jest.fn(),
@@ -37,7 +42,9 @@ const baseRole = {
   description: 'Role base',
   isSystem: false,
   priority: 0,
-  permissions: [{ id: 1, name: 'courses:read', action: 'read', subject: 'courses' }],
+  rolePermissions: [
+    { permission: { id: 1, name: 'courses:read', action: 'read', subject: 'courses' } },
+  ],
   users: [],
   _count: { users: 10 },
 };
@@ -96,6 +103,7 @@ describe('RolesPermissionsService', () => {
     it('deve criar role com sucesso', async () => {
       mockPrisma.role.findFirst.mockResolvedValue(null);
       mockPrisma.role.create.mockResolvedValue(baseRole);
+      mockPrisma.role.findUnique.mockResolvedValue(baseRole);
 
       const result = await service.create({ name: 'COLABORADOR', description: 'Base' });
 
@@ -105,6 +113,22 @@ describe('RolesPermissionsService', () => {
           data: expect.objectContaining({ entity: 'Role', action: 'ROLE_CREATED' }),
         }),
       );
+    });
+
+    it('atribui as permissões pedidas via RolePermission ao criar', async () => {
+      mockPrisma.role.findFirst.mockResolvedValue(null);
+      mockPrisma.role.create.mockResolvedValue(baseRole);
+      mockPrisma.role.findUnique.mockResolvedValue(baseRole);
+
+      await service.create({ name: 'COLABORADOR', permissionIds: [1, 2] });
+
+      expect(mockPrisma.rolePermission.createMany).toHaveBeenCalledWith({
+        data: [
+          { roleId: baseRole.id, permissionId: 1 },
+          { roleId: baseRole.id, permissionId: 2 },
+        ],
+        skipDuplicates: true,
+      });
     });
 
     it('deve lançar ConflictException se nome duplicado', async () => {
@@ -117,7 +141,9 @@ describe('RolesPermissionsService', () => {
 
   describe('update', () => {
     it('deve actualizar role com sucesso', async () => {
-      mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, isSystem: false });
+      mockPrisma.role.findUnique
+        .mockResolvedValueOnce({ ...baseRole, isSystem: false })
+        .mockResolvedValueOnce({ ...baseRole, name: 'COLABORADOR_V2' });
       mockPrisma.role.update.mockResolvedValue({ ...baseRole, name: 'COLABORADOR_V2' });
 
       const result = await service.update(1, { name: 'COLABORADOR_V2' });
@@ -131,10 +157,41 @@ describe('RolesPermissionsService', () => {
     });
 
     it('actualiza mesmo quando o registo devolvido tem isSystem=true (campo nunca existiu no schema real — a "protecção" nunca funcionou em produção, ver findAll())', async () => {
-      mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, isSystem: true });
+      mockPrisma.role.findUnique
+        .mockResolvedValueOnce({ ...baseRole, isSystem: true })
+        .mockResolvedValueOnce({ ...baseRole, name: 'NOVO_NOME' });
       mockPrisma.role.update.mockResolvedValue({ ...baseRole, name: 'NOVO_NOME' });
       const result = await service.update(1, { name: 'NOVO_NOME' });
       expect(result.name).toBe('NOVO_NOME');
+    });
+
+    it('substitui as permissões via diff (remove as antigas, adiciona as novas) quando permissionIds é fornecido', async () => {
+      mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, isSystem: false });
+      mockPrisma.role.update.mockResolvedValue(baseRole);
+      mockPrisma.rolePermission.findMany.mockResolvedValue([{ permissionId: 1 }]);
+
+      await service.update(1, { permissionIds: [2, 3] });
+
+      expect(mockPrisma.rolePermission.deleteMany).toHaveBeenCalledWith({
+        where: { roleId: 1, permissionId: { in: [1] } },
+      });
+      expect(mockPrisma.rolePermission.createMany).toHaveBeenCalledWith({
+        data: [
+          { roleId: 1, permissionId: 2 },
+          { roleId: 1, permissionId: 3 },
+        ],
+        skipDuplicates: true,
+      });
+    });
+
+    it('não toca em RolePermission quando permissionIds não é fornecido', async () => {
+      mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, isSystem: false });
+      mockPrisma.role.update.mockResolvedValue(baseRole);
+
+      await service.update(1, { name: 'X' });
+
+      expect(mockPrisma.rolePermission.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.rolePermission.createMany).not.toHaveBeenCalled();
     });
   });
 });

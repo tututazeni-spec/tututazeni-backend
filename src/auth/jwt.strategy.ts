@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy, JwtFromRequestFunction } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
+import { withFlatPermissions } from '../common/utils/role-permissions';
 
 // Extrai o JWT do cookie httpOnly 'token' (definido pelo backend no login).
 const cookieExtractor: JwtFromRequestFunction = (req: Request) => {
@@ -75,19 +76,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   private async loadUser(sub: number) {
-    const user = await this.prisma.user.findUnique({
+    const raw = await this.prisma.user.findUnique({
       where: { id: sub },
       include: {
-        role: { include: { permissions: true } },
+        role: { include: { rolePermissions: { include: { permission: true } } } },
         unit: true,
         department: true,
         position: true,
       },
     });
-    if (!user || !user.active) {
+    if (!raw || !raw.active) {
       this.userCache.delete(sub);
       throw new UnauthorizedException('Utilizador inativo ou não encontrado');
     }
+    const user = { ...raw, role: withFlatPermissions(raw.role) };
     this.userCache.set(sub, { user, expiresAt: Date.now() + this.cacheTtlMs });
     return user;
   }

@@ -141,7 +141,7 @@ describe('Roles Permissions Integration', () => {
     });
   });
 
-  describe('Permissões — bug: Permission.roleId é FK obrigatória, não M2M', () => {
+  describe('Permissões — M2M via RolePermission (ver project-innova-acl-permission-ownership)', () => {
     let roleId: number;
     let permA: number;
     let permB: number;
@@ -154,15 +154,16 @@ describe('Roles Permissions Integration', () => {
       roleId = role.id;
       roleIds.push(roleId);
 
-      const admin = await prisma.role.findFirst({ where: { name: 'ADMIN' } });
+      // Permission já não tem roleId (removido — catálogo independente,
+      // associação só existe via RolePermission).
       const a = await prisma.permission.create({
-        data: { name: 'int-test:read-a', action: 'VIEW', subject: 'USERS', roleId: admin!.id },
+        data: { name: 'int-test:read-a', action: 'VIEW', subject: 'USERS' },
       });
       const b = await prisma.permission.create({
-        data: { name: 'int-test:read-b', action: 'VIEW', subject: 'REPORTS', roleId: admin!.id },
+        data: { name: 'int-test:read-b', action: 'VIEW', subject: 'REPORTS' },
       });
       const c = await prisma.permission.create({
-        data: { name: 'int-test:read-c', action: 'VIEW', subject: 'LMS', roleId: admin!.id },
+        data: { name: 'int-test:read-c', action: 'VIEW', subject: 'LMS' },
       });
       permA = a.id;
       permB = b.id;
@@ -179,7 +180,7 @@ describe('Roles Permissions Integration', () => {
       expect(res.body.permissions.map((p: any) => p.id).sort()).toEqual([permA, permB].sort());
     });
 
-    it('remover a permissão A não rebenta 500 (disconnect numa FK obrigatória)', async () => {
+    it('remover a permissão A é um delete real da associação, sem afectar o catálogo', async () => {
       const res = await request(app.getHttpServer())
         .patch(`/roles-permissions/${roleId}/permissions/remove`)
         .set('Authorization', `Bearer ${rhToken}`)
@@ -188,13 +189,12 @@ describe('Roles Permissions Integration', () => {
       expect(res.body.permissions.map((p: any) => p.id)).toEqual([permB]);
     });
 
-    it('a permissão removida foi reatribuída ao ADMIN, não perdida', async () => {
+    it('a permissão removida continua a existir no catálogo — só deixou de pertencer a este role', async () => {
       const perm = await prisma.permission.findUnique({ where: { id: permA } });
-      const adminRole = await prisma.role.findFirst({ where: { name: 'ADMIN' } });
-      expect(perm!.roleId).toBe(adminRole!.id);
+      expect(perm).not.toBeNull();
     });
 
-    it('setRolePermissions substitui B por C sem rebentar (set implícito também é disconnect)', async () => {
+    it('setRolePermissions substitui B por C via diff (deleteMany + createMany)', async () => {
       const res = await request(app.getHttpServer())
         .patch(`/roles-permissions/${roleId}/permissions/set`)
         .set('Authorization', `Bearer ${rhToken}`)
@@ -203,35 +203,24 @@ describe('Roles Permissions Integration', () => {
       expect(res.body.permissions.map((p: any) => p.id)).toEqual([permC]);
     });
 
-    it('a permissão B libertada pelo set também foi reatribuída ao ADMIN', async () => {
+    it('a permissão B libertada pelo set também continua a existir no catálogo', async () => {
       const perm = await prisma.permission.findUnique({ where: { id: permB } });
-      const adminRole = await prisma.role.findFirst({ where: { name: 'ADMIN' } });
-      expect(perm!.roleId).toBe(adminRole!.id);
+      expect(perm).not.toBeNull();
     });
 
-    it('eliminar role que ainda possui permissões → 409 (evita cascade-delete das permissões)', async () => {
-      await request(app.getHttpServer())
-        .delete(`/roles-permissions/${roleId}`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .expect(409);
-    });
-
-    it('libertar as permissões e só depois eliminar o role com sucesso', async () => {
-      await request(app.getHttpServer())
-        .patch(`/roles-permissions/${roleId}/permissions/set`)
-        .set('Authorization', `Bearer ${rhToken}`)
-        .send({ permissionIds: [] })
-        .expect(200);
-
+    it('eliminar role com permissões associadas → 204 (cascata remove só RolePermission, nunca o catálogo)', async () => {
       await request(app.getHttpServer())
         .delete(`/roles-permissions/${roleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
       roleIds.splice(roleIds.indexOf(roleId), 1);
+
+      const perm = await prisma.permission.findUnique({ where: { id: permC } });
+      expect(perm).not.toBeNull();
     });
   });
 
-  describe('Clone (documentado: connect rouba em vez de duplicar — arquitectura FK single-owner)', () => {
+  describe('Clone — M2M via RolePermission duplica, não move a posse', () => {
     let sourceId: number;
     let cloneId: number;
     let permId: number;
@@ -246,15 +235,16 @@ describe('Roles Permissions Integration', () => {
       roleIds.push(sourceId);
 
       const perm = await prisma.permission.create({
-        data: {
-          name: 'int-test:clone-perm',
-          action: 'VIEW',
-          subject: 'DASHBOARD',
-          roleId: sourceId,
-        },
+        data: { name: 'int-test:clone-perm', action: 'VIEW', subject: 'DASHBOARD' },
       });
       permId = perm.id;
       permissionIds.push(permId);
+
+      await request(app.getHttpServer())
+        .patch(`/roles-permissions/${sourceId}/permissions/add`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ permissionIds: [permId] })
+        .expect(200);
 
       const clone = await request(app.getHttpServer())
         .post(`/roles-permissions/${sourceId}/clone`)
@@ -266,12 +256,12 @@ describe('Roles Permissions Integration', () => {
       expect(clone.body.permissions.map((p: any) => p.id)).toEqual([permId]);
     });
 
-    it('a permissão passou a pertencer ao clone — o role de origem já não a tem', async () => {
+    it('a permissão passou a pertencer também ao clone — o role de origem mantém-na', async () => {
       const source = await request(app.getHttpServer())
         .get(`/roles-permissions/${sourceId}`)
         .set('Authorization', `Bearer ${rhToken}`)
         .expect(200);
-      expect(source.body.permissions.length).toBe(0);
+      expect(source.body.permissions.map((p: any) => p.id)).toEqual([permId]);
     });
   });
 

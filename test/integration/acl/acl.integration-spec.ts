@@ -46,24 +46,15 @@ describe('ACL Integration', () => {
   });
 
   afterAll(async () => {
-    // Permission.roleId é obrigatório (RESTRICT implícito via FK NOT NULL) —
-    // reatribuir para o role ADMIN antes de apagar o role de teste, e só então
-    // apagar a permissão.
-    const perm = await prisma.permission.findUnique({ where: { name: PERMISSION_NAME } });
-    if (perm) {
-      const adminRole = await prisma.role.findFirst({ where: { name: 'ADMIN' } });
-      if (adminRole) {
-        await prisma.permission
-          .update({ where: { id: perm.id }, data: { roleId: adminRole.id } })
-          .catch(() => undefined);
-      }
-      await prisma.permission
-        .deleteMany({ where: { name: PERMISSION_NAME } })
-        .catch(() => undefined);
-    }
+    // M2M via RolePermission: Permission já não tem dono único (roleId foi
+    // removido — ver project-innova-acl-permission-ownership). Apagar os
+    // roles de teste só remove as linhas de associação (ON DELETE CASCADE em
+    // RolePermission.roleId); a permissão do catálogo sobrevive e é apagada
+    // à parte, sem nenhuma dança de reatribuição prévia.
     await prisma.role
       .deleteMany({ where: { name: { contains: 'Int Test Role' } } })
       .catch(() => undefined);
+    await prisma.permission.deleteMany({ where: { name: PERMISSION_NAME } }).catch(() => undefined);
 
     await prisma.$disconnect();
     await pool.end();
@@ -189,17 +180,21 @@ describe('ACL Integration', () => {
       expect(res.body.permissions.some((p: any) => p.id === permissionId)).toBe(true);
     });
 
-    it('POST /acl/roles/:id/clone — clona role com as suas permissões → 201', async () => {
-      // Nota: Permission.roleId é uma FK 1:N de dono único (não M2M) — "clonar"
-      // na prática move a posse da permissão para o clone, não a duplica. Não
-      // apagamos o clone aqui (o cleanup de roles no afterAll trata disso,
-      // reatribuindo a permissão ao ADMIN antes de apagar qualquer role de teste).
+    it('POST /acl/roles/:id/clone — clona role duplicando as suas permissões (o original mantém as próprias)', async () => {
+      // M2M via RolePermission: clonar cria novas linhas de associação para o
+      // clone — o role de origem continua a ter a permissão, não é "roubada".
       const res = await request(app.getHttpServer())
         .post(`/acl/roles/${roleId}/clone`)
         .set('Authorization', `Bearer ${rhToken}`)
         .send({ newName: `${ROLE_NAME} (clone)` })
         .expect(201);
       expect(res.body.permissions.some((p: any) => p.id === permissionId)).toBe(true);
+
+      const original = await request(app.getHttpServer())
+        .get(`/acl/roles/${roleId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(original.body.permissions.some((p: any) => p.id === permissionId)).toBe(true);
     });
   });
 

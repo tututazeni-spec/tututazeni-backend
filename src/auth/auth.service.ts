@@ -11,6 +11,7 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto, RegisterDto, ChangePasswordDto } from './auth.dto';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
+import { withFlatPermissions } from '../common/utils/role-permissions';
 
 // A10-24: um refresh token não usado há mais tempo do que isto é tratado
 // como sessão inactiva — a cadeia é revogada mesmo que o token em si ainda
@@ -40,7 +41,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: {
-        role: { include: { permissions: true } },
+        role: { include: { rolePermissions: { include: { permission: true } } } },
       },
       // password é omitido por omissão (src/prisma/prisma.service.ts) — precisamos
       // dele aqui para o bcrypt.compare abaixo.
@@ -70,7 +71,8 @@ export class AuthService {
         }),
       );
 
-    const { password: _, ...safeUser } = user;
+    const { password: _, ...rest } = user;
+    const safeUser = { ...rest, role: withFlatPermissions(user.role) };
     return { user: safeUser, ...tokens };
   }
 
@@ -145,7 +147,7 @@ export class AuthService {
     const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
       include: {
-        role: { include: { permissions: true } },
+        role: { include: { rolePermissions: { include: { permission: true } } } },
         unit: true,
         department: true,
         position: true,
@@ -155,8 +157,8 @@ export class AuthService {
       },
     });
     if (!user) throw new UnauthorizedException();
-    const { password: _, ...safeUser } = user;
-    return safeUser;
+    const { password: _, ...rest } = user;
+    return { ...rest, role: withFlatPermissions(user.role) };
   }
 
   private async persistRefreshToken(userId: number, refreshToken: string): Promise<void> {

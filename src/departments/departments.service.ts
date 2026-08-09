@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { flattenRolePermissions } from '../common/utils/role-permissions';
 import {
   CreateDepartmentDto,
   UpdateDepartmentDto,
@@ -465,25 +466,29 @@ export class RolesService {
   constructor(private prisma: PrismaService) {}
 
   async findAll() {
-    return this.prisma.read.role.findMany({
+    const roles = await this.prisma.read.role.findMany({
       include: {
-        permissions: true,
+        rolePermissions: { include: { permission: true } },
         _count: { select: { users: true } },
       },
       orderBy: { name: 'asc' },
     });
+    return roles.map(({ rolePermissions, ...r }) => ({
+      ...r,
+      permissions: flattenRolePermissions(rolePermissions),
+    }));
   }
 
   async findOne(id: number) {
     const r = await this.prisma.read.role.findUnique({
       where: { id },
       include: {
-        permissions: true,
         rolePermissions: { include: { permission: true } },
       },
     });
     if (!r) throw new NotFoundException('Role não encontrada');
-    return r;
+    const { rolePermissions, ...rest } = r;
+    return { ...rest, permissions: flattenRolePermissions(rolePermissions) };
   }
 
   async create(dto: DepartmentsCreateRoleDto) {
@@ -502,15 +507,17 @@ export class RolesService {
     return this.prisma.role.delete({ where: { id } });
   }
 
+  // Permission é um catálogo independente (M2M via RolePermission) — criar
+  // uma permissão não precisa de um role "dono". Se `dto.roleId` for
+  // fornecido, atribui-se de imediato via RolePermission; caso contrário
+  // fica só no catálogo, para atribuição posterior.
   async addPermission(dto: DepartmentsCreatePermissionDto) {
-    // Permission.roleId é obrigatório no schema (resquício de um design
-    // anterior à relação many-to-many via RolePermission, que é a que o ACL
-    // usa de facto). ADMIN é o dono lógico de todas as permissões.
-    const adminRole = await this.prisma.role.findFirst({ where: { name: 'ADMIN' } });
-    if (!adminRole) {
-      throw new Error("Role 'ADMIN' não encontrado — não é possível criar permissões sem ele");
+    const { roleId, ...data } = dto;
+    const permission = await this.prisma.permission.create({ data });
+    if (roleId) {
+      await this.prisma.rolePermission.create({ data: { roleId, permissionId: permission.id } });
     }
-    return this.prisma.permission.create({ data: { ...dto, roleId: adminRole.id } });
+    return permission;
   }
 
   async removePermission(permissionId: number) {
@@ -518,13 +525,13 @@ export class RolesService {
   }
 
   async assignPermissionToRole(roleId: number, permissionId: number) {
-    // RolePermission não tem @@unique([roleId, permissionId]) no schema —
-    // upsert por chave composta rebentava sempre ("Unknown argument").
-    const existing = await this.prisma.rolePermission.findFirst({
-      where: { roleId, permissionId },
+    // upsert por chave composta (roleId, permissionId) — idempotente desde
+    // que RolePermission ganhou @@unique([roleId, permissionId]).
+    return this.prisma.rolePermission.upsert({
+      where: { roleId_permissionId: { roleId, permissionId } },
+      create: { roleId, permissionId },
+      update: {},
     });
-    if (existing) return existing;
-    return this.prisma.rolePermission.create({ data: { roleId, permissionId } });
   }
 
   async revokePermissionFromRole(roleId: number, permissionId: number) {
