@@ -471,14 +471,14 @@ export class CompetencyMapService {
     });
 
     // Agrupar por skill: média, distribuição de níveis
-    type SkillGapAgg = {
+    interface SkillGapAgg {
       skillId: number;
       skillName: string;
       skillType: string;
       category: string | undefined;
       levels: number[];
       count: number;
-    };
+    }
     const bySkill: Record<number, SkillGapAgg> = {};
     for (const es of allEmployeeSkills) {
       const id = es.skillId;
@@ -519,7 +519,11 @@ export class CompetencyMapService {
     // Departamento summary
     // FIX: `es.user.employee` nunca existiu — grupo caía sempre em 'N/A'; o
     // campo real é `user.department.name` (agora incluído acima).
-    type DeptAgg = { department: string; totalAssessments: number; sumLevels: number };
+    interface DeptAgg {
+      department: string;
+      totalAssessments: number;
+      sumLevels: number;
+    }
     const deptSummary = allEmployeeSkills.reduce(
       (acc: Record<string, DeptAgg>, es) => {
         const dept = es.user.department?.name ?? 'N/A';
@@ -569,11 +573,11 @@ export class CompetencyMapService {
     });
 
     // Média por skill
-    type DeptSkillAgg = {
+    interface DeptSkillAgg {
       skill: (typeof allSkills)[number]['skill'];
       levels: number[];
       count: number;
-    };
+    }
     const bySkill: Record<number, DeptSkillAgg> = {};
     for (const s of allSkills) {
       if (!bySkill[s.skillId]) bySkill[s.skillId] = { skill: s.skill, levels: [], count: 0 };
@@ -638,7 +642,12 @@ export class CompetencyMapService {
     const { skills, gapAnalysis } = await this.getMap(userId);
 
     // Para radar chart: agrupar por tipo de skill
-    type RadarAgg = { type: string; current: number; required: number; count: number };
+    interface RadarAgg {
+      type: string;
+      current: number;
+      required: number;
+      count: number;
+    }
     const radarByType = Object.entries(
       skills.reduce(
         (acc: Record<string, RadarAgg>, s) => {

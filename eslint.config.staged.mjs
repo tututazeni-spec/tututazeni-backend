@@ -45,6 +45,7 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': 'off',
       '@typescript-eslint/no-duplicate-enum-values': 'off',
       '@typescript-eslint/no-unused-expressions': 'off',
+      '@typescript-eslint/consistent-type-definitions': ['error', 'interface'],
 
       'unused-imports/no-unused-imports': 'error',
       'unused-imports/no-unused-vars': [

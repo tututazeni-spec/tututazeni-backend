@@ -68,6 +68,14 @@ export default tseslint.config(
       '@typescript-eslint/require-await': 'off',
       '@typescript-eslint/no-unsafe-enum-comparison': 'off',
 
+      // Sub-projecto 5 do audit de type-safety: o código já usa quase
+      // exclusivamente `interface` para formas de objecto (confirmado —
+      // só havia 1 excepção em todo o src/). Esta regra torna essa
+      // convenção obrigatória daqui em diante; `type` continua livre para
+      // uniões, tuplos, mapped types, etc. (a regra só actua sobre
+      // `type X = { ... }`).
+      '@typescript-eslint/consistent-type-definitions': ['error', 'interface'],
+
       // Imports
       'unused-imports/no-unused-imports': 'error',
       'unused-imports/no-unused-vars': [

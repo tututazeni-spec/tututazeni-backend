@@ -266,12 +266,12 @@ export class SearchService {
     // sempre a nível do Prisma; o .catch() escondia-o silenciosamente,
     // tornando a pesquisa de documentos permanentemente muda (0 resultados,
     // sem erro visível) desde sempre.
-    type ArticleRow = {
+    interface ArticleRow {
       id: number;
       title: string;
       summary: string | null;
       category: { name: string } | null;
-    };
+    }
     const articles: ArticleRow[] = await (
       safeM(this.prisma, 'knowledgeArticle').findMany({
         where: {
