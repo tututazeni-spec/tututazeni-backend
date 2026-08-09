@@ -53,7 +53,7 @@ function computeRisk(
 // no cabeçalho do ficheiro sem espalhar `any` pelo resto da classe (ao
 // contrário de Feedback/OneOnOneMeeting acima, que eram modelos reais e o
 // wrapper genérico nunca teve razão de ser).
-type LeaderProfileDelegate = {
+interface LeaderProfileDelegate {
   upsert: (args: {
     where: { userId: number };
     create: Record<string, unknown>;
@@ -64,7 +64,7 @@ type LeaderProfileDelegate = {
     where: { userId: number };
     include?: Record<string, unknown>;
   }) => Promise<Record<string, unknown> | null>;
-};
+}
 
 function safeLeaderProfile(prisma: PrismaService): LeaderProfileDelegate {
   const delegate = (prisma as unknown as { leaderProfile?: LeaderProfileDelegate }).leaderProfile;

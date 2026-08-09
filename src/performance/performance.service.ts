@@ -782,6 +782,10 @@ export class PerformanceService {
     });
 
     // Montar grid 3x3
+    // interface aqui rebenta a emissão de .d.ts (declaration: true no tsconfig): TS exige
+    // poder "nomear" um interface usado no tipo de retorno inferido de um método público,
+    // mas um type alias local é livremente inlinable na declaração, logo não tem esse problema.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
     type GridEntry = {
       user: (typeof placements)[number]['user'];
       placement: (typeof placements)[number];
