@@ -445,6 +445,11 @@ export class AttendanceService {
       data: {
         userId,
         leaveType: dto.type,
+        // leaveTypeCode passou a obrigatório (project-innova-leave-type-enum-
+        // mismatch); este fluxo usa sempre um valor real do enum LeaveType
+        // (@IsEnum no DTO), nunca um código customizado — seguro usar
+        // dto.type directamente como string.
+        leaveTypeCode: dto.type,
         startDate: start,
         endDate: end,
         reason: dto.reason,

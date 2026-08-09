@@ -5593,7 +5593,13 @@ model LeaveRequest {
   id              Int                 @id @default(autoincrement())
   userId          Int
   user            User                @relation(fields: [userId], references: [id])
-  leaveType       LeaveType
+  // `leaveType` (enum fixo de 10 valores) tornou-se opcional — só é
+  // preenchido quando `leaveTypeCode` coincide literalmente com um dos 10
+  // membros; caso contrário fica null (código customizado). `leaveTypeCode`
+  // é agora obrigatório e é a chave real usada por todo o subsistema de
+  // saldo/pedidos. Ver project-innova-leave-type-enum-mismatch.
+  leaveType       LeaveType?
+  leaveTypeCode   String
   startDate       DateTime
   endDate         DateTime
   durationMode    DurationMode        @default(FULL_DAY)
@@ -5610,7 +5616,6 @@ model LeaveRequest {
   impactPreview   LeaveImpactPreview?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
-  leaveTypeCode   String?
   reviewNotes     String?
   reviewedById    Int?
   reviewedAt      DateTime?
@@ -5638,32 +5643,37 @@ model LeaveApproval {
 }
 
 model LeaveBalance {
-  id        Int       @id @default(autoincrement())
-  userId    Int
-  user      User      @relation(fields: [userId], references: [id])
-  leaveType LeaveType
-  balance   Float     @default(0)
-  used      Float     @default(0)
-  expiresAt DateTime?
-  updatedAt DateTime  @updatedAt
+  id            Int        @id @default(autoincrement())
+  userId        Int
+  user          User       @relation(fields: [userId], references: [id])
+  // Ver comentário em LeaveRequest — mesma troca de chave: leaveTypeCode
+  // (livre, de LeaveTypeConfig.code) é agora a chave real; leaveType (enum
+  // fixo) fica opcional, best-effort, só para compat com leitores antigos.
+  leaveType     LeaveType?
+  leaveTypeCode String
+  balance       Float      @default(0)
+  used          Float      @default(0)
+  expiresAt     DateTime?
+  updatedAt     DateTime   @updatedAt
 
-  @@unique([userId, leaveType])
+  @@unique([userId, leaveTypeCode])
 }
 
 model LeaveBalanceHistory {
-  id            Int       @id @default(autoincrement())
+  id            Int        @id @default(autoincrement())
   userId        Int
-  leaveType     LeaveType
+  leaveType     LeaveType?
+  leaveTypeCode String
   balanceBefore Float
   balanceAfter  Float
   change        Float
   reason        String
   requestId     Int?
   updatedById   Int
-  createdAt     DateTime  @default(now())
-  leaveTypeCode String?
+  createdAt     DateTime   @default(now())
 
   @@index([userId, leaveType])
+  @@index([userId, leaveTypeCode])
 }
 
 model LeaveDocument {
