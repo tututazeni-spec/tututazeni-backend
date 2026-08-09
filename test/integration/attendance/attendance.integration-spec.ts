@@ -15,7 +15,14 @@ describe('Attendance Integration', () => {
     }).compile();
 
     app = module.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        transformOptions: { enableImplicitConversion: true },
+      }),
+    );
     await app.init();
 
     employeeToken = await getToken(app.getHttpServer(), 'employee');
@@ -108,7 +115,9 @@ describe('Attendance Integration', () => {
 
   describe('POST /attendance/leaves', () => {
     it('employee pode solicitar licença → 201', async () => {
-      const futureStart = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const futureStart = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0];
       const futureEnd = new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       const res = await request(app.getHttpServer())

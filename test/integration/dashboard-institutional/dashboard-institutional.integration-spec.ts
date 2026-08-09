@@ -14,8 +14,8 @@ describe('Dashboard Institutional Integration', () => {
   let employeeToken: string;
   let rhToken: string;
 
-  let snapshotPeriod1 = '2026-01';
-  let snapshotPeriod2 = '2026-02';
+  const snapshotPeriod1 = '2026-01';
+  const snapshotPeriod2 = '2026-02';
   let widgetId: string;
 
   const pool = new Pool({ connectionString: TEST_DB_URL });
@@ -28,7 +28,14 @@ describe('Dashboard Institutional Integration', () => {
     }).compile();
 
     app = module.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        transformOptions: { enableImplicitConversion: true },
+      }),
+    );
     await app.init();
 
     employeeToken = await getToken(app.getHttpServer(), 'employee');
