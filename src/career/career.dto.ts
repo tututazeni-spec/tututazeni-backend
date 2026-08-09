@@ -13,7 +13,7 @@ import {
   IsNumber,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import {
   CareerPathType,
   VacancyType,
@@ -325,10 +325,14 @@ export class VacancyFilterDto {
   @Type(() => Number)
   departmentId?: number;
 
+  // @Type(() => Boolean) coage '?matchingOnly=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
   @ApiPropertyOptional({ description: 'Mostrar apenas vagas compatíveis com o meu perfil' })
   @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  @Type(() => Boolean)
   matchingOnly?: boolean;
 
   @ApiPropertyOptional({ default: 1 })
@@ -358,9 +362,13 @@ export class CareerAnalyticsFilterDto {
   @IsString()
   period?: string; // YYYY
 
+  // @Type(() => Boolean) coage '?includeRisk=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  @Type(() => Boolean)
   includeRisk?: boolean;
 }

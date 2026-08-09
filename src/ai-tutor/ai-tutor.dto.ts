@@ -11,7 +11,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 export enum TutorPersonality {
   PROFESSIONAL = 'PROFESSIONAL',
@@ -157,7 +157,15 @@ export class GenerateContentDto {
 
 export class AiSessionFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) courseId?: number;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) activeOnly?: boolean;
+  // @Type(() => Boolean) coage '?activeOnly=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  activeOnly?: boolean;
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @IsInt()

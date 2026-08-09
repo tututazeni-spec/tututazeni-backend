@@ -12,7 +12,7 @@ import {
   Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -135,7 +135,15 @@ export class SkillFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
   @ApiPropertyOptional() @IsOptional() @IsEnum(SkillType) type?: SkillType;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) categoryId?: number;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) active?: boolean;
+  // @Type(() => Boolean) coage '?active=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  active?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
 }

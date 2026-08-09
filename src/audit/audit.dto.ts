@@ -1,7 +1,7 @@
 // src/audit/audit.dto.ts
 import { IsString, IsInt, IsOptional, IsEnum, IsBoolean, IsDateString, Min } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { AuditStatus, RiskLevel as AuditSeverity } from '@prisma/client';
 
 export { AuditStatus, AuditSeverity };
@@ -75,10 +75,14 @@ export class AuditFilterDto {
   @IsDateString()
   to?: string;
 
+  // @Type(() => Boolean) coage '?criticalOnly=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
   @ApiPropertyOptional({ description: 'Apenas eventos críticos e altos' })
   @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  @Type(() => Boolean)
   criticalOnly?: boolean;
 
   @ApiPropertyOptional({ default: 1 })

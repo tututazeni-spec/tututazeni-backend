@@ -10,7 +10,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import {
   UnitType,
   PositionLevel,
@@ -77,10 +77,14 @@ export class DepartmentFilterDto {
   @IsString()
   search?: string;
 
+  // @Type(() => Boolean) coage '?active=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  @Type(() => Boolean)
   active?: boolean;
 
   @ApiPropertyOptional()
@@ -89,10 +93,14 @@ export class DepartmentFilterDto {
   @Type(() => Number)
   parentId?: number;
 
+  // @Type(() => Boolean) coage '?rootOnly=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
   @ApiPropertyOptional({ description: 'Apenas raiz (sem pai)' })
   @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  @Type(() => Boolean)
   rootOnly?: boolean;
 
   @ApiPropertyOptional({ default: 1 })

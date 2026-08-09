@@ -12,7 +12,7 @@ import {
   Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { IsStrongPassword } from '../common/validators/strong-password.decorator';
 import { AccountStatus, HrStatus } from '@prisma/client';
 
@@ -205,10 +205,14 @@ export class UserFilterDto {
   @IsEnum(HrStatus)
   hrStatus?: HrStatus;
 
+  // @Type(() => Boolean) coage '?active=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  @Type(() => Boolean)
   active?: boolean;
 
   @ApiPropertyOptional({ default: 1 })

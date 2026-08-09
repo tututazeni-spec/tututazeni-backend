@@ -12,7 +12,7 @@ import {
   ArrayMinSize,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { CourseLevel, CourseStatus, LessonType, QuizQuestionType } from '@prisma/client';
 
 export { CourseLevel, CourseStatus, LessonType, QuizQuestionType };
@@ -229,10 +229,14 @@ export class CourseFilterDto {
   @IsEnum(CourseStatus)
   status?: CourseStatus;
 
+  // @Type(() => Boolean) coage '?mandatory=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  @Type(() => Boolean)
   mandatory?: boolean;
 
   @ApiPropertyOptional()

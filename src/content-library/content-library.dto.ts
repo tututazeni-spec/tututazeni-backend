@@ -11,7 +11,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import {
   ContentFormat,
   ContentAssetStatus as ContentStatus,
@@ -81,9 +81,27 @@ export class ContentFilterDto {
   @IsEnum(ContentLevel)
   level?: ContentLevel;
   @ApiPropertyOptional() @IsOptional() @IsString() language?: string;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) mandatory?: boolean;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) hasCertification?: boolean;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) isMicrolearning?: boolean;
+  // Os 3 campos abaixo: @Type(() => Boolean) coage '?campo=false' para true —
+  // ver [[project-innova-boolean-query-filter-coercion]]. @Type(() => String)
+  // + @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  mandatory?: boolean;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  hasCertification?: boolean;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isMicrolearning?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) maxDuration?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() tag?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?:

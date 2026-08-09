@@ -14,7 +14,7 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { NotificationPriority, NotificationCategory, DigestFrequency } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -234,10 +234,16 @@ export class NotificationFilterDto {
   @IsEnum(NotificationPriority)
   priority?: NotificationPriority;
 
+  // @Type(() => Boolean) coage '?read=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
+  // Bug real e activo: o frontend (hooks/useNotificationsInbox.ts) envia
+  // read=false para o filtro "Não lidas" — sem este fix devolvia as lidas.
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  @Type(() => Boolean)
   read?: boolean;
 
   @ApiPropertyOptional({ default: 1 })

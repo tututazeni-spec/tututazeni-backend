@@ -15,7 +15,7 @@ import {
   Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import {
   DocCategoryType,
   DocSensitivity,
@@ -123,8 +123,21 @@ export class DocumentFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() tag?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) expiringSoon?: boolean;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) expired?: boolean;
+  // Os 2 campos abaixo: @Type(() => Boolean) coage '?campo=false' para true —
+  // ver [[project-innova-boolean-query-filter-coercion]]. @Type(() => String)
+  // + @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  expiringSoon?: boolean;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  expired?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Max(100) @Type(() => Number) limit?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?: string;
