@@ -2,6 +2,7 @@
 import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { Permission } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { flattenRolePermissions, withFlatPermissions } from '../common/utils/role-permissions';
 import {
   RolesPermissionsCreateRoleDto,
   RolesPermissionsUpdateRoleDto,
@@ -33,35 +34,27 @@ export class RolesPermissionsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  // Permission.roleId é uma FK obrigatória (single-owner), não M2M, apesar
-  // de connect/disconnect/set no relation "permissions" sugerirem o
-  // contrário — ver [[project-innova-acl-permission-ownership]] (mesmo
-  // padrão já encontrado e corrigido no módulo acl). ADMIN é o dono lógico
-  // por convenção de permissões "libertadas" de um role.
-  private async getAdminRoleId(): Promise<number> {
-    const adminRole = await this.prisma.role.findFirst({ where: { name: 'ADMIN' } });
-    if (!adminRole) {
-      throw new Error("Role 'ADMIN' não encontrado — não é possível libertar permissões sem ele");
-    }
-    return adminRole.id;
-  }
-
   // ══════════════════════════════════════════════════════
   // ROLES — CRUD
   // ══════════════════════════════════════════════════════
 
   async findAll() {
-    const roles = await this.prisma.read.role.findMany({
+    const rawRoles = await this.prisma.read.role.findMany({
       include: {
-        permissions: { select: { id: true, name: true, action: true, subject: true } },
+        rolePermissions: {
+          include: {
+            permission: { select: { id: true, name: true, action: true, subject: true } },
+          },
+        },
         _count: { select: { users: true } },
       },
       orderBy: { name: 'asc' },
     });
 
-    return roles.map(r => ({
+    return rawRoles.map(({ rolePermissions, ...r }) => ({
       ...r,
-      effectivePermissions: r.permissions.length,
+      permissions: flattenRolePermissions(rolePermissions),
+      effectivePermissions: rolePermissions.length,
       usersCount: r._count.users,
       // FIX (achado, não corrigido — precisa de migração/decisão de produto):
       // Role.isSystem/Role.priority NUNCA existiram no schema (confirmado —
@@ -79,7 +72,7 @@ export class RolesPermissionsService {
     const r = await this.prisma.read.role.findUnique({
       where: { id },
       include: {
-        permissions: true,
+        rolePermissions: { include: { permission: true } },
         users: {
           select: {
             id: true,
@@ -95,7 +88,8 @@ export class RolesPermissionsService {
       },
     });
     if (!r) throw new NotFoundException('Role não encontrado');
-    return r;
+    const { rolePermissions, ...rest } = r;
+    return { ...rest, permissions: flattenRolePermissions(rolePermissions) };
   }
 
   async create(dto: RolesPermissionsCreateRoleDto) {
@@ -103,17 +97,20 @@ export class RolesPermissionsService {
     if (exists) throw new ConflictException('Nome de role já existe');
 
     const { permissionIds, ...data } = dto;
-    const role = await this.prisma.role.create({
+    const created = await this.prisma.role.create({
       data: {
         name: data.name,
         description: data.description,
         code: data.code ?? data.name.toUpperCase().replace(/\s+/g, '_'),
-        permissions: permissionIds?.length
-          ? { connect: permissionIds.map(id => ({ id })) }
-          : undefined,
       },
-      include: { permissions: true },
     });
+    if (permissionIds?.length) {
+      await this.prisma.rolePermission.createMany({
+        data: permissionIds.map(permissionId => ({ roleId: created.id, permissionId })),
+        skipDuplicates: true,
+      });
+    }
+    const role = await this.findOne(created.id);
 
     await this.prisma.auditLog
       .create({
@@ -144,19 +141,17 @@ export class RolesPermissionsService {
     await this.findOne(id);
 
     const { permissionIds, ...data } = dto;
-    const updated = await this.prisma.role.update({
+    await this.prisma.role.update({
       where: { id },
       data: {
         ...(data.name && { name: data.name }),
         ...(data.description && { description: data.description }),
-        ...(permissionIds !== undefined && {
-          permissions: {
-            set: permissionIds.map(pid => ({ id: pid })),
-          },
-        }),
       },
-      include: { permissions: true },
     });
+    if (permissionIds !== undefined) {
+      await this.replacePermissionsForRole(id, permissionIds);
+    }
+    const updated = await this.findOne(id);
 
     await this.prisma.auditLog
       .create({
@@ -188,15 +183,10 @@ export class RolesPermissionsService {
       throw new ConflictException(
         `Role tem ${role._count.users} utilizador(es) atribuídos — reatribua antes de remover`,
       );
-    // Permission.roleId → Role é ON DELETE CASCADE: sem este guard, remover
-    // um role apagaria PERMANENTEMENTE todas as permissões que ele possui
-    // (não apenas a associação) — usa setRolePermissions(id, []) primeiro
-    // para libertar as permissões para o ADMIN antes de remover o role.
-    if (role.permissions.length > 0) {
-      throw new ConflictException(
-        `Role tem ${role.permissions.length} permissão(ões) associada(s) — reatribua-as (setRolePermissions) antes de remover, para não as perder em cascata`,
-      );
-    }
+    // RolePermission (não Permission) tem ON DELETE CASCADE em roleId — remover
+    // um role apaga só as linhas de associação, nunca as permissões em si
+    // (catálogo independente, M2M). Já não é preciso libertar permissões
+    // antes de remover, ao contrário do design anterior de FK single-owner.
 
     await this.prisma.role.delete({ where: { id } });
     await this.prisma.auditLog
@@ -221,6 +211,10 @@ export class RolesPermissionsService {
     return { message: 'Role removido com sucesso', roleName: role.name };
   }
 
+  // M2M via RolePermission: clonar cria novas linhas de associação para o
+  // clone — duplica de facto as permissões do role de origem, que mantém as
+  // suas. Antes disto (FK single-owner), "clonar" na prática roubava as
+  // permissões do role de origem.
   async cloneRole(id: number, newName: string) {
     const source = await this.findOne(id);
     const exists = await this.prisma.role.findFirst({ where: { name: newName } });
@@ -231,11 +225,14 @@ export class RolesPermissionsService {
         name: newName,
         code: newName.toUpperCase().replace(/\s+/g, '_'),
         description: `Clone de: ${source.name}`,
-        permissions: { connect: source.permissions.map(p => ({ id: p.id })) },
       },
-      include: { permissions: true },
     });
-    return clone;
+    if (source.permissions.length > 0) {
+      await this.prisma.rolePermission.createMany({
+        data: source.permissions.map(p => ({ roleId: clone.id, permissionId: p.id })),
+      });
+    }
+    return this.findOne(clone.id);
   }
 
   // ══════════════════════════════════════════════════════
@@ -244,11 +241,12 @@ export class RolesPermissionsService {
 
   async assignToUser(userId: number, roleId: number) {
     await this.findOne(roleId);
-    const user = await this.prisma.user.update({
+    const raw = await this.prisma.user.update({
       where: { id: userId },
       data: { roleId },
-      include: { role: { include: { permissions: true } } },
+      include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
     });
+    const user = { ...raw, role: withFlatPermissions(raw.role) };
 
     await this.prisma.notificationLog
       .create({
@@ -308,50 +306,54 @@ export class RolesPermissionsService {
 
   async addPermissionsToRole(roleId: number, permissionIds: number[]) {
     await this.findOne(roleId);
-    return this.prisma.role.update({
-      where: { id: roleId },
-      data: { permissions: { connect: permissionIds.map(id => ({ id })) } },
-      include: { permissions: true },
-    });
-  }
-
-  async removePermissionsFromRole(roleId: number, permissionIds: number[]) {
-    await this.findOne(roleId);
-    // disconnect numa relação obrigatória (Permission.roleId) rebenta sempre
-    // com "would violate the required relation" — reatribuir ao ADMIN em vez
-    // de desligar é o mesmo padrão já usado em acl.service.ts.
-    const adminRoleId = await this.getAdminRoleId();
-    await this.prisma.permission.updateMany({
-      where: { id: { in: permissionIds }, roleId },
-      data: { roleId: adminRoleId },
+    await this.prisma.rolePermission.createMany({
+      data: permissionIds.map(permissionId => ({ roleId, permissionId })),
+      skipDuplicates: true,
     });
     return this.findOne(roleId);
   }
 
-  async setRolePermissions(roleId: number, permissionIds: number[]) {
-    const role = await this.findOne(roleId);
-    // { permissions: { set: [...] } } implica um disconnect implícito de tudo
-    // o que já não está na nova lista — na relação obrigatória Permission.roleId
-    // isso rebenta exactamente da mesma forma que um disconnect explícito.
-    // Em vez disso, reatribui-se directamente pelo FK: o que sai vai para o
-    // ADMIN (dono lógico de permissões libertadas), o que entra passa a
-    // pertencer a este role.
-    const currentIds = role.permissions.map(p => p.id);
-    const toRelease = currentIds.filter(id => !permissionIds.includes(id));
+  // M2M via RolePermission: remover é um delete real da associação — a
+  // permissão continua a existir no catálogo, só deixa de pertencer a este
+  // role (antes, com Permission.roleId como FK obrigatória, "remover"
+  // reatribuía a permissão ao ADMIN em vez de a desligar de facto).
+  async removePermissionsFromRole(roleId: number, permissionIds: number[]) {
+    await this.findOne(roleId);
+    await this.prisma.rolePermission.deleteMany({
+      where: { roleId, permissionId: { in: permissionIds } },
+    });
+    return this.findOne(roleId);
+  }
 
-    if (toRelease.length) {
-      const adminRoleId = await this.getAdminRoleId();
-      await this.prisma.permission.updateMany({
-        where: { id: { in: toRelease } },
-        data: { roleId: adminRoleId },
+  // Substitui o conjunto de permissões do role pela lista dada — diff entre
+  // o estado actual e o pedido, em vez de {set:[...]} (que na relação antiga
+  // implicava um disconnect implícito; aqui é só limpeza + inserção directa
+  // na tabela de associação).
+  private async replacePermissionsForRole(roleId: number, permissionIds: number[]) {
+    const current = await this.prisma.read.rolePermission.findMany({
+      where: { roleId },
+      select: { permissionId: true },
+    });
+    const currentIds = current.map(rp => rp.permissionId);
+    const toRemove = currentIds.filter(id => !permissionIds.includes(id));
+    const toAdd = permissionIds.filter(id => !currentIds.includes(id));
+
+    if (toRemove.length) {
+      await this.prisma.rolePermission.deleteMany({
+        where: { roleId, permissionId: { in: toRemove } },
       });
     }
-    if (permissionIds.length) {
-      await this.prisma.permission.updateMany({
-        where: { id: { in: permissionIds } },
-        data: { roleId },
+    if (toAdd.length) {
+      await this.prisma.rolePermission.createMany({
+        data: toAdd.map(permissionId => ({ roleId, permissionId })),
+        skipDuplicates: true,
       });
     }
+  }
+
+  async setRolePermissions(roleId: number, permissionIds: number[]) {
+    await this.findOne(roleId);
+    await this.replacePermissionsForRole(roleId, permissionIds);
     return this.findOne(roleId);
   }
 
@@ -360,12 +362,18 @@ export class RolesPermissionsService {
   // ══════════════════════════════════════════════════════
 
   async getPermissionMatrix() {
-    const [roles, permissions] = await Promise.all([
+    const [rawRoles, permissions] = await Promise.all([
       this.prisma.read.role.findMany({
-        include: { permissions: { select: { id: true, name: true } } },
+        include: {
+          rolePermissions: { include: { permission: { select: { id: true, name: true } } } },
+        },
       }),
       this.prisma.read.permission.findMany({ orderBy: [{ subject: 'asc' }, { action: 'asc' }] }),
     ]);
+    const roles = rawRoles.map(({ rolePermissions, ...r }) => ({
+      ...r,
+      permissions: flattenRolePermissions(rolePermissions),
+    }));
 
     // Group permissions by subject
     const grouped: Record<string, Permission[]> = {};
@@ -418,11 +426,12 @@ export class RolesPermissionsService {
   // ══════════════════════════════════════════════════════
 
   async simulatePermission(dto: SimulatePermissionDto) {
-    const user = await this.prisma.read.user.findUnique({
+    const raw = await this.prisma.read.user.findUnique({
       where: { id: dto.userId },
-      include: { role: { include: { permissions: true } } },
+      include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
     });
-    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (!raw) throw new NotFoundException('Utilizador não encontrado');
+    const user = { ...raw, role: withFlatPermissions(raw.role) };
 
     const rolePerms = user.role?.permissions ?? [];
     const permName = `${dto.resource.toLowerCase()}:${dto.action.toLowerCase()}`;

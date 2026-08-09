@@ -945,7 +945,6 @@ model Role {
   name            String           @unique
   description     String?          @db.Text
   users           User[]
-  permissions     Permission[]
   code            String?          @unique
   rolePermissions RolePermission[]
   roleTemplates   RoleTemplate[]
@@ -982,13 +981,18 @@ enum PermissionSubject {
   HR
 }
 
+// Permission é um catálogo reutilizável, independente de qualquer role —
+// a associação real vive inteiramente em RolePermission (M2M). Antes tinha
+// um roleId obrigatório (FK 1:N de dono único) que código em 3 módulos
+// (acl, roles-permissions, departments) tratava como M2M via connect/
+// disconnect/set — revoke sempre rebentava, clone roubava em vez de
+// duplicar, remover um role cascade-apagava as permissões que possuía.
+// Ver memory project-innova-acl-permission-ownership.
 model Permission {
   id              Int               @id @default(autoincrement())
   name            String            @unique
   action          PermissionAction
   subject         PermissionSubject
-  roleId          Int
-  role            Role              @relation(fields: [roleId], references: [id], onDelete: Cascade)
   rolePermissions RolePermission[]
 
   @@index([action])
@@ -1001,6 +1005,8 @@ model RolePermission {
   permissionId Int
   role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
 }
 
 model RoleTemplate {

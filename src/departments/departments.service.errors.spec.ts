@@ -18,7 +18,7 @@ const mockPrisma = {
     delete: jest.fn(),
   },
   permission: { create: jest.fn() },
-  rolePermission: { upsert: jest.fn(), deleteMany: jest.fn() },
+  rolePermission: { create: jest.fn(), upsert: jest.fn(), deleteMany: jest.fn() },
   position: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
   careerPosition: { findUnique: jest.fn(), create: jest.fn() },
   positionCompetency: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
@@ -84,19 +84,23 @@ describe('RolesService — erros e invariantes', () => {
     expect(mockPrisma.role.create).not.toHaveBeenCalled();
   });
 
-  it('addPermission sem role ADMIN configurada lança erro explícito (invariante de sistema)', async () => {
-    mockPrisma.role.findFirst.mockResolvedValue(null);
-    await expect(service.addPermission({} as any)).rejects.toThrow(/ADMIN/);
-    expect(mockPrisma.permission.create).not.toHaveBeenCalled();
+  // M2M via RolePermission: addPermission já não exige (nem procura) uma role
+  // ADMIN implícita — cria a permissão no catálogo e só associa a um role se
+  // `dto.roleId` for explicitamente indicado (ver project-innova-acl-permission-ownership).
+  it('addPermission cria a permissão no catálogo sem role associada quando roleId não é indicado', async () => {
+    mockPrisma.permission.create.mockResolvedValue({ id: 1, name: 'x' });
+    const result = await service.addPermission({ name: 'x' } as any);
+    expect(mockPrisma.permission.create).toHaveBeenCalledWith({ data: { name: 'x' } });
+    expect(mockPrisma.rolePermission.create).not.toHaveBeenCalled();
+    expect(result).toEqual({ id: 1, name: 'x' });
   });
 
-  it('addPermission atribui a permissão à role ADMIN existente', async () => {
-    mockPrisma.role.findFirst.mockResolvedValue({ id: 3, name: 'ADMIN' });
-    mockPrisma.permission.create.mockResolvedValue({ id: 1 });
-    await service.addPermission({ name: 'x' } as any);
-    expect(mockPrisma.permission.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ roleId: 3 }) }),
-    );
+  it('addPermission associa a permissão criada ao roleId indicado via RolePermission', async () => {
+    mockPrisma.permission.create.mockResolvedValue({ id: 1, name: 'x' });
+    await service.addPermission({ name: 'x', roleId: 3 } as any);
+    expect(mockPrisma.rolePermission.create).toHaveBeenCalledWith({
+      data: { roleId: 3, permissionId: 1 },
+    });
   });
 
   it('initDefaultRoles só cria as roles por omissão que ainda não existem', async () => {

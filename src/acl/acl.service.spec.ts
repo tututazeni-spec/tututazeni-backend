@@ -43,13 +43,16 @@ const mockPrisma = {
   },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
+  rolePermission: {
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
 };
 
 const baseRole = {
   id: 1,
   name: 'COLABORADOR',
   code: 'COLABORADOR',
-  permissions: [],
+  rolePermissions: [],
   users: [],
   _count: { users: 10 },
 };

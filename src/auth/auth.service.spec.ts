@@ -59,7 +59,7 @@ const baseUser = {
   fullName: 'Test User',
   password: 'hashed',
   active: true,
-  role: { id: 1, name: 'COLABORADOR', permissions: [] },
+  role: { id: 1, name: 'COLABORADOR', rolePermissions: [] },
   unit: null,
   department: null,
   position: null,

@@ -29,6 +29,11 @@ const mockPrisma: any = {
     findFirst: jest.fn().mockResolvedValue(null),
     findMany: jest.fn().mockResolvedValue([]),
   },
+  rolePermission: {
+    findMany: jest.fn().mockResolvedValue([]),
+    createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   user: {
     findMany: jest.fn().mockResolvedValue([]),
     findUnique: jest.fn().mockResolvedValue(null),
@@ -47,7 +52,7 @@ const baseRole = {
   description: 'Manager role',
   isSystem: false,
   priority: 10,
-  permissions: [{ id: 1, name: 'READ_USERS', action: 'read', subject: 'User' }],
+  rolePermissions: [{ permission: { id: 1, name: 'READ_USERS', action: 'read', subject: 'User' } }],
   users: [{ id: 1, fullName: 'João Silva', email: 'joao@innova.com', avatarUrl: null }],
   _count: { users: 5 },
 };
@@ -104,6 +109,7 @@ describe('RolesPermissionsService (additional)', () => {
     it('deve criar role', async () => {
       mockPrisma.role.findFirst.mockResolvedValue(null);
       mockPrisma.role.create.mockResolvedValue(baseRole);
+      mockPrisma.role.findUnique.mockResolvedValue(baseRole);
       const result = await service.create({ name: 'MANAGER', code: 'MANAGER' } as any);
       expect(result).toBeDefined();
     });
@@ -132,7 +138,9 @@ describe('RolesPermissionsService (additional)', () => {
     });
 
     it('actualiza mesmo quando o registo devolvido tem isSystem=true (campo nunca existiu no schema real — ver findAll())', async () => {
-      mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, isSystem: true });
+      mockPrisma.role.findUnique
+        .mockResolvedValueOnce({ ...baseRole, isSystem: true })
+        .mockResolvedValueOnce({ ...baseRole, name: 'Outro' });
       mockPrisma.role.update.mockResolvedValue({ ...baseRole, name: 'Outro' });
       const result = await service.update(1, { name: 'Outro' } as any);
       expect(result.name).toBe('Outro');
@@ -147,20 +155,27 @@ describe('RolesPermissionsService (additional)', () => {
         ...baseRole,
         _count: { users: 0 },
         isSystem: false,
-        permissions: [],
+        rolePermissions: [],
       });
       mockPrisma.role.delete.mockResolvedValue(baseRole);
       await service.remove(1);
       expect(mockPrisma.role.delete).toHaveBeenCalled();
     });
 
-    it('deve lançar ConflictException se role ainda tem permissões associadas (seriam eliminadas em cascata)', async () => {
+    // M2M via RolePermission: ON DELETE CASCADE agora incide sobre a linha de
+    // associação, não sobre a Permission do catálogo — remover um role que
+    // ainda tem permissões associadas já não é destrutivo, por isso deixou de
+    // haver guarda de bloqueio para este caso (ver remove() e a migração
+    // project-innova-acl-permission-ownership).
+    it('elimina role com sucesso mesmo com permissões associadas — cascata só remove RolePermission, nunca o catálogo', async () => {
       mockPrisma.role.findUnique.mockResolvedValue({
         ...baseRole,
         _count: { users: 0 },
         isSystem: false,
       });
-      await expect(service.remove(1)).rejects.toThrow(ConflictException);
+      mockPrisma.role.delete.mockResolvedValue(baseRole);
+      await service.remove(1);
+      expect(mockPrisma.role.delete).toHaveBeenCalledWith({ where: { id: 1 } });
     });
 
     it('deve lançar ConflictException se role tem utilizadores', async () => {
