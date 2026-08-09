@@ -14,7 +14,7 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 import { ScenarioCategory, Difficulty, AvatarSessionStatus as SessionStatus } from '@prisma/client';
 
@@ -102,7 +102,15 @@ export class UpdateAvatarDto {
 
 export class AvatarFilterDto {
   @ApiPropertyOptional({ enum: AvatarRole }) @IsOptional() @IsEnum(AvatarRole) role?: AvatarRole;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() @Type(() => Boolean) isPublic?: boolean;
+  // @Type(() => Boolean) coage '?isPublic=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isPublic?: boolean;
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @IsInt()
