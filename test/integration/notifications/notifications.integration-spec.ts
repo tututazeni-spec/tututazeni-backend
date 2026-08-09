@@ -15,7 +15,14 @@ describe('Notifications Integration', () => {
     }).compile();
 
     app = module.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        transformOptions: { enableImplicitConversion: true },
+      }),
+    );
     await app.init();
 
     employeeToken = await getToken(app.getHttpServer(), 'employee');
@@ -51,9 +58,7 @@ describe('Notifications Integration', () => {
     });
 
     it('sem token → 401', async () => {
-      await request(app.getHttpServer())
-        .get('/notifications/my/unread-count')
-        .expect(401);
+      await request(app.getHttpServer()).get('/notifications/my/unread-count').expect(401);
     });
   });
 

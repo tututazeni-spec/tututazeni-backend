@@ -16,7 +16,14 @@ describe('PDI (Development Plans) Integration', () => {
     }).compile();
 
     app = module.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        transformOptions: { enableImplicitConversion: true },
+      }),
+    );
     await app.init();
 
     employeeToken = await getToken(app.getHttpServer(), 'employee');
@@ -32,7 +39,9 @@ describe('PDI (Development Plans) Integration', () => {
         .set('Authorization', `Bearer ${employeeToken}`)
         .expect(200);
 
-      expect(Array.isArray(res.body) || res.body.data !== undefined || res.body.plans !== undefined).toBe(true);
+      expect(
+        Array.isArray(res.body) || res.body.data !== undefined || res.body.plans !== undefined,
+      ).toBe(true);
     });
 
     it('sem token → 401', async () => {
@@ -74,9 +83,7 @@ describe('PDI (Development Plans) Integration', () => {
       // Endpoint é @Roles('ADMIN','RH','GESTOR') e o DTO exige name, goal e
       // userId (não title/description) — plano criado para o employee
       const employeeId = Number(
-        JSON.parse(
-          Buffer.from(employeeToken.split('.')[1], 'base64').toString(),
-        ).sub,
+        JSON.parse(Buffer.from(employeeToken.split('.')[1], 'base64').toString()).sub,
       );
 
       const res = await request(app.getHttpServer())
