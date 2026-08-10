@@ -395,7 +395,24 @@ export class EngagementService {
       orderBy: { createdAt: 'desc' },
     });
 
-    if (!survey) return { enps: null, promoters: 0, passives: 0, detractors: 0, total: 0 };
+    // Forma tem de coincidir com o `return` normal abaixo — o frontend
+    // (components/engagement/OverviewTab.tsx) lê promoterPct/detractorPct
+    // sem guarda (`e.pct.toFixed(1)`), assumindo o tipo `number` declarado em
+    // DashboardData. Faltarem promoterPct/detractorPct/label aqui (BD vazia,
+    // sem nenhuma survey eNPS ACTIVE/COMPLETED) causava
+    // "Cannot read properties of undefined (reading 'toFixed')" no dashboard.
+    if (!survey) {
+      return {
+        enps: null,
+        promoters: 0,
+        passives: 0,
+        detractors: 0,
+        total: 0,
+        promoterPct: 0,
+        detractorPct: 0,
+        label: 'Sem dados',
+      };
+    }
 
     // FIX: casts desnecessários — `survey.responses`/`.answers` já vêm
     // tipados do `include` acima (responses → answers → question).
