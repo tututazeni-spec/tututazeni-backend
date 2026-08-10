@@ -275,6 +275,19 @@ describe('EngagementService', () => {
       const result = await service.getENPSScore();
       expect(result).toBeDefined();
     });
+
+    // Regressão: este ramo faltava promoterPct/detractorPct/label, que o
+    // frontend (OverviewTab.tsx) lê sem guarda — `e.pct.toFixed(1)` rebentava
+    // com "Cannot read properties of undefined (reading 'toFixed')" sempre
+    // que não existisse nenhuma survey eNPS ACTIVE/COMPLETED (ex.: BD vazia).
+    // A forma tem de coincidir com o `return` do caminho com dados.
+    it('deve incluir promoterPct/detractorPct/label mesmo sem survey eNPS', async () => {
+      engagementSurveyMock.findFirst.mockResolvedValue(null);
+      const result = (await service.getENPSScore()) as any;
+      expect(result.promoterPct).toBe(0);
+      expect(result.detractorPct).toBe(0);
+      expect(result.label).toBe('Sem dados');
+    });
   });
 
   // ─── submitMood ───────────────────────────────────────────────────────────
