@@ -184,7 +184,24 @@ export class AnalyticsService {
       },
     });
     const teamIds = team.map(u => u.id);
-    if (!teamIds.length) return { team: [], metrics: {}, alerts: [] };
+    if (!teamIds.length) {
+      return {
+        team: [],
+        metrics: {
+          headcount: 0,
+          enrollments: 0,
+          completions: 0,
+          completionRate: 0,
+          activePDIs: 0,
+          pdiAdoptionRate: 0,
+          avgPerformance: 0,
+          overdueActions: 0,
+        },
+        competencyGaps: [],
+        nineBox: [],
+        alerts: [],
+      };
+    }
 
     const [
       enrollments,

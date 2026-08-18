@@ -154,6 +154,27 @@ describe('AnalyticsService', () => {
       const result = await service.getManagerDashboard(1);
       expect(result).toBeDefined();
     });
+
+    it('sem membros de equipa activos deve devolver o shape completo (não {})', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      const result = await service.getManagerDashboard(1);
+      expect(result).toEqual({
+        team: [],
+        metrics: {
+          headcount: 0,
+          enrollments: 0,
+          completions: 0,
+          completionRate: 0,
+          activePDIs: 0,
+          pdiAdoptionRate: 0,
+          avgPerformance: 0,
+          overdueActions: 0,
+        },
+        competencyGaps: [],
+        nineBox: [],
+        alerts: [],
+      });
+    });
   });
 
   // ─── getPeopleAnalytics ───────────────────────────────────────────────────
