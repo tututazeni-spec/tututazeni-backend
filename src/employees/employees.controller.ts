@@ -11,6 +11,8 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Header,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
@@ -40,6 +42,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, CurrentUserData } from '../common/decorators';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Role } from '../auth/enums/role.enum';
+import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -75,6 +78,34 @@ export class EmployeesController {
   async exportAll(@Query() filters: EmployeeFilterDto) {
     const data = await this.svc.exportEmployees(filters);
     return { data, count: data.length };
+  }
+
+  @Get('export/xlsx')
+  @Roles(Role.ADMIN, Role.RH)
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="colaboradores.xlsx"')
+  @ApiOperation({ summary: 'Exportar colaboradores como XLSX' })
+  async exportAllXlsx(@Query() filters: EmployeeFilterDto) {
+    const data = await this.svc.exportEmployees(filters);
+    const buffer = await buildXlsxBuffer(
+      data,
+      [
+        'matricula',
+        'name',
+        'email',
+        'role',
+        'department',
+        'seniority',
+        'status',
+        'joinedAt',
+        'contractType',
+        'workMode',
+        'location',
+        'manager',
+      ],
+      'Colaboradores',
+    );
+    return new StreamableFile(buffer);
   }
 
   @Get('org-chart')

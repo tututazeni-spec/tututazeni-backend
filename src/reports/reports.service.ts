@@ -7,6 +7,7 @@ import { sanitizeForLog } from '../common/logging/sanitize';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import type { CurrentUserData } from '../common/decorators';
+import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS
@@ -1037,6 +1038,14 @@ export class ReportsService {
         .join(','),
     );
     return [headers.join(','), ...rows].join('\n');
+  }
+
+  async exportToXlsx<T extends Record<string, unknown>>(
+    data: T[],
+    headers: (keyof T & string)[],
+    sheetName = 'Relatório',
+  ): Promise<Buffer> {
+    return buildXlsxBuffer(data, headers, sheetName);
   }
 
   // ══════════════════════════════════════════════════════
