@@ -10,6 +10,7 @@ import {
   ParseIntPipe,
   UseGuards,
   Header,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
@@ -246,5 +247,51 @@ export class ReportsController {
       type: r.type,
     }));
     return this.svc.exportToCsv(rows, ['name', 'department', 'position', 'score', 'type']);
+  }
+
+  // ─── XLSX Export ──────────────────────────────────────────────
+
+  @Get('export/skill-gap-xlsx')
+  @Roles(...ALL_MGMT)
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="skill-gap.xlsx"')
+  @ApiOperation({ summary: 'Exportar gaps de competências como XLSX' })
+  async exportSkillGapXlsx(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.skillGapReport(filter);
+    const rows = data.skills.map(s => ({
+      skill: s.competency?.name,
+      type: s.competency?.type,
+      users: s.count,
+      usersWithGap: s.usersWithGap,
+      avgGap: s.avgGap,
+    }));
+    const buffer = await this.svc.exportToXlsx(
+      rows,
+      ['skill', 'type', 'users', 'usersWithGap', 'avgGap'],
+      'Lacunas de Competências',
+    );
+    return new StreamableFile(buffer);
+  }
+
+  @Get('export/performance-xlsx')
+  @Roles(...ALL_MGMT)
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="performance.xlsx"')
+  @ApiOperation({ summary: 'Exportar relatório de performance como XLSX' })
+  async exportPerfXlsx(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.performanceReportFull(filter);
+    const rows = data.topPerformers.map(r => ({
+      name: r.user?.fullName,
+      department: r.user?.department?.name,
+      position: r.user?.position?.name,
+      score: r.score,
+      type: r.type,
+    }));
+    const buffer = await this.svc.exportToXlsx(
+      rows,
+      ['name', 'department', 'position', 'score', 'type'],
+      'Performance',
+    );
+    return new StreamableFile(buffer);
   }
 }
