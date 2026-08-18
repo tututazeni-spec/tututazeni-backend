@@ -1066,15 +1066,15 @@ export class ReportsService {
     // Training insights
     if (training.summary.completionRate < 60)
       insights.push({
-        type: 'LEARNING',
-        severity: 'HIGH',
+        type: 'APRENDIZADO',
+        severity: 'ALTO',
         message: `Taxa de conclusão de cursos baixa: ${training.summary.completionRate}%`,
         recommendation: 'Identificar cursos com alta taxa de abandono e reavaliar o conteúdo',
       });
 
     if (training.summary.abandonment > 25)
       insights.push({
-        type: 'LEARNING',
+        type: 'APRENDIZADO',
         severity: 'MEDIUM',
         message: `Taxa de abandono elevada: ${training.summary.abandonment}%`,
         recommendation: 'Considerar cursos mais curtos (microlearning) para aumentar conclusão',
@@ -1085,7 +1085,7 @@ export class ReportsService {
     if (atRiskCount > 0)
       insights.push({
         type: 'PERFORMANCE',
-        severity: 'HIGH',
+        severity: 'ALTO',
         message: `${atRiskCount} colaborador(es) com performance abaixo de 2.5`,
         recommendation: 'Agendar 1:1 e criar PDI de melhoria urgente',
       });
@@ -1093,7 +1093,7 @@ export class ReportsService {
     if ((performance.summary.avgScore ?? 0) < 3)
       insights.push({
         type: 'PERFORMANCE',
-        severity: 'MEDIUM',
+        severity: 'MÉDIO',
         message: `Score médio organizacional abaixo de 3.0: ${performance.summary.avgScore}`,
         recommendation: 'Rever programas de desenvolvimento e metas',
       });
@@ -1101,27 +1101,27 @@ export class ReportsService {
     // Talent insights
     if (talent.summary.pdpCoverage < 40)
       insights.push({
-        type: 'TALENT',
-        severity: 'HIGH',
+        type: 'TALENTO',
+        severity: 'ALTO',
         message: `Apenas ${talent.summary.pdpCoverage}% dos colaboradores têm PDI activo`,
         recommendation: 'Lançar campanha de criação de PDIs com apoio dos gestores',
       });
 
     if (talent.summary.succession < 5)
       insights.push({
-        type: 'TALENT',
-        severity: 'MEDIUM',
-        message: 'Pipeline de sucessão insuficiente',
+        type: 'TALENTO',
+        severity: 'MÉDIO',
+        message: 'Plano de Sucessão insuficiente',
         recommendation: 'Identificar e preparar sucessores para posições críticas',
       });
 
     // Engagement insights
     if (engagement.summary.participationRate < 50)
       insights.push({
-        type: 'ENGAGEMENT',
-        severity: 'MEDIUM',
-        message: `Taxa de participação em surveys abaixo de 50%: ${engagement.summary.participationRate}%`,
-        recommendation: 'Simplificar surveys e comunicar importância da participação',
+        type: 'ENGAJAMENTO',
+        severity: 'MÉDIO',
+        message: `Taxa de participação em Inquéritos abaixo de 50%: ${engagement.summary.participationRate}%`,
+        recommendation: 'Simplificar Inquéritos e comunicar importância da participação',
       });
 
     return { insights, generatedAt: new Date(), count: insights.length };
@@ -1134,9 +1134,9 @@ export class ReportsService {
   private buildTurnoverInsights(rate: number, left: number): string[] {
     const out = [];
     if (rate > 20)
-      out.push(`🚨 Taxa de turnover crítica: ${rate}% — investigar causas urgentemente`);
-    else if (rate > 10) out.push(`⚠️ Turnover acima da média de mercado: ${rate}%`);
-    else out.push(`✅ Turnover dentro do esperado: ${rate}%`);
+      out.push(`🚨 Taxa de rotatividade crítica: ${rate}% — investigar causas urgentemente`);
+    else if (rate > 10) out.push(`⚠️ Rotatividade acima da média de mercado: ${rate}%`);
+    else out.push(`✅ Rotatividade dentro do esperado: ${rate}%`);
     if (left > 0) out.push(`${left} colaborador(es) saíram no período`);
     return out;
   }
