@@ -215,6 +215,126 @@ export class ReportsController {
 
   // ─── CSV Export ───────────────────────────────────────────────
 
+  @Get('export/headcount-csv')
+  @Roles(...ALL_MGMT)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="headcount.csv"')
+  @ApiOperation({ summary: 'Exportar headcount como CSV' })
+  async exportHeadcountCsv(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.headcountReport(filter);
+    const rows = [
+      ...data.byDepartment.map(d => ({ grupo: 'Departamento', nome: d.name, quantidade: d.count })),
+      ...data.byPosition.map(p => ({ grupo: 'Cargo', nome: p.name, quantidade: p.count })),
+    ];
+    return this.svc.exportToCsv(rows, ['grupo', 'nome', 'quantidade']);
+  }
+
+  @Get('export/turnover-csv')
+  @Roles(...ALL_MGMT)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="turnover.csv"')
+  @ApiOperation({ summary: 'Exportar turnover como CSV' })
+  async exportTurnoverCsv(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.turnoverReport(filter);
+    return this.svc.exportToCsv(
+      [data.summary],
+      ['total', 'inactive', 'newInPeriod', 'leftInPeriod', 'turnoverRate', 'retentionRate'],
+    );
+  }
+
+  @Get('export/training-csv')
+  @Roles(...ALL_MGMT)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="training.csv"')
+  @ApiOperation({ summary: 'Exportar relatório de formação como CSV' })
+  async exportTrainingCsv(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.trainingReportFull(filter);
+    const rows = data.topCourses.map(c => ({
+      curso: c.course?.title,
+      categoria: c.course?.category,
+      inscricoes: c.enrollments,
+      conclusoes: c.completions,
+      taxaConclusao: c.completionRate,
+    }));
+    return this.svc.exportToCsv(rows, [
+      'curso',
+      'categoria',
+      'inscricoes',
+      'conclusoes',
+      'taxaConclusao',
+    ]);
+  }
+
+  @Get('export/engagement-csv')
+  @Roles(...ALL_MGMT)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="engagement.csv"')
+  @ApiOperation({ summary: 'Exportar relatório de envolvimento como CSV' })
+  async exportEngagementCsv(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.engagementReport(filter);
+    const rows = data.surveys.map(s => ({
+      titulo: s.title,
+      tipo: s.type,
+      respostas: s.responses,
+      scoreMedio: s.avgScore,
+    }));
+    return this.svc.exportToCsv(rows, ['titulo', 'tipo', 'respostas', 'scoreMedio']);
+  }
+
+  @Get('export/talent-csv')
+  @Roles(...ALL_MGMT)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="talent.csv"')
+  @ApiOperation({ summary: 'Exportar relatório de talento como CSV' })
+  async exportTalentCsv(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.talentReport(filter);
+    const rows = data.successionPlans.map(sp => ({
+      cargo: sp.position?.name,
+      nivel: sp.position?.level,
+      candidato: sp.candidate?.fullName,
+      preparacao: sp.readiness,
+    }));
+    return this.svc.exportToCsv(rows, ['cargo', 'nivel', 'candidato', 'preparacao']);
+  }
+
+  @Get('export/compliance-csv')
+  @Roles(...ADMIN)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="compliance.csv"')
+  @ApiOperation({ summary: 'Exportar relatório de compliance como CSV' })
+  async exportComplianceCsv(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.complianceReport(filter);
+    const rows = data.recentCertifications.map(c => ({
+      colaborador: c.user?.fullName,
+      departamento: c.user?.department?.name,
+      tipo: c.type,
+      codigo: c.code,
+      emitidoEm: c.issuedAt,
+    }));
+    return this.svc.exportToCsv(rows, [
+      'colaborador',
+      'departamento',
+      'tipo',
+      'codigo',
+      'emitidoEm',
+    ]);
+  }
+
+  @Get('export/usage-csv')
+  @Roles(...ADMIN)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="usage.csv"')
+  @ApiOperation({ summary: 'Exportar relatório de uso da plataforma como CSV' })
+  async exportUsageCsv(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.platformUsageReport(filter);
+    const rows = data.topContent.map(tc => ({
+      conteudo: tc.content?.title,
+      tipo: tc.content?.type,
+      visualizacoes: tc.views,
+    }));
+    return this.svc.exportToCsv(rows, ['conteudo', 'tipo', 'visualizacoes']);
+  }
+
   @Get('export/skill-gap-csv')
   @Roles(...ALL_MGMT)
   @Header('Content-Type', 'text/csv')
@@ -250,6 +370,142 @@ export class ReportsController {
   }
 
   // ─── XLSX Export ──────────────────────────────────────────────
+
+  @Get('export/headcount-xlsx')
+  @Roles(...ALL_MGMT)
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="headcount.xlsx"')
+  @ApiOperation({ summary: 'Exportar headcount como XLSX' })
+  async exportHeadcountXlsx(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.headcountReport(filter);
+    const rows = [
+      ...data.byDepartment.map(d => ({ grupo: 'Departamento', nome: d.name, quantidade: d.count })),
+      ...data.byPosition.map(p => ({ grupo: 'Cargo', nome: p.name, quantidade: p.count })),
+    ];
+    const buffer = await this.svc.exportToXlsx(rows, ['grupo', 'nome', 'quantidade'], 'Headcount');
+    return new StreamableFile(buffer);
+  }
+
+  @Get('export/turnover-xlsx')
+  @Roles(...ALL_MGMT)
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="turnover.xlsx"')
+  @ApiOperation({ summary: 'Exportar turnover como XLSX' })
+  async exportTurnoverXlsx(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.turnoverReport(filter);
+    const buffer = await this.svc.exportToXlsx(
+      [data.summary],
+      ['total', 'inactive', 'newInPeriod', 'leftInPeriod', 'turnoverRate', 'retentionRate'],
+      'Rotatividade',
+    );
+    return new StreamableFile(buffer);
+  }
+
+  @Get('export/training-xlsx')
+  @Roles(...ALL_MGMT)
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="training.xlsx"')
+  @ApiOperation({ summary: 'Exportar relatório de formação como XLSX' })
+  async exportTrainingXlsx(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.trainingReportFull(filter);
+    const rows = data.topCourses.map(c => ({
+      curso: c.course?.title,
+      categoria: c.course?.category,
+      inscricoes: c.enrollments,
+      conclusoes: c.completions,
+      taxaConclusao: c.completionRate,
+    }));
+    const buffer = await this.svc.exportToXlsx(
+      rows,
+      ['curso', 'categoria', 'inscricoes', 'conclusoes', 'taxaConclusao'],
+      'Formação',
+    );
+    return new StreamableFile(buffer);
+  }
+
+  @Get('export/engagement-xlsx')
+  @Roles(...ALL_MGMT)
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="engagement.xlsx"')
+  @ApiOperation({ summary: 'Exportar relatório de envolvimento como XLSX' })
+  async exportEngagementXlsx(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.engagementReport(filter);
+    const rows = data.surveys.map(s => ({
+      titulo: s.title,
+      tipo: s.type,
+      respostas: s.responses,
+      scoreMedio: s.avgScore,
+    }));
+    const buffer = await this.svc.exportToXlsx(
+      rows,
+      ['titulo', 'tipo', 'respostas', 'scoreMedio'],
+      'Envolvimento',
+    );
+    return new StreamableFile(buffer);
+  }
+
+  @Get('export/talent-xlsx')
+  @Roles(...ALL_MGMT)
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="talent.xlsx"')
+  @ApiOperation({ summary: 'Exportar relatório de talento como XLSX' })
+  async exportTalentXlsx(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.talentReport(filter);
+    const rows = data.successionPlans.map(sp => ({
+      cargo: sp.position?.name,
+      nivel: sp.position?.level,
+      candidato: sp.candidate?.fullName,
+      preparacao: sp.readiness,
+    }));
+    const buffer = await this.svc.exportToXlsx(
+      rows,
+      ['cargo', 'nivel', 'candidato', 'preparacao'],
+      'Talento',
+    );
+    return new StreamableFile(buffer);
+  }
+
+  @Get('export/compliance-xlsx')
+  @Roles(...ADMIN)
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="compliance.xlsx"')
+  @ApiOperation({ summary: 'Exportar relatório de compliance como XLSX' })
+  async exportComplianceXlsx(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.complianceReport(filter);
+    const rows = data.recentCertifications.map(c => ({
+      colaborador: c.user?.fullName,
+      departamento: c.user?.department?.name,
+      tipo: c.type,
+      codigo: c.code,
+      emitidoEm: c.issuedAt,
+    }));
+    const buffer = await this.svc.exportToXlsx(
+      rows,
+      ['colaborador', 'departamento', 'tipo', 'codigo', 'emitidoEm'],
+      'Compliance',
+    );
+    return new StreamableFile(buffer);
+  }
+
+  @Get('export/usage-xlsx')
+  @Roles(...ADMIN)
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="usage.xlsx"')
+  @ApiOperation({ summary: 'Exportar relatório de uso da plataforma como XLSX' })
+  async exportUsageXlsx(@Query() filter: ReportFilterDto) {
+    const data = await this.svc.platformUsageReport(filter);
+    const rows = data.topContent.map(tc => ({
+      conteudo: tc.content?.title,
+      tipo: tc.content?.type,
+      visualizacoes: tc.views,
+    }));
+    const buffer = await this.svc.exportToXlsx(
+      rows,
+      ['conteudo', 'tipo', 'visualizacoes'],
+      'Uso da Plataforma',
+    );
+    return new StreamableFile(buffer);
+  }
 
   @Get('export/skill-gap-xlsx')
   @Roles(...ALL_MGMT)
