@@ -506,8 +506,8 @@ export class ReportsService {
       surveys: surveyData,
       insights:
         participationRate < 50
-          ? ['⚠️ Taxa de participação abaixo de 50% — considerar incentivos']
-          : ['✅ Boa taxa de participação nos surveys'],
+          ? ['Taxa de participação abaixo de 50% — considerar incentivos']
+          : ['Boa taxa de participação nos surveys'],
       generatedAt: new Date(),
     };
   }
@@ -694,9 +694,9 @@ export class ReportsService {
       insights:
         mandatoryRate < 80
           ? [
-              `⚠️ Taxa de conclusão de formações obrigatórias: ${mandatoryRate}% — abaixo do mínimo recomendado (80%)`,
+              `Taxa de conclusão de formações obrigatórias: ${mandatoryRate}% — abaixo do mínimo recomendado (80%)`,
             ]
-          : [`✅ Conformidade de formações obrigatórias: ${mandatoryRate}%`],
+          : [`Conformidade de formações obrigatórias: ${mandatoryRate}%`],
       generatedAt: new Date(),
     };
   }
@@ -1133,30 +1133,29 @@ export class ReportsService {
 
   private buildTurnoverInsights(rate: number, left: number): string[] {
     const out = [];
-    if (rate > 20)
-      out.push(`🚨 Taxa de turnover crítica: ${rate}% — investigar causas urgentemente`);
-    else if (rate > 10) out.push(`⚠️ Turnover acima da média de mercado: ${rate}%`);
-    else out.push(`✅ Turnover dentro do esperado: ${rate}%`);
+    if (rate > 20) out.push(`Taxa de turnover crítica: ${rate}% — investigar causas urgentemente`);
+    else if (rate > 10) out.push(`Turnover acima da média de mercado: ${rate}%`);
+    else out.push(`Turnover dentro do esperado: ${rate}%`);
     if (left > 0) out.push(`${left} colaborador(es) saíram no período`);
     return out;
   }
 
   private buildTrainingInsights(completionRate: number, abandonment: number): string[] {
     const out = [];
-    if (completionRate >= 80) out.push(`✅ Taxa de conclusão excelente: ${completionRate}%`);
+    if (completionRate >= 80) out.push(`Taxa de conclusão excelente: ${completionRate}%`);
     else if (completionRate >= 60)
-      out.push(`⚠️ Taxa de conclusão aceitável: ${completionRate}% — há margem de melhoria`);
-    else out.push(`🚨 Taxa de conclusão baixa: ${completionRate}% — rever conteúdo e metodologia`);
+      out.push(`Taxa de conclusão aceitável: ${completionRate}% — há margem de melhoria`);
+    else out.push(`Taxa de conclusão baixa: ${completionRate}% — rever conteúdo e metodologia`);
     if (abandonment > 25)
-      out.push(`⚠️ Alta taxa de abandono (${abandonment}%) — considerar microlearning`);
+      out.push(`Alta taxa de abandono (${abandonment}%) — considerar microlearning`);
     return out;
   }
 
   private buildPerformanceInsights(avg: number, atRisk: number, total: number): string[] {
     const out = [];
-    if (avg >= 4) out.push(`✅ Excelente performance média da organização: ${avg}/5`);
+    if (avg >= 4) out.push(`Excelente performance média da organização: ${avg}/5`);
     else if (avg >= 3) out.push(`Score médio na faixa aceitável: ${avg}/5`);
-    else out.push(`⚠️ Score médio abaixo do esperado: ${avg}/5 — acção necessária`);
+    else out.push(`Score médio abaixo do esperado: ${avg}/5 — acção necessária`);
     if (atRisk > 0)
       out.push(`${atRisk} colaborador(es) (${pct(atRisk, total)}%) com performance crítica`);
     return out;
@@ -1171,10 +1170,10 @@ export class ReportsService {
     const out = [];
     const hiPoRatio = pct(hiPos, total);
     if (hiPoRatio >= 15)
-      out.push(`🌟 Alto índice de High Potentials: ${hiPoRatio}% da força de trabalho`);
+      out.push(`Alto índice de High Potentials: ${hiPoRatio}% da força de trabalho`);
     else if (hiPoRatio > 0) out.push(`${hiPos} High Potential(s) identificados (${hiPoRatio}%)`);
-    if (pdpCoverage < 40) out.push(`⚠️ Baixa cobertura de PDI: ${pdpCoverage}%`);
-    if (succession < 3) out.push(`⚠️ Pipeline de sucessão insuficiente: ${succession} plano(s)`);
+    if (pdpCoverage < 40) out.push(`Baixa cobertura de PDI: ${pdpCoverage}%`);
+    if (succession < 3) out.push(`Pipeline de sucessão insuficiente: ${succession} plano(s)`);
     return out;
   }
 
