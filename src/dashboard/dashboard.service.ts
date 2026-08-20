@@ -1061,13 +1061,13 @@ export class DashboardService {
   }): string[] {
     const insights: string[] = [];
     if (data.hiPoCount > 0)
-      insights.push(`🌟 ${data.hiPoCount} colaboradores identificados como High Potential`);
+      insights.push(`${data.hiPoCount} colaboradores identificados como High Potential`);
     if (data.successionCoverage < 50)
-      insights.push(`⚠️ Cobertura de sucessão abaixo de 50% — risco organizacional`);
+      insights.push(`Cobertura de sucessão abaixo de 50% — risco organizacional`);
     if (data.activePlans / (data.totalUsers || 1) < 0.4)
-      insights.push(`📋 Menos de 40% dos colaboradores têm PDI activo`);
+      insights.push(`Menos de 40% dos colaboradores têm PDI activo`);
     if (data.completionsNow > 0)
-      insights.push(`✅ ${data.completionsNow} conclusões de cursos no período`);
+      insights.push(`${data.completionsNow} conclusões de cursos no período`);
     return insights;
   }
 
