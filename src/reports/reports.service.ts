@@ -1133,8 +1133,7 @@ export class ReportsService {
 
   private buildTurnoverInsights(rate: number, left: number): string[] {
     const out = [];
-    if (rate > 20)
-      out.push(`Taxa de turnover crítica: ${rate}% — investigar causas urgentemente`);
+    if (rate > 20) out.push(`Taxa de turnover crítica: ${rate}% — investigar causas urgentemente`);
     else if (rate > 10) out.push(`Turnover acima da média de mercado: ${rate}%`);
     else out.push(`Turnover dentro do esperado: ${rate}%`);
     if (left > 0) out.push(`${left} colaborador(es) saíram no período`);
