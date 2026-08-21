@@ -85,8 +85,8 @@ describe('CoursesService', () => {
       const result = await service.findAll({ page: 1, limit: 20 });
 
       expect(result.data).toHaveLength(1);
-      expect(result.total).toBe(1);
-      expect(result.totalPages).toBe(1);
+      expect(result.meta.total).toBe(1);
+      expect(result.meta.totalPages).toBe(1);
     });
 
     it('deve filtrar por search, category e status', async () => {

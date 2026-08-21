@@ -8,6 +8,7 @@
 } from '@nestjs/common';
 import { CertificateType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import {
   CreateCourseDto,
   UpdateCourseDto,
@@ -49,7 +50,7 @@ export class CoursesService {
       mandatory,
       departmentId,
     } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.CourseWhereInput = {};
     if (status) where.status = status;
@@ -70,14 +71,14 @@ export class CoursesService {
       this.prisma.read.course.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: COURSE_BASE_INCLUDE,
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.read.course.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: number) {

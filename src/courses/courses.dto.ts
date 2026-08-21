@@ -14,6 +14,7 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { CourseLevel, CourseStatus, LessonType, QuizQuestionType } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 export { CourseLevel, CourseStatus, LessonType, QuizQuestionType };
 
@@ -208,7 +209,7 @@ export class MarkLessonCompleteDto {
   resumePosition?: number;
 }
 
-export class CourseFilterDto {
+export class CourseFilterDto extends BaseFilterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -244,18 +245,6 @@ export class CourseFilterDto {
   @IsInt()
   @Type(() => Number)
   departmentId?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsInt()
-  @Type(() => Number)
-  page?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsInt()
-  @Type(() => Number)
-  limit?: number;
 }
 
 export class EnrollDto {

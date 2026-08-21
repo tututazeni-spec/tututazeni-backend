@@ -8,13 +8,12 @@ import {
   IsArray,
   MaxLength,
   IsDateString,
-  Min,
-  Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { IsStrongPassword } from '../common/validators/strong-password.decorator';
 import { AccountStatus, HrStatus } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 export { AccountStatus, HrStatus };
 
@@ -159,7 +158,7 @@ export class UpdateProfileDto {
   linkedinUrl?: string;
 }
 
-export class UserFilterDto {
+export class UserFilterDto extends BaseFilterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -214,21 +213,6 @@ export class UserFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   active?: boolean;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  @Type(() => Number)
-  limit?: number;
 }
 
 export class BulkActionDto {

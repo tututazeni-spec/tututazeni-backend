@@ -16,6 +16,7 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { NotificationPriority, NotificationCategory, DigestFrequency } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -218,7 +219,7 @@ export class UpdatePreferencesDto {
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
-export class NotificationFilterDto {
+export class NotificationFilterDto extends BaseFilterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -245,20 +246,6 @@ export class NotificationFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   read?: boolean;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── ReadBulkDto ─────────────────────────────────────────────────────────────

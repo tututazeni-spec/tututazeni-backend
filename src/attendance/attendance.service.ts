@@ -484,7 +484,7 @@ export class AttendanceService {
 
   async getLeaves(filters: AttendanceLeaveFilterDto) {
     const { page = 1, limit = 20, userId, type, status, from, to } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LeaveRequestWhereInput = {};
     if (userId) where.userId = userId;
     if (type) where.leaveType = type;
@@ -499,7 +499,7 @@ export class AttendanceService {
       this.prisma.read.leaveRequest.findMany({
         where,
         skip,
-        take: limit,
+        take,
         orderBy: { createdAt: 'desc' },
         include: {
           // FIX: removed reviewedBy (does not exist on LeaveRequest); kept user only
@@ -509,7 +509,7 @@ export class AttendanceService {
       this.prisma.read.leaveRequest.count({ where }),
     ]);
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async getLeaveBalance(userId: number) {

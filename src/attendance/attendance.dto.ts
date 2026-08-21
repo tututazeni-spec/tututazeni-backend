@@ -1,6 +1,5 @@
 // ─── src/attendance/attendance.dto.ts ────────────────────────────────────────
 import {
-  Max,
   IsInt,
   IsOptional,
   IsString,
@@ -13,6 +12,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import {
   AttendanceStatus,
   CheckInMethod,
@@ -207,7 +207,7 @@ export class CreateAdjustmentDto {
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
-export class AttendanceFilterDto {
+export class AttendanceFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
@@ -216,18 +216,14 @@ export class AttendanceFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsEnum(AttendanceContext) context?: AttendanceContext;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) eventId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) courseId?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Max(100) @Type(() => Number) limit?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortOrder?: 'asc' | 'desc';
 }
 
-export class AttendanceLeaveFilterDto {
+export class AttendanceLeaveFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
   @ApiPropertyOptional() @IsOptional() @IsEnum(LeaveType) type?: LeaveType;
   @ApiPropertyOptional() @IsOptional() @IsEnum(LeaveStatus) status?: LeaveStatus;
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Max(100) @Type(() => Number) limit?: number;
 }

@@ -11,6 +11,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -96,7 +97,7 @@ export class UsersService {
       hrStatus,
       active,
     } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.UserWhereInput = {};
 
@@ -122,7 +123,7 @@ export class UsersService {
       this.prisma.read.user.findMany({
         where,
         skip,
-        take: limit,
+        take,
         select: {
           ...USER_SELECT_SAFE,
           role: { select: { id: true, name: true } },
@@ -137,7 +138,7 @@ export class UsersService {
       this.prisma.read.user.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   // ─── DETALHE ──────────────────────────────────────────────────────────────
@@ -642,18 +643,18 @@ export class UsersService {
   }
 
   async getAuditLogs(userId: number, page = 1, limit = 30) {
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await Promise.all([
       this.prisma.read.userAuditLog.findMany({
         where: { userId },
         skip,
-        take: limit,
+        take,
         include: { performedBy: { select: { id: true, fullName: true } } },
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.read.userAuditLog.count({ where: { userId } }),
     ]);
-    return { data, total, page, limit };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   // ─── DASHBOARD DO ADMIN ───────────────────────────────────────────────────
