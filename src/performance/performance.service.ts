@@ -8,6 +8,7 @@
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import {
   PerformanceCreateCycleDto,
   CreatePerformanceReviewDto,
@@ -130,7 +131,7 @@ export class PerformanceService {
 
   async findAll(filters: PerformanceFilterDto) {
     const { page = 1, limit = 20, userId, cycleId, status, type } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.PerformanceReviewWhereInput = {};
     if (userId) where.userId = userId;
@@ -142,7 +143,7 @@ export class PerformanceService {
       this.prisma.read.performanceReview.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: {
           user: {
             select: { id: true, fullName: true, email: true, position: { select: { name: true } } },
@@ -155,7 +156,7 @@ export class PerformanceService {
       this.prisma.read.performanceReview.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: number, user?: CurrentUserData) {

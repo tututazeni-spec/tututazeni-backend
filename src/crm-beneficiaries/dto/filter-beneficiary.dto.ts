@@ -1,9 +1,10 @@
-import { Max, IsOptional, IsEnum, IsString, IsInt, Min } from 'class-validator';
+import { IsOptional, IsEnum, IsString, IsInt } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { BeneficiaryType, BeneficiaryStatus, AngolaProvince } from '@prisma/client';
+import { BaseFilterDto } from '../../common/dtos/pagination.dto';
 
-export class FilterBeneficiaryDto {
+export class FilterBeneficiaryDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: BeneficiaryType })
   @IsOptional()
   @IsEnum(BeneficiaryType)
@@ -34,19 +35,4 @@ export class FilterBeneficiaryDto {
   @IsOptional()
   @IsString()
   search?: string;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 20;
 }

@@ -139,8 +139,10 @@ describe('LibraryService', () => {
       const result = await service.findAllItems({ page: 1, limit: 20 });
       expect(result).toMatchObject({
         data: expect.any(Array),
-        total: 1,
-        totalPages: 1,
+        meta: expect.objectContaining({
+          total: 1,
+          totalPages: 1,
+        }),
       });
     });
 
@@ -148,7 +150,7 @@ describe('LibraryService', () => {
       mockPrisma.libraryItem.findMany.mockResolvedValue([]);
       mockPrisma.libraryItem.count.mockResolvedValue(0);
       const result = await service.findAllItems({ type: 'VIDEO' as any });
-      expect(result.total).toBe(0);
+      expect(result.meta.total).toBe(0);
     });
   });
 

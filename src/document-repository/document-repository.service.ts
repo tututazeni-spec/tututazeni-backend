@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { sanitizeForLog } from '../common/logging/sanitize';
 import * as crypto from 'crypto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { hashSharePassword, verifySharePassword } from './share-password';
 import {
   DocumentFilterDto,
@@ -136,7 +137,7 @@ export class DocumentRepositoryService {
       sortBy,
       sortOrder = 'desc',
     } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const orderByField = resolveSortBy(sortBy);
 
     // CurrentUserData não carrega o departamento do chamador (User não tem
@@ -190,7 +191,7 @@ export class DocumentRepositoryService {
       this.prisma.read.document.findMany({
         where,
         skip,
-        take: limit,
+        take,
         orderBy: { [orderByField]: sortOrder },
         include: {
           createdBy: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -201,10 +202,7 @@ export class DocumentRepositoryService {
       this.prisma.read.document.count({ where }),
     ]);
 
-    return {
-      data,
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
-    };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: number, requesterId?: number) {

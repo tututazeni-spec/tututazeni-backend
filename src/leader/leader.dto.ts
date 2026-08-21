@@ -8,12 +8,12 @@ import {
   IsBoolean,
   IsDateString,
   MaxLength,
-  Min,
   IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { EngagementFeedbackType } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────
 
@@ -42,21 +42,9 @@ export class CreateLeaderProfileDto {
 
 // ─── Team Management ──────────────────────────────────────────────
 
-export class TeamFilterDto {
+export class TeamFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
   @ApiPropertyOptional() @IsOptional() @IsEnum(RiskLevel) risk?: RiskLevel;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 30 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── Feedback ────────────────────────────────────────────────────
@@ -95,10 +83,8 @@ export class LeaderAssignCourseDto {
 
 // ─── Alert Filter ─────────────────────────────────────────────────
 
-export class AlertFilterDto {
+export class AlertFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
-  @ApiPropertyOptional({ default: 1 }) @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional({ default: 20 }) @IsOptional() @IsInt() @Type(() => Number) limit?: number;
 }
 
 // ─── Complete1on1Dto ──────────────────────────────────────────────────────────

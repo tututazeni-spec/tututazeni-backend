@@ -13,6 +13,7 @@ import { AuditService } from '../common/services/audit.service';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 @Injectable()
 export class LibraryService {
@@ -78,6 +79,7 @@ export class LibraryService {
 
   async findAllItems(filters: FilterItemDto) {
     const { type, collectionId, category, search, isApproved, page = 1, limit = 20 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LibraryItemWhereInput = {
       deletedAt: null,
       ...(type && { type }),
@@ -96,8 +98,8 @@ export class LibraryService {
     const [data, total] = await Promise.all([
       this.prisma.read.libraryItem.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { createdAt: 'desc' },
         include: {
           collection: { select: { name: true } },
@@ -107,7 +109,7 @@ export class LibraryService {
       }),
       this.prisma.read.libraryItem.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findItemById(id: string) {
