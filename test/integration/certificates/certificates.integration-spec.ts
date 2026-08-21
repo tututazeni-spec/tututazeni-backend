@@ -110,10 +110,10 @@ describe('Certificates Integration', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
 
-      // Resposta usa paginação { data, meta: { total, page, limit, totalPages } }
+      // Resposta usa paginação plana: { data, total, page, limit, totalPages }
       expect(res.body).toHaveProperty('data');
-      expect(res.body).toHaveProperty('meta.total');
-      expect(res.body).toHaveProperty('meta.page');
+      expect(res.body).toHaveProperty('total');
+      expect(res.body).toHaveProperty('page');
     });
 
     it('employee sem permissão → 403', async () => {
