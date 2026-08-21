@@ -19,6 +19,7 @@ import {
   EventStatus,
   EventParticipantStatus as ParticipantStatus,
 } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // NOTA: ParticipantStatus aqui é o `EventParticipantStatus` do Prisma — nome
@@ -187,7 +188,7 @@ export class SubmitFeedbackDto {
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
-export class EventFilterDto {
+export class EventFilterDto extends BaseFilterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -230,18 +231,4 @@ export class EventFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   mandatory?: boolean;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }

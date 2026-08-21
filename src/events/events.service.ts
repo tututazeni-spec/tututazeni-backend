@@ -17,6 +17,7 @@ import {
   SubmitFeedbackDto,
   ParticipantStatus,
 } from './events.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 @Injectable()
 export class EventsService {
@@ -38,7 +39,7 @@ export class EventsService {
       upcoming,
       mandatory,
     } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.EventWhereInput = {};
     if (search) where.title = { contains: search, mode: 'insensitive' };
@@ -54,7 +55,7 @@ export class EventsService {
       this.prisma.read.event.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: {
           organizer: { select: { id: true, fullName: true, avatarUrl: true } },
           _count: { select: { participants: true } },
@@ -64,20 +65,16 @@ export class EventsService {
       this.prisma.read.event.count({ where }),
     ]);
 
-    return {
-      data: data.map(e => ({
-        ...e,
-        isFull: e.maxCapacity ? e._count.participants >= e.maxCapacity : false,
-        occupancyRate:
-          e.maxCapacity && e.maxCapacity > 0
-            ? Math.round((e._count.participants / e.maxCapacity) * 100)
-            : null,
-      })),
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    const enrichedData = data.map(e => ({
+      ...e,
+      isFull: e.maxCapacity ? e._count.participants >= e.maxCapacity : false,
+      occupancyRate:
+        e.maxCapacity && e.maxCapacity > 0
+          ? Math.round((e._count.participants / e.maxCapacity) * 100)
+          : null,
+    }));
+
+    return buildPaginatedResponse(enrichedData, total, page, limit);
   }
 
   async findOne(id: number) {

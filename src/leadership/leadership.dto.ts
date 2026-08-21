@@ -20,6 +20,7 @@ import {
   ParticipantStatus,
   OneOnOneStatus,
 } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -374,7 +375,7 @@ export class SendKudosDto {
 
 // ─── Filter ───────────────────────────────────────────────────────────────────
 
-export class LeadershipFilterDto {
+export class LeadershipFilterDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: ProgramLevel })
   @IsOptional()
   @IsEnum(ProgramLevel)
@@ -391,18 +392,4 @@ export class LeadershipFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   mandatory?: boolean;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }

@@ -236,7 +236,7 @@ describe('LeadershipService — additional coverage', () => {
       const result = await service.findAll({ page: 1, limit: 10, status: 'ACTIVE' as any });
 
       expect(result).toHaveProperty('data');
-      expect(result).toHaveProperty('total');
+      expect(result.meta).toHaveProperty('total');
     });
   });
 });

@@ -8,6 +8,7 @@ import {
   PostClassResponseDto,
   LiveClassFilterDto,
 } from './live-classes.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 @Injectable()
 export class LiveClassesService {
@@ -15,7 +16,7 @@ export class LiveClassesService {
 
   async findAll(filters: LiveClassFilterDto) {
     const { page = 1, limit = 20, courseId } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LiveClassWhereInput = {};
     if (courseId) where.courseId = courseId;
 
@@ -23,7 +24,7 @@ export class LiveClassesService {
       this.prisma.read.liveClass.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: {
           course: { select: { id: true, title: true } },
           _count: { select: { attendances: true, messages: true } },
@@ -33,7 +34,7 @@ export class LiveClassesService {
       }),
       this.prisma.read.liveClass.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: number) {
