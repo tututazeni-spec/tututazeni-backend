@@ -11,6 +11,7 @@ import { AuditService } from '../common/services/audit.service';
 import { sanitizeForLog } from '../common/logging/sanitize';
 import * as crypto from 'crypto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { hashSharePassword, verifySharePassword } from './share-password';
 import {
   DocumentFilterDto,
@@ -720,15 +721,6 @@ export class DocumentRepositoryService {
   }
 
   private async notify(userId: number, type: string, message: string) {
-    try {
-      await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } });
-    } catch (e: unknown) {
-      this.logger.warn({
-        userId,
-        type,
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao notificar utilizador',
-      });
-    }
+    await createNotificationSafe(this.prisma, this.logger, { userId, type, message });
   }
 }

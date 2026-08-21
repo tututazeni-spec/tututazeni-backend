@@ -20,6 +20,7 @@ import {
   AgentAction,
 } from './ai-tutor.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 type StartSessionUser = Prisma.UserGetPayload<{
   include: {
@@ -315,15 +316,13 @@ export class AiTutorService {
           select: { managerId: true, fullName: true },
         });
         if (!user?.managerId) throw new BadRequestException('Utilizador não tem gestor definido');
-        result = await this.prisma.notificationLog.create({
-          data: {
-            userId: user.managerId,
-            type: 'AI_TUTOR_REQUEST',
-            message: message ?? `${user.fullName} solicitou atenção via AI Tutor`,
-            priority: 'MEDIUM',
-            category: 'LMS',
-            metadata: JSON.stringify({ requestedBy: userId }),
-          },
+        result = await createNotificationSafe(this.prisma, this.logger, {
+          userId: user.managerId,
+          type: 'AI_TUTOR_REQUEST',
+          message: message ?? `${user.fullName} solicitou atenção via AI Tutor`,
+          priority: 'MEDIUM',
+          category: 'LMS',
+          metadata: { requestedBy: userId },
         });
         description = 'Gestor notificado';
         break;

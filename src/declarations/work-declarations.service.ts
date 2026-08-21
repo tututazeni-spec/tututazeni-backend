@@ -9,6 +9,7 @@ import { AuditService } from '../common/services/audit.service';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 import {
   CreateWorkDeclFormDto,
   UpdateWorkDeclFormDto,
@@ -392,13 +393,10 @@ export class WorkDeclarationsService {
 
     await Promise.allSettled(
       pending.map(u =>
-        this.prisma.notificationLog.create({
-          data: {
-            userId: u.id,
-            type: 'WORK_DECL_REMINDER',
-            message: `Lembrete: "${form.title}" está pendente de preenchimento`,
-            success: true,
-          },
+        createNotificationSafe(this.prisma, this.logger, {
+          userId: u.id,
+          type: 'WORK_DECL_REMINDER',
+          message: `Lembrete: "${form.title}" está pendente de preenchimento`,
         }),
       ),
     );
@@ -512,25 +510,14 @@ export class WorkDeclarationsService {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   private async notifyUser(userId: number, type: string, message: string) {
-    try {
-      await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } });
-    } catch (e: unknown) {
-      this.logger.warn({
-        userId,
-        type,
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao notificar utilizador',
-      });
-    }
+    await createNotificationSafe(this.prisma, this.logger, { userId, type, message });
   }
 
   private async notifyRH(type: string, message: string) {
     try {
       const hr = await this.prisma.read.user.findFirst({ where: { role: { code: 'RH' } } });
       if (hr)
-        await this.prisma.notificationLog.create({
-          data: { userId: hr.id, type, message, success: true },
-        });
+        await createNotificationSafe(this.prisma, this.logger, { userId: hr.id, type, message });
     } catch (e: unknown) {
       this.logger.warn({
         type,

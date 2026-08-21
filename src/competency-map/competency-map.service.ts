@@ -17,6 +17,7 @@ import {
   AssessmentSource,
 } from './competency-map.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -729,7 +730,11 @@ export class CompetencyMapService {
       const user = await this.prisma.read.user.findUnique({ where: { id: userId } });
       const managerId = user?.managerId;
       if (managerId)
-        await this.prisma.notificationLog.create({ data: { userId: managerId, type, message } });
+        await createNotificationSafe(this.prisma, this.logger, {
+          userId: managerId,
+          type,
+          message,
+        });
     } catch (e: unknown) {
       this.logger.warn({
         userId,

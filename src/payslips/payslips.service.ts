@@ -21,6 +21,7 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 // ─── Tabela IRT Angola 2026 (Lei nº 26/2020 + actualização 2026) ─────────────
 // Isenção até 150.000 Kz/mês (Portaria 2026)
@@ -293,13 +294,10 @@ export class PayslipsService {
         });
 
         if (issueImmediately) {
-          await this.prisma.notificationLog.create({
-            data: {
-              userId: u.id,
-              type: 'PAYSLIP_ISSUED',
-              message: `O seu recibo de ${period} está disponível.`,
-              metadata: JSON.stringify({}),
-            },
+          await createNotificationSafe(this.prisma, this.logger, {
+            userId: u.id,
+            type: 'PAYSLIP_ISSUED',
+            message: `O seu recibo de ${period} está disponível.`,
           });
         }
 
@@ -331,13 +329,10 @@ export class PayslipsService {
       data: { status: 'ISSUED', issuedAt: new Date() },
     });
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId: updated.userId,
-        type: 'PAYSLIP_ISSUED',
-        message: `O seu recibo de ${updated.period} está disponível.`,
-        metadata: JSON.stringify({}),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: updated.userId,
+      type: 'PAYSLIP_ISSUED',
+      message: `O seu recibo de ${updated.period} está disponível.`,
     });
 
     return updated;
@@ -541,13 +536,10 @@ export class PayslipsService {
       data: { status: 'DISPUTED' },
     });
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId: p.userId,
-        type: 'PAYSLIP_DISPUTE',
-        message: `Disputa aberta para o recibo ${p.receiptCode}`,
-        metadata: JSON.stringify({}),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: p.userId,
+      type: 'PAYSLIP_DISPUTE',
+      message: `Disputa aberta para o recibo ${p.receiptCode}`,
     });
 
     return dispute;

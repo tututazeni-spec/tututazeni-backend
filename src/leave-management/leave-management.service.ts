@@ -14,6 +14,7 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 import {
   LeaveFilterDto,
   CalendarFilterDto,
@@ -1166,17 +1167,6 @@ export class LeaveManagementService {
   }
 
   private async notifyUser(userId: number, type: string, message: string) {
-    try {
-      await this.prisma.notificationLog.create({
-        data: { userId, type, message, success: true },
-      });
-    } catch (e: unknown) {
-      this.logger.warn({
-        userId,
-        notificationType: type,
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao criar notificação de licença para o utilizador',
-      });
-    }
+    await createNotificationSafe(this.prisma, this.logger, { userId, type, message });
   }
 }

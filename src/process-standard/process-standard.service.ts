@@ -13,6 +13,7 @@ import { createHash } from 'crypto';
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { ApprovalDecision, InstanceStatus } from '@prisma/client';
 import {
   CreateProcessDto,
@@ -320,13 +321,10 @@ export class ProcessStandardService {
     await this.writeAuditLog({ processId: id, userId, action: 'SUBMITTED_FOR_REVIEW' });
 
     // Notificar aprovadores
-    await this.prisma.notificationLog.create({
-      data: {
-        userId: p.ownerId,
-        type: 'PROCESS_REVIEW_REQUESTED',
-        message: `Processo ${p.code} submetido para revisão`,
-        metadata: JSON.stringify({}),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: p.ownerId,
+      type: 'PROCESS_REVIEW_REQUESTED',
+      message: `Processo ${p.code} submetido para revisão`,
     });
 
     return updated;
@@ -470,13 +468,10 @@ export class ProcessStandardService {
     });
 
     // Notificar o colaborador alvo
-    await this.prisma.notificationLog.create({
-      data: {
-        userId: dto.targetUserId,
-        type: 'PROCESS_STARTED',
-        message: `O processo "${process.title}" foi iniciado para si`,
-        metadata: JSON.stringify({}),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: dto.targetUserId,
+      type: 'PROCESS_STARTED',
+      message: `O processo "${process.title}" foi iniciado para si`,
     });
 
     return instance;

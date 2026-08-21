@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
@@ -13,9 +13,12 @@ import {
 import { AuditService } from '../common/services/audit.service';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 @Injectable()
 export class CertificationService {
+  private readonly logger = new Logger(CertificationService.name);
+
   constructor(
     private prisma: PrismaService,
     private readonly audit: AuditService,
@@ -120,17 +123,12 @@ export class CertificationService {
       code,
       userId: dto.userId,
     });
-    await this.prisma.notificationLog.create({
-      data: {
-        userId: dto.userId,
-        type: 'CERTIFICATE_ISSUED',
-        title: 'Certificado emitido',
-        message: `O teu certificado "${dto.title}" está disponível.`,
-        metadata: JSON.stringify({
-          certificateId: certificate.id,
-          verificationCode,
-        }),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: dto.userId,
+      type: 'CERTIFICATE_ISSUED',
+      title: 'Certificado emitido',
+      message: `O teu certificado "${dto.title}" está disponível.`,
+      metadata: { certificateId: certificate.id, verificationCode },
     });
     return certificate;
   }
@@ -255,14 +253,12 @@ export class CertificationService {
       action: 'REVOKE',
       reason: dto.reason,
     });
-    await this.prisma.notificationLog.create({
-      data: {
-        userId: cert.userId,
-        type: 'CERTIFICATE_REVOKED',
-        title: 'Certificado revogado',
-        message: `O teu certificado "${cert.title}" foi revogado.`,
-        metadata: JSON.stringify({ certificateId: id, reason: dto.reason }),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: cert.userId,
+      type: 'CERTIFICATE_REVOKED',
+      title: 'Certificado revogado',
+      message: `O teu certificado "${cert.title}" foi revogado.`,
+      metadata: { certificateId: id, reason: dto.reason },
     });
     return updated;
   }
@@ -345,14 +341,12 @@ export class CertificationService {
       badgeId: dto.badgeId,
       userId: dto.userId,
     });
-    await this.prisma.notificationLog.create({
-      data: {
-        userId: dto.userId,
-        type: 'BADGE_EARNED',
-        title: 'Novo badge conquistado!',
-        message: `Conquistaste o badge "${badge.name}".`,
-        metadata: JSON.stringify({ badgeId: badge.id, verifyCode }),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: dto.userId,
+      type: 'BADGE_EARNED',
+      title: 'Novo badge conquistado!',
+      message: `Conquistaste o badge "${badge.name}".`,
+      metadata: { badgeId: badge.id, verifyCode },
     });
     return issuance;
   }

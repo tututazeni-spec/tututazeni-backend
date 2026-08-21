@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { Prisma, SessionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -10,6 +10,7 @@ import {
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 /**
  * Incrementos numéricos aplicados a LmsLearningAnalytics — só os campos
@@ -30,6 +31,8 @@ type LmsAnalyticsIncrements = Partial<
 
 @Injectable()
 export class LmsService {
+  private readonly logger = new Logger(LmsService.name);
+
   constructor(
     private prisma: PrismaService,
     private readonly audit: AuditService,
@@ -169,14 +172,12 @@ export class LmsService {
       where: { id: pathId },
       data: { enrolledCount: { increment: 1 } },
     });
-    await this.prisma.notificationLog.create({
-      data: {
-        userId,
-        type: 'LMS_PATH_ENROLLMENT',
-        title: 'Inscrição em percurso',
-        message: `Inscreveste-te no percurso "${path.name}".`,
-        metadata: JSON.stringify({ pathId }),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId,
+      type: 'LMS_PATH_ENROLLMENT',
+      title: 'Inscrição em percurso',
+      message: `Inscreveste-te no percurso "${path.name}".`,
+      metadata: { pathId },
     });
     await this.audit.logEntity(userId, 'CREATE', 'LmsPathEnrollment', enrollment.id, {
       pathId,

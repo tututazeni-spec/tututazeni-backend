@@ -33,6 +33,7 @@ import {
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import type { CurrentUserData } from '../common/types/current-user';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS
@@ -1146,31 +1147,17 @@ export class TalentDevelopmentService {
     });
 
     await Promise.all([
-      this.prisma.notificationLog.create({
-        data: {
-          userId: dto.menteeId,
-          type: 'MENTORING_STARTED',
-          message: `Nova mentoria iniciada com ${mentor.fullName}`,
-          metadata: JSON.stringify({}),
-        },
+      createNotificationSafe(this.prisma, this.logger, {
+        userId: dto.menteeId,
+        type: 'MENTORING_STARTED',
+        message: `Nova mentoria iniciada com ${mentor.fullName}`,
       }),
-      this.prisma.notificationLog.create({
-        data: {
-          userId: dto.mentorId,
-          type: 'MENTORING_ASSIGNED',
-          message: `Foste designado mentor de ${mentee.fullName}`,
-          metadata: JSON.stringify({}),
-        },
+      createNotificationSafe(this.prisma, this.logger, {
+        userId: dto.mentorId,
+        type: 'MENTORING_ASSIGNED',
+        message: `Foste designado mentor de ${mentee.fullName}`,
       }),
-    ]).catch(e => {
-      this.logger.warn({
-        mentorId: dto.mentorId,
-        menteeId: dto.menteeId,
-        action: 'createMentoring.notify',
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao criar notificações de início de mentoria',
-      });
-    });
+    ]);
 
     return mentoring;
   }
