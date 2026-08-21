@@ -1,5 +1,5 @@
 // src/audit/audit.dto.ts
-import { IsString, IsInt, IsOptional, IsEnum, IsBoolean, IsDateString, Min } from 'class-validator';
+import { IsString, IsInt, IsOptional, IsEnum, IsBoolean, IsDateString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
