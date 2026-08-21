@@ -20,6 +20,7 @@ import { randomBytes } from 'crypto';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 // ─── Tabela IRT Angola 2026 (Lei nº 26/2020 + actualização 2026) ─────────────
 // Isenção até 150.000 Kz/mês (Portaria 2026)
@@ -141,7 +142,7 @@ export class PayslipsService {
   // ─── LISTAGEM (ADMIN / RH) ─────────────────────────────────────────────────
   async findAll(filters: PayslipFilterDto) {
     const { page = 1, limit = 20, userId, period, year, status } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.PayslipWhereInput = {};
     if (userId) where.userId = userId;
@@ -153,7 +154,7 @@ export class PayslipsService {
       this.prisma.read.payslip.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: {
           user: {
             select: {
@@ -170,7 +171,7 @@ export class PayslipsService {
       this.prisma.read.payslip.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   // ─── DETALHE ───────────────────────────────────────────────────────────────
@@ -400,8 +401,10 @@ export class PayslipsService {
 
   // ─── MEUS RECIBOS (colaborador) ────────────────────────────────────────────
   async getMyPayslips(userId: number, filters: PayslipFilterDto) {
+    // limit por omissão é 12 (não 20) — comportamento pré-existente deste
+    // endpoint, preservado explicitamente aqui em vez de herdar o omissão do helper.
     const { page = 1, limit = 12, year } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.PayslipWhereInput = { userId, status: { not: 'DRAFT' } };
     if (year) where.period = { startsWith: year };
@@ -410,7 +413,7 @@ export class PayslipsService {
       this.prisma.read.payslip.findMany({
         where,
         skip,
-        take: limit,
+        take,
         orderBy: { period: 'desc' },
         select: {
           id: true,
@@ -427,7 +430,7 @@ export class PayslipsService {
       this.prisma.read.payslip.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   // ─── RESUMO ANUAL ──────────────────────────────────────────────────────────

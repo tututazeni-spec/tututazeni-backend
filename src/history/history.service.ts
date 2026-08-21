@@ -9,6 +9,7 @@ import {
   EventCategory,
   EventModule,
 } from './history.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -223,7 +224,7 @@ export class HistoryService {
       category,
       module,
     } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.AuditLogWhereInput = {};
     if (userId) where.userId = userId;
     if (entity) where.entity = { contains: entity, mode: 'insensitive' };
@@ -246,7 +247,7 @@ export class HistoryService {
       this.prisma.read.auditLog.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: { user: { select: { id: true, fullName: true, email: true, avatarUrl: true } } },
         orderBy: { timestamp: 'desc' },
       }),
@@ -259,7 +260,7 @@ export class HistoryService {
     if (category) data = data.filter(d => d.category === category);
     if (module) data = data.filter(d => d.module === module);
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async getUserActivity(userId: number, limit = 50) {
@@ -300,7 +301,7 @@ export class HistoryService {
 
   async getUserTimeline(userId: number, filters: TimelineFilterDto) {
     const { page = 1, limit = 20 } = filters;
-    const skip = (page - 1) * limit;
+    const { skip } = calculatePagination(page, limit);
     const where: Prisma.AuditLogWhereInput = { userId };
     if (filters.from || filters.to) {
       where.timestamp = {};
@@ -565,13 +566,13 @@ export class HistoryService {
     }
 
     const { page = 1, limit = 30 } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const [raw, total] = await Promise.all([
       this.prisma.read.auditLog.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
         orderBy: { timestamp: 'desc' },
       }),
@@ -580,8 +581,7 @@ export class HistoryService {
 
     return {
       teamSize: team.length,
-      data: raw.map(enrichEntry),
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+      ...buildPaginatedResponse(raw.map(enrichEntry), total, page, limit),
     };
   }
 
