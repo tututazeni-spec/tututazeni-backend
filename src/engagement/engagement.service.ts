@@ -9,6 +9,7 @@ import {
   ActionPlanStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import {
   CreateSurveyDto,
   UpdateSurveyDto,
@@ -62,7 +63,7 @@ export class EngagementService {
 
   async getSurveys(filters: SurveyFilterDto = {}) {
     const { type, status, departmentId, page = 1, limit = 20 } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.EngagementSurveyWhereInput = {};
     if (type) where.type = type;
     if (status) where.status = status;
@@ -71,7 +72,7 @@ export class EngagementService {
       this.prisma.read.engagementSurvey.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: { _count: { select: { responses: true, questions: true } } },
         orderBy: { createdAt: 'desc' },
       }),
@@ -87,7 +88,7 @@ export class EngagementService {
       }),
     );
 
-    return { data: enriched, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(enriched, total, page, limit);
   }
 
   async getSurvey(id: number) {
@@ -605,7 +606,7 @@ export class EngagementService {
 
   async getFeedback(filters: FeedbackFilterDto) {
     const { type, toUserId, fromUserId, page = 1, limit = 20 } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.FeedbackWhereInput = {};
     if (type) where.type = type;
     if (toUserId) where.toUserId = toUserId;
@@ -614,7 +615,7 @@ export class EngagementService {
     const data = await this.prisma.feedback.findMany({
       where,
       skip,
-      take: limit,
+      take,
       include: {
         from: { select: { id: true, fullName: true, avatarUrl: true } },
         to: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -630,7 +631,7 @@ export class EngagementService {
       from: f.anonymous ? { id: null, fullName: 'Anónimo', avatarUrl: null } : f.from,
     }));
 
-    return { data: safe, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(safe, total, page, limit);
   }
 
   async replyToFeedback(feedbackId: number, userId: number, dto: FeedbackReplyDto) {
@@ -725,7 +726,7 @@ export class EngagementService {
 
   async getRecognitionFeed(filters: RecognitionFilterDto) {
     const { toUserId, fromUserId, departmentId, page = 1, limit = 20 } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.RecognitionWhereInput = { public: true };
     if (toUserId) where.toUserId = toUserId;
     if (fromUserId) where.fromUserId = fromUserId;
@@ -736,7 +737,7 @@ export class EngagementService {
     const data = await this.prisma.recognition.findMany({
       where,
       skip,
-      take: limit,
+      take,
       include: {
         from: { select: { id: true, fullName: true, avatarUrl: true } },
         to: {
@@ -753,7 +754,7 @@ export class EngagementService {
 
     const total = await this.prisma.recognition.count({ where });
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async getLeaderboard(
@@ -930,7 +931,7 @@ export class EngagementService {
     filters: { departmentId?: number; status?: string; page?: number; limit?: number } = {},
   ) {
     const { departmentId, status, page = 1, limit = 20 } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.EngagementActionWhereInput = {};
     if (departmentId) where.departmentId = departmentId;
     // `status` chega como query string livre do controller — valida contra o
@@ -943,7 +944,7 @@ export class EngagementService {
     const data = await this.prisma.engagementAction.findMany({
       where,
       skip,
-      take: limit,
+      take,
       include: {
         assignee: { select: { id: true, fullName: true, avatarUrl: true } },
         createdBy: { select: { id: true, fullName: true } },
@@ -953,7 +954,7 @@ export class EngagementService {
 
     const total = await this.prisma.engagementAction.count({ where });
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async updateActionPlan(id: number, dto: UpdateActionPlanDto) {

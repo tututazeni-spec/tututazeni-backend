@@ -23,6 +23,7 @@ import {
   RecognitionType,
   ActionPlanStatus,
 } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────
 
@@ -78,25 +79,13 @@ export class UpdateSurveyDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() endDate?: string;
 }
 
-export class SurveyFilterDto {
+export class SurveyFilterDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: SurveyType }) @IsOptional() @IsEnum(SurveyType) type?: SurveyType;
   @ApiPropertyOptional({ enum: SurveyStatus })
   @IsOptional()
   @IsEnum(SurveyStatus)
   status?: SurveyStatus;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── Submit DTOs ──────────────────────────────────────────────────
@@ -150,25 +139,13 @@ export class FeedbackReplyDto {
   @ApiProperty() @IsString() @MaxLength(2000) message!: string;
 }
 
-export class FeedbackFilterDto {
+export class FeedbackFilterDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: EngagementFeedbackType })
   @IsOptional()
   @IsEnum(EngagementFeedbackType)
   type?: EngagementFeedbackType;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) toUserId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) fromUserId?: number;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── Recognition DTOs ────────────────────────────────────────────
@@ -182,22 +159,10 @@ export class CreateRecognitionDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) badgeId?: number;
 }
 
-export class RecognitionFilterDto {
+export class RecognitionFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) toUserId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) fromUserId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── 1:1 Meeting DTOs ─────────────────────────────────────────────
@@ -244,20 +209,8 @@ export class UpdateActionPlanDto {
 
 // ─── Analytics DTOs ──────────────────────────────────────────────
 
-export class EngagementFilterDto {
+export class EngagementFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) managerId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() period?: string;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
