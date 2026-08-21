@@ -529,11 +529,11 @@ export class AuditService {
       action: 'EXPORT',
       entity: 'AuditLog',
       severity: AuditSeverity.HIGH,
-      metadata: { exported: result.total },
+      metadata: { exported: result.meta.total },
     });
 
     return {
-      exported: result.total,
+      exported: result.meta.total,
       data: result.data.map(log => ({
         id: log.id,
         timestamp: log.timestamp,

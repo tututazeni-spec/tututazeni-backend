@@ -926,21 +926,21 @@ export class ContentLibraryService {
     const where: Record<string, unknown> = {};
     if (search) where.title = { contains: search, mode: 'insensitive' };
 
-    const data = await safeModel(this.prisma, 'learningPath')
-      .findMany({
+    const data = await (
+      safeModel(this.prisma, 'learningPath').findMany({
         where,
         skip,
         take,
         orderBy: { createdAt: 'desc' },
-      })
-      .catch(e => {
-        this.logger.warn({
-          action: 'getLearningPaths.findMany',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter learning paths — modelo learningPath pode estar ausente',
-        });
-        return [];
+      }) as Promise<Record<string, unknown>[]>
+    ).catch(e => {
+      this.logger.warn({
+        action: 'getLearningPaths.findMany',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter learning paths — modelo learningPath pode estar ausente',
       });
+      return [];
+    });
 
     const total = await (
       safeModel(this.prisma, 'learningPath').count({ where }) as Promise<number>
