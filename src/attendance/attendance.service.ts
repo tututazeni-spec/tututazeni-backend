@@ -11,6 +11,7 @@ import { AuditService } from '../common/services/audit.service';
 import { CacheService } from '../cache/cache.service';
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import {
   AttendanceFilterDto,
   AttendanceLeaveFilterDto,
@@ -126,7 +127,7 @@ export class AttendanceService {
       sortBy = 'date',
       sortOrder = 'desc',
     } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.AttendanceRecordWhereInput = {};
 
     if (userId) where.userId = userId;
@@ -147,7 +148,7 @@ export class AttendanceService {
       this.prisma.attendanceRecord.findMany({
         where,
         skip,
-        take: limit,
+        take,
         orderBy: { [sortBy]: sortOrder },
         include: {
           user: { select: { id: true, fullName: true, email: true } },
@@ -157,10 +158,7 @@ export class AttendanceService {
       this.prisma.attendanceRecord.count({ where }),
     ]);
 
-    return {
-      data,
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
-    };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findByUser(userId: number, from?: string, to?: string) {

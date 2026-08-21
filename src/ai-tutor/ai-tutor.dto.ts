@@ -12,6 +12,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 export enum TutorPersonality {
   PROFESSIONAL = 'PROFESSIONAL',
@@ -155,7 +156,7 @@ export class GenerateContentDto {
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
-export class AiSessionFilterDto {
+export class AiSessionFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) courseId?: number;
   // @Type(() => Boolean) coage '?activeOnly=false' para true — ver
   // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
@@ -166,16 +167,4 @@ export class AiSessionFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   activeOnly?: boolean;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }

@@ -288,8 +288,8 @@ describe('AcademicService', () => {
       mockPrisma.academicProgram.findMany.mockResolvedValue([mockProgram]);
       mockPrisma.academicProgram.count.mockResolvedValue(1);
       const result = await service.findAllPrograms({ page: 1, limit: 20 });
-      expect(result.total).toBe(1);
-      expect(result.totalPages).toBe(1);
+      expect(result.meta.total).toBe(1);
+      expect(result.meta.totalPages).toBe(1);
     });
 
     it('findProgramById deve retornar programa', async () => {
@@ -343,7 +343,7 @@ describe('AcademicService', () => {
       mockPrisma.academicEnrollment.findMany.mockResolvedValue([mockEnrollment]);
       mockPrisma.academicEnrollment.count.mockResolvedValue(1);
       const result = await service.getMyEnrollments(1, 1, 20);
-      expect(result.total).toBe(1);
+      expect(result.meta.total).toBe(1);
     });
 
     it('getEnrollmentGrades deve listar notas', async () => {

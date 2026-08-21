@@ -113,7 +113,7 @@ describe('LmsService', () => {
       mockPrisma.lmsLearningPath.findMany.mockResolvedValue([mockPath]);
       mockPrisma.lmsLearningPath.count.mockResolvedValue(1);
       const result = await service.findAllPaths({ page: 1, limit: 20 });
-      expect(result).toMatchObject({ total: 1, totalPages: 1 });
+      expect(result).toMatchObject({ meta: { total: 1, totalPages: 1 } });
     });
   });
 
