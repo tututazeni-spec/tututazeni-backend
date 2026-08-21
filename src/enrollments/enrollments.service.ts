@@ -20,6 +20,7 @@ import {
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 const ENROLLMENT_INCLUDE_BASIC = {
   user: {
@@ -86,7 +87,7 @@ export class EnrollmentsService {
       mandatory,
       overdue,
     } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.EnrollmentWhereInput = {};
     if (userId) where.userId = userId;
@@ -106,7 +107,7 @@ export class EnrollmentsService {
       this.prisma.read.enrollment.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: {
           ...ENROLLMENT_INCLUDE_BASIC,
           _count: { select: { progresses: true } },
@@ -158,7 +159,7 @@ export class EnrollmentsService {
       };
     });
 
-    return { data: enriched, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(enriched, total, page, limit);
   }
 
   // ─── DETALHE ──────────────────────────────────────────────────────────────

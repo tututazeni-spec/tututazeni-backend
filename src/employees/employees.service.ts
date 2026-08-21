@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { Prisma, RequestStatus } from '@prisma/client';
 import {
   CreateEmployeeDto,
@@ -98,7 +99,7 @@ export class EmployeesService {
       sortOrder,
     } = filters;
 
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.EmployeeWhereInput = {};
 
@@ -149,7 +150,7 @@ export class EmployeesService {
       this.prisma.read.employee.findMany({
         where,
         skip,
-        take: limit,
+        take,
         orderBy: buildOrderBy(sortBy, sortOrder),
         include: {
           manager: { select: { id: true, name: true, avatarUrl: true } },
@@ -168,17 +169,7 @@ export class EmployeesService {
       this.prisma.read.employee.count({ where }),
     ]);
 
-    return {
-      data,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1,
-      },
-    };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: number, requesterId?: number) {

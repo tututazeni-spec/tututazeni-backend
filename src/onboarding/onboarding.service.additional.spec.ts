@@ -245,7 +245,7 @@ describe('OnboardingService — additional coverage', () => {
 
       const result = await service.findAll({ status: 'IN_PROGRESS' as any });
       expect(result).toHaveProperty('data');
-      expect(result).toHaveProperty('total');
+      expect(result).toHaveProperty('meta');
     });
 
     it('deve filtrar por departmentId', async () => {

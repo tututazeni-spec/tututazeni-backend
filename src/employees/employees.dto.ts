@@ -20,6 +20,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestj
 import { Type } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES } from '../common/validators/allowed-mime-types';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import {
   EmployeeStatus,
   LegacyCareerPlanStatus,
@@ -377,7 +378,7 @@ export class BulkSendMessageDto {
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
-export class EmployeeFilterDto {
+export class EmployeeFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() role?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
@@ -393,8 +394,6 @@ export class EmployeeFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() skillName?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) skillLevel?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() costCenter?: string;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortOrder?: 'asc' | 'desc';
 }

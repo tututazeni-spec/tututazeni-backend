@@ -12,6 +12,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { EnrollmentStatus, EnrollmentOrigin } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums (EN — consistentes com toda a plataforma) ─────────────────────────
 
@@ -92,7 +93,7 @@ export class UpdateEnrollmentStatusDto {
 
 // ─── Filter ───────────────────────────────────────────────────────────────────
 
-export class EnrollmentFilterDto {
+export class EnrollmentFilterDto extends BaseFilterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()
@@ -135,13 +136,8 @@ export class EnrollmentFilterDto {
   @IsBoolean()
   overdue?: boolean;
 
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-
+  // limit sobrepõe o campo de BaseFilterDto para preservar o @Max(100)
+  // já existente aqui (nenhum outro módulo migrado tinha este limite).
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
   @IsInt()

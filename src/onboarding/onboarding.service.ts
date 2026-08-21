@@ -25,6 +25,7 @@ import {
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import type { CurrentUserData } from '../common/types/current-user';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 @Injectable()
 export class OnboardingService {
@@ -104,7 +105,7 @@ export class OnboardingService {
 
   async findAll(filters: OnboardingFilterDto) {
     const { page = 1, limit = 20, status, departmentId, templateId } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.OnboardingPlanWhereInput = {};
     if (status) where.status = status;
@@ -115,7 +116,7 @@ export class OnboardingService {
       this.prisma.read.onboardingPlan.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: {
           user: {
             select: {
@@ -136,7 +137,7 @@ export class OnboardingService {
       this.prisma.read.onboardingPlan.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findByUser(userId: number) {

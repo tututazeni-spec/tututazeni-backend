@@ -2,6 +2,7 @@
 import { IsString, IsOptional, IsInt, IsEnum, Min, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ export enum TimelineView {
 
 // ─── Filter DTOs ──────────────────────────────────────────────────
 
-export class HistoryFilterDto {
+export class HistoryFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() entity?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() action?: string;
@@ -52,12 +53,7 @@ export class HistoryFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
+  // Override: default de 30 (não 20) — preserva o comportamento pré-existente
   @ApiPropertyOptional({ default: 30 })
   @IsOptional()
   @IsInt()
@@ -66,7 +62,7 @@ export class HistoryFilterDto {
   limit?: number;
 }
 
-export class TimelineFilterDto {
+export class TimelineFilterDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: EventCategory })
   @IsOptional()
   @IsEnum(EventCategory)
@@ -77,18 +73,6 @@ export class TimelineFilterDto {
   module?: EventModule;
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── Manual Event ─────────────────────────────────────────────────
