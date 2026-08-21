@@ -13,6 +13,7 @@ import {
 } from './api-integration.dto';
 import * as crypto from 'crypto';
 import { sanitizeForLog } from '../common/logging/sanitize';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -336,7 +337,7 @@ export class ApiIntegrationService {
 
   async getLogs(integrationId: number, filters: IntegrationLogFilterDto = {}) {
     const { page = 1, limit = 50, from, to, status } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.ApiIntegrationLogWhereInput = { integrationId };
     if (status) where.status = status;
     if (from || to) {
@@ -349,27 +350,27 @@ export class ApiIntegrationService {
       this.prisma.read.apiIntegrationLog.findMany({
         where,
         skip,
-        take: limit,
+        take,
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.read.apiIntegrationLog.count({ where }),
     ]);
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async getAllLogs(filters: IntegrationLogFilterDto = {}) {
     const { page = 1, limit = 50 } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await Promise.all([
       this.prisma.read.apiIntegrationLog.findMany({
         skip,
-        take: limit,
+        take,
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.read.apiIntegrationLog.count(),
     ]);
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   // ══════════════════════════════════════════════════════
