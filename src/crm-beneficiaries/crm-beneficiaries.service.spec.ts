@@ -126,8 +126,8 @@ describe('CrmBeneficiariesService', () => {
       const result = await service.findAll({ page: 1, limit: 20 });
 
       expect(result).toHaveProperty('data');
-      expect(result).toHaveProperty('total', 1);
-      expect(result).toHaveProperty('totalPages', 1);
+      expect(result.meta).toHaveProperty('total', 1);
+      expect(result.meta).toHaveProperty('totalPages', 1);
     });
 
     it('deve filtrar por tipo e status', async () => {
@@ -137,7 +137,7 @@ describe('CrmBeneficiariesService', () => {
         type: 'INDIVIDUAL' as any,
         status: 'ACTIVE' as any,
       });
-      expect(result.total).toBe(0);
+      expect(result.meta.total).toBe(0);
     });
   });
 
@@ -242,8 +242,8 @@ describe('CrmBeneficiariesService', () => {
       mockPrisma.beneficiaryInteraction.count.mockResolvedValue(1);
       const result = await service.getInteractions('ben-1', 1, 20);
       expect(result).toHaveProperty('data');
-      expect(result.total).toBe(1);
-      expect(result.totalPages).toBe(1);
+      expect(result.meta.total).toBe(1);
+      expect(result.meta.totalPages).toBe(1);
     });
   });
 
