@@ -1,9 +1,9 @@
-import { Max, IsOptional, IsEnum, IsString, IsInt, IsBoolean, Min } from 'class-validator';
-import { Type, Transform } from 'class-transformer';
+import { IsOptional, IsEnum, IsString, IsBoolean, Transform } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ProgramLevel } from '@prisma/client';
+import { BaseFilterDto } from '../../common/dtos/pagination.dto';
 
-export class FilterProgramDto {
+export class FilterProgramDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: ProgramLevel })
   @IsOptional()
   @IsEnum(ProgramLevel)
@@ -24,19 +24,4 @@ export class FilterProgramDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   isMandatory?: boolean;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 20;
 }

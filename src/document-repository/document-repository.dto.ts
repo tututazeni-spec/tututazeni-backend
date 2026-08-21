@@ -30,6 +30,7 @@ import {
   MAX_FILE_SIZE_BYTES,
   MAX_FILE_NAME_LENGTH,
 } from '../common/validators/allowed-mime-types';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 const NO_PATH_SEPARATORS = /^[^/\\]+$/;
 const NO_PATH_SEPARATORS_MESSAGE = 'fileName não pode conter separadores de caminho (/ ou \\)';
@@ -113,7 +114,7 @@ export class CreateShareLinkDto {
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
-export class DocumentFilterDto {
+export class DocumentFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
   @ApiPropertyOptional() @IsOptional() @IsEnum(DocCategoryType) category?: DocCategoryType;
   @ApiPropertyOptional() @IsOptional() @IsEnum(DocSensitivity) sensitivity?: DocSensitivity;
@@ -138,8 +139,6 @@ export class DocumentFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   expired?: boolean;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Max(100) @Type(() => Number) limit?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortOrder?: 'asc' | 'desc';
 }

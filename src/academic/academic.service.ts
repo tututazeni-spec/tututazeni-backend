@@ -19,6 +19,7 @@ import { AuditService } from '../common/services/audit.service';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 @Injectable()
 export class AcademicService {
@@ -111,6 +112,7 @@ export class AcademicService {
 
   async findAllPrograms(filters: FilterProgramDto) {
     const { level, category, search, isMandatory, page = 1, limit = 20 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.AcademicProgramWhereInput = {
       deletedAt: null,
       isActive: true,
@@ -127,8 +129,8 @@ export class AcademicService {
     const [data, total] = await Promise.all([
       this.prisma.read.academicProgram.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { createdAt: 'desc' },
         include: {
           createdBy: { select: { fullName: true } },
@@ -137,7 +139,7 @@ export class AcademicService {
       }),
       this.prisma.read.academicProgram.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findProgramById(id: string) {
@@ -298,12 +300,13 @@ export class AcademicService {
   }
 
   async getMyEnrollments(userId: number, page = 1, limit = 20) {
+    const { skip, take } = calculatePagination(page, limit);
     const where = { userId, deletedAt: null };
     const [data, total] = await Promise.all([
       this.prisma.read.academicEnrollment.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { createdAt: 'desc' },
         include: {
           program: {
@@ -319,7 +322,7 @@ export class AcademicService {
       }),
       this.prisma.read.academicEnrollment.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   // ─── NOTAS ───────────────────────────────────────────
