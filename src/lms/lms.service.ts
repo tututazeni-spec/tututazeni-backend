@@ -9,6 +9,7 @@ import {
   FilterPathDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 /**
  * Incrementos numéricos aplicados a LmsLearningAnalytics — só os campos
@@ -84,6 +85,7 @@ export class LmsService {
 
   async findAllPaths(filters: FilterPathDto) {
     const { level, search, isFeatured, page = 1, limit = 20 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LmsLearningPathWhereInput = {
       deletedAt: null,
       isActive: true,
@@ -99,8 +101,8 @@ export class LmsService {
     const [data, total] = await Promise.all([
       this.prisma.read.lmsLearningPath.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
         include: {
           createdBy: { select: { fullName: true } },
@@ -109,7 +111,7 @@ export class LmsService {
       }),
       this.prisma.read.lmsLearningPath.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findPathById(id: string) {
@@ -257,6 +259,7 @@ export class LmsService {
   }
 
   async findUpcomingSessions(page = 1, limit = 20) {
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LmsLiveSessionWhereInput = {
       deletedAt: null,
       status: { in: [SessionStatus.SCHEDULED, SessionStatus.LIVE] },
@@ -265,8 +268,8 @@ export class LmsService {
     const [data, total] = await Promise.all([
       this.prisma.read.lmsLiveSession.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { scheduledAt: 'asc' },
         include: {
           instructor: { select: { fullName: true } },
@@ -275,7 +278,7 @@ export class LmsService {
       }),
       this.prisma.read.lmsLiveSession.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async registerForSession(sessionId: string, userId: number) {

@@ -9,6 +9,7 @@ import {
   CreateMilestoneDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 @Injectable()
 export class CrmPartnersService {
@@ -56,6 +57,7 @@ export class CrmPartnersService {
 
   async findAll(filters: FilterPartnerDto) {
     const { type, tier, status, search, assignedToId, page = 1, limit = 20 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.PartnerWhereInput = {
       deletedAt: null,
       ...(type && { type }),
@@ -74,8 +76,8 @@ export class CrmPartnersService {
     const [data, total] = await Promise.all([
       this.prisma.read.partner.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { createdAt: 'desc' },
         include: {
           assignedTo: { select: { fullName: true } },
@@ -84,7 +86,7 @@ export class CrmPartnersService {
       }),
       this.prisma.read.partner.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: string) {
@@ -181,18 +183,19 @@ export class CrmPartnersService {
 
   async getInteractions(partnerId: string, page = 1, limit = 20) {
     await this.findOne(partnerId);
+    const { skip, take } = calculatePagination(page, limit);
     const where = { partnerId, deletedAt: null };
     const [data, total] = await Promise.all([
       this.prisma.read.partnerInteraction.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { date: 'desc' },
         include: { user: { select: { fullName: true } } },
       }),
       this.prisma.read.partnerInteraction.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   // ─── MILESTONES ──────────────────────────────────────

@@ -9,6 +9,7 @@ import {
   CreateNeedDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 @Injectable()
 export class CrmBeneficiariesService {
@@ -64,6 +65,7 @@ export class CrmBeneficiariesService {
       page = 1,
       limit = 20,
     } = filters;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.BeneficiaryWhereInput = {
       deletedAt: null,
       ...(type && { type }),
@@ -84,8 +86,8 @@ export class CrmBeneficiariesService {
     const [data, total] = await Promise.all([
       this.prisma.read.beneficiary.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { createdAt: 'desc' },
         include: {
           assignedTo: { select: { fullName: true } },
@@ -94,7 +96,7 @@ export class CrmBeneficiariesService {
       }),
       this.prisma.read.beneficiary.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: string) {
@@ -196,18 +198,19 @@ export class CrmBeneficiariesService {
 
   async getInteractions(beneficiaryId: string, page = 1, limit = 20) {
     await this.findOne(beneficiaryId);
+    const { skip, take } = calculatePagination(page, limit);
     const where = { beneficiaryId, deletedAt: null };
     const [data, total] = await Promise.all([
       this.prisma.read.beneficiaryInteraction.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { date: 'desc' },
         include: { user: { select: { fullName: true } } },
       }),
       this.prisma.read.beneficiaryInteraction.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   // ─── NECESSIDADES ────────────────────────────────────

@@ -120,8 +120,7 @@ describe('CrmPartnersService', () => {
       const result = await service.findAll({ page: 1, limit: 20 });
       expect(result).toMatchObject({
         data: expect.any(Array),
-        total: 1,
-        totalPages: 1,
+        meta: { total: 1, totalPages: 1 },
       });
     });
 
@@ -133,7 +132,7 @@ describe('CrmPartnersService', () => {
         tier: 'GOLD' as any,
         status: 'ACTIVE' as any,
       });
-      expect(result.total).toBe(0);
+      expect(result.meta.total).toBe(0);
     });
   });
 
@@ -237,8 +236,8 @@ describe('CrmPartnersService', () => {
       mockPrisma.partnerInteraction.findMany.mockResolvedValue([{ id: 'int-1', type: 'MEETING' }]);
       mockPrisma.partnerInteraction.count.mockResolvedValue(1);
       const result = await service.getInteractions('par-1', 1, 20);
-      expect(result.total).toBe(1);
-      expect(result.totalPages).toBe(1);
+      expect(result.meta.total).toBe(1);
+      expect(result.meta.totalPages).toBe(1);
     });
   });
 

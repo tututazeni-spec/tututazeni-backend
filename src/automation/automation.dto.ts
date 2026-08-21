@@ -3,6 +3,7 @@ import { IsString, IsOptional, IsEnum, IsBoolean, IsInt, MaxLength, Min } from '
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { AutomationCategory, ExecutionStatus } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────
 
@@ -128,7 +129,7 @@ export class TriggerEventDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() userId?: number;
 }
 
-export class ExecutionFilterDto {
+export class ExecutionFilterDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: ExecutionStatus })
   @IsOptional()
   @IsEnum(ExecutionStatus)
@@ -136,16 +137,4 @@ export class ExecutionFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) ruleId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 30 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
