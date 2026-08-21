@@ -14,6 +14,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import {
   CycleStatus,
   CycleType,
@@ -370,7 +371,7 @@ export class Update9BoxDto {
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
-export class PerformanceFilterDto {
+export class PerformanceFilterDto extends BaseFilterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()
@@ -397,18 +398,4 @@ export class PerformanceFilterDto {
   @IsOptional()
   @IsEnum(ReviewType)
   type?: ReviewType;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }

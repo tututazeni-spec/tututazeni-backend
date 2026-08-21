@@ -24,6 +24,7 @@ import {
   UpdatePositionDto,
   CreateCareerPositionDto,
 } from './departments.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 // ─── DEPARTMENTS ──────────────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ export class DepartmentsService {
 
   async findAll(filters: DepartmentFilterDto) {
     const { page = 1, limit = 30, search, active, parentId, rootOnly } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.DepartmentWhereInput = {};
     if (active !== undefined) where.active = active;
@@ -71,7 +72,7 @@ export class DepartmentsService {
       this.prisma.read.department.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: {
           head: { select: { id: true, fullName: true, email: true } },
           parent: { select: { id: true, name: true, code: true } },
@@ -83,7 +84,7 @@ export class DepartmentsService {
       this.prisma.read.department.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   // Árvore hierárquica completa (para org chart)

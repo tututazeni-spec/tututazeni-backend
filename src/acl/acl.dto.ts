@@ -12,6 +12,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { PermissionAction, PermissionSubject } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────
 
@@ -90,21 +91,9 @@ export class AssignRoleToUserDto {
 
 // ─── Audit Filter ─────────────────────────────────────────────────
 
-export class AclAuditFilterDto {
+export class AclAuditFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() action?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 30 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
