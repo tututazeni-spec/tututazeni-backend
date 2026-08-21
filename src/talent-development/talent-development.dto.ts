@@ -14,6 +14,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { PlanStatus, ActionType, ActionStatus, PlanPriority, SkillType } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ───────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ export enum MentoringStatus {
 
 // ─── Plan DTOs ───────────────────────────────────────────────────
 
-export class PlanFilterDto {
+export class PlanFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) managerId?: number;
   @ApiPropertyOptional({ enum: PlanStatus }) @IsOptional() @IsEnum(PlanStatus) status?: PlanStatus;
@@ -46,18 +47,6 @@ export class PlanFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   isTemplate?: boolean;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 export class TalentDevelopmentCreateDevelopmentPlanDto {
@@ -157,16 +146,11 @@ export class ApproveActionDto {
 
 // ─── Talent Pool DTOs ────────────────────────────────────────────
 
-export class TalentFilterDto {
+export class TalentFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) positionId?: number;
   @ApiPropertyOptional({ enum: TalentTier }) @IsOptional() @IsEnum(TalentTier) tier?: TalentTier;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
+  // limit por omissão é 50 aqui (não 20 como no BaseFilterDto) — override intencional.
   @ApiPropertyOptional({ default: 50 })
   @IsOptional()
   @IsInt()
@@ -193,25 +177,13 @@ export class CreateMentoringSessionDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(5) rating?: number;
 }
 
-export class MentoringFilterDto {
+export class MentoringFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) mentorId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) menteeId?: number;
   @ApiPropertyOptional({ enum: MentoringStatus })
   @IsOptional()
   @IsEnum(MentoringStatus)
   status?: MentoringStatus;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── Skill Gap DTOs ──────────────────────────────────────────────
