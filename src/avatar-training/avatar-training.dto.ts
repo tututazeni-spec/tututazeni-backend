@@ -16,6 +16,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import { ScenarioCategory, Difficulty, AvatarSessionStatus as SessionStatus } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────
@@ -100,7 +101,7 @@ export class UpdateAvatarDto {
   @ApiPropertyOptional() @IsOptional() @IsString() avatarImageUrl?: string;
 }
 
-export class AvatarFilterDto {
+export class AvatarFilterDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: AvatarRole }) @IsOptional() @IsEnum(AvatarRole) role?: AvatarRole;
   // @Type(() => Boolean) coage '?isPublic=false' para true — ver
   // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
@@ -111,18 +112,6 @@ export class AvatarFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   isPublic?: boolean;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── Scenario DTOs ────────────────────────────────────────────────
@@ -162,7 +151,7 @@ export class CreateScenarioDto {
   turns?: ScenarioTurnDto[];
 }
 
-export class ScenarioFilterDto {
+export class ScenarioFilterDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: ScenarioCategory })
   @IsOptional()
   @IsEnum(ScenarioCategory)
@@ -173,18 +162,6 @@ export class ScenarioFilterDto {
   difficulty?: Difficulty;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) competencyId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── Session DTOs ─────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { EvaluationRequestStatus as RequestStatus } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────
 
@@ -91,23 +92,11 @@ export class UpdateCycleDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() endDate?: string;
 }
 
-export class CycleFilterDto {
+export class CycleFilterDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: CycleStatus })
   @IsOptional()
   @IsEnum(CycleStatus)
   status?: CycleStatus;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── Form / Question DTOs ─────────────────────────────────────────

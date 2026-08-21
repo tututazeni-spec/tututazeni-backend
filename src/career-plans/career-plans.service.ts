@@ -26,6 +26,7 @@ import {
   PromotionStatus,
   GoalStatus,
 } from './career-plans.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 export interface SkillGapEntry {
   skillId: number;
@@ -286,7 +287,7 @@ export class CareerPlansService {
 
   async findAll(filters: CareerPlanFilterDto) {
     const { page = 1, limit = 20, userId, status, department } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.UserCareerPlanWhereInput = {};
     if (userId) where.userId = userId;
     if (status) where.status = status;
@@ -298,7 +299,7 @@ export class CareerPlansService {
       this.prisma.read.userCareerPlan.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: {
           // FIX: removed employee sub-select from user select
           user: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -335,7 +336,7 @@ export class CareerPlansService {
       }),
     );
 
-    return { data: enriched, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(enriched, total, page, limit);
   }
 
   async findOne(id: number, user?: CurrentUserData) {
@@ -679,7 +680,7 @@ export class CareerPlansService {
 
   async getPromotions(filters: PromotionFilterDto) {
     const { page = 1, limit = 20, userId, status, department } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.PromotionRequestWhereInput = {};
     if (userId) where.userId = userId;
     if (status) where.status = status;
@@ -691,7 +692,7 @@ export class CareerPlansService {
       this.prisma.read.promotionRequest.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: {
           // FIX: removed employee sub-select
           user: { select: { id: true, fullName: true, avatarUrl: true } },
@@ -703,7 +704,7 @@ export class CareerPlansService {
       this.prisma.read.promotionRequest.count({ where }),
     ]);
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async simulateCareer(dto: SimulateCareerDto) {

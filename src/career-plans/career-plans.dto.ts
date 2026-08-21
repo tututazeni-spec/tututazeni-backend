@@ -15,6 +15,7 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { CareerPathType, SeniorityLevel } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -208,19 +209,15 @@ export class SimulateCareerDto {
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
-export class CareerPlanFilterDto {
+export class CareerPlanFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
   @ApiPropertyOptional() @IsOptional() @IsEnum(CareerPlanStatus) status?: CareerPlanStatus;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
   @ApiPropertyOptional() @IsOptional() @IsEnum(ReadinessLevel) readiness?: ReadinessLevel;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
 }
 
-export class PromotionFilterDto {
+export class PromotionFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
   @ApiPropertyOptional() @IsOptional() @IsEnum(PromotionStatus) status?: PromotionStatus;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
 }

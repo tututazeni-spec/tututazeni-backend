@@ -17,6 +17,7 @@ import {
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS
@@ -156,12 +157,12 @@ export class ContentLibraryService {
 
   async findAll(filters: ContentFilterDto = {}) {
     const { page = 1, limit = 20 } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where = buildWhereFromFilters(filters);
     const orderBy = buildOrderBy(filters.sortBy);
 
     const [data, total] = await Promise.all([
-      this.prisma.read.contentAsset.findMany({ where, skip, take: limit, orderBy }),
+      this.prisma.read.contentAsset.findMany({ where, skip, take, orderBy }),
       this.prisma.read.contentAsset.count({ where }),
     ]);
 
@@ -186,10 +187,8 @@ export class ContentLibraryService {
       viewCounts.map((v): [number | null, number] => [v.entityId, v._count.id]),
     );
 
-    return {
-      data: data.map(c => ({ ...c, viewCount: vcMap.get(c.id) ?? 0 })),
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
-    };
+    const enriched = data.map(c => ({ ...c, viewCount: vcMap.get(c.id) ?? 0 }));
+    return buildPaginatedResponse(enriched, total, page, limit);
   }
 
   async findOne(id: number, userId?: number) {
@@ -920,7 +919,7 @@ export class ContentLibraryService {
 
   async getLearningPaths(filters: ContentLibraryLearningPathFilterDto = {}) {
     const { page = 1, limit = 20, search } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     // Record<string, unknown> em vez de `any` — learningPath não existe em
     // prisma/schema.prisma (ver nota estrutural acima), por isso não há
     // Prisma.LearningPathWhereInput real a que amarrar este filtro.
@@ -931,7 +930,7 @@ export class ContentLibraryService {
       .findMany({
         where,
         skip,
-        take: limit,
+        take,
         orderBy: { createdAt: 'desc' },
       })
       .catch(e => {
@@ -953,7 +952,7 @@ export class ContentLibraryService {
       });
       return 0;
     });
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async getLearningPath(id: number, userId?: number) {

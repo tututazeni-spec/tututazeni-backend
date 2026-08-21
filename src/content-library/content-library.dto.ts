@@ -18,6 +18,7 @@ import {
   ContentAssetLevel as ContentLevel,
   ContentCategory,
 } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────
 // NOTA: ContentStatus/ContentLevel aqui são `ContentAssetStatus`/
@@ -66,7 +67,7 @@ export class UpdateContentDto extends PartialType(CreateContentDto) {
   status?: ContentStatus;
 }
 
-export class ContentFilterDto {
+export class ContentFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
   @ApiPropertyOptional({ enum: ContentFormat })
   @IsOptional()
@@ -106,19 +107,6 @@ export class ContentFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() tag?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?:
     'popular' | 'newest' | 'rating' | 'duration';
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── Progress DTOs ────────────────────────────────────────────────
@@ -158,20 +146,8 @@ export class CreateLearningPathDto {
   @ApiProperty({ type: [LearningPathItemDto] }) @IsArray() items!: LearningPathItemDto[];
 }
 
-export class ContentLibraryLearningPathFilterDto {
+export class ContentLibraryLearningPathFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── Note DTOs ────────────────────────────────────────────────────
