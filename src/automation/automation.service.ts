@@ -11,6 +11,7 @@ import {
   ActionType,
   AutomationCategory,
 } from './automation.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -835,7 +836,7 @@ export class AutomationService {
 
   async getExecutions(filters: ExecutionFilterDto = {}) {
     const { page = 1, limit = 30, status, ruleId, from, to } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.AutomationExecutionWhereInput = {};
     if (status) where.status = status;
     if (ruleId) where.ruleId = ruleId;
@@ -850,7 +851,7 @@ export class AutomationService {
         .findMany({
           where,
           skip,
-          take: limit,
+          take,
           orderBy: { startedAt: 'desc' },
         })
         .catch((e: unknown) => {
@@ -873,7 +874,7 @@ export class AutomationService {
       return 0;
     });
 
-    return { data: executions, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(executions, total, page, limit);
   }
 
   async rerunExecution(executionId: string) {
