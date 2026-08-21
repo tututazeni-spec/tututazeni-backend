@@ -1,4 +1,5 @@
-import { IsOptional, IsEnum, IsString, IsBoolean, Transform } from 'class-validator';
+import { IsOptional, IsEnum, IsString, IsBoolean } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ProgramLevel } from '@prisma/client';
 import { BaseFilterDto } from '../../common/dtos/pagination.dto';
