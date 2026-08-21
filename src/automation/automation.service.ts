@@ -12,6 +12,7 @@ import {
   AutomationCategory,
 } from './automation.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -451,13 +452,11 @@ export class AutomationService {
       switch (rule.action) {
         case ActionType.SEND_NOTIFICATION: {
           if (targetUserId) {
-            await this.prisma.notificationLog.create({
-              data: {
-                userId: targetUserId,
-                type: params.type ?? 'AUTOMATION',
-                message: params.message ?? `Automação: ${rule.name}`,
-                metadata: JSON.stringify({ ruleId: rule.id, ...params }),
-              },
+            await createNotificationSafe(this.prisma, this.logger, {
+              userId: targetUserId,
+              type: params.type ?? 'AUTOMATION',
+              message: params.message ?? `Automação: ${rule.name}`,
+              metadata: { ruleId: rule.id, ...params },
             });
           }
           result = { affected: targetUserId ? 1 : 0 };

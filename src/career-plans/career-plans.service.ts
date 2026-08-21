@@ -27,6 +27,7 @@ import {
   GoalStatus,
 } from './career-plans.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 export interface SkillGapEntry {
   skillId: number;
@@ -904,16 +905,6 @@ export class CareerPlansService {
   }
 
   private async notify(userId: number, type: string, message: string) {
-    try {
-      await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } });
-    } catch (e: unknown) {
-      this.logger.warn({
-        userId,
-        type,
-        action: 'NOTIFY',
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao criar notificação',
-      });
-    }
+    await createNotificationSafe(this.prisma, this.logger, { userId, type, message });
   }
 }

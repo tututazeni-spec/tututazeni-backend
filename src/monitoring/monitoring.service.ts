@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { MonitoringEvalType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -15,9 +15,12 @@ import { AuditService } from '../common/services/audit.service';
 import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 @Injectable()
 export class MonitoringService {
+  private readonly logger = new Logger(MonitoringService.name);
+
   constructor(
     private prisma: PrismaService,
     private readonly audit: AuditService,
@@ -284,14 +287,12 @@ export class MonitoringService {
     const evaluation = await this.prisma.userEvaluation.create({
       data: { cycleId, userId, evaluatorId, type },
     });
-    await this.prisma.notificationLog.create({
-      data: {
-        userId: evaluatorId,
-        type: 'EVALUATION_ASSIGNED',
-        title: 'Nova avaliação atribuída',
-        message: 'Foi-te atribuída uma avaliação de desempenho.',
-        metadata: JSON.stringify({ evaluationId: evaluation.id, cycleId }),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: evaluatorId,
+      type: 'EVALUATION_ASSIGNED',
+      title: 'Nova avaliação atribuída',
+      message: 'Foi-te atribuída uma avaliação de desempenho.',
+      metadata: { evaluationId: evaluation.id, cycleId },
     });
     await this.audit.logEntity(assignedBy, 'CREATE', 'UserEvaluation', evaluation.id, {
       cycleId,
@@ -334,14 +335,12 @@ export class MonitoringService {
       status: 'CLOSED',
       score: dto.score,
     });
-    await this.prisma.notificationLog.create({
-      data: {
-        userId: evaluation.userId,
-        type: 'EVALUATION_COMPLETED',
-        title: 'Avaliação concluída',
-        message: 'A tua avaliação de desempenho foi concluída.',
-        metadata: JSON.stringify({ evaluationId: id }),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: evaluation.userId,
+      type: 'EVALUATION_COMPLETED',
+      title: 'Avaliação concluída',
+      message: 'A tua avaliação de desempenho foi concluída.',
+      metadata: { evaluationId: id },
     });
     return updated;
   }

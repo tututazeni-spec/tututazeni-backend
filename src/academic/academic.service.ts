@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -20,9 +21,12 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 @Injectable()
 export class AcademicService {
+  private readonly logger = new Logger(AcademicService.name);
+
   constructor(
     private prisma: PrismaService,
     private readonly audit: AuditService,
@@ -250,18 +254,16 @@ export class AcademicService {
     await this.audit.logEntity(userId, 'CREATE', 'AcademicEnrollment', enrollment.id, {
       code,
     });
-    await this.prisma.notificationLog.create({
-      data: {
-        userId: dto.userId,
-        type: 'ACADEMIC_ENROLLMENT',
-        title: 'Matrícula académica',
-        message: `Matrícula em "${program.name}" ${
-          enrollment.status === 'APPROVED' ? 'aprovada' : 'pendente'
-        }.`,
-        metadata: JSON.stringify({
-          enrollmentId: enrollment.id,
-          programId: dto.programId,
-        }),
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: dto.userId,
+      type: 'ACADEMIC_ENROLLMENT',
+      title: 'Matrícula académica',
+      message: `Matrícula em "${program.name}" ${
+        enrollment.status === 'APPROVED' ? 'aprovada' : 'pendente'
+      }.`,
+      metadata: {
+        enrollmentId: enrollment.id,
+        programId: dto.programId,
       },
     });
     return enrollment;
@@ -287,14 +289,12 @@ export class AcademicService {
     await this.audit.logEntity(approverId, 'UPDATE', 'AcademicEnrollment', id, {
       status: 'APPROVED',
     });
-    await this.prisma.notificationLog.create({
-      data: {
-        userId: enrollment.userId,
-        type: 'ACADEMIC_ENROLLMENT_APPROVED',
-        title: 'Matrícula aprovada',
-        message: `A tua matrícula em "${enrollment.program.name}" foi aprovada.`,
-        metadata: JSON.stringify({ enrollmentId: id }),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: enrollment.userId,
+      type: 'ACADEMIC_ENROLLMENT_APPROVED',
+      title: 'Matrícula aprovada',
+      message: `A tua matrícula em "${enrollment.program.name}" foi aprovada.`,
+      metadata: { enrollmentId: id },
     });
     return updated;
   }

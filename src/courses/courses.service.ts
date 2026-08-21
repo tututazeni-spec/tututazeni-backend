@@ -9,6 +9,7 @@
 import { CertificateType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 import {
   CreateCourseDto,
   UpdateCourseDto,
@@ -332,13 +333,10 @@ export class CoursesService {
       data: { totalEnrollments: { increment: 1 } },
     });
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId,
-        type: 'COURSE_ENROLLED',
-        message: `Está matriculado no curso "${course.title}"`,
-        metadata: JSON.stringify({}),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId,
+      type: 'COURSE_ENROLLED',
+      message: `Está matriculado no curso "${course.title}"`,
     });
 
     return enrollment;
@@ -391,13 +389,10 @@ export class CoursesService {
         },
       });
 
-      await this.prisma.notificationLog.create({
-        data: {
-          userId,
-          type: 'COURSE_ASSIGNED',
-          message: `O curso "${course.title}" foi atribuído a si`,
-          metadata: JSON.stringify({}),
-        },
+      await createNotificationSafe(this.prisma, this.logger, {
+        userId,
+        type: 'COURSE_ASSIGNED',
+        message: `O curso "${course.title}" foi atribuído a si`,
       });
 
       results.enrolled++;
@@ -562,13 +557,10 @@ export class CoursesService {
       },
     });
 
-    await this.prisma.notificationLog.create({
-      data: {
-        userId,
-        type: 'CERTIFICATE_ISSUED',
-        message: `Certificado emitido para o curso "${course?.title}"`,
-        metadata: JSON.stringify({}),
-      },
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId,
+      type: 'CERTIFICATE_ISSUED',
+      message: `Certificado emitido para o curso "${course?.title}"`,
     });
 
     return cert;

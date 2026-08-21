@@ -16,6 +16,7 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
 import { DeclarationType, Prisma, TemplateLanguage } from '@prisma/client';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 // ─── Variable resolver ────────────────────────────────────────────────────────
 
@@ -532,16 +533,7 @@ export class DocumentDeclarationsService {
   }
 
   private async notifyUser(userId: number, type: string, message: string) {
-    try {
-      await this.prisma.notificationLog.create({ data: { userId, type, message, success: true } });
-    } catch (e: unknown) {
-      this.logger.warn({
-        userId,
-        type,
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao notificar utilizador',
-      });
-    }
+    await createNotificationSafe(this.prisma, this.logger, { userId, type, message });
   }
 
   private async notifyRH(type: string, message: string) {
@@ -549,9 +541,7 @@ export class DocumentDeclarationsService {
       // User has no scalar roleCode — role is a relation, filter via role.code
       const hr = await this.prisma.read.user.findFirst({ where: { role: { code: 'RH' } } });
       if (hr)
-        await this.prisma.notificationLog.create({
-          data: { userId: hr.id, type, message, success: true },
-        });
+        await createNotificationSafe(this.prisma, this.logger, { userId: hr.id, type, message });
     } catch (e: unknown) {
       this.logger.warn({
         type,
