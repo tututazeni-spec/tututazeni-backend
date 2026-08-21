@@ -14,6 +14,7 @@ import {
   AssignRoleToUserDto,
   AclAuditFilterDto,
 } from './acl.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 // ─── Permission cache (Redis via CacheService — antes era um Map em memória do
 // processo, o que dava permissões desactualizadas noutras instâncias após uma
@@ -605,7 +606,7 @@ export class AclService {
 
   async getAuditLog(filters: AclAuditFilterDto) {
     const { page = 1, limit = 30, userId, action, from, to } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.AuditLogWhereInput = {
       entity: { in: ['User', 'Role', 'Permission', 'ACL'] },
     };
@@ -621,19 +622,19 @@ export class AclService {
       this.prisma.read.auditLog.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: { user: { select: { id: true, fullName: true, email: true } } },
         orderBy: { timestamp: 'desc' },
       }),
       this.prisma.read.auditLog.count({ where }),
     ]);
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async getDeniedLog(filters: AclAuditFilterDto) {
     const { page = 1, limit = 30 } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.AuditLogWhereInput = { action: 'ACCESS_DENIED' };
     if (filters.userId) where.userId = filters.userId;
 
@@ -641,14 +642,14 @@ export class AclService {
       this.prisma.read.auditLog.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: { user: { select: { id: true, fullName: true } } },
         orderBy: { timestamp: 'desc' },
       }),
       this.prisma.read.auditLog.count({ where }),
     ]);
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   private async logDenied(userId: number, action: string, subject: string, reason: string) {

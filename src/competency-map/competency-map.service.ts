@@ -16,6 +16,7 @@ import {
   GapPriority,
   AssessmentSource,
 } from './competency-map.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -108,7 +109,7 @@ export class CompetencyMapService {
 
   async getSkills(filters: SkillFilterDto) {
     const { page = 1, limit = 50, search, type, categoryId, active = true } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.SkillWhereInput = { active };
     if (search) where.name = { contains: search, mode: 'insensitive' };
     if (type) where.type = type;
@@ -118,7 +119,7 @@ export class CompetencyMapService {
       this.prisma.read.skill.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: {
           category: true,
           proficiencyLevels: { orderBy: { level: 'asc' } },
@@ -129,7 +130,7 @@ export class CompetencyMapService {
       this.prisma.read.skill.count({ where }),
     ]);
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async getSkill(id: number) {

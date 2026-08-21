@@ -18,6 +18,7 @@ import {
   PermissionSubject,
   SeniorityLevel,
 } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Department ───────────────────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ export class CreateDepartmentDto {
 
 export class UpdateDepartmentDto extends PartialType(CreateDepartmentDto) {}
 
-export class DepartmentFilterDto {
+export class DepartmentFilterDto extends BaseFilterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -102,20 +103,6 @@ export class DepartmentFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   rootOnly?: boolean;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-
-  @ApiPropertyOptional({ default: 30 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── Member Transfer ──────────────────────────────────────────────────────────

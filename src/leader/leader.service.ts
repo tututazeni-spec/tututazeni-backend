@@ -13,6 +13,7 @@ import {
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 // ─── Schema Fixes Applied ─────────────────────────────────────────
 // ✅ role is a RELATION — never use { role: { in: ['GESTOR'] } }
@@ -254,7 +255,7 @@ export class LeaderService {
 
   async getTeam(leaderId: number, filters: TeamFilterDto = {}) {
     const { page = 1, limit = 30, search } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.UserWhereInput = { managerId: leaderId, active: true };
     if (search)
       where.OR = [
@@ -266,7 +267,7 @@ export class LeaderService {
       this.prisma.read.user.findMany({
         where,
         skip,
-        take: limit,
+        take,
         select: {
           id: true,
           fullName: true,
@@ -323,9 +324,9 @@ export class LeaderService {
       return order[a.riskLevel] - order[b.riskLevel];
     });
 
+    const paginatedResponse = buildPaginatedResponse(sorted, total, page, limit);
     return {
-      data: sorted,
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+      ...paginatedResponse,
       summary: {
         headcount: total,
         atRisk: enriched.filter(u => u.riskLevel !== RiskLevel.NONE).length,
