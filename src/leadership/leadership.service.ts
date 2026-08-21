@@ -25,6 +25,7 @@ import {
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 @Injectable()
 export class LeadershipService {
@@ -36,7 +37,7 @@ export class LeadershipService {
 
   async findAll(filters: LeadershipFilterDto) {
     const { page = 1, limit = 20, level, status, mandatory } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.LeadershipProgramWhereInput = {};
     if (level) where.level = level;
@@ -47,14 +48,14 @@ export class LeadershipService {
       this.prisma.read.leadershipProgram.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: { _count: { select: { participants: true } } },
         orderBy: [{ level: 'asc' }, { createdAt: 'desc' }],
       }),
       this.prisma.read.leadershipProgram.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: number) {
