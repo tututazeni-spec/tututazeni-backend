@@ -19,6 +19,7 @@ import {
   TutorPersonality,
   AgentAction,
 } from './ai-tutor.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 type StartSessionUser = Prisma.UserGetPayload<{
   include: {
@@ -532,7 +533,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
 
   async getMySessions(userId: number, filters: AiSessionFilterDto) {
     const { page = 1, limit = 20, courseId, activeOnly } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.AiTutorSessionWhereInput = { userId };
     if (courseId) where.courseId = courseId;
     if (activeOnly) where.endedAt = null;
@@ -541,7 +542,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
       this.prisma.read.aiTutorSession.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: {
           course: { select: { id: true, title: true } },
           _count: { select: { messages: true } },
@@ -551,7 +552,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
       this.prisma.read.aiTutorSession.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   // ─── MEMÓRIA PERSISTENTE ──────────────────────────────────────────────────

@@ -13,8 +13,8 @@ import {
   IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
 import { IntegrationType, IntegrationStatus, AuthType, ApiCallStatus } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────
 // CORRIGIDO: IntegrationType/IntegrationStatus eram enums locais com valores
@@ -72,25 +72,13 @@ export class UpdateIntegrationDto {
   @ApiPropertyOptional() @IsOptional() config?: Record<string, unknown>;
 }
 
-export class IntegrationLogFilterDto {
+export class IntegrationLogFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
   @ApiPropertyOptional({ enum: ApiCallStatus })
   @IsOptional()
   @IsEnum(ApiCallStatus)
   status?: ApiCallStatus;
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-  @ApiPropertyOptional({ default: 50 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 // ─── API Key DTOs ─────────────────────────────────────────────────
