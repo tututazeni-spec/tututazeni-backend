@@ -22,14 +22,12 @@ const stubChat = jest.fn().mockResolvedValue({
   provider: 'stub',
   model: 'stub-model',
 });
-const stubProviderInfo = jest
-  .fn()
-  .mockReturnValue({
-    provider: 'Stub',
-    model: 'stub-model',
-    free: true,
-    docs: 'https://stub.test',
-  });
+const stubProviderInfo = jest.fn().mockReturnValue({
+  provider: 'Stub',
+  model: 'stub-model',
+  free: true,
+  docs: 'https://stub.test',
+});
 
 describe('AI Tutor Integration', () => {
   let app: INestApplication;
@@ -143,7 +141,7 @@ describe('AI Tutor Integration', () => {
 
       expect(res.body.session).toHaveProperty('id');
       expect(res.body.courseTitle).toBe('Curso Integração — AI Tutor');
-      expect(res.body.greeting).toContain('NOVA');
+      expect(res.body.greeting).toContain('Ísis');
       sessionId = res.body.session.id;
     });
 
