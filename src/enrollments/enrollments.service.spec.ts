@@ -101,7 +101,7 @@ describe('EnrollmentsService', () => {
       const result = await service.findAll({ page: 1, limit: 20 });
 
       expect(result.data).toHaveLength(1);
-      expect(result.total).toBe(1);
+      expect(result.meta.total).toBe(1);
       expect((result.data[0] as any).progressPercent).toBe(60);
     });
 

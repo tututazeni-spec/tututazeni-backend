@@ -13,6 +13,7 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { PayslipStatus, PayslipAccessAction } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 export { PayslipStatus, PayslipAccessAction };
 
@@ -105,7 +106,7 @@ export class CreatePayslipDto {
 export class UpdatePayslipDto extends PartialType(CreatePayslipDto) {}
 
 // ─── Filtros ─────────────────────────────────────────────────────────────────
-export class PayslipFilterDto {
+export class PayslipFilterDto extends BaseFilterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()
@@ -127,13 +128,8 @@ export class PayslipFilterDto {
   @IsEnum(PayslipStatus)
   status?: PayslipStatus;
 
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-
+  // limit sobrepõe o campo de BaseFilterDto para preservar o @Max(100)
+  // já existente aqui (mesmo padrão aplicado em EnrollmentFilterDto).
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
   @IsInt()

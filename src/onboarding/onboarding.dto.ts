@@ -13,6 +13,7 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import {
   OnboardingStatus,
   TaskCategory,
@@ -305,7 +306,7 @@ export class SubmitOnboardingSurveyDto {
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
-export class OnboardingFilterDto {
+export class OnboardingFilterDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: OnboardingStatus })
   @IsOptional()
   @IsEnum(OnboardingStatus)
@@ -322,18 +323,4 @@ export class OnboardingFilterDto {
   @IsInt()
   @Type(() => Number)
   templateId?: number;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
