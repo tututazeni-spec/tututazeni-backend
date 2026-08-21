@@ -148,7 +148,7 @@ export class AiTutorService {
       session,
       courseTitle,
       provider: providerInfo,
-      greeting: `Olá ${userName}! Sou a Ísis, o teu Tutor IA 🤖${courseTitle ? ` — estou contextualizado com o curso "${courseTitle}"` : ''}. Como posso ajudar-te hoje?`,
+      greeting: `Olá ${userName}! Sou a Ísis, o teu Tutor IA${courseTitle ? ` — estou contextualizado com o curso "${courseTitle}"` : ''}. Como posso ajudar-te hoje?`,
       quickActions: this.getQuickActions(!!dto.courseId, !!dto.planId),
     };
   }
