@@ -5,6 +5,7 @@ import { Queue } from 'bull';
 import { ConfigService } from '@nestjs/config';
 import { AutomationTrigger, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import {
   CreateNotificationDto,
   BulkNotificationDto,
@@ -187,7 +188,7 @@ export class NotificationsService {
 
   async getMyNotifications(userId: number, filters: NotificationFilterDto) {
     const { page = 1, limit = 20, type, category, priority, read } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.NotificationLogWhereInput = {
       userId,
@@ -202,7 +203,7 @@ export class NotificationsService {
       this.prisma.read.notificationLog.findMany({
         where,
         skip,
-        take: limit,
+        take,
         orderBy: [{ read: 'asc' }, { createdAt: 'desc' }],
       }),
       this.prisma.read.notificationLog.count({ where }),
@@ -229,13 +230,9 @@ export class NotificationsService {
     };
 
     return {
-      data,
+      ...buildPaginatedResponse(data, total, page, limit),
       grouped,
-      total,
       unreadCount,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
     };
   }
 
@@ -292,7 +289,7 @@ export class NotificationsService {
 
   async getAllLogs(filters: NotificationFilterDto) {
     const { page = 1, limit = 20, type, category, priority } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.NotificationLogWhereInput = {};
     if (type) where.type = type;
@@ -303,14 +300,14 @@ export class NotificationsService {
       this.prisma.read.notificationLog.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.read.notificationLog.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async getStats() {

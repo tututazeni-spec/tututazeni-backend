@@ -14,6 +14,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -166,15 +167,13 @@ export class AccrueBalanceDto {
 
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
-export class LeaveFilterDto {
+export class LeaveFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() leaveTypeCode?: string;
   @ApiPropertyOptional() @IsOptional() @IsEnum(LeaveStatus) status?: LeaveStatus;
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() to?: string;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) page?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) limit?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortOrder?: 'asc' | 'desc';
 }
