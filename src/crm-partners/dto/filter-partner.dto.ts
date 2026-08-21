@@ -1,9 +1,10 @@
-import { Max, IsOptional, IsEnum, IsString, IsInt, Min } from 'class-validator';
+import { IsOptional, IsEnum, IsString, IsInt } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PartnerType, PartnerTier, PartnerStatus } from '@prisma/client';
+import { BaseFilterDto } from '../../common/dtos/pagination.dto';
 
-export class FilterPartnerDto {
+export class FilterPartnerDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: PartnerType })
   @IsOptional()
   @IsEnum(PartnerType)
@@ -29,19 +30,4 @@ export class FilterPartnerDto {
   @Type(() => Number)
   @IsInt()
   assignedToId?: number;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ default: 20 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 20;
 }
