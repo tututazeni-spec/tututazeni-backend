@@ -148,7 +148,7 @@ export class AiTutorService {
       session,
       courseTitle,
       provider: providerInfo,
-      greeting: `Olá ${userName}! Sou o NOVA, o teu Tutor IA 🤖${courseTitle ? ` — estou contextualizado com o curso "${courseTitle}"` : ''}. Como posso ajudar-te hoje?`,
+      greeting: `Olá ${userName}! Sou a Ísis, o teu Tutor IA${courseTitle ? ` — estou contextualizado com o curso "${courseTitle}"` : ''}. Como posso ajudar-te hoje?`,
       quickActions: this.getQuickActions(!!dto.courseId, !!dto.planId),
     };
   }
@@ -627,7 +627,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
     ];
     if (hasCourse)
       base.push({
-        label: '📊 Gerar quiz',
+        label: '📊 Gerar questionário',
         value: 'Cria um quiz de 5 perguntas sobre esta matéria',
       });
     if (hasPlan) base.push({ label: '🗂 Ver PDI', value: 'Como está o progresso do meu PDI?' });
@@ -652,7 +652,7 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
         'Tens um estilo gamificado. Celebras conquistas, usas analogias de jogos e manténs o utilizador motivado.',
     };
 
-    return `És o NOVA, o Tutor de IA da plataforma INNOVA — especializado em aprendizagem corporativa e desenvolvimento profissional no contexto angolano.
+    return `És a Ísis, o Tutor de IA da plataforma INNOVA — especializado em aprendizagem corporativa e desenvolvimento profissional no contexto angolano.
 
 PERFIL DO UTILIZADOR:
 - Nome: ${ctx.user?.fullName ?? 'Colaborador'}
@@ -680,6 +680,6 @@ REGRAS:
   }
 
   private buildFallbackPrompt(): string {
-    return `És o NOVA, o Tutor de IA da plataforma INNOVA. Responde em português, de forma clara e didáctica.`;
+    return `És a Ísis, o Tutor de IA da plataforma INNOVA. Responde em português, de forma clara e didáctica.`;
   }
 }

@@ -28,7 +28,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
-@ApiTags('AI Tutor — NOVA (Groq / Gemini / Ollama)')
+@ApiTags('AI Tutor — Ísis (Groq / Gemini / Ollama)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('ai-tutor')
@@ -69,7 +69,7 @@ export class AiTutorController {
 
   @Post('sessions')
   @ApiOperation({
-    summary: 'Iniciar sessão com NOVA (contexto de curso, lição, PDI, personalidade)',
+    summary: 'Iniciar sessão com Ísis (contexto de curso, lição, PDI, personalidade)',
   })
   startSession(@CurrentUser() user: CurrentUserData, @Body() dto: StartAiSessionDto) {
     return this.svc.startSession(user.id, dto);
