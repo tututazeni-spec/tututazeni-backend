@@ -94,7 +94,7 @@ describe('Audit Integration', () => {
         .set('Authorization', `Bearer ${rhToken}`)
         .expect(200);
       expect(res.body).toHaveProperty('data');
-      expect(res.body).toHaveProperty('total');
+      expect(res.body).toHaveProperty('meta.total');
     });
 
     it('RH filtra logs por entidade → só devolve a entidade pedida', async () => {
@@ -225,7 +225,7 @@ describe('Audit Integration', () => {
         .get('/audit?action=EXPORT&entity=AuditLog')
         .set('Authorization', `Bearer ${rhToken}`)
         .expect(200);
-      expect(listRes.body.total).toBeGreaterThan(0);
+      expect(listRes.body.meta.total).toBeGreaterThan(0);
     });
   });
 });

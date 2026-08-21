@@ -20,6 +20,7 @@ import {
   AvatarTrainingAnalyticsFilterDto,
   SessionStatus,
 } from './avatar-training.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -224,7 +225,7 @@ export class AvatarTrainingService {
 
   async getAvatars(filters: AvatarFilterDto = {}) {
     const { page = 1, limit = 20, role, isPublic } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Partial<TrainingAvatarRecord> = { active: true };
     if (role) where.role = role;
     if (isPublic !== undefined) where.isPublic = isPublic;
@@ -233,7 +234,7 @@ export class AvatarTrainingService {
       safeM(this.prisma, 'trainingAvatar').findMany({
         where,
         skip,
-        take: limit,
+        take,
         orderBy: { createdAt: 'desc' },
       }) as Promise<TrainingAvatarRecord[]>
     ).catch(e => {
@@ -257,7 +258,7 @@ export class AvatarTrainingService {
       return 0;
     });
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async getAvatar(id: number) {
@@ -354,7 +355,7 @@ export class AvatarTrainingService {
 
   async getScenarios(filters: ScenarioFilterDto = {}) {
     const { page = 1, limit = 20, category, difficulty, competencyId, search } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.AvatarScenarioWhereInput = { active: true };
     if (category) where.category = category;
     if (difficulty) where.difficulty = difficulty;
@@ -369,7 +370,7 @@ export class AvatarTrainingService {
       this.prisma.read.avatarScenario.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: { competency: { select: { id: true, name: true } } },
         orderBy: { difficulty: 'asc' },
       }),
@@ -402,18 +403,17 @@ export class AvatarTrainingService {
       completions.map((c): [number, (typeof completions)[number]] => [c.scenarioId, c]),
     );
 
-    return {
-      data: data.map(s => ({
-        ...s,
-        completions: cMap.get(s.id)?._count.id ?? 0,
-        avgScore: cMap.get(s.id)?._avg.score ? +cMap.get(s.id)!._avg.score!.toFixed(1) : null,
-        // xpReward não existe em AvatarScenario (achado estrutural, ver
-        // comentário acima de createScenario) — sempre cai no valor por
-        // difficulty.
-        xpReward: DIFFICULTY_XP[s.difficulty],
-      })),
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
-    };
+    const enriched = data.map(s => ({
+      ...s,
+      completions: cMap.get(s.id)?._count.id ?? 0,
+      avgScore: cMap.get(s.id)?._avg.score ? +cMap.get(s.id)!._avg.score!.toFixed(1) : null,
+      // xpReward não existe em AvatarScenario (achado estrutural, ver
+      // comentário acima de createScenario) — sempre cai no valor por
+      // difficulty.
+      xpReward: DIFFICULTY_XP[s.difficulty],
+    }));
+
+    return buildPaginatedResponse(enriched, total, page, limit);
   }
 
   async getScenario(id: number, userId?: number) {

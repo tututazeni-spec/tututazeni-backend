@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { AuditLog, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditFilterDto, LogAuditDto, AuditSeverity, AuditStatus } from './audit.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import * as crypto from 'crypto';
 
 // Shape mínimo de um Request Express usado por logCreate/logUpdate/logDelete
@@ -322,7 +323,7 @@ export class AuditService {
       to,
       criticalOnly,
     } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.AuditLogWhereInput = {};
     if (userId) where.userId = userId;
@@ -343,14 +344,14 @@ export class AuditService {
       this.prisma.read.auditLog.findMany({
         where,
         skip,
-        take: limit,
+        take,
         include: { user: { select: { id: true, fullName: true, email: true, avatarUrl: true } } },
         orderBy: { timestamp: 'desc' },
       }),
       this.prisma.read.auditLog.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: number) {
@@ -528,11 +529,11 @@ export class AuditService {
       action: 'EXPORT',
       entity: 'AuditLog',
       severity: AuditSeverity.HIGH,
-      metadata: { exported: result.total },
+      metadata: { exported: result.meta.total },
     });
 
     return {
-      exported: result.total,
+      exported: result.meta.total,
       data: result.data.map(log => ({
         id: log.id,
         timestamp: log.timestamp,

@@ -24,6 +24,7 @@ import {
   CycleStatus,
   RequestStatus,
 } from './evaluation.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS
@@ -178,7 +179,7 @@ export class EvaluationService {
 
   async getCycles(filters: CycleFilterDto = {}) {
     const { page = 1, limit = 20, status } = filters;
-    const skip = (page - 1) * limit;
+    const { skip, take } = calculatePagination(page, limit);
     // Record<string, unknown> em vez de `any` — não há
     // Prisma.EvaluationCycleWhereInput real a que amarrar este filtro (ver
     // nota estrutural em createCycle() abaixo).
@@ -189,7 +190,7 @@ export class EvaluationService {
       safeM(this.prisma, 'evaluationCycle').findMany({
         where,
         skip,
-        take: limit,
+        take,
         orderBy: { createdAt: 'desc' },
       }) as Promise<EvaluationCycleRow[]>
     ).catch((e: unknown) => {
@@ -214,7 +215,7 @@ export class EvaluationService {
       return 0;
     });
 
-    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async getCycle(id: number) {

@@ -1,7 +1,8 @@
 // src/audit/audit.dto.ts
-import { IsString, IsInt, IsOptional, IsEnum, IsBoolean, IsDateString, Min } from 'class-validator';
+import { IsString, IsInt, IsOptional, IsEnum, IsBoolean, IsDateString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import { AuditStatus, RiskLevel as AuditSeverity } from '@prisma/client';
 
 export { AuditStatus, AuditSeverity };
@@ -27,7 +28,7 @@ export enum AuditAction {
   FAILED = 'FAILED',
 }
 
-export class AuditFilterDto {
+export class AuditFilterDto extends BaseFilterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsInt()
@@ -84,20 +85,6 @@ export class AuditFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   criticalOnly?: boolean;
-
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  page?: number;
-
-  @ApiPropertyOptional({ default: 50 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  limit?: number;
 }
 
 export class LogAuditDto {
