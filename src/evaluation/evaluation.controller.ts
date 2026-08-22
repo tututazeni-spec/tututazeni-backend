@@ -113,15 +113,15 @@ export class EvaluationController {
   @Post('assign')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Atribuir avaliador a um colaborador' })
-  assign(@Body() dto: AssignEvaluatorDto) {
-    return this.svc.assignEvaluator(dto);
+  assign(@Body() dto: AssignEvaluatorDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.assignEvaluator(dto, user);
   }
 
   @Post('bulk-assign')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Atribuição em massa de avaliadores num ciclo' })
-  bulkAssign(@Body() dto: BulkAssignDto) {
-    return this.svc.bulkAssign(dto);
+  bulkAssign(@Body() dto: BulkAssignDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.bulkAssign(dto, user);
   }
 
   // ─── Submit ──────────────────────────────────────────────────

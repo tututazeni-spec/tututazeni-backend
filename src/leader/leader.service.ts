@@ -477,7 +477,24 @@ export class LeaderService {
   // FEEDBACK (1:1 & structured)
   // ══════════════════════════════════════════════════════
 
-  async giveFeedback(giverId: number, dto: GiveFeedbackDto) {
+  async giveFeedback(user: CurrentUserData, dto: GiveFeedbackDto) {
+    const giverId = user.id;
+
+    // Ownership: o destinatário tem de pertencer à equipa do líder autenticado
+    // (managerId === giverId), ser o próprio, ou o utilizador ser ADMIN/RH.
+    // Sem isto, qualquer LIDER/DIRECTOR/GESTOR dava feedback a qualquer
+    // utilizador da plataforma, não só à sua equipa.
+    const isTeamMember = await this.prisma.read.user.count({
+      where: { id: dto.recipientId, managerId: giverId },
+    });
+    if (
+      !isTeamMember &&
+      giverId !== dto.recipientId &&
+      !isPrivileged(user, [Role.ADMIN, Role.RH])
+    ) {
+      throw new NotFoundException('Membro não encontrado');
+    }
+
     // Record via AuditLog + optionally EngagementFeedback model
     const contentFull =
       dto.type === 'SBI'
@@ -584,7 +601,24 @@ export class LeaderService {
   // 1:1 MEETINGS
   // ══════════════════════════════════════════════════════
 
-  async createOneOnOne(leaderId: number, dto: LeaderCreateOneOnOneDto) {
+  async createOneOnOne(user: CurrentUserData, dto: LeaderCreateOneOnOneDto) {
+    const leaderId = user.id;
+
+    // Ownership: o participante tem de pertencer à equipa do líder autenticado
+    // (managerId === leaderId), ser o próprio, ou o utilizador ser ADMIN/RH.
+    // Sem isto, qualquer LIDER/DIRECTOR/GESTOR agendava 1:1s com qualquer
+    // utilizador da plataforma, não só com a sua equipa.
+    const isTeamMember = await this.prisma.read.user.count({
+      where: { id: dto.participantId, managerId: leaderId },
+    });
+    if (
+      !isTeamMember &&
+      leaderId !== dto.participantId &&
+      !isPrivileged(user, [Role.ADMIN, Role.RH])
+    ) {
+      throw new NotFoundException('Membro não encontrado');
+    }
+
     // FIX: OneOnOneMeeting é um modelo real — mesmo achado de Feedback acima.
     const meeting = await this.prisma.oneOnOneMeeting
       .create({
@@ -850,7 +884,23 @@ export class LeaderService {
   // COURSE ASSIGNMENT
   // ══════════════════════════════════════════════════════
 
-  async assignCourse(dto: LeaderAssignCourseDto) {
+  async assignCourse(user: CurrentUserData, dto: LeaderAssignCourseDto) {
+    const leaderId = user.id;
+
+    // Ownership: todos os utilizadores atribuídos têm de pertencer à equipa
+    // do líder autenticado (managerId === leaderId), ou o utilizador ser
+    // ADMIN/RH. Sem isto, qualquer LIDER/DIRECTOR/GESTOR inscrevia qualquer
+    // utilizador da plataforma num curso, não só a sua equipa — e o método
+    // nem sequer recebia a identidade do chamador antes desta correcção.
+    if (!isPrivileged(user, [Role.ADMIN, Role.RH])) {
+      const teamMemberCount = await this.prisma.read.user.count({
+        where: { id: { in: dto.userIds }, managerId: leaderId },
+      });
+      if (teamMemberCount !== dto.userIds.length) {
+        throw new NotFoundException('Um ou mais membros não encontrados');
+      }
+    }
+
     const results = await Promise.allSettled(
       dto.userIds.map(uid =>
         this.prisma.enrollment

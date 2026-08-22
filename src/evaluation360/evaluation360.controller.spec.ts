@@ -155,13 +155,13 @@ describe('Evaluation360Controller', () => {
   it('assignEvaluators → assignEvaluators(id, dto, userId)', async () => {
     const dto = {} as any;
     await controller.assignEvaluators('cycle-1', dto, mockUser as any);
-    expect(mockSvc.assignEvaluators).toHaveBeenCalledWith('cycle-1', dto, '1');
+    expect(mockSvc.assignEvaluators).toHaveBeenCalledWith('cycle-1', dto, mockUser);
   });
 
   it('approveEvaluators → approveEvaluators(id, dto, userId)', async () => {
     const dto = {} as any;
     await controller.approveEvaluators('cycle-1', dto, mockUser as any);
-    expect(mockSvc.approveEvaluators).toHaveBeenCalledWith('cycle-1', dto, '1');
+    expect(mockSvc.approveEvaluators).toHaveBeenCalledWith('cycle-1', dto, mockUser);
   });
 
   it('sendInvites → sendCycleInvites(id, userId)', async () => {

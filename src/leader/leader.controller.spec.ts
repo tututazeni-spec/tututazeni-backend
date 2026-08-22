@@ -95,10 +95,10 @@ describe('LeaderController', () => {
     expect(mockSvc.getTeamPerformance).toHaveBeenCalledWith(3, undefined);
   });
 
-  it('giveFeedback → giveFeedback(userId, dto)', async () => {
+  it('giveFeedback → giveFeedback(user, dto)', async () => {
     const dto = {} as any;
     await controller.giveFeedback(mockUser as any, dto);
-    expect(mockSvc.giveFeedback).toHaveBeenCalledWith(1, dto);
+    expect(mockSvc.giveFeedback).toHaveBeenCalledWith(mockUser, dto);
   });
 
   it('teamFeedbacks → getTeamFeedbacks(userId)', async () => {
@@ -106,10 +106,10 @@ describe('LeaderController', () => {
     expect(mockSvc.getTeamFeedbacks).toHaveBeenCalledWith(1, undefined);
   });
 
-  it('create1on1 → createOneOnOne(userId, dto)', async () => {
+  it('create1on1 → createOneOnOne(user, dto)', async () => {
     const dto = {} as any;
     await controller.create1on1(mockUser as any, dto);
-    expect(mockSvc.createOneOnOne).toHaveBeenCalledWith(1, dto);
+    expect(mockSvc.createOneOnOne).toHaveBeenCalledWith(mockUser, dto);
   });
 
   it('list1on1 → getOneOnOnes(userId)', async () => {
@@ -127,10 +127,10 @@ describe('LeaderController', () => {
     expect(mockSvc.approvePlan).toHaveBeenCalledWith(5, mockUser);
   });
 
-  it('assignCourse → assignCourse(dto)', async () => {
+  it('assignCourse → assignCourse(user, dto)', async () => {
     const dto = {} as any;
-    await controller.assignCourse(dto);
-    expect(mockSvc.assignCourse).toHaveBeenCalledWith(dto);
+    await controller.assignCourse(mockUser as any, dto);
+    expect(mockSvc.assignCourse).toHaveBeenCalledWith(mockUser, dto);
   });
 
   it('upsertProfile → upsertProfile(dto)', async () => {

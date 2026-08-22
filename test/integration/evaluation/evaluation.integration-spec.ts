@@ -18,6 +18,7 @@ describe('Evaluation Integration', () => {
   let adminToken: string;
   let employeeId: number;
   let managerId: number;
+  let originalEmployeeManagerId: number | null;
 
   const pool = new Pool({ connectionString: TEST_DB_URL });
   const adapter = new PrismaPg(pool);
@@ -55,9 +56,18 @@ describe('Evaluation Integration', () => {
       where: { email: 'int.manager@innova-test.com' },
     });
     managerId = manager!.id;
+    originalEmployeeManagerId = employee!.managerId;
+
+    // Wire employee → manager for team-scoped endpoints (seed doesn't set this by default)
+    await prisma.user.update({ where: { id: employeeId }, data: { managerId } });
   });
 
   afterAll(async () => {
+    await prisma.user.update({
+      where: { id: employeeId },
+      data: { managerId: originalEmployeeManagerId },
+    });
+
     await prisma.performanceEvaluation
       .deleteMany({ where: { evaluatorId: managerId, evaluatedId: employeeId } })
       .catch(() => undefined);
@@ -302,12 +312,13 @@ describe('Evaluation Integration', () => {
       expect(res.body.hasData).toBe(true);
     });
 
-    it('GET /evaluations/analytics/team/:managerId — 200 (sem equipa directa nos fixtures partilhados)', async () => {
+    it('GET /evaluations/analytics/team/:managerId — 200 (colaborador fixture agora reporta ao gestor)', async () => {
       const res = await request(app.getHttpServer())
         .get(`/evaluations/analytics/team/${managerId}`)
         .set('Authorization', `Bearer ${managerToken}`)
         .expect(200);
-      expect(res.body.team).toEqual([]);
+      expect(Array.isArray(res.body.team)).toBe(true);
+      expect(res.body.team.some((m: any) => m.user?.id === employeeId)).toBe(true);
     });
   });
 

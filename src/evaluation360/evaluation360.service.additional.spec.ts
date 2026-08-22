@@ -391,7 +391,7 @@ describe('Evaluation360Service (additional)', () => {
       const result = await service.assignEvaluators(
         'cycle-1',
         { assignments: [{ evaluatorId: 'mgr-1', evaluateeId: 'user-1', role: 'MANAGER' as any }] },
-        'admin-1',
+        { id: 1, role: { name: 'ADMIN' } } as any,
       );
       expect(result.created).toBe(1);
       expect(result.errors).toHaveLength(0);
@@ -402,7 +402,7 @@ describe('Evaluation360Service (additional)', () => {
       const result = await service.assignEvaluators(
         'cycle-1',
         { assignments: [{ evaluatorId: 'user-1', evaluateeId: 'user-1', role: 'MANAGER' as any }] },
-        'admin-1',
+        { id: 1, role: { name: 'ADMIN' } } as any,
       );
       expect(result.errors).toHaveLength(1);
       expect(result.created).toBe(0);
@@ -421,7 +421,7 @@ describe('Evaluation360Service (additional)', () => {
       const result = await service.assignEvaluators(
         'cycle-1',
         { assignments: [{ evaluatorId: 'user-1', evaluateeId: 'user-1', role: 'SELF' as any }] },
-        'admin-1',
+        { id: 1, role: { name: 'ADMIN' } } as any,
       );
       expect(result.created).toBe(1);
     });
@@ -439,11 +439,10 @@ describe('Evaluation360Service (additional)', () => {
         create: jest.fn().mockResolvedValue({}),
         update: jest.fn().mockResolvedValue({}),
       };
-      const result = await service.approveEvaluators(
-        'cycle-1',
-        { assignmentIds: ['a1', 'a2'] },
-        'admin-1',
-      );
+      const result = await service.approveEvaluators('cycle-1', { assignmentIds: ['a1', 'a2'] }, {
+        id: 1,
+        role: { name: 'ADMIN' },
+      } as any);
       expect(result.approved).toBe(2);
       expect(mockEvents.emit).toHaveBeenCalledWith(
         'evaluation.invitation.send',

@@ -236,12 +236,15 @@ describe('EvaluationService', () => {
         evaluatedId: 1,
         type: EvalType.MANAGER,
       });
-      const result = await service.assignEvaluator({
-        evaluatorId: 2,
-        evaluatedId: 1,
-        cycleId: 1,
-        type: EvalType.MANAGER,
-      });
+      const result = await service.assignEvaluator(
+        {
+          evaluatorId: 2,
+          evaluatedId: 1,
+          cycleId: 1,
+          type: EvalType.MANAGER,
+        },
+        { id: 1, role: { name: 'ADMIN' } } as any,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -250,10 +253,13 @@ describe('EvaluationService', () => {
 
   describe('bulkAssign', () => {
     it('deve atribuir avaliadores em massa', async () => {
-      const result = await service.bulkAssign({
-        cycleId: 1,
-        assignments: [{ evaluatorId: 2, evaluatedId: 1, type: EvalType.MANAGER }],
-      });
+      const result = await service.bulkAssign(
+        {
+          cycleId: 1,
+          assignments: [{ evaluatorId: 2, evaluatedId: 1, type: EvalType.MANAGER }],
+        },
+        { id: 1, role: { name: 'ADMIN' } } as any,
+      );
       expect(result).toBeDefined();
     });
   });

@@ -231,7 +231,7 @@ export class Evaluation360Controller {
     @Body() dto: BulkAssignEvaluatorsDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.service.assignEvaluators(id, dto, String(user.id));
+    return this.service.assignEvaluators(id, dto, user);
   }
 
   @Post('cycles/:id/evaluators/approve')
@@ -243,7 +243,7 @@ export class Evaluation360Controller {
     @Body() dto: ApproveEvaluatorsDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.service.approveEvaluators(id, dto, String(user.id));
+    return this.service.approveEvaluators(id, dto, user);
   }
 
   @Post('cycles/:id/invites/send')

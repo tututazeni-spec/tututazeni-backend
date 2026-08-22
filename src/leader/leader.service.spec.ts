@@ -13,7 +13,7 @@ const mockPrisma = {
     aggregate: jest.fn().mockResolvedValue({ _avg: {} }),
     groupBy: jest.fn().mockResolvedValue([]),
   },
-  enrollment: { findMany: makeFind(), count: makeCount() },
+  enrollment: { findMany: makeFind(), count: makeCount(), create: jest.fn().mockResolvedValue({}) },
   developmentPlan: { findMany: makeFind(), count: makeCount() },
   developmentPlanAction: { findMany: makeFind(), count: makeCount() },
   surveyResponse: { findMany: makeFind(), count: makeCount() },
@@ -162,12 +162,42 @@ describe('LeaderService', () => {
 
   describe('giveFeedback', () => {
     it('deve dar feedback a membro da equipa', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 2, managerId: 1 });
-      const result = await service.giveFeedback(1, {
-        toUserId: 2,
-        type: 'RECOGNITION',
-        message: 'Excelente trabalho',
-      } as any);
+      mockPrisma.user.count.mockResolvedValue(1); // recipientId 2 pertence à equipa do leaderUser (id 1)
+      const result = await service.giveFeedback(
+        leaderUser as any,
+        {
+          recipientId: 2,
+          type: 'RECOGNITION',
+          content: 'Excelente trabalho',
+        } as any,
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('não permite dar feedback a utilizador fora da equipa', async () => {
+      mockPrisma.user.count.mockResolvedValue(0); // recipientId 2 não pertence à equipa do otherLeaderUser (id 99)
+      await expect(
+        service.giveFeedback(
+          otherLeaderUser as any,
+          {
+            recipientId: 2,
+            type: 'RECOGNITION',
+            content: 'Excelente trabalho',
+          } as any,
+        ),
+      ).rejects.toThrow('Membro não encontrado');
+    });
+
+    it('permite ADMIN dar feedback a qualquer utilizador', async () => {
+      mockPrisma.user.count.mockResolvedValue(0);
+      const result = await service.giveFeedback(
+        adminUser as any,
+        {
+          recipientId: 2,
+          type: 'RECOGNITION',
+          content: 'Excelente trabalho',
+        } as any,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -186,12 +216,80 @@ describe('LeaderService', () => {
 
   describe('createOneOnOne', () => {
     it('deve criar 1:1 com membro da equipa', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 2, managerId: 1 });
-      const result = await service.createOneOnOne(1, {
-        memberId: 2,
-        scheduledAt: new Date().toISOString(),
-        topics: [],
-      } as any);
+      mockPrisma.user.count.mockResolvedValue(1); // participantId 2 pertence à equipa do leaderUser (id 1)
+      const result = await service.createOneOnOne(
+        leaderUser as any,
+        {
+          participantId: 2,
+          scheduledAt: new Date().toISOString(),
+        } as any,
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('não permite agendar 1:1 com utilizador fora da equipa', async () => {
+      mockPrisma.user.count.mockResolvedValue(0); // participantId 2 não pertence à equipa do otherLeaderUser (id 99)
+      await expect(
+        service.createOneOnOne(
+          otherLeaderUser as any,
+          {
+            participantId: 2,
+            scheduledAt: new Date().toISOString(),
+          } as any,
+        ),
+      ).rejects.toThrow('Membro não encontrado');
+    });
+
+    it('permite ADMIN agendar 1:1 com qualquer utilizador', async () => {
+      mockPrisma.user.count.mockResolvedValue(0);
+      const result = await service.createOneOnOne(
+        adminUser as any,
+        {
+          participantId: 2,
+          scheduledAt: new Date().toISOString(),
+        } as any,
+      );
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ─── assignCourse ─────────────────────────────────────────────────────────
+
+  describe('assignCourse', () => {
+    it('deve inscrever membros da equipa no curso', async () => {
+      mockPrisma.user.count.mockResolvedValue(2); // ambos os userIds pertencem à equipa do leaderUser (id 1)
+      const result = await service.assignCourse(
+        leaderUser as any,
+        {
+          userIds: [2, 3],
+          courseId: 10,
+        } as any,
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('não permite atribuir curso a utilizadores fora da equipa', async () => {
+      mockPrisma.user.count.mockResolvedValue(1); // só 1 dos 2 userIds pertence à equipa do otherLeaderUser (id 99)
+      await expect(
+        service.assignCourse(
+          otherLeaderUser as any,
+          {
+            userIds: [2, 3],
+            courseId: 10,
+          } as any,
+        ),
+      ).rejects.toThrow('Um ou mais membros não encontrados');
+    });
+
+    it('permite ADMIN atribuir curso a qualquer utilizador', async () => {
+      mockPrisma.user.count.mockResolvedValue(0);
+      const result = await service.assignCourse(
+        adminUser as any,
+        {
+          userIds: [2, 3],
+          courseId: 10,
+        } as any,
+      );
       expect(result).toBeDefined();
     });
   });

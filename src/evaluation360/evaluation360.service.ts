@@ -15,6 +15,9 @@ import { Prisma } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/services/audit.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CurrentUserData } from '../common/decorators';
+import { isPrivileged } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
 import {
   Evaluation360CreateCompetencyDto,
   Evaluation360UpdateCompetencyDto,
@@ -468,8 +471,10 @@ export class Evaluation360Service {
     return suggestions;
   }
 
-  async assignEvaluators(cycleId: string, dto: BulkAssignEvaluatorsDto, actorId: string) {
+  async assignEvaluators(cycleId: string, dto: BulkAssignEvaluatorsDto, user: CurrentUserData) {
     await this.findCycleOrFail(cycleId);
+    const actorId = String(user.id);
+    const privileged = isPrivileged(user, [Role.ADMIN, Role.RH]);
     const results = { created: 0, skipped: 0, errors: [] as string[] };
 
     for (const assign of dto.assignments) {
@@ -479,6 +484,18 @@ export class Evaluation360Service {
           `Avaliador ${assign.evaluatorId} não pode ser o mesmo que o avaliado em role ${assign.role}`,
         );
         continue;
+      }
+      // Ownership: sem esta verificação, um GESTOR/LIDER conseguia atribuir
+      // avaliadores a colaboradores de qualquer equipa, não só a sua.
+      // evaluateeId/evaluatorId são Strings sem FK — o User.id real é Int.
+      if (!privileged && user.id !== Number(assign.evaluateeId)) {
+        const isTeamMember = await this.prisma.read.user.count({
+          where: { id: Number(assign.evaluateeId), managerId: user.id },
+        });
+        if (!isTeamMember) {
+          results.errors.push(`Colaborador ${assign.evaluateeId} não encontrado na sua equipa`);
+          continue;
+        }
       }
       try {
         await this.prisma.evaluatorAssignment.create({
@@ -507,7 +524,29 @@ export class Evaluation360Service {
     return results;
   }
 
-  async approveEvaluators(cycleId: string, dto: ApproveEvaluatorsDto, actorId: string) {
+  async approveEvaluators(cycleId: string, dto: ApproveEvaluatorsDto, user: CurrentUserData) {
+    const actorId = String(user.id);
+
+    if (!isPrivileged(user, [Role.ADMIN, Role.RH])) {
+      // Ownership: mesmo gap do assignEvaluators — sem isto, um GESTOR/LIDER
+      // conseguia aprovar avaliadores de colaboradores de outra equipa.
+      const targets = await this.prisma.evaluatorAssignment.findMany({
+        where: { id: { in: dto.assignmentIds }, cycleId },
+        select: { evaluateeId: true },
+      });
+      const otherTeamIds = [
+        ...new Set(targets.map(t => Number(t.evaluateeId)).filter(id => id !== user.id)),
+      ];
+      if (otherTeamIds.length) {
+        const teamCount = await this.prisma.read.user.count({
+          where: { id: { in: otherTeamIds }, managerId: user.id },
+        });
+        if (teamCount !== otherTeamIds.length) {
+          throw new NotFoundException('Atribuição não encontrada na sua equipa');
+        }
+      }
+    }
+
     const updated = await this.prisma.evaluatorAssignment.updateMany({
       where: { id: { in: dto.assignmentIds }, cycleId },
       data: {

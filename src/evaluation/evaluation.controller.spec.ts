@@ -99,16 +99,16 @@ describe('EvaluationController', () => {
     expect(mockSvc.getForm).toHaveBeenCalledWith(3);
   });
 
-  it('assign → assignEvaluator(dto)', async () => {
+  it('assign → assignEvaluator(dto, user)', async () => {
     const dto = {} as any;
-    await controller.assign(dto);
-    expect(mockSvc.assignEvaluator).toHaveBeenCalledWith(dto);
+    await controller.assign(dto, mockUser as any);
+    expect(mockSvc.assignEvaluator).toHaveBeenCalledWith(dto, mockUser);
   });
 
-  it('bulkAssign → bulkAssign(dto)', async () => {
+  it('bulkAssign → bulkAssign(dto, user)', async () => {
     const dto = {} as any;
-    await controller.bulkAssign(dto);
-    expect(mockSvc.bulkAssign).toHaveBeenCalledWith(dto);
+    await controller.bulkAssign(dto, mockUser as any);
+    expect(mockSvc.bulkAssign).toHaveBeenCalledWith(dto, mockUser);
   });
 
   it('submit → submitEvaluation(userId, dto)', async () => {
