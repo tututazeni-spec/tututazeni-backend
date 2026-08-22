@@ -66,9 +66,9 @@ describe('CertificationController', () => {
     expect(mockSvc.findAllCertificates).toHaveBeenCalledWith(filters);
   });
 
-  it('getMyCertificates → getMyCertificates(userId, page, limit)', async () => {
-    await controller.getMyCertificates(mockUser as any, 1, 20);
-    expect(mockSvc.getMyCertificates).toHaveBeenCalledWith(1, 1, 20);
+  it('getMyCertificates → getMyCertificates(userId, filters)', async () => {
+    await controller.getMyCertificates(mockUser as any, { page: 1, limit: 20 } as any);
+    expect(mockSvc.getMyCertificates).toHaveBeenCalledWith(1, { page: 1, limit: 20 });
   });
 
   it('findCertificateById → findCertificateById(id, user)', async () => {

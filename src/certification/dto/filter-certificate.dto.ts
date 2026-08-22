@@ -34,3 +34,5 @@ export class FilterCertificateDto extends BaseFilterDto {
   @Max(100)
   override limit?: number = 20;
 }
+
+export class MyCertificatesFilterDto extends BaseFilterDto {}

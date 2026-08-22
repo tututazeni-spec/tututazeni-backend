@@ -6,8 +6,6 @@ import {
   Body,
   Param,
   Query,
-  DefaultValuePipe,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CurrentUser, Roles, Public, CurrentUserData } from '../common/decorators';
@@ -19,6 +17,7 @@ import {
   IssueBadgeDto,
   RevokeDto,
   FilterCertificateDto,
+  MyCertificatesFilterDto,
 } from './dto';
 import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
@@ -81,12 +80,8 @@ export class CertificationController {
   @Get('my-certificates')
   @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Meus certificados' })
-  getMyCertificates(
-    @CurrentUser() user: CurrentUserData,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-  ) {
-    return this.service.getMyCertificates(user.id, page, limit);
+  getMyCertificates(@CurrentUser() user: CurrentUserData, @Query() filters: MyCertificatesFilterDto) {
+    return this.service.getMyCertificates(user.id, filters);
   }
 
   @Get('certificates/:id')
