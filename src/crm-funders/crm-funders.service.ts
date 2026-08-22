@@ -9,6 +9,7 @@ import {
   CreateDisbursementDto,
   CreateFunderInteractionDto,
   CreateFunderReportDto,
+  PaginationFilterDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -208,14 +209,16 @@ export class CrmFundersService {
     });
   }
 
-  async findGrants(funderId: string, page = 1, limit = 20) {
+  async findGrants(funderId: string, filters: PaginationFilterDto) {
     await this.findOne(funderId);
+    const { page = 1, limit = 20 } = filters;
     const where = { funderId, deletedAt: null };
+    const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await Promise.all([
       this.prisma.read.fundingGrant.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { createdAt: 'desc' },
         include: {
           _count: { select: { disbursements: true, reports: true } },
@@ -223,7 +226,8 @@ export class CrmFundersService {
       }),
       this.prisma.read.fundingGrant.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+    return { data: pageData, ...meta };
   }
 
   async updateGrantStatus(grantId: string, status: string, userId: number) {

@@ -244,7 +244,7 @@ describe('CrmFundersService', () => {
       mockPrisma.funder.findUnique.mockResolvedValue(mockFunder);
       mockPrisma.fundingGrant.findMany.mockResolvedValue([mockGrant]);
       mockPrisma.fundingGrant.count.mockResolvedValue(1);
-      const result = await service.findGrants('fun-1', 1, 20);
+      const result = await service.findGrants('fun-1', { page: 1, limit: 20 });
       expect(result.total).toBe(1);
     });
   });

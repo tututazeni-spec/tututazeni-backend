@@ -27,6 +27,7 @@ import {
   CreateFunderInteractionDto,
   CreateFunderReportDto,
   SubmitFunderReportDto,
+  PaginationFilterDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
 
@@ -119,12 +120,8 @@ export class CrmFundersController {
   @Get(':id/grants')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar grants do financiador' })
-  findGrants(
-    @Param('id') id: string,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-  ) {
-    return this.service.findGrants(id, page, limit);
+  findGrants(@Param('id') id: string, @Query() filters: PaginationFilterDto) {
+    return this.service.findGrants(id, filters);
   }
 
   @Put('grants/:grantId/status')
