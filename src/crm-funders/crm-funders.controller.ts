@@ -151,12 +151,8 @@ export class CrmFundersController {
   @Get('grants/:grantId/disbursements')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar desembolsos do grant' })
-  getDisbursements(
-    @Param('grantId') grantId: string,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-  ) {
-    return this.service.getDisbursements(grantId, page, limit);
+  getDisbursements(@Param('grantId') grantId: string, @Query() filters: PaginationFilterDto) {
+    return this.service.getDisbursements(grantId, filters);
   }
 
   // ─── INTERACÇÕES ─────────────────────────────────────

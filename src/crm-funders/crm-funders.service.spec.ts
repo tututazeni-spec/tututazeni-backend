@@ -314,7 +314,7 @@ describe('CrmFundersService', () => {
     it('deve retornar desembolsos paginados', async () => {
       mockPrisma.grantDisbursement.findMany.mockResolvedValue([{ id: 'dis-1' }]);
       mockPrisma.grantDisbursement.count.mockResolvedValue(1);
-      const result = await service.getDisbursements('grt-1', 1, 20);
+      const result = await service.getDisbursements('grt-1', { page: 1, limit: 20 });
       expect(result.total).toBe(1);
     });
   });

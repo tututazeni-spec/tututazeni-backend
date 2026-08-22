@@ -289,19 +289,22 @@ export class CrmFundersService {
     return disbursement;
   }
 
-  async getDisbursements(grantId: string, page = 1, limit = 20) {
+  async getDisbursements(grantId: string, filters: PaginationFilterDto) {
+    const { page = 1, limit = 20 } = filters;
     const where = { grantId, deletedAt: null };
+    const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await Promise.all([
       this.prisma.read.grantDisbursement.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { receivedAt: 'desc' },
         include: { createdBy: { select: { fullName: true } } },
       }),
       this.prisma.read.grantDisbursement.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+    return { data: pageData, ...meta };
   }
 
   // ─── INTERACÇÕES ─────────────────────────────────────
