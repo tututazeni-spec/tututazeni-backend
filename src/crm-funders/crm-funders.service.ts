@@ -12,6 +12,7 @@ import {
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 const MS_PER_DAY = 86_400_000;
 const DEFAULT_CURRENCY = 'AOA'; // moeda oficial: Kwanza angolano
@@ -91,11 +92,12 @@ export class CrmFundersService {
         ],
       }),
     };
+    const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await Promise.all([
       this.prisma.read.funder.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { createdAt: 'desc' },
         include: {
           assignedTo: { select: { fullName: true } },
@@ -104,7 +106,8 @@ export class CrmFundersService {
       }),
       this.prisma.read.funder.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+    return { data: pageData, ...meta };
   }
 
   async findOne(id: string) {
