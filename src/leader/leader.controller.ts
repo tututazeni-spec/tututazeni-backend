@@ -122,7 +122,7 @@ export class LeaderController {
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Dar feedback a um membro da equipa (suporte a formato SBI)' })
   giveFeedback(@CurrentUser() user: CurrentUserData, @Body() dto: GiveFeedbackDto) {
-    return this.svc.giveFeedback(user.id, dto);
+    return this.svc.giveFeedback(user, dto);
   }
 
   @Get('feedback/team')
@@ -138,7 +138,7 @@ export class LeaderController {
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Agendar reunião 1:1' })
   create1on1(@CurrentUser() user: CurrentUserData, @Body() dto: LeaderCreateOneOnOneDto) {
-    return this.svc.createOneOnOne(user.id, dto);
+    return this.svc.createOneOnOne(user, dto);
   }
 
   @Get('1on1')
@@ -175,8 +175,8 @@ export class LeaderController {
   @Post('assign-course')
   @Roles(...ALL_MGMT)
   @ApiOperation({ summary: 'Atribuir curso a um ou vários membros da equipa' })
-  assignCourse(@Body() dto: LeaderAssignCourseDto) {
-    return this.svc.assignCourse(dto);
+  assignCourse(@CurrentUser() user: CurrentUserData, @Body() dto: LeaderAssignCourseDto) {
+    return this.svc.assignCourse(user, dto);
   }
 
   // ─── Leader profile ───────────────────────────────────────────

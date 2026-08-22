@@ -8,6 +8,9 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CurrentUserData } from '../common/decorators';
+import { isPrivileged } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
 import {
   CreateCycleDto,
   UpdateCycleDto,
@@ -494,7 +497,18 @@ export class EvaluationService {
   // EVALUATOR ASSIGNMENT
   // ══════════════════════════════════════════════════════
 
-  async assignEvaluator(dto: AssignEvaluatorDto) {
+  async assignEvaluator(dto: AssignEvaluatorDto, user: CurrentUserData) {
+    // Ownership: quem atribui tem de ser ADMIN/RH, o próprio avaliado, ou ter
+    // o avaliado como reporte directo (managerId === user.id) — caso
+    // contrário um LIDER/GESTOR conseguiria atribuir avaliadores a
+    // colaboradores de outras equipas.
+    if (!isPrivileged(user, [Role.ADMIN, Role.RH]) && user.id !== dto.evaluatedId) {
+      const isTeamMember = await this.prisma.read.user.count({
+        where: { id: dto.evaluatedId, managerId: user.id },
+      });
+      if (!isTeamMember) throw new NotFoundException('Colaborador não encontrado');
+    }
+
     const existing = await this.prisma.evaluationRequest
       .findFirst({
         where: {
@@ -555,9 +569,9 @@ export class EvaluationService {
     return request;
   }
 
-  async bulkAssign(dto: BulkAssignDto) {
+  async bulkAssign(dto: BulkAssignDto, user: CurrentUserData) {
     const results = await Promise.allSettled(
-      dto.assignments.map(a => this.assignEvaluator({ ...a, cycleId: dto.cycleId })),
+      dto.assignments.map(a => this.assignEvaluator({ ...a, cycleId: dto.cycleId }, user)),
     );
     const succeeded = results.filter(r => r.status === 'fulfilled').length;
     const failed = results.filter(r => r.status === 'rejected').length;

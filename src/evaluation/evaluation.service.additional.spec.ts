@@ -369,12 +369,15 @@ describe('EvaluationService (additional)', () => {
   describe('assignEvaluator', () => {
     it('deve criar pedido de avaliação', async () => {
       mockPrisma.evaluationRequest.create.mockResolvedValue({ id: 1 });
-      const result = await service.assignEvaluator({
-        evaluatorId: 2,
-        evaluatedId: 1,
-        cycleId: 1,
-        type: 'PEER' as any,
-      });
+      const result = await service.assignEvaluator(
+        {
+          evaluatorId: 2,
+          evaluatedId: 1,
+          cycleId: 1,
+          type: 'PEER' as any,
+        },
+        { id: 1, role: { name: 'ADMIN' } } as any,
+      );
       expect(result).toBeDefined();
     });
   });
@@ -384,10 +387,13 @@ describe('EvaluationService (additional)', () => {
   describe('bulkAssign', () => {
     it('deve atribuir avaliadores em bulk', async () => {
       mockPrisma.evaluationRequest.createMany.mockResolvedValue({ count: 3 });
-      const result = await service.bulkAssign({
-        cycleId: 1,
-        assignments: [{ evaluatorId: 2, evaluatedId: 1, type: 'MANAGER' as any }],
-      });
+      const result = await service.bulkAssign(
+        {
+          cycleId: 1,
+          assignments: [{ evaluatorId: 2, evaluatedId: 1, type: 'MANAGER' as any }],
+        },
+        { id: 1, role: { name: 'ADMIN' } } as any,
+      );
       expect(result).toBeDefined();
     });
   });
