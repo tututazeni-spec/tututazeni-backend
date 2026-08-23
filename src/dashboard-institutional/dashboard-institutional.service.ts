@@ -10,6 +10,7 @@ import { CreateSnapshotDto, CreateWidgetDto, UpdateWidgetDto, FilterSnapshotDto 
 import { AuditService } from '../common/services/audit.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 @Injectable()
 export class DashboardInstitutionalService {
@@ -242,17 +243,19 @@ export class DashboardInstitutionalService {
   async findAllSnapshots(filters: FilterSnapshotDto) {
     const { type, page = 1, limit = 12 } = filters;
     const where = { deletedAt: null, ...(type && { type }) };
+    const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await this.prisma.$transaction([
       this.prisma.read.institutionalSnapshot.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { period: 'desc' },
         include: { createdBy: { select: { fullName: true } } },
       }),
       this.prisma.read.institutionalSnapshot.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+    return { data: pageData, ...meta };
   }
 
   async compareSnapshots(period1: string, period2: string, type: string = SnapshotType.MONTHLY) {
