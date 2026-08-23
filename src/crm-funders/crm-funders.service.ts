@@ -381,9 +381,9 @@ export class CrmFundersService {
     return updated;
   }
 
-  async getOverdueReports(page = 1, limit = DEFAULT_PAGE_SIZE) {
-    const safePage = Math.max(page, 1);
-    const safeLimit = Math.min(Math.max(limit, 1), MAX_PAGE_SIZE);
+  async getOverdueReports(filters: PaginationFilterDto = {} as PaginationFilterDto) {
+    const safePage = Math.max(filters.page ?? 1, 1);
+    const safeLimit = Math.min(Math.max(filters.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
     const where: Prisma.FunderReportWhereInput = {
       status: { in: ['PENDING', 'REJECTED'] },
       dueDate: { lt: new Date() },

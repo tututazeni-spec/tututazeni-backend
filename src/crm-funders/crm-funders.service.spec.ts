@@ -399,7 +399,7 @@ describe('CrmFundersService', () => {
     it('deve retornar relatórios em atraso paginados', async () => {
       mockPrisma.funderReport.findMany.mockResolvedValue([{ id: 'rep-1' }]);
       mockPrisma.funderReport.count.mockResolvedValue(1);
-      const result = await service.getOverdueReports();
+      const result = await service.getOverdueReports({});
       expect(result.data).toHaveLength(1);
       expect(result).toMatchObject({ total: 1, page: 1, limit: 20, totalPages: 1 });
     });
@@ -407,7 +407,7 @@ describe('CrmFundersService', () => {
     it('deve aplicar o tecto de paginação (limit máximo 100)', async () => {
       mockPrisma.funderReport.findMany.mockResolvedValue([]);
       mockPrisma.funderReport.count.mockResolvedValue(0);
-      const result = await service.getOverdueReports(1, 5000);
+      const result = await service.getOverdueReports({ page: 1, limit: 5000 });
       expect(result.limit).toBe(100);
       expect(mockPrisma.funderReport.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ take: 100, skip: 0 }),

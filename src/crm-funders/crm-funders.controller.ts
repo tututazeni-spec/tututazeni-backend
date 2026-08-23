@@ -10,8 +10,6 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  DefaultValuePipe,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -64,11 +62,8 @@ export class CrmFundersController {
   @Get('overdue-reports')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Relatórios em atraso (paginado)' })
-  getOverdueReports(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-  ) {
-    return this.service.getOverdueReports(page, limit);
+  getOverdueReports(@Query() filters: PaginationFilterDto) {
+    return this.service.getOverdueReports(filters);
   }
 
   @Get('report')
