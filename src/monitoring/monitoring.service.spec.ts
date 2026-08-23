@@ -275,7 +275,7 @@ describe('MonitoringService', () => {
     it('deve retornar lista paginada', async () => {
       mockPrisma.monitoringIndicator.findMany.mockResolvedValue([{ id: 'ind-1' }]);
       mockPrisma.monitoringIndicator.count.mockResolvedValue(1);
-      const result = await service.findAllIndicators(1, 20);
+      const result = await service.findAllIndicators({ page: 1, limit: 20 });
       expect(result.total).toBe(1);
     });
   });

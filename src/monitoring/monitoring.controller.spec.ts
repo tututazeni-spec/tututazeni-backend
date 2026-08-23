@@ -92,9 +92,13 @@ describe('MonitoringController', () => {
     expect(mockSvc.createIndicator).toHaveBeenCalledWith(dto, 1);
   });
 
-  it('findAllIndicators → findAllIndicators(page, limit, category)', async () => {
-    await controller.findAllIndicators(1, 20, 'financeiro');
-    expect(mockSvc.findAllIndicators).toHaveBeenCalledWith(1, 20, 'financeiro');
+  it('findAllIndicators → findAllIndicators(filters)', async () => {
+    await controller.findAllIndicators({ page: 1, limit: 20, category: 'financeiro' } as any);
+    expect(mockSvc.findAllIndicators).toHaveBeenCalledWith({
+      page: 1,
+      limit: 20,
+      category: 'financeiro',
+    });
   });
 
   it('addRecord → addRecord(id, dto, userId)', async () => {

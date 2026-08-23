@@ -10,12 +10,14 @@ import {
   CreateRecordDto,
   CreateEvalCycleDto,
   MonitoringSubmitEvaluationDto,
+  FilterIndicatorDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
 import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 @Injectable()
 export class MonitoringService {
@@ -177,23 +179,26 @@ export class MonitoringService {
     return indicator;
   }
 
-  async findAllIndicators(page = 1, limit = 20, category?: string) {
+  async findAllIndicators(filters: FilterIndicatorDto) {
+    const { page = 1, limit = 20, category } = filters;
     const where = {
       deletedAt: null,
       isActive: true,
       ...(category && { category }),
     };
+    const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await Promise.all([
       this.prisma.read.monitoringIndicator.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { createdAt: 'desc' },
         include: { _count: { select: { records: true } } },
       }),
       this.prisma.read.monitoringIndicator.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+    return { data: pageData, ...meta };
   }
 
   async addRecord(indicatorId: string, dto: CreateRecordDto, userId: number) {

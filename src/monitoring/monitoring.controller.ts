@@ -7,7 +7,6 @@ import {
   Param,
   Query,
   UseGuards,
-  DefaultValuePipe,
   ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -25,6 +24,7 @@ import {
   CreateRecordDto,
   CreateEvalCycleDto,
   MonitoringSubmitEvaluationDto,
+  FilterIndicatorDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
 
@@ -98,12 +98,8 @@ export class MonitoringController {
 
   @Get('indicators')
   @ApiOperation({ summary: 'Listar indicadores (paginado)' })
-  findAllIndicators(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-    @Query('category') category?: string,
-  ) {
-    return this.service.findAllIndicators(page, limit, category);
+  findAllIndicators(@Query() filters: FilterIndicatorDto) {
+    return this.service.findAllIndicators(filters);
   }
 
   @Post('indicators/:id/records')
