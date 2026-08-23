@@ -20,6 +20,7 @@ import {
 } from 'class-validator';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 import { SignerRole } from '@prisma/client';
+import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 export { SignerRole };
 
@@ -342,7 +343,7 @@ export class SendDeclarationDto {
 // QUERY / FILTROS
 // ────────────────────────────────────────────────────────────
 
-export class DeclarationQueryDto {
+export class DeclarationQueryDto extends BaseFilterDto {
   @IsOptional()
   @IsEnum(DeclarationStatus)
   status?: DeclarationStatus;
@@ -372,18 +373,6 @@ export class DeclarationQueryDto {
   @IsOptional()
   @IsString()
   search?: string; // busca por código, nome do colaborador
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  limit?: number = 20;
 
   @IsOptional()
   @IsString()
