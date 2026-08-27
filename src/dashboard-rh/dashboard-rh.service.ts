@@ -1260,7 +1260,7 @@ export class DashboardRhService {
     const out = [];
     if (avg >= 4) out.push(`✅ Performance excelente: score médio ${avg}/5`);
     else if (avg >= 3) out.push(`Score médio na faixa aceitável: ${avg}/5`);
-    else out.push(`⚠️ Score médio abaixo do esperado: ${avg}/5`);
+    else out.push(`⚠️ Pontuação Média abaixo do esperado: ${avg}/5`);
     if (atRisk > 0)
       out.push(`${atRisk} colaborador(es) (${pct(atRisk, total)}%) com performance crítica`);
     return out;

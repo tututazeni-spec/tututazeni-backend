@@ -1077,7 +1077,7 @@ export class ReportsService {
         type: 'LEARNING',
         severity: 'MEDIUM',
         message: `Taxa de abandono elevada: ${training.summary.abandonment}%`,
-        recommendation: 'Considerar cursos mais curtos (microlearning) para aumentar conclusão',
+        recommendation: 'Considerar cursos mais curtos para aumentar conclusão',
       });
 
     // Performance insights
@@ -1094,7 +1094,7 @@ export class ReportsService {
       insights.push({
         type: 'PERFORMANCE',
         severity: 'MEDIUM',
-        message: `Score médio organizacional abaixo de 3.0: ${performance.summary.avgScore}`,
+        message: `Pontuação Média organizacional abaixo de 3.0: ${performance.summary.avgScore}`,
         recommendation: 'Rever programas de desenvolvimento e metas',
       });
 
@@ -1111,7 +1111,7 @@ export class ReportsService {
       insights.push({
         type: 'TALENT',
         severity: 'MEDIUM',
-        message: 'Pipeline de sucessão insuficiente',
+        message: 'Plano de sucessão insuficiente',
         recommendation: 'Identificar e preparar sucessores para posições críticas',
       });
 
@@ -1120,8 +1120,8 @@ export class ReportsService {
       insights.push({
         type: 'ENGAGEMENT',
         severity: 'MEDIUM',
-        message: `Taxa de participação em surveys abaixo de 50%: ${engagement.summary.participationRate}%`,
-        recommendation: 'Simplificar surveys e comunicar importância da participação',
+        message: `Taxa de participação em questionários abaixo de 50%: ${engagement.summary.participationRate}%`,
+        recommendation: 'Simplificar questionários e comunicar importância da participação',
       });
 
     return { insights, generatedAt: new Date(), count: insights.length };
