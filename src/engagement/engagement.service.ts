@@ -375,12 +375,18 @@ export class EngagementService {
       include: { questions: true },
     });
 
-    if (!survey) throw new NotFoundException('Nenhuma pesquisa de Índice de Recomendação dos colaboradores activa no momento');
+    if (!survey)
+      throw new NotFoundException(
+        'Nenhuma pesquisa de Índice de Recomendação dos colaboradores activa no momento',
+      );
 
     // FIX: `as any[]` desnecessário — `survey.questions` já vem tipado do
     // `include: { questions: true }` acima.
     const eNPSQuestion = survey.questions.find(q => q.type === 'ENPS');
-    if (!eNPSQuestion) throw new BadRequestException('Pesquisa de Índice de Recomendação dos colaboradores mal configurada');
+    if (!eNPSQuestion)
+      throw new BadRequestException(
+        'Pesquisa de Índice de Recomendação dos colaboradores mal configurada',
+      );
 
     return this.submitSurvey(userId, {
       surveyId: survey.id,
@@ -1199,10 +1205,10 @@ export class EngagementService {
     teamSize: number,
   ): string[] {
     const out: string[] = [];
-    if (score !== null && score < 3) out.push(' Pontuação de engajamento da equipa abaixo da média');
+    if (score !== null && score < 3)
+      out.push(' Pontuação de engajamento da equipa abaixo da média');
     if (mood !== null && mood < 3) out.push(' Humor geral da equipa está baixo esta semana');
-    if (atRisk > 0)
-      out.push(` ${atRisk} colaboradores sem resposta a surveys nos últimos 30 dias`);
+    if (atRisk > 0) out.push(` ${atRisk} colaboradores sem resposta a surveys nos últimos 30 dias`);
     if (score !== null && score >= 4)
       out.push('✅ Equipa com alto nível de engajamento — continua assim!');
     if (out.length === 0) out.push(' Equipa estável — sem alertas activos');

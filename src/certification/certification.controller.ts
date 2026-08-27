@@ -1,12 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Body,
-  Param,
-  Query,
-} from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CurrentUser, Roles, Public, CurrentUserData } from '../common/decorators';
 import { CertificationService } from './certification.service';
@@ -80,7 +72,10 @@ export class CertificationController {
   @Get('my-certificates')
   @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Meus certificados' })
-  getMyCertificates(@CurrentUser() user: CurrentUserData, @Query() filters: MyCertificatesFilterDto) {
+  getMyCertificates(
+    @CurrentUser() user: CurrentUserData,
+    @Query() filters: MyCertificatesFilterDto,
+  ) {
     return this.service.getMyCertificates(user.id, filters);
   }
 
