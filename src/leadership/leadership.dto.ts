@@ -71,7 +71,7 @@ export class CreateLeadershipProgramDto {
   @Min(1)
   durationWeeks?: number;
 
-  @ApiPropertyOptional({ description: 'Learning Path associada' })
+  @ApiPropertyOptional({ description: 'Trilha de Aprendizagem associada' })
   @IsOptional()
   @IsInt()
   learningPathId?: number;
@@ -81,7 +81,7 @@ export class CreateLeadershipProgramDto {
   @IsBoolean()
   mandatory?: boolean;
 
-  @ApiPropertyOptional({ description: 'Score mínimo de liderança para acesso' })
+  @ApiPropertyOptional({ description: 'Pontuação mínima de liderança para acesso' })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -166,11 +166,11 @@ export class CompleteOneOnOneDto {
   @IsInt()
   oneOnOneId!: number;
 
-  @ApiProperty({ description: 'Ata da reunião' })
+  @ApiProperty({ description: 'Acta da reunião' })
   @IsString()
   minutes!: string;
 
-  @ApiPropertyOptional({ description: 'Action items / próximos passos' })
+  @ApiPropertyOptional({ description: 'Acções a Executar / próximos passos' })
   @IsOptional()
   @IsString()
   actionItems?: string;
@@ -230,7 +230,7 @@ export class SubmitPulseDto {
   @IsInt()
   leaderId!: number;
 
-  @ApiProperty({ description: 'Score geral (1-5)' })
+  @ApiProperty({ description: 'Pontuação geral (1-5)' })
   @IsInt()
   @Min(1)
   @Max(5)
@@ -308,7 +308,7 @@ export class LogMentoringSessionDto {
   @IsString()
   actionItems?: string;
 
-  @ApiPropertyOptional({ description: 'Rating da sessão (1-5)' })
+  @ApiPropertyOptional({ description: 'Classificação da sessão (1-5)' })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -326,7 +326,7 @@ export class UpsertTeamHealthDto {
   @Max(100)
   engagementScore?: number;
 
-  @ApiPropertyOptional({ description: 'Taxa de turnover 12m (%)' })
+  @ApiPropertyOptional({ description: 'Taxa de rotatividade 12m (%)' })
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -367,7 +367,7 @@ export class SendKudosDto {
   @MaxLength(500)
   message!: string;
 
-  @ApiPropertyOptional({ description: 'Badge/ícone do kudo' })
+  @ApiPropertyOptional({ description: 'Distintivo/ícone do reconhecimento' })
   @IsOptional()
   @IsString()
   badge?: string;

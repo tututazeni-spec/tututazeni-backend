@@ -9,11 +9,13 @@ import {
   IssueBadgeDto,
   RevokeDto,
   FilterCertificateDto,
+  MyCertificatesFilterDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 @Injectable()
 export class CertificationService {
@@ -149,11 +151,12 @@ export class CertificationService {
         ],
       }),
     };
+    const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await this.prisma.$transaction([
       this.prisma.read.issuedCertificate.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { issuedAt: 'desc' },
         include: {
           user: { select: { fullName: true } },
@@ -162,7 +165,8 @@ export class CertificationService {
       }),
       this.prisma.read.issuedCertificate.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+    return { data: pageData, ...meta };
   }
 
   async findCertificateById(id: string, user: { id: number; role?: { name: string } | null }) {
@@ -359,18 +363,21 @@ export class CertificationService {
     });
   }
 
-  async getMyCertificates(userId: number, page = 1, limit = 20) {
+  async getMyCertificates(userId: number, filters: MyCertificatesFilterDto) {
+    const { page = 1, limit = 20 } = filters;
     const where = { userId, deletedAt: null };
+    const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await this.prisma.$transaction([
       this.prisma.read.issuedCertificate.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { issuedAt: 'desc' },
       }),
       this.prisma.read.issuedCertificate.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+    return { data: pageData, ...meta };
   }
 
   // ─── DASHBOARD ───────────────────────────────────────

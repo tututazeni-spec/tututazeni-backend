@@ -10,8 +10,6 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  DefaultValuePipe,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -27,6 +25,7 @@ import {
   CreateFunderInteractionDto,
   CreateFunderReportDto,
   SubmitFunderReportDto,
+  PaginationFilterDto,
 } from './dto';
 import { Role } from '../auth/enums/role.enum';
 
@@ -63,11 +62,8 @@ export class CrmFundersController {
   @Get('overdue-reports')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Relatórios em atraso (paginado)' })
-  getOverdueReports(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-  ) {
-    return this.service.getOverdueReports(page, limit);
+  getOverdueReports(@Query() filters: PaginationFilterDto) {
+    return this.service.getOverdueReports(filters);
   }
 
   @Get('report')
@@ -119,12 +115,8 @@ export class CrmFundersController {
   @Get(':id/grants')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar grants do financiador' })
-  findGrants(
-    @Param('id') id: string,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-  ) {
-    return this.service.findGrants(id, page, limit);
+  findGrants(@Param('id') id: string, @Query() filters: PaginationFilterDto) {
+    return this.service.findGrants(id, filters);
   }
 
   @Put('grants/:grantId/status')
@@ -154,12 +146,8 @@ export class CrmFundersController {
   @Get('grants/:grantId/disbursements')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar desembolsos do grant' })
-  getDisbursements(
-    @Param('grantId') grantId: string,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
-  ) {
-    return this.service.getDisbursements(grantId, page, limit);
+  getDisbursements(@Param('grantId') grantId: string, @Query() filters: PaginationFilterDto) {
+    return this.service.getDisbursements(grantId, filters);
   }
 
   // ─── INTERACÇÕES ─────────────────────────────────────

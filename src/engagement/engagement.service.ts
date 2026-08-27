@@ -231,7 +231,7 @@ export class EngagementService {
         data: {
           userId,
           type: 'SURVEY_COMPLETED',
-          message: `Obrigado! A tua resposta foi registada. +10 XP 🎉`,
+          message: `Obrigado! A tua resposta foi registada. +10 Pontos de Experiência`,
           metadata: JSON.stringify({}),
         },
       })
@@ -375,12 +375,18 @@ export class EngagementService {
       include: { questions: true },
     });
 
-    if (!survey) throw new NotFoundException('Nenhuma pesquisa eNPS activa no momento');
+    if (!survey)
+      throw new NotFoundException(
+        'Nenhuma pesquisa de Índice de Recomendação dos colaboradores activa no momento',
+      );
 
     // FIX: `as any[]` desnecessário — `survey.questions` já vem tipado do
     // `include: { questions: true }` acima.
     const eNPSQuestion = survey.questions.find(q => q.type === 'ENPS');
-    if (!eNPSQuestion) throw new BadRequestException('Pesquisa eNPS mal configurada');
+    if (!eNPSQuestion)
+      throw new BadRequestException(
+        'Pesquisa de Índice de Recomendação dos colaboradores mal configurada',
+      );
 
     return this.submitSurvey(userId, {
       surveyId: survey.id,
@@ -696,7 +702,7 @@ export class EngagementService {
             fromUserId,
             action: 'giveRecognition.awardBadge',
             err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao atribuir badge de reconhecimento',
+            msg: 'Falha ao atribuir distintivo de reconhecimento',
           });
         });
     }
@@ -707,7 +713,7 @@ export class EngagementService {
         data: {
           userId: dto.toUserId,
           type: 'RECOGNITION_RECEIVED',
-          message: `🏆 Recebeste um reconhecimento! +${xp} XP`,
+          message: ` Recebeste um reconhecimento! +${xp} XP`,
           metadata: JSON.stringify({}),
         },
       })
@@ -908,7 +914,7 @@ export class EngagementService {
           data: {
             userId: dto.assigneeId,
             type: 'ACTION_PLAN_ASSIGNED',
-            message: `Nova acção de engagement atribuída: "${dto.title}"`,
+            message: `Nova acção de engajamento atribuída: "${dto.title}"`,
             metadata: JSON.stringify({}),
           },
         })
@@ -919,7 +925,7 @@ export class EngagementService {
             action: 'ACTION_PLAN_ASSIGNED',
             planId: plan.id,
             err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao criar notificação de plano de acção de engagement atribuído',
+            msg: 'Falha ao criar notificação de plano de acção de engajamento atribuído',
           });
         });
     }
@@ -1199,13 +1205,13 @@ export class EngagementService {
     teamSize: number,
   ): string[] {
     const out: string[] = [];
-    if (score !== null && score < 3) out.push('⚠️ Score de engajamento da equipa abaixo da média');
-    if (mood !== null && mood < 3) out.push('😟 Humor geral da equipa está baixo esta semana');
-    if (atRisk > 0)
-      out.push(`📊 ${atRisk} colaboradores sem resposta a surveys nos últimos 30 dias`);
+    if (score !== null && score < 3)
+      out.push(' Pontuação de engajamento da equipa abaixo da média');
+    if (mood !== null && mood < 3) out.push(' Humor geral da equipa está baixo esta semana');
+    if (atRisk > 0) out.push(` ${atRisk} colaboradores sem resposta a surveys nos últimos 30 dias`);
     if (score !== null && score >= 4)
       out.push('✅ Equipa com alto nível de engajamento — continua assim!');
-    if (out.length === 0) out.push('🟢 Equipa estável — sem alertas activos');
+    if (out.length === 0) out.push(' Equipa estável — sem alertas activos');
     return out;
   }
 

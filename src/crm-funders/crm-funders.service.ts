@@ -9,9 +9,11 @@ import {
   CreateDisbursementDto,
   CreateFunderInteractionDto,
   CreateFunderReportDto,
+  PaginationFilterDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
 const MS_PER_DAY = 86_400_000;
 const DEFAULT_CURRENCY = 'AOA'; // moeda oficial: Kwanza angolano
@@ -91,11 +93,12 @@ export class CrmFundersService {
         ],
       }),
     };
+    const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await Promise.all([
       this.prisma.read.funder.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { createdAt: 'desc' },
         include: {
           assignedTo: { select: { fullName: true } },
@@ -104,7 +107,8 @@ export class CrmFundersService {
       }),
       this.prisma.read.funder.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+    return { data: pageData, ...meta };
   }
 
   async findOne(id: string) {
@@ -205,14 +209,16 @@ export class CrmFundersService {
     });
   }
 
-  async findGrants(funderId: string, page = 1, limit = 20) {
+  async findGrants(funderId: string, filters: PaginationFilterDto) {
     await this.findOne(funderId);
+    const { page = 1, limit = 20 } = filters;
     const where = { funderId, deletedAt: null };
+    const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await Promise.all([
       this.prisma.read.fundingGrant.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { createdAt: 'desc' },
         include: {
           _count: { select: { disbursements: true, reports: true } },
@@ -220,7 +226,8 @@ export class CrmFundersService {
       }),
       this.prisma.read.fundingGrant.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+    return { data: pageData, ...meta };
   }
 
   async updateGrantStatus(grantId: string, status: string, userId: number) {
@@ -282,19 +289,22 @@ export class CrmFundersService {
     return disbursement;
   }
 
-  async getDisbursements(grantId: string, page = 1, limit = 20) {
+  async getDisbursements(grantId: string, filters: PaginationFilterDto) {
+    const { page = 1, limit = 20 } = filters;
     const where = { grantId, deletedAt: null };
+    const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await Promise.all([
       this.prisma.read.grantDisbursement.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: limit,
+        skip,
+        take,
         orderBy: { receivedAt: 'desc' },
         include: { createdBy: { select: { fullName: true } } },
       }),
       this.prisma.read.grantDisbursement.count({ where }),
     ]);
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+    return { data: pageData, ...meta };
   }
 
   // ─── INTERACÇÕES ─────────────────────────────────────
@@ -371,9 +381,9 @@ export class CrmFundersService {
     return updated;
   }
 
-  async getOverdueReports(page = 1, limit = DEFAULT_PAGE_SIZE) {
-    const safePage = Math.max(page, 1);
-    const safeLimit = Math.min(Math.max(limit, 1), MAX_PAGE_SIZE);
+  async getOverdueReports(filters: PaginationFilterDto = {} as PaginationFilterDto) {
+    const safePage = Math.max(filters.page ?? 1, 1);
+    const safeLimit = Math.min(Math.max(filters.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
     const where: Prisma.FunderReportWhereInput = {
       status: { in: ['PENDING', 'REJECTED'] },
       dueDate: { lt: new Date() },

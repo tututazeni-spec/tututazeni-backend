@@ -293,7 +293,7 @@ describe('CertificationService', () => {
   describe('getMyCertificates', () => {
     it('deve retornar certificados paginados do utilizador', async () => {
       mockPrisma.$transaction.mockResolvedValue([[mockCert], 1]);
-      const result = await service.getMyCertificates(1, 1, 20);
+      const result = await service.getMyCertificates(1, { page: 1, limit: 20 });
       expect(result.total).toBe(1);
     });
   });

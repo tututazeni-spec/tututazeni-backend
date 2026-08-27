@@ -5,6 +5,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfService } from '../pdf/pdf.service';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import {
   DeclarationAuditAction,
   DeclarationStatus as PrismaDeclarationStatus,
@@ -367,26 +368,19 @@ export class WorkDeclarationService {
       ];
     }
 
+    const { skip, take } = calculatePagination(query.page, query.limit);
     const [data, total] = await Promise.all([
       this.prisma.declaration.findMany({
         where,
         include: this.declarationListIncludes(),
         orderBy: { [query.sortBy ?? 'createdAt']: query.sortOrder ?? 'desc' },
-        skip: ((query.page ?? 1) - 1) * (query.limit ?? 20),
-        take: query.limit ?? 20,
+        skip,
+        take,
       }),
       this.prisma.declaration.count({ where }),
     ]);
 
-    return {
-      data,
-      meta: {
-        total,
-        page: query.page ?? 1,
-        limit: query.limit ?? 20,
-        totalPages: Math.ceil(total / (query.limit ?? 20)),
-      },
-    };
+    return buildPaginatedResponse(data, total, query.page, query.limit);
   }
 
   async getDeclaration(tenantId: string, user: CurrentUserData, declarationId: string) {

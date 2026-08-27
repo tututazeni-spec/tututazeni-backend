@@ -1,9 +1,10 @@
-import { Max, IsOptional, IsEnum, IsString, IsInt, IsBoolean, Min } from 'class-validator';
+import { Max, IsOptional, IsEnum, IsString, IsInt, IsBoolean } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { CertificateTemplateType } from '@prisma/client';
+import { BaseFilterDto } from '../../common/dtos/pagination.dto';
 
-export class FilterCertificateDto {
+export class FilterCertificateDto extends BaseFilterDto {
   @ApiPropertyOptional({ enum: CertificateTemplateType })
   @IsOptional()
   @IsEnum(CertificateTemplateType)
@@ -26,18 +27,12 @@ export class FilterCertificateDto {
   @IsBoolean()
   isRevoked?: boolean;
 
-  @ApiPropertyOptional({ default: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
   @Max(100)
-  limit?: number = 20;
+  override limit?: number = 20;
 }
+
+export class MyCertificatesFilterDto extends BaseFilterDto {}
