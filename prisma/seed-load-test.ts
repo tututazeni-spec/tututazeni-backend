@@ -159,7 +159,77 @@ async function main() {
   console.log(`✅ ${TOTAL_COURSES} cursos criados → courses.csv`);
   console.log('✅ Lições criadas → lessons.csv');
 
-  // ── 5. Inscrições pré-existentes (para GET /enrollments/my ter dados) ─────
+  // ── 5. Instrutor — user1 é a conta universal de teste ────────────────────
+  // user1 mantém a role ADMIN (nome do papel que passa todos os @Roles do
+  // backend). Este bloco dá-lhe também um InstructorProfile aprovado + 1 curso
+  // de marketplace + 1 turma, para que os endpoints "my" de /instructors
+  // devolvam dados em vez de 404 / listas vazias durante os testes.
+  const instructorUserId = userIds[0];
+  const instructorCourseId = courseIds[0];
+
+  const instructorProfile = await prisma.instructorProfile.upsert({
+    where: { userId: instructorUserId },
+    update: { approved: true, availableForMentoring: true },
+    create: {
+      userId: instructorUserId,
+      bio: 'Conta universal de teste de carga — perfil de instrutor.',
+      expertiseArea: 'Load Testing',
+      instructorType: 'STANDARD',
+      specialties: ['performance', 'qa'],
+      certifications: ['Artillery'],
+      availableForMentoring: true,
+      approved: true,
+    },
+  });
+
+  // 1 curso de marketplace + join InstructorCourse (espelha createMarketplaceCourse)
+  let marketplaceCourse = await prisma.marketplaceCourse.findFirst({
+    where: { instructorId: instructorProfile.id, title: 'Curso Marketplace de Teste' },
+  });
+  if (!marketplaceCourse) {
+    marketplaceCourse = await prisma.marketplaceCourse.create({
+      data: {
+        title: 'Curso Marketplace de Teste',
+        description: 'Curso de marketplace para testes de carga — não usar em produção',
+        price: 0,
+        category: 'QA',
+        level: 'BEGINNER',
+        workloadHours: 4,
+        instructorId: instructorProfile.id,
+      },
+    });
+    await prisma.instructorCourse.create({
+      data: { instructorId: instructorProfile.id, marketplaceCourseId: marketplaceCourse.id },
+    });
+    await prisma.instructorProfile.update({
+      where: { id: instructorProfile.id },
+      data: { totalCourses: { increment: 1 } },
+    });
+  }
+
+  // 1 turma associada a um curso PUBLISHED já existente
+  const existingCohort = await prisma.instructorCohort.findFirst({
+    where: { instructorId: instructorProfile.id, name: 'Turma de Teste' },
+  });
+  if (!existingCohort) {
+    await prisma.instructorCohort.create({
+      data: {
+        instructorId: instructorProfile.id,
+        courseId: instructorCourseId,
+        name: 'Turma de Teste',
+        description: 'Turma para testes de carga',
+        modalidade: 'ONLINE',
+        maxParticipants: 30,
+        status: 'OPEN',
+        startDate: new Date(),
+      },
+    });
+  }
+  console.log(
+    `✅ Instrutor de teste: profile #${instructorProfile.id} (user1) + 1 curso marketplace + 1 turma`,
+  );
+
+  // ── 6. Inscrições pré-existentes (para GET /enrollments/my ter dados) ─────
   // Enrollment.@@unique([courseId, userId]) — compound key courseId_userId
   // Utilizadores 1-50 inscritos nos cursos 1-5
   console.log('\n⏳ A criar inscrições pré-existentes...');
@@ -181,7 +251,7 @@ async function main() {
   }
   console.log(`✅ ${enrollCount} inscrições pré-criadas`);
 
-  // ── 6. CSV de pares para testes de escrita de inscrição ───────────────────
+  // ── 7. CSV de pares para testes de escrita de inscrição ───────────────────
   // Utilizadores 51-150 × Cursos 11-20 — sem inscrição prévia (evita 409 no seed)
   // Durante o load test, 409 é esperado (@@unique) mas não no seed
   const enrollPairsCsv: string[] = ['userId,courseId'];
@@ -201,6 +271,7 @@ async function main() {
   console.log(`  Cursos       : ${TOTAL_COURSES} (PUBLISHED)`);
   console.log(`  Lições       : 30 (3 por curso × 10 cursos)`);
   console.log(`  Inscrições   : ${enrollCount} pré-existentes`);
+  console.log(`  Instrutor    : user1 (perfil aprovado + 1 curso marketplace + 1 turma)`);
   console.log(`  Pares CSV    : ${enrollPairsCsv.length - 1} (para testes de escrita)`);
   console.log('  📁 CSVs em: load-tests/data/');
   console.log('\n  ⚠️  JWT expira em 15 min (hardcoded no auth.service.ts)');
