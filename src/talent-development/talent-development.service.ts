@@ -214,15 +214,15 @@ export class TalentDevelopmentService {
 
     // Map each user to one of 9 boxes (perf Y: 1-3, potential/comp X: 1-3)
     const BOX_LABELS: Record<string, string> = {
-      '3_3': '⭐ Stars — Alto Potencial + Alta Performance',
-      '3_2': '🏆 High Performers — Alta Performance, Potencial Médio',
-      '3_1': '❓ Enigmas — Alta Performance, Baixo Potencial',
-      '2_3': '🚀 High Potentials — Potencial Alto, Performance Média',
-      '2_2': '💪 Core Players — Médio-Médio',
-      '2_1': '⚠️  Inconsistentes — Médio Performance, Baixo Potencial',
-      '1_3': '💡 Raw Talent — Alto Potencial, Baixa Performance',
-      '1_2': '🔧 Needs Guidance — Médio Potencial, Baixa Performance',
-      '1_1': '🔴 Needs Action — Baixo-Baixo',
+      '3_3': 'Talentos de Excelência — Alto Potencial + Alta Performance',
+      '3_2': 'Alto Desempenho — Alta Performance, Potencial Médio',
+      '3_1': 'Enigmas — Alta Performance, Baixo Potencial',
+      '2_3': 'Elevado Potencial — Potencial Alto, Performance Média',
+      '2_2': 'Colaboradores Chave — Médio-Médio',
+      '2_1': 'Inconsistentes — Médio Performance, Baixo Potencial',
+      '1_3': 'Talento em Desenvolvimento — Alto Potencial, Baixa Performance',
+      '1_2': 'Necessita de Orientação — Médio Potencial, Baixa Performance',
+      '1_1': 'Requer Acção — Baixo-Baixo',
     };
 
     const boxes: Record<string, (typeof pool.data)[number][]> = {};
