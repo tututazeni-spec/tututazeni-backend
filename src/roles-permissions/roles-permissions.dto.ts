@@ -10,7 +10,7 @@ import {
   IsNotEmpty,
   ArrayMaxSize,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 // ─── Role DTOs ────────────────────────────────────────────────────
@@ -61,13 +61,6 @@ export class RolesPermissionsCreateRoleDto {
 }
 
 export class RolesPermissionsUpdateRoleDto extends PartialType(RolesPermissionsCreateRoleDto) {}
-
-export class RolesPermissionsCloneRoleDto {
-  @ApiProperty({ description: 'Nome do role clonado (tem de ser único)' })
-  @IsString()
-  @MaxLength(100)
-  newName!: string;
-}
 
 // ─── Assignment DTOs ──────────────────────────────────────────────
 
@@ -127,6 +120,7 @@ export class RoleTemplateDto {
 
 // ─── CloneRoleDto ────────────────────────────────────────────────────────────
 
+@ApiSchema({ name: 'RolesPermissionsCloneRoleDto' })
 export class CloneRoleDto {
   @IsString()
   @IsNotEmpty()

@@ -11,7 +11,7 @@ import {
   MaxLength,
   IsNotEmpty,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType, ApiSchema } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import {
   LearningPathStatus,
@@ -220,6 +220,7 @@ export class ReorderStepsDto {
 
 // ─── CreateMilestoneDto ───────────────────────────────────────────────────────
 
+@ApiSchema({ name: 'CreateLearningPathMilestoneDto' })
 export class CreateMilestoneDto {
   @IsString()
   @IsNotEmpty()
