@@ -84,8 +84,7 @@ function parseParams(params?: string | null): Record<string, unknown> {
 const DEFAULT_RULES: Omit<CreateRuleDto, never>[] = [
   {
     name: 'Parabéns de Aniversário',
-    description:
-      'Envia notificação de aniversário no dia do aniversário (requer campo dateOfBirth)',
+    description: 'Envia notificação de aniversário no dia do aniversário',
     trigger: TriggerType.BIRTHDAY_TODAY,
     action: ActionType.SEND_NOTIFICATION,
     category: AutomationCategory.ENGAGEMENT,
@@ -157,12 +156,12 @@ const DEFAULT_RULES: Omit<CreateRuleDto, never>[] = [
   },
   {
     name: 'Notificação de novo colaborador',
-    description: 'Envia boas-vindas e atribui curso de onboarding ao criar utilizador',
+    description: 'Envia boas-vindas e atribui curso de integração ao criar utilizador',
     trigger: TriggerType.EMPLOYEE_CREATED,
     action: ActionType.SEND_NOTIFICATION,
     category: AutomationCategory.HR,
     condition: '',
-    actionParams: JSON.stringify({ type: 'WELCOME', message: 'Bem-vindo à INNOVA! 🚀' }),
+    actionParams: JSON.stringify({ type: 'WELCOME', message: 'Bem-vindo à INNOVA!' }),
     active: true,
     priority: 60,
   },
