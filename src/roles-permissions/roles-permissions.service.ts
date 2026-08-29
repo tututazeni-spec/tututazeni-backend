@@ -15,7 +15,6 @@ import {
 export {
   RolesPermissionsCreateRoleDto,
   RolesPermissionsUpdateRoleDto,
-  RolesPermissionsCloneRoleDto,
   BulkAssignRoleDto,
   SetPermissionsDto,
   SimulatePermissionDto,

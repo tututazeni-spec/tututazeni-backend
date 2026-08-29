@@ -1,8 +1,9 @@
 import { IsString, IsOptional, IsEnum, IsDateString, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, ApiSchema } from '@nestjs/swagger';
 import { NeedPriority } from '@prisma/client';
 
+@ApiSchema({ name: 'CreatePartnerMilestoneDto' })
 export class CreateMilestoneDto {
   @ApiProperty()
   @IsString()
