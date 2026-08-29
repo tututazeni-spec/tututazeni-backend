@@ -84,8 +84,7 @@ function parseParams(params?: string | null): Record<string, unknown> {
 const DEFAULT_RULES: Omit<CreateRuleDto, never>[] = [
   {
     name: 'Parabéns de Aniversário',
-    description:
-      'Envia notificação de aniversário no dia do aniversário',
+    description: 'Envia notificação de aniversário no dia do aniversário',
     trigger: TriggerType.BIRTHDAY_TODAY,
     action: ActionType.SEND_NOTIFICATION,
     category: AutomationCategory.ENGAGEMENT,
