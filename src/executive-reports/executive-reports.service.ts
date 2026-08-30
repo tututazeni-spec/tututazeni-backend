@@ -317,7 +317,7 @@ export class ExecutiveReportsService {
         target: 3,
       },
       {
-        label: 'Taxa de turnover',
+        label: 'Taxa de Rotatividade',
         value: turnoverRate,
         unit: '%',
         status:
@@ -338,7 +338,7 @@ export class ExecutiveReportsService {
       },
       { label: 'Conclusões este mês', value: completedMonth, unit: '', status: KpiStatus.GREEN },
       {
-        label: 'Score médio perf.',
+        label: 'Pontuação Média de Desempenho',
         value: avgScore,
         unit: '/5',
         status:
@@ -368,7 +368,7 @@ export class ExecutiveReportsService {
         target: 0,
       },
       {
-        label: 'XP total da plataforma',
+        label: 'Pontuação Total da Plataforma',
         value: totalXp._sum.points ?? 0,
         unit: 'xp',
         status: KpiStatus.GREEN,
@@ -377,7 +377,8 @@ export class ExecutiveReportsService {
 
     // Riscos automáticos
     const risks: string[] = [];
-    if (turnoverRate > 10) risks.push(`Taxa de turnover elevada: ${turnoverRate}% (target: ≤5%)`);
+    if (turnoverRate > 10)
+      risks.push(`Taxa de Rotatividade elevada: ${turnoverRate}% (target: ≤5%)`);
     if (completionRate < 30) risks.push(`Taxa de conclusão de cursos crítica: ${completionRate}%`);
     if (overdueActions > 10)
       risks.push(`${overdueActions} acções de PDI atrasadas — risco de abandono`);
@@ -397,11 +398,21 @@ export class ExecutiveReportsService {
     if (overdueActions > 0)
       recommendations.push('Enviar lembretes automáticos para gestores com acções atrasadas');
 
-    const periodLabel = `${now.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })}`;
+    const tipoLabel: Record<string, string> = {
+      FLASH: 'Semanal',
+      MONTHLY: 'Mensal',
+      QUARTERLY: 'Trimestral',
+      ANNUAL: 'Anual',
+      CUSTOM: 'Personalizado',
+      AUDIT: 'Auditoria',
+    };
+
+    const rawPeriod = now.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
+    const periodLabel = rawPeriod.charAt(0).toUpperCase() + rawPeriod.slice(1);
 
     return this.create(generatedById, {
-      title: `${ReportType[type]} Executive Report — ${periodLabel}`,
-      subtitle: departmentId ? `Filtrado por departamento` : 'Visão global da organização',
+      title: `Relatório Executivo ${tipoLabel[type] ?? type} — ${periodLabel}`,
+      subtitle: departmentId ? `Filtrado por departamento` : undefined,
       type,
       departmentId,
       period: periodLabel,
@@ -410,7 +421,10 @@ export class ExecutiveReportsService {
       achievements,
       risks,
       recommendations,
-      nextSteps: ['Reunião de review com equipa de RH', 'Partilhar com C-Level até final do mês'],
+      nextSteps: [
+        'Reunião de Avaliação com equipa de RH',
+        'Partilhar com Administração de Topo até final do mês',
+      ],
       metrics,
       autoGenerateNarrative: true,
     });
@@ -478,7 +492,7 @@ export class ExecutiveReportsService {
         id: 'quarterly',
         name: 'Executive Summary (Trimestral)',
         type: ReportType.QUARTERLY,
-        description: 'Relatório estratégico completo para C-Level',
+        description: 'Relatório estratégico completo para Administração de Topo',
         sections: [
           'executive_summary',
           'people',
