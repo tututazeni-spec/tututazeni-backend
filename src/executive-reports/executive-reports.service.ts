@@ -307,7 +307,7 @@ export class ExecutiveReportsService {
 
     // Montar KPIs com semáforo automático
     const metrics = [
-      { label: 'Headcount activo', value: totalUsers, unit: 'pessoas', status: KpiStatus.GREEN },
+      { label: 'Efectivos activos', value: totalUsers, unit: 'pessoas', status: KpiStatus.GREEN },
       { label: 'Novos colaboradores', value: hired, unit: 'pessoas', status: KpiStatus.GREEN },
       {
         label: 'Saídas no período',
