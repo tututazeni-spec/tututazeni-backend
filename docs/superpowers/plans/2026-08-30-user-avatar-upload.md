@@ -27,7 +27,7 @@
 
 Branch: `feat/user-avatar-upload` (já criada; o spec já está commitado nela).
 
-## Task A1: Validador `IsBase64ImageDataUrl`
+## Task 1: Validador `IsBase64ImageDataUrl`
 
 **Files:**
 - Create: `src/common/validators/is-base64-image-data-url.decorator.ts`
@@ -35,7 +35,7 @@ Branch: `feat/user-avatar-upload` (já criada; o spec já está commitado nela).
 
 **Interfaces:**
 - Consumes: nada.
-- Produces: `export function IsBase64ImageDataUrl(options?: ValidationOptions): PropertyDecorator` — decorator class-validator que valida uma string data URL de imagem base64 (`png`/`jpeg`/`jpg`/`webp`). Usado pelo `UpdateMyAvatarDto` na Task A2.
+- Produces: `export function IsBase64ImageDataUrl(options?: ValidationOptions): PropertyDecorator` — decorator class-validator que valida uma string data URL de imagem base64 (`png`/`jpeg`/`jpg`/`webp`). Usado pelo `UpdateMyAvatarDto` na Task 2.
 
 - [ ] **Step 1: Escrever o teste que falha**
 
@@ -146,7 +146,7 @@ Claude-Session: https://claude.ai/code/session_01WKndfttK1uPKXpm44tXMCw"
 
 ---
 
-## Task A2: DTO, rotas `me/avatar` e métodos do serviço
+## Task 2: DTO, rotas `me/avatar` e métodos do serviço
 
 **Files:**
 - Modify: `src/users/users.dto.ts` (adicionar `UpdateMyAvatarDto`; imports `MaxLength` já presente)
@@ -156,7 +156,7 @@ Claude-Session: https://claude.ai/code/session_01WKndfttK1uPKXpm44tXMCw"
 - Modify: `src/main.ts` (limite do JSON body parser)
 
 **Interfaces:**
-- Consumes: `IsBase64ImageDataUrl` da Task A1.
+- Consumes: `IsBase64ImageDataUrl` da Task 1.
 - Produces:
   - `UpdateMyAvatarDto { avatarUrl: string }` (exportado de `users.dto.ts`).
   - `UsersController.setMyAvatar(user, dto)` → `Promise<{ avatarUrl: string }>` (rota `PATCH /users/me/avatar`).
@@ -304,7 +304,7 @@ Claude-Session: https://claude.ai/code/session_01WKndfttK1uPKXpm44tXMCw"
 
 ---
 
-## Task A3: Teste de integração do fluxo completo
+## Task 3: Teste de integração do fluxo completo
 
 **Files:**
 - Create: `test/integration/users/users-avatar.integration-spec.ts`
@@ -463,7 +463,7 @@ Claude-Session: https://claude.ai/code/session_01WKndfttK1uPKXpm44tXMCw"
 
 ---
 
-## Task A4: Verificação final e PR (backend)
+## Task 4: Verificação final e PR (backend)
 
 - [ ] **Step 1: Verificação completa**
 
@@ -513,7 +513,7 @@ Sondar até estado terminal: `gh pr checks --watch`. Só com `quality` = pass: `
 >
 > Só começar depois do contrato do PR da Parte A estar em `main` do `innova`.
 
-## Task B1: `lib/image.ts` — redimensionamento e center-crop no browser
+## Task 5: `lib/image.ts` — redimensionamento e center-crop no browser
 
 **Files:**
 - Create: `frontend/lib/image.ts`
@@ -634,7 +634,7 @@ export async function resizeImageToDataUrl(
 - [ ] **Step 4: Correr — verificar que passa**
 
 Run: `npx vitest run lib/image.test.ts`
-Expected: PASS (4 testes). (`resizeImageToDataUrl` não é testada em unit — jsdom não codifica canvas; é exercitada na verificação manual da Task B7.)
+Expected: PASS (4 testes). (`resizeImageToDataUrl` não é testada em unit — jsdom não codifica canvas; é exercitada na verificação manual da Task 11.)
 
 - [ ] **Step 5: Adicionar `avatarUrl` à interface `CurrentUser`**
 
@@ -659,7 +659,7 @@ Claude-Session: https://claude.ai/code/session_01WKndfttK1uPKXpm44tXMCw"
 
 ---
 
-## Task B2: `Avatar.tsx` — ramo `<img>` para data URLs
+## Task 6: `Avatar.tsx` — ramo `<img>` para data URLs
 
 **Files:**
 - Modify: `frontend/components/ui/Avatar.tsx`
@@ -756,7 +756,7 @@ Claude-Session: https://claude.ai/code/session_01WKndfttK1uPKXpm44tXMCw"
 
 ---
 
-## Task B3: `hooks/useUpdateAvatar.ts`
+## Task 7: `hooks/useUpdateAvatar.ts`
 
 **Files:**
 - Create: `frontend/hooks/useUpdateAvatar.ts`
@@ -828,7 +828,7 @@ Claude-Session: https://claude.ai/code/session_01WKndfttK1uPKXpm44tXMCw"
 
 ---
 
-## Task B4: `components/ui/AvatarUploader.tsx`
+## Task 8: `components/ui/AvatarUploader.tsx`
 
 **Files:**
 - Create: `frontend/components/ui/AvatarUploader.tsx`
@@ -1009,7 +1009,7 @@ Claude-Session: https://claude.ai/code/session_01WKndfttK1uPKXpm44tXMCw"
 
 ---
 
-## Task B5: `Topbar.tsx` — avatar real, clicável, com Modal
+## Task 9: `Topbar.tsx` — avatar real, clicável, com Modal
 
 **Files:**
 - Modify: `frontend/components/Topbar.tsx`
@@ -1107,7 +1107,7 @@ Claude-Session: https://claude.ai/code/session_01WKndfttK1uPKXpm44tXMCw"
 
 ---
 
-## Task B6: `TabPerfil.tsx` — uploader inline nas Definições
+## Task 10: `TabPerfil.tsx` — uploader inline nas Definições
 
 **Files:**
 - Modify: `frontend/components/settings/TabPerfil.tsx`
@@ -1162,7 +1162,7 @@ Claude-Session: https://claude.ai/code/session_01WKndfttK1uPKXpm44tXMCw"
 
 ---
 
-## Task B7: Verificação final, prova manual e PR (frontend)
+## Task 11: Verificação final, prova manual e PR (frontend)
 
 - [ ] **Step 1: Verificação completa**
 
@@ -1222,7 +1222,7 @@ EOF
 ## Self-Review (feito ao escrever o plano)
 
 **1. Cobertura do spec:**
-- Validador `IsBase64ImageDataUrl` → Task A1.
+- Validador `IsBase64ImageDataUrl` → Task 1.
 - `UpdateMyAvatarDto` + `@MaxLength(200_000)` → A2.
 - Rotas `PATCH`/`DELETE /users/me/avatar` + métodos do serviço → A2.
 - Limite do JSON body parser em `main.ts` → A2 Step 6.
