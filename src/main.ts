@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
@@ -18,7 +19,7 @@ import { runWithRequestContext } from './common/logging/request-context';
 async function bootstrap() {
   validateEnv();
 
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
   const logger = app.get(Logger);
   app.useLogger(logger);
 
@@ -64,6 +65,12 @@ async function bootstrap() {
   app.use((req: Request, _res: Response, next: () => void) => {
     runWithRequestContext({ reqId: (req as Request & { id?: string }).id }, next);
   });
+
+  // O avatar de perfil chega como data URL base64 (~até 150 KB) no corpo JSON
+  // de PATCH /users/me/avatar. O default do parser (~100 KB) daria 413 antes
+  // da validação — subir para 1 MB deixa o @MaxLength(200_000) do DTO ser a
+  // fronteira real (resposta 400 limpa, não 413).
+  app.useBodyParser('json', { limit: '1mb' });
 
   // ─── CORS ────────────────────────────────────────────────────────────────
   app.enableCors({

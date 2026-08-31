@@ -12,6 +12,7 @@ import {
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { IsStrongPassword } from '../common/validators/strong-password.decorator';
+import { IsBase64ImageDataUrl } from '../common/validators/is-base64-image-data-url.decorator';
 import { AccountStatus, HrStatus } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
@@ -156,6 +157,17 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   linkedinUrl?: string;
+}
+
+export class UpdateMyAvatarDto {
+  @ApiProperty({
+    description: 'Foto de perfil como data URL base64 (png, jpeg ou webp)',
+    example: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...',
+  })
+  @IsString()
+  @MaxLength(200_000) // ~150 KB descodificados — válvula de segurança; espelha o frontend
+  @IsBase64ImageDataUrl()
+  avatarUrl!: string;
 }
 
 export class UserFilterDto extends BaseFilterDto {
