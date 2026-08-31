@@ -315,6 +315,16 @@ export class UsersService {
     });
   }
 
+  async setAvatar(userId: number, avatarUrl: string) {
+    await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl } });
+    return { avatarUrl };
+  }
+
+  async clearAvatar(userId: number) {
+    await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl: null } });
+    return { avatarUrl: null };
+  }
+
   // ─── ESTADO DA CONTA ──────────────────────────────────────────────────────
 
   async activate(id: number) {

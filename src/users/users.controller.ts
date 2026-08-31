@@ -19,6 +19,7 @@ import {
   CreateUserDto,
   UpdateUserDto,
   UpdateProfileDto,
+  UpdateMyAvatarDto,
   UserFilterDto,
   BulkActionDto,
   InviteUserDto,
@@ -66,6 +67,19 @@ export class UsersController {
   @ApiOperation({ summary: 'Actualizar perfil do utilizador autenticado' })
   updateMyProfile(@CurrentUser() user: CurrentUserData, @Body() dto: UpdateProfileDto) {
     return this.svc.upsertProfile(user.id, dto);
+  }
+
+  @Patch('me/avatar')
+  @ApiOperation({ summary: 'Definir a foto de perfil do utilizador autenticado' })
+  setMyAvatar(@CurrentUser() user: CurrentUserData, @Body() dto: UpdateMyAvatarDto) {
+    return this.svc.setAvatar(user.id, dto.avatarUrl);
+  }
+
+  @Delete('me/avatar')
+  @ApiOperation({ summary: 'Remover a foto de perfil do utilizador autenticado' })
+  @HttpCode(HttpStatus.OK)
+  removeMyAvatar(@CurrentUser() user: CurrentUserData) {
+    return this.svc.clearAvatar(user.id);
   }
 
   @Patch('me/password')

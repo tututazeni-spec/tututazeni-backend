@@ -10,6 +10,8 @@ const mockSvc = {
   getTeam: jest.fn().mockResolvedValue([]),
   getAuditLogs: jest.fn().mockResolvedValue([]),
   upsertProfile: jest.fn().mockResolvedValue({}),
+  setAvatar: jest.fn().mockResolvedValue({ avatarUrl: 'data:image/jpeg;base64,AAAA' }),
+  clearAvatar: jest.fn().mockResolvedValue({ avatarUrl: null }),
   changePassword: jest.fn().mockResolvedValue({ message: 'ok' }),
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   getDirectory: jest.fn().mockResolvedValue([]),
@@ -73,6 +75,17 @@ describe('UsersController', () => {
     const dto = {} as any;
     await controller.updateMyProfile(mockUser as any, dto);
     expect(mockSvc.upsertProfile).toHaveBeenCalledWith(1, dto);
+  });
+
+  it('setMyAvatar → setAvatar(user.id, dto.avatarUrl)', async () => {
+    const dto = { avatarUrl: 'data:image/jpeg;base64,AAAA' } as any;
+    await controller.setMyAvatar(mockUser as any, dto);
+    expect(mockSvc.setAvatar).toHaveBeenCalledWith(1, 'data:image/jpeg;base64,AAAA');
+  });
+
+  it('removeMyAvatar → clearAvatar(user.id)', async () => {
+    await controller.removeMyAvatar(mockUser as any);
+    expect(mockSvc.clearAvatar).toHaveBeenCalledWith(1);
   });
 
   it('changePassword → changePassword', async () => {
