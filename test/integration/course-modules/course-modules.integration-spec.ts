@@ -9,6 +9,9 @@ import { Pool } from 'pg';
 
 const TEST_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/innova_test';
 
+// PDF "carregado" inline em Lesson.contentUrl (mesmo padrão do avatar/thumbnail).
+const LESSON_PDF_DATA_URL = 'data:application/pdf;base64,JVBERi0xLjQK';
+
 describe('Course Modules Integration', () => {
   let app: INestApplication;
   let employeeToken: string;
@@ -146,10 +149,17 @@ describe('Course Modules Integration', () => {
       const res = await request(app.getHttpServer())
         .post('/lessons')
         .set('Authorization', `Bearer ${rhToken}`)
-        .send({ moduleId, title: 'Aula 1', contentType: 'VIDEO', seq: 0 })
+        .send({
+          moduleId,
+          title: 'Aula 1',
+          contentType: 'PDF',
+          seq: 0,
+          contentUrl: LESSON_PDF_DATA_URL,
+        })
         .expect(201);
       lessonId = res.body.id;
       expect(res.body.moduleId).toBe(moduleId);
+      expect(res.body.contentUrl).toBe(LESSON_PDF_DATA_URL);
     });
 
     it('criar aula em módulo inexistente → 404', async () => {
@@ -357,6 +367,26 @@ describe('Course Modules Integration', () => {
       const mod = res.body.find((m: any) => m.id === moduleId);
       expect(mod.completed).toBe(true);
       expect(mod.pct).toBe(100);
+    });
+
+    it('module-progress — colaborador inscrito recebe o contentUrl do PDF', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/courses/${courseId}/module-progress`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      const mod = res.body.find((m: any) => m.id === moduleId);
+      const lesson = mod.lessons.find((l: any) => l.id === lessonId);
+      expect(lesson.contentUrl).toBe(LESSON_PDF_DATA_URL);
+    });
+
+    it('module-progress — utilizador NÃO inscrito recebe contentUrl null', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/courses/${courseId}/module-progress`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .expect(200);
+      const mod = res.body.find((m: any) => m.id === moduleId);
+      const lesson = mod.lessons.find((l: any) => l.id === lessonId);
+      expect(lesson.contentUrl).toBeNull();
     });
   });
 

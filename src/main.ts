@@ -66,11 +66,14 @@ async function bootstrap() {
     runWithRequestContext({ reqId: (req as Request & { id?: string }).id }, next);
   });
 
-  // O avatar de perfil chega como data URL base64 (~até 150 KB) no corpo JSON
-  // de PATCH /users/me/avatar. O default do parser (~100 KB) daria 413 antes
-  // da validação — subir para 1 MB deixa o @MaxLength(200_000) do DTO ser a
-  // fronteira real (resposta 400 limpa, não 413).
-  app.useBodyParser('json', { limit: '1mb' });
+  // O avatar de perfil e a thumbnail do curso chegam como data URL base64 no
+  // corpo JSON (PATCH /users/me/avatar, POST/PUT /courses). Além disso, uma
+  // lição do tipo PDF pode trazer o ficheiro inline em contentUrl
+  // (@MaxLength(7_000_000) no CreateModuleLessonDto). Subir o limite do parser
+  // para 8 MB deixa o @MaxLength de cada DTO ser a fronteira real (400 limpo,
+  // não 413). Nota: o limite é global — aumenta a superfície de payload em
+  // todas as rotas, o mesmo trade-off já aceite quando passou de 100 KB p/ 1 MB.
+  app.useBodyParser('json', { limit: '8mb' });
 
   // ─── CORS ────────────────────────────────────────────────────────────────
   app.enableCors({

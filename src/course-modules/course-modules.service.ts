@@ -607,6 +607,15 @@ export class CourseModulesService {
       },
     });
 
+    // O conteúdo da lição (contentUrl — ex.: PDF inline) só fica disponível a
+    // quem está inscrito no curso. A estrutura (títulos, progresso) continua
+    // visível para pré-visualização, mas o ficheiro em si não.
+    const enrollment = await this.prisma.read.enrollment.findFirst({
+      where: { userId, courseId },
+      select: { id: true },
+    });
+    const canSeeContent = !!enrollment;
+
     // FIX: todos os casts `as any`/`(l: any)` eram desnecessários — `mod` já
     // vem totalmente tipado do `include` acima (lessons+progress, materials).
     // Verificar acesso a cada módulo (drip, sequencial)
@@ -650,6 +659,8 @@ export class CourseModulesService {
             seq: l.seq,
             durationMinutes: l.durationMinutes,
             isFree: l.isFree,
+            allowDownload: l.allowDownload,
+            contentUrl: canSeeContent ? l.contentUrl : null,
             completed: l.progress[0]?.completed ?? false,
             completedAt: l.progress[0]?.completedAt ?? null,
             resumePosition: l.progress[0]?.resumePosition ?? 0,

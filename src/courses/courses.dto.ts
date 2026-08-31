@@ -56,8 +56,9 @@ export class CreateCourseDto {
 
   // Imagem do curso: data URL base64 (upload self-service, ver
   // CreateCourseModal) ou URL normal. Guardada tal e qual em
-  // Course.thumbnailUrl. O @MaxLength dá um 400 limpo antes de o body
-  // parser cortar a 1mb (main.ts). ~700k ≈ 512KB de imagem em base64.
+  // Course.thumbnailUrl. O @MaxLength é a fronteira real do tamanho
+  // (o body parser em main.ts só corta muito acima disto).
+  // ~700k ≈ 512KB de imagem em base64.
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
