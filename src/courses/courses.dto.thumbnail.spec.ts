@@ -3,8 +3,8 @@ import { CreateCourseDto, UpdateCourseDto } from './courses.dto';
 
 // A imagem do curso (opcional) chega como data URL base64 ou como URL normal
 // e é guardada tal e qual em Course.thumbnailUrl. O único limite no backend é
-// o comprimento — o body parser corta a 1mb (main.ts), este @MaxLength dá um
-// 400 limpo antes disso. Ver [[project-innova-user-avatar-upload]].
+// o comprimento — este @MaxLength é a fronteira real (o body parser em main.ts
+// só corta muito acima disto). Ver [[project-innova-user-avatar-upload]].
 const MAX = 700_000;
 
 async function thumbErrors(value: unknown) {

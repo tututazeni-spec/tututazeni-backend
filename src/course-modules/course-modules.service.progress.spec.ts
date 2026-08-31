@@ -513,6 +513,56 @@ describe('CourseModulesService (progress)', () => {
       expect(result).toHaveLength(1);
       expect(result[0].locked).toBe(true);
     });
+
+    describe('contentUrl da lição (gate por inscrição)', () => {
+      const pdfModule = {
+        id: 1,
+        title: 'Módulo 1',
+        seq: 1,
+        type: 'CONTENT',
+        mandatory: true,
+        progressionType: 'FREE',
+        dripDays: null,
+        availableFrom: null,
+        materials: [],
+        lessons: [
+          {
+            id: 5,
+            title: 'Manual em PDF',
+            type: 'PDF',
+            seq: 1,
+            durationMinutes: null,
+            isFree: false,
+            allowDownload: true,
+            contentUrl: 'data:application/pdf;base64,JVBERi0x',
+            progress: [],
+          },
+        ],
+      };
+
+      beforeEach(() => {
+        mockPrisma.courseModule.findMany.mockResolvedValue([pdfModule]);
+        mockPrisma.courseModule.findUnique.mockResolvedValue({
+          id: 1,
+          completionRule: 'ALL_LESSONS',
+          lessons: [{ id: 5 }],
+        });
+        mockPrisma.lessonProgress.count.mockResolvedValue(0);
+      });
+
+      it('inclui contentUrl e allowDownload quando o utilizador está inscrito', async () => {
+        mockPrisma.enrollment.findFirst.mockResolvedValue({ id: 99 });
+        const result = (await service.getLessonProgress(1, 10)) as any[];
+        expect(result[0].lessons[0].contentUrl).toBe('data:application/pdf;base64,JVBERi0x');
+        expect(result[0].lessons[0].allowDownload).toBe(true);
+      });
+
+      it('devolve contentUrl null quando o utilizador não está inscrito', async () => {
+        mockPrisma.enrollment.findFirst.mockResolvedValue(null);
+        const result = (await service.getLessonProgress(1, 10)) as any[];
+        expect(result[0].lessons[0].contentUrl).toBeNull();
+      });
+    });
   });
 
   // ─── getModuleAnalytics ───────────────────────────────────────────────────────

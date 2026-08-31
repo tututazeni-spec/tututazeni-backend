@@ -141,9 +141,14 @@ export class CreateModuleLessonDto {
   @IsEnum(LessonContentType)
   contentType!: LessonContentType;
 
+  // Aceita uma URL http(s) OU um data URL base64 (ex.: PDF carregado no
+  // browser e guardado inline em Lesson.contentUrl, mesmo padrão do
+  // avatar/thumbnail). O @MaxLength dá um 400 limpo antes de o corpo JSON
+  // chegar ao limite do body parser. ~7 MB de string ≈ PDF de ~5 MB.
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(7_000_000)
   contentUrl?: string;
 
   @ApiPropertyOptional()
