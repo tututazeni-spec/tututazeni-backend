@@ -220,7 +220,10 @@ export class UsersService {
         fullName: dto.fullName,
         email: dto.email,
         password: hashed,
-        employeeNumber: dto.employeeNumber,
+        // Nunca gravar "" num campo `@unique` — colidiria no 2.º utilizador
+        // sem nº de funcionário (P2002 -> 500). O DTO já normaliza "" -> undefined;
+        // este `|| null` protege chamadores directos do serviço.
+        employeeNumber: dto.employeeNumber || null,
         phone: dto.phone,
         birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
         gender: dto.gender,
