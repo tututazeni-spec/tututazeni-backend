@@ -3890,6 +3890,7 @@ model PayslipItem {
 enum PayslipAccessAction {
   VIEW
   ADMIN_VIEW
+  DOWNLOAD
 }
 
 model PayslipAccessLog {

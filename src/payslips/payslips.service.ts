@@ -62,6 +62,32 @@ type PayslipAmountField =
   | 'employerInss'
   | 'totalDeductions';
 
+// Colunas monetárias exportadas no resumo anual (CSV/PDF). Subconjunto de
+// PayslipAmountField, mantido como tuple `as const` para derivar os tipos das
+// linhas/totais e para o controlador iterar as colunas sem strings soltas.
+export const ANNUAL_EXPORT_FIELDS = [
+  'baseSalary',
+  'mealAllowance',
+  'vacationAllowance',
+  'christmasAllowance',
+  'bonuses',
+  'overtime',
+  'otherAllowances',
+  'grossSalary',
+  'incomeTax',
+  'socialSecurity',
+  'totalDeductions',
+  'netSalary',
+] as const;
+export type AnnualExportField = (typeof ANNUAL_EXPORT_FIELDS)[number];
+export interface AnnualExport {
+  year: string;
+  userId: number;
+  months: number;
+  rows: Array<{ period: string } & Record<AnnualExportField, number>>;
+  totals: Record<AnnualExportField, number>;
+}
+
 @Injectable()
 export class PayslipsService {
   private readonly logger = new Logger(PayslipsService.name);
@@ -429,15 +455,15 @@ export class PayslipsService {
   }
 
   // ─── RESUMO ANUAL ──────────────────────────────────────────────────────────
+  // Um ano sem recibos NÃO é um erro (404) — é um resumo a zeros. Isto alinha
+  // com getMyPayslips, que devolve uma página vazia em vez de rebentar, e evita
+  // que a vista "Resumo anual" do frontend mostre "recurso não encontrado"
+  // quando o colaborador ainda não tem recibos emitidos no ano seleccionado.
   async annualSummary(userId: number, year: string) {
     const payslips = await this.prisma.read.payslip.findMany({
       where: { userId, period: { startsWith: year }, status: { not: 'DRAFT' } },
       orderBy: { period: 'asc' },
     });
-
-    if (!payslips.length) {
-      throw new NotFoundException(`Sem recibos para ${year}`);
-    }
 
     const sum = (field: PayslipAmountField) =>
       payslips.reduce((acc, p) => acc + (p[field] ?? 0), 0);
@@ -464,6 +490,30 @@ export class PayslipsService {
         socialSecurity: p.socialSecurity,
       })),
     };
+  }
+
+  // ─── EXPORTAÇÃO DO RESUMO ANUAL (dados p/ CSV ou PDF) ─────────────────────
+  // Devolve dados estruturados com todas as colunas monetárias; a serialização
+  // (CSV/PDF) fica no controlador. Um ano sem recibos devolve rows vazio +
+  // totais a zero, tal como annualSummary — nunca 404.
+  async buildAnnualExport(userId: number, year: string): Promise<AnnualExport> {
+    const payslips = await this.prisma.read.payslip.findMany({
+      where: { userId, period: { startsWith: year }, status: { not: 'DRAFT' } },
+      orderBy: { period: 'asc' },
+    });
+
+    const rows = payslips.map(p => {
+      const row = { period: p.period } as { period: string } & Record<AnnualExportField, number>;
+      for (const f of ANNUAL_EXPORT_FIELDS) row[f] = p[f] ?? 0;
+      return row;
+    });
+
+    const totals = {} as Record<AnnualExportField, number>;
+    for (const f of ANNUAL_EXPORT_FIELDS) {
+      totals[f] = payslips.reduce((acc, p) => acc + (p[f] ?? 0), 0);
+    }
+
+    return { year, userId, months: payslips.length, rows, totals };
   }
 
   // ─── COMPARAÇÃO DE 2 MESES ─────────────────────────────────────────────────

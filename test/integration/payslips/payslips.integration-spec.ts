@@ -271,11 +271,14 @@ describe('Payslips Integration', () => {
       expect(res.body.months).toBeGreaterThanOrEqual(1);
     });
 
-    it('resumo anual sem recibos → 404', async () => {
-      await request(app.getHttpServer())
+    it('resumo anual sem recibos → 200 com resumo zerado (não 404)', async () => {
+      const res = await request(app.getHttpServer())
         .get('/payslips/my/annual-summary?year=2026')
         .set('Authorization', `Bearer ${otherEmployeeToken}`)
-        .expect(404);
+        .expect(200);
+      expect(res.body.months).toBe(0);
+      expect(res.body.totalGross).toBe(0);
+      expect(res.body.monthlySeries).toEqual([]);
     });
 
     it('RH cria e emite um segundo recibo (2026-05) para comparação', async () => {
@@ -310,6 +313,50 @@ describe('Payslips Integration', () => {
         .get('/payslips/my/compare?periodA=2026-04&periodB=2099-01')
         .set('Authorization', `Bearer ${employeeToken}`)
         .expect(404);
+    });
+  });
+
+  describe('Exportação (PDF / CSV)', () => {
+    it('dono descarrega o próprio recibo em PDF → 200 application/pdf', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/payslips/my/${payslipId}/pdf`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .buffer(true)
+        .parse((r, cb) => {
+          const chunks: Buffer[] = [];
+          r.on('data', (c: Buffer) => chunks.push(c));
+          r.on('end', () => cb(null, Buffer.concat(chunks)));
+        })
+        .expect(200);
+      expect(res.headers['content-type']).toContain('application/pdf');
+      expect(res.headers['content-disposition']).toContain('attachment');
+      expect((res.body as Buffer).slice(0, 4).toString()).toBe('%PDF');
+    });
+
+    it('outro colaborador não descarrega o PDF de recibo alheio → 404', async () => {
+      await request(app.getHttpServer())
+        .get(`/payslips/my/${payslipId}/pdf`)
+        .set('Authorization', `Bearer ${otherEmployeeToken}`)
+        .expect(404);
+    });
+
+    it('exporta o resumo anual em CSV → 200 text/csv com cabeçalho', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/payslips/my/annual-summary/export?year=2026')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      expect(res.headers['content-type']).toContain('text/csv');
+      expect(res.text).toContain('Período');
+      expect(res.text).toContain('TOTAL');
+    });
+
+    it('exporta o resumo anual em PDF (format=pdf) → 200 application/pdf', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/payslips/my/annual-summary/export?year=2026&format=pdf')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      expect(res.headers['content-type']).toContain('application/pdf');
+      expect(res.headers['content-disposition']).toContain('attachment');
     });
   });
 
