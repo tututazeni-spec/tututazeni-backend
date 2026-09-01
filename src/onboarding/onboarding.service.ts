@@ -196,12 +196,17 @@ export class OnboardingService {
           select: {
             id: true,
             fullName: true,
+            email: true,
             avatarUrl: true,
             position: { select: { name: true } },
           },
         },
-        manager: { select: { id: true, fullName: true, avatarUrl: true } },
-        hrResponsible: { select: { id: true, fullName: true, avatarUrl: true } },
+        manager: {
+          select: { id: true, fullName: true, email: true, avatarUrl: true },
+        },
+        hrResponsible: {
+          select: { id: true, fullName: true, email: true, avatarUrl: true },
+        },
         taskInstances: {
           include: { templateTask: true, approvedBy: { select: { id: true, fullName: true } } },
           orderBy: { templateTask: { seq: 'asc' } },
