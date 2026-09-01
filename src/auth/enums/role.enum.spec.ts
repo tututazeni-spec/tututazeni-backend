@@ -25,9 +25,7 @@ describe('Roles metadata — DepartmentsController (Grupo B)', () => {
     );
     expect(meta).toBeDefined();
     expect(meta).toContain(Role.COLABORADOR);
-    expect(meta).toEqual(
-      expect.arrayContaining([Role.GESTOR, Role.RH, Role.ADMIN, Role.DIRECTOR]),
-    );
+    expect(meta).toEqual(expect.arrayContaining([Role.GESTOR, Role.RH, Role.ADMIN, Role.DIRECTOR]));
   });
 
   it('metrics permite qualquer autenticado (contém COLABORADOR)', () => {
