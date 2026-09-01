@@ -193,6 +193,21 @@ describe('Departments Integration', () => {
       expect(Array.isArray(res.body.children)).toBe(true);
     });
 
+    it('GET /departments/:id — colaborador (mesmo acesso que tree/list) → 200', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/departments/${departmentId}`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      expect(res.body.id).toBe(departmentId);
+    });
+
+    it('GET /departments/:id/metrics — colaborador → 200', async () => {
+      await request(app.getHttpServer())
+        .get(`/departments/${childDepartmentId}/metrics`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+    });
+
     it('GET /departments/:id/metrics — 200 com breadcrumb', async () => {
       const res = await request(app.getHttpServer())
         .get(`/departments/${childDepartmentId}/metrics`)

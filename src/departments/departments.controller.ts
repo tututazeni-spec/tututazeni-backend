@@ -72,15 +72,20 @@ export class DepartmentsController {
     return this.svc.getComparativeDashboard();
   }
 
+  // Detalhe e métricas: mesmo nível de acesso que GET /departments e
+  // /departments/tree (AUTHENTICATED_ROLES). O organograma e a lista já são
+  // visíveis a qualquer autenticado; se o detalhe fosse mais restrito, um
+  // COLABORADOR/LIDER/INSTRUCTOR/AUDITOR que clicasse num nó do organograma
+  // levava 403. Escrita (create/update/(de)activate/transfer) continua restrita.
   @Get(':id')
-  @Roles(Role.GESTOR, Role.RH, Role.ADMIN, Role.DIRECTOR)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe do departamento (membros, sub-deptos, histórico)' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
   }
 
   @Get(':id/metrics')
-  @Roles(Role.GESTOR, Role.RH, Role.ADMIN, Role.DIRECTOR)
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Métricas do departamento' })
   metrics(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getMetrics(id);
