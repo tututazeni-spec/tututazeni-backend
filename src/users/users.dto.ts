@@ -13,6 +13,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import { IsStrongPassword } from '../common/validators/strong-password.decorator';
 import { IsBase64ImageDataUrl } from '../common/validators/is-base64-image-data-url.decorator';
+import { EmptyStringToUndefined } from '../common/transformers/empty-string-to-undefined';
 import { AccountStatus, HrStatus } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
@@ -36,54 +37,66 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({ minLength: 10 })
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsString()
   @IsStrongPassword()
   password?: string;
 
+  // `String? @unique` no schema: um "" enviado por formulário/import grava na
+  // BD e o 2.º utilizador sem nº de funcionário rebenta com P2002 (500).
   @ApiPropertyOptional()
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsString()
   @MaxLength(30)
   employeeNumber?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsString()
   @MaxLength(30)
   phone?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsDateString()
   birthDate?: string;
 
   @ApiPropertyOptional({ enum: Gender })
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsEnum(Gender)
   gender?: Gender;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsString()
   avatarUrl?: string;
 
   @ApiPropertyOptional({ default: 'pt' })
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsString()
   language?: string;
 
   @ApiPropertyOptional({ example: 'Africa/Luanda' })
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsString()
   timezone?: string;
 
   @ApiPropertyOptional({ example: 'Angola' })
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsString()
   country?: string;
 
   @ApiPropertyOptional({ example: 'Luanda' })
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsString()
   city?: string;
 
@@ -109,16 +122,19 @@ export class CreateUserDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsDateString()
   hireDate?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsDateString()
   exitDate?: string;
 
   @ApiPropertyOptional({ enum: HrStatus, default: HrStatus.ACTIVE })
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsEnum(HrStatus)
   hrStatus?: HrStatus;
 
@@ -129,6 +145,7 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({ enum: AccountStatus, default: AccountStatus.PENDING })
   @IsOptional()
+  @EmptyStringToUndefined()
   @IsEnum(AccountStatus)
   accountStatus?: AccountStatus;
 }
