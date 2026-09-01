@@ -191,10 +191,13 @@ export class PdfService {
     deductions: { label: string; amount: number }[];
     netSalary: number;
     companyName?: string;
+    /** Símbolo de moeda no corpo do recibo. Omisso: '€' (compat. com chamadas antigas). */
+    currencySymbol?: string;
   }): Promise<Buffer> {
     const doc = this.createDoc('Recibo de Vencimento');
     this.addHeader(doc, data.companyName);
 
+    const cur = data.currencySymbol ?? '€';
     const totalAllowances = data.allowances.reduce((s, a) => s + a.amount, 0);
     const totalDeductions = data.deductions.reduce((s, d) => s + d.amount, 0);
 
@@ -213,16 +216,16 @@ export class PdfService {
       .font('Helvetica-Bold')
       .text('VENCIMENTOS')
       .font('Helvetica')
-      .text(`Salário Base: ${data.baseSalary.toFixed(2)} €`);
+      .text(`Salário Base: ${data.baseSalary.toFixed(2)} ${cur}`);
 
     data.allowances.forEach(a => {
-      doc.text(`${a.label}: ${a.amount.toFixed(2)} €`);
+      doc.text(`${a.label}: ${a.amount.toFixed(2)} ${cur}`);
     });
 
     doc.moveDown().font('Helvetica-Bold').text('DESCONTOS').font('Helvetica');
 
     data.deductions.forEach(d => {
-      doc.text(`${d.label}: ${d.amount.toFixed(2)} €`);
+      doc.text(`${d.label}: ${d.amount.toFixed(2)} ${cur}`);
     });
 
     doc
@@ -233,7 +236,7 @@ export class PdfService {
       .moveDown()
       .font('Helvetica-Bold')
       .fontSize(13)
-      .text(`LÍQUIDO A RECEBER: ${data.netSalary.toFixed(2)} €`, { align: 'right' });
+      .text(`LÍQUIDO A RECEBER: ${data.netSalary.toFixed(2)} ${cur}`, { align: 'right' });
 
     this.addFooter(doc, 1);
     return this.bufferFromDoc(doc);

@@ -11,13 +11,16 @@ import {
   ParseIntPipe,
   UseGuards,
   Req,
+  Res,
+  NotFoundException,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 
-import { PayslipsService } from './payslips.service';
+import { PayslipsService, type AnnualExport, type AnnualExportField } from './payslips.service';
+import { PdfService } from '../pdf/pdf.service';
 import {
   CreatePayslipDto,
   UpdatePayslipDto,
@@ -36,7 +39,10 @@ import { Role } from '../auth/enums/role.enum';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('payslips')
 export class PayslipsController {
-  constructor(private readonly svc: PayslipsService) {}
+  constructor(
+    private readonly svc: PayslipsService,
+    private readonly pdf: PdfService,
+  ) {}
 
   // ── Colaborador ────────────────────────────────────────────────────────────
 
@@ -51,6 +57,37 @@ export class PayslipsController {
   @ApiQuery({ name: 'year', example: '2026' })
   myAnnualSummary(@CurrentUser() user: CurrentUserData, @Query('year') year: string) {
     return this.svc.annualSummary(user.id, year ?? new Date().getFullYear().toString());
+  }
+
+  @Get('my/annual-summary/export')
+  @ApiOperation({ summary: 'Exportar o meu resumo anual (CSV ou PDF)' })
+  @ApiQuery({ name: 'year', required: false, example: '2026' })
+  @ApiQuery({ name: 'format', required: false, enum: ['csv', 'pdf'] })
+  async myAnnualSummaryExport(
+    @CurrentUser() user: CurrentUserData,
+    @Query('year') year: string | undefined,
+    @Query('format') format: string | undefined,
+    @Res() res: Response,
+  ) {
+    const yr = year ?? new Date().getFullYear().toString();
+    const data = await this.svc.buildAnnualExport(user.id, yr);
+
+    if (format === 'pdf') {
+      const buffer = await this.pdf.generateExecutiveReport(annualReportInput(data));
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="resumo-anual-${yr}.pdf"`,
+        'Content-Length': buffer.length,
+      });
+      res.end(buffer);
+      return;
+    }
+
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="resumo-anual-${yr}.csv"`,
+    });
+    res.end(annualCsv(data));
   }
 
   @Get('my/compare')
@@ -75,6 +112,29 @@ export class PayslipsController {
     const payslip = await this.svc.findOne(id, user);
     await this.svc.logAccess(id, user.id, 'VIEW', req.ip);
     return payslip;
+  }
+
+  @Get('my/:id/pdf')
+  @ApiOperation({ summary: 'Descarregar o meu recibo em PDF' })
+  async myPayslipPdf(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    // findOne aplica ownership ao nível do dado (dono OU ADMIN/RH; senão 404).
+    const payslip = await this.svc.findOne(id, user);
+    if (!payslip) throw new NotFoundException('Recibo não encontrado');
+
+    const buffer = await this.pdf.generatePayslip(payslipToPdfInput(payslip));
+    await this.svc.logAccess(id, user.id, 'DOWNLOAD', req.ip);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="recibo-${payslip.receiptCode ?? id}.pdf"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 
   @Patch('my/:id/acknowledge')
@@ -168,4 +228,103 @@ export class PayslipsController {
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePayslipDto) {
     return this.svc.update(id, dto);
   }
+}
+
+// ─── Serialização dos exports (apresentação; dados vêm do serviço) ───────────
+
+type MyPayslip = NonNullable<Awaited<ReturnType<PayslipsService['findOne']>>>;
+
+/** Mapeia um recibo real para o formato que o PdfService.generatePayslip espera. */
+function payslipToPdfInput(p: MyPayslip) {
+  const allowances = [
+    { label: 'Subsídio de Alimentação', amount: p.mealAllowance },
+    { label: 'Subsídio de Férias', amount: p.vacationAllowance },
+    { label: 'Subsídio de Natal', amount: p.christmasAllowance },
+    { label: 'Horas Extra', amount: p.overtime },
+    { label: 'Prémios', amount: p.bonuses },
+    { label: 'Outros Abonos', amount: p.otherAllowances },
+  ].filter(a => a.amount > 0);
+
+  const deductions = [
+    { label: 'IRT', amount: p.incomeTax },
+    { label: 'INSS (3%)', amount: p.socialSecurity },
+    { label: 'Seguro de Saúde', amount: p.healthInsurance },
+    { label: 'Empréstimo', amount: p.loanDeduction },
+    { label: 'Adiantamento', amount: p.advanceDeduction },
+    { label: 'Outros Descontos', amount: p.otherDeductions },
+  ].filter(d => d.amount > 0);
+
+  return {
+    employeeName: p.user?.fullName ?? '—',
+    employeeId: p.user?.employeeNumber ?? String(p.userId),
+    period: p.period,
+    baseSalary: p.baseSalary,
+    allowances,
+    deductions,
+    netSalary: p.netSalary,
+    currencySymbol: 'Kz',
+  };
+}
+
+/** Colunas do CSV do resumo anual: rótulo legível → chave em AnnualExport. */
+const ANNUAL_CSV_COLUMNS: ReadonlyArray<readonly [string, AnnualExportField]> = [
+  ['Salário Base', 'baseSalary'],
+  ['Subsídio Alimentação', 'mealAllowance'],
+  ['Subsídio Férias', 'vacationAllowance'],
+  ['Subsídio Natal', 'christmasAllowance'],
+  ['Prémios', 'bonuses'],
+  ['Horas Extra', 'overtime'],
+  ['Outros Abonos', 'otherAllowances'],
+  ['Salário Bruto', 'grossSalary'],
+  ['IRT', 'incomeTax'],
+  ['INSS', 'socialSecurity'],
+  ['Total Descontos', 'totalDeductions'],
+  ['Salário Líquido', 'netSalary'],
+];
+
+function annualCsv(data: AnnualExport): string {
+  const header = ['Período', ...ANNUAL_CSV_COLUMNS.map(([label]) => label)];
+  const monthly = data.rows.map(r => [
+    r.period,
+    ...ANNUAL_CSV_COLUMNS.map(([, key]) => r[key].toFixed(2)),
+  ]);
+  const totalRow = ['TOTAL', ...ANNUAL_CSV_COLUMNS.map(([, key]) => data.totals[key].toFixed(2))];
+  const lines = [header, ...monthly, totalRow];
+  // Prefixo BOM (U+FEFF) para o Excel interpretar o ficheiro como UTF-8 (acentos).
+  return '\uFEFF' + lines.map(cols => cols.join(',')).join('\r\n') + '\r\n';
+}
+
+function annualReportInput(data: AnnualExport) {
+  const kz = (n: number) =>
+    `${n.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kz`;
+  const t = data.totals;
+  return {
+    title: `Resumo Anual de Recibos ${data.year}`,
+    period: `${data.year} — ${data.months} ${data.months === 1 ? 'mês' : 'meses'}`,
+    metrics: [
+      { label: 'Total Bruto', value: kz(t.grossSalary) },
+      { label: 'Total Líquido', value: kz(t.netSalary) },
+      { label: 'Total IRT', value: kz(t.incomeTax) },
+      { label: 'Total INSS (colaborador)', value: kz(t.socialSecurity) },
+      { label: 'Total Subsídio Alimentação', value: kz(t.mealAllowance) },
+      { label: 'Total Subsídio Férias', value: kz(t.vacationAllowance) },
+      { label: 'Total Subsídio Natal', value: kz(t.christmasAllowance) },
+      { label: 'Total Prémios', value: kz(t.bonuses) },
+      { label: 'Total Descontos', value: kz(t.totalDeductions) },
+    ],
+    sections: [
+      {
+        title: 'Evolução mensal',
+        content: data.rows.length
+          ? data.rows
+              .map(
+                r =>
+                  `${r.period}   Bruto: ${kz(r.grossSalary)}   IRT: ${kz(r.incomeTax)}   Líquido: ${kz(r.netSalary)}`,
+              )
+              .join('\n')
+          : 'Sem recibos emitidos neste ano.',
+      },
+    ],
+    companyName: 'INNOVA',
+  };
 }

@@ -337,9 +337,68 @@ describe('PayslipsService — resumo anual, comparação e disputa', () => {
     service = module.get<PayslipsService>(PayslipsService);
   });
 
-  it('annualSummary: lança 404 se não há recibos no ano', async () => {
+  it('annualSummary: devolve resumo zerado (não 404) quando não há recibos no ano', async () => {
     mockPrisma.payslip.findMany.mockResolvedValue([]);
-    await expect(service.annualSummary(7, '2026')).rejects.toBeInstanceOf(NotFoundException);
+    const out = await service.annualSummary(7, '2026');
+    expect(out).toMatchObject({
+      year: '2026',
+      userId: 7,
+      months: 0,
+      totalGross: 0,
+      totalNet: 0,
+      totalIRT: 0,
+      monthlySeries: [],
+    });
+  });
+
+  it('buildAnnualExport: uma linha por mês com todas as colunas + linha de totais', async () => {
+    mockPrisma.payslip.findMany.mockResolvedValue([
+      {
+        period: '2026-01',
+        baseSalary: 100,
+        mealAllowance: 5,
+        vacationAllowance: 0,
+        christmasAllowance: 0,
+        bonuses: 15,
+        overtime: 0,
+        otherAllowances: 0,
+        grossSalary: 120,
+        incomeTax: 10,
+        socialSecurity: 3,
+        totalDeductions: 13,
+        netSalary: 107,
+      },
+      {
+        period: '2026-02',
+        baseSalary: 200,
+        mealAllowance: 5,
+        vacationAllowance: 0,
+        christmasAllowance: 0,
+        bonuses: 35,
+        overtime: 0,
+        otherAllowances: 0,
+        grossSalary: 240,
+        incomeTax: 20,
+        socialSecurity: 6,
+        totalDeductions: 26,
+        netSalary: 214,
+      },
+    ]);
+    const out = await service.buildAnnualExport(7, '2026');
+    expect(out.year).toBe('2026');
+    expect(out.months).toBe(2);
+    expect(out.rows).toHaveLength(2);
+    expect(out.rows[0]).toMatchObject({ period: '2026-01', baseSalary: 100, netSalary: 107 });
+    expect(out.totals).toMatchObject({ grossSalary: 360, netSalary: 321, incomeTax: 30 });
+  });
+
+  it('buildAnnualExport: rows vazio e totais a zero quando não há recibos', async () => {
+    mockPrisma.payslip.findMany.mockResolvedValue([]);
+    const out = await service.buildAnnualExport(7, '2026');
+    expect(out.rows).toEqual([]);
+    expect(out.months).toBe(0);
+    expect(out.totals.grossSalary).toBe(0);
+    expect(out.totals.netSalary).toBe(0);
   });
 
   it('annualSummary: soma correctamente os totais do ano', async () => {
