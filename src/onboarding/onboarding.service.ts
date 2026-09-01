@@ -149,6 +149,7 @@ export class OnboardingService {
           select: {
             id: true,
             fullName: true,
+            email: true,
             avatarUrl: true,
             position: { select: { name: true } },
           },
@@ -157,11 +158,14 @@ export class OnboardingService {
           select: {
             id: true,
             fullName: true,
+            email: true,
             avatarUrl: true,
             position: { select: { name: true } },
           },
         },
-        hrResponsible: { select: { id: true, fullName: true, avatarUrl: true } },
+        hrResponsible: {
+          select: { id: true, fullName: true, email: true, avatarUrl: true },
+        },
         taskInstances: {
           include: { templateTask: true },
           orderBy: { templateTask: { seq: 'asc' } },
