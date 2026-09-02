@@ -20,6 +20,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { Request, Response } from 'express';
 
 import { PayslipsService, type AnnualExport, type AnnualExportField } from './payslips.service';
+import { EmployeeCompensationService } from './employee-compensation.service';
 import { PdfService } from '../pdf/pdf.service';
 import {
   CreatePayslipDto,
@@ -42,6 +43,7 @@ export class PayslipsController {
   constructor(
     private readonly svc: PayslipsService,
     private readonly pdf: PdfService,
+    private readonly compensation: EmployeeCompensationService,
   ) {}
 
   // ── Colaborador ────────────────────────────────────────────────────────────
@@ -100,6 +102,12 @@ export class PayslipsController {
     @Query('periodB') periodB: string,
   ) {
     return this.svc.compare(user.id, periodA, periodB);
+  }
+
+  @Get('my/compensation')
+  @ApiOperation({ summary: 'A minha compensação actual (só-leitura)' })
+  myCompensation(@CurrentUser() user: CurrentUserData) {
+    return this.compensation.myCompensation(user.id);
   }
 
   @Get('my/:id')

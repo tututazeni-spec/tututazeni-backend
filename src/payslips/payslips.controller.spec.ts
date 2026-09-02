@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { PayslipsController } from './payslips.controller';
 import { PayslipsService } from './payslips.service';
+import { EmployeeCompensationService } from './employee-compensation.service';
 import { PdfService } from '../pdf/pdf.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -67,6 +68,17 @@ const mockPdf = {
   generateExecutiveReport: jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4 resumo')),
 };
 
+const mockCompensation = {
+  myCompensation: jest.fn().mockResolvedValue({
+    baseSalary: 120000,
+    foodAllowance: null,
+    transportAllowance: null,
+    bankName: 'BAI',
+    ibanMasked: '•••••••••••••••••••••3010',
+    effectiveFrom: new Date('2026-01-01'),
+  }),
+};
+
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
 const mockReq = { ip: '127.0.0.1' } as any;
 const mockRes = () => {
@@ -86,6 +98,7 @@ describe('PayslipsController', () => {
       providers: [
         { provide: PayslipsService, useValue: mockSvc },
         { provide: PdfService, useValue: mockPdf },
+        { provide: EmployeeCompensationService, useValue: mockCompensation },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -192,6 +205,22 @@ describe('PayslipsController', () => {
   it('myCompare → compare(userId, periodA, periodB)', async () => {
     await controller.myCompare(mockUser as any, '2024-01', '2024-02');
     expect(mockSvc.compare).toHaveBeenCalledWith(1, '2024-01', '2024-02');
+  });
+
+  it('myCompensation → compensation.myCompensation(user.id) e devolve o resultado', async () => {
+    const result = await controller.myCompensation(mockUser as any);
+    expect(mockCompensation.myCompensation).toHaveBeenCalledWith(1);
+    expect(result).toEqual(
+      expect.objectContaining({ baseSalary: 120000, ibanMasked: '•••••••••••••••••••••3010' }),
+    );
+    expect(result).not.toHaveProperty('iban');
+    expect(result).not.toHaveProperty('accountNumber');
+  });
+
+  it('myCompensation declarado antes de myPayslip (my/:id) — literal path vence o :id', () => {
+    const proto = PayslipsController.prototype;
+    const names = Object.getOwnPropertyNames(proto);
+    expect(names.indexOf('myCompensation')).toBeLessThan(names.indexOf('myPayslip'));
   });
 
   it('myPayslip → findOne + logAccess', async () => {
