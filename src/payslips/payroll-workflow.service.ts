@@ -17,7 +17,10 @@ import {
   RejectRunDto,
   CancelRunDto,
   RecalcPayslipInputsDto,
+  PayrollRunFilterDto,
 } from './payroll.dto';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { money } from './money.util';
 
 const EDIT_LOCKED = new Set(['APPROVED', 'PUBLISHED', 'CANCELLED']);
 
@@ -120,7 +123,7 @@ export class PayrollWorkflowService {
       },
     );
 
-    return this.prisma.$transaction(async tx => {
+    const result = await this.prisma.$transaction(async tx => {
       await (tx as unknown as PrismaService).payslipItem.deleteMany({ where: { payslipId } });
       const updated = await (tx as unknown as PrismaService).payslip.update({
         where: { id: payslipId },
@@ -133,6 +136,9 @@ export class PayrollWorkflowService {
       }
       return updated;
     });
+    // Efeito colateral: recompõe o snapshot do run a partir dos recibos actuais.
+    await this.refreshRunSnapshot(runId);
+    return result;
   }
 
   async excludePayslip(runId: number, payslipId: number) {
@@ -148,7 +154,13 @@ export class PayrollWorkflowService {
     if (!payslip || payslip.runId !== runId)
       throw new NotFoundException('Recibo não pertence a este run');
     assertPayslipEditable(payslip);
-    return this.prisma.payslip.update({ where: { id: payslipId }, data: { runId: null } });
+    const result = await this.prisma.payslip.update({
+      where: { id: payslipId },
+      data: { runId: null },
+    });
+    // Efeito colateral: recompõe o snapshot do run a partir dos recibos actuais.
+    await this.refreshRunSnapshot(runId);
+    return result;
   }
 
   async submit(runId: number, actorId: number) {
@@ -272,5 +284,154 @@ export class PayrollWorkflowService {
       metadata: { period: run.period, reason: dto.reason },
     });
     return updated;
+  }
+
+  // ─── Leituras ──────────────────────────────────────────────────────────────
+
+  async list(filter: PayrollRunFilterDto) {
+    const { page = 1, limit = 20, period, status, payGroup } = filter;
+    const { skip, take } = calculatePagination(page, limit);
+    const where: Prisma.PayrollRunWhereInput = {};
+    if (period) where.period = period;
+    if (status) where.status = status as Prisma.PayrollRunWhereInput['status'];
+    if (payGroup) where.payGroup = payGroup;
+    const [data, total] = await Promise.all([
+      this.prisma.read.payrollRun.findMany({
+        where,
+        skip,
+        take,
+        orderBy: [{ period: 'desc' }, { id: 'desc' }],
+      }),
+      this.prisma.read.payrollRun.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  async getRun(runId: number) {
+    const run = await this.loadRun(runId);
+    const ids = [
+      run.createdById,
+      run.processedById,
+      run.submittedById,
+      run.approvedById,
+      run.publishedById,
+    ].filter((x): x is number => typeof x === 'number');
+    const users = ids.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const byId = new Map(users.map(u => [u.id, u]));
+    const step = (name: string, at: Date | null, uid: number | null) => ({
+      step: name,
+      at,
+      by: uid != null ? (byId.get(uid) ?? null) : null,
+    });
+    return {
+      ...run,
+      timeline: [
+        step('created', run.createdAt, run.createdById),
+        step('processed', run.processedAt, run.processedById),
+        step('submitted', run.submittedAt, run.submittedById),
+        step('approved', run.approvedAt, run.approvedById),
+        step('published', run.publishedAt, run.publishedById),
+      ],
+    };
+  }
+
+  async listPayslips(runId: number, filter: PayrollRunFilterDto) {
+    const { page = 1, limit = 50 } = filter;
+    const { skip, take } = calculatePagination(page, limit);
+    const where: Prisma.PayslipWhereInput = { runId };
+    const [data, total] = await Promise.all([
+      this.prisma.read.payslip.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          user: { select: { id: true, fullName: true, employeeNumber: true } },
+          items: true,
+        },
+        orderBy: { user: { fullName: 'asc' } },
+      }),
+      this.prisma.read.payslip.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  async listExceptions(runId: number) {
+    const rows = await this.prisma.read.payslip.findMany({
+      where: { runId, hasExceptions: true },
+      select: { id: true, userId: true, exceptions: true, user: { select: { fullName: true } } },
+    });
+    const out: Array<{
+      payslipId: number;
+      userId: number;
+      fullName: string;
+      code: string;
+      severity: string;
+      message: string;
+    }> = [];
+    for (const r of rows) {
+      const list = Array.isArray(r.exceptions)
+        ? (r.exceptions as unknown as Array<Record<string, string>>)
+        : [];
+      for (const e of list) {
+        out.push({
+          payslipId: r.id,
+          userId: r.userId,
+          fullName: r.user?.fullName ?? '—',
+          code: e.code,
+          severity: e.severity,
+          message: e.message,
+        });
+      }
+    }
+    return out;
+  }
+
+  /** Recompõe employeeCount/exceptionsCount/errorCount/totais do run a partir dos recibos actuais. */
+  async refreshRunSnapshot(runId: number) {
+    const payslips = await this.prisma.read.payslip.findMany({
+      where: { runId },
+      select: {
+        grossSalary: true,
+        netSalary: true,
+        totalDeductions: true,
+        totalEmployerCost: true,
+        exceptions: true,
+        hasExceptions: true,
+      },
+    });
+    let exceptionsCount = 0;
+    let errorCount = 0;
+    let totalGross = 0;
+    let totalNet = 0;
+    let totalDeductions = 0;
+    let totalEmployerCost = 0;
+    for (const p of payslips) {
+      const list = Array.isArray(p.exceptions)
+        ? (p.exceptions as unknown as Array<{ severity: string }>)
+        : [];
+      exceptionsCount += list.length;
+      if (list.some(e => e.severity === 'ERROR')) errorCount += 1;
+      totalGross += p.grossSalary ?? 0;
+      totalNet += p.netSalary ?? 0;
+      totalDeductions += p.totalDeductions ?? 0;
+      totalEmployerCost += p.totalEmployerCost ?? 0;
+    }
+    return this.prisma.payrollRun.update({
+      where: { id: runId },
+      data: {
+        employeeCount: payslips.length,
+        exceptionsCount,
+        errorCount,
+        totalGross: money(totalGross),
+        totalNet: money(totalNet),
+        totalDeductions: money(totalDeductions),
+        totalEmployerCost: money(totalEmployerCost),
+      },
+    });
   }
 }
