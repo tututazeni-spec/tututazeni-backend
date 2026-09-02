@@ -23,6 +23,19 @@ import { CurrentUserData } from '../common/types/current-user';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 
+// ─── Validação de editabilidade de recibos ─────────────────────────────────
+const LOCKED_PAYSLIP_STATUSES = new Set(['ISSUED', 'ACKNOWLEDGED', 'DISPUTED']);
+
+/** Recibo imutável quando já emitido/confirmado/em-disputa, ou quando o seu run está PUBLISHED. */
+export function assertPayslipEditable(payslip: {
+  status: string;
+  run?: { status: string } | null;
+}): void {
+  if (LOCKED_PAYSLIP_STATUSES.has(payslip.status) || payslip.run?.status === 'PUBLISHED') {
+    throw new ForbiddenException('Recibo não editável no estado actual');
+  }
+}
+
 // ─── Tabela IRT Angola 2026 (Lei nº 26/2020 + actualização 2026) ─────────────
 // Isenção até 150.000 Kz/mês (Portaria 2026)
 export interface IrtBracket {
@@ -377,13 +390,12 @@ export class PayslipsService {
 
   // ─── ACTUALIZAR ────────────────────────────────────────────────────────────
   async update(id: number, dto: UpdatePayslipDto) {
-    const existing = await this.findOne(id);
-
-    if (existing.status === 'ACKNOWLEDGED') {
-      throw new ForbiddenException(
-        'Não é possível editar um recibo já confirmado pelo colaborador',
-      );
-    }
+    const existing = await this.prisma.payslip.findUnique({
+      where: { id },
+      include: { run: { select: { status: true } } },
+    });
+    if (!existing) throw new NotFoundException('Recibo não encontrado');
+    assertPayslipEditable(existing);
 
     const merged = {
       baseSalary: dto.baseSalary ?? existing.baseSalary,
