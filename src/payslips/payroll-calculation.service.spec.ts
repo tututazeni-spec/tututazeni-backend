@@ -364,6 +364,8 @@ describe('PayrollCalculationService.processRun', () => {
       expect.objectContaining({ where: { runId: 1, status: 'DRAFT' } }),
     );
     expect(prisma.payslip.create).toHaveBeenCalledTimes(2);
+    // config do país é carregada UMA vez por run, não por colaborador
+    expect(engine.loadCountryConfig).toHaveBeenCalledTimes(1);
     expect(snap.employeeCount).toBe(2);
     expect(snap.totalNet).toBe(money(118770 * 2));
     expect(snap.errorCount).toBe(0);

@@ -323,18 +323,31 @@ export class PayrollCalculationService {
    * (ou a marcar) o `exceptions`/`hasExceptions` do recibo.
    * Lê via `this.prisma.read.*` (sem tx): são leituras pré-cálculo sem
    * necessidade de isolamento transaccional.
+   *
+   * `preloaded`: `countryCode`/`taxYear` são invariantes por run — o `processRun`
+   * carrega a config UMA vez antes do loop de colaboradores e passa
+   * `minimumWage`/`usedFallbackConfig` já derivados, evitando N
+   * `loadCountryConfig` (com join a `irtBrackets`) dentro da janela da
+   * transacção. O `recalcPayslip` (recibo único) chama sem `preloaded`.
    */
   async reassessExceptions(
     run: { id: number; countryCode: string; taxYear: number | null; period: string },
     user: { id: number; fullName?: string },
     result: PayrollResult,
+    preloaded?: { minimumWage: number; usedFallbackConfig: boolean },
   ): Promise<PayrollException[]> {
-    const config = await this.engine.loadCountryConfig(
-      run.countryCode,
-      run.taxYear ?? Number(run.period.slice(0, 4)),
-    );
-    const minimumWage = config.minimumWage ?? 0;
-    const usedFallbackConfig = !('id' in (config as Record<string, unknown>));
+    let minimumWage: number;
+    let usedFallbackConfig: boolean;
+    if (preloaded) {
+      ({ minimumWage, usedFallbackConfig } = preloaded);
+    } else {
+      const config = await this.engine.loadCountryConfig(
+        run.countryCode,
+        run.taxYear ?? Number(run.period.slice(0, 4)),
+      );
+      minimumWage = config.minimumWage ?? 0;
+      usedFallbackConfig = !('id' in (config as Record<string, unknown>));
+    }
 
     const compensation = await this.prisma.read.employeeCompensation.findFirst({
       where: {
@@ -384,6 +397,15 @@ export class PayrollCalculationService {
 
     const targets = await this.resolveTargetUsers(run);
 
+    // countryCode/taxYear são invariantes por run — carrega a config UMA vez
+    // (join a irtBrackets) e reutiliza para todos os colaboradores.
+    const config = await this.engine.loadCountryConfig(
+      run.countryCode,
+      run.taxYear ?? Number(run.period.slice(0, 4)),
+    );
+    const minimumWage = config.minimumWage ?? 0;
+    const usedFallbackConfig = !('id' in (config as Record<string, unknown>));
+
     let totalGross = 0,
       totalNet = 0,
       totalDeductions = 0,
@@ -414,6 +436,7 @@ export class PayrollCalculationService {
           },
           user,
           calc.result,
+          { minimumWage, usedFallbackConfig },
         );
         const hasError = exceptions.some(e => e.severity === 'ERROR');
         exceptionsCount += exceptions.length;
