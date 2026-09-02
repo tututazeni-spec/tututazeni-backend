@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { PayrollCalculationService } from './payroll-calculation.service';
 import { PayrollEngineService } from './payroll-engine.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { money } from './money.util';
 
 const prismaMock = () => {
   const m: any = {
@@ -294,5 +295,93 @@ describe('PayrollCalculationService.detectExceptions', () => {
   });
   it('returns [] for a clean payslip', () => {
     expect(svc.detectExceptions(base)).toEqual([]);
+  });
+});
+
+describe('PayrollCalculationService.processRun', () => {
+  let svc: PayrollCalculationService;
+  let prisma: any;
+  let engine: any;
+
+  beforeEach(async () => {
+    prisma = prismaMock();
+    prisma.payrollRun = { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({}) };
+    prisma.payslip = {
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      findFirst: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({ id: 10 }),
+    };
+    prisma.payslipItem = {
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      createMany: jest.fn().mockResolvedValue({ count: 0 }),
+    };
+    prisma.$transaction = jest.fn(async (cb: any) => cb(prisma));
+    engine = {
+      calculate: jest.fn().mockResolvedValue({
+        lines: [],
+        grossSalary: 125000,
+        totalDeductions: 6230,
+        netSalary: 118770,
+        totalEarnings: 125000,
+        totalEmployerCost: 133625,
+        incomeTax: 3230,
+        employeeSocialSecurity: 3000,
+        employerSocialSecurity: 8000,
+        taxBracketApplied: 'x',
+      }),
+      loadCountryConfig: jest.fn().mockResolvedValue({ id: 1, minimumWage: 70000 }),
+    };
+    const mod = await Test.createTestingModule({
+      providers: [
+        PayrollCalculationService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: PayrollEngineService, useValue: engine },
+      ],
+    }).compile();
+    svc = mod.get(PayrollCalculationService);
+  });
+
+  it('recreates payslips for all targets and returns the totals snapshot', async () => {
+    prisma.payrollRun.findUnique.mockResolvedValue({
+      id: 1,
+      period: '2026-09',
+      countryCode: 'AO',
+      taxYear: 2026,
+      scope: { userIds: [1, 2] },
+    });
+    prisma.read.user.findMany.mockResolvedValue([
+      { id: 1, fullName: 'Ana' },
+      { id: 2, fullName: 'Rui' },
+    ]);
+    prisma.read.employeeCompensation.findFirst.mockResolvedValue({
+      baseSalary: 100000,
+      components: [],
+    });
+
+    const snap = await svc.processRun(1);
+
+    expect(prisma.payslip.deleteMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { runId: 1, status: 'DRAFT' } }),
+    );
+    expect(prisma.payslip.create).toHaveBeenCalledTimes(2);
+    expect(snap.employeeCount).toBe(2);
+    expect(snap.totalNet).toBe(money(118770 * 2));
+    expect(snap.errorCount).toBe(0);
+  });
+
+  it('counts NO_COMPENSATION as an error exception', async () => {
+    prisma.payrollRun.findUnique.mockResolvedValue({
+      id: 1,
+      period: '2026-09',
+      countryCode: 'AO',
+      taxYear: 2026,
+      scope: { userIds: [1] },
+    });
+    prisma.read.user.findMany.mockResolvedValue([{ id: 1, fullName: 'Ana' }]);
+    prisma.read.employeeCompensation.findFirst.mockResolvedValue(null);
+
+    const snap = await svc.processRun(1);
+    expect(snap.errorCount).toBeGreaterThanOrEqual(1);
+    expect(snap.exceptionsCount).toBeGreaterThanOrEqual(1);
   });
 });

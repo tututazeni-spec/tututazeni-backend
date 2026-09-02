@@ -1,5 +1,6 @@
 // src/payslips/payroll-calculation.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayrollEngineService } from './payroll-engine.service';
 import type { PayrollContext, PayrollResult, PayrollLineItem } from './payroll-engine.service';
@@ -311,5 +312,137 @@ export class PayrollCalculationService {
       });
     }
     return ex;
+  }
+
+  async resolveTargetUsers(run: {
+    scope: unknown;
+  }): Promise<Array<{ id: number; fullName: string }>> {
+    const scope = (run.scope ?? {}) as { departmentIds?: number[]; userIds?: number[] };
+    const where: Prisma.UserWhereInput = { active: true };
+    if (scope.userIds?.length) where.id = { in: scope.userIds };
+    else if (scope.departmentIds?.length) where.departmentId = { in: scope.departmentIds };
+    // NB: User não tem countryCode — um scope vazio abrange todos os utilizadores activos.
+    return this.prisma.read.user.findMany({ where, select: { id: true, fullName: true } });
+  }
+
+  async processRun(runId: number) {
+    const run = await this.prisma.payrollRun.findUnique({ where: { id: runId } });
+    if (!run) throw new NotFoundException('PayrollRun não encontrado');
+
+    const targets = await this.resolveTargetUsers(run);
+    const config = await this.engine.loadCountryConfig(
+      run.countryCode,
+      run.taxYear ?? Number(run.period.slice(0, 4)),
+    );
+    const minimumWage = config.minimumWage ?? 0;
+    const usedFallbackConfig = !('id' in (config as Record<string, unknown>));
+
+    let totalGross = 0,
+      totalNet = 0,
+      totalDeductions = 0,
+      totalEmployerCost = 0;
+    let exceptionsCount = 0,
+      errorCount = 0;
+
+    await this.prisma.$transaction(async tx => {
+      await (tx as unknown as PrismaService).payslipItem.deleteMany({
+        where: { payslip: { runId, status: 'DRAFT' } },
+      });
+      await (tx as unknown as PrismaService).payslip.deleteMany({
+        where: { runId, status: 'DRAFT' },
+      });
+
+      for (const user of targets) {
+        const calc = await this.calculatePayslip(
+          { countryCode: run.countryCode, taxYear: run.taxYear, period: run.period },
+          user,
+        );
+
+        const conflicting = await (tx as unknown as PrismaService).payslip.findFirst({
+          where: { userId: user.id, period: run.period, runId: { not: runId } },
+          select: { id: true },
+        });
+        const prev = await (tx as unknown as PrismaService).payslip.findFirst({
+          where: { userId: user.id, period: { lt: run.period }, status: { not: 'DRAFT' } },
+          orderBy: { period: 'desc' },
+          select: { netSalary: true },
+        });
+
+        const compensation = await this.prisma.read.employeeCompensation.findFirst({
+          where: {
+            userId: user.id,
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+          },
+          orderBy: { effectiveFrom: 'desc' },
+        });
+
+        const exceptions = this.detectExceptions({
+          period: run.period,
+          user,
+          compensation,
+          result: calc.result,
+          minimumWage,
+          usedFallbackConfig,
+          prevNetSalary: prev?.netSalary ?? null,
+          conflictingPayslip: !!conflicting,
+        });
+        const hasError = exceptions.some(e => e.severity === 'ERROR');
+        exceptionsCount += exceptions.length;
+        if (hasError) errorCount += 1;
+
+        try {
+          const created = await (tx as unknown as PrismaService).payslip.create({
+            data: {
+              ...calc.data,
+              runId,
+              hasExceptions: exceptions.length > 0,
+              exceptions: exceptions.length
+                ? (exceptions as unknown as Prisma.InputJsonValue)
+                : undefined,
+            } as unknown as Prisma.PayslipUncheckedCreateInput,
+          });
+          if (calc.items.length) {
+            await (tx as unknown as PrismaService).payslipItem.createMany({
+              data: calc.items.map(i => ({ ...i, payslipId: created.id })),
+            });
+          }
+        } catch (e) {
+          if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+            errorCount += 1;
+            exceptionsCount += 1;
+            continue;
+          }
+          throw e;
+        }
+
+        totalGross += calc.data.grossSalary as number;
+        totalNet += calc.data.netSalary as number;
+        totalDeductions += calc.data.totalDeductions as number;
+        totalEmployerCost += calc.data.totalEmployerCost as number;
+      }
+
+      await (tx as unknown as PrismaService).payrollRun.update({
+        where: { id: runId },
+        data: {
+          employeeCount: targets.length,
+          exceptionsCount,
+          errorCount,
+          totalGross: money(totalGross),
+          totalNet: money(totalNet),
+          totalDeductions: money(totalDeductions),
+          totalEmployerCost: money(totalEmployerCost),
+        },
+      });
+    });
+
+    return {
+      employeeCount: targets.length,
+      exceptionsCount,
+      errorCount,
+      totalGross: money(totalGross),
+      totalNet: money(totalNet),
+      totalDeductions: money(totalDeductions),
+      totalEmployerCost: money(totalEmployerCost),
+    };
   }
 }
