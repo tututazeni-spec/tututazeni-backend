@@ -328,6 +328,9 @@ describe('Payroll Workflow Integration', () => {
         action: 'publish',
       });
       expect(row).toBeTruthy();
+      // metadata é uma String JSON (o AuditProcessor faz JSON.stringify).
+      const meta = JSON.parse(row.metadata);
+      expect(typeof meta.publishedById).toBe('number');
     });
   });
 

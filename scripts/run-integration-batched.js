@@ -16,7 +16,7 @@ const BATCHES = [
   ['course-modules', 'courses', 'crm-beneficiaries', 'crm-funders', 'crm-partners', 'dashboard', 'dashboard-institutional', 'dashboard-rh', 'declarations'],
   ['departments', 'document-repository', 'employees', 'engagement', 'enrollment', 'evaluation', 'evaluation360', 'events', 'executive-reports'],
   ['instructor', 'knowledge', 'leader', 'leadership', 'learning-paths', 'leave-management', 'library', 'live-classes', 'lms'],
-  ['metrics', 'micro-learning', 'mobile', 'monitoring', 'notifications', 'onboarding', 'organization', 'payslips', 'pdf'],
+  ['metrics', 'micro-learning', 'mobile', 'monitoring', 'notifications', 'onboarding', 'organization', 'payslips', 'payroll', 'pdf'],
   ['pdi', 'performance', 'process-standard', 'reports', 'roi-impact', 'roles-permissions', 'scalability', 'search', 'succession'],
   [
     'talent-development',
