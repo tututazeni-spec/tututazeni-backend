@@ -2,12 +2,43 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayrollEngineService } from './payroll-engine.service';
-import { money } from './money.util';
+import type { PayrollContext, PayrollResult, PayrollLineItem } from './payroll-engine.service';
+import { money, assertNetInvariant } from './money.util';
 
 export interface PayrollInputs {
   absenceDays: number;
   overtimeHours: number;
   workingDaysInMonth: number;
+}
+
+export interface CalcOverrides {
+  absenceDays?: number;
+  overtimeHours?: number;
+  bonusAmount?: number;
+  advanceDeduction?: number;
+}
+
+export interface PayrollRunLike {
+  countryCode: string;
+  taxYear: number | null;
+  period: string;
+}
+
+export interface PayslipItemWriteData {
+  code: string;
+  name: string;
+  type: 'EARNING' | 'DEDUCTION';
+  value: number;
+  isTaxable: boolean;
+  calcType: 'FIXED' | 'PERCENT' | 'FORMULA' | 'TABLE' | null;
+  isEmployerCost: boolean;
+  order: number;
+}
+
+export interface CalculatedPayslip {
+  data: Record<string, unknown>;
+  items: PayslipItemWriteData[];
+  result: PayrollResult;
 }
 
 @Injectable()
@@ -103,5 +134,104 @@ export class PayrollCalculationService {
       overtimeHours,
       workingDaysInMonth,
     };
+  }
+
+  private lineValue(lines: PayrollLineItem[], code: string): number {
+    return money(lines.filter(l => l.code === code).reduce((s, l) => s + l.value, 0));
+  }
+
+  async calculatePayslip(
+    run: PayrollRunLike,
+    user: { id: number },
+    overrides: CalcOverrides = {},
+  ): Promise<CalculatedPayslip> {
+    const taxYear = run.taxYear ?? Number(run.period.slice(0, 4));
+    const compensation = await this.prisma.read.employeeCompensation.findFirst({
+      where: {
+        userId: user.id,
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+      },
+      include: { components: true },
+      orderBy: { effectiveFrom: 'desc' },
+    });
+
+    const inputs = await this.gatherInputs(user.id, run.period);
+
+    const ctx: PayrollContext = {
+      userId: user.id,
+      baseSalary: compensation?.baseSalary ?? 0,
+      countryCode: run.countryCode,
+      taxYear,
+      foodAllowance: compensation?.foodAllowance ?? undefined,
+      transportAllowance: compensation?.transportAllowance ?? undefined,
+      absenceDays: overrides.absenceDays ?? inputs.absenceDays,
+      overtimeHours: overrides.overtimeHours ?? inputs.overtimeHours,
+      workingDaysInMonth: inputs.workingDaysInMonth,
+      bonusAmount: overrides.bonusAmount,
+      advanceDeduction: overrides.advanceDeduction,
+      extraComponents: (compensation?.components ?? []).map(c => ({
+        code: c.componentCode,
+        value: c.value,
+        isTaxable: true,
+      })),
+    };
+
+    const result = await this.engine.calculate(ctx, run.period);
+
+    const items: PayslipItemWriteData[] = result.lines.map((l, i) => ({
+      code: l.code,
+      name: l.name,
+      type: l.type,
+      value: money(l.value),
+      isTaxable: l.isTaxable,
+      calcType: (['FIXED', 'PERCENT', 'FORMULA', 'TABLE'].includes(l.calcType)
+        ? l.calcType
+        : null) as PayslipItemWriteData['calcType'],
+      isEmployerCost: l.isEmployerCost,
+      order: i,
+    }));
+
+    const totals = {
+      grossSalary: money(result.grossSalary),
+      totalDeductions: money(result.totalDeductions),
+      netSalary: money(result.netSalary),
+    };
+    assertNetInvariant(totals);
+
+    const data: Record<string, unknown> = {
+      userId: user.id,
+      period: run.period,
+      countryCode: run.countryCode,
+      baseSalary: this.lineValue(result.lines, 'BASE_SALARY'),
+      mealAllowance: this.lineValue(result.lines, 'ALLOWANCE_FOOD'),
+      otherAllowances: this.lineValue(result.lines, 'ALLOWANCE_TRANSPORT'),
+      overtime: this.lineValue(result.lines, 'OVERTIME'),
+      bonuses: this.lineValue(result.lines, 'BONUS'),
+      vacationAllowance: 0,
+      christmasAllowance: 0,
+      grossSalary: totals.grossSalary,
+      totalEarnings: money(result.totalEarnings),
+      netSalary: totals.netSalary,
+      totalDeductions: totals.totalDeductions,
+      totalEmployerCost: money(result.totalEmployerCost),
+      incomeTax: money(result.incomeTax),
+      socialSecurity: money(result.employeeSocialSecurity),
+      employerInss: money(result.employerSocialSecurity),
+      healthInsurance: this.lineValue(result.lines, 'HEALTH_INSURANCE'),
+      advanceDeduction: this.lineValue(result.lines, 'ADVANCE'),
+      otherDeductions: this.lineValue(result.lines, 'UNION_FEE'),
+      taxBracket: result.taxBracketApplied ?? null,
+      calcInputs: {
+        absenceDays: ctx.absenceDays,
+        overtimeHours: ctx.overtimeHours,
+        bonusAmount: ctx.bonusAmount ?? null,
+        advanceDeduction: ctx.advanceDeduction ?? null,
+        workingDaysInMonth: ctx.workingDaysInMonth,
+      },
+      calcSnapshot: result as unknown as Record<string, unknown>,
+      status: 'DRAFT',
+    };
+
+    return { data, items, result };
   }
 }
