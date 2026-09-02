@@ -41,6 +41,13 @@ export interface CalculatedPayslip {
   result: PayrollResult;
 }
 
+export type ExceptionSeverity = 'ERROR' | 'WARNING';
+export interface PayrollException {
+  code: string;
+  severity: ExceptionSeverity;
+  message: string;
+}
+
 @Injectable()
 export class PayrollCalculationService {
   private readonly logger = new Logger(PayrollCalculationService.name);
@@ -233,5 +240,76 @@ export class PayrollCalculationService {
     };
 
     return { data, items, result };
+  }
+
+  detectExceptions(args: {
+    period: string;
+    user: { id: number; fullName?: string };
+    compensation: { baseSalary: number; iban?: string | null } | null;
+    result: { netSalary: number; grossSalary: number };
+    minimumWage: number;
+    usedFallbackConfig: boolean;
+    prevNetSalary: number | null;
+    conflictingPayslip: boolean;
+  }): PayrollException[] {
+    const ex: PayrollException[] = [];
+    const { compensation, result } = args;
+
+    if (!compensation) {
+      ex.push({
+        code: 'NO_COMPENSATION',
+        severity: 'ERROR',
+        message: 'Sem compensação activa registada.',
+      });
+    } else if (compensation.baseSalary <= 0) {
+      ex.push({ code: 'ZERO_BASE_SALARY', severity: 'ERROR', message: 'Salário-base é 0.' });
+    }
+
+    if (result.netSalary < 0) {
+      ex.push({
+        code: 'NEGATIVE_NET',
+        severity: 'ERROR',
+        message: `Líquido negativo (${result.netSalary}).`,
+      });
+    }
+    if (args.conflictingPayslip) {
+      ex.push({
+        code: 'DUPLICATE_PAYSLIP_FOR_PERIOD',
+        severity: 'ERROR',
+        message: `Já existe recibo de ${args.period} para este colaborador noutro run.`,
+      });
+    }
+    if (result.netSalary >= 0 && result.netSalary < args.minimumWage) {
+      ex.push({
+        code: 'NET_BELOW_MINIMUM_WAGE',
+        severity: 'WARNING',
+        message: `Líquido ${result.netSalary} abaixo do salário mínimo ${args.minimumWage}.`,
+      });
+    }
+    if (compensation && !compensation.iban) {
+      ex.push({
+        code: 'MISSING_BANK_DETAILS',
+        severity: 'WARNING',
+        message: 'IBAN em falta na compensação.',
+      });
+    }
+    if (args.prevNetSalary && args.prevNetSalary > 0) {
+      const variance = Math.abs(result.netSalary - args.prevNetSalary) / args.prevNetSalary;
+      if (variance > 0.3) {
+        ex.push({
+          code: 'HIGH_VARIANCE_VS_PREV_MONTH',
+          severity: 'WARNING',
+          message: `Variação de ${(variance * 100).toFixed(0)}% face ao mês anterior.`,
+        });
+      }
+    }
+    if (args.usedFallbackConfig) {
+      ex.push({
+        code: 'USING_FALLBACK_TAX_CONFIG',
+        severity: 'WARNING',
+        message: 'CountryConfig em falta — cálculo com tabela fiscal por omissão.',
+      });
+    }
+    return ex;
   }
 }

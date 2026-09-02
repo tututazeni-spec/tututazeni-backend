@@ -222,3 +222,77 @@ describe('PayrollCalculationService.calculatePayslip', () => {
     expect(ctx.taxYear).toBe(2026);
   });
 });
+
+describe('PayrollCalculationService.detectExceptions', () => {
+  let svc: PayrollCalculationService;
+  beforeEach(async () => {
+    const mod = await Test.createTestingModule({
+      providers: [
+        PayrollCalculationService,
+        { provide: PrismaService, useValue: prismaMock() },
+        { provide: PayrollEngineService, useValue: { calculate: jest.fn() } },
+      ],
+    }).compile();
+    svc = mod.get(PayrollCalculationService);
+  });
+
+  const base = {
+    period: '2026-09',
+    user: { id: 1, fullName: 'Ana' },
+    compensation: { baseSalary: 100000, iban: 'AO06000000000000000000000' } as any,
+    result: { netSalary: 90000, grossSalary: 100000 } as any,
+    minimumWage: 70000,
+    usedFallbackConfig: false,
+    prevNetSalary: 90000,
+    conflictingPayslip: false,
+  };
+
+  it('flags NO_COMPENSATION as ERROR', () => {
+    const ex = svc.detectExceptions({ ...base, compensation: null });
+    expect(ex.find(e => e.code === 'NO_COMPENSATION')?.severity).toBe('ERROR');
+  });
+  it('flags ZERO_BASE_SALARY as ERROR', () => {
+    const ex = svc.detectExceptions({ ...base, compensation: { baseSalary: 0 } as any });
+    expect(ex.find(e => e.code === 'ZERO_BASE_SALARY')?.severity).toBe('ERROR');
+  });
+  it('flags NEGATIVE_NET as ERROR', () => {
+    const ex = svc.detectExceptions({
+      ...base,
+      result: { netSalary: -10, grossSalary: 100 } as any,
+    });
+    expect(ex.find(e => e.code === 'NEGATIVE_NET')?.severity).toBe('ERROR');
+  });
+  it('flags DUPLICATE_PAYSLIP_FOR_PERIOD as ERROR', () => {
+    const ex = svc.detectExceptions({ ...base, conflictingPayslip: true });
+    expect(ex.find(e => e.code === 'DUPLICATE_PAYSLIP_FOR_PERIOD')?.severity).toBe('ERROR');
+  });
+  it('flags NET_BELOW_MINIMUM_WAGE as WARNING', () => {
+    const ex = svc.detectExceptions({
+      ...base,
+      result: { netSalary: 50000, grossSalary: 60000 } as any,
+    });
+    expect(ex.find(e => e.code === 'NET_BELOW_MINIMUM_WAGE')?.severity).toBe('WARNING');
+  });
+  it('flags MISSING_BANK_DETAILS as WARNING', () => {
+    const ex = svc.detectExceptions({
+      ...base,
+      compensation: { baseSalary: 100000, iban: '' } as any,
+    });
+    expect(ex.find(e => e.code === 'MISSING_BANK_DETAILS')?.severity).toBe('WARNING');
+  });
+  it('flags HIGH_VARIANCE_VS_PREV_MONTH when abs delta > 30%', () => {
+    const ex = svc.detectExceptions({
+      ...base,
+      result: { netSalary: 40000, grossSalary: 50000 } as any,
+      prevNetSalary: 90000,
+    });
+    expect(ex.find(e => e.code === 'HIGH_VARIANCE_VS_PREV_MONTH')?.severity).toBe('WARNING');
+  });
+  it('flags USING_FALLBACK_TAX_CONFIG as WARNING', () => {
+    const ex = svc.detectExceptions({ ...base, usedFallbackConfig: true });
+    expect(ex.find(e => e.code === 'USING_FALLBACK_TAX_CONFIG')?.severity).toBe('WARNING');
+  });
+  it('returns [] for a clean payslip', () => {
+    expect(svc.detectExceptions(base)).toEqual([]);
+  });
+});
