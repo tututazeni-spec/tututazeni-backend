@@ -6,6 +6,8 @@ import { PayrollEngineService } from './payroll-engine.service';
 import { PayrollCalculationService } from './payroll-calculation.service';
 import { PayrollWorkflowService } from './payroll-workflow.service';
 import { PayrollRunController } from './payroll-run.controller';
+import { SalaryComponentService } from './salary-component.service';
+import { SalaryComponentController } from './salary-component.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuditModule } from '../common/modules/audit.module';
 
@@ -16,13 +18,15 @@ import { AuditModule } from '../common/modules/audit.module';
     PayrollEngineService,
     PayrollCalculationService,
     PayrollWorkflowService,
+    SalaryComponentService,
   ],
-  controllers: [PayslipsController, PayrollRunController],
+  controllers: [PayslipsController, PayrollRunController, SalaryComponentController],
   exports: [
     PayslipsService,
     PayrollEngineService,
     PayrollCalculationService,
     PayrollWorkflowService,
+    SalaryComponentService,
   ],
 })
 export class PayslipsModule {}
