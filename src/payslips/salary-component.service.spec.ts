@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { SalaryComponentService } from './salary-component.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -12,6 +13,7 @@ describe('SalaryComponentService.remove', () => {
         delete: jest.fn().mockResolvedValue({ code: 'X' }),
       },
       read: {
+        salaryComponent: { findUnique: jest.fn().mockResolvedValue({ code: 'X' }) },
         employeeCompensationComponent: { count: jest.fn().mockResolvedValue(0) },
         payslipItem: { count: jest.fn().mockResolvedValue(0) },
       },
@@ -33,6 +35,11 @@ describe('SalaryComponentService.remove', () => {
       where: { code: 'X' },
       data: { active: false },
     });
+    expect(prisma.salaryComponent.delete).not.toHaveBeenCalled();
+  });
+  it('throws NotFoundException when the component does not exist', async () => {
+    prisma.read.salaryComponent = { findUnique: jest.fn().mockResolvedValue(null) };
+    await expect(svc.remove('NOPE')).rejects.toThrow(NotFoundException);
     expect(prisma.salaryComponent.delete).not.toHaveBeenCalled();
   });
 });

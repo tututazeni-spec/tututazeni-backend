@@ -36,6 +36,7 @@ export class SalaryComponentService {
   }
 
   async remove(code: string) {
+    await this.get(code);
     const [inComp, inItems] = await Promise.all([
       this.prisma.read.employeeCompensationComponent.count({ where: { componentCode: code } }),
       this.prisma.read.payslipItem.count({ where: { code } }),
