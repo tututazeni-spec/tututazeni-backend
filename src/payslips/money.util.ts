@@ -2,8 +2,7 @@
 // Arredondamento monetário único para toda a escrita de totais de payroll.
 // Mantém Float (decisão de arquitectura #2) mas garante 2 casas na persistência.
 
-export const money = (n: number): number =>
-  Math.round((n + Number.EPSILON) * 100) / 100;
+export const money = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
 
 /** Guarda de sanidade: bruto − descontos tem de bater certo com o líquido. */
 export function assertNetInvariant(r: {

@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { PayslipsService } from './payslips.service';
+import { PayslipsService, assertPayslipEditable } from './payslips.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
@@ -568,23 +568,19 @@ describe('PayslipsService — dashboard RH e logs de acesso', () => {
 
 describe('assertPayslipEditable', () => {
   it('allows DRAFT with no run', () => {
-    const { assertPayslipEditable } = require('./payslips.service');
     expect(() => assertPayslipEditable({ status: 'DRAFT' })).not.toThrow();
   });
   it('allows DRAFT whose run is SIMULATED', () => {
-    const { assertPayslipEditable } = require('./payslips.service');
     expect(() =>
       assertPayslipEditable({ status: 'DRAFT', run: { status: 'SIMULATED' } }),
     ).not.toThrow();
   });
   it('blocks ISSUED / ACKNOWLEDGED / DISPUTED', () => {
-    const { assertPayslipEditable } = require('./payslips.service');
     for (const status of ['ISSUED', 'ACKNOWLEDGED', 'DISPUTED']) {
       expect(() => assertPayslipEditable({ status })).toThrow(ForbiddenException);
     }
   });
   it('blocks a DRAFT payslip whose run is PUBLISHED', () => {
-    const { assertPayslipEditable } = require('./payslips.service');
     expect(() => assertPayslipEditable({ status: 'DRAFT', run: { status: 'PUBLISHED' } })).toThrow(
       ForbiddenException,
     );

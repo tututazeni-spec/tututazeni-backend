@@ -14,10 +14,16 @@ describe('money', () => {
 
 describe('assertNetInvariant', () => {
   it('passes when gross - deductions === net within 1 cent', () => {
-    expect(() => assertNetInvariant({ grossSalary: 100, totalDeductions: 30, netSalary: 70 })).not.toThrow();
-    expect(() => assertNetInvariant({ grossSalary: 100, totalDeductions: 30, netSalary: 69.995 })).not.toThrow();
+    expect(() =>
+      assertNetInvariant({ grossSalary: 100, totalDeductions: 30, netSalary: 70 }),
+    ).not.toThrow();
+    expect(() =>
+      assertNetInvariant({ grossSalary: 100, totalDeductions: 30, netSalary: 69.995 }),
+    ).not.toThrow();
   });
   it('throws when the gap exceeds 1 cent', () => {
-    expect(() => assertNetInvariant({ grossSalary: 100, totalDeductions: 30, netSalary: 68 })).toThrow(/invariant/i);
+    expect(() =>
+      assertNetInvariant({ grossSalary: 100, totalDeductions: 30, netSalary: 68 }),
+    ).toThrow(/invariant/i);
   });
 });

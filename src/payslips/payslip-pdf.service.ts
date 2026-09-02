@@ -19,7 +19,7 @@ interface PdfPayslipInput {
   stampHash?: string;
 }
 
-type SlipForPdf = {
+interface SlipForPdf {
   userId: number;
   period: string;
   baseSalary: number;
@@ -45,7 +45,7 @@ type SlipForPdf = {
     value: number;
     isEmployerCost: boolean;
   }>;
-};
+}
 
 export function buildPdfInput(p: SlipForPdf): PdfPayslipInput {
   let allowances: { label: string; amount: number }[];
