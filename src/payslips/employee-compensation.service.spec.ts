@@ -22,6 +22,7 @@ describe('EmployeeCompensationService', () => {
         employeeCompensation: {
           findFirst: jest.fn().mockResolvedValue(null),
           findMany: jest.fn().mockResolvedValue([]),
+          count: jest.fn().mockResolvedValue(0),
         },
       },
     };
@@ -57,5 +58,87 @@ describe('EmployeeCompensationService', () => {
     const r = await svc.myCompensation(1);
     expect(r!.ibanMasked.endsWith('0102')).toBe(true);
     expect(r!.ibanMasked).toMatch(/^•+0102$/);
+  });
+
+  describe('listAll', () => {
+    it('filters to the active record only and paginates + shapes the where/include', async () => {
+      prisma.read.employeeCompensation.findMany.mockResolvedValue([
+        {
+          id: 1,
+          userId: 7,
+          baseSalary: 150000,
+          effectiveTo: null,
+          user: { id: 7, fullName: 'Ana', employeeNumber: 'E7', department: { id: 2, name: 'RH' } },
+          _count: { components: 2 },
+        },
+      ]);
+      prisma.read.employeeCompensation.count.mockResolvedValue(1);
+
+      const res = await svc.listAll({
+        page: 1,
+        limit: 20,
+        search: 'ana',
+        departmentId: 2,
+        countryCode: 'AO',
+      });
+
+      expect(prisma.read.employeeCompensation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            effectiveTo: null,
+            countryCode: 'AO',
+            user: expect.objectContaining({
+              departmentId: 2,
+              OR: [
+                { fullName: { contains: 'ana', mode: 'insensitive' } },
+                { employeeNumber: { contains: 'ana', mode: 'insensitive' } },
+              ],
+            }),
+          }),
+          orderBy: { user: { fullName: 'asc' } },
+          skip: 0,
+          take: 20,
+          include: expect.objectContaining({ _count: { select: { components: true } } }),
+        }),
+      );
+      // no bankName/iban leak: Prisma `include` returns all scalar columns,
+      // so the query must explicitly omit the bank details
+      const call = prisma.read.employeeCompensation.findMany.mock.calls[0][0];
+      expect(call.omit).toEqual({ bankName: true, iban: true });
+
+      expect(res).toEqual({
+        data: expect.any(Array),
+        meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
+      });
+    });
+
+    it('omits the user filter entirely when no search/departmentId given', async () => {
+      prisma.read.employeeCompensation.findMany.mockResolvedValue([]);
+      prisma.read.employeeCompensation.count.mockResolvedValue(0);
+      await svc.listAll({});
+      const call = prisma.read.employeeCompensation.findMany.mock.calls[0][0];
+      expect(call.where).toEqual({ effectiveTo: null });
+    });
+  });
+
+  it('history includes the user identity on every row', async () => {
+    prisma.read.employeeCompensation.findMany.mockResolvedValue([]);
+    await svc.history(7);
+    expect(prisma.read.employeeCompensation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 7 },
+        include: expect.objectContaining({
+          components: true,
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              employeeNumber: true,
+              department: { select: { id: true, name: true } },
+            },
+          },
+        }),
+      }),
+    );
   });
 });

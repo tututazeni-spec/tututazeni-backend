@@ -2,7 +2,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { buildPaginatedResponse, calculatePagination } from '../common/helpers/pagination.helper';
 import {
+  CompensationListFilterDto,
   CreateEmployeeCompensationDto,
   UpdateEmployeeCompensationDto,
   UpsertCompensationComponentsDto,
@@ -16,8 +18,61 @@ export class EmployeeCompensationService {
     return this.prisma.read.employeeCompensation.findMany({
       where: { userId },
       orderBy: { effectiveFrom: 'desc' },
-      include: { components: true },
+      include: {
+        components: true,
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            employeeNumber: true,
+            department: { select: { id: true, name: true } },
+          },
+        },
+      },
     });
+  }
+
+  async listAll(filter: CompensationListFilterDto) {
+    const page = filter.page ?? 1;
+    const limit = filter.limit ?? 20;
+    const { skip, take } = calculatePagination(page, limit);
+
+    const where: Prisma.EmployeeCompensationWhereInput = { effectiveTo: null };
+    if (filter.countryCode) where.countryCode = filter.countryCode;
+
+    const userWhere: Prisma.UserWhereInput = {};
+    if (filter.departmentId) userWhere.departmentId = filter.departmentId;
+    if (filter.search) {
+      userWhere.OR = [
+        { fullName: { contains: filter.search, mode: 'insensitive' } },
+        { employeeNumber: { contains: filter.search, mode: 'insensitive' } },
+      ];
+    }
+    if (Object.keys(userWhere).length > 0) where.user = userWhere;
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.employeeCompensation.findMany({
+        where,
+        orderBy: { user: { fullName: 'asc' } },
+        skip,
+        take,
+        omit: { bankName: true, iban: true },
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              employeeNumber: true,
+              department: { select: { id: true, name: true } },
+            },
+          },
+          _count: { select: { components: true } },
+        },
+      }),
+      this.prisma.read.employeeCompensation.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   current(userId: number) {

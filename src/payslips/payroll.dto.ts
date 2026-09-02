@@ -76,6 +76,24 @@ export class PayrollRunFilterDto extends BaseFilterDto {
   payGroup?: string;
 }
 
+export class CompensationListFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional({ description: 'Pesquisa por nome ou nº de colaborador' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional({ example: 'AO' })
+  @IsOptional()
+  @IsString()
+  countryCode?: string;
+}
+
 export class RejectRunDto {
   @ApiProperty()
   @IsString()
