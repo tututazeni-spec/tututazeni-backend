@@ -5,12 +5,14 @@ import { PayrollWorkflowService } from './payroll-workflow.service';
 import { PayrollCalculationService } from './payroll-calculation.service';
 import { AuditService } from '../common/services/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PayslipPdfService } from './payslip-pdf.service';
 
 describe('PayrollWorkflowService transitions', () => {
   let svc: PayrollWorkflowService;
   let prisma: any;
   let calc: any;
   let audit: any;
+  let payslipPdf: any;
 
   const run = (over: Partial<any> = {}) => ({
     id: 1,
@@ -38,6 +40,9 @@ describe('PayrollWorkflowService transitions', () => {
         updateMany: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
       },
+      notificationLog: {
+        create: jest.fn().mockResolvedValue({}),
+      },
       $transaction: jest.fn(async (cb: any) =>
         typeof cb === 'function' ? cb(prisma) : Promise.all(cb),
       ),
@@ -54,6 +59,7 @@ describe('PayrollWorkflowService transitions', () => {
       }),
     };
     audit = { log: jest.fn().mockResolvedValue(undefined) };
+    payslipPdf = { render: jest.fn().mockResolvedValue(Buffer.from('')) };
 
     const mod = await Test.createTestingModule({
       providers: [
@@ -61,6 +67,7 @@ describe('PayrollWorkflowService transitions', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: PayrollCalculationService, useValue: calc },
         { provide: AuditService, useValue: audit },
+        { provide: PayslipPdfService, useValue: payslipPdf },
       ],
     }).compile();
     svc = mod.get(PayrollWorkflowService);
@@ -135,6 +142,36 @@ describe('PayrollWorkflowService transitions', () => {
   it('publish: 409 when not approved', async () => {
     prisma.payrollRun.findUnique.mockResolvedValue(run({ status: 'PENDING_APPROVAL' }));
     await expect(svc.publish(1, { id: 7 })).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('publish: a PDF render failure for one payslip does not stop publish — run still PUBLISHED, every payslip still notified', async () => {
+    prisma.payrollRun.findUnique.mockResolvedValue(run({ status: 'APPROVED' }));
+    prisma.payslip.findMany.mockResolvedValue([
+      { id: 10, userId: 1, period: '2026-09', status: 'DRAFT' },
+      { id: 11, userId: 2, period: '2026-09', status: 'DRAFT' },
+    ]);
+    payslipPdf.render
+      .mockRejectedValueOnce(new Error('pdf boom'))
+      .mockResolvedValueOnce(Buffer.from(''));
+
+    const updated = await svc.publish(1, { id: 7 });
+
+    expect(updated.status).toBe('PUBLISHED');
+    expect(payslipPdf.render).toHaveBeenCalledTimes(2);
+    expect(payslipPdf.render).toHaveBeenNthCalledWith(1, 10);
+    expect(payslipPdf.render).toHaveBeenNthCalledWith(2, 11);
+    // notificação enviada para TODOS os recibos, incluindo aquele cujo PDF falhou
+    expect(prisma.notificationLog.create).toHaveBeenCalledTimes(2);
+    const notifiedUserIds = prisma.notificationLog.create.mock.calls.map(
+      (c: any) => c[0].data.userId,
+    );
+    expect(notifiedUserIds).toEqual([1, 2]);
+    expect(prisma.payrollRun.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'PUBLISHED', publishedById: 7 }),
+      }),
+    );
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'publish' }));
   });
 
   it('reject: PENDING_APPROVAL -> SIMULATED with reason + audit', async () => {
@@ -237,6 +274,10 @@ describe('PayrollWorkflowService reads', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: PayrollCalculationService, useValue: calc },
         { provide: AuditService, useValue: audit },
+        {
+          provide: PayslipPdfService,
+          useValue: { render: jest.fn().mockResolvedValue(Buffer.from('')) },
+        },
       ],
     }).compile();
     svc = mod.get(PayrollWorkflowService);

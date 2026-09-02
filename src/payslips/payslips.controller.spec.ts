@@ -4,6 +4,7 @@ import { PayslipsController } from './payslips.controller';
 import { PayslipsService } from './payslips.service';
 import { EmployeeCompensationService } from './employee-compensation.service';
 import { PdfService } from '../pdf/pdf.service';
+import { PayslipPdfService } from './payslip-pdf.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -68,6 +69,10 @@ const mockPdf = {
   generateExecutiveReport: jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4 resumo')),
 };
 
+const mockPayslipPdf = {
+  render: jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4 recibo')),
+};
+
 const mockCompensation = {
   myCompensation: jest.fn().mockResolvedValue({
     baseSalary: 120000,
@@ -99,6 +104,7 @@ describe('PayslipsController', () => {
         { provide: PayslipsService, useValue: mockSvc },
         { provide: PdfService, useValue: mockPdf },
         { provide: EmployeeCompensationService, useValue: mockCompensation },
+        { provide: PayslipPdfService, useValue: mockPayslipPdf },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -150,45 +156,25 @@ describe('PayslipsController', () => {
     expect(mockSvc.buildAnnualExport).toHaveBeenCalledWith(1, String(new Date().getFullYear()));
   });
 
-  it('myPayslipPdf → findOne + PdfService.generatePayslip + stream + logAccess(DOWNLOAD)', async () => {
+  it('myPayslipPdf → findOne (ownership) + PayslipPdfService.render(id) + stream + logAccess(DOWNLOAD)', async () => {
     const res = mockRes();
     mockSvc.findOne.mockResolvedValueOnce({
       id: 3,
       userId: 1,
       period: '2026-04',
       receiptCode: 'REC-202604-0001-ABCD',
-      baseSalary: 100,
-      mealAllowance: 5,
-      vacationAllowance: 0,
-      christmasAllowance: 0,
-      overtime: 0,
-      bonuses: 0,
-      otherAllowances: 0,
-      incomeTax: 10,
-      socialSecurity: 3,
-      healthInsurance: 0,
-      loanDeduction: 0,
-      advanceDeduction: 0,
-      otherDeductions: 0,
       netSalary: 87,
       user: { fullName: 'Ana Teste', employeeNumber: 'E-001' },
     });
     await controller.myPayslipPdf(3, mockUser as any, mockReq, res);
     expect(mockSvc.findOne).toHaveBeenCalledWith(3, mockUser);
-    expect(mockPdf.generatePayslip).toHaveBeenCalledWith(
-      expect.objectContaining({
-        employeeName: 'Ana Teste',
-        employeeId: 'E-001',
-        period: '2026-04',
-        netSalary: 87,
-        currencySymbol: 'Kz',
-      }),
-    );
+    expect(mockPayslipPdf.render).toHaveBeenCalledWith(3);
+    expect(mockPdf.generatePayslip).not.toHaveBeenCalled();
     expect(mockSvc.logAccess).toHaveBeenCalledWith(3, 1, 'DOWNLOAD', '127.0.0.1');
     expect(res.set).toHaveBeenCalledWith(
       expect.objectContaining({ 'Content-Type': 'application/pdf' }),
     );
-    expect(res.end).toHaveBeenCalled();
+    expect(res.end).toHaveBeenCalledWith(expect.any(Buffer));
   });
 
   it('myPayslipPdf → propaga o erro de ownership do findOne (não gera PDF)', async () => {
@@ -197,7 +183,7 @@ describe('PayslipsController', () => {
     await expect(controller.myPayslipPdf(3, mockUser as any, mockReq, res)).rejects.toBeInstanceOf(
       NotFoundException,
     );
-    expect(mockPdf.generatePayslip).not.toHaveBeenCalled();
+    expect(mockPayslipPdf.render).not.toHaveBeenCalled();
     expect(mockSvc.logAccess).not.toHaveBeenCalled();
     expect(res.end).not.toHaveBeenCalled();
   });

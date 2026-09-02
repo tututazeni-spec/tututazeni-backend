@@ -12,6 +12,7 @@ import { PayrollCalculationService } from './payroll-calculation.service';
 import { AuditService } from '../common/services/audit.service';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { assertPayslipEditable } from './payslips.service';
+import { PayslipPdfService } from './payslip-pdf.service';
 import {
   CreatePayrollRunDto,
   RejectRunDto,
@@ -32,6 +33,7 @@ export class PayrollWorkflowService {
     private readonly prisma: PrismaService,
     private readonly calc: PayrollCalculationService,
     private readonly audit: AuditService,
+    private readonly payslipPdf: PayslipPdfService,
   ) {}
 
   private async loadRun(runId: number) {
@@ -261,8 +263,17 @@ export class PayrollWorkflowService {
       data: { status: 'PUBLISHED', publishedById: actor.id, publishedAt: new Date() },
     });
 
-    // PDF é adicionado na Fase 4. Aqui só notificamos.
+    // Pré-gera o PDF de cada recibo e notifica o colaborador. Fora da transacção:
+    // uma falha individual a gerar o PDF não reverte a publicação nem impede a
+    // notificação — só fica registada como warning.
     for (const p of payslips) {
+      try {
+        await this.payslipPdf.render(p.id); // pré-gera; falha individual não reverte
+      } catch (e) {
+        this.logger.warn(
+          `PDF do recibo ${p.id} falhou no publish: ${e instanceof Error ? e.message : e}`,
+        );
+      }
       await createNotificationSafe(this.prisma, this.logger, {
         userId: p.userId,
         type: 'PAYSLIP_ISSUED',

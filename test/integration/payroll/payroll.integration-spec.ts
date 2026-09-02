@@ -332,6 +332,14 @@ describe('Payroll Workflow Integration', () => {
       const meta = JSON.parse(row.metadata);
       expect(typeof meta.publishedById).toBe('number');
     });
+
+    it('colaborador descarrega o recibo emitido em PDF → 200 application/pdf', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/payslips/my/${issuedPayslipId}/pdf`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    });
   });
 
   // ───────────────────────────────────────────────────────────────────────────
