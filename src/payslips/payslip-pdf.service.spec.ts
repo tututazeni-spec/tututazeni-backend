@@ -55,9 +55,19 @@ describe('buildPdfInput', () => {
           value: 8000,
           isEmployerCost: true,
         },
+        {
+          code: 'ALLOWANCE_TRANSPORT',
+          name: 'Subsídio de Transporte',
+          type: 'EARNING',
+          value: 0,
+          isEmployerCost: false,
+        },
       ],
     });
     expect(input.allowances).toEqual([{ label: 'Subsídio de Alimentação', amount: 25000 }]);
+    expect(input.allowances).not.toContainEqual(
+      expect.objectContaining({ label: 'Subsídio de Transporte' }),
+    );
     expect(input.deductions).toEqual([{ label: 'INSS Colaborador', amount: 3000 }]);
     expect(input.currencySymbol).toBe('Kz');
     expect(input.employeeName).toBe('Ana');
@@ -68,6 +78,9 @@ describe('buildPdfInput', () => {
     expect(input.allowances).toContainEqual({ label: 'Subsídio de Alimentação', amount: 25000 });
     expect(input.deductions).toContainEqual({ label: 'IRT', amount: 3230 });
     expect(input.deductions).toContainEqual({ label: 'INSS (3%)', amount: 3000 });
+    // zero-value rows (vacation/christmas/overtime/bonuses/other + zero deductions) are dropped
+    expect(input.allowances).toHaveLength(1);
+    expect(input.deductions).toHaveLength(2);
   });
 
   it('forwards receiptCode and issuedAt to the pdf input', () => {
