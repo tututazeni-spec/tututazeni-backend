@@ -215,6 +215,8 @@ describe('PayslipsController', () => {
     );
     expect(result).not.toHaveProperty('iban');
     expect(result).not.toHaveProperty('accountNumber');
+    expect(result).not.toHaveProperty('userId');
+    expect(result).not.toHaveProperty('id');
   });
 
   it('myCompensation declarado antes de myPayslip (my/:id) — literal path vence o :id', () => {

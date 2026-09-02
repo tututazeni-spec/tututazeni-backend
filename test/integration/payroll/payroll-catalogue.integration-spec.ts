@@ -232,6 +232,8 @@ describe('Payroll Catalogue + ESS Compensation Integration', () => {
       expect(res.body.ibanMasked.endsWith(CAT_IBAN_LAST4)).toBe(true);
       expect(res.body).not.toHaveProperty('iban');
       expect(res.body).not.toHaveProperty('accountNumber');
+      expect(res.body).not.toHaveProperty('userId');
+      expect(res.body).not.toHaveProperty('id');
     });
 
     it('colaborador diferente (sem compensação) → NÃO recebe os dados do primeiro', async () => {
@@ -240,7 +242,10 @@ describe('Payroll Catalogue + ESS Compensation Integration', () => {
         .set('Authorization', `Bearer ${otherToken}`)
         .expect(200);
 
-      // myCompensation devolve null quando não há linha activa.
+      // catOther não tem EmployeeCompensation → myCompensation devolve null e o
+      // Nest serializa-o como corpo vazio ({}). Nenhum dado do catEmp escapa.
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({});
       expect(res.body.baseSalary).toBeUndefined();
       expect(res.body.ibanMasked).toBeUndefined();
       expect(res.body).not.toEqual(
