@@ -101,10 +101,10 @@ describe('EmployeeCompensationService', () => {
           include: expect.objectContaining({ _count: { select: { components: true } } }),
         }),
       );
-      // no bankName/iban leak in the select
+      // no bankName/iban leak: Prisma `include` returns all scalar columns,
+      // so the query must explicitly omit the bank details
       const call = prisma.read.employeeCompensation.findMany.mock.calls[0][0];
-      expect(JSON.stringify(call.include)).not.toContain('iban');
-      expect(JSON.stringify(call.include)).not.toContain('bankName');
+      expect(call.omit).toEqual({ bankName: true, iban: true });
 
       expect(res).toEqual({
         data: expect.any(Array),

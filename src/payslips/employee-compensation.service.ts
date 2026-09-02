@@ -56,6 +56,7 @@ export class EmployeeCompensationService {
         orderBy: { user: { fullName: 'asc' } },
         skip,
         take,
+        omit: { bankName: true, iban: true },
         include: {
           user: {
             select: {
