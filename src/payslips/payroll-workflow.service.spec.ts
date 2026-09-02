@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PayrollWorkflowService } from './payroll-workflow.service';
 import { PayrollCalculationService } from './payroll-calculation.service';
 import { AuditService } from '../common/services/audit.service';
@@ -227,7 +228,7 @@ describe('PayrollWorkflowService reads', () => {
         },
       },
     };
-    calc = { calculatePayslip: jest.fn() };
+    calc = { calculatePayslip: jest.fn(), reassessExceptions: jest.fn().mockResolvedValue([]) };
     audit = { log: jest.fn().mockResolvedValue(undefined) };
 
     const mod = await Test.createTestingModule({
@@ -420,7 +421,7 @@ describe('PayrollWorkflowService reads', () => {
   });
 
   describe('refreshRunSnapshot side effects', () => {
-    it('recalcPayslip refreshes the run snapshot with errorCount 0 once the only ERROR is cleared', async () => {
+    it('recalcPayslip re-detects exceptions via reassessExceptions and clears the payslip + snapshot when nothing is found', async () => {
       prisma.payrollRun.findUnique.mockResolvedValue(baseRun({ status: 'SIMULATED' }));
       prisma.payslip.findUnique.mockResolvedValue({
         id: 100,
@@ -429,19 +430,20 @@ describe('PayrollWorkflowService reads', () => {
         status: 'DRAFT',
         run: { status: 'SIMULATED' },
       });
+      // calc.data é o shape REAL de calculatePayslip — sem exceptions/hasExceptions
       calc.calculatePayslip.mockResolvedValue({
         data: {
           grossSalary: 200000,
           netSalary: 180000,
           totalDeductions: 20000,
           totalEmployerCost: 210000,
-          hasExceptions: false,
-          exceptions: [],
         },
         items: [],
+        result: { netSalary: 180000, grossSalary: 200000 },
       });
+      // inputs corrigidos → a re-detecção não encontra qualquer exceção
+      calc.reassessExceptions.mockResolvedValue([]);
       prisma.payslip.update.mockResolvedValue({ id: 100, netSalary: 180000 });
-      // após o recalc, os recibos persistidos do run já não têm exceções ERROR
       prisma.read.payslip.findMany.mockResolvedValue([
         {
           grossSalary: 200000,
@@ -449,13 +451,35 @@ describe('PayrollWorkflowService reads', () => {
           totalDeductions: 20000,
           totalEmployerCost: 210000,
           exceptions: [],
-          hasExceptions: false,
         },
       ]);
 
       const result = await svc.recalcPayslip(1, 100, {} as any);
 
       expect(result).toEqual({ id: 100, netSalary: 180000 });
+
+      // prova que o caminho de produção RE-DETECTA (não depende do mock do snapshot)
+      expect(calc.reassessExceptions).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 1,
+          countryCode: 'AO',
+          taxYear: 2026,
+          period: '2026-09',
+        }),
+        { id: 5 },
+        expect.objectContaining({ netSalary: 180000 }),
+      );
+      // e persiste o resultado recomputado no próprio recibo (limpa o JSON via DbNull)
+      expect(prisma.payslip.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 100 },
+          data: expect.objectContaining({
+            hasExceptions: false,
+            exceptions: Prisma.DbNull,
+          }),
+        }),
+      );
+
       expect(prisma.payrollRun.update).toHaveBeenCalledTimes(1);
       expect(prisma.payrollRun.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -469,6 +493,49 @@ describe('PayrollWorkflowService reads', () => {
             totalDeductions: 20000,
             totalEmployerCost: 210000,
           }),
+        }),
+      );
+    });
+
+    it('recalcPayslip persists the recomputed exceptions when reassessExceptions still finds an ERROR', async () => {
+      prisma.payrollRun.findUnique.mockResolvedValue(baseRun({ status: 'SIMULATED' }));
+      prisma.payslip.findUnique.mockResolvedValue({
+        id: 100,
+        runId: 1,
+        userId: 5,
+        status: 'DRAFT',
+        run: { status: 'SIMULATED' },
+      });
+      calc.calculatePayslip.mockResolvedValue({
+        data: { grossSalary: 0, netSalary: -10, totalDeductions: 10, totalEmployerCost: 0 },
+        items: [],
+        result: { netSalary: -10, grossSalary: 0 },
+      });
+      const detected = [
+        { code: 'NEGATIVE_NET', severity: 'ERROR', message: 'Líquido negativo (-10).' },
+      ];
+      calc.reassessExceptions.mockResolvedValue(detected);
+      prisma.payslip.update.mockResolvedValue({ id: 100 });
+      prisma.read.payslip.findMany.mockResolvedValue([
+        {
+          grossSalary: 0,
+          netSalary: -10,
+          totalDeductions: 10,
+          totalEmployerCost: 0,
+          exceptions: detected,
+        },
+      ]);
+
+      await svc.recalcPayslip(1, 100, {} as any);
+
+      expect(prisma.payslip.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ hasExceptions: true, exceptions: detected }),
+        }),
+      );
+      expect(prisma.payrollRun.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ errorCount: 1, exceptionsCount: 1 }),
         }),
       );
     });

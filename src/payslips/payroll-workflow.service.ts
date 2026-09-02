@@ -123,11 +123,31 @@ export class PayrollWorkflowService {
       },
     );
 
+    // Re-detecta exceções com os inputs recalculados. `calc.data` NÃO traz
+    // exceptions/hasExceptions — sem isto, o JSON e a flag do recibo ficavam
+    // congelados no valor do processRun e o errorCount do run nunca baixava
+    // (submit permanentemente bloqueado). Fonte única: reassessExceptions.
+    const exceptions = await this.calc.reassessExceptions(
+      { id: runId, countryCode: run.countryCode, taxYear: run.taxYear, period: run.period },
+      { id: payslip.userId },
+      calc.result,
+    );
+
     const result = await this.prisma.$transaction(async tx => {
       await (tx as unknown as PrismaService).payslipItem.deleteMany({ where: { payslipId } });
       const updated = await (tx as unknown as PrismaService).payslip.update({
         where: { id: payslipId },
-        data: { ...calc.data, runId } as unknown as Prisma.PayslipUncheckedUpdateInput,
+        data: {
+          ...calc.data,
+          runId,
+          hasExceptions: exceptions.length > 0,
+          // update: Prisma.DbNull limpa activamente a coluna JSON; `undefined`
+          // deixá-la-ia com o valor anterior (o processRun usa `undefined` só
+          // porque é um create onde o campo omitido já nasce nulo).
+          exceptions: exceptions.length
+            ? (exceptions as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
+        } as unknown as Prisma.PayslipUncheckedUpdateInput,
       });
       if (calc.items.length) {
         await (tx as unknown as PrismaService).payslipItem.createMany({
@@ -401,7 +421,6 @@ export class PayrollWorkflowService {
         totalDeductions: true,
         totalEmployerCost: true,
         exceptions: true,
-        hasExceptions: true,
       },
     });
     let exceptionsCount = 0;

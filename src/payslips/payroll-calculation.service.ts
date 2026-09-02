@@ -314,6 +314,59 @@ export class PayrollCalculationService {
     return ex;
   }
 
+  /**
+   * Reavalia as exceções de um único recibo já calculado, refazendo os mesmos
+   * lookups que o `processRun` faz inline para cada colaborador (config do país,
+   * compensação activa, recibo do mês anterior, recibo em conflito noutro run).
+   * Fonte ÚNICA de detecção de exceções — usada pelo `processRun` e pelo
+   * `recalcPayslip` do workflow, para que um recalc de inputs volte a limpar
+   * (ou a marcar) o `exceptions`/`hasExceptions` do recibo.
+   * Lê via `this.prisma.read.*` (sem tx): são leituras pré-cálculo sem
+   * necessidade de isolamento transaccional.
+   */
+  async reassessExceptions(
+    run: { id: number; countryCode: string; taxYear: number | null; period: string },
+    user: { id: number; fullName?: string },
+    result: PayrollResult,
+  ): Promise<PayrollException[]> {
+    const config = await this.engine.loadCountryConfig(
+      run.countryCode,
+      run.taxYear ?? Number(run.period.slice(0, 4)),
+    );
+    const minimumWage = config.minimumWage ?? 0;
+    const usedFallbackConfig = !('id' in (config as Record<string, unknown>));
+
+    const compensation = await this.prisma.read.employeeCompensation.findFirst({
+      where: {
+        userId: user.id,
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+      },
+      orderBy: { effectiveFrom: 'desc' },
+    });
+
+    const prev = await this.prisma.read.payslip.findFirst({
+      where: { userId: user.id, period: { lt: run.period }, status: { not: 'DRAFT' } },
+      orderBy: { period: 'desc' },
+      select: { netSalary: true },
+    });
+
+    const conflicting = await this.prisma.read.payslip.findFirst({
+      where: { userId: user.id, period: run.period, runId: { not: run.id } },
+      select: { id: true },
+    });
+
+    return this.detectExceptions({
+      period: run.period,
+      user,
+      compensation,
+      result,
+      minimumWage,
+      usedFallbackConfig,
+      prevNetSalary: prev?.netSalary ?? null,
+      conflictingPayslip: !!conflicting,
+    });
+  }
+
   async resolveTargetUsers(run: {
     scope: unknown;
   }): Promise<Array<{ id: number; fullName: string }>> {
@@ -330,12 +383,6 @@ export class PayrollCalculationService {
     if (!run) throw new NotFoundException('PayrollRun não encontrado');
 
     const targets = await this.resolveTargetUsers(run);
-    const config = await this.engine.loadCountryConfig(
-      run.countryCode,
-      run.taxYear ?? Number(run.period.slice(0, 4)),
-    );
-    const minimumWage = config.minimumWage ?? 0;
-    const usedFallbackConfig = !('id' in (config as Record<string, unknown>));
 
     let totalGross = 0,
       totalNet = 0,
@@ -358,34 +405,16 @@ export class PayrollCalculationService {
           user,
         );
 
-        const conflicting = await (tx as unknown as PrismaService).payslip.findFirst({
-          where: { userId: user.id, period: run.period, runId: { not: runId } },
-          select: { id: true },
-        });
-        const prev = await (tx as unknown as PrismaService).payslip.findFirst({
-          where: { userId: user.id, period: { lt: run.period }, status: { not: 'DRAFT' } },
-          orderBy: { period: 'desc' },
-          select: { netSalary: true },
-        });
-
-        const compensation = await this.prisma.read.employeeCompensation.findFirst({
-          where: {
-            userId: user.id,
-            OR: [{ effectiveTo: null }, { effectiveTo: { gte: new Date() } }],
+        const exceptions = await this.reassessExceptions(
+          {
+            id: runId,
+            countryCode: run.countryCode,
+            taxYear: run.taxYear,
+            period: run.period,
           },
-          orderBy: { effectiveFrom: 'desc' },
-        });
-
-        const exceptions = this.detectExceptions({
-          period: run.period,
           user,
-          compensation,
-          result: calc.result,
-          minimumWage,
-          usedFallbackConfig,
-          prevNetSalary: prev?.netSalary ?? null,
-          conflictingPayslip: !!conflicting,
-        });
+          calc.result,
+        );
         const hasError = exceptions.some(e => e.severity === 'ERROR');
         exceptionsCount += exceptions.length;
         if (hasError) errorCount += 1;
