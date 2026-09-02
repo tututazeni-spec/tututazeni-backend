@@ -20,7 +20,9 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { Request, Response } from 'express';
 
 import { PayslipsService, type AnnualExport, type AnnualExportField } from './payslips.service';
+import { EmployeeCompensationService } from './employee-compensation.service';
 import { PdfService } from '../pdf/pdf.service';
+import { PayslipPdfService } from './payslip-pdf.service';
 import {
   CreatePayslipDto,
   UpdatePayslipDto,
@@ -42,6 +44,8 @@ export class PayslipsController {
   constructor(
     private readonly svc: PayslipsService,
     private readonly pdf: PdfService,
+    private readonly compensation: EmployeeCompensationService,
+    private readonly payslipPdf: PayslipPdfService,
   ) {}
 
   // ── Colaborador ────────────────────────────────────────────────────────────
@@ -102,6 +106,12 @@ export class PayslipsController {
     return this.svc.compare(user.id, periodA, periodB);
   }
 
+  @Get('my/compensation')
+  @ApiOperation({ summary: 'A minha compensação actual (só-leitura)' })
+  myCompensation(@CurrentUser() user: CurrentUserData) {
+    return this.compensation.myCompensation(user.id);
+  }
+
   @Get('my/:id')
   @ApiOperation({ summary: 'Detalhe do meu recibo' })
   async myPayslip(
@@ -126,7 +136,7 @@ export class PayslipsController {
     const payslip = await this.svc.findOne(id, user);
     if (!payslip) throw new NotFoundException('Recibo não encontrado');
 
-    const buffer = await this.pdf.generatePayslip(payslipToPdfInput(payslip));
+    const buffer = await this.payslipPdf.render(id);
     await this.svc.logAccess(id, user.id, 'DOWNLOAD', req.ip);
 
     res.set({
@@ -231,40 +241,6 @@ export class PayslipsController {
 }
 
 // ─── Serialização dos exports (apresentação; dados vêm do serviço) ───────────
-
-type MyPayslip = NonNullable<Awaited<ReturnType<PayslipsService['findOne']>>>;
-
-/** Mapeia um recibo real para o formato que o PdfService.generatePayslip espera. */
-function payslipToPdfInput(p: MyPayslip) {
-  const allowances = [
-    { label: 'Subsídio de Alimentação', amount: p.mealAllowance },
-    { label: 'Subsídio de Férias', amount: p.vacationAllowance },
-    { label: 'Subsídio de Natal', amount: p.christmasAllowance },
-    { label: 'Horas Extra', amount: p.overtime },
-    { label: 'Prémios', amount: p.bonuses },
-    { label: 'Outros Abonos', amount: p.otherAllowances },
-  ].filter(a => a.amount > 0);
-
-  const deductions = [
-    { label: 'IRT', amount: p.incomeTax },
-    { label: 'INSS (3%)', amount: p.socialSecurity },
-    { label: 'Seguro de Saúde', amount: p.healthInsurance },
-    { label: 'Empréstimo', amount: p.loanDeduction },
-    { label: 'Adiantamento', amount: p.advanceDeduction },
-    { label: 'Outros Descontos', amount: p.otherDeductions },
-  ].filter(d => d.amount > 0);
-
-  return {
-    employeeName: p.user?.fullName ?? '—',
-    employeeId: p.user?.employeeNumber ?? String(p.userId),
-    period: p.period,
-    baseSalary: p.baseSalary,
-    allowances,
-    deductions,
-    netSalary: p.netSalary,
-    currencySymbol: 'Kz',
-  };
-}
 
 /** Colunas do CSV do resumo anual: rótulo legível → chave em AnnualExport. */
 const ANNUAL_CSV_COLUMNS: ReadonlyArray<readonly [string, AnnualExportField]> = [

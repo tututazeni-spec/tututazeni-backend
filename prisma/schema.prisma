@@ -243,6 +243,8 @@ enum PayslipStatus {
 enum PayrollRunStatus {
   DRAFT
   PROCESSING
+  SIMULATED
+  PENDING_APPROVAL
   CALCULATED
   APPROVED
   PUBLISHED
@@ -3860,11 +3862,16 @@ model Payslip {
   items              PayslipItem[]
   accessLogs         PayslipAccessLog[]
   disputes           PayslipDispute[]
+  hasExceptions      Boolean            @default(false)
+  exceptions         Json?
+  calcInputs         Json?
+  calcSnapshot       Json?
 
   @@unique([userId, period])
   @@index([userId, period])
   @@index([period, status])
   @@index([runId])
+  @@index([runId, hasExceptions])
 }
 
 // NOTA: PayslipItem não é escrito por nenhum serviço actualmente (feature
@@ -3873,16 +3880,17 @@ model Payslip {
 // declarados no schema sem nenhum campo a usá-los e correspondem
 // semanticamente (EARNING/DEDUCTION, FIXED/PERCENT/FORMULA/TABLE).
 model PayslipItem {
-  id        Int                @id @default(autoincrement())
-  payslipId Int
-  payslip   Payslip            @relation(fields: [payslipId], references: [id], onDelete: Cascade)
-  code      String
-  name      String
-  type      ComponentType
-  value     Float
-  isTaxable Boolean            @default(true)
-  calcType  ComponentCalcType?
-  order     Int                @default(0)
+  id             Int                @id @default(autoincrement())
+  payslipId      Int
+  payslip        Payslip            @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  type           ComponentType
+  value          Float
+  isTaxable      Boolean            @default(true)
+  calcType       ComponentCalcType?
+  order          Int                @default(0)
+  isEmployerCost Boolean            @default(false)
 
   @@index([payslipId])
 }
@@ -4020,6 +4028,22 @@ model PayrollRun {
   payslips      Payslip[]
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
+
+  payGroup           String?
+  scope              Json?
+  taxYear            Int?
+  totalNet           Float?
+  totalDeductions    Float?
+  totalEmployerCost  Float?
+  employeeCount      Int?
+  exceptionsCount    Int?
+  errorCount         Int?
+  submittedAt        DateTime?
+  submittedById      Int?
+  publishedAt        DateTime?
+  publishedById      Int?
+  rejectionReason    String?
+  cancellationReason String?
 
   @@index([period, status])
 }

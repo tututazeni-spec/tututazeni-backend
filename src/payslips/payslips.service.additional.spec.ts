@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { PayslipsService } from './payslips.service';
+import { PayslipsService, assertPayslipEditable } from './payslips.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
@@ -221,9 +221,10 @@ describe('PayslipsService — transições de estado', () => {
     mockPrisma.payslip.findUnique.mockResolvedValue({
       id: 1,
       userId: 7,
-      status: 'ISSUED',
+      status: 'DRAFT',
       baseSalary: 200_000,
       mealAllowance: 0,
+      run: null,
     });
     mockPrisma.payslip.update.mockImplementation(({ data }: any) => Promise.resolve(data));
 
@@ -562,5 +563,26 @@ describe('PayslipsService — dashboard RH e logs de acesso', () => {
   it('logAccess: falha ao gravar o log não propaga excepção (apenas regista aviso)', async () => {
     mockPrisma.payslipAccessLog.create.mockRejectedValueOnce(new Error('db down'));
     await expect(service.logAccess(3, 7, 'VIEW')).resolves.toBeUndefined();
+  });
+});
+
+describe('assertPayslipEditable', () => {
+  it('allows DRAFT with no run', () => {
+    expect(() => assertPayslipEditable({ status: 'DRAFT' })).not.toThrow();
+  });
+  it('allows DRAFT whose run is SIMULATED', () => {
+    expect(() =>
+      assertPayslipEditable({ status: 'DRAFT', run: { status: 'SIMULATED' } }),
+    ).not.toThrow();
+  });
+  it('blocks ISSUED / ACKNOWLEDGED / DISPUTED', () => {
+    for (const status of ['ISSUED', 'ACKNOWLEDGED', 'DISPUTED']) {
+      expect(() => assertPayslipEditable({ status })).toThrow(ForbiddenException);
+    }
+  });
+  it('blocks a DRAFT payslip whose run is PUBLISHED', () => {
+    expect(() => assertPayslipEditable({ status: 'DRAFT', run: { status: 'PUBLISHED' } })).toThrow(
+      ForbiddenException,
+    );
   });
 });

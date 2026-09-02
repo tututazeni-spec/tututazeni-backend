@@ -11,6 +11,75 @@ const pool = new Pool({
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter } as any);
 
+async function seedPayroll(prisma: PrismaClient) {
+  const taxYear = new Date().getFullYear();
+
+  // ⚠️ Tabela IRT / taxas provisórias — confirmar com AGT antes de produção.
+  // Valores espelham PayrollEngineService.getDefaultAngolaConfig().
+  const config = await prisma.countryConfig.upsert({
+    where: { countryCode_taxYear: { countryCode: 'AO', taxYear } },
+    update: {},
+    create: {
+      countryCode: 'AO',
+      name: 'Angola',
+      currency: 'AOA',
+      locale: 'pt-AO',
+      taxYear,
+      minimumWage: 70000,
+      defaultFoodAllowance: 25000,
+      defaultTransportAllowance: 15000,
+      socialSecurity: { employeeRate: 0.03, employerRate: 0.08, ceiling: null },
+      healthInsuranceRate: 0.02,
+      unionFeeRate: 0.01,
+      guaranteeFundRate: 0.005,
+      active: true,
+    },
+  });
+
+  const brackets = [
+    { min: 0, max: 70000, rate: 0, deduction: 0, order: 0 },
+    { min: 70000, max: 100000, rate: 0.07, deduction: 0, order: 1 },
+    { min: 100000, max: 150000, rate: 0.11, deduction: 4000, order: 2 },
+    { min: 150000, max: 200000, rate: 0.14, deduction: 8500, order: 3 },
+    { min: 200000, max: 300000, rate: 0.17, deduction: 14500, order: 4 },
+    { min: 300000, max: 500000, rate: 0.21, deduction: 26500, order: 5 },
+    { min: 500000, max: null, rate: 0.25, deduction: 46500, order: 6 },
+  ];
+  const existing = await prisma.irtBracket.count({ where: { configId: config.id } });
+  if (existing === 0) {
+    await prisma.irtBracket.createMany({
+      data: brackets.map(b => ({ ...b, configId: config.id })),
+    });
+  }
+
+  const components: Array<{
+    code: string; name: string; type: 'EARNING' | 'DEDUCTION';
+    calcType: 'FIXED' | 'PERCENT' | 'FORMULA' | 'TABLE';
+    isTaxable: boolean; isMandatory: boolean; order: number;
+  }> = [
+    { code: 'BASE_SALARY', name: 'Salário Base', type: 'EARNING', calcType: 'FIXED', isTaxable: true, isMandatory: true, order: 0 },
+    { code: 'ALLOWANCE_FOOD', name: 'Subsídio de Alimentação', type: 'EARNING', calcType: 'FIXED', isTaxable: false, isMandatory: false, order: 1 },
+    { code: 'ALLOWANCE_TRANSPORT', name: 'Subsídio de Transporte', type: 'EARNING', calcType: 'FIXED', isTaxable: false, isMandatory: false, order: 2 },
+    { code: 'OVERTIME', name: 'Horas Extras', type: 'EARNING', calcType: 'FORMULA', isTaxable: true, isMandatory: false, order: 3 },
+    { code: 'BONUS', name: 'Bónus', type: 'EARNING', calcType: 'FIXED', isTaxable: true, isMandatory: false, order: 4 },
+    { code: 'INSS_EMPLOYEE', name: 'INSS Colaborador', type: 'DEDUCTION', calcType: 'PERCENT', isTaxable: false, isMandatory: true, order: 5 },
+    { code: 'IRT', name: 'IRT (Imposto Rendimento Trabalho)', type: 'DEDUCTION', calcType: 'TABLE', isTaxable: false, isMandatory: true, order: 6 },
+    { code: 'HEALTH_INSURANCE', name: 'Seguro de Saúde', type: 'DEDUCTION', calcType: 'PERCENT', isTaxable: false, isMandatory: false, order: 7 },
+    { code: 'UNION_FEE', name: 'Quota Sindical', type: 'DEDUCTION', calcType: 'PERCENT', isTaxable: false, isMandatory: false, order: 8 },
+    { code: 'ADVANCE', name: 'Adiantamento', type: 'DEDUCTION', calcType: 'FIXED', isTaxable: false, isMandatory: false, order: 9 },
+    { code: 'ABSENCE_DEDUCTION', name: 'Desconto por Faltas', type: 'DEDUCTION', calcType: 'FIXED', isTaxable: false, isMandatory: false, order: 10 },
+  ];
+  for (const c of components) {
+    await prisma.salaryComponent.upsert({
+      where: { code: c.code },
+      update: {},
+      create: { ...c, countryCode: 'AO' },
+    });
+  }
+
+  console.log('✅ Payroll seed: CountryConfig AO', taxYear, '+ 7 escalões IRT + 11 componentes');
+}
+
 async function main() {
   console.log('🌱 A iniciar seed...');
 
@@ -173,6 +242,8 @@ async function main() {
     });
   }
   console.log('✅ Tipos de licença criados:', leaveTypes.map(l => l.code).join(', '));
+
+  await seedPayroll(prisma);
 
   console.log('🎉 Seed concluído!');
 }

@@ -193,6 +193,10 @@ export class PdfService {
     companyName?: string;
     /** Símbolo de moeda no corpo do recibo. Omisso: '€' (compat. com chamadas antigas). */
     currencySymbol?: string;
+    /** Selo digital opcional (recibos publicados). Chamadas antigas não passam nenhum destes. */
+    receiptCode?: string;
+    issuedAt?: string | Date;
+    stampHash?: string;
   }): Promise<Buffer> {
     const doc = this.createDoc('Recibo de Vencimento');
     this.addHeader(doc, data.companyName);
@@ -237,6 +241,20 @@ export class PdfService {
       .font('Helvetica-Bold')
       .fontSize(13)
       .text(`LÍQUIDO A RECEBER: ${data.netSalary.toFixed(2)} ${cur}`, { align: 'right' });
+
+    if (data.receiptCode) {
+      doc
+        .moveDown(2)
+        .fontSize(8)
+        .font('Helvetica')
+        .text(`Código do recibo: ${data.receiptCode}`, { align: 'left' })
+        .text(
+          `Emitido: ${data.issuedAt ? new Date(data.issuedAt).toLocaleDateString('pt-AO') : '—'}` +
+            (data.stampHash ? `   •   Ref.: ${data.stampHash}` : ''),
+          { align: 'left' },
+        )
+        .text('Documento processado por computador.', { align: 'left' });
+    }
 
     this.addFooter(doc, 1);
     return this.bufferFromDoc(doc);
