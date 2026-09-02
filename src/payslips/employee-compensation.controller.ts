@@ -17,6 +17,7 @@ import { Roles } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 import { EmployeeCompensationService } from './employee-compensation.service';
 import {
+  CompensationListFilterDto,
   CreateEmployeeCompensationDto,
   UpdateEmployeeCompensationDto,
   UpsertCompensationComponentsDto,
@@ -34,6 +35,12 @@ export class EmployeeCompensationController {
   @ApiOperation({ summary: 'Histórico de compensação de um colaborador' })
   history(@Query('userId', ParseIntPipe) userId: number) {
     return this.service.history(userId);
+  }
+
+  @Get('all')
+  @ApiOperation({ summary: 'Listar colaboradores com compensação activa (paginado)' })
+  listAll(@Query() filter: CompensationListFilterDto) {
+    return this.service.listAll(filter);
   }
 
   @Get('current/:userId')

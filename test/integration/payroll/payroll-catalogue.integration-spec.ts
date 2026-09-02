@@ -214,6 +214,66 @@ describe('Payroll Catalogue + ESS Compensation Integration', () => {
       expect(rows[0].effectiveTo).not.toBeNull();
       expect(rows[1].effectiveTo).toBeNull();
       expect(rows[1].baseSalary).toBe(150000);
+
+      const hist = await request(app.getHttpServer())
+        .get('/payroll/compensation')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .query({ userId: catEmpId })
+        .expect(200);
+      expect(hist.body[0].user).toEqual(
+        expect.objectContaining({ id: catEmpId, fullName: 'Colaborador Catalogo ESS' }),
+      );
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Catálogo — GET /payroll/compensation/all (lista global paginada, ADMIN/RH)
+  // ───────────────────────────────────────────────────────────────────────────
+  describe('GET /payroll/compensation/all', () => {
+    it('COLABORADOR → 403', async () => {
+      await request(app.getHttpServer())
+        .get('/payroll/compensation/all')
+        .set('Authorization', `Bearer ${empToken}`)
+        .expect(403);
+    });
+
+    it('RH → 200, active rows only, correct shape, no iban/bankName', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/payroll/compensation/all')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .query({ search: 'Colaborador Catalogo ESS' })
+        .expect(200);
+
+      expect(res.body.meta).toEqual(
+        expect.objectContaining({
+          total: expect.any(Number),
+          page: 1,
+          limit: 20,
+          totalPages: expect.any(Number),
+        }),
+      );
+      const mine = res.body.data.find((r: any) => r.userId === catEmpId);
+      expect(mine).toBeDefined();
+      // catEmp has a closed + an open row → exactly one line here (the open one)
+      expect(res.body.data.filter((r: any) => r.userId === catEmpId)).toHaveLength(1);
+      expect(mine.effectiveTo).toBeNull();
+      expect(mine.baseSalary).toBe(150000);
+      expect(mine.user).toEqual(
+        expect.objectContaining({ id: catEmpId, fullName: 'Colaborador Catalogo ESS' }),
+      );
+      expect(mine.user).toHaveProperty('department');
+      expect(mine._count).toEqual({ components: expect.any(Number) });
+      expect(mine).not.toHaveProperty('iban');
+      expect(mine).not.toHaveProperty('bankName');
+    });
+
+    it('search narrows by employeeNumber and returns nothing for a miss', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/payroll/compensation/all')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .query({ search: 'zzz-no-such-employee-zzz' })
+        .expect(200);
+      expect(res.body.data.some((r: any) => r.userId === catEmpId)).toBe(false);
     });
   });
 
