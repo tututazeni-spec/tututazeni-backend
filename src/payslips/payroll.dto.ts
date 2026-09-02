@@ -9,6 +9,7 @@ import {
   ValidateIf,
   IsBoolean,
   IsEnum,
+  ValidateNested,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType, OmitType } from '@nestjs/swagger';
@@ -180,3 +181,83 @@ export class CreateSalaryComponentDto {
 export class UpdateSalaryComponentDto extends PartialType(
   OmitType(CreateSalaryComponentDto, ['code'] as const),
 ) {}
+
+export class CompensationComponentItemDto {
+  @ApiProperty({ example: 'TRANSPORT' })
+  @IsString()
+  componentCode: string;
+
+  @ApiProperty({ example: 15000 })
+  @IsNumber()
+  value: number;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  override?: boolean;
+}
+
+export class CreateEmployeeCompensationDto {
+  @ApiProperty({ example: 1 })
+  @IsInt()
+  @Type(() => Number)
+  userId: number;
+
+  @ApiProperty({ example: 130000 })
+  @IsNumber()
+  @Min(0)
+  baseSalary: number;
+
+  @ApiPropertyOptional({ example: 'AO' })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  countryCode?: string;
+
+  @ApiPropertyOptional({ example: 'BAI' })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  bankName?: string;
+
+  @ApiPropertyOptional({ example: 'AO06004400006729503010102' })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  iban?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  accountNumber?: string;
+
+  @ApiPropertyOptional({ example: '2026-10-01' })
+  @IsOptional()
+  @IsString()
+  effectiveFrom?: string;
+
+  @ApiPropertyOptional({ example: 12000 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  foodAllowance?: number;
+
+  @ApiPropertyOptional({ example: 15000 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  transportAllowance?: number;
+}
+
+export class UpdateEmployeeCompensationDto extends PartialType(
+  OmitType(CreateEmployeeCompensationDto, ['userId'] as const),
+) {}
+
+export class UpsertCompensationComponentsDto {
+  @ApiProperty({ type: [CompensationComponentItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CompensationComponentItemDto)
+  items: CompensationComponentItemDto[];
+}
