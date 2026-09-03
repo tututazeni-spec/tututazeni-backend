@@ -129,6 +129,11 @@ export class PayslipFilterDto extends BaseFilterDto {
   @IsEnum(PayslipStatus)
   status?: PayslipStatus;
 
+  @ApiPropertyOptional({ description: 'Pesquisa por nome ou nº de colaborador' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   // limit sobrepõe o campo de BaseFilterDto para preservar o @Max(100)
   // já existente aqui (mesmo padrão aplicado em EnrollmentFilterDto).
   @ApiPropertyOptional({ default: 20 })
