@@ -236,6 +236,11 @@ export class PayslipsService {
           orderBy: { createdAt: 'desc' },
           include: { user: { select: { id: true, fullName: true } } },
         },
+        // `run` alimenta o guard de editabilidade da vista admin
+        // (AdminPayslipDetailView): um recibo cujo run está PUBLISHED não é
+        // editável mesmo que o seu próprio status ainda fosse DRAFT — mesmo
+        // critério do assertPayslipEditable. `null` para recibos avulsos.
+        run: { select: { id: true, status: true } },
       },
     });
 
