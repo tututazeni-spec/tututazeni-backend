@@ -263,6 +263,33 @@ describe('CareerService (additional)', () => {
     });
   });
 
+  // ─── listPositions ────────────────────────────────────────────
+
+  describe('listPositions', () => {
+    it('deve listar cargos ordenados por nível e nome', async () => {
+      const positions = [
+        { id: 1, name: 'Analista', level: 'JUNIOR' },
+        { id: 2, name: 'Senior Analista', level: 'SENIOR' },
+      ];
+      mockPrisma.position.findMany.mockResolvedValue(positions);
+
+      const result = await service.listPositions();
+
+      expect(result).toEqual(positions);
+      expect(mockPrisma.position.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [{ level: 'asc' }, { name: 'asc' }],
+          select: { id: true, name: true, level: true },
+        }),
+      );
+    });
+
+    it('deve retornar [] quando não há cargos', async () => {
+      mockPrisma.position.findMany.mockResolvedValue([]);
+      expect(await service.listPositions()).toEqual([]);
+    });
+  });
+
   // ─── simulateNextRole ─────────────────────────────────────────
 
   describe('simulateNextRole', () => {

@@ -75,6 +75,12 @@ export class CareerController {
     return this.svc.requestPromotion(user.id, targetPositionId, justification);
   }
 
+  @Get('positions')
+  @ApiOperation({ summary: 'Catálogo de cargos (para o seletor do simulador de carreira)' })
+  listPositions() {
+    return this.svc.listPositions();
+  }
+
   @Get('me/simulate/:targetPositionId')
   @ApiOperation({ summary: 'Simulador de carreira — o que falta para chegar ao cargo X' })
   simulate(
