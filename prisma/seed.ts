@@ -80,6 +80,61 @@ async function seedPayroll(prisma: PrismaClient) {
   console.log('✅ Payroll seed: CountryConfig AO', taxYear, '+ 7 escalões IRT + 11 componentes');
 }
 
+// Estrutura organizacional mínima: 4 departamentos + 8 cargos (um por nível).
+// Sem isto a tabela Position fica vazia e GET /career/positions devolve [] — o
+// Simulador de Carreira (career/DashboardView) esconde o seletor e mostra
+// "Sem cargos definidos", tornando a simulação impossível. Mesmo padrão do bug
+// dos LeaveTypeConfig (sem seed → wizard preso no passo 1).
+async function seedOrgStructure(prisma: PrismaClient) {
+  const departments = [
+    { code: 'ENG', name: 'Engenharia' },
+    { code: 'RH', name: 'Recursos Humanos' },
+    { code: 'COM', name: 'Comercial' },
+    { code: 'OPS', name: 'Operações' },
+  ];
+  const deptMap: Record<string, { id: number }> = {};
+  for (const d of departments) {
+    const dept = await prisma.department.upsert({
+      where: { code: d.code },
+      update: {},
+      create: d,
+    });
+    deptMap[d.code] = dept;
+  }
+  console.log('✅ Departamentos criados:', departments.map(d => d.code).join(', '));
+
+  // Um cargo por PositionLevel. Salários em Kz (Angola) — bandas indicativas.
+  const positions = [
+    { code: 'P-INT', name: 'Estagiário', level: 'INTERN', dept: 'ENG', salaryMin: 150000, salaryMax: 250000 },
+    { code: 'P-JR', name: 'Técnico Júnior', level: 'JUNIOR', dept: 'OPS', salaryMin: 300000, salaryMax: 450000 },
+    { code: 'P-MID', name: 'Analista', level: 'MID', dept: 'COM', salaryMin: 500000, salaryMax: 750000 },
+    { code: 'P-SR', name: 'Engenheiro Sénior', level: 'SENIOR', dept: 'ENG', salaryMin: 800000, salaryMax: 1200000 },
+    { code: 'P-LEAD', name: 'Team Lead', level: 'LEAD', dept: 'ENG', salaryMin: 1300000, salaryMax: 1800000 },
+    { code: 'P-MGR', name: 'Gestor de Departamento', level: 'MANAGER', dept: 'OPS', salaryMin: 1900000, salaryMax: 2600000 },
+    { code: 'P-DIR', name: 'Director', level: 'DIRECTOR', dept: 'RH', salaryMin: 2800000, salaryMax: 4000000 },
+    { code: 'P-EXEC', name: 'Administrador Executivo', level: 'EXECUTIVE', dept: 'COM', salaryMin: 4500000, salaryMax: 7000000 },
+  ] as const;
+
+  // Position não tem campo @unique além do id — upsert por nome não é possível.
+  // Cria só o que ainda não existir (idempotência por nome).
+  for (const p of positions) {
+    const existing = await prisma.position.findFirst({ where: { name: p.name } });
+    if (existing) continue;
+    await prisma.position.create({
+      data: {
+        code: p.code,
+        name: p.name,
+        level: p.level,
+        departmentId: deptMap[p.dept].id,
+        salaryMin: p.salaryMin,
+        salaryMax: p.salaryMax,
+        headcountPlanned: 1,
+      },
+    });
+  }
+  console.log('✅ Cargos criados:', positions.map(p => p.name).join(', '));
+}
+
 async function main() {
   console.log('🌱 A iniciar seed...');
 
@@ -242,6 +297,8 @@ async function main() {
     });
   }
   console.log('✅ Tipos de licença criados:', leaveTypes.map(l => l.code).join(', '));
+
+  await seedOrgStructure(prisma);
 
   await seedPayroll(prisma);
 
