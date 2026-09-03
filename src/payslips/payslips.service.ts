@@ -15,6 +15,8 @@ import {
   BulkCreatePayslipDto,
   SimulatePayslipDto,
   CreateDisputeDto,
+  DisputeFilterDto,
+  ResolveDisputeDto,
 } from './payslips.dto';
 import { randomBytes } from 'crypto';
 import { assertCanAccess } from '../common/authz/ownership';
@@ -229,6 +231,10 @@ export class PayslipsService {
             nib: true,
             hireDate: true,
           },
+        },
+        disputes: {
+          orderBy: { createdAt: 'desc' },
+          include: { user: { select: { id: true, fullName: true } } },
         },
       },
     });
@@ -607,6 +613,73 @@ export class PayslipsService {
     return dispute;
   }
 
+  // ─── LISTAR DISPUTAS (ADMIN / RH) ─────────────────────────────────────────
+  async listDisputes(filters: DisputeFilterDto) {
+    const { page = 1, limit = 20, status, userId } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+
+    const where: Prisma.PayslipDisputeWhereInput = {};
+    if (status) where.status = status;
+    if (userId) where.userId = userId;
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.payslipDispute.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          payslip: {
+            select: { id: true, period: true, receiptCode: true, status: true },
+          },
+          user: { select: { id: true, fullName: true, employeeNumber: true } },
+        },
+      }),
+      this.prisma.read.payslipDispute.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  // ─── RESOLVER DISPUTA (ADMIN / RH) ───────────────────────────────────────
+  // `reissue: true` → recibo volta a ISSUED (correcção aplicada e reemitida);
+  // caso contrário o recibo mantém-se DISPUTED (resolução sem alteração de valor).
+  async resolveDispute(disputeId: number, dto: ResolveDisputeDto) {
+    const dispute = await this.prisma.payslipDispute.findUnique({
+      where: { id: disputeId },
+    });
+    if (!dispute) throw new NotFoundException('Disputa não encontrada');
+    if (dispute.status === 'RESOLVED') {
+      throw new ConflictException('Disputa já foi resolvida');
+    }
+
+    const updated = await this.prisma.payslipDispute.update({
+      where: { id: disputeId },
+      data: {
+        status: 'RESOLVED',
+        resolvedAt: new Date(),
+        resolution: dto.resolution,
+      },
+    });
+
+    if (dto.reissue) {
+      await this.prisma.payslip.update({
+        where: { id: dispute.payslipId },
+        data: { status: 'ISSUED', issuedAt: new Date() },
+      });
+    }
+
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: dispute.userId,
+      type: 'PAYSLIP_DISPUTE',
+      message: dto.reissue
+        ? 'A sua disputa foi resolvida e o recibo foi reemitido.'
+        : 'A sua disputa foi resolvida.',
+    });
+
+    return updated;
+  }
+
   // ─── DASHBOARD RH ─────────────────────────────────────────────────────────
   async hrDashboard(period?: string) {
     const targetPeriod = period ?? new Date().toISOString().slice(0, 7);
@@ -664,6 +737,9 @@ export class PayslipsService {
       where: { payslipId },
       orderBy: { accessedAt: 'desc' },
       take: 50,
+      include: {
+        user: { select: { id: true, fullName: true, email: true } },
+      },
     });
   }
 }
