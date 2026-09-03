@@ -173,6 +173,21 @@ export class CareerService {
       .sort((a, b) => b.gap - a.gap);
   }
 
+  // ─── CATÁLOGO DE CARGOS (para o seletor do simulador) ────────────────────
+
+  /**
+   * Lista leve de cargos para alimentar o seletor do Simulador de Carreira no
+   * frontend. Sem paginação — o catálogo de cargos tem dezenas de linhas, não
+   * milhares. Acessível a qualquer utilizador autenticado, tal como
+   * GET /organization/positions.
+   */
+  async listPositions() {
+    return this.prisma.read.position.findMany({
+      orderBy: [{ level: 'asc' }, { name: 'asc' }],
+      select: { id: true, name: true, level: true },
+    });
+  }
+
   // ─── SIMULADOR DE CARREIRA (Próximo cargo) ────────────────────────────────
 
   async simulateNextRole(userId: number, targetPositionId: number) {

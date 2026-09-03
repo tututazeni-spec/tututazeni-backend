@@ -10,6 +10,7 @@ const mockSvc = {
   checkPromotionEligibility: jest.fn().mockResolvedValue({ eligible: true }),
   requestPromotion: jest.fn().mockResolvedValue({ id: 1 }),
   simulateNextRole: jest.fn().mockResolvedValue({}),
+  listPositions: jest.fn().mockResolvedValue([]),
   updateCareerInterests: jest.fn().mockResolvedValue({}),
   findAllCareerPaths: jest.fn().mockResolvedValue([]),
   findOneCareerPath: jest.fn().mockResolvedValue({ id: 1 }),
@@ -77,6 +78,11 @@ describe('CareerController', () => {
   it('simulate → simulateNextRole(userId, targetPositionId)', async () => {
     await controller.simulate(mockUser as any, 3);
     expect(mockSvc.simulateNextRole).toHaveBeenCalledWith(1, 3);
+  });
+
+  it('listPositions → listPositions()', async () => {
+    await controller.listPositions();
+    expect(mockSvc.listPositions).toHaveBeenCalled();
   });
 
   it('updateInterests → updateCareerInterests(userId, dto)', async () => {
