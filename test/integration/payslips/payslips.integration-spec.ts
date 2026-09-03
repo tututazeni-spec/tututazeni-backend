@@ -340,6 +340,29 @@ describe('Payslips Integration', () => {
         .expect(404);
     });
 
+    it('RH descarrega o PDF de qualquer recibo via /:id/pdf → 200 application/pdf', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/payslips/${payslipId}/pdf`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .buffer(true)
+        .parse((r, cb) => {
+          const chunks: Buffer[] = [];
+          r.on('data', (c: Buffer) => chunks.push(c));
+          r.on('end', () => cb(null, Buffer.concat(chunks)));
+        })
+        .expect(200);
+      expect(res.headers['content-type']).toContain('application/pdf');
+      expect(res.headers['content-disposition']).toContain('attachment');
+      expect((res.body as Buffer).slice(0, 4).toString()).toBe('%PDF');
+    });
+
+    it('colaborador não acede à rota admin de PDF → 403', async () => {
+      await request(app.getHttpServer())
+        .get(`/payslips/${payslipId}/pdf`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+
     it('exporta o resumo anual em CSV → 200 text/csv com cabeçalho', async () => {
       const res = await request(app.getHttpServer())
         .get('/payslips/my/annual-summary/export?year=2026')
