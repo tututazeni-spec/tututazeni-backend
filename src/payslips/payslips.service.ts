@@ -183,7 +183,7 @@ export class PayslipsService {
 
   // ─── LISTAGEM (ADMIN / RH) ─────────────────────────────────────────────────
   async findAll(filters: PayslipFilterDto) {
-    const { page = 1, limit = 20, userId, period, year, status } = filters;
+    const { page = 1, limit = 20, userId, period, year, status, search } = filters;
     const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.PayslipWhereInput = {};
@@ -191,6 +191,14 @@ export class PayslipsService {
     if (status) where.status = status;
     if (period) where.period = period;
     if (year && !period) where.period = { startsWith: year };
+    if (search?.trim()) {
+      where.user = {
+        OR: [
+          { fullName: { contains: search.trim(), mode: 'insensitive' } },
+          { employeeNumber: { contains: search.trim(), mode: 'insensitive' } },
+        ],
+      };
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.read.payslip.findMany({

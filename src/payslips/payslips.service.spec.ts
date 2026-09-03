@@ -96,6 +96,27 @@ describe('PayslipsService', () => {
       const result = await service.findAll({});
       expect(result).toBeDefined();
     });
+
+    it('search filtra por nome ou nº de colaborador (case-insensitive)', async () => {
+      mockPrisma.payslip.findMany.mockResolvedValue([]);
+      mockPrisma.payslip.count.mockResolvedValue(0);
+      await service.findAll({ search: '  ana  ' });
+      const where = mockPrisma.payslip.findMany.mock.calls.at(-1)![0].where;
+      expect(where.user).toEqual({
+        OR: [
+          { fullName: { contains: 'ana', mode: 'insensitive' } },
+          { employeeNumber: { contains: 'ana', mode: 'insensitive' } },
+        ],
+      });
+    });
+
+    it('search em branco não aplica filtro de utilizador', async () => {
+      mockPrisma.payslip.findMany.mockResolvedValue([]);
+      mockPrisma.payslip.count.mockResolvedValue(0);
+      await service.findAll({ search: '   ' });
+      const where = mockPrisma.payslip.findMany.mock.calls.at(-1)![0].where;
+      expect(where.user).toBeUndefined();
+    });
   });
 
   describe('findOne', () => {
