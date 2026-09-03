@@ -733,6 +733,7 @@ model User {
   // ─── RH Operacional ───────────────────────────────────────────
   payslips                 Payslip[]
   payslipAccessLogs        PayslipAccessLog[]
+  payslipDisputes          PayslipDispute[]
   workDeclarations         WorkDeclaration[]
   surveyResponses          SurveyResponse[]
   leaveRequests            LeaveRequest[]
@@ -3927,6 +3928,7 @@ model PayslipDispute {
   resolvedAt DateTime?
   resolution String?
   payslip    Payslip       @relation(fields: [payslipId], references: [id])
+  user       User          @relation(fields: [userId], references: [id])
 }
 
 model CountryConfig {

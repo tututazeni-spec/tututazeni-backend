@@ -30,6 +30,8 @@ import {
   BulkCreatePayslipDto,
   SimulatePayslipDto,
   CreateDisputeDto,
+  DisputeFilterDto,
+  ResolveDisputeDto,
 } from './payslips.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -188,6 +190,27 @@ export class PayslipsController {
   @ApiQuery({ name: 'period', example: '2026-04', required: false })
   hrDashboard(@Query('period') period?: string) {
     return this.svc.hrDashboard(period);
+  }
+
+  // Rotas estáticas `disputes*` declaradas antes de `:id` para não serem
+  // capturadas pelo param (ParseIntPipe → 400). Mesmo padrão de `dashboard`.
+  @Get('disputes')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Listar disputas de recibos (Admin/RH)' })
+  @ApiQuery({ name: 'status', required: false, enum: ['OPEN', 'RESOLVED'] })
+  listDisputes(@Query() filters: DisputeFilterDto) {
+    return this.svc.listDisputes(filters);
+  }
+
+  @Patch('disputes/:disputeId/resolve')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Resolver uma disputa (Admin/RH), opcionalmente reemitindo o recibo' })
+  @HttpCode(HttpStatus.OK)
+  resolveDispute(
+    @Param('disputeId', ParseIntPipe) disputeId: number,
+    @Body() dto: ResolveDisputeDto,
+  ) {
+    return this.svc.resolveDispute(disputeId, dto);
   }
 
   @Get(':id')

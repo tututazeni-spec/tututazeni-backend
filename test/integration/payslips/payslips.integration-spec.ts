@@ -427,5 +427,140 @@ describe('Payslips Integration', () => {
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body.length).toBeGreaterThan(0);
     });
+
+    it('detalhe de recibo inclui as disputas → 200', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/payslips/${payslipId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(Array.isArray(res.body.disputes)).toBe(true);
+    });
+
+    it('logs de acesso incluem o nome de quem acedeu → 200', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/payslips/${payslipId}/access-logs`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.length).toBeGreaterThan(0);
+      expect(res.body[0].user).toHaveProperty('fullName');
+    });
+  });
+
+  describe('Disputas (RH) — listagem e resolução', () => {
+    let disputePayslipId: number;
+    let disputeId: number;
+
+    beforeAll(async () => {
+      // Período próprio deste bloco — 2026-06 já é usado pelo otherEmployee
+      // no bloco "Criação em massa" (bulk-create), o que dava 409 aqui.
+      const created = await request(app.getHttpServer())
+        .post('/payslips')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({
+          userId: otherEmployeeId,
+          period: '2026-07',
+          paymentDate: '2026-07-25',
+          baseSalary: 200000,
+        })
+        .expect(201);
+      disputePayslipId = created.body.id;
+
+      await request(app.getHttpServer())
+        .patch(`/payslips/${disputePayslipId}/issue`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+
+      const opened = await request(app.getHttpServer())
+        .post(`/payslips/my/${disputePayslipId}/dispute`)
+        .set('Authorization', `Bearer ${otherEmployeeToken}`)
+        .send({ reason: 'IRT mal calculado', details: 'Escalão errado' })
+        .expect(201);
+      disputeId = opened.body.id;
+    });
+
+    it('colaborador não pode listar disputas → 403', async () => {
+      await request(app.getHttpServer())
+        .get('/payslips/disputes')
+        .set('Authorization', `Bearer ${otherEmployeeToken}`)
+        .expect(403);
+    });
+
+    it('RH lista disputas abertas com recibo e colaborador incluídos → 200', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/payslips/disputes?status=OPEN')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body).toHaveProperty('data');
+      expect(res.body).toHaveProperty('meta.totalPages');
+      const row = res.body.data.find((d: any) => d.id === disputeId);
+      expect(row).toBeDefined();
+      expect(row.status).toBe('OPEN');
+      expect(row.payslip).toMatchObject({ id: disputePayslipId, period: '2026-07' });
+      expect(row.user).toMatchObject({ id: otherEmployeeId });
+    });
+
+    it('resolver sem reissue → disputa RESOLVED, recibo continua DISPUTED', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/payslips/disputes/${disputeId}/resolve`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ resolution: 'Recalculado manualmente, sem alteração.' })
+        .expect(200);
+      expect(res.body.status).toBe('RESOLVED');
+      expect(res.body.resolvedAt).toBeTruthy();
+
+      const detail = await request(app.getHttpServer())
+        .get(`/payslips/${disputePayslipId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(detail.body.status).toBe('DISPUTED');
+    });
+
+    it('resolver disputa já RESOLVED → 409', async () => {
+      await request(app.getHttpServer())
+        .patch(`/payslips/disputes/${disputeId}/resolve`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ resolution: 'de novo' })
+        .expect(409);
+    });
+
+    it('resolution vazio → 400', async () => {
+      const second = await request(app.getHttpServer())
+        .post(`/payslips/my/${disputePayslipId}/dispute`)
+        .set('Authorization', `Bearer ${otherEmployeeToken}`)
+        .send({ reason: 'segunda disputa' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .patch(`/payslips/disputes/${second.body.id}/resolve`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ resolution: '' })
+        .expect(400);
+    });
+
+    it('resolver com reissue → disputa RESOLVED e recibo volta a ISSUED', async () => {
+      const open = await request(app.getHttpServer())
+        .get('/payslips/disputes?status=OPEN')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      const pending = open.body.data.find((d: any) => d.payslip.id === disputePayslipId);
+      await request(app.getHttpServer())
+        .patch(`/payslips/disputes/${pending.id}/resolve`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ resolution: 'Corrigido e reemitido.', reissue: true })
+        .expect(200);
+
+      const detail = await request(app.getHttpServer())
+        .get(`/payslips/${disputePayslipId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(detail.body.status).toBe('ISSUED');
+    });
+
+    it('colaborador não pode resolver → 403', async () => {
+      await request(app.getHttpServer())
+        .patch(`/payslips/disputes/999999/resolve`)
+        .set('Authorization', `Bearer ${otherEmployeeToken}`)
+        .send({ resolution: 'x' })
+        .expect(403);
+    });
   });
 });

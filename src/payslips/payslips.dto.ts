@@ -7,15 +7,16 @@ import {
   IsEnum,
   IsArray,
   IsBoolean,
+  IsNotEmpty,
   Min,
   Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { PayslipStatus, PayslipAccessAction } from '@prisma/client';
+import { PayslipStatus, PayslipAccessAction, DisputeStatus } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
-export { PayslipStatus, PayslipAccessAction };
+export { PayslipStatus, PayslipAccessAction, DisputeStatus };
 
 // ─── Criação individual ──────────────────────────────────────────────────────
 export class CreatePayslipDto {
@@ -180,4 +181,32 @@ export class CreateDisputeDto {
   @IsOptional()
   @IsString()
   details?: string;
+}
+
+// ─── Disputas — administração (RH) ───────────────────────────────────────────
+export class DisputeFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional({ enum: DisputeStatus })
+  @IsOptional()
+  @IsEnum(DisputeStatus)
+  status?: DisputeStatus;
+
+  @ApiPropertyOptional({ description: 'Filtrar disputas de um colaborador' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  userId?: number;
+}
+
+export class ResolveDisputeDto {
+  @ApiProperty({ description: 'Descrição da resolução aplicada' })
+  @IsString()
+  @IsNotEmpty()
+  resolution: string;
+
+  @ApiPropertyOptional({
+    description: 'Reemitir o recibo (volta a ISSUED) em vez de o manter DISPUTED',
+  })
+  @IsOptional()
+  @IsBoolean()
+  reissue?: boolean;
 }
