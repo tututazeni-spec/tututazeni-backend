@@ -233,6 +233,30 @@ export class PayslipsController {
     return this.svc.getAccessLogs(id);
   }
 
+  @Get(':id/pdf')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Descarregar qualquer recibo em PDF (Admin/RH)' })
+  async adminPayslipPdf(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    // findOne com user → ownership ao nível do dado (ADMIN/RH passam; senão 404).
+    const payslip = await this.svc.findOne(id, user);
+    if (!payslip) throw new NotFoundException('Recibo não encontrado');
+
+    const buffer = await this.payslipPdf.render(id);
+    await this.svc.logAccess(id, user.id, 'DOWNLOAD', req.ip);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="recibo-${payslip.receiptCode ?? id}.pdf"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
+  }
+
   @Post()
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar recibo individual' })
