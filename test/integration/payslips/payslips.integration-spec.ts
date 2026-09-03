@@ -436,6 +436,15 @@ describe('Payslips Integration', () => {
       expect(Array.isArray(res.body.disputes)).toBe(true);
     });
 
+    it('detalhe de recibo inclui o run (null para recibo avulso) → 200', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/payslips/${payslipId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body).toHaveProperty('run');
+      expect(res.body.run).toBeNull();
+    });
+
     it('logs de acesso incluem o nome de quem acedeu → 200', async () => {
       const res = await request(app.getHttpServer())
         .get(`/payslips/${payslipId}/access-logs`)
