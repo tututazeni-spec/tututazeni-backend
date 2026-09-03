@@ -135,6 +135,43 @@ async function seedOrgStructure(prisma: PrismaClient) {
   console.log('✅ Cargos criados:', positions.map(p => p.name).join(', '));
 }
 
+// Catálogo de cargos do módulo career-plans (tabela CareerRole, distinta de
+// Position). Sem isto GET /career-plans/roles devolve [] e o Simulador de
+// Carreira desse módulo (career-plans/SimulateModal) fica com o <Select> de
+// "Cargo Alvo" vazio — impossível simular. Mesmo padrão de Position/career.
+// CareerRole não tem @unique além do id → idempotência por (name, department).
+async function seedCareerRoles(prisma: PrismaClient) {
+  const roles = [
+    { name: 'Analista Júnior', department: 'Engenharia', seniority: 'JUNIOR', level: 1, salaryMin: 300000, salaryMax: 450000 },
+    { name: 'Analista', department: 'Engenharia', seniority: 'MID', level: 2, salaryMin: 500000, salaryMax: 750000 },
+    { name: 'Analista Sénior', department: 'Engenharia', seniority: 'SENIOR', level: 3, salaryMin: 800000, salaryMax: 1200000 },
+    { name: 'Team Lead', department: 'Engenharia', seniority: 'LEAD', level: 4, salaryMin: 1300000, salaryMax: 1800000 },
+    { name: 'Gestor de Recursos Humanos', department: 'Recursos Humanos', seniority: 'MANAGER', level: 5, salaryMin: 1900000, salaryMax: 2600000 },
+    { name: 'Gestor Comercial', department: 'Comercial', seniority: 'MANAGER', level: 5, salaryMin: 1900000, salaryMax: 2600000 },
+    { name: 'Director de Operações', department: 'Operações', seniority: 'DIRECTOR', level: 6, salaryMin: 2800000, salaryMax: 4000000 },
+    { name: 'Administrador Executivo', department: 'Comercial', seniority: 'C_LEVEL', level: 7, salaryMin: 4500000, salaryMax: 7000000 },
+  ] as const;
+
+  for (const r of roles) {
+    const existing = await prisma.careerRole.findFirst({
+      where: { name: r.name, department: r.department },
+    });
+    if (existing) continue;
+    await prisma.careerRole.create({
+      data: {
+        name: r.name,
+        department: r.department,
+        seniority: r.seniority,
+        level: r.level,
+        salaryMin: r.salaryMin,
+        salaryMax: r.salaryMax,
+        active: true,
+      },
+    });
+  }
+  console.log('✅ CareerRoles criados:', roles.map(r => r.name).join(', '));
+}
+
 async function main() {
   console.log('🌱 A iniciar seed...');
 
@@ -299,6 +336,8 @@ async function main() {
   console.log('✅ Tipos de licença criados:', leaveTypes.map(l => l.code).join(', '));
 
   await seedOrgStructure(prisma);
+
+  await seedCareerRoles(prisma);
 
   await seedPayroll(prisma);
 
