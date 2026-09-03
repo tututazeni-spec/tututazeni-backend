@@ -80,17 +80,31 @@ async function seedPayroll(prisma: PrismaClient) {
   console.log('✅ Payroll seed: CountryConfig AO', taxYear, '+ 7 escalões IRT + 11 componentes');
 }
 
-// Estrutura organizacional mínima: 4 departamentos + 8 cargos (um por nível).
+// Estrutura organizacional: catálogo de departamentos + 8 cargos (um por nível).
 // Sem isto a tabela Position fica vazia e GET /career/positions devolve [] — o
 // Simulador de Carreira (career/DashboardView) esconde o seletor e mostra
 // "Sem cargos definidos", tornando a simulação impossível. Mesmo padrão do bug
 // dos LeaveTypeConfig (sem seed → wizard preso no passo 1).
 async function seedOrgStructure(prisma: PrismaClient) {
+  // Department.code é @unique → upsert idempotente por code.
   const departments = [
     { code: 'ENG', name: 'Engenharia' },
     { code: 'RH', name: 'Recursos Humanos' },
     { code: 'COM', name: 'Comercial' },
     { code: 'OPS', name: 'Operações' },
+    { code: 'ADM', name: 'Administração' },
+    { code: 'FIN', name: 'Finanças e Contabilidade' },
+    { code: 'AUD', name: 'Auditoria' },
+    { code: 'JUR', name: 'Jurídico' },
+    { code: 'TI', name: 'Tecnologias de Informação' },
+    { code: 'MKT', name: 'Marketing' },
+    { code: 'LOG', name: 'Logística' },
+    { code: 'ADMV', name: 'Administrativo' },
+    { code: 'RSC', name: 'Responsabilidade Social' },
+    { code: 'CPL', name: 'Compliance' },
+    { code: 'STK', name: 'Gestão de Stocks' },
+    { code: 'PRD', name: 'Produção' },
+    { code: 'ACAD', name: 'Academia Corporativa' },
   ];
   const deptMap: Record<string, { id: number }> = {};
   for (const d of departments) {
