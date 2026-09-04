@@ -84,6 +84,7 @@ const baseSurvey = {
   status: 'DRAFT',
   questions: [{ id: 1, text: 'Como se sente?', type: 'SCALE', scale: 10 }],
   _count: { responses: 0, questions: 1 },
+  targetDepartmentIds: [] as number[],
 };
 
 describe('EngagementService (additional)', () => {

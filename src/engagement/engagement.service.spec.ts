@@ -78,6 +78,7 @@ const baseSurvey = {
   status: SurveyStatus.DRAFT,
   questions: [],
   _count: { responses: 5, questions: 3 },
+  targetDepartmentIds: [] as number[],
 };
 
 describe('EngagementService', () => {
