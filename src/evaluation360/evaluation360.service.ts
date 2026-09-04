@@ -568,7 +568,7 @@ export class Evaluation360Service {
   // ENVIO DE CONVITES
   // ============================================================
 
-  async sendCycleInvites(cycleId: string, actorId: string) {
+  async sendCycleInvites(cycleId: string, _actorId: string) {
     const pending = await this.prisma.evaluatorAssignment.findMany({
       where: { cycleId, status: 'PENDING' },
     });
@@ -1235,7 +1235,7 @@ export class Evaluation360Service {
   // RELATÓRIOS
   // ============================================================
 
-  async generateReport(dto: GenerateReportDto, requesterId: string) {
+  async generateReport(dto: GenerateReportDto, _requesterId: string) {
     const cycle = await this.findCycleOrFail(dto.cycleId);
     if (dto.scope === 'INDIVIDUAL' && dto.participantId) {
       const result = await this.prisma.evaluationResult.findUnique({

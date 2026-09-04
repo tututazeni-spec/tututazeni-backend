@@ -77,7 +77,7 @@ function deriveModule(action: string, entity: string): EventModule {
 }
 
 /** Impact score heuristic */
-function impactScore(action: string, entity: string): number {
+function impactScore(action: string, _entity: string): number {
   const a = action.toUpperCase();
   if (a.includes('PROMOTION') || a.includes('HIRE') || a.includes('TERMINATION')) return 90;
   if (a.includes('COMPLETED') || a.includes('CERTIFICATE')) return 80;

@@ -804,7 +804,7 @@ export class ScalabilityService {
   // ALERTS
   // ============================================================
 
-  async createAlert(dto: CreateAlertDto, actorId: string) {
+  async createAlert(dto: CreateAlertDto, _actorId: string) {
     const alert = await this.prisma.systemAlert.create({ data: dto });
 
     // Notificar canais configurados

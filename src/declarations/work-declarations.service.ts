@@ -96,7 +96,7 @@ export class WorkDeclarationsService {
     return f;
   }
 
-  async updateForm(id: number, dto: UpdateWorkDeclFormDto, updatedById: number) {
+  async updateForm(id: number, dto: UpdateWorkDeclFormDto, _updatedById: number) {
     const { questions, ...rest } = dto;
     const updated: Prisma.WorkDeclFormUpdateInput = { ...rest };
     if (rest.validFrom) updated.validFrom = new Date(rest.validFrom);

@@ -657,7 +657,7 @@ export class AttendanceService {
     return updated;
   }
 
-  async getPendingJustifications(managerId?: number) {
+  async getPendingJustifications(_managerId?: number) {
     const where: Prisma.AttendanceJustificationWhereInput = { status: 'PENDING' };
     return this.prisma.read.attendanceJustification.findMany({
       where,
