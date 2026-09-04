@@ -9,6 +9,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CacheService } from '../cache/cache.service';
+import { LeaveManagementService } from '../leave-management/leave-management.service';
+import { ApprovalAction, DurationMode } from '../leave-management/leave-management.dto';
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -106,10 +108,43 @@ function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number):
 
 @Injectable()
 export class AttendanceService {
+  // Traduz o enum LeaveType (Prisma, usado por CreateLeaveRequestDto.type —
+  // contrato público já consumido pelo frontend) para LeaveTypeConfig.code
+  // (chave real do catálogo configurável de leave-management). SICK_LEAVE→
+  // 'SICK' é o único par que diverge de uma correspondência 1:1 nome-a-nome
+  // (ver docs/superpowers/plans/2026-09-04-fase-b-attendance-leave-consolidation.md
+  // Task 1) — os restantes 9 usam o próprio nome do enum como código.
+  private static readonly LEAVE_TYPE_TO_CODE: Record<LeaveType, string> = {
+    [LeaveType.VACATION]: 'VACATION',
+    [LeaveType.SICK_LEAVE]: 'SICK',
+    [LeaveType.MATERNITY]: 'MATERNITY',
+    [LeaveType.PATERNITY]: 'PATERNITY',
+    [LeaveType.JUSTIFIED_ABSENCE]: 'JUSTIFIED_ABSENCE',
+    [LeaveType.UNJUSTIFIED_ABSENCE]: 'UNJUSTIFIED_ABSENCE',
+    [LeaveType.BEREAVEMENT]: 'BEREAVEMENT',
+    [LeaveType.TRAINING]: 'TRAINING',
+    [LeaveType.PUBLIC_DUTY]: 'PUBLIC_DUTY',
+    [LeaveType.OTHER]: 'OTHER',
+  };
+
+  // 6 tipos legados que attendance.getLeaveBalance() sempre expôs (entitlements
+  // hardcoded antes desta consolidação) — mantidos como o conjunto exposto por
+  // GET /attendance/my/leave-balance e /attendance/leaves/balance/:userId para
+  // não alterar a forma da resposta que o frontend já consome.
+  private static readonly LEGACY_BALANCE_TYPES: LeaveType[] = [
+    LeaveType.VACATION,
+    LeaveType.SICK_LEAVE,
+    LeaveType.MATERNITY,
+    LeaveType.PATERNITY,
+    LeaveType.BEREAVEMENT,
+    LeaveType.JUSTIFIED_ABSENCE,
+  ];
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly cache: CacheService,
+    private readonly leaveManagement: LeaveManagementService,
   ) {}
 
   async findAll(filters: AttendanceFilterDto) {

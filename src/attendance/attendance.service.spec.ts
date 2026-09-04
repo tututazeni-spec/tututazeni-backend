@@ -4,6 +4,7 @@ import { AttendanceService } from './attendance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CacheService } from '../cache/cache.service';
+import { LeaveManagementService } from '../leave-management/leave-management.service';
 import { AttendanceStatus, AttendanceContext } from './attendance.dto';
 
 const mockAttendanceRecord = {
@@ -70,6 +71,13 @@ const mockPrismaProxy = new Proxy(mockPrisma, {
 
 const mockAudit = { log: jest.fn().mockResolvedValue({}) };
 
+const mockLeaveManagement = {
+  create: jest.fn(),
+  processApproval: jest.fn(),
+  getBalance: jest.fn(),
+  getLeaveTypes: jest.fn(),
+};
+
 function buildMockCache() {
   const store = new Map<string, unknown>();
   return {
@@ -116,6 +124,7 @@ describe('AttendanceService', () => {
         { provide: PrismaService, useValue: mockPrismaProxy },
         { provide: AuditService, useValue: mockAudit },
         { provide: CacheService, useValue: buildMockCache() },
+        { provide: LeaveManagementService, useValue: mockLeaveManagement },
       ],
     }).compile();
     service = module.get<AttendanceService>(AttendanceService);
