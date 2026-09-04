@@ -368,7 +368,14 @@ export class EvaluationService {
   }
 
   private async autoAssignCycleRequests(cycleId: number, cycle: EvaluationCycleRow) {
-    const weights = cycle.weights ? JSON.parse(cycle.weights ?? '[]') : [];
+    // FIX (parcial): `cycle.weights` é lido mas a atribuição automática só
+    // cria pedidos SELF e MANAGER abaixo — nunca houve lógica para escolher
+    // avaliadores PEER/SUBORDINATE/EXTERNAL (nenhum outro sítio no módulo
+    // `evaluation` cria pedidos desse tipo). `weights` parece ter sido
+    // pensado para configurar quantos pares atribuir, mas essa selecção
+    // (por equipa? por departamento? aleatória?) nunca foi desenhada — não
+    // inventado aqui. Documentado, não implementado. Ver issue #249.
+    const _weights = cycle.weights ? JSON.parse(cycle.weights ?? '[]') : [];
     const deptFilter: Prisma.UserWhereInput = {};
     if (cycle.targetDeptIds?.length) deptFilter.departmentId = { in: cycle.targetDeptIds };
 

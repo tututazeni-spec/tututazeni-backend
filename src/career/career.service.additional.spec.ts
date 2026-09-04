@@ -119,6 +119,9 @@ const mockPrisma: any = {
     findMany: jest.fn().mockResolvedValue([]),
     count: jest.fn().mockResolvedValue(0),
   },
+  promotionRequest: {
+    count: jest.fn().mockResolvedValue(0),
+  },
   successionPlan: {
     findMany: jest.fn().mockResolvedValue([]),
     findUnique: jest.fn().mockResolvedValue(null),

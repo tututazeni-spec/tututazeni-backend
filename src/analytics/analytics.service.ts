@@ -395,7 +395,7 @@ export class AnalyticsService {
     const [
       byStatus,
       topCourses,
-      completionByCategory,
+      completionByCourse,
       avgAssessmentScore,
       certificationCount,
       monthlyEnrollments,
@@ -412,6 +412,12 @@ export class AnalyticsService {
         orderBy: { totalCompleted: 'desc' },
         take: 10,
       }),
+      // FIX: chamava-se `completionByCategory` mas agrupa por `courseId`, não
+      // por categoria (Prisma `groupBy` não agrupa por campo de relação); era
+      // calculada e nunca devolvida — renomeada para reflectir o que
+      // realmente é (top 5 cursos por conclusões, fonte diferente de
+      // `topCourses` — este vem de dados ao vivo, `topCourses` da tabela
+      // denormalizada `courseAnalytics`).
       this.prisma.read.enrollment.groupBy({
         by: ['courseId'],
         where: { status: 'COMPLETED' },
@@ -439,9 +445,20 @@ export class AnalyticsService {
     });
     const totalHours = completedEnrollments.reduce((s, e) => s + (e.course.workloadHours ?? 0), 0);
 
+    const completionCourses = await this.prisma.read.course.findMany({
+      where: { id: { in: completionByCourse.map(c => c.courseId) } },
+      select: { id: true, title: true },
+    });
+    const completionCourseTitle = new Map(completionCourses.map(c => [c.id, c.title]));
+
     return {
       byStatus: Object.fromEntries(byStatus.map(s => [s.status, s._count])),
       topCourses,
+      completionByCourse: completionByCourse.map(c => ({
+        courseId: c.courseId,
+        courseTitle: completionCourseTitle.get(c.courseId) ?? null,
+        completions: c._count,
+      })),
       avgAssessmentScore: Math.round((avgAssessmentScore._avg.score ?? 0) * 10) / 10,
       certificationCount,
       totalHoursConsumed: totalHours,

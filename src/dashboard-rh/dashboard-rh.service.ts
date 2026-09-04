@@ -721,8 +721,19 @@ export class DashboardRhService {
     const totalUsers = await this.prisma.read.user.count({
       where: { active: true, ...(departmentId ? { departmentId } : {}) },
     });
+    const uniqueLearners = await this.prisma.enrollment
+      .findMany({
+        where: { enrolledAt: { gte: mS }, ...uWhere },
+        select: { userId: true },
+        distinct: ['userId'],
+      })
+      .then(r => r.length);
     const completionRate = pct(completed, enrollments);
     const mandatoryRate = pct(mandatoryComplete, mandatory);
+    // FIX: `totalUsers` era calculado e nunca devolvido. É o denominador
+    // natural de `uniqueLearners` — % de colaboradores activos que fizeram
+    // pelo menos uma formação no período.
+    const trainingCoverage = pct(uniqueLearners, totalUsers);
 
     return {
       enrollments,
@@ -737,13 +748,9 @@ export class DashboardRhService {
       mandatoryStatus: healthStatus(mandatoryRate, 90, 70),
       topCourses,
       estimatedHours: completed * 2, // ~2h avg
-      uniqueLearners: await this.prisma.enrollment
-        .findMany({
-          where: { enrolledAt: { gte: mS }, ...uWhere },
-          select: { userId: true },
-          distinct: ['userId'],
-        })
-        .then(r => r.length),
+      totalUsers,
+      uniqueLearners,
+      trainingCoverage,
       insights: this.buildTrainingInsights(completionRate, mandatoryRate),
     };
   }

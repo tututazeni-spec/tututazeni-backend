@@ -225,12 +225,18 @@ export class PdfService {
     data.allowances.forEach(a => {
       doc.text(`${a.label}: ${a.amount.toFixed(2)} ${cur}`);
     });
+    if (data.allowances.length > 0) {
+      doc.font('Helvetica-Oblique').text(`Total Subsídios: ${totalAllowances.toFixed(2)} ${cur}`);
+    }
 
     doc.moveDown().font('Helvetica-Bold').text('DESCONTOS').font('Helvetica');
 
     data.deductions.forEach(d => {
       doc.text(`${d.label}: ${d.amount.toFixed(2)} ${cur}`);
     });
+    if (data.deductions.length > 0) {
+      doc.font('Helvetica-Oblique').text(`Total Descontos: ${totalDeductions.toFixed(2)} ${cur}`);
+    }
 
     doc
       .moveDown()

@@ -62,7 +62,13 @@ export class EngagementService {
   // ══════════════════════════════════════════════════════
 
   async getSurveys(filters: SurveyFilterDto = {}) {
-    const { type, status, departmentId, page = 1, limit = 20 } = filters;
+    // FIX (parcial): `departmentId` está no DTO mas `EngagementSurvey` não
+    // tem nenhuma dimensão de departamento no schema (nem directa nem via
+    // `targetDepartmentIds` — ver nota em createSurvey() abaixo, que tem o
+    // mesmo problema). Filtrar por ele exigiria migration; por agora o
+    // parâmetro é aceite mas não tem efeito — documentado, não corrigido
+    // silenciosamente. Ver issue #245.
+    const { type, status, departmentId: _departmentId, page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.EngagementSurveyWhereInput = {};
     if (type) where.type = type;
