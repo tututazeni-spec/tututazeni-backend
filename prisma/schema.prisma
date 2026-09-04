@@ -4098,6 +4098,12 @@ model EngagementSurvey {
   minResponsesForResults Int                @default(3)
   startDate              DateTime?
   endDate                DateTime?
+  // Departamentos-alvo (achado #245). [] = aplica-se a todos — mantém o
+  // comportamento actual para surveys existentes/sem alvo definido. Array
+  // escalar (não relação M2M) para corresponder directamente ao
+  // `targetDepartmentIds: number[]` já validado em CreateSurveyDto — o
+  // mesmo padrão de `Course.tags String[]`.
+  targetDepartmentIds    Int[]              @default([])
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
   questions              SurveyQuestion[]

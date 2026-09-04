@@ -56,6 +56,7 @@ const baseSurvey = {
   questions: [],
   responses: [],
   _count: { responses: 0, questions: 0 },
+  targetDepartmentIds: [] as number[],
 };
 
 describe('EngagementService (progress)', () => {

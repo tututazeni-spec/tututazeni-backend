@@ -62,17 +62,23 @@ export class EngagementService {
   // ══════════════════════════════════════════════════════
 
   async getSurveys(filters: SurveyFilterDto = {}) {
-    // FIX (parcial): `departmentId` está no DTO mas `EngagementSurvey` não
-    // tem nenhuma dimensão de departamento no schema (nem directa nem via
-    // `targetDepartmentIds` — ver nota em createSurvey() abaixo, que tem o
-    // mesmo problema). Filtrar por ele exigiria migration; por agora o
-    // parâmetro é aceite mas não tem efeito — documentado, não corrigido
-    // silenciosamente. Ver issue #245.
-    const { type, status, departmentId: _departmentId, page = 1, limit = 20 } = filters;
+    const { type, status, departmentId, page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.EngagementSurveyWhereInput = {};
     if (type) where.type = type;
     if (status) where.status = status;
+    // FIX (#245): `departmentId` era aceite e nunca aplicado ao `where`
+    // (EngagementSurvey não tinha nenhuma dimensão de departamento — ver
+    // `targetDepartmentIds` no schema, adicionado para resolver isto).
+    // `targetDepartmentIds: []` = survey aplica-se a todos os departamentos
+    // (compatível com todas as surveys existentes, que ficaram com [] pela
+    // migration) — por isso conta sempre, além das que têm o id no array.
+    if (departmentId) {
+      where.OR = [
+        { targetDepartmentIds: { isEmpty: true } },
+        { targetDepartmentIds: { has: departmentId } },
+      ];
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.read.engagementSurvey.findMany({
@@ -87,14 +93,28 @@ export class EngagementService {
 
     const enriched = await Promise.all(
       data.map(async s => {
-        // Participation rate: responses / total active users
-        const totalUsers = await this.prisma.read.user.count({ where: { active: true } });
+        // Participation rate: responses / colaboradores no público-alvo
+        // (#245: antes era sempre / total de activos, mesmo em surveys
+        // dirigidas a um departamento — desnormalizava a taxa para baixo).
+        const totalUsers = await this.audienceSize(s.targetDepartmentIds);
         const rate = totalUsers > 0 ? +((s._count.responses / totalUsers) * 100).toFixed(1) : 0;
         return { ...s, participationRate: rate };
       }),
     );
 
     return buildPaginatedResponse(enriched, total, page, limit);
+  }
+
+  /** Nº de colaboradores activos no público-alvo de uma survey — todos os
+   * activos se `targetDepartmentIds` estiver vazio (survey sem alvo, ver
+   * schema), só os desses departamentos caso contrário. Ver issue #245. */
+  private async audienceSize(targetDepartmentIds: number[]): Promise<number> {
+    return this.prisma.read.user.count({
+      where: {
+        active: true,
+        ...(targetDepartmentIds.length > 0 ? { departmentId: { in: targetDepartmentIds } } : {}),
+      },
+    });
   }
 
   async getSurvey(id: number) {
@@ -107,7 +127,7 @@ export class EngagementService {
     });
     if (!s) throw new NotFoundException('Inquérito não encontrado');
 
-    const totalUsers = await this.prisma.read.user.count({ where: { active: true } });
+    const totalUsers = await this.audienceSize(s.targetDepartmentIds);
     return {
       ...s,
       participationRate: totalUsers > 0 ? +((s._count.responses / totalUsers) * 100).toFixed(1) : 0,
@@ -115,9 +135,11 @@ export class EngagementService {
   }
 
   async createSurvey(dto: CreateSurveyDto, _createdById: number) {
-    // targetDepartmentIds/frequency não existem em EngagementSurvey — a
-    // segmentação por departamento não está implementada a nível de schema
-    // (activateSurvey() notifica sempre todos os utilizadores activos).
+    // FIX (#245): targetDepartmentIds era aceite pelo DTO e nunca persistido
+    // (EngagementSurvey não tinha a coluna). Agora tem — ver
+    // targetDepartmentIds no schema. `frequency` continua sem coluna
+    // correspondente (nunca foi usado por nenhum consumidor deste DTO além
+    // de o aceitar) — fica fora deste fix.
     const { questions, startDate, endDate, targetDepartmentIds, frequency, ...data } = dto;
 
     return this.prisma.engagementSurvey.create({
@@ -126,6 +148,7 @@ export class EngagementService {
         status: SurveyStatus.DRAFT,
         startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
+        targetDepartmentIds: targetDepartmentIds ?? [],
         questions: {
           create: questions.map((q, i) => ({
             text: q.text,
@@ -159,9 +182,16 @@ export class EngagementService {
       data: { status: 'ACTIVE' },
     });
 
-    // Notify all active users
+    // FIX (#245): notificava sempre todos os activos, ignorando
+    // targetDepartmentIds mesmo quando a survey tinha departamentos-alvo
+    // definidos. [] continua a notificar todos, como antes.
     const users = await this.prisma.read.user.findMany({
-      where: { active: true },
+      where: {
+        active: true,
+        ...(s.targetDepartmentIds.length > 0
+          ? { departmentId: { in: s.targetDepartmentIds } }
+          : {}),
+      },
       select: { id: true },
     });
     await this.prisma.notificationLog.createMany({
