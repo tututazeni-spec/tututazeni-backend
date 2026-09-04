@@ -84,6 +84,10 @@ export default tseslint.config(
           varsIgnorePattern: '^_',
           args: 'after-used',
           argsIgnorePattern: '^_',
+          // Padrão intencional no código: `const { a, b, ...data } = dto`
+          // extrai campos-relação/não-persistidos para os excluir do objecto
+          // passado ao Prisma. Esses `a`/`b` não são código morto.
+          ignoreRestSiblings: true,
         },
       ],
       'no-duplicate-imports': 'off',

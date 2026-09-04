@@ -331,7 +331,7 @@ export class PayslipsService {
         const totals = this.computeTotals({ baseSalary: base });
         const code = this.generateReceiptCode(u.id, period);
 
-        const payslip = await this.prisma.payslip.create({
+        await this.prisma.payslip.create({
           data: {
             userId: u.id,
             period,

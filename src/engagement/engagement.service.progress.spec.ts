@@ -363,11 +363,11 @@ describe('EngagementService (progress)', () => {
     it('deve atribuir reconhecimento e XP (KUDOS → 15 XP)', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 2, fullName: 'Ana' });
       mockPrisma.userPoints.upsert.mockResolvedValue({ userId: 2, points: 15 });
-      const result = (await service.giveRecognition(1, {
+      await service.giveRecognition(1, {
         toUserId: 2,
         type: 'KUDOS',
         message: 'Excelente!',
-      } as any)) as any;
+      } as any);
       expect(mockPrisma.userPoints.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ create: { userId: 2, points: 15 } }),
       );

@@ -67,7 +67,6 @@ export class DashboardRhService {
       const now = new Date();
       const mS = monthStart();
       const mS1 = monthStart(1);
-      const mEnd1 = monthEnd(1);
 
       // Anotados explicitamente: `.catch()` a seguir a groupBy/findMany colapsa
       // o tipo inteiro para `any` sem isto (ver subproject3-any-cleanup.md).
@@ -312,7 +311,6 @@ export class DashboardRhService {
   // ══════════════════════════════════════════════════════
 
   async getTurnoverPanel(months = 12) {
-    const now = new Date();
     const [total, inactive] = await Promise.all([
       this.prisma.read.user.count(),
       this.prisma.read.user.count({ where: { active: false } }),

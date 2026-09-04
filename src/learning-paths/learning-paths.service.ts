@@ -160,7 +160,7 @@ export class LearningPathsService {
       });
     }
 
-    const updated = await this.prisma.learningPath.update({
+    await this.prisma.learningPath.update({
       where: { id },
       data: {
         ...data,
@@ -258,7 +258,7 @@ export class LearningPathsService {
   // ─── STEPS (Cursos na trilha) ─────────────────────────────────────────────
 
   async addStep(learningPathId: number, dto: LearningPathStepDto) {
-    const lp = await this.findOne(learningPathId);
+    await this.findOne(learningPathId);
 
     const course = await this.prisma.read.course.findUnique({ where: { id: dto.courseId } });
     if (!course) throw new NotFoundException('Curso não encontrado');

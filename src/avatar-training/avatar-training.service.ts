@@ -129,47 +129,6 @@ function scoreUserMessage(
   };
 }
 
-/** Build AI avatar prompt */
-function buildAvatarPrompt(
-  avatar: {
-    systemPrompt?: string | null;
-    role?: string;
-    personality?: string;
-    language?: string;
-  } | null,
-  // context/objective não existem em AvatarScenario (achado estrutural, ver
-  // comentário em createScenario) — este parâmetro nunca os fornece de
-  // facto, ficam sempre como string vazia.
-  scenario: { context?: string; objective?: string } | null,
-  conversationHistory: ConversationMessage[],
-  userMessage: string,
-): string {
-  const persona =
-    avatar?.systemPrompt ??
-    `És um avatar de treino corporativo com papel de ${avatar?.role ?? 'coach'}.`;
-  const context = scenario?.context ?? '';
-  const objective = scenario?.objective ?? '';
-  const history = conversationHistory
-    .slice(-6)
-    .map(m => `${m.role === 'USER' ? 'Utilizador' : 'Avatar'}: ${m.content}`)
-    .join('\n');
-
-  return `${persona}
-
-CONTEXTO DO CENÁRIO: ${context}
-OBJECTIVO DO TREINO: ${objective}
-PERSONALIDADE: ${avatar?.personality ?? 'EMPATHETIC'}
-IDIOMA: ${avatar?.language ?? 'pt'}
-
-HISTÓRICO:
-${history}
-
-Utilizador: ${userMessage}
-
-Responde de forma natural, útil e avaliativa. Se o utilizador errou, corrige com empatia. Se acertou, reforça positivamente. Máximo 3 frases.
-Avatar:`;
-}
-
 // ─────────────────────────────────────────────────────────────────
 // SERVICE
 // ─────────────────────────────────────────────────────────────────
