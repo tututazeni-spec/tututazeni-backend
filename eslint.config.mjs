@@ -37,7 +37,6 @@ export default tseslint.config(
       parserOptions: {
         projectService: {
           allowDefaultProject: [
-            'src/app.controller.spec.ts',
             'src/prisma.service.spec.ts',
             'src/prisma/prisma.service.spec.ts',
           ],
