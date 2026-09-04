@@ -338,7 +338,7 @@ export class TalentDevelopmentService {
   // DEVELOPMENT PLANS — CRUD
   // ══════════════════════════════════════════════════════
 
-  async createPlan(dto: TalentDevelopmentCreateDevelopmentPlanDto, createdById: number) {
+  async createPlan(dto: TalentDevelopmentCreateDevelopmentPlanDto, _createdById: number) {
     const user = await this.prisma.read.user.findUnique({ where: { id: dto.userId } });
     if (!user) throw new NotFoundException('Colaborador não encontrado');
 
@@ -466,7 +466,7 @@ export class TalentDevelopmentService {
     return this.prisma.developmentPlan.update({ where: { id }, data });
   }
 
-  async activatePlan(id: number, activatedById: number) {
+  async activatePlan(id: number, _activatedById: number) {
     const plan = await this.getPlan(id);
     if (plan.status === PlanStatus.ACTIVE) throw new BadRequestException('Plano já está activo');
     if (!plan.actions || plan.actions.length === 0)
@@ -829,7 +829,7 @@ export class TalentDevelopmentService {
     return { message: 'Progresso actualizado', progress: dto.progress, status: newStatus };
   }
 
-  async approveActionEvidence(actionId: number, dto: ApproveActionDto, approverId: number) {
+  async approveActionEvidence(actionId: number, dto: ApproveActionDto, _approverId: number) {
     const action = await this.prisma.read.developmentPlanAction.findUnique({
       where: { id: actionId },
       include: { plan: { select: { userId: true } } },

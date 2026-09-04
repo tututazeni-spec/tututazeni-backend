@@ -446,7 +446,7 @@ export class DocumentRepositoryService {
     });
   }
 
-  async revokePermission(permissionId: number, revokedById: number) {
+  async revokePermission(permissionId: number, _revokedById: number) {
     return this.prisma.docPermission.delete({ where: { id: permissionId } });
   }
 
