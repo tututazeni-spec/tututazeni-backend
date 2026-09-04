@@ -102,6 +102,130 @@ export default async function globalSetup() {
     },
   });
 
+  // Leave types — necessário para o Lote 1 (attendance), que corre antes do
+  // Lote 5 (leave-management) e delega em LeaveManagementService.create()
+  // desde a consolidação Fase B (docs/arquitetura-modular-analise.md §13).
+  // `update` força reset a cada corrida do globalSetup (uma vez por lote) —
+  // sem isto, uma BD de teste reutilizada entre execuções ia acumular saldo
+  // gasto de corridas anteriores até ficar insuficiente (flakiness).
+  const leaveTypesForTests: {
+    code: string;
+    name: string;
+    category: string;
+    isPaid: boolean;
+    annualLimit?: number;
+    countWorkDaysOnly: boolean;
+  }[] = [
+    {
+      code: 'VACATION',
+      name: 'Férias',
+      category: 'STATUTORY',
+      isPaid: true,
+      annualLimit: 22,
+      countWorkDaysOnly: true,
+    },
+    {
+      code: 'SICK',
+      name: 'Baixa Médica',
+      category: 'MEDICAL',
+      isPaid: true,
+      countWorkDaysOnly: true,
+    },
+    {
+      code: 'MATERNITY',
+      name: 'Licença de Maternidade',
+      category: 'FAMILY',
+      isPaid: true,
+      annualLimit: 120,
+      countWorkDaysOnly: true,
+    },
+    {
+      code: 'PATERNITY',
+      name: 'Licença de Paternidade',
+      category: 'FAMILY',
+      isPaid: true,
+      annualLimit: 28,
+      countWorkDaysOnly: true,
+    },
+    {
+      code: 'BEREAVEMENT',
+      name: 'Luto',
+      category: 'FAMILY',
+      isPaid: true,
+      annualLimit: 5,
+      countWorkDaysOnly: true,
+    },
+    {
+      code: 'TRAINING',
+      name: 'Formação',
+      category: 'TRAINING',
+      isPaid: true,
+      countWorkDaysOnly: true,
+    },
+    {
+      code: 'JUSTIFIED_ABSENCE',
+      name: 'Ausência Justificada',
+      category: 'OTHER',
+      isPaid: true,
+      annualLimit: 6,
+      countWorkDaysOnly: true,
+    },
+    {
+      code: 'UNJUSTIFIED_ABSENCE',
+      name: 'Ausência Injustificada',
+      category: 'DISCIPLINARY',
+      isPaid: false,
+      countWorkDaysOnly: true,
+    },
+    {
+      code: 'PUBLIC_DUTY',
+      name: 'Dever Cívico',
+      category: 'OTHER',
+      isPaid: true,
+      countWorkDaysOnly: true,
+    },
+    { code: 'OTHER', name: 'Outra', category: 'OTHER', isPaid: false, countWorkDaysOnly: true },
+  ];
+
+  for (const lt of leaveTypesForTests) {
+    await prisma.leaveTypeConfig.upsert({
+      where: { code: lt.code },
+      update: {
+        name: lt.name,
+        category: lt.category,
+        isPaid: lt.isPaid,
+        annualLimit: lt.annualLimit ?? null,
+        active: true,
+      },
+      create: { ...lt, active: true },
+    });
+  }
+
+  // Saldo inicial de int.employee para os tipos com annualLimit — simula um
+  // colaborador já onboardado (LeaveManagementService.initializeUserBalances
+  // faria o mesmo). `update` reposiciona ao valor cheio a cada lote, para os
+  // testes do Lote 1 (attendance) partirem sempre do mesmo estado.
+  const employeeForBalances = await prisma.user.findUnique({
+    where: { email: 'int.employee@innova-test.com' },
+  });
+  if (employeeForBalances) {
+    for (const lt of leaveTypesForTests) {
+      if (!lt.annualLimit) continue;
+      await prisma.leaveBalance.upsert({
+        where: {
+          userId_leaveTypeCode: { userId: employeeForBalances.id, leaveTypeCode: lt.code },
+        },
+        update: { balance: lt.annualLimit, used: 0 },
+        create: {
+          userId: employeeForBalances.id,
+          leaveTypeCode: lt.code,
+          balance: lt.annualLimit,
+          used: 0,
+        },
+      });
+    }
+  }
+
   await prisma.$disconnect();
   console.log('✅ BD de teste preparada\n');
 }
