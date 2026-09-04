@@ -593,7 +593,7 @@ export class EmployeesService {
   // PDI
   // ══════════════════════════════════════════════════════════════════
 
-  async createPdi(dto: CreatePdiDto, createdById: number) {
+  async createPdi(dto: CreatePdiDto, _createdById: number) {
     await this.findOne(dto.employeeId);
     const { actions, ...rest } = dto;
 
@@ -674,7 +674,7 @@ export class EmployeesService {
 
   // selfAssessed/managerValidated existem em AssignSkillDto/UpdateSkillLevelDto
   // mas nunca foram migrados para EmployeeSkill — não são persistidos.
-  async assignSkill(dto: AssignSkillDto, assignedById: number) {
+  async assignSkill(dto: AssignSkillDto, _assignedById: number) {
     const skill = await this.prisma.skill.findUnique({ where: { id: dto.skillId } });
     if (!skill) throw new NotFoundException(`Skill #${dto.skillId} não encontrada`);
 

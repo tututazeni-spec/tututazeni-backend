@@ -106,7 +106,7 @@ export class ApiIntegrationController {
 
   @Get('api-keys/list')
   @ApiOperation({ summary: 'Listar API Keys (sem revelar o valor)' })
-  getApiKeys(@CurrentUser() user: CurrentUserData) {
+  getApiKeys(@CurrentUser() _user: CurrentUserData) {
     return this.svc.getApiKeys();
   }
 

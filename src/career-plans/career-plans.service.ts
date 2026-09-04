@@ -125,7 +125,7 @@ export class CareerPlansService {
     });
   }
 
-  async createCareerPath(dto: CareerPlansCreateCareerPathDto, createdById: number) {
+  async createCareerPath(dto: CareerPlansCreateCareerPathDto, _createdById: number) {
     const { steps, department, ...rest } = dto;
     // FIX: CareerPath não tem campo `department` (String) — só `departmentId`
     // (FK para Department). O spread de `...dto` directo para `data` ou
@@ -441,14 +441,14 @@ export class CareerPlansService {
     return this.findOne(plan.id);
   }
 
-  async update(id: number, dto: CareerPlansUpdateCareerPlanDto, updatedById: number) {
+  async update(id: number, dto: CareerPlansUpdateCareerPlanDto, _updatedById: number) {
     await this.findOne(id);
     const data: Prisma.UserCareerPlanUpdateInput = { ...dto };
     if (dto.targetDate) data.targetDate = new Date(dto.targetDate);
     return this.prisma.userCareerPlan.update({ where: { id }, data });
   }
 
-  async activate(id: number, activatedById: number) {
+  async activate(id: number, _activatedById: number) {
     await this.findOne(id);
     return this.prisma.userCareerPlan.update({
       where: { id },
@@ -577,7 +577,7 @@ export class CareerPlansService {
     return promotion;
   }
 
-  async reviewPromotion(id: number, dto: ReviewPromotionDto, reviewerId: number, role: string) {
+  async reviewPromotion(id: number, dto: ReviewPromotionDto, reviewerId: number, _role: string) {
     const promotion = await this.prisma.read.promotionRequest.findUnique({
       where: { id },
       include: { user: true, targetRole: true },

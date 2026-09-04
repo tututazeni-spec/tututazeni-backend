@@ -640,7 +640,7 @@ export class CompetencyMapService {
   // ANALYTICS & RADAR DATA
   // ══════════════════════════════════════════════════════════════════
 
-  async getRadarData(userId: number, roleCode?: string) {
+  async getRadarData(userId: number, _roleCode?: string) {
     const { skills, gapAnalysis } = await this.getMap(userId);
 
     // Para radar chart: agrupar por tipo de skill

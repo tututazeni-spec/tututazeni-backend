@@ -108,7 +108,7 @@ export class EngagementService {
     };
   }
 
-  async createSurvey(dto: CreateSurveyDto, createdById: number) {
+  async createSurvey(dto: CreateSurveyDto, _createdById: number) {
     // targetDepartmentIds/frequency não existem em EngagementSurvey — a
     // segmentação por departamento não está implementada a nível de schema
     // (activateSurvey() notifica sempre todos os utilizadores activos).
@@ -250,7 +250,7 @@ export class EngagementService {
 
   // ─── Results ─────────────────────────────────────────
 
-  async getSurveyResults(surveyId: number, requesterId: number) {
+  async getSurveyResults(surveyId: number, _requesterId: number) {
     const survey = await this.prisma.engagementSurvey.findUnique({
       where: { id: surveyId },
       include: {
@@ -395,7 +395,7 @@ export class EngagementService {
     });
   }
 
-  async getENPSScore(departmentId?: number) {
+  async getENPSScore(_departmentId?: number) {
     const survey = await this.prisma.engagementSurvey.findFirst({
       where: { type: SurveyType.ENPS, status: { in: ['ACTIVE', 'COMPLETED'] } },
       include: { responses: { include: { answers: { include: { question: true } } } } },
@@ -978,7 +978,7 @@ export class EngagementService {
   // ANALYTICS & ENGAGEMENT INDEX
   // ══════════════════════════════════════════════════════
 
-  async getEngagementIndex(departmentId?: number) {
+  async getEngagementIndex(_departmentId?: number) {
     // Last 5 COMPLETED surveys
     const surveys = await this.prisma.engagementSurvey.findMany({
       where: { status: 'COMPLETED', type: { not: SurveyType.ENPS } },
@@ -1202,7 +1202,7 @@ export class EngagementService {
     score: number | null,
     mood: number | null,
     atRisk: number,
-    teamSize: number,
+    _teamSize: number,
   ): string[] {
     const out: string[] = [];
     if (score !== null && score < 3)

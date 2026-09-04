@@ -6,7 +6,7 @@ import PDFDocument from 'pdfkit';
 export class PdfService {
   // ─── UTILITÁRIOS INTERNOS ────────────────────────────────────
 
-  private createDoc(title: string): PDFKit.PDFDocument {
+  private createDoc(_title: string): PDFKit.PDFDocument {
     const doc = new PDFDocument({ margin: 50, size: 'A4' });
     return doc;
   }
