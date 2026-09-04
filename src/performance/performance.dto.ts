@@ -106,8 +106,6 @@ export class PerformanceCreateCycleDto {
   scoreScale?: number;
 }
 
-export class PerformanceUpdateCycleDto extends PartialType(PerformanceCreateCycleDto) {}
-
 // ─── Performance Review ───────────────────────────────────────────────────────
 
 export class CreatePerformanceReviewDto {
@@ -258,8 +256,6 @@ export class CreateGoalDto {
   @IsDateString()
   dueDate?: string;
 }
-
-export class PerformanceUpdateGoalDto extends PartialType(CreateGoalDto) {}
 
 export class UpdatePerformanceGoalProgressDto {
   @ApiProperty()

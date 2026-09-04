@@ -40,12 +40,6 @@ export class RegisterDto {
   positionId?: number;
 }
 
-export class RefreshTokenDto {
-  @ApiProperty()
-  @IsString()
-  refreshToken!: string;
-}
-
 export class ChangePasswordDto {
   @ApiProperty()
   @IsString()

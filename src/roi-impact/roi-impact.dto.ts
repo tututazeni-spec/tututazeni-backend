@@ -3,16 +3,6 @@ import { IsOptional, IsInt, IsNumber, IsDateString, Min, Max } from 'class-valid
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
-export enum ImpactCategory {
-  PRODUCTIVITY = 'PRODUCTIVITY',
-  RETENTION = 'RETENTION',
-  SALES = 'SALES',
-  QUALITY = 'QUALITY',
-  COMPLIANCE = 'COMPLIANCE',
-  WELLBEING = 'WELLBEING',
-  ENGAGEMENT = 'ENGAGEMENT',
-}
-
 export enum RoiConfidence {
   HIGH = 'HIGH',
   MEDIUM = 'MEDIUM',

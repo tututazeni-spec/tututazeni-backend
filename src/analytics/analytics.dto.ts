@@ -62,16 +62,3 @@ export class AnalyticsFilterDto {
   @IsBoolean()
   includeInactive?: boolean;
 }
-
-export class ManagerAnalyticsFilterDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsInt()
-  @Type(() => Number)
-  managerId?: number;
-
-  @ApiPropertyOptional({ enum: AnalyticsPeriod })
-  @IsOptional()
-  @IsEnum(AnalyticsPeriod)
-  period?: AnalyticsPeriod;
-}

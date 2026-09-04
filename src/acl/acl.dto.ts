@@ -18,15 +18,6 @@ import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 export { PermissionAction, PermissionSubject };
 
-export enum PolicyConditionType {
-  DEPARTMENT = 'DEPARTMENT',
-  ROLE = 'ROLE',
-  OWNER = 'OWNER',
-  TIME = 'TIME',
-  IP = 'IP',
-  MANAGER_OF = 'MANAGER_OF',
-}
-
 // ─── Permission DTOs ──────────────────────────────────────────────
 
 export class CreatePermissionDto {

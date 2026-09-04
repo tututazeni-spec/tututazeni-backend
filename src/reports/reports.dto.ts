@@ -17,14 +17,6 @@ import { ReportCategory, ExportFormat, ScheduleFrequency } from '@prisma/client'
 
 // ─── Filter DTOs ──────────────────────────────────────────────────
 
-export class DateRangeDto {
-  @ApiProperty() @IsDateString() from!: string;
-  @ApiProperty() @IsDateString() to!: string;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) managerId?: number;
-  @ApiPropertyOptional() @IsOptional() @IsString() period?: string;
-}
-
 export class ReportFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;

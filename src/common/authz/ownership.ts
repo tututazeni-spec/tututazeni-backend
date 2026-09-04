@@ -26,12 +26,3 @@ export function assertCanAccess<T>(
   if (isPrivileged(user, privilegedRoles)) return;
   throw new NotFoundException('Recurso não encontrado');
 }
-
-export function ownershipWhere(
-  user: AuthUserLike,
-  ownerField: string,
-  privilegedRoles: Role[] = [],
-): Record<string, unknown> {
-  if (isPrivileged(user, privilegedRoles)) return {};
-  return { [ownerField]: user.id };
-}

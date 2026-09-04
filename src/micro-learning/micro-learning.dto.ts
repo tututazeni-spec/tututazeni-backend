@@ -174,8 +174,6 @@ export class CreatePlaylistDto {
   contentIds?: number[];
 }
 
-export class UpdatePlaylistDto extends PartialType(CreatePlaylistDto) {}
-
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export class DispatchMicroLearningDto {

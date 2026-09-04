@@ -54,12 +54,6 @@ export enum AvatarPersonality {
   FRIENDLY = 'FRIENDLY',
 }
 
-export enum MessageRole {
-  USER = 'USER',
-  AVATAR = 'AVATAR',
-  SYSTEM = 'SYSTEM',
-}
-
 // ─── Avatar DTOs ──────────────────────────────────────────────────
 
 export class CreateAvatarDto {
@@ -184,13 +178,6 @@ export class CompleteSessionDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(5) userRating?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(5) confidenceLevel?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() reflection?: string;
-}
-
-export class BehavioralScoreDto {
-  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100) clarity?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100) empathy?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100) assertiveness?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100) decisionMaking?: number;
 }
 
 // ─── Analytics DTOs ──────────────────────────────────────────────

@@ -30,12 +30,6 @@ export enum EventModule {
   PAYROLL = 'PAYROLL',
 }
 
-export enum TimelineView {
-  USER = 'USER',
-  TEAM = 'TEAM',
-  COMPANY = 'COMPANY',
-}
-
 // ─── Filter DTOs ──────────────────────────────────────────────────
 
 export class HistoryFilterDto extends BaseFilterDto {

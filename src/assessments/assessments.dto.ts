@@ -106,8 +106,6 @@ export class CreateQuestionDto {
   seq: number;
 }
 
-export class UpdateQuestionDto extends PartialType(CreateQuestionDto) {}
-
 // ─── Assessment ───────────────────────────────────────────────────────────────
 
 export class CreateAssessmentDto {

@@ -217,13 +217,6 @@ export class CreateInternalVacancyDto {
   slots?: number;
 }
 
-export class UpdateInternalVacancyDto extends PartialType(CreateInternalVacancyDto) {
-  @ApiPropertyOptional({ enum: VacancyStatus })
-  @IsOptional()
-  @IsEnum(VacancyStatus)
-  status?: VacancyStatus;
-}
-
 export class ApplyToVacancyDto {
   @ApiPropertyOptional({ description: 'Motivação / carta de apresentação' })
   @IsOptional()
