@@ -1,9 +1,42 @@
 # Limpeza de Código Morto — INNOVA (backend + frontend)
 
+> **Estado: CONCLUÍDO** (2026-09-04). Todas as tarefas A1–A2 e B1–B9 foram
+> executadas e mergeadas. Tabela de rastreio por tarefa → PR logo a seguir;
+> os checkboxes de cada tarefa ficam marcados como registo histórico dos
+> passos seguidos, não como trabalho pendente.
+
 > **Para executores:** este plano é uma limpeza dirigida por auditoria. Não há
 > features novas; cada tarefa é "remover X → `tsc` + build + lint + testes verdes
 > → commit". A "prova" de cada tarefa é a suite existente continuar verde, não um
 > teste novo. Passos com checkbox (`- [ ]`) para tracking.
+
+## Rastreio de conclusão
+
+| Tarefa | PR | Estado |
+|---|---|---|
+| A1 — 151 imports não usados (frontend, 56 ficheiros) | frontend [#416](https://github.com/tututazeni-spec/tututazeni-frontend/pull/416) | ✅ merged |
+| A2 — directiva `eslint-disable` inútil | *não aplicado* — tinha justificação escrita, deixou de contar como "sem explicação" (ver nota na Task A2) | — |
+| B1+B2 — scaffolding NestJS não registado + módulo órfão | backend [#241](https://github.com/tututazeni-spec/tututazeni-backend/pull/241) | ✅ merged |
+| B3+B4 — `ownershipWhere()` + 28 DTOs/enums/interfaces | backend [#242](https://github.com/tututazeni-spec/tututazeni-backend/pull/242) | ✅ merged |
+| B5 (args) — 36 parâmetros → `_prefixo` | backend [#243](https://github.com/tututazeni-spec/tututazeni-backend/pull/243) | ✅ merged |
+| B5 (vars) — `ignoreRestSiblings` + 18 remoções de código morto | backend [#244](https://github.com/tututazeni-spec/tututazeni-backend/pull/244) | ✅ merged |
+| B6 — `DashboardShell.tsx` | frontend [#417](https://github.com/tututazeni-spec/tututazeni-frontend/pull/417) | ✅ merged |
+| B7 — filtro morto no `FeedView` + estado mock do `scalability` → `const` | frontend [#418](https://github.com/tututazeni-spec/tututazeni-frontend/pull/418) | ✅ merged |
+| B8 — `CourseAvatarReaderExample.tsx` + subsistema `CourseAvatarReader` órfão | frontend [#419](https://github.com/tututazeni-spec/tututazeni-frontend/pull/419) | ✅ merged (decisão: apagar) |
+| B9 — dívida `react-compiler/react-compiler` | registado em memória (`project_innova_dead_code_cleanup`), sem PR — não é código morto | ✅ |
+
+**Follow-ups fora do âmbito original deste plano** (nasceram da investigação
+da B5/B8, pedidos explicitamente a seguir):
+- 6 issues "computa e ignora" (código que faz query/cálculo e descarta o
+  resultado) — backend [#245](https://github.com/tututazeni-spec/tututazeni-backend/issues/245)–[#250](https://github.com/tututazeni-spec/tututazeni-backend/issues/250),
+  resolvidas em backend [#252](https://github.com/tututazeni-spec/tututazeni-backend/pull/252)
+  (4 corrigidas a sério, 1 era falso alarme + 1 gap real documentado — ver
+  memória `project_innova_computed_then_discarded_bugs`); #245 fica aberta
+  de propósito (bloqueada por schema).
+- A feature "Ouvir a aula" (TTS), órfã desde a PR #129 e apagada com o
+  subsistema `CourseAvatarReader` em B8, foi restaurada e religada ao
+  `ContentPlayer` — frontend [#420](https://github.com/tututazeni-spec/tututazeni-frontend/pull/420)
+  (ver memória `project_innova_lesson_audio_tts`).
 
 **Objectivo:** remover componentes/ficheiros nunca usados, funções e DTOs nunca
 chamados, imports não utilizados, estado React morto e código comentado sem
@@ -91,7 +124,7 @@ novo com o comando do passo 1).
 
 **Interfaces:** nenhuma — só remoção de identificadores de linhas de `import`.
 
-- [ ] **Passo 1: regenerar a lista exacta**
+- [x] **Passo 1: regenerar a lista exacta**
 
 ```bash
 cd frontend
@@ -101,14 +134,14 @@ npx eslint app components hooks lib providers \
 node -e "const r=require('/tmp/fe-unused.json');for(const f of r){const u=f.messages.filter(m=>m.ruleId==='@typescript-eslint/no-unused-vars'&&/is defined but never used/.test(m.message));if(u.length)console.log(f.filePath,'::',u.map(m=>m.message.match(/'(.+?)'/)[1]).join(', '))}"
 ```
 
-- [ ] **Passo 2: remover cada identificador não usado**
+- [x] **Passo 2: remover cada identificador não usado**
 
 Para cada ficheiro: apagar o identificador da lista `import { … }`. Se a lista
 ficar vazia, apagar a linha inteira. **Não** tocar em imports com efeito colateral
 (`import './x.css'`). Preferir edição manual ficheiro-a-ficheiro; `eslint --fix`
 **não** resolve (a regra está `off` na config do projecto).
 
-- [ ] **Passo 3: verificar**
+- [x] **Passo 3: verificar**
 
 ```bash
 cd frontend
@@ -117,9 +150,9 @@ npx tsc --noEmit && npm run build && npm test
 Esperado: os três verdes. `tsc`/`build` a falhar = um identificador ainda era
 usado (JSX, tipo) — repor esse.
 
-- [ ] **Passo 4: re-correr o scan — esperar 0 "is defined but never used"**
+- [x] **Passo 4: re-correr o scan — esperar 0 "is defined but never used"**
 
-- [ ] **Passo 5: commit + PR**
+- [x] **Passo 5: commit + PR**
 
 ```bash
 git checkout -b chore/remove-unused-imports
@@ -129,9 +162,15 @@ gh pr create --title "chore: remover imports não utilizados (158 ocorrências, 
 ```
 Aguardar check `build` verde → squash-merge.
 
-### Task A2: Frontend — remover directiva `eslint-disable` inútil
+### Task A2: Frontend — remover directiva `eslint-disable` inútil ⏭️ NÃO APLICADO
 
-**Files:** Modify `frontend/lib/errorReporting.ts:18`
+**Decisão:** ao chegar à execução, a directiva tinha uma justificação escrita
+no próprio comentário (`-- ponto central de logging`) — deixa de ser "código
+comentado sem explicação" (o critério do pedido original) e passa a ser uma
+nota de intenção deliberada. Removê-la seria cosmético, não risco-zero no
+sentido estrito. Deixada como está.
+
+**Files:** `frontend/lib/errorReporting.ts:18` (inalterado)
 
 - [ ] **Passo 1:** apagar o comentário `// eslint-disable-next-line no-console`
   da linha 18 (o eslint reporta "Unused eslint-disable directive").
@@ -151,33 +190,33 @@ Aguardar check `build` verde → squash-merge.
 
 **Interfaces:** nenhuma — nada importa estes símbolos fora dos próprios specs.
 
-- [ ] **Passo 1: confirmar que continuam órfãos**
+- [x] **Passo 1: confirmar que continuam órfãos**
 
 ```bash
 grep -rn "AppController\|AppService" src --include=*.ts | grep -v "app.controller.ts\|app.service.ts\|.spec.ts"
 ```
 Esperado: **sem output**. Se aparecer algo, PARAR e reavaliar.
 
-- [ ] **Passo 2: confirmar que `GET /` não é testado no e2e/regressão**
+- [x] **Passo 2: confirmar que `GET /` não é testado no e2e/regressão**
 
 ```bash
 grep -rn "'/'\|\"/\"" test/ src/*.spec.ts | grep -i "get\|api está"
 ```
 Esperado: nada relevante (o health check usa `/health/ready`).
 
-- [ ] **Passo 3: apagar os 4 ficheiros**
+- [x] **Passo 3: apagar os 4 ficheiros**
 
-- [ ] **Passo 4: ajustar `allowDefaultProject` nas duas configs eslint** se
+- [x] **Passo 4: ajustar `allowDefaultProject` nas duas configs eslint** se
   referiam `src/app.controller.spec.ts` (removê-lo da lista).
 
-- [ ] **Passo 5: verificar**
+- [x] **Passo 5: verificar**
 
 ```bash
 npm run build && npm run lint:check && npm run test:coverage
 ```
 Esperado: verdes. A cobertura sobe ligeiramente (menos ficheiros triviais).
 
-- [ ] **Passo 6: commit + PR**, aguardar `quality` verde, squash-merge.
+- [x] **Passo 6: commit + PR**, aguardar `quality` verde, squash-merge.
 
 ### Task B2: Backend — remover módulo órfão `LearningPathsModule`
 
@@ -187,14 +226,14 @@ Esperado: verdes. A cobertura sobe ligeiramente (menos ficheiros triviais).
 importados directamente por `src/app.module.ts:94-95` e registados em
 `controllers:`/`providers:` — **não tocar nessas linhas**.
 
-- [ ] **Passo 1: confirmar órfão**
+- [x] **Passo 1: confirmar órfão**
 
 ```bash
 grep -rn "learning-paths.module\|LearningPathsModule" src
 ```
 Esperado: só a linha da própria classe.
 
-- [ ] **Passo 2: confirmar que `app.module.ts` regista Controller+Service directamente**
+- [x] **Passo 2: confirmar que `app.module.ts` regista Controller+Service directamente**
 
 ```bash
 grep -n "LearningPaths" src/app.module.ts
@@ -202,13 +241,13 @@ grep -n "LearningPaths" src/app.module.ts
 Esperado: import do Controller + Service, ambos nos arrays. Se `LearningPathsModule`
 aparecer em `imports:`, PARAR (não é órfão).
 
-- [ ] **Passo 3: apagar o ficheiro**
+- [x] **Passo 3: apagar o ficheiro**
 
-- [ ] **Passo 4: verificar** `npm run build && npm run test:coverage` (o
+- [x] **Passo 4: verificar** `npm run build && npm run test:coverage` (o
   `learning-paths.controller.spec.ts` e os `service.*.spec.ts` não importam o módulo
   — confirmado na auditoria).
 
-- [ ] **Passo 5:** commit + PR + `quality` verde + merge. (Pode ir no mesmo PR que B1.)
+- [x] **Passo 5:** commit + PR + `quality` verde + merge. (Pode ir no mesmo PR que B1.)
 
 ### Task B3: Backend — remover `ownershipWhere()` não utilizada
 
@@ -218,19 +257,19 @@ aparecer em `imports:`, PARAR (não é órfão).
 
 **Interfaces:** `isPrivileged` e `assertCanAccess` **ficam** (usadas em ~35 ficheiros).
 
-- [ ] **Passo 1: reconfirmar 0 call sites em produção**
+- [x] **Passo 1: reconfirmar 0 call sites em produção**
 
 ```bash
 grep -rn "ownershipWhere" src --include=*.ts | grep -v ".spec.ts"
 ```
 Esperado: só a linha da declaração.
 
-- [ ] **Passo 2:** apagar a função e os seus testes; ajustar o import no spec.
+- [x] **Passo 2:** apagar a função e os seus testes; ajustar o import no spec.
 
-- [ ] **Passo 3:** `npm run build && npm run test:coverage` (o `ownership.spec.ts`
+- [x] **Passo 3:** `npm run build && npm run test:coverage` (o `ownership.spec.ts`
   continua a testar `isPrivileged`/`assertCanAccess`).
 
-- [ ] **Passo 4:** commit + PR. **Nota de revisão:** decidir se se prefere manter
+- [x] **Passo 4:** commit + PR. **Nota de revisão:** decidir se se prefere manter
   `ownershipWhere` como superfície de API pública deliberada (padrão "filtro por
   ownership em `where`") — se sim, não fazer esta task e em vez disso adoptá-la em
   pelo menos 1 call site real. Recomendação: **remover** (YAGNI; `assertCanAccess`
@@ -243,7 +282,7 @@ Esperado: só a linha da declaração.
 
 **Interfaces:** nenhuma — confirmado 1 ocorrência (só a declaração) para cada.
 
-- [ ] **Passo 1: reconfirmar cada símbolo, um a um** (não em bloco)
+- [x] **Passo 1: reconfirmar cada símbolo, um a um** (não em bloco)
 
 ```bash
 for s in RefreshTokenDto ManagerAnalyticsFilterDto DateRangeDto UpdateQuestionDto \
@@ -260,18 +299,18 @@ Manter para remoção só os que devolvem **exactamente** o ficheiro da declara�
 Qualquer símbolo com 2+ ficheiros → **excluir desta task** (usado via decorator/
 `PartialType`/re-export).
 
-- [ ] **Passo 2:** para cada confirmado: apagar a `class`/`enum`/`interface`. Se o
+- [x] **Passo 2:** para cada confirmado: apagar a `class`/`enum`/`interface`. Se o
   ficheiro ficar sem exports usados, ainda assim **manter o ficheiro** se tiver
   outras DTOs vivas; só apagar `auth-user.interface.ts` inteiro (é 1 símbolo só).
 
-- [ ] **Passo 3:** procurar imports agora órfãos nos mesmos ficheiros e removê-los
+- [x] **Passo 3:** procurar imports agora órfãos nos mesmos ficheiros e removê-los
   (o `unused-imports` do CI apanha, mas resolver antes).
 
-- [ ] **Passo 4:** `npm run build && npm run lint:check && npm run test:coverage`.
+- [x] **Passo 4:** `npm run build && npm run lint:check && npm run test:coverage`.
 
-- [ ] **Passo 5:** `npx prettier --write` nos ficheiros tocados.
+- [x] **Passo 5:** `npx prettier --write` nos ficheiros tocados.
 
-- [ ] **Passo 6:** commit + PR. Dividir em 2 PRs se passar de ~15 ficheiros
+- [x] **Passo 6:** commit + PR. Dividir em 2 PRs se passar de ~15 ficheiros
   (um para DTOs, outro para enums/interfaces) para revisão mais fácil.
 
 ### Task B5: Backend — resolver 99 vars/args locais não usados
@@ -280,7 +319,7 @@ Qualquer símbolo com 2+ ficheiros → **excluir desta task** (usado via decorat
 
 **Interfaces:** nenhuma alteração de assinatura pública; args passam a `_arg`.
 
-- [ ] **Passo 1: separar em duas pilhas a partir do output do lint**
+- [x] **Passo 1: separar em duas pilhas a partir do output do lint**
 
 ```bash
 npx eslint "src/**/*.ts" --config eslint.config.staged.mjs --format json > /tmp/be.json
@@ -297,15 +336,15 @@ node -e "const r=require('/tmp/be.json');for(const f of r)for(const m of f.messa
     resposta devia incluir) → isto é **feature incompleta / bug**, não código
     morto: abrir issue/nota e **não** apagar nesta task.
 
-- [ ] **Passo 2:** aplicar os renomes ARG (todos) + as remoções VAR seguras.
+- [x] **Passo 2:** aplicar os renomes ARG (todos) + as remoções VAR seguras.
 
-- [ ] **Passo 3:** listar à parte os VAR "provável bug" com ficheiro:linha para
+- [x] **Passo 3:** listar à parte os VAR "provável bug" com ficheiro:linha para
   triagem do utilizador (não apagar).
 
-- [ ] **Passo 4:** `npm run build && npm run lint:check && npm run test:coverage`
+- [x] **Passo 4:** `npm run build && npm run lint:check && npm run test:coverage`
   por sub-lote.
 
-- [ ] **Passo 5:** commit + PR por sub-lote (`chore(cleanup): unused vars — lote N/5`).
+- [x] **Passo 5:** commit + PR por sub-lote (`chore(cleanup): unused vars — lote N/5`).
 
 ### Task B6: Frontend — remover `DashboardShell.tsx` (componente nunca renderizado)
 
@@ -314,7 +353,7 @@ node -e "const r=require('/tmp/be.json');for(const f of r)for(const m of f.messa
 **Interfaces:** `Sidebar` e `Topbar` **ficam** (usados por `app/(platform)/layout.tsx`
 e outros).
 
-- [ ] **Passo 1: confirmar 0 imports**
+- [x] **Passo 1: confirmar 0 imports**
 
 ```bash
 cd frontend && grep -rn "DashboardShell" --include=*.tsx --include=*.ts . | grep -v node_modules
@@ -322,13 +361,17 @@ cd frontend && grep -rn "DashboardShell" --include=*.tsx --include=*.ts . | grep
 Esperado: só a definição + o comentário em `app/(platform)/employees/layout.tsx`
 (que é uma nota, não um import).
 
-- [ ] **Passo 2:** apagar o ficheiro.
+- [x] **Passo 2:** apagar o ficheiro.
 
-- [ ] **Passo 3:** `cd frontend && npx tsc --noEmit && npm run build && npm test`.
+- [x] **Passo 3:** `cd frontend && npx tsc --noEmit && npm run build && npm test`.
 
-- [ ] **Passo 4:** commit + PR, check `build` verde, merge.
+- [x] **Passo 4:** commit + PR, check `build` verde, merge.
 
-### Task B7: Frontend — remover handlers e estado mortos
+### Task B7: Frontend — remover handlers e estado mortos ✅ (#418)
+
+**Decisão tomada:** `FeedView` — opção (b), removido o filtro "nível" morto
+(nunca teve controlo de UI). `scalability` — reduzido a `const` (opção (b)
+implícita na task; a interacção da PR #411 não chegou a existir).
 
 **Files:**
 - Modify `frontend/components/events/DetailView.tsx` — apagar `handleLeave` (L82) se
@@ -348,30 +391,38 @@ Esperado: só a definição + o comentário em `app/(platform)/employees/layout.
   estado e do query param (remove o filtro morto). Recomendação: (a) se o filtro
   "nível" era suposto existir; (b) se não.
 
-- [ ] **Passo 1:** para cada handler, `grep -n <nome>` no ficheiro — confirmar 1 só
+- [x] **Passo 1:** para cada handler, `grep -n <nome>` no ficheiro — confirmar 1 só
   ocorrência (a declaração) antes de apagar.
-- [ ] **Passo 2:** aplicar remoções (a)/(b) conforme decisão.
-- [ ] **Passo 3:** `cd frontend && npx tsc --noEmit && npm run build && npm test`.
-- [ ] **Passo 4:** commit + PR + merge.
+- [x] **Passo 2:** aplicar remoções (a)/(b) conforme decisão.
+- [x] **Passo 3:** `cd frontend && npx tsc --noEmit && npm run build && npm test`.
+- [x] **Passo 4:** commit + PR + merge.
 
-### Task B8: Frontend — decisão sobre `CourseAvatarReaderExample.tsx`
+### Task B8: Frontend — decisão sobre `CourseAvatarReaderExample.tsx` ✅ (#419)
+
+**Decisão tomada:** (c) apagar. Fez-se um 2º commit no mesmo PR a apagar
+também o subsistema `CourseAvatarReader.tsx`/`useCourseAvatarReader.ts`/
+`lib/audioCache.ts`, que ficou sem consumidor depois de o exemplo sair —
+achado durante a investigação, não estava no plano original. A feature
+("Ouvir a aula") acabou por ser restaurada como controlo compacto no
+`ContentPlayer` no frontend #420 (o endpoint backend nunca tinha saído do
+ar) — ver memória `project_innova_lesson_audio_tts`.
 
 **Files:** Delete (ou manter) `frontend/components/courses-learn/CourseAvatarReaderExample.tsx`
 (+ possivelmente `components/courses-learn/types.ts:86` que lhe faz referência num comentário).
 
-- [ ] **Passo 1: decisão do utilizador** — o ficheiro está marcado como exemplo de
+- [x] **Passo 1: decisão do utilizador** — o ficheiro está marcado como exemplo de
   integração de referência. Opções: (a) manter como está (documentação viva),
   (b) mover para `docs/` como snippet, (c) apagar.
-- [ ] **Passo 2:** se (b)/(c): apagar o `.tsx`, limpar a referência em `types.ts:86`
+- [x] **Passo 2:** se (b)/(c): apagar o `.tsx`, limpar a referência em `types.ts:86`
   e no comentário de `app/(platform)/courses/[courseId]/learn/page.tsx:8`.
-- [ ] **Passo 3:** `cd frontend && npx tsc --noEmit && npm run build`.
-- [ ] **Passo 4:** commit + PR.
+- [x] **Passo 3:** `cd frontend && npx tsc --noEmit && npm run build`.
+- [x] **Passo 4:** commit + PR.
 
 ### Task B9: Frontend — registar (não remover) a dívida do React Compiler
 
 **Files:** nenhuma alteração de código.
 
-- [ ] Anotar em `project_innova_frontend_*` (memória) os 4 pontos onde o React
+- [x] Anotar em `project_innova_frontend_*` (memória) os 4 pontos onde o React
   Compiler salta optimização por regras do React desactivadas:
   `components/payslips/SimulateView.tsx:45`, `hooks/useAutoDismiss.ts:13`,
   `hooks/useSearch.ts:88`, `hooks/useSearch.ts:117`. Candidato a uma limpeza
