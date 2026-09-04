@@ -27,11 +27,6 @@ import { calculatePagination, buildPaginatedResponse } from '../common/helpers/p
 // ✅ managerId field on User for direct reports
 
 // ─── Helpers ─────────────────────────────────────────────────────
-
-function pct(num: number, den: number): number {
-  return den > 0 ? +((num / den) * 100).toFixed(1) : 0;
-}
-
 function tenureMonths(createdAt: Date): number {
   return Math.floor((Date.now() - createdAt.getTime()) / (30 * 86400000));
 }

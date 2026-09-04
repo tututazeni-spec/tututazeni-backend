@@ -405,7 +405,7 @@ export class WorkDeclarationsService {
   }
 
   async exemptUser(submissionId: number, reason: string, exemptedById: number) {
-    const sub = await this.findOneSubmission(submissionId);
+    await this.findOneSubmission(submissionId);
     await this.prisma.workDeclSubmission.update({
       where: { id: submissionId },
       data: { status: WorkDeclStatus.APPROVED, exemptionReason: reason, reviewedAt: new Date() },
@@ -558,7 +558,6 @@ export class WorkDeclarationsService {
     for (const form of forms) {
       const users = await this.prisma.read.user.findMany({ select: { id: true } });
       for (const user of users) {
-        const thisYear = today.getFullYear().toString();
         const alreadyDone = await this.prisma.read.workDeclSubmission.findFirst({
           where: {
             userId: user.id,
