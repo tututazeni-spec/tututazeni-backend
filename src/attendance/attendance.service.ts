@@ -10,7 +10,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CacheService } from '../cache/cache.service';
 import { LeaveManagementService } from '../leave-management/leave-management.service';
-import { ApprovalAction, DurationMode } from '../leave-management/leave-management.dto';
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
