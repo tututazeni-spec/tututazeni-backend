@@ -30,7 +30,7 @@ describe('AuditService', () => {
 
   describe('log', () => {
     it('deve criar log de auditoria', async () => {
-      const result = await service.log({
+      await service.log({
         userId: 1,
         action: 'CREATE',
         entity: 'User',

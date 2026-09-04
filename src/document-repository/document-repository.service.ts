@@ -325,7 +325,7 @@ export class DocumentRepositoryService {
   }
 
   async newVersion(id: number, dto: NewVersionDto, uploadedById: number) {
-    const doc = await this.findOne(id);
+    await this.findOne(id);
 
     const lastVersion = await this.prisma.read.docVersion.findFirst({
       where: { documentId: id },
@@ -432,7 +432,7 @@ export class DocumentRepositoryService {
   // ══════════════════════════════════════════════════════════════════
 
   async grantPermission(dto: GrantPermissionDto, grantedById: number) {
-    const doc = await this.findOne(dto.documentId);
+    await this.findOne(dto.documentId);
 
     return this.prisma.docPermission.create({
       data: {

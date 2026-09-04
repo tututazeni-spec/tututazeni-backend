@@ -219,7 +219,6 @@ export class CareerService {
     ]);
 
     const userCompMap = new Map(userCompetencies.map(uc => [uc.competencyId, uc.currentLevel]));
-    const completedSet = new Set(completedCourseIds.map(e => e.courseId));
 
     // Verificar requisitos de competências
     const competencyGaps = targetPosition.competencies.map(pc => {

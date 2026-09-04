@@ -1035,7 +1035,7 @@ export class Evaluation360Service {
     });
     if (!result) throw new NotFoundException('Resultado não encontrado.');
 
-    const cycle = await this.findCycleOrFail(cycleId);
+    await this.findCycleOrFail(cycleId);
     const canSeeFull = requesterRole === 'ADMIN' || requesterRole === 'RH';
     // requesterId chega como number (User.id via JWT) e participantId como
     // string (route param) — comparação estrita nunca era true.

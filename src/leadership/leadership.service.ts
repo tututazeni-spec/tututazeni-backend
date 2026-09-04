@@ -303,8 +303,6 @@ export class LeadershipService {
           }),
         ]);
 
-        const pendingLeaves = 0; // TODO: implementar LeaveRequest
-
         // Calcular status semáforo
         const perfScore = latestReview?.score ?? 0;
         const hasPending = pendingApprovals > 0;

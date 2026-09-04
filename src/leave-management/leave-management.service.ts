@@ -66,17 +66,6 @@ function countWorkDays(start: Date, end: Date, holidays: string[] = ANGOLA_HOLID
 function countCalendarDays(start: Date, end: Date): number {
   return Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
 }
-
-function addWorkDays(start: Date, days: number, holidays: string[] = ANGOLA_HOLIDAYS_2025): Date {
-  let added = 0;
-  const cur = new Date(start);
-  while (added < days) {
-    cur.setDate(cur.getDate() + 1);
-    if (cur.getDay() !== 0 && cur.getDay() !== 6 && !isHoliday(cur, holidays)) added++;
-  }
-  return cur;
-}
-
 // Ver project-innova-leave-type-enum-mismatch: LeaveTypeConfig.code é livre
 // (admin pode criar "SICK_SHORT", etc.), mas o enum fixo `LeaveType` só tem
 // 10 valores. `leaveTypeCode` é agora a chave real usada em todo este
