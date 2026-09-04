@@ -53,21 +53,113 @@ async function seedPayroll(prisma: PrismaClient) {
   }
 
   const components: Array<{
-    code: string; name: string; type: 'EARNING' | 'DEDUCTION';
+    code: string;
+    name: string;
+    type: 'EARNING' | 'DEDUCTION';
     calcType: 'FIXED' | 'PERCENT' | 'FORMULA' | 'TABLE';
-    isTaxable: boolean; isMandatory: boolean; order: number;
+    isTaxable: boolean;
+    isMandatory: boolean;
+    order: number;
   }> = [
-    { code: 'BASE_SALARY', name: 'Salário Base', type: 'EARNING', calcType: 'FIXED', isTaxable: true, isMandatory: true, order: 0 },
-    { code: 'ALLOWANCE_FOOD', name: 'Subsídio de Alimentação', type: 'EARNING', calcType: 'FIXED', isTaxable: false, isMandatory: false, order: 1 },
-    { code: 'ALLOWANCE_TRANSPORT', name: 'Subsídio de Transporte', type: 'EARNING', calcType: 'FIXED', isTaxable: false, isMandatory: false, order: 2 },
-    { code: 'OVERTIME', name: 'Horas Extras', type: 'EARNING', calcType: 'FORMULA', isTaxable: true, isMandatory: false, order: 3 },
-    { code: 'BONUS', name: 'Bónus', type: 'EARNING', calcType: 'FIXED', isTaxable: true, isMandatory: false, order: 4 },
-    { code: 'INSS_EMPLOYEE', name: 'INSS Colaborador', type: 'DEDUCTION', calcType: 'PERCENT', isTaxable: false, isMandatory: true, order: 5 },
-    { code: 'IRT', name: 'IRT (Imposto Rendimento Trabalho)', type: 'DEDUCTION', calcType: 'TABLE', isTaxable: false, isMandatory: true, order: 6 },
-    { code: 'HEALTH_INSURANCE', name: 'Seguro de Saúde', type: 'DEDUCTION', calcType: 'PERCENT', isTaxable: false, isMandatory: false, order: 7 },
-    { code: 'UNION_FEE', name: 'Quota Sindical', type: 'DEDUCTION', calcType: 'PERCENT', isTaxable: false, isMandatory: false, order: 8 },
-    { code: 'ADVANCE', name: 'Adiantamento', type: 'DEDUCTION', calcType: 'FIXED', isTaxable: false, isMandatory: false, order: 9 },
-    { code: 'ABSENCE_DEDUCTION', name: 'Desconto por Faltas', type: 'DEDUCTION', calcType: 'FIXED', isTaxable: false, isMandatory: false, order: 10 },
+    {
+      code: 'BASE_SALARY',
+      name: 'Salário Base',
+      type: 'EARNING',
+      calcType: 'FIXED',
+      isTaxable: true,
+      isMandatory: true,
+      order: 0,
+    },
+    {
+      code: 'ALLOWANCE_FOOD',
+      name: 'Subsídio de Alimentação',
+      type: 'EARNING',
+      calcType: 'FIXED',
+      isTaxable: false,
+      isMandatory: false,
+      order: 1,
+    },
+    {
+      code: 'ALLOWANCE_TRANSPORT',
+      name: 'Subsídio de Transporte',
+      type: 'EARNING',
+      calcType: 'FIXED',
+      isTaxable: false,
+      isMandatory: false,
+      order: 2,
+    },
+    {
+      code: 'OVERTIME',
+      name: 'Horas Extras',
+      type: 'EARNING',
+      calcType: 'FORMULA',
+      isTaxable: true,
+      isMandatory: false,
+      order: 3,
+    },
+    {
+      code: 'BONUS',
+      name: 'Bónus',
+      type: 'EARNING',
+      calcType: 'FIXED',
+      isTaxable: true,
+      isMandatory: false,
+      order: 4,
+    },
+    {
+      code: 'INSS_EMPLOYEE',
+      name: 'INSS Colaborador',
+      type: 'DEDUCTION',
+      calcType: 'PERCENT',
+      isTaxable: false,
+      isMandatory: true,
+      order: 5,
+    },
+    {
+      code: 'IRT',
+      name: 'IRT (Imposto Rendimento Trabalho)',
+      type: 'DEDUCTION',
+      calcType: 'TABLE',
+      isTaxable: false,
+      isMandatory: true,
+      order: 6,
+    },
+    {
+      code: 'HEALTH_INSURANCE',
+      name: 'Seguro de Saúde',
+      type: 'DEDUCTION',
+      calcType: 'PERCENT',
+      isTaxable: false,
+      isMandatory: false,
+      order: 7,
+    },
+    {
+      code: 'UNION_FEE',
+      name: 'Quota Sindical',
+      type: 'DEDUCTION',
+      calcType: 'PERCENT',
+      isTaxable: false,
+      isMandatory: false,
+      order: 8,
+    },
+    {
+      code: 'ADVANCE',
+      name: 'Adiantamento',
+      type: 'DEDUCTION',
+      calcType: 'FIXED',
+      isTaxable: false,
+      isMandatory: false,
+      order: 9,
+    },
+    {
+      code: 'ABSENCE_DEDUCTION',
+      name: 'Desconto por Faltas',
+      type: 'DEDUCTION',
+      calcType: 'FIXED',
+      isTaxable: false,
+      isMandatory: false,
+      order: 10,
+    },
   ];
   for (const c of components) {
     await prisma.salaryComponent.upsert({
@@ -119,14 +211,70 @@ async function seedOrgStructure(prisma: PrismaClient) {
 
   // Um cargo por PositionLevel. Salários em Kz (Angola) — bandas indicativas.
   const positions = [
-    { code: 'P-INT', name: 'Estagiário', level: 'INTERN', dept: 'ENG', salaryMin: 150000, salaryMax: 250000 },
-    { code: 'P-JR', name: 'Técnico Júnior', level: 'JUNIOR', dept: 'OPS', salaryMin: 300000, salaryMax: 450000 },
-    { code: 'P-MID', name: 'Analista', level: 'MID', dept: 'COM', salaryMin: 500000, salaryMax: 750000 },
-    { code: 'P-SR', name: 'Engenheiro Sénior', level: 'SENIOR', dept: 'ENG', salaryMin: 800000, salaryMax: 1200000 },
-    { code: 'P-LEAD', name: 'Team Lead', level: 'LEAD', dept: 'ENG', salaryMin: 1300000, salaryMax: 1800000 },
-    { code: 'P-MGR', name: 'Gestor de Departamento', level: 'MANAGER', dept: 'OPS', salaryMin: 1900000, salaryMax: 2600000 },
-    { code: 'P-DIR', name: 'Director', level: 'DIRECTOR', dept: 'RH', salaryMin: 2800000, salaryMax: 4000000 },
-    { code: 'P-EXEC', name: 'Administrador Executivo', level: 'EXECUTIVE', dept: 'COM', salaryMin: 4500000, salaryMax: 7000000 },
+    {
+      code: 'P-INT',
+      name: 'Estagiário',
+      level: 'INTERN',
+      dept: 'ENG',
+      salaryMin: 150000,
+      salaryMax: 250000,
+    },
+    {
+      code: 'P-JR',
+      name: 'Técnico Júnior',
+      level: 'JUNIOR',
+      dept: 'OPS',
+      salaryMin: 300000,
+      salaryMax: 450000,
+    },
+    {
+      code: 'P-MID',
+      name: 'Analista',
+      level: 'MID',
+      dept: 'COM',
+      salaryMin: 500000,
+      salaryMax: 750000,
+    },
+    {
+      code: 'P-SR',
+      name: 'Engenheiro Sénior',
+      level: 'SENIOR',
+      dept: 'ENG',
+      salaryMin: 800000,
+      salaryMax: 1200000,
+    },
+    {
+      code: 'P-LEAD',
+      name: 'Team Lead',
+      level: 'LEAD',
+      dept: 'ENG',
+      salaryMin: 1300000,
+      salaryMax: 1800000,
+    },
+    {
+      code: 'P-MGR',
+      name: 'Gestor de Departamento',
+      level: 'MANAGER',
+      dept: 'OPS',
+      salaryMin: 1900000,
+      salaryMax: 2600000,
+    },
+    {
+      code: 'P-DIR',
+      name: 'Director',
+      level: 'DIRECTOR',
+      dept: 'RH',
+      salaryMin: 2800000,
+      salaryMax: 4000000,
+    },
+    {
+      code: 'P-EXEC',
+      name: 'Administrador Executivo',
+      level: 'EXECUTIVE',
+      dept: 'COM',
+      salaryMin: 4500000,
+      salaryMax: 7000000,
+    },
   ] as const;
 
   // Position não tem campo @unique além do id — upsert por nome não é possível.
@@ -156,14 +304,70 @@ async function seedOrgStructure(prisma: PrismaClient) {
 // CareerRole não tem @unique além do id → idempotência por (name, department).
 async function seedCareerRoles(prisma: PrismaClient) {
   const roles = [
-    { name: 'Analista Júnior', department: 'Engenharia', seniority: 'JUNIOR', level: 1, salaryMin: 300000, salaryMax: 450000 },
-    { name: 'Analista', department: 'Engenharia', seniority: 'MID', level: 2, salaryMin: 500000, salaryMax: 750000 },
-    { name: 'Analista Sénior', department: 'Engenharia', seniority: 'SENIOR', level: 3, salaryMin: 800000, salaryMax: 1200000 },
-    { name: 'Team Lead', department: 'Engenharia', seniority: 'LEAD', level: 4, salaryMin: 1300000, salaryMax: 1800000 },
-    { name: 'Gestor de Recursos Humanos', department: 'Recursos Humanos', seniority: 'MANAGER', level: 5, salaryMin: 1900000, salaryMax: 2600000 },
-    { name: 'Gestor Comercial', department: 'Comercial', seniority: 'MANAGER', level: 5, salaryMin: 1900000, salaryMax: 2600000 },
-    { name: 'Director de Operações', department: 'Operações', seniority: 'DIRECTOR', level: 6, salaryMin: 2800000, salaryMax: 4000000 },
-    { name: 'Administrador Executivo', department: 'Comercial', seniority: 'C_LEVEL', level: 7, salaryMin: 4500000, salaryMax: 7000000 },
+    {
+      name: 'Analista Júnior',
+      department: 'Engenharia',
+      seniority: 'JUNIOR',
+      level: 1,
+      salaryMin: 300000,
+      salaryMax: 450000,
+    },
+    {
+      name: 'Analista',
+      department: 'Engenharia',
+      seniority: 'MID',
+      level: 2,
+      salaryMin: 500000,
+      salaryMax: 750000,
+    },
+    {
+      name: 'Analista Sénior',
+      department: 'Engenharia',
+      seniority: 'SENIOR',
+      level: 3,
+      salaryMin: 800000,
+      salaryMax: 1200000,
+    },
+    {
+      name: 'Team Lead',
+      department: 'Engenharia',
+      seniority: 'LEAD',
+      level: 4,
+      salaryMin: 1300000,
+      salaryMax: 1800000,
+    },
+    {
+      name: 'Gestor de Recursos Humanos',
+      department: 'Recursos Humanos',
+      seniority: 'MANAGER',
+      level: 5,
+      salaryMin: 1900000,
+      salaryMax: 2600000,
+    },
+    {
+      name: 'Gestor Comercial',
+      department: 'Comercial',
+      seniority: 'MANAGER',
+      level: 5,
+      salaryMin: 1900000,
+      salaryMax: 2600000,
+    },
+    {
+      name: 'Director de Operações',
+      department: 'Operações',
+      seniority: 'DIRECTOR',
+      level: 6,
+      salaryMin: 2800000,
+      salaryMax: 4000000,
+    },
+    {
+      name: 'Administrador Executivo',
+      department: 'Comercial',
+      seniority: 'C_LEVEL',
+      level: 7,
+      salaryMin: 4500000,
+      salaryMax: 7000000,
+    },
   ] as const;
 
   for (const r of roles) {
@@ -307,6 +511,39 @@ async function main() {
       isPaid: true,
       annualLimit: 5,
       minNoticeDays: 0,
+    },
+    {
+      code: 'JUSTIFIED_ABSENCE',
+      name: 'Ausência Justificada',
+      description:
+        'Ausência justificada não coberta por outro tipo (ex: consulta médica, assuntos pessoais pontuais)',
+      category: 'OTHER',
+      color: '#0EA5E9',
+      icon: 'FileCheck',
+      isPaid: true,
+      annualLimit: 6,
+      minNoticeDays: 0,
+    },
+    {
+      code: 'UNJUSTIFIED_ABSENCE',
+      name: 'Ausência Injustificada',
+      description:
+        'Ausência registada sem justificação — impacto disciplinar/salarial a tratar caso a caso',
+      category: 'DISCIPLINARY',
+      color: '#DC2626',
+      icon: 'AlertTriangle',
+      isPaid: false,
+      minNoticeDays: 0,
+    },
+    {
+      code: 'PUBLIC_DUTY',
+      name: 'Dever Cívico',
+      description: 'Convocatória oficial (júri, eleições, testemunho em tribunal, serviço militar)',
+      category: 'OTHER',
+      color: '#7C3AED',
+      icon: 'Landmark',
+      isPaid: true,
+      minNoticeDays: 3,
     },
     {
       code: 'TRAINING',
