@@ -1073,6 +1073,73 @@ export class CareerService {
 
   // ─── ANALYTICS DE CARREIRA ────────────────────────────────────────────────
 
+  /** Pedidos de promoção criados no período, opcionalmente por departamento
+   * (do utilizador que pediu). `PromotionRequest` é o modelo real — não
+   * confundir com `OrgChangeLog` (histórico de mudanças já efectivadas). */
+  private async countPromotionRequests(
+    userWhere: Prisma.UserWhereInput,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<number> {
+    return this.prisma.read.promotionRequest.count({
+      where: { createdAt: { gte: startDate, lte: endDate }, user: userWhere },
+    });
+  }
+
+  /** Gap médio (requiredLevel − currentLevel, sem clamp negativo) entre os
+   * requisitos de competência da posição de cada colaborador activo e o
+   * nível actual da respectiva UserCompetency — mesma lógica de
+   * `getCompetencyGapsForUser`, agregada para toda a organização/departamento
+   * em lote (2 queries, não N+1). Colaboradores sem posição atribuída ou sem
+   * requisitos de competência não entram na média. */
+  private async calcAvgCompetencyGap(userWhere: Prisma.UserWhereInput): Promise<number> {
+    const usersWithPosition = await this.prisma.read.user.findMany({
+      where: { ...userWhere, active: true, positionId: { not: null } },
+      select: { id: true, positionId: true },
+    });
+    if (usersWithPosition.length === 0) return 0;
+
+    const positionIds = [...new Set(usersWithPosition.map(u => u.positionId as number))];
+    const userIds = usersWithPosition.map(u => u.id);
+
+    const [positionCompetencies, userCompetencies] = await Promise.all([
+      this.prisma.read.positionCompetency.findMany({
+        where: { positionId: { in: positionIds } },
+        select: { positionId: true, competencyId: true, requiredLevel: true },
+      }),
+      this.prisma.read.userCompetency.findMany({
+        where: { userId: { in: userIds } },
+        select: { userId: true, competencyId: true, currentLevel: true },
+      }),
+    ]);
+
+    const requirementsByPosition = new Map<number, typeof positionCompetencies>();
+    for (const pc of positionCompetencies) {
+      const key = pc.positionId as number;
+      const arr = requirementsByPosition.get(key) ?? [];
+      arr.push(pc);
+      requirementsByPosition.set(key, arr);
+    }
+    const currentLevelByUser = new Map<number, Map<number, number>>();
+    for (const uc of userCompetencies) {
+      if (!currentLevelByUser.has(uc.userId)) currentLevelByUser.set(uc.userId, new Map());
+      currentLevelByUser.get(uc.userId)!.set(uc.competencyId, uc.currentLevel);
+    }
+
+    let gapSum = 0;
+    let gapCount = 0;
+    for (const u of usersWithPosition) {
+      const requirements = requirementsByPosition.get(u.positionId as number) ?? [];
+      const currentLevels = currentLevelByUser.get(u.id);
+      for (const req of requirements) {
+        const current = currentLevels?.get(req.competencyId) ?? 0;
+        gapSum += Math.max(0, req.requiredLevel - current);
+        gapCount++;
+      }
+    }
+    return gapCount > 0 ? +(gapSum / gapCount).toFixed(2) : 0;
+  }
+
   async getCareerAnalytics(filters: CareerAnalyticsFilterDto) {
     const { departmentId, period, includeRisk } = filters;
     const year = period ? parseInt(period) : new Date().getFullYear();
@@ -1099,8 +1166,8 @@ export class CareerService {
       this.prisma.read.internalApplication.count({
         where: { appliedAt: { gte: startDate, lte: endDate } },
       }),
-      0, // Placeholder — promoções via OrgChangeLog
-      0, // Placeholder
+      this.countPromotionRequests(where, startDate, endDate),
+      this.calcAvgCompetencyGap(where),
       this.prisma.read.positionCompetency.groupBy({
         by: ['competencyId'],
         _count: true,
@@ -1149,6 +1216,8 @@ export class CareerService {
         pdiEngagementRate: `${pdiEngagementRate}%`,
         activeVacancies,
         totalApplications,
+        promotionRequests,
+        avgCompetencyGap,
       },
       topVacancyTypes,
       // FIX: bug real escondido pelo `as any` — o groupBy pede `_count: true`

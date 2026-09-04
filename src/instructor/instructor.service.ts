@@ -439,6 +439,8 @@ export class InstructorService {
 
     const completedCohorts = allCohorts.filter(c => c.status === 'CLOSED').length;
     const activeCohorts = allCohorts.filter(c => c.status === 'ACTIVE').length;
+    // Título vem de `allCohorts` (já carregado) — evita mais uma query.
+    const courseTitleById = new Map(allCohorts.map(c => [c.course.id, c.course.title]));
 
     return {
       totals: {
@@ -455,6 +457,11 @@ export class InstructorService {
         active: activeCohorts,
         closed: completedCohorts,
       },
+      topCourses: topCourses.map(t => ({
+        courseId: t.courseId,
+        courseTitle: courseTitleById.get(t.courseId) ?? null,
+        cohorts: t._count,
+      })),
       recentCohorts: allCohorts.slice(0, 5).map(c => ({
         id: c.id,
         name: c.name,

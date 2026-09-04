@@ -178,7 +178,7 @@ export class SearchService {
 
   private async searchUsers(
     q: string,
-    opts: { limit: number; departmentId?: number; activeOnly?: boolean },
+    opts: { limit: number; skip?: number; departmentId?: number; activeOnly?: boolean },
   ) {
     const where: Prisma.UserWhereInput = {
       OR: [
@@ -206,6 +206,7 @@ export class SearchService {
         points: { select: { points: true } },
       },
       take: opts.limit,
+      skip: opts.skip,
     });
 
     return users.map(u =>
@@ -222,7 +223,7 @@ export class SearchService {
 
   private async searchCourses(
     q: string,
-    opts: { limit: number; category?: string; activeOnly?: boolean },
+    opts: { limit: number; skip?: number; category?: string; activeOnly?: boolean },
   ) {
     const where: Prisma.CourseWhereInput = {
       OR: [{ title: iLike(q) }, { description: iLike(q) }, { category: iLike(q) }],
@@ -246,6 +247,7 @@ export class SearchService {
         thumbnailUrl: true,
       },
       take: opts.limit,
+      skip: opts.skip,
     });
 
     return courses.map(c =>
@@ -260,7 +262,7 @@ export class SearchService {
     );
   }
 
-  private async searchDocuments(q: string, opts: { limit: number }) {
+  private async searchDocuments(q: string, opts: { limit: number; skip?: number }) {
     // KnowledgeArticle não tem campo `description` (é `summary`) nem `tags`
     // como coluna escalar (é a relação KnowledgeTag[]) — esta query rebentava
     // sempre a nível do Prisma; o .catch() escondia-o silenciosamente,
@@ -284,6 +286,7 @@ export class SearchService {
           category: { select: { name: true } },
         },
         take: opts.limit,
+        skip: opts.skip,
       }) as Promise<ArticleRow[]>
     ).catch(e => {
       this.logger.warn({
@@ -307,7 +310,10 @@ export class SearchService {
     );
   }
 
-  private async searchContent(q: string, opts: { limit: number; activeOnly?: boolean }) {
+  private async searchContent(
+    q: string,
+    opts: { limit: number; skip?: number; activeOnly?: boolean },
+  ) {
     const where: Prisma.ContentAssetWhereInput = {
       OR: [{ title: iLike(q) }, { description: iLike(q) }],
     };
@@ -316,6 +322,7 @@ export class SearchService {
       where,
       select: { id: true, title: true, type: true, description: true, thumbnailUrl: true },
       take: opts.limit,
+      skip: opts.skip,
     });
 
     return assets.map(c =>
@@ -330,7 +337,7 @@ export class SearchService {
     );
   }
 
-  private async searchPdis(q: string, opts: { limit: number; userId: number }) {
+  private async searchPdis(q: string, opts: { limit: number; skip?: number; userId: number }) {
     const plans = await this.prisma.read.developmentPlan.findMany({
       where: {
         OR: [{ name: iLike(q) }, { goal: iLike(q) }],
@@ -344,6 +351,7 @@ export class SearchService {
         user: { select: { fullName: true } },
       },
       take: opts.limit,
+      skip: opts.skip,
     });
 
     return plans.map(p =>
@@ -358,12 +366,13 @@ export class SearchService {
     );
   }
 
-  private async searchCompetencies(q: string, opts: { limit: number }) {
+  private async searchCompetencies(q: string, opts: { limit: number; skip?: number }) {
     const comps = await this.prisma.competency
       .findMany({
         where: { OR: [{ name: iLike(q) }, { description: iLike(q) }] },
         select: { id: true, name: true, type: true, description: true },
         take: opts.limit,
+        skip: opts.skip,
       })
       .catch(e => {
         this.logger.warn({
@@ -392,7 +401,10 @@ export class SearchService {
     );
   }
 
-  private async searchScenarios(q: string, opts: { limit: number; activeOnly?: boolean }) {
+  private async searchScenarios(
+    q: string,
+    opts: { limit: number; skip?: number; activeOnly?: boolean },
+  ) {
     const where: Prisma.AvatarScenarioWhereInput = {
       OR: [{ title: iLike(q) }, { description: iLike(q) }],
     };
@@ -402,6 +414,7 @@ export class SearchService {
         where,
         select: { id: true, title: true, category: true, difficulty: true },
         take: opts.limit,
+        skip: opts.skip,
       })
       .catch(e => {
         this.logger.warn({
@@ -436,7 +449,10 @@ export class SearchService {
 
   async searchByType(type: SearchEntityType, q: string, userId: number, dto: TypedSearchDto) {
     const { limit = 20, page = 1 } = dto;
-    const opts = { limit, departmentId: dto.departmentId, category: dto.category };
+    // FIX: `page` era aceite pelo DTO e nunca convertido em `skip` — pedir
+    // page=2 devolvia sempre a mesma 1ª página.
+    const skip = (page - 1) * limit;
+    const opts = { limit, skip, departmentId: dto.departmentId, category: dto.category };
 
     let results: ReturnType<typeof normalise>[] = [];
     switch (type) {
@@ -447,19 +463,19 @@ export class SearchService {
         results = await this.searchCourses(q, opts);
         break;
       case SearchEntityType.DOCUMENT:
-        results = await this.searchDocuments(q, { limit });
+        results = await this.searchDocuments(q, { limit, skip });
         break;
       case SearchEntityType.CONTENT:
-        results = await this.searchContent(q, { limit });
+        results = await this.searchContent(q, { limit, skip });
         break;
       case SearchEntityType.PDI:
-        results = await this.searchPdis(q, { limit, userId });
+        results = await this.searchPdis(q, { limit, skip, userId });
         break;
       case SearchEntityType.COMPETENCY:
-        results = await this.searchCompetencies(q, { limit });
+        results = await this.searchCompetencies(q, { limit, skip });
         break;
       case SearchEntityType.SCENARIO:
-        results = await this.searchScenarios(q, { limit });
+        results = await this.searchScenarios(q, { limit, skip });
         break;
       default:
         results = [];
@@ -548,12 +564,11 @@ export class SearchService {
   // ══════════════════════════════════════════════════════
 
   async getSuggestions(userId: number) {
+    // FIX: `user` era carregado (para filtrar por departamento — ver
+    // comentário abaixo) e nunca lido; as sugestões eram sempre genéricas.
     const user = await this.prisma.read.user.findUnique({
       where: { id: userId },
-      select: {
-        departmentId: true,
-        userCompetencies: { select: { competencyId: true, currentLevel: true } },
-      },
+      select: { departmentId: true },
     });
 
     // Courses not yet enrolled in, matching user's department
@@ -565,7 +580,15 @@ export class SearchService {
       .then(es => es.map(e => e.courseId));
 
     const suggestedCourses = await this.prisma.course.findMany({
-      where: { status: 'PUBLISHED', id: { notIn: enrolled } },
+      where: {
+        status: 'PUBLISHED',
+        id: { notIn: enrolled },
+        // Cursos do departamento do utilizador + cursos sem departamento
+        // (transversais). Sem departamento conhecido, não filtra.
+        ...(user?.departmentId
+          ? { OR: [{ departmentId: user.departmentId }, { departmentId: null }] }
+          : {}),
+      },
       select: { id: true, title: true, category: true, thumbnailUrl: true },
       take: 5,
     });

@@ -45,13 +45,17 @@ export class OrganizationService {
   // ─── ESTATÍSTICAS / DASHBOARD ─────────────────────────────────────────────
 
   async getStats() {
-    const [units, departments, positions, totalStaff, managers, activePositions, spanReport] =
+    // FIX: a query de `managers` aqui (`managerId: null`) contava utilizadores
+    // SEM gestor — o oposto de um gestor. O `managerCount` correcto já é
+    // calculado abaixo via `managerIds` (distinct managerId de quem TEM
+    // gestor) e devolvido em `kpis.managerCount`; a query estava morta e
+    // dava o número errado.
+    const [units, departments, positions, totalStaff, activePositions, spanReport] =
       await Promise.all([
         this.prisma.read.unit.count(),
         this.prisma.read.department.count({ where: { status: 'ACTIVE' } }),
         this.prisma.read.position.count(),
         this.prisma.read.user.count({ where: { active: true } }),
-        this.prisma.read.user.count({ where: { active: true, managerId: null, id: { gt: 0 } } }),
         this.prisma.read.position.findMany({
           select: { id: true, headcountPlanned: true, _count: { select: { users: true } } },
         }),

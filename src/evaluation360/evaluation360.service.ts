@@ -827,13 +827,11 @@ export class Evaluation360Service {
     const subScore = getAvgScore(byRole['SUBORDINATE'] ?? []);
     const extScore = getAvgScore(byRole['EXTERNAL'] ?? []);
 
-    // Score ponderado
-    const totalWeight =
-      cycle.weightSelf +
-      cycle.weightManager +
-      cycle.weightPeer +
-      cycle.weightSubordinate +
-      cycle.weightExternal;
+    // Score ponderado — normalizado por `appliedWeight` (soma dos pesos dos
+    // papéis que efectivamente responderam), não pela soma configurada no
+    // ciclo (`weightSelf+weightManager+...`): se um papel ficar de fora (ex.:
+    // pares abaixo do quorum), dividir pelo total configurado penalizaria
+    // incorrectamente a ausência de dados que nem deviam contar.
     let weightedSum = 0;
     let appliedWeight = 0;
     if (selfScore !== null) {
@@ -1124,13 +1122,11 @@ export class Evaluation360Service {
   }
 
   async getNineBox(query: NineBoxQueryDto) {
-    const results = await this.prisma.evaluationResult.findMany({
-      where: { cycleId: query.cycleId },
-      select: { participantId: true, weightedScore: true },
-    });
-
     // Nine-Box: X = Performance (weightedScore), Y = Potencial (a integrar com OKRs)
-    // Por agora: usar selfScore como proxy de potencial (auto-percepção)
+    // Por agora: usar selfScore como proxy de potencial (auto-percepção).
+    // FIX: havia uma 1ª query idêntica (sem `selfScore`) cujo resultado nunca
+    // era lido — `withSelf` já tem tudo o que essa continha, era uma
+    // segunda ida à BD redundante.
     const withSelf = await this.prisma.evaluationResult.findMany({
       where: { cycleId: query.cycleId },
       select: { participantId: true, weightedScore: true, selfScore: true },

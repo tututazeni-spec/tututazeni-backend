@@ -36,6 +36,7 @@ function buildMockPrisma() {
     internalVacancy: crud(),
     internalApplication: crud(),
     vacancyApplication: crud(),
+    promotionRequest: crud(),
     successionPlan: crud(),
     criticalPosition: crud(),
     positionCompetency: crud(),

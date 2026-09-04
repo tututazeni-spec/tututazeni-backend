@@ -357,13 +357,11 @@ export class AssessmentsService {
     const questions = attempt.assessment.questions;
     const assessment = attempt.assessment;
 
-    let totalWeight = 0;
     let earnedWeight = 0;
     const results: GradedResult[] = [];
     const needsManualReview: number[] = [];
 
     for (const q of questions) {
-      totalWeight += q.weight ?? 1;
       const answer = dto.answers.find(a => a.questionId === q.id);
       let isCorrect: boolean | null = null;
       let earnedPoints = 0;
@@ -428,7 +426,11 @@ export class AssessmentsService {
       });
     }
 
-    // Calcular score final (excluindo questões de revisão manual)
+    // Calcular score final (excluindo questões de revisão manual). Este é o
+    // denominador correcto — soma dos pesos só das perguntas auto-corrigidas.
+    // (Havia um `totalWeight` acumulado no loop acima com o peso de TODAS as
+    // perguntas, incluindo as de revisão manual — nunca chegou a ser lido;
+    // usá-lo teria penalizado o score sempre que há perguntas por rever.)
     const autoGradableWeight = questions
       .filter(q => !needsManualReview.includes(q.id))
       .reduce((s, q) => s + (q.weight ?? 1), 0);
