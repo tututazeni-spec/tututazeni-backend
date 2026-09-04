@@ -705,7 +705,7 @@ export class ReportsService {
   // ATTENDANCE REPORT (legacy-compatible)
   // ══════════════════════════════════════════════════════
 
-  async attendanceReport(from: string, to: string, departmentId?: number) {
+  async attendanceReport(from: string, to: string, _departmentId?: number) {
     const where: Prisma.AttendanceRecordWhereInput = {
       date: { gte: new Date(from), lte: new Date(to) },
     };

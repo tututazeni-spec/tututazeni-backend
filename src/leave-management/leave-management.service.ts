@@ -590,7 +590,7 @@ export class LeaveManagementService {
     return updated;
   }
 
-  async accrueBalance(dto: AccrueBalanceDto, updatedById: number) {
+  async accrueBalance(dto: AccrueBalanceDto, _updatedById: number) {
     const results = await Promise.allSettled(
       dto.userIds.map(userId =>
         this.prisma.leaveBalance.upsert({
@@ -628,7 +628,7 @@ export class LeaveManagementService {
     });
   }
 
-  async processCarryOver(year: number) {
+  async processCarryOver(_year: number) {
     const leaveTypes = await this.prisma.leaveTypeConfig.findMany({
       where: { allowCarryOver: true },
     });
@@ -873,7 +873,7 @@ export class LeaveManagementService {
     start: Date,
     end: Date,
     workDays: number,
-    mode?: DurationMode,
+    _mode?: DurationMode,
   ) {
     // 1. Antecedência mínima
     if (leaveType.minNoticeDays) {

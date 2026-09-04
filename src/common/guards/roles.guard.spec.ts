@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { ForbiddenException, ExecutionContext } from '@nestjs/common';
 import { RolesGuard } from './roles.guard';
 
-function mockContext(user: any, handlerRoles?: string[], classRoles?: string[]) {
+function mockContext(user: any, _handlerRoles?: string[], _classRoles?: string[]) {
   return {
     getHandler: () => ({}),
     getClass: () => ({}),

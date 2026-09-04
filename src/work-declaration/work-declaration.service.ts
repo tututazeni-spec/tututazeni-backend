@@ -787,7 +787,7 @@ export class WorkDeclarationService {
     return titles[type]?.[locale ?? 'PT'] ?? templateName;
   }
 
-  private async buildEmployeeSnapshot(employeeId: number, tenantId: string) {
+  private async buildEmployeeSnapshot(employeeId: number, _tenantId: string) {
     const employee = await this.prisma.user.findFirst({
       where: { id: employeeId },
       include: {
@@ -914,11 +914,11 @@ export class WorkDeclarationService {
     return `${process.env.APP_URL}/declarations/secure/${code}?token=${token}`;
   }
 
-  private async notifyHrTeam(tenantId: string, declaration: DeclarationWithRelations) {
+  private async notifyHrTeam(_tenantId: string, _declaration: DeclarationWithRelations) {
     // TODO: notificar via NotificationsService quando disponível
   }
 
-  private async notifyEmployeeIssued(declaration: DeclarationWithRelations) {
+  private async notifyEmployeeIssued(_declaration: DeclarationWithRelations) {
     // TODO: notificar via NotificationsService quando disponível
   }
 

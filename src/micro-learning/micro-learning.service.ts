@@ -173,7 +173,7 @@ export class MicroLearningService {
     return this.findOne(ml.id);
   }
 
-  async update(id: number, dto: UpdateMicroLearningDto, updatedById?: number) {
+  async update(id: number, dto: UpdateMicroLearningDto, _updatedById?: number) {
     await this.findOne(id);
     const { quizQuestions, competencyIds, ...data } = dto;
 

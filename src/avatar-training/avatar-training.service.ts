@@ -104,7 +104,7 @@ function gradeScore(score: number): string {
 function scoreUserMessage(
   message: string,
   expectedKeywords: string[],
-  behaviorWeights: Record<string, number>,
+  _behaviorWeights: Record<string, number>,
 ): { score: number; behavioral: Record<string, number> } {
   const lower = message.toLowerCase();
   const matched = expectedKeywords.filter(k => lower.includes(k.toLowerCase())).length;
