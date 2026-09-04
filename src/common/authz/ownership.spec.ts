@@ -1,6 +1,6 @@
 // src/common/authz/ownership.spec.ts
 import { NotFoundException } from '@nestjs/common';
-import { isPrivileged, assertCanAccess, ownershipWhere } from './ownership';
+import { isPrivileged, assertCanAccess } from './ownership';
 import { Role } from '../../auth/enums/role.enum';
 
 const employee = { id: 7, role: { name: 'COLABORADOR' } };
@@ -36,14 +36,5 @@ describe('assertCanAccess', () => {
     expect(() => assertCanAccess({ x: 1 }, 99, employee, [Role.ADMIN, Role.RH])).toThrow(
       NotFoundException,
     );
-  });
-});
-
-describe('ownershipWhere', () => {
-  it('devolve {} para papel privilegiado', () => {
-    expect(ownershipWhere(admin, 'userId', [Role.ADMIN, Role.RH])).toEqual({});
-  });
-  it('força o dono para papel não privilegiado', () => {
-    expect(ownershipWhere(employee, 'userId', [Role.ADMIN, Role.RH])).toEqual({ userId: 7 });
   });
 });

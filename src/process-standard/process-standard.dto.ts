@@ -266,9 +266,3 @@ export class ApprovalActionDto {
   @IsString()
   comment?: string;
 }
-
-// ─── Compare versions ────────────────────────────────────────────────────────
-export class CompareVersionsDto {
-  @ApiProperty() @IsString() versionA: string;
-  @ApiProperty() @IsString() versionB: string;
-}

@@ -100,14 +100,6 @@ export enum SkillType {
   CERTIFICATION = 'CERTIFICATION',
 }
 
-export enum SkillLevel {
-  BEGINNER = 1,
-  ELEMENTARY = 2,
-  INTERMEDIATE = 3,
-  ADVANCED = 4,
-  EXPERT = 5,
-}
-
 export enum TimelineEventType {
   HIRED = 'HIRED',
   PROMOTED = 'PROMOTED',
@@ -220,13 +212,6 @@ export class CreateContractDto {
 }
 
 // ─── Skills / Competências ────────────────────────────────────────────────────
-
-export class CreateEmployeeSkillDto {
-  @ApiProperty() @IsString() name!: string;
-  @ApiProperty() @IsEnum(SkillType) type!: SkillType;
-  @ApiPropertyOptional() @IsOptional() @IsString() category?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
-}
 
 export class AssignSkillDto {
   @ApiProperty() @IsInt() employeeId!: number;
@@ -368,12 +353,6 @@ export class BulkUpdateStatusDto {
   @ApiProperty({ type: [Number] }) @IsArray() @IsInt({ each: true }) employeeIds!: number[];
   @ApiProperty() @IsEnum(EmployeeStatus) status!: EmployeeStatus;
   @ApiPropertyOptional() @IsOptional() @IsString() reason?: string;
-}
-
-export class BulkSendMessageDto {
-  @ApiProperty({ type: [Number] }) @IsArray() @IsInt({ each: true }) employeeIds!: number[];
-  @ApiProperty() @IsString() subject!: string;
-  @ApiProperty() @IsString() message!: string;
 }
 
 // ─── Filters ──────────────────────────────────────────────────────────────────

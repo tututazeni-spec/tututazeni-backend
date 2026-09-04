@@ -18,7 +18,6 @@ import {
   IsNotEmpty,
   MaxLength,
   IsPositive,
-  IsIn,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
@@ -159,23 +158,6 @@ export class TriggerSyncDto {
 // -------------------------------------------------------
 // AUTOMATION RULE
 // -------------------------------------------------------
-export class AutomationConditionDto {
-  @ApiProperty() @IsString() field: string; // ex: "departmentId"
-  @ApiProperty({ enum: ['EQ', 'NEQ', 'IN', 'NOT_IN', 'GT', 'LT'] })
-  @IsIn(['EQ', 'NEQ', 'IN', 'NOT_IN', 'GT', 'LT'])
-  operator: 'EQ' | 'NEQ' | 'IN' | 'NOT_IN' | 'GT' | 'LT';
-  @ApiProperty() value: unknown; // valor da condição
-}
-
-export class AutomationActionDto {
-  @ApiProperty({
-    enum: ['ENROLL_COURSE', 'ASSIGN_TRAIL', 'SEND_NOTIFICATION', 'GRANT_BADGE', 'REVOKE_ACCESS'],
-  })
-  @IsIn(['ENROLL_COURSE', 'ASSIGN_TRAIL', 'SEND_NOTIFICATION', 'GRANT_BADGE', 'REVOKE_ACCESS'])
-  type: 'ENROLL_COURSE' | 'ASSIGN_TRAIL' | 'SEND_NOTIFICATION' | 'GRANT_BADGE' | 'REVOKE_ACCESS';
-  @ApiProperty() payload: Record<string, unknown>; // dados específicos da ação
-}
-
 export class CreateAutomationRuleDto {
   @ApiProperty() @IsString() @IsNotEmpty() tenantId: string;
   @ApiProperty() @IsString() @IsNotEmpty() @MaxLength(120) name: string;

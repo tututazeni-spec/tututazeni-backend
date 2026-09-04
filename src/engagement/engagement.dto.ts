@@ -27,14 +27,6 @@ import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────
 
-export enum MoodLevel {
-  GREAT = 5,
-  GOOD = 4,
-  NEUTRAL = 3,
-  SAD = 2,
-  TERRIBLE = 1,
-}
-
 // ─── Survey DTOs ──────────────────────────────────────────────────
 
 export class QuestionDto {

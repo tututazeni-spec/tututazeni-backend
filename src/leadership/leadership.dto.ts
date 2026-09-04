@@ -37,12 +37,6 @@ export enum LeadershipCompetency {
   RESILIENCE = 'RESILIENCE',
 }
 
-export enum MentoringStatus {
-  ACTIVE = 'ACTIVE',
-  PAUSED = 'PAUSED',
-  COMPLETED = 'COMPLETED',
-}
-
 // ─── Leadership Program ───────────────────────────────────────────────────────
 
 export class CreateLeadershipProgramDto {
@@ -158,8 +152,6 @@ export class LeadershipCreateOneOnOneDto {
   @IsString()
   meetingUrl?: string;
 }
-
-export class UpdateOneOnOneDto extends PartialType(LeadershipCreateOneOnOneDto) {}
 
 export class CompleteOneOnOneDto {
   @ApiProperty()

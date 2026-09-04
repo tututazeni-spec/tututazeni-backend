@@ -75,14 +75,6 @@ export interface ContentRatingRow {
   updatedAt?: Date;
 }
 
-export interface ContentNoteRow {
-  userId: number;
-  contentId: number;
-  note: string;
-  timestamp?: number | null;
-  updatedAt?: Date;
-}
-
 // learningPath/learningPathEnrollment também não existem em
 // prisma/schema.prisma, e o shape assumido por este ficheiro (items/
 // hasCertification/xpReward) diverge do modelo real "LearningPath" que lá

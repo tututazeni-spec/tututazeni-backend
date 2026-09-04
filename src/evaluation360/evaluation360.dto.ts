@@ -153,8 +153,6 @@ export class Evaluation360CreateQuestionDto {
   @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() targetLevels?: string[];
 }
 
-export class Evaluation360UpdateQuestionDto extends PartialType(Evaluation360CreateQuestionDto) {}
-
 // ─── PARTICIPANTS ─────────────────────────────────────────────
 export class AddParticipantsDto {
   @ApiProperty({ type: [String] }) @IsArray() @IsString({ each: true }) userIds: string[];

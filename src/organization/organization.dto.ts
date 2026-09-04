@@ -18,12 +18,6 @@ import { DepartmentStatus, PositionLevel, OrgChangeType, UnitType } from '@prism
 
 export { DepartmentStatus, PositionLevel, OrgChangeType, UnitType };
 
-export enum ReportingType {
-  DIRECT = 'DIRECT',
-  MATRIX = 'MATRIX',
-  DOTTED = 'DOTTED',
-}
-
 // ─── Department ───────────────────────────────────────────────────────────────
 
 export class CreateOrgDepartmentDto {

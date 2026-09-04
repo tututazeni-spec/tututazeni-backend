@@ -45,13 +45,6 @@ export enum ApprovalAction {
   DELEGATE = 'DELEGATE',
 }
 
-export enum BalanceAccrualType {
-  MONTHLY = 'MONTHLY',
-  ANNUAL = 'ANNUAL',
-  ON_HIRE = 'ON_HIRE',
-  NONE = 'NONE',
-}
-
 export enum DurationMode {
   FULL_DAY = 'FULL_DAY',
   HALF_AM = 'HALF_AM',
@@ -133,8 +126,6 @@ export class CreateLeaveManagementRequestDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() substituteId?: number; // substituto
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsString({ each: true }) attachments?: string[];
 }
-
-export class UpdateLeaveRequestDto extends PartialType(CreateLeaveManagementRequestDto) {}
 
 // ─── Approvals ────────────────────────────────────────────────────────────────
 
