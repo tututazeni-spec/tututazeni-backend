@@ -74,6 +74,100 @@ describe('CourseCompletionService', () => {
       mockPrisma.read.courseModule.findUnique.mockResolvedValue(null);
       expect(await service.isModuleCompleted(999, 10)).toBe(false);
     });
+
+    it('MIN_PERCENT: false quando abaixo do limiar', async () => {
+      mockPrisma.read.courseModule.findUnique.mockResolvedValue({
+        id: 7,
+        completionRule: 'MIN_PERCENT',
+        minCompletionPercent: 80,
+        lessons: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }],
+      });
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(2); // 50% < 80%
+      expect(await service.isModuleCompleted(7, 10)).toBe(false);
+    });
+
+    it('QUIZ_PASS: true quando o módulo tem quiz e há tentativa aprovada', async () => {
+      mockPrisma.read.courseModule.findUnique.mockResolvedValue({
+        id: 8,
+        completionRule: 'QUIZ_PASS',
+        lessons: [{ id: 1 }],
+      });
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(0);
+      mockPrisma.read.quiz.findFirst.mockResolvedValue({ id: 10 });
+      mockPrisma.read.quizAttempt.findFirst.mockResolvedValue({ id: 1, passed: true });
+      expect(await service.isModuleCompleted(8, 10)).toBe(true);
+    });
+
+    it('QUIZ_PASS: false quando o módulo tem quiz mas sem tentativa aprovada', async () => {
+      mockPrisma.read.courseModule.findUnique.mockResolvedValue({
+        id: 8,
+        completionRule: 'QUIZ_PASS',
+        lessons: [{ id: 1 }],
+      });
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(0);
+      mockPrisma.read.quiz.findFirst.mockResolvedValue({ id: 10 });
+      mockPrisma.read.quizAttempt.findFirst.mockResolvedValue(null);
+      expect(await service.isModuleCompleted(8, 10)).toBe(false);
+    });
+
+    it('QUIZ_PASS: sem quiz no módulo → fallback a ALL_LESSONS', async () => {
+      mockPrisma.read.courseModule.findUnique.mockResolvedValue({
+        id: 8,
+        completionRule: 'QUIZ_PASS',
+        lessons: [{ id: 1 }, { id: 2 }],
+      });
+      mockPrisma.read.quiz.findFirst.mockResolvedValue(null);
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(1); // 1 < 2 → incompleto
+      expect(await service.isModuleCompleted(8, 10)).toBe(false);
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(2); // 2 >= 2 → completo
+      expect(await service.isModuleCompleted(8, 10)).toBe(true);
+    });
+
+    it('COMBINED: exige limiar de aulas E quiz aprovado', async () => {
+      mockPrisma.read.courseModule.findUnique.mockResolvedValue({
+        id: 9,
+        completionRule: 'COMBINED',
+        minCompletionPercent: 80,
+        lessons: [{ id: 1 }, { id: 2 }],
+      });
+      mockPrisma.read.quiz.findFirst.mockResolvedValue({ id: 10 });
+
+      // aulas OK (100% >= 80%) + quiz aprovado → true
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(2);
+      mockPrisma.read.quizAttempt.findFirst.mockResolvedValue({ id: 1, passed: true });
+      expect(await service.isModuleCompleted(9, 10)).toBe(true);
+
+      // aulas OK mas quiz reprovado → false
+      mockPrisma.read.quizAttempt.findFirst.mockResolvedValue(null);
+      expect(await service.isModuleCompleted(9, 10)).toBe(false);
+
+      // quiz aprovado mas aulas insuficientes (50% < 80%) → false
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(1);
+      mockPrisma.read.quizAttempt.findFirst.mockResolvedValue({ id: 1, passed: true });
+      expect(await service.isModuleCompleted(9, 10)).toBe(false);
+    });
+
+    it('COMBINED: sem quiz no módulo → basta o limiar de aulas', async () => {
+      mockPrisma.read.courseModule.findUnique.mockResolvedValue({
+        id: 9,
+        completionRule: 'COMBINED',
+        minCompletionPercent: 80,
+        lessons: [{ id: 1 }, { id: 2 }],
+      });
+      mockPrisma.read.quiz.findFirst.mockResolvedValue(null);
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(2);
+      expect(await service.isModuleCompleted(9, 10)).toBe(true);
+    });
+
+    it('regra de conclusão desconhecida → false', async () => {
+      mockPrisma.read.courseModule.findUnique.mockResolvedValue({
+        id: 11,
+        completionRule: 'UNKNOWN_RULE',
+        lessons: [{ id: 1 }],
+      });
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(1);
+      expect(await service.isModuleCompleted(11, 10)).toBe(false);
+    });
   });
 
   describe('evaluateCompletion', () => {
