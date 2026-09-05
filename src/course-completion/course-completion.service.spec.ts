@@ -1,3 +1,4 @@
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { CourseCompletionService } from './course-completion.service';
@@ -253,6 +254,54 @@ describe('CourseCompletionService', () => {
 
       const res = await service.finalizeCompletion(1);
       expect(res).toEqual({ finalized: true });
+    });
+  });
+
+  describe('issueCertificateFor', () => {
+    const adminUser = { id: 99, role: { name: 'ADMIN' } } as any;
+    const ownerUser = { id: 10, role: { name: 'COLABORADOR' } } as any;
+    const strangerUser = { id: 77, role: { name: 'COLABORADOR' } } as any;
+
+    const completed = {
+      id: 1,
+      userId: 10,
+      courseId: 20,
+      status: 'COMPLETED',
+      course: { id: 20, title: 'Curso X', certificateValidityDays: null },
+    };
+
+    it('curso não concluído → BadRequestException', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...completed, status: 'IN_PROGRESS' });
+      await expect(service.issueCertificateFor(1, ownerUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('utilizador que não é dono nem ADMIN/RH → ForbiddenException', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...completed });
+      await expect(service.issueCertificateFor(1, strangerUser)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('dono, curso concluído, sem certificado → cria e devolve', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...completed });
+      mockPrisma.certificate.findFirst.mockResolvedValue(null);
+      mockPrisma.certificate.create.mockResolvedValue({ id: 500, enrollmentId: 1 });
+      const cert = await service.issueCertificateFor(1, ownerUser);
+      expect(cert).toEqual({ id: 500, enrollmentId: 1 });
+    });
+
+    it('certificado já existe → devolve o existente, sem criar nem notificar', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...completed });
+      mockPrisma.certificate.findFirst.mockResolvedValue({ id: 500, enrollmentId: 1 });
+      const cert = await service.issueCertificateFor(1, adminUser);
+      expect(cert).toEqual({ id: 500, enrollmentId: 1 });
+      expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
+      expect(mockPrisma.notificationLog.create).not.toHaveBeenCalled();
+    });
+
+    it('matrícula inexistente → NotFoundException', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue(null);
+      await expect(service.issueCertificateFor(999, adminUser)).rejects.toThrow(NotFoundException);
     });
   });
 });
