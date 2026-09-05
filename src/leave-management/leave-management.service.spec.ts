@@ -18,10 +18,14 @@ const leavePolicy = {
 };
 const leaveBalance = {
   findFirst: jest.fn(),
+  findUnique: jest.fn(),
   upsert: jest.fn(),
   findMany: jest.fn(),
   update: jest.fn(),
   create: jest.fn(),
+};
+const leaveBalanceHistory = {
+  create: jest.fn().mockResolvedValue({}),
 };
 const leaveApproval = {
   create: jest.fn(),
@@ -52,6 +56,7 @@ const mockPrismaProxy: any = new Proxy(mockPrisma, {
     if (prop === 'leaveTypeConfig') return leaveTypeConfig;
     if (prop === 'leavePolicy') return leavePolicy;
     if (prop === 'leaveBalance') return leaveBalance;
+    if (prop === 'leaveBalanceHistory') return leaveBalanceHistory;
     if (prop === 'leaveApproval') return leaveApproval;
     return (target as any)[prop];
   },
@@ -225,6 +230,59 @@ describe('LeaveManagementService', () => {
         1,
       );
       expect(result).toBeDefined();
+    });
+
+    it('sem gestor atribuído e sem política de 2 níveis → aprova automaticamente E deduz saldo (bug: hoje só aprova, não deduz)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        fullName: 'Test User',
+        email: 'test@innova.com',
+        managerId: null,
+      });
+      leaveTypeConfig.findUnique.mockResolvedValue({
+        code: 'VACATION',
+        name: 'Férias',
+        annualLimit: 22,
+        countWorkDaysOnly: true,
+        autoApprove: false,
+        requiresDocument: false,
+      });
+      leaveBalance.findUnique.mockResolvedValue({
+        balance: 22,
+        used: 0,
+        userId: 1,
+        leaveTypeCode: 'VACATION',
+      });
+      leaveBalance.findFirst.mockResolvedValue({
+        balance: 22,
+        userId: 1,
+        leaveTypeCode: 'VACATION',
+      });
+      leavePolicy.findFirst.mockResolvedValue(null);
+      mockPrisma.leaveRequest.create.mockResolvedValue({
+        ...baseLeaveRequest,
+        id: 42,
+        leaveTypeCode: 'VACATION',
+        workDays: 3,
+        status: 'PENDING',
+      });
+
+      await service.create(
+        {
+          leaveTypeCode: 'VACATION',
+          startDate: '2024-08-01',
+          endDate: '2024-08-05',
+          reason: 'Férias sem gestor',
+        } as any,
+        1,
+      );
+
+      expect(leaveBalance.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId_leaveTypeCode: { userId: 1, leaveTypeCode: 'VACATION' } },
+        }),
+      );
+      expect(leaveBalanceHistory.create).toHaveBeenCalled();
     });
   });
 

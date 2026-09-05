@@ -9,6 +9,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CacheService } from '../cache/cache.service';
+import { LeaveManagementService } from '../leave-management/leave-management.service';
+import { ApprovalAction, DurationMode } from '../leave-management/leave-management.dto';
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -34,6 +36,7 @@ import {
   CheckInMethod,
   AttendanceContext,
   OvertimeStatus,
+  DayPeriod,
 } from './attendance.dto';
 
 interface QrPayload {
@@ -106,10 +109,43 @@ function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number):
 
 @Injectable()
 export class AttendanceService {
+  // Traduz o enum LeaveType (Prisma, usado por CreateLeaveRequestDto.type —
+  // contrato público já consumido pelo frontend) para LeaveTypeConfig.code
+  // (chave real do catálogo configurável de leave-management). SICK_LEAVE→
+  // 'SICK' é o único par que diverge de uma correspondência 1:1 nome-a-nome
+  // (ver docs/superpowers/plans/2026-09-04-fase-b-attendance-leave-consolidation.md
+  // Task 1) — os restantes 9 usam o próprio nome do enum como código.
+  private static readonly LEAVE_TYPE_TO_CODE: Record<LeaveType, string> = {
+    [LeaveType.VACATION]: 'VACATION',
+    [LeaveType.SICK_LEAVE]: 'SICK',
+    [LeaveType.MATERNITY]: 'MATERNITY',
+    [LeaveType.PATERNITY]: 'PATERNITY',
+    [LeaveType.JUSTIFIED_ABSENCE]: 'JUSTIFIED_ABSENCE',
+    [LeaveType.UNJUSTIFIED_ABSENCE]: 'UNJUSTIFIED_ABSENCE',
+    [LeaveType.BEREAVEMENT]: 'BEREAVEMENT',
+    [LeaveType.TRAINING]: 'TRAINING',
+    [LeaveType.PUBLIC_DUTY]: 'PUBLIC_DUTY',
+    [LeaveType.OTHER]: 'OTHER',
+  };
+
+  // 6 tipos legados que attendance.getLeaveBalance() sempre expôs (entitlements
+  // hardcoded antes desta consolidação) — mantidos como o conjunto exposto por
+  // GET /attendance/my/leave-balance e /attendance/leaves/balance/:userId para
+  // não alterar a forma da resposta que o frontend já consome.
+  private static readonly LEGACY_BALANCE_TYPES: LeaveType[] = [
+    LeaveType.VACATION,
+    LeaveType.SICK_LEAVE,
+    LeaveType.MATERNITY,
+    LeaveType.PATERNITY,
+    LeaveType.BEREAVEMENT,
+    LeaveType.JUSTIFIED_ABSENCE,
+  ];
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly cache: CacheService,
+    private readonly leaveManagement: LeaveManagementService,
   ) {}
 
   async findAll(filters: AttendanceFilterDto) {
@@ -421,62 +457,61 @@ export class AttendanceService {
   }
 
   async createLeaveRequest(userId: number, dto: CreateLeaveRequestDto) {
-    const start = new Date(dto.startDate);
-    const end = new Date(dto.endDate);
+    // Validação de datas (end < start) já é feita por leave-management.create()
+    // (leave-management.service.ts:290) — não duplicar aqui.
+    const durationMode = dto.halfDay
+      ? dto.halfDayPeriod === DayPeriod.PM
+        ? DurationMode.HALF_PM
+        : DurationMode.HALF_AM
+      : DurationMode.FULL_DAY;
 
-    if (end < start) throw new BadRequestException('Data de fim anterior ao início');
-
-    // Guard de sobreposição antes de criar: força primary para não validar contra réplica atrasada.
-    const conflict = await this.prisma.leaveRequest.findFirst({
-      where: {
+    // A partir daqui, a validação de sobreposição, saldo, antecedência
+    // mínima, blackout periods e o fluxo de aprovação são inteiramente
+    // responsabilidade de LeaveManagementService — attendance deixou de ter
+    // a sua própria cópia divergente destas regras (Fase B da consolidação).
+    return this.leaveManagement.create(
+      {
         userId,
-        status: LeaveStatus.APPROVED,
-        OR: [{ startDate: { lte: end }, endDate: { gte: start } }],
-      },
-    });
-    if (conflict)
-      throw new ConflictException('Existe sobreposição com licença já aprovada neste período');
-
-    const workDays = this.countWorkdays(start, end);
-
-    return this.prisma.leaveRequest.create({
-      data: {
-        userId,
-        leaveType: dto.type,
-        // leaveTypeCode passou a obrigatório (project-innova-leave-type-enum-
-        // mismatch); este fluxo usa sempre um valor real do enum LeaveType
-        // (@IsEnum no DTO), nunca um código customizado — seguro usar
-        // dto.type directamente como string.
-        leaveTypeCode: dto.type,
-        startDate: start,
-        endDate: end,
+        leaveTypeCode: AttendanceService.LEAVE_TYPE_TO_CODE[dto.type],
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        durationMode,
         reason: dto.reason,
-        attachments: dto.attachments ?? [],
-        halfDay: dto.halfDay ?? false,
-        halfDayPeriod: dto.halfDayPeriod,
-        workDays,
-        status: LeaveStatus.PENDING,
+        attachments: dto.attachments,
       },
-    });
+      userId,
+    );
   }
 
   async reviewLeave(id: number, dto: ReviewLeaveDto, reviewerId: number) {
-    const leave = await this.prisma.leaveRequest.findUnique({ where: { id } });
-    if (!leave) throw new NotFoundException('Pedido de licença não encontrado');
-    if (leave.status !== LeaveStatus.PENDING) throw new BadRequestException('Pedido já processado');
+    // Só APPROVE/REJECT fazem sentido num "review" — DRAFT/PENDING/CANCELLED/
+    // EXPIRED não são decisões de revisor. Antes desta consolidação o código
+    // aceitava qualquer valor de LeaveStatus sem validar.
+    if (dto.status !== LeaveStatus.APPROVED && dto.status !== LeaveStatus.REJECTED) {
+      throw new BadRequestException('Estado inválido para revisão — use APPROVED ou REJECTED');
+    }
 
-    const updated = await this.prisma.leaveRequest.update({
-      where: { id },
-      data: {
-        status: dto.status,
-        reviewNotes: dto.reviewNotes,
-        reviewedById: reviewerId,
-        reviewedAt: new Date(),
-      },
+    const action =
+      dto.status === LeaveStatus.APPROVED ? ApprovalAction.APPROVE : ApprovalAction.REJECT;
+
+    // Autorização real (quem pode decidir este pedido específico) passa a
+    // ser inteiramente responsabilidade de LeaveManagementService — só o
+    // aprovador atribuído no fluxo (gestor directo, ou RH em política de 2
+    // níveis) pode decidir. @Roles(ADMIN, RH, GESTOR) no controller continua
+    // a ser só o gate grosseiro de papel, igual ao que /leave/:id/approve já
+    // usa.
+    const updated = await this.leaveManagement.processApproval(id, reviewerId, {
+      action,
+      notes: dto.reviewNotes,
     });
 
-    if (dto.status === LeaveStatus.APPROVED) {
-      await this.createLeaveAttendanceRecords(leave);
+    // processApproval só devolve um LeaveApproval no ramo DELEGATE, que este
+    // fluxo nunca aciona (action é sempre APPROVE/REJECT) — nesses dois ramos
+    // retorna findOne(requestId), i.e. um LeaveRequest (ou null se entretanto
+    // desaparecer).
+    const reviewed = updated as Prisma.LeaveRequestGetPayload<object> | null;
+    if (reviewed?.status === LeaveStatus.APPROVED) {
+      await this.createLeaveAttendanceRecords(reviewed);
     }
 
     return updated;
@@ -513,34 +548,29 @@ export class AttendanceService {
   }
 
   async getLeaveBalance(userId: number) {
-    const year = new Date().getFullYear();
-    const start = new Date(year, 0, 1);
-    const end = new Date(year, 11, 31);
+    // Fonte de verdade passa a ser LeaveTypeConfig (entitled) + LeaveBalance
+    // (used/remaining reais), ambos geridos por LeaveManagementService — os
+    // valores hardcoded (22/30/90/2/3/6) que existiam aqui antes da Fase B
+    // divergiam do saldo mostrado em /leave/my/balance. A forma da resposta
+    // (array de {type, entitled, used, remaining}) mantém-se idêntica para
+    // não obrigar a alterações no frontend.
+    const [types, balances] = await Promise.all([
+      this.leaveManagement.getLeaveTypes(),
+      this.leaveManagement.getBalance(userId),
+    ]);
 
-    const approved = await this.prisma.read.leaveRequest.findMany({
-      where: { userId, status: LeaveStatus.APPROVED, startDate: { gte: start, lte: end } },
+    const configByCode = new Map(types.map(t => [t.code, t]));
+    const balanceByCode = new Map(balances.map(b => [b.leaveTypeCode, b]));
+
+    return AttendanceService.LEGACY_BALANCE_TYPES.map(type => {
+      const code = AttendanceService.LEAVE_TYPE_TO_CODE[type];
+      const config = configByCode.get(code);
+      const balance = balanceByCode.get(code);
+      const entitled = config?.annualLimit ?? 0;
+      const used = balance?.used ?? 0;
+      const remaining = balance ? balance.effectiveBalance : entitled;
+      return { type, entitled, used, remaining };
     });
-
-    const used: Record<string, number> = {};
-    for (const l of approved) {
-      used[l.leaveType as string] = (used[l.leaveType as string] ?? 0) + (l.workDays ?? 1);
-    }
-
-    const entitlements: Record<string, number> = {
-      [LeaveType.VACATION]: 22,
-      [LeaveType.SICK_LEAVE]: 30,
-      [LeaveType.MATERNITY]: 90,
-      [LeaveType.PATERNITY]: 2,
-      [LeaveType.BEREAVEMENT]: 3,
-      [LeaveType.JUSTIFIED_ABSENCE]: 6,
-    };
-
-    return Object.entries(entitlements).map(([type, total]) => ({
-      type,
-      entitled: total,
-      used: used[type] ?? 0,
-      remaining: total - (used[type] ?? 0),
-    }));
   }
 
   async createWorkSchedule(dto: CreateWorkScheduleDto) {

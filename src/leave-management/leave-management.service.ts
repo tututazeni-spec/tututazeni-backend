@@ -345,7 +345,7 @@ export class LeaveManagementService {
     // ── Criar nível de aprovação
     if (initialStatus === LeaveStatus.PENDING) {
       const policy = await this.getApplicablePolicy(dto.userId);
-      await this.createApprovalFlow(request.id, dto.userId, policy);
+      await this.createApprovalFlow(request, policy);
     }
 
     // ── Se auto-aprovado, deduzir saldo
@@ -447,20 +447,7 @@ export class LeaveManagementService {
 
     if (remainingApprovals === 0) {
       // Todos os níveis aprovaram
-      await this.prisma.leaveRequest.update({
-        where: { id: requestId },
-        data: { status: LeaveStatus.APPROVED, finalApprovedAt: new Date() },
-      });
-
-      await this.deductBalance(request.userId, request.leaveTypeCode, request.workDays, requestId);
-      await this.applyModuleImpacts(request);
-      await this.notifyUser(request.userId, 'LEAVE_APPROVED', `O seu pedido foi aprovado!`);
-      await this.audit.log({
-        action: 'LEAVE_APPROVED',
-        entityType: 'LeaveRequest',
-        entityId: requestId,
-        userId: approverId,
-      });
+      await this.finalizeApproval(request, approverId);
     }
 
     return this.findOne(requestId);
@@ -941,10 +928,11 @@ export class LeaveManagementService {
   }
 
   private async createApprovalFlow(
-    requestId: number,
-    userId: number,
+    request: { id: number; userId: number; leaveTypeCode: string; workDays: number },
     policy: Prisma.LeavePolicyGetPayload<object> | null,
   ) {
+    const requestId = request.id;
+    const userId = request.userId;
     const levels = policy?.approvalLevels ?? 1;
     const user = await this.prisma.read.user.findUnique({ where: { id: userId } });
     const managerId = user?.managerId;
@@ -961,11 +949,10 @@ export class LeaveManagementService {
     }
 
     if (approvals.length === 0) {
-      // Sem gestor configurado — auto-aprovar
-      await this.prisma.leaveRequest.update({
-        where: { id: requestId },
-        data: { status: LeaveStatus.APPROVED },
-      });
+      // Sem gestor configurado — auto-aprovar. `actorId = userId` porque não
+      // existe aprovador humano que tenha tomado a decisão — quem accionou
+      // este caminho foi o próprio requerente ao submeter o pedido.
+      await this.finalizeApproval(request, userId);
     } else {
       await this.prisma.leaveApproval.createMany({ data: approvals });
       // Notificar primeiro aprovador
@@ -994,6 +981,35 @@ export class LeaveManagementService {
     return this.prisma.leaveApproval.update({
       where: { id: approvalId },
       data: { approverId: delegateToId, notes: notes ?? 'Delegado', decidedAt: null },
+    });
+  }
+
+  /**
+   * Marca o pedido como aprovado e aplica todos os efeitos secundários de uma
+   * aprovação final — dedução de saldo, impacto noutros módulos, notificação
+   * e auditoria. Chamado tanto quando o último nível de aprovação decide
+   * APPROVE (processApproval) como quando não existe nenhum aprovador
+   * configurado e o pedido é auto-aprovado na submissão (createApprovalFlow).
+   * Extraído para eliminar a divergência onde o segundo caminho fazia só o
+   * update de status, sem tocar no ledger de saldo (bug real, corrigido aqui).
+   */
+  private async finalizeApproval(
+    request: { id: number; userId: number; leaveTypeCode: string; workDays: number },
+    actorId: number,
+  ) {
+    await this.prisma.leaveRequest.update({
+      where: { id: request.id },
+      data: { status: LeaveStatus.APPROVED, finalApprovedAt: new Date() },
+    });
+
+    await this.deductBalance(request.userId, request.leaveTypeCode, request.workDays, request.id);
+    await this.applyModuleImpacts(request as Prisma.LeaveRequestGetPayload<object>);
+    await this.notifyUser(request.userId, 'LEAVE_APPROVED', 'O seu pedido foi aprovado!');
+    await this.audit.log({
+      action: 'LEAVE_APPROVED',
+      entityType: 'LeaveRequest',
+      entityId: request.id,
+      userId: actorId,
     });
   }
 

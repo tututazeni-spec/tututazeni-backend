@@ -1,9 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CacheService } from '../cache/cache.service';
+import { LeaveManagementService } from '../leave-management/leave-management.service';
 import { AttendanceStatus, AttendanceContext } from './attendance.dto';
 
 const mockAttendanceRecord = {
@@ -70,6 +71,13 @@ const mockPrismaProxy = new Proxy(mockPrisma, {
 
 const mockAudit = { log: jest.fn().mockResolvedValue({}) };
 
+const mockLeaveManagement = {
+  create: jest.fn(),
+  processApproval: jest.fn(),
+  getBalance: jest.fn(),
+  getLeaveTypes: jest.fn(),
+};
+
 function buildMockCache() {
   const store = new Map<string, unknown>();
   return {
@@ -116,6 +124,7 @@ describe('AttendanceService', () => {
         { provide: PrismaService, useValue: mockPrismaProxy },
         { provide: AuditService, useValue: mockAudit },
         { provide: CacheService, useValue: buildMockCache() },
+        { provide: LeaveManagementService, useValue: mockLeaveManagement },
       ],
     }).compile();
     service = module.get<AttendanceService>(AttendanceService);
@@ -311,22 +320,104 @@ describe('AttendanceService', () => {
   // ─── createLeaveRequest ───────────────────────────────────────────────────
 
   describe('createLeaveRequest', () => {
-    it('deve criar pedido de licença', async () => {
-      mockPrisma.leaveRequest.create.mockResolvedValue({
-        id: 1,
-        userId: 1,
-        type: 'ANNUAL',
-        status: 'PENDING',
-      });
+    it('deve delegar em LeaveManagementService.create com o código traduzido', async () => {
+      mockLeaveManagement.create.mockResolvedValue({ id: 1, userId: 1, status: 'PENDING' });
 
       const result = await service.createLeaveRequest(1, {
-        type: 'ANNUAL' as any,
+        type: 'VACATION' as any,
         startDate: '2024-08-01',
         endDate: '2024-08-05',
         reason: 'Férias',
       } as any);
 
+      expect(mockLeaveManagement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          leaveTypeCode: 'VACATION',
+          startDate: '2024-08-01',
+          endDate: '2024-08-05',
+          reason: 'Férias',
+          durationMode: 'FULL_DAY',
+        }),
+        1,
+      );
       expect(result).toBeDefined();
+    });
+
+    it('traduz SICK_LEAVE (Prisma) para o código SICK (LeaveTypeConfig)', async () => {
+      mockLeaveManagement.create.mockResolvedValue({ id: 2, userId: 1, status: 'PENDING' });
+
+      await service.createLeaveRequest(1, {
+        type: 'SICK_LEAVE' as any,
+        startDate: '2024-08-01',
+        endDate: '2024-08-02',
+        reason: 'Doença',
+      } as any);
+
+      expect(mockLeaveManagement.create).toHaveBeenCalledWith(
+        expect.objectContaining({ leaveTypeCode: 'SICK' }),
+        1,
+      );
+    });
+
+    it('meio-dia → durationMode HALF_AM/HALF_PM conforme halfDayPeriod', async () => {
+      mockLeaveManagement.create.mockResolvedValue({ id: 3, userId: 1, status: 'PENDING' });
+
+      await service.createLeaveRequest(1, {
+        type: 'VACATION' as any,
+        startDate: '2024-08-01',
+        endDate: '2024-08-01',
+        reason: 'Manhã livre',
+        halfDay: true,
+        halfDayPeriod: 'PM' as any,
+      } as any);
+
+      expect(mockLeaveManagement.create).toHaveBeenCalledWith(
+        expect.objectContaining({ durationMode: 'HALF_PM' }),
+        1,
+      );
+    });
+  });
+
+  // ─── reviewLeave ───────────────────────────────────────────────────────────
+
+  describe('reviewLeave', () => {
+    it('APPROVED → delega em processApproval com ApprovalAction.APPROVE e marca presenças ON_LEAVE', async () => {
+      mockLeaveManagement.processApproval.mockResolvedValue({
+        id: 10,
+        userId: 1,
+        status: 'APPROVED',
+        startDate: new Date('2024-08-01'),
+        endDate: new Date('2024-08-02'),
+        leaveType: 'VACATION',
+      });
+
+      await service.reviewLeave(10, { status: 'APPROVED' as any, reviewNotes: 'ok' }, 99);
+
+      expect(mockLeaveManagement.processApproval).toHaveBeenCalledWith(10, 99, {
+        action: 'APPROVE',
+        notes: 'ok',
+      });
+      expect(mockAttendanceRecord.createMany).toHaveBeenCalled();
+    });
+
+    it('REJECTED → delega com ApprovalAction.REJECT e NÃO cria registos de presença', async () => {
+      mockLeaveManagement.processApproval.mockResolvedValue({ id: 11, status: 'REJECTED' });
+
+      await service.reviewLeave(11, { status: 'REJECTED' as any }, 99);
+
+      expect(mockLeaveManagement.processApproval).toHaveBeenCalledWith(11, 99, {
+        action: 'REJECT',
+        notes: undefined,
+      });
+      expect(mockAttendanceRecord.createMany).not.toHaveBeenCalled();
+    });
+
+    it('estado diferente de APPROVED/REJECTED → BadRequestException, não chama processApproval', async () => {
+      await expect(service.reviewLeave(12, { status: 'CANCELLED' as any }, 99)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockLeaveManagement.processApproval).not.toHaveBeenCalled();
     });
   });
 
@@ -344,10 +435,39 @@ describe('AttendanceService', () => {
   // ─── getLeaveBalance ──────────────────────────────────────────────────────
 
   describe('getLeaveBalance', () => {
-    it('deve retornar saldo de licenças', async () => {
-      mockPrisma.leaveRequest.findMany.mockResolvedValue([]);
+    it('compõe entitled/used/remaining a partir do catálogo e do saldo real, mantendo a forma [{type,...}]', async () => {
+      mockLeaveManagement.getLeaveTypes.mockResolvedValue([
+        { code: 'VACATION', annualLimit: 22 },
+        { code: 'SICK', annualLimit: null },
+        { code: 'MATERNITY', annualLimit: 120 },
+        { code: 'PATERNITY', annualLimit: 28 },
+        { code: 'BEREAVEMENT', annualLimit: 5 },
+        { code: 'JUSTIFIED_ABSENCE', annualLimit: 6 },
+      ]);
+      mockLeaveManagement.getBalance.mockResolvedValue([
+        { leaveTypeCode: 'VACATION', used: 4, effectiveBalance: 18 },
+      ]);
+
       const result = await service.getLeaveBalance(1);
-      expect(result).toBeDefined();
+
+      expect(result).toEqual(
+        expect.arrayContaining([
+          { type: 'VACATION', entitled: 22, used: 4, remaining: 18 },
+          { type: 'SICK_LEAVE', entitled: 0, used: 0, remaining: 0 },
+          { type: 'BEREAVEMENT', entitled: 5, used: 0, remaining: 5 },
+        ]),
+      );
+      expect(result).toHaveLength(6);
+    });
+
+    it('utilizador sem nenhum LeaveBalance inicializado → remaining = entitled cheio (não 0)', async () => {
+      mockLeaveManagement.getLeaveTypes.mockResolvedValue([{ code: 'VACATION', annualLimit: 22 }]);
+      mockLeaveManagement.getBalance.mockResolvedValue([]);
+
+      const result = await service.getLeaveBalance(1);
+      const vacation = result.find(r => r.type === 'VACATION');
+
+      expect(vacation).toEqual({ type: 'VACATION', entitled: 22, used: 0, remaining: 22 });
     });
   });
 
