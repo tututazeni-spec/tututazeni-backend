@@ -194,15 +194,19 @@ export class DepartmentsService {
   async update(id: number, dto: UpdateDepartmentDto) {
     const existing = await this.findOne(id);
 
-    // Validar código único
-    if (dto.code && dto.code !== existing.code) {
+    // Validar código único (case-insensitive; persistido em UPPERCASE)
+    const nextCode = dto.code ? dto.code.toUpperCase() : undefined;
+    if (nextCode && nextCode !== existing.code) {
       const codeExists = await this.prisma.department.findFirst({
-        where: { code: dto.code, id: { not: id } },
+        where: { code: { equals: nextCode, mode: 'insensitive' }, id: { not: id } },
       });
-      if (codeExists) throw new ConflictException(`Código ${dto.code} já em uso`);
+      if (codeExists) throw new ConflictException(`Código ${nextCode} já em uso`);
     }
 
     // Validar hierarquia circular
+    if (dto.parentId && dto.parentId === id) {
+      throw new BadRequestException('Departamento não pode ser pai de si próprio');
+    }
     if (dto.parentId && dto.parentId !== existing.parentId) {
       const isCircular = await this.detectCircularHierarchy(id, dto.parentId);
       if (isCircular) throw new BadRequestException('Hierarquia circular detectada');
@@ -219,9 +223,18 @@ export class DepartmentsService {
       });
     }
 
+    // active é a fonte de verdade; se o DTO trouxer status, espelha-se em active
+    const { status, code: _code, ...rest } = dto;
+    const data: Prisma.DepartmentUncheckedUpdateInput = { ...rest };
+    if (nextCode) data.code = nextCode;
+    if (status !== undefined) {
+      data.status = status;
+      data.active = status === 'ACTIVE';
+    }
+
     return this.prisma.department.update({
       where: { id },
-      data: dto,
+      data,
       include: {
         head: { select: { id: true, fullName: true } },
         parent: { select: { id: true, name: true, code: true } },

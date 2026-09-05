@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { DepartmentsService } from './departments.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -13,7 +13,10 @@ const mockPrisma = {
     count: jest.fn(),
     delete: jest.fn(),
   },
-  departmentHeadHistory: { create: jest.fn().mockResolvedValue({}) },
+  departmentHeadHistory: {
+    create: jest.fn().mockResolvedValue({}),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   user: {
     findMany: jest.fn(),
     update: jest.fn(),
@@ -255,6 +258,71 @@ describe('DepartmentsService', () => {
           data: expect.objectContaining({ active: true, status: 'ACTIVE' }),
         }),
       );
+    });
+  });
+
+  // ─── update ───────────────────────────────────────────────────────────────
+
+  describe('update', () => {
+    it('novo código é validado case-insensitively contra outros e persistido UPPERCASE', async () => {
+      jest.spyOn(service, 'findOne').mockResolvedValue({
+        id: 1,
+        code: 'ENG',
+        parentId: null,
+        headId: null,
+        _count: { users: 0 },
+      } as any);
+      mockPrisma.department.findFirst.mockResolvedValue(null);
+      mockPrisma.department.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 1, ...data }),
+      );
+
+      await service.update(1, { code: 'ops' } as any);
+
+      expect(mockPrisma.department.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            code: expect.objectContaining({ mode: 'insensitive' }),
+            id: { not: 1 },
+          }),
+        }),
+      );
+      expect(mockPrisma.department.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ code: 'OPS' }) }),
+      );
+    });
+
+    it('status no DTO → espelha active', async () => {
+      jest.spyOn(service, 'findOne').mockResolvedValue({
+        id: 1,
+        code: 'ENG',
+        parentId: null,
+        headId: 5,
+        _count: { users: 0 },
+      } as any);
+      mockPrisma.department.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 1, ...data }),
+      );
+
+      await service.update(1, { status: 'INACTIVE' } as any);
+
+      expect(mockPrisma.department.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'INACTIVE', active: false }),
+        }),
+      );
+    });
+
+    it('parentId circular → BadRequestException (comportamento pré-existente preservado)', async () => {
+      jest.spyOn(service, 'findOne').mockResolvedValue({
+        id: 1,
+        code: 'ENG',
+        parentId: null,
+        headId: null,
+        _count: { users: 0 },
+      } as any);
+      jest.spyOn(service as any, 'detectCircularHierarchy').mockResolvedValue(true);
+      await expect(service.update(1, { parentId: 2 } as any)).rejects.toThrow(BadRequestException);
     });
   });
 });
