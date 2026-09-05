@@ -457,4 +457,115 @@ describe('Course Modules Integration', () => {
         .expect(200);
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Fase A — o caminho de conclusão por módulos (POST /lessons/progress) delega
+  // no CourseCompletionService: concluir o módulo mandatory final tem de finalizar
+  // o curso (COMPLETED) e emitir o certificado — antes disto só marcava progresso
+  // e dava pontos, sem certificado.
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('conclusão consolidada (Fase A)', () => {
+    let faseCourseId: number;
+    let faseModuleId: number;
+    let firstMandatoryLessonId: number;
+    let finalMandatoryLessonId: number;
+    let enrollmentId: number;
+
+    beforeAll(async () => {
+      const course = await prisma.course.create({
+        data: {
+          title: 'Curso Conclusão Consolidada (course-modules)',
+          internalCode: `INT-COURSE-MODULES-FASEA-${Date.now()}`,
+          description: 'x',
+          status: 'PUBLISHED',
+        },
+      });
+      faseCourseId = course.id;
+
+      const mod = await prisma.courseModule.create({
+        data: {
+          courseId: faseCourseId,
+          title: 'Módulo obrigatório',
+          seq: 0,
+          status: 'PUBLISHED',
+          mandatory: true,
+          progressionType: 'FREE',
+          completionRule: 'ALL_LESSONS',
+        },
+      });
+      faseModuleId = mod.id;
+
+      const l1 = await prisma.lesson.create({
+        data: { moduleId: faseModuleId, title: 'Aula 1', type: 'TEXT', seq: 0 },
+      });
+      firstMandatoryLessonId = l1.id;
+      const l2 = await prisma.lesson.create({
+        data: { moduleId: faseModuleId, title: 'Aula 2', type: 'TEXT', seq: 1 },
+      });
+      finalMandatoryLessonId = l2.id;
+
+      const enr = await prisma.enrollment.create({
+        data: {
+          userId: employeeId,
+          courseId: faseCourseId,
+          status: 'IN_PROGRESS',
+          startedAt: new Date(),
+        },
+      });
+      enrollmentId = enr.id;
+
+      // Todas as aulas obrigatórias menos a última já concluídas.
+      await prisma.lessonProgress.create({
+        data: {
+          lessonId: firstMandatoryLessonId,
+          userId: employeeId,
+          enrollmentId,
+          completed: true,
+          completedAt: new Date(),
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.certificate.deleteMany({ where: { enrollmentId } }).catch(() => undefined);
+      await prisma.lessonProgress
+        .deleteMany({ where: { lesson: { module: { courseId: faseCourseId } } } })
+        .catch(() => undefined);
+      await prisma.enrollment
+        .deleteMany({ where: { courseId: faseCourseId } })
+        .catch(() => undefined);
+      await prisma.courseAnalytics
+        .deleteMany({ where: { courseId: faseCourseId } })
+        .catch(() => undefined);
+      await prisma.lesson
+        .deleteMany({ where: { module: { courseId: faseCourseId } } })
+        .catch(() => undefined);
+      await prisma.courseModule
+        .deleteMany({ where: { courseId: faseCourseId } })
+        .catch(() => undefined);
+      await prisma.course.deleteMany({ where: { id: faseCourseId } }).catch(() => undefined);
+      await prisma.notificationLog
+        .deleteMany({
+          where: { userId: employeeId, metadata: { contains: `"courseId":${faseCourseId}` } },
+        })
+        .catch(() => undefined);
+    });
+
+    it('completar o módulo mandatory final via /lessons/progress → curso COMPLETED + certificado emitido (antes: só pontos)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/lessons/progress')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ lessonId: finalMandatoryLessonId })
+        .expect(200);
+
+      expect(res.body.moduleCompleted).toBe(true);
+
+      const enr = await prisma.enrollment.findFirst({
+        where: { userId: employeeId, courseId: faseCourseId },
+      });
+      expect(enr!.status).toBe('COMPLETED');
+      const cert = await prisma.certificate.findFirst({ where: { enrollmentId: enr!.id } });
+      expect(cert).not.toBeNull();
+    });
+  });
 });
