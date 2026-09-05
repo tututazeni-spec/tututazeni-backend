@@ -626,17 +626,41 @@ export class PositionsService {
   }
 
   async create(dto: CreatePositionDto) {
-    return this.prisma.position.create({ data: dto });
+    // Sem posições com o mesmo nome (case-insensitive) no mesmo departamento
+    const exists = await this.prisma.position.findFirst({
+      where: {
+        name: { equals: dto.name, mode: 'insensitive' },
+        departmentId: dto.departmentId ?? undefined,
+      },
+    });
+    if (exists) throw new ConflictException(`Posição "${dto.name}" já existe neste departamento`);
+
+    // competencyIds não é coluna de Position — a associação real é via
+    // PositionCompetency (que exige requiredLevel, não fornecido pelo DTO);
+    // aceite mas não persistido, ver memória do módulo.
+    const { competencyIds: _competencyIds, ...rest } = dto;
+    return this.prisma.position.create({
+      data: { ...rest, headcountPlanned: dto.headcountPlanned ?? 1 },
+    });
   }
 
   async update(id: number, dto: UpdatePositionDto) {
     await this.findOne(id);
-    return this.prisma.position.update({ where: { id }, data: dto });
+    const { competencyIds: _competencyIds, ...data } = dto;
+    return this.prisma.position.update({ where: { id }, data });
   }
 
   async remove(id: number) {
-    await this.findOne(id);
-    return this.prisma.position.delete({ where: { id } });
+    const pos = await this.prisma.read.position.findUnique({
+      where: { id },
+      include: { _count: { select: { users: true } } },
+    });
+    if (!pos) throw new NotFoundException('Posição não encontrada');
+    if (pos._count.users > 0) {
+      throw new BadRequestException(`Posição tem ${pos._count.users} colaboradores activos`);
+    }
+    await this.prisma.position.delete({ where: { id } });
+    return { message: 'Posição eliminada' };
   }
 }
 

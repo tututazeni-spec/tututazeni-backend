@@ -224,6 +224,17 @@ export class CreatePositionDto {
   @MaxLength(120)
   name: string;
 
+  @ApiPropertyOptional({ description: 'Código do cargo' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
   @ApiPropertyOptional({ enum: PositionLevel, example: PositionLevel.SENIOR })
   @IsOptional()
   @IsEnum(PositionLevel)
@@ -245,6 +256,20 @@ export class CreatePositionDto {
   @IsInt()
   @Min(0)
   salaryMax?: number;
+
+  @ApiPropertyOptional({ description: 'Headcount planeado (default 1)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  headcountPlanned?: number;
+
+  @ApiPropertyOptional({
+    description: 'Competências obrigatórias (IDs) — aceite mas não persistido',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  competencyIds?: number[];
 }
 
 export class UpdatePositionDto extends PartialType(CreatePositionDto) {}

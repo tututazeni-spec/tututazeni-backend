@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import {
   UnitsService,
   RolesService,
@@ -19,7 +19,13 @@ const mockPrisma = {
   },
   permission: { create: jest.fn() },
   rolePermission: { create: jest.fn(), upsert: jest.fn(), deleteMany: jest.fn() },
-  position: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
+  position: {
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
   careerPosition: { findUnique: jest.fn(), create: jest.fn() },
   positionCompetency: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
   userCareer: {
@@ -132,6 +138,55 @@ describe('PositionsService — erros', () => {
   it('remove inexistente → NotFoundException', async () => {
     mockPrisma.position.findUnique.mockResolvedValue(null);
     await expect(service.remove(1)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('create: nome duplicado no mesmo departamento → ConflictException', async () => {
+    mockPrisma.position.findFirst.mockResolvedValue({ id: 9 });
+    await expect(
+      service.create({ name: 'Analista', departmentId: 3 } as any),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(mockPrisma.position.create).not.toHaveBeenCalled();
+  });
+
+  it('create: mesmo nome em departamento diferente é permitido', async () => {
+    mockPrisma.position.findFirst.mockResolvedValue(null);
+    mockPrisma.position.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({ id: 1, ...data }),
+    );
+    await service.create({ name: 'Analista', departmentId: 5 } as any);
+    expect(mockPrisma.position.create).toHaveBeenCalled();
+  });
+
+  it('create: headcountPlanned em falta → default 1', async () => {
+    mockPrisma.position.findFirst.mockResolvedValue(null);
+    mockPrisma.position.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({ id: 1, ...data }),
+    );
+    await service.create({ name: 'Novo', departmentId: 3 } as any);
+    expect(mockPrisma.position.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ headcountPlanned: 1 }) }),
+    );
+  });
+
+  it('update: competencyIds é descartado do payload', async () => {
+    jest.spyOn(service, 'findOne').mockResolvedValue({ id: 1 } as any);
+    mockPrisma.position.update.mockResolvedValue({ id: 1 });
+    await service.update(1, { name: 'X', competencyIds: [1, 2] } as any);
+    const call = mockPrisma.position.update.mock.calls[0][0] as any;
+    expect(call.data).not.toHaveProperty('competencyIds');
+    expect(call.data).toEqual(expect.objectContaining({ name: 'X' }));
+  });
+
+  it('remove: posição com colaboradores → BadRequestException', async () => {
+    mockPrisma.position.findUnique.mockResolvedValue({ id: 1, _count: { users: 2 } });
+    await expect(service.remove(1)).rejects.toBeInstanceOf(BadRequestException);
+    expect(mockPrisma.position.delete).not.toHaveBeenCalled();
+  });
+
+  it('remove: posição sem colaboradores → elimina e devolve mensagem', async () => {
+    mockPrisma.position.findUnique.mockResolvedValue({ id: 1, _count: { users: 0 } });
+    mockPrisma.position.delete.mockResolvedValue({ id: 1 });
+    expect(await service.remove(1)).toEqual({ message: 'Posição eliminada' });
   });
 });
 
