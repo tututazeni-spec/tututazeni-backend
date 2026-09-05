@@ -47,33 +47,8 @@ export class CloneRoleDto {
   @ApiProperty() @IsString() newName!: string;
 }
 
-// ─── Policy DTOs ──────────────────────────────────────────────────
-
-export class CreatePolicyDto {
-  @ApiProperty() @IsString() @MaxLength(200) name!: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
-  @ApiPropertyOptional({ enum: PermissionSubject })
-  @IsOptional()
-  @IsEnum(PermissionSubject)
-  subject?: PermissionSubject;
-  @ApiPropertyOptional({ enum: PermissionAction })
-  @IsOptional()
-  @IsEnum(PermissionAction)
-  action?: PermissionAction;
-  @ApiProperty() @IsString() condition!: string; // JSON
-  @ApiProperty() @IsString() effect!: 'ALLOW' | 'DENY';
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) priority?: number;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() requiresJustification?: boolean;
-}
-
-// ─── Check DTOs ───────────────────────────────────────────────────
-
-export class CheckPermissionDto {
-  @ApiProperty() @IsInt() userId!: number;
-  @ApiProperty({ enum: PermissionAction }) @IsEnum(PermissionAction) action!: PermissionAction;
-  @ApiProperty({ enum: PermissionSubject }) @IsEnum(PermissionSubject) subject!: PermissionSubject;
-  @ApiPropertyOptional() @IsOptional() context?: Record<string, unknown>;
-}
+// Fase D: os DTOs de ABAC (CreatePolicyDto, CheckPermissionDto) e AccessPolicyRow
+// foram removidos com o motor de políticas.
 
 export class AssignRoleToUserDto {
   @ApiProperty() @IsInt() userId!: number;
