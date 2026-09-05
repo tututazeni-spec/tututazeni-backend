@@ -2,6 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import { RolesPermissionsService } from './roles-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
+
+const mockCache = {
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue(undefined),
+  del: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockPrisma: any = {
   role: {
@@ -42,7 +49,12 @@ const mockPrisma: any = {
     count: jest.fn().mockResolvedValue(0),
     groupBy: jest.fn().mockResolvedValue([]),
   },
-  auditLog: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
+  auditLog: {
+    create: jest.fn().mockResolvedValue({}),
+    count: jest.fn().mockResolvedValue(0),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
 const baseRole = {
@@ -69,7 +81,11 @@ describe('RolesPermissionsService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RolesPermissionsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        RolesPermissionsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CacheService, useValue: mockCache },
+      ],
     }).compile();
     service = module.get<RolesPermissionsService>(RolesPermissionsService);
   });

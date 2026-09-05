@@ -2,6 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import { RolesPermissionsService } from './roles-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
+
+const mockCache = {
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue(undefined),
+  del: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockPrisma = {
   role: {
@@ -20,6 +27,7 @@ const mockPrisma = {
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   },
   rolePermission: {
     findMany: jest.fn().mockResolvedValue([]),
@@ -29,11 +37,18 @@ const mockPrisma = {
   },
   user: {
     findMany: jest.fn(),
+    findUnique: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
-    count: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
-  auditLog: { create: jest.fn().mockResolvedValue({}) },
+  auditLog: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
 const baseRole = {
@@ -62,7 +77,11 @@ describe('RolesPermissionsService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RolesPermissionsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        RolesPermissionsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CacheService, useValue: mockCache },
+      ],
     }).compile();
     service = module.get<RolesPermissionsService>(RolesPermissionsService);
   });
@@ -300,6 +319,101 @@ describe('RolesPermissionsService', () => {
       await service.create({ name: 'Custom X' } as never);
 
       expect(mockPrisma.rolePermission.createMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── métodos absorvidos do acl (sem ABAC) ────────────────────────────────
+
+  describe('métodos absorvidos do acl', () => {
+    it('getUserPermissions devolve as permissões do role do utilizador e guarda em cache', async () => {
+      mockCache.get.mockResolvedValueOnce(null);
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        role: {
+          code: 'COLABORADOR',
+          rolePermissions: [{ permission: { id: 1, name: 'course.read' } }],
+        },
+      });
+
+      const res = await service.getUserPermissions(1);
+
+      expect(res.permissions).toEqual(expect.arrayContaining(['course.read']));
+      expect(res.cached).toBe(false);
+      expect(mockCache.set).toHaveBeenCalledWith(
+        'acl:perm:1',
+        expect.objectContaining({ roleCode: 'COLABORADOR' }),
+        60,
+      );
+    });
+
+    it('getUserPermissions — ADMIN recebe wildcard e permissões built-in', async () => {
+      mockCache.get.mockResolvedValueOnce(null);
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 2,
+        role: { code: 'ADMIN', rolePermissions: [] },
+      });
+
+      const res = await service.getUserPermissions(2);
+
+      expect(res.permissions).toContain('*');
+      expect(res.permissions.length).toBeGreaterThan(1);
+    });
+
+    it('getUserPermissions devolve o valor em cache quando existe', async () => {
+      mockCache.get.mockResolvedValueOnce({ permissions: ['x'], roleCode: 'RH' });
+      const res = await service.getUserPermissions(3);
+      expect(res).toEqual({ userId: 3, roleCode: 'RH', permissions: ['x'], cached: true });
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('assignRoleToUser actualiza o role, invalida a cache e devolve a forma histórica', async () => {
+      mockPrisma.user.update.mockResolvedValue({ id: 5, roleId: 9 });
+      const res = await service.assignRoleToUser({ userId: 5, roleId: 9 });
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 5 },
+        data: { roleId: 9 },
+      });
+      expect(mockCache.del).toHaveBeenCalledWith('acl:perm:5');
+      expect(res).toEqual({ message: 'Role atribuído com sucesso', userId: 5, roleId: 9 });
+    });
+
+    it('getAuditLog filtra AuditLog e devolve resposta paginada', async () => {
+      mockPrisma.auditLog.findMany.mockResolvedValue([]);
+      mockPrisma.auditLog.count.mockResolvedValue(0);
+      const res = await service.getAuditLog({ action: 'ROLE_CREATED' });
+      expect(mockPrisma.auditLog.findMany).toHaveBeenCalled();
+      expect(res).toHaveProperty('data');
+    });
+
+    it('getDeniedLog filtra por action ACCESS_DENIED', async () => {
+      mockPrisma.auditLog.findMany.mockResolvedValue([]);
+      mockPrisma.auditLog.count.mockResolvedValue(0);
+      await service.getDeniedLog({});
+      expect(mockPrisma.auditLog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { action: 'ACCESS_DENIED' } }),
+      );
+    });
+
+    it('getStats devolve a forma histórica de GET /acl/stats', async () => {
+      mockPrisma.user.count.mockResolvedValue(6000);
+      mockPrisma.role.count.mockResolvedValue(7);
+      mockPrisma.permission.count.mockResolvedValue(35);
+      mockPrisma.auditLog.count.mockResolvedValue(3);
+      mockPrisma.auditLog.findMany.mockResolvedValue([]);
+      mockPrisma.user.groupBy.mockResolvedValue([]);
+
+      const res = await service.getStats();
+
+      expect(res).toEqual(
+        expect.objectContaining({
+          totalUsers: 6000,
+          totalRoles: 7,
+          totalPermissions: 35,
+          deniedCount: 3,
+          roleBreakdown: [],
+          recentDenied: [],
+        }),
+      );
     });
   });
 });
