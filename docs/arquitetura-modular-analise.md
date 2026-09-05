@@ -133,7 +133,7 @@ Com base nos achados acima, os ~80 módulos agrupam-se em **12 domínios de neg�
 
 Hoje não existe nenhum contrato formal entre módulos (nem interface, nem evento) — porque não há composição nenhuma (§2.2). As prioridades de contrato, na ordem que desbloqueiam mais duplicação:
 
-1. **`CourseCompletionService`** (domínio 6) — ponto único de "marcar lição/módulo como concluído → decidir se o curso está completo → emitir certificado + pontos + notificação", consumido por `courses`, `course-modules`, `enrollments`.
+1. **`CourseCompletionService`** (domínio 6) — ponto único de "marcar lição/módulo como concluído → decidir se o curso está completo → emitir certificado + pontos + notificação", consumido por `courses`, `course-modules`, `enrollments`. — **feito** (Fase A, 2026-09-05).
 2. **`PdiApprovalContract`** (domínio 8) — `talent-development.activatePlan` passa a exigir o mesmo fluxo de aprovação que `development-plans`, via serviço/interface partilhada.
 3. **`LeaveManagementService` público** consumido por `attendance` em vez de Prisma directo.
 4. **`DepartmentsService` público** consumido por `organization` (ou `organization` é descontinuado a favor de `departments`).
@@ -218,7 +218,7 @@ Ordem sugerida de sub-projectos, cada um pequeno e independentemente entregável
 
 | Fase | Sub-projecto | Domínio(s) | Risco | Porquê nesta ordem |
 |---|---|---|---|---|
-| A | Consolidar "concluir curso" num `CourseCompletionService` | 6 | Médio (muda comportamento visível — certificado vs pontos) | Bug de consistência de dados activo, maior impacto por utilizador afectado |
+| A | ~~Consolidar "concluir curso" num `CourseCompletionService`~~ — **concluída**: `src/course-completion/` é agora o dono único de progresso→conclusão→certificado+pontos+notificação; `courses`/`course-modules`/`enrollments` delegam; critério de conclusão passou a module-aware em todos os caminhos (fallback plano só sem módulos publicados) | 6 | — | Ver `docs/superpowers/plans/2026-09-05-fase-a-course-completion-consolidation.md` |
 | B | ~~`attendance` deixa de escrever `LeaveRequest` directo~~ — **concluída**: `createLeaveRequest`/`reviewLeave`/`getLeaveBalance` delegam em `LeaveManagementService`; corrigido também um bug colateral onde auto-aprovação sem gestor atribuído não deduzia saldo (achado durante a implementação, não estava na análise original) | 3 | — | Ver `docs/superpowers/plans/2026-09-04-fase-b-attendance-leave-consolidation.md` |
 | C | Fundir `organization` em `departments` | 2 | Baixo (CRUD simples, sem lógica divergente encontrada) | Quick win de baixo risco, valida o padrão de fusão antes dos casos complexos |
 | D | Consolidar Roles/Permissions (`acl`+`roles-permissions`+`departments.RolesService`) + decisão sobre ABAC | 1 | Médio-alto (toca autorização) | Pré-requisito de segurança antes de qualquer extracção futura |
