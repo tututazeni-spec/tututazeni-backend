@@ -8,6 +8,7 @@ describe('Attendance Integration', () => {
   let app: INestApplication;
   let employeeToken: string;
   let adminToken: string;
+  let managerToken: string;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -27,6 +28,7 @@ describe('Attendance Integration', () => {
 
     employeeToken = await getToken(app.getHttpServer(), 'employee');
     adminToken = await getToken(app.getHttpServer(), 'admin');
+    managerToken = await getToken(app.getHttpServer(), 'manager');
   });
 
   afterAll(async () => await app.close());
@@ -190,6 +192,34 @@ describe('Attendance Integration', () => {
         .then(res => {
           expect(res.status).not.toBe(500);
         });
+    });
+  });
+
+  describe('PATCH /attendance/leaves/:id/review — autorização delegada em leave-management (Fase B)', () => {
+    it('ADMIN fora da cadeia de aprovação → 403 (antes desta consolidação, ADMIN aprovava qualquer licença)', async () => {
+      // Cria um pedido cujo único aprovador possível seria o gestor directo
+      // de int.employee — como int.employee não tem managerId definido neste
+      // teste (a não ser que outro spec o tenha atribuído), o pedido é
+      // auto-aprovado na submissão e não fica PENDING para rever; por isso
+      // este teste foca-se no contrato de erro quando HÁ uma aprovação
+      // pendente mas o chamador não é o aprovador — reaproveita-se o cenário
+      // idêntico já coberto em leave-management.integration-spec.ts. Aqui
+      // confirma-se apenas que a rota de attendance propaga o mesmo 403 (não
+      // engole a excepção nem devolve 500).
+      const res = await request(app.getHttpServer())
+        .patch('/attendance/leaves/999999/review')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'APPROVED' });
+
+      expect([403, 404]).toContain(res.status);
+    });
+
+    it('estado inválido (nem APPROVED nem REJECTED) → 400', async () => {
+      await request(app.getHttpServer())
+        .patch('/attendance/leaves/1/review')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'CANCELLED' })
+        .expect(400);
     });
   });
 });

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
@@ -376,6 +376,48 @@ describe('AttendanceService', () => {
         expect.objectContaining({ durationMode: 'HALF_PM' }),
         1,
       );
+    });
+  });
+
+  // ─── reviewLeave ───────────────────────────────────────────────────────────
+
+  describe('reviewLeave', () => {
+    it('APPROVED → delega em processApproval com ApprovalAction.APPROVE e marca presenças ON_LEAVE', async () => {
+      mockLeaveManagement.processApproval.mockResolvedValue({
+        id: 10,
+        userId: 1,
+        status: 'APPROVED',
+        startDate: new Date('2024-08-01'),
+        endDate: new Date('2024-08-02'),
+        leaveType: 'VACATION',
+      });
+
+      await service.reviewLeave(10, { status: 'APPROVED' as any, reviewNotes: 'ok' }, 99);
+
+      expect(mockLeaveManagement.processApproval).toHaveBeenCalledWith(10, 99, {
+        action: 'APPROVE',
+        notes: 'ok',
+      });
+      expect(mockAttendanceRecord.createMany).toHaveBeenCalled();
+    });
+
+    it('REJECTED → delega com ApprovalAction.REJECT e NÃO cria registos de presença', async () => {
+      mockLeaveManagement.processApproval.mockResolvedValue({ id: 11, status: 'REJECTED' });
+
+      await service.reviewLeave(11, { status: 'REJECTED' as any }, 99);
+
+      expect(mockLeaveManagement.processApproval).toHaveBeenCalledWith(11, 99, {
+        action: 'REJECT',
+        notes: undefined,
+      });
+      expect(mockAttendanceRecord.createMany).not.toHaveBeenCalled();
+    });
+
+    it('estado diferente de APPROVED/REJECTED → BadRequestException, não chama processApproval', async () => {
+      await expect(service.reviewLeave(12, { status: 'CANCELLED' as any }, 99)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockLeaveManagement.processApproval).not.toHaveBeenCalled();
     });
   });
 

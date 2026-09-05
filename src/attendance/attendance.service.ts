@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CacheService } from '../cache/cache.service';
 import { LeaveManagementService } from '../leave-management/leave-management.service';
-import { DurationMode } from '../leave-management/leave-management.dto';
+import { ApprovalAction, DurationMode } from '../leave-management/leave-management.dto';
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -484,22 +484,31 @@ export class AttendanceService {
   }
 
   async reviewLeave(id: number, dto: ReviewLeaveDto, reviewerId: number) {
-    const leave = await this.prisma.leaveRequest.findUnique({ where: { id } });
-    if (!leave) throw new NotFoundException('Pedido de licença não encontrado');
-    if (leave.status !== LeaveStatus.PENDING) throw new BadRequestException('Pedido já processado');
+    // Só APPROVE/REJECT fazem sentido num "review" — DRAFT/PENDING/CANCELLED/
+    // EXPIRED não são decisões de revisor. Antes desta consolidação o código
+    // aceitava qualquer valor de LeaveStatus sem validar.
+    if (dto.status !== LeaveStatus.APPROVED && dto.status !== LeaveStatus.REJECTED) {
+      throw new BadRequestException('Estado inválido para revisão — use APPROVED ou REJECTED');
+    }
 
-    const updated = await this.prisma.leaveRequest.update({
-      where: { id },
-      data: {
-        status: dto.status,
-        reviewNotes: dto.reviewNotes,
-        reviewedById: reviewerId,
-        reviewedAt: new Date(),
-      },
+    const action =
+      dto.status === LeaveStatus.APPROVED ? ApprovalAction.APPROVE : ApprovalAction.REJECT;
+
+    // Autorização real (quem pode decidir este pedido específico) passa a
+    // ser inteiramente responsabilidade de LeaveManagementService — só o
+    // aprovador atribuído no fluxo (gestor directo, ou RH em política de 2
+    // níveis) pode decidir. @Roles(ADMIN, RH, GESTOR) no controller continua
+    // a ser só o gate grosseiro de papel, igual ao que /leave/:id/approve já
+    // usa.
+    const updated = await this.leaveManagement.processApproval(id, reviewerId, {
+      action,
+      notes: dto.reviewNotes,
     });
 
-    if (dto.status === LeaveStatus.APPROVED) {
-      await this.createLeaveAttendanceRecords(leave);
+    // updated é sempre um LeaveRequest quando action é APPROVE/REJECT
+    // (processApproval retorna this.findOne(requestId) nesses casos)
+    if ((updated as any).status === LeaveStatus.APPROVED) {
+      await this.createLeaveAttendanceRecords(updated as Prisma.LeaveRequestGetPayload<object>);
     }
 
     return updated;
