@@ -505,10 +505,13 @@ export class AttendanceService {
       notes: dto.reviewNotes,
     });
 
-    // updated é sempre um LeaveRequest quando action é APPROVE/REJECT
-    // (processApproval retorna this.findOne(requestId) nesses casos)
-    if ((updated as any).status === LeaveStatus.APPROVED) {
-      await this.createLeaveAttendanceRecords(updated as Prisma.LeaveRequestGetPayload<object>);
+    // processApproval só devolve um LeaveApproval no ramo DELEGATE, que este
+    // fluxo nunca aciona (action é sempre APPROVE/REJECT) — nesses dois ramos
+    // retorna findOne(requestId), i.e. um LeaveRequest (ou null se entretanto
+    // desaparecer).
+    const reviewed = updated as Prisma.LeaveRequestGetPayload<object> | null;
+    if (reviewed?.status === LeaveStatus.APPROVED) {
+      await this.createLeaveAttendanceRecords(reviewed);
     }
 
     return updated;
