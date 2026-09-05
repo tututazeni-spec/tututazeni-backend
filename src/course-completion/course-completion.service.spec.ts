@@ -25,10 +25,7 @@ describe('CourseCompletionService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const moduleRef = await Test.createTestingModule({
-      providers: [
-        CourseCompletionService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [CourseCompletionService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
     service = moduleRef.get(CourseCompletionService);
   });
