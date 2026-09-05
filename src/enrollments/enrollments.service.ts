@@ -57,10 +57,16 @@ export class EnrollmentsService {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  private async computeProgress(enrollmentId: number, courseId: number, userId: number) {
+  private async computeProgress(
+    enrollmentId: number,
+    courseId: number,
+    userId: number,
+    opts?: { fromPrimary?: boolean },
+  ) {
+    const db = opts?.fromPrimary ? this.prisma : this.prisma.read;
     const [totalLessons, completedLessons] = await Promise.all([
-      this.prisma.read.lesson.count({ where: { module: { courseId } } }),
-      this.prisma.read.lessonProgress.count({
+      db.lesson.count({ where: { module: { courseId } } }),
+      db.lessonProgress.count({
         where: { userId, completed: true, lesson: { module: { courseId } } },
       }),
     ]);
@@ -168,8 +174,12 @@ export class EnrollmentsService {
 
   // ─── DETALHE ──────────────────────────────────────────────────────────────
 
-  async findOne(id: number, user?: CurrentUserData) {
-    const e = await this.prisma.read.enrollment.findUnique({
+  async findOne(id: number, user?: CurrentUserData, opts?: { fromPrimary?: boolean }) {
+    // `fromPrimary` força a leitura na primária — usado logo após uma escrita no
+    // mesmo pedido (ex.: PUT /enrollments/:id/status {COMPLETED}), onde a réplica
+    // ainda devolveria o estado antigo e um `certificate` nulo.
+    const db = opts?.fromPrimary ? this.prisma : this.prisma.read;
+    const e = await db.enrollment.findUnique({
       where: { id },
       include: {
         ...ENROLLMENT_INCLUDE_BASIC,
@@ -183,7 +193,7 @@ export class EnrollmentsService {
     if (user) assertCanAccess(e, e?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     else if (!e) throw new NotFoundException('Matrícula não encontrada');
 
-    const prog = await this.computeProgress(id, e.courseId, e.userId);
+    const prog = await this.computeProgress(id, e.courseId, e.userId, opts);
     return {
       ...e,
       ...prog,
@@ -331,7 +341,9 @@ export class EnrollmentsService {
 
     if (dto.status === 'COMPLETED') {
       await this.courseCompletion.finalizeCompletion(id);
-      return this.findOne(id);
+      // Recarrega da primária: `finalizeCompletion` acabou de escrever COMPLETED +
+      // certificado na primária; a réplica ainda devolveria IN_PROGRESS/sem cert.
+      return this.findOne(id, undefined, { fromPrimary: true });
     }
 
     const data: Prisma.EnrollmentUpdateInput = { status: dto.status };

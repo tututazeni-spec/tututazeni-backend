@@ -4,21 +4,35 @@ import { Prisma } from '@prisma/client';
 import { CourseCompletionService } from './course-completion.service';
 import { PrismaService } from '../prisma/prisma.service';
 
+// A decisão de conclusão passou a ler da primária (regressão evitada da antiga
+// calculateCourseProgress): os stubs de lesson/lessonProgress/courseModule/quiz/
+// quizAttempt vivem agora no nível de topo (primária). `read` continua a apontar
+// para os mesmos jest.fn() — os poucos testes que ainda usam `mockPrisma.read.*`
+// exercitam exactamente os mesmos stubs.
+const enrollment = {
+  findUnique: jest.fn(),
+  findFirst: jest.fn(),
+  update: jest.fn(),
+  updateMany: jest.fn(),
+};
+const courseModule = { findMany: jest.fn(), findUnique: jest.fn() };
+const lesson = { count: jest.fn(), findUnique: jest.fn() };
+const lessonProgress = { count: jest.fn(), upsert: jest.fn() };
+const quiz = { findFirst: jest.fn() };
+const quizAttempt = { findFirst: jest.fn() };
+
 const mockPrisma = {
-  enrollment: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
-  read: {
-    courseModule: { findMany: jest.fn(), findUnique: jest.fn() },
-    lesson: { count: jest.fn(), findUnique: jest.fn() },
-    lessonProgress: { count: jest.fn() },
-    quiz: { findFirst: jest.fn() },
-    quizAttempt: { findFirst: jest.fn() },
-  },
-  lessonProgress: { upsert: jest.fn() },
-  courseModule: { findUnique: jest.fn() },
+  enrollment,
+  courseModule,
+  lesson,
+  lessonProgress,
+  quiz,
+  quizAttempt,
   certificate: { findFirst: jest.fn(), create: jest.fn() },
   courseAnalytics: { updateMany: jest.fn() },
   userPoints: { upsert: jest.fn() },
   notificationLog: { create: jest.fn() },
+  read: { courseModule, lesson, lessonProgress, quiz, quizAttempt, enrollment },
 };
 
 describe('CourseCompletionService', () => {
@@ -268,6 +282,14 @@ describe('CourseCompletionService', () => {
       course: { id: 20, title: 'Curso X', certificateValidityDays: null },
     };
 
+    beforeEach(() => {
+      // `updateMany` condicional é agora o claim atómico: count:1 = esta chamada
+      // ganhou o lock. `courseAnalytics.updateMany` corre num `.catch()`, por isso
+      // tem de devolver uma promessa (jest.fn() cru devolveria undefined).
+      mockPrisma.enrollment.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.courseAnalytics.updateMany.mockResolvedValue({});
+    });
+
     it('primeira chamada aplica os 5 efeitos e devolve finalized:true', async () => {
       mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment });
       mockPrisma.certificate.findFirst.mockResolvedValue(null);
@@ -278,8 +300,8 @@ describe('CourseCompletionService', () => {
       const res = await service.finalizeCompletion(1);
 
       expect(res).toEqual({ finalized: true });
-      expect(mockPrisma.enrollment.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+      expect(mockPrisma.enrollment.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: { not: 'COMPLETED' } },
         data: { status: 'COMPLETED', completedAt: expect.any(Date) },
       });
       expect(mockPrisma.courseAnalytics.updateMany).toHaveBeenCalledWith({
@@ -299,16 +321,14 @@ describe('CourseCompletionService', () => {
       );
     });
 
-    it('idempotente: se já COMPLETED, não faz nada e devolve finalized:false', async () => {
-      mockPrisma.enrollment.findUnique.mockResolvedValue({
-        ...baseEnrollment,
-        status: 'COMPLETED',
-      });
+    it('idempotente: se já COMPLETED, o claim não afecta linhas e devolve finalized:false', async () => {
+      mockPrisma.enrollment.updateMany.mockResolvedValue({ count: 0 });
       const res = await service.finalizeCompletion(1);
       expect(res).toEqual({ finalized: false });
-      expect(mockPrisma.enrollment.update).not.toHaveBeenCalled();
+      expect(mockPrisma.enrollment.findUnique).not.toHaveBeenCalled();
       expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
       expect(mockPrisma.userPoints.upsert).not.toHaveBeenCalled();
+      expect(mockPrisma.courseAnalytics.updateMany).not.toHaveBeenCalled();
     });
 
     it('certificado já existe → não volta a criar, mas os outros efeitos aplicam-se na mesma', async () => {
@@ -320,7 +340,7 @@ describe('CourseCompletionService', () => {
       await service.finalizeCompletion(1);
 
       expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
-      expect(mockPrisma.enrollment.update).toHaveBeenCalled();
+      expect(mockPrisma.enrollment.updateMany).toHaveBeenCalled();
       expect(mockPrisma.userPoints.upsert).toHaveBeenCalled();
     });
 

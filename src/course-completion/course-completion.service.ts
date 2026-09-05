@@ -30,9 +30,12 @@ export class CourseCompletionService {
    * (usada por `GET /courses/:id/progress`).
    */
   async getCourseProgressNumbers(courseId: number, userId: number) {
+    // Lê da primária: esta decisão corre logo após um upsert de progresso na
+    // primária — a réplica pode não ter o registo ainda (regressão evitada da
+    // antiga calculateCourseProgress).
     const [totalLessons, completedLessons] = await Promise.all([
-      this.prisma.read.lesson.count({ where: { module: { courseId } } }),
-      this.prisma.read.lessonProgress.count({
+      this.prisma.lesson.count({ where: { module: { courseId } } }),
+      this.prisma.lessonProgress.count({
         where: { userId, completed: true, lesson: { module: { courseId } } },
       }),
     ]);
@@ -46,7 +49,10 @@ export class CourseCompletionService {
    * e, se aplicável, finaliza-a (certificado + pontos + notificação).
    */
   async markLessonComplete(userId: number, lessonId: number, dto: MarkLessonProgressInput) {
-    const lesson = await this.prisma.read.lesson.findUnique({
+    // Lê da primária: esta decisão corre logo após um upsert de progresso na
+    // primária — a réplica pode não ter o registo ainda (regressão evitada da
+    // antiga calculateCourseProgress).
+    const lesson = await this.prisma.lesson.findUnique({
       where: { id: lessonId },
       include: { module: { select: { courseId: true } } },
     });
@@ -94,7 +100,10 @@ export class CourseCompletionService {
   }
 
   async isModuleCompleted(moduleId: number, userId: number): Promise<boolean> {
-    const mod = await this.prisma.read.courseModule.findUnique({
+    // Lê da primária: esta decisão corre logo após um upsert de progresso na
+    // primária — a réplica pode não ter o registo ainda (regressão evitada da
+    // antiga calculateCourseProgress).
+    const mod = await this.prisma.courseModule.findUnique({
       where: { id: moduleId },
       include: { lessons: true },
     });
@@ -104,7 +113,7 @@ export class CourseCompletionService {
     const totalLessons = lessons.length;
     if (totalLessons === 0) return true;
 
-    const completedCount = await this.prisma.read.lessonProgress.count({
+    const completedCount = await this.prisma.lessonProgress.count({
       where: { userId, completed: true, lessonId: { in: lessons.map(l => l.id) } },
     });
 
@@ -118,9 +127,9 @@ export class CourseCompletionService {
       return (completedCount / totalLessons) * 100 >= pct;
     }
     if (rule === 'QUIZ_PASS') {
-      const quiz = await this.prisma.read.quiz.findFirst({ where: { lesson: { moduleId } } });
+      const quiz = await this.prisma.quiz.findFirst({ where: { lesson: { moduleId } } });
       if (!quiz) return completedCount >= totalLessons;
-      const passed = await this.prisma.read.quizAttempt.findFirst({
+      const passed = await this.prisma.quizAttempt.findFirst({
         where: { quizId: quiz.id, userId, passed: true },
       });
       return !!passed;
@@ -128,9 +137,9 @@ export class CourseCompletionService {
     if (rule === 'COMBINED') {
       const pct = mod.minCompletionPercent ?? 80;
       const lessonOk = (completedCount / totalLessons) * 100 >= pct;
-      const quiz = await this.prisma.read.quiz.findFirst({ where: { lesson: { moduleId } } });
+      const quiz = await this.prisma.quiz.findFirst({ where: { lesson: { moduleId } } });
       const quizOk = quiz
-        ? !!(await this.prisma.read.quizAttempt.findFirst({
+        ? !!(await this.prisma.quizAttempt.findFirst({
             where: { quizId: quiz.id, userId, passed: true },
           }))
         : true;
@@ -143,15 +152,18 @@ export class CourseCompletionService {
     const enrollment = await this.prisma.enrollment.findUnique({ where: { id: enrollmentId } });
     if (!enrollment) return { complete: false, reason: 'no-enrollment' };
 
-    const publishedModules = await this.prisma.read.courseModule.findMany({
+    // Lê da primária: esta decisão corre logo após um upsert de progresso na
+    // primária — a réplica pode não ter o registo ainda (regressão evitada da
+    // antiga calculateCourseProgress).
+    const publishedModules = await this.prisma.courseModule.findMany({
       where: { courseId: enrollment.courseId, status: 'PUBLISHED' },
       select: { id: true, mandatory: true },
     });
 
     if (publishedModules.length === 0) {
       const [total, done] = await Promise.all([
-        this.prisma.read.lesson.count({ where: { module: { courseId: enrollment.courseId } } }),
-        this.prisma.read.lessonProgress.count({
+        this.prisma.lesson.count({ where: { module: { courseId: enrollment.courseId } } }),
+        this.prisma.lessonProgress.count({
           where: {
             userId: enrollment.userId,
             completed: true,
@@ -178,22 +190,25 @@ export class CourseCompletionService {
   }
 
   async finalizeCompletion(enrollmentId: number): Promise<{ finalized: boolean }> {
+    // Claim atómico: a própria escrita do estado serve de lock. `updateMany` só
+    // afecta a linha se ainda não estiver COMPLETED — sob concorrência (ex.: duas
+    // últimas lições marcadas em simultâneo) apenas uma chamada obtém count > 0;
+    // as restantes saem já aqui, evitando pontos/notificação/analytics em dobro.
+    const claimed = await this.prisma.enrollment.updateMany({
+      where: { id: enrollmentId, status: { not: 'COMPLETED' } },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+    if (claimed.count === 0) {
+      return { finalized: false };
+    }
+
+    // Campos necessários aos efeitos seguintes (courseId/userId/título) — lidos da
+    // primária após o claim bem-sucedido.
     const enrollment = await this.prisma.enrollment.findUnique({
       where: { id: enrollmentId },
       include: { course: { select: { id: true, title: true, certificateValidityDays: true } } },
     });
-    if (!enrollment) return { finalized: false };
-    if (enrollment.status === 'COMPLETED') return { finalized: false };
-
-    await this.prisma.enrollment.update({
-      where: { id: enrollmentId },
-      data: { status: 'COMPLETED', completedAt: new Date() },
-    });
-
-    await this.prisma.courseAnalytics.updateMany({
-      where: { courseId: enrollment.courseId },
-      data: { totalCompleted: { increment: 1 } },
-    });
+    if (!enrollment) return { finalized: true };
 
     await this.issueCertificateInternal(enrollment);
     await this.awardCompletionPoints(enrollment.userId);
@@ -204,6 +219,22 @@ export class CourseCompletionService {
       message: `Concluíste o curso "${enrollment.course?.title}"! Certificado emitido. 🎉`,
       metadata: { courseId: enrollment.courseId, enrollmentId },
     });
+
+    // Analytics é o efeito menos essencial: corre depois da emissão do certificado
+    // e não bloqueia. Se falhar (blip de ligação), a matrícula já está COMPLETED e
+    // um retry no-opa no claim — o pior caso é perder um contador, não o certificado.
+    await this.prisma.courseAnalytics
+      .updateMany({
+        where: { courseId: enrollment.courseId },
+        data: { totalCompleted: { increment: 1 } },
+      })
+      .catch((e: unknown) => {
+        this.logger.warn(
+          `Falha ao actualizar analytics do curso após conclusão (não bloqueante) — enrollmentId=${enrollmentId}: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        );
+      });
 
     return { finalized: true };
   }
