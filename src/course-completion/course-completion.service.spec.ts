@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { CourseCompletionService } from './course-completion.service';
@@ -300,6 +300,129 @@ describe('CourseCompletionService', () => {
     it('matrícula inexistente → NotFoundException', async () => {
       mockPrisma.enrollment.findUnique.mockResolvedValue(null);
       await expect(service.issueCertificateFor(999, adminUser)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getCourseProgressNumbers', () => {
+    it('pct = round(completed / total * 100)', async () => {
+      mockPrisma.read.lesson.count.mockResolvedValue(8);
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(2);
+      expect(await service.getCourseProgressNumbers(20, 10)).toEqual({
+        totalLessons: 8,
+        completedLessons: 2,
+        pct: 25,
+      });
+    });
+    it('curso sem aulas → pct 0', async () => {
+      mockPrisma.read.lesson.count.mockResolvedValue(0);
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(0);
+      expect(await service.getCourseProgressNumbers(20, 10)).toEqual({
+        totalLessons: 0,
+        completedLessons: 0,
+        pct: 0,
+      });
+    });
+  });
+
+  describe('markLessonComplete', () => {
+    it('aula inexistente → NotFoundException', async () => {
+      mockPrisma.read.lesson.findUnique.mockResolvedValue(null);
+      await expect(service.markLessonComplete(10, 999, {})).rejects.toThrow(NotFoundException);
+    });
+
+    it('não matriculado → ForbiddenException', async () => {
+      mockPrisma.read.lesson.findUnique.mockResolvedValue({
+        id: 1,
+        moduleId: 5,
+        module: { courseId: 20 },
+      });
+      mockPrisma.enrollment.findFirst.mockResolvedValue(null);
+      await expect(service.markLessonComplete(10, 1, {})).rejects.toThrow(ForbiddenException);
+    });
+
+    it('upsert do progresso + NOT_STARTED → IN_PROGRESS + não completa se evaluateCompletion=false', async () => {
+      mockPrisma.read.lesson.findUnique.mockResolvedValue({
+        id: 1,
+        moduleId: 5,
+        module: { courseId: 20 },
+      });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({
+        id: 7,
+        userId: 10,
+        courseId: 20,
+        status: 'NOT_STARTED',
+      });
+      mockPrisma.lessonProgress.upsert.mockResolvedValue({ id: 1, completed: true });
+      jest
+        .spyOn(service, 'evaluateCompletion')
+        .mockResolvedValue({ complete: false, reason: 'all-lessons' });
+      mockPrisma.read.lesson.count.mockResolvedValue(4);
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(1);
+
+      const res = await service.markLessonComplete(10, 1, { watchedSeconds: 30 });
+
+      expect(mockPrisma.lessonProgress.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { lessonId_userId: { lessonId: 1, userId: 10 } } }),
+      );
+      expect(mockPrisma.enrollment.update).toHaveBeenCalledWith({
+        where: { id: 7 },
+        data: { status: 'IN_PROGRESS', startedAt: expect.any(Date) },
+      });
+      expect(res.courseCompleted).toBe(false);
+      expect(res.courseProgress).toEqual({ totalLessons: 4, completedLessons: 1, pct: 25 });
+    });
+
+    it('evaluateCompletion=true → chama finalizeCompletion e devolve courseCompleted:true', async () => {
+      mockPrisma.read.lesson.findUnique.mockResolvedValue({
+        id: 1,
+        moduleId: 5,
+        module: { courseId: 20 },
+      });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({
+        id: 7,
+        userId: 10,
+        courseId: 20,
+        status: 'IN_PROGRESS',
+      });
+      mockPrisma.lessonProgress.upsert.mockResolvedValue({ id: 1, completed: true });
+      jest
+        .spyOn(service, 'evaluateCompletion')
+        .mockResolvedValue({ complete: true, reason: 'all-modules' });
+      const finalizeSpy = jest
+        .spyOn(service, 'finalizeCompletion')
+        .mockResolvedValue({ finalized: true });
+      mockPrisma.read.lesson.count.mockResolvedValue(4);
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(4);
+
+      const res = await service.markLessonComplete(10, 1, {});
+
+      expect(finalizeSpy).toHaveBeenCalledWith(7);
+      expect(res.courseCompleted).toBe(true);
+    });
+
+    it('idempotente: se finalizeCompletion devolve finalized:false mas o curso já está COMPLETED, courseCompleted:true', async () => {
+      mockPrisma.read.lesson.findUnique.mockResolvedValue({
+        id: 1,
+        moduleId: 5,
+        module: { courseId: 20 },
+      });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({
+        id: 7,
+        userId: 10,
+        courseId: 20,
+        status: 'COMPLETED',
+      });
+      mockPrisma.lessonProgress.upsert.mockResolvedValue({ id: 1, completed: true });
+      jest
+        .spyOn(service, 'evaluateCompletion')
+        .mockResolvedValue({ complete: true, reason: 'all-modules' });
+      jest.spyOn(service, 'finalizeCompletion').mockResolvedValue({ finalized: false });
+      mockPrisma.read.lesson.count.mockResolvedValue(4);
+      mockPrisma.read.lessonProgress.count.mockResolvedValue(4);
+
+      const res = await service.markLessonComplete(10, 1, {});
+      expect(res.courseCompleted).toBe(true);
+      expect(mockPrisma.enrollment.update).not.toHaveBeenCalled(); // não re-flipa NOT_STARTED
     });
   });
 });

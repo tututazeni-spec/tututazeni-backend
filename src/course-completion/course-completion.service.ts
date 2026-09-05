@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { CertificateType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
@@ -17,6 +23,75 @@ export class CourseCompletionService {
   private readonly logger = new Logger(CourseCompletionService.name);
 
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * Números de progresso de um curso para um utilizador — a antiga
+   * `calculateCourseProgress` de `courses.service.ts`, agora pública
+   * (usada por `GET /courses/:id/progress`).
+   */
+  async getCourseProgressNumbers(courseId: number, userId: number) {
+    const [totalLessons, completedLessons] = await Promise.all([
+      this.prisma.read.lesson.count({ where: { module: { courseId } } }),
+      this.prisma.read.lessonProgress.count({
+        where: { userId, completed: true, lesson: { module: { courseId } } },
+      }),
+    ]);
+    const pct = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+    return { totalLessons, completedLessons, pct };
+  }
+
+  /**
+   * Orquestrador único: marca uma aula como concluída, promove a matrícula de
+   * NOT_STARTED → IN_PROGRESS, recalcula o progresso do curso, avalia a conclusão
+   * e, se aplicável, finaliza-a (certificado + pontos + notificação).
+   */
+  async markLessonComplete(userId: number, lessonId: number, dto: MarkLessonProgressInput) {
+    const lesson = await this.prisma.read.lesson.findUnique({
+      where: { id: lessonId },
+      include: { module: { select: { courseId: true } } },
+    });
+    if (!lesson) throw new NotFoundException('Aula não encontrada');
+    const courseId = lesson.module.courseId;
+
+    const enrollment = await this.prisma.enrollment.findFirst({ where: { userId, courseId } });
+    if (!enrollment) throw new ForbiddenException('Não está matriculado neste curso');
+
+    const progress = await this.prisma.lessonProgress.upsert({
+      where: { lessonId_userId: { lessonId, userId } },
+      create: {
+        lessonId,
+        userId,
+        completed: true,
+        completedAt: new Date(),
+        watchedSeconds: dto.watchedSeconds,
+        resumePosition: dto.resumePosition,
+      },
+      update: {
+        completed: true,
+        completedAt: new Date(),
+        watchedSeconds: dto.watchedSeconds,
+        resumePosition: dto.resumePosition,
+      },
+    });
+
+    if (enrollment.status === 'NOT_STARTED') {
+      await this.prisma.enrollment.update({
+        where: { id: enrollment.id },
+        data: { status: 'IN_PROGRESS', startedAt: new Date() },
+      });
+    }
+
+    const courseProgress = await this.getCourseProgressNumbers(courseId, userId);
+
+    let courseCompleted = enrollment.status === 'COMPLETED';
+    const evalResult = await this.evaluateCompletion(enrollment.id);
+    if (evalResult.complete) {
+      const { finalized } = await this.finalizeCompletion(enrollment.id);
+      courseCompleted = courseCompleted || finalized;
+    }
+
+    return { progress, courseProgress, courseCompleted };
+  }
 
   async isModuleCompleted(moduleId: number, userId: number): Promise<boolean> {
     const mod = await this.prisma.read.courseModule.findUnique({
