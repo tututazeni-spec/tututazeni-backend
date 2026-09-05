@@ -475,8 +475,19 @@ export class UnitsService {
 
   async create(dto: CreateUnitDto) {
     // Department é o lado proprietário da relação (Department.unitId), não o inverso
-    const { departmentId, ...rest } = dto;
-    const code = await this.generateCode();
+    const { departmentId, code: explicitCode, ...rest } = dto;
+
+    let code: string;
+    if (explicitCode) {
+      code = explicitCode.toUpperCase();
+      const exists = await this.prisma.unit.findFirst({
+        where: { code: { equals: code, mode: 'insensitive' } },
+      });
+      if (exists) throw new ConflictException(`Código "${code}" já existe`);
+    } else {
+      code = await this.generateCode();
+    }
+
     const unit = await this.prisma.unit.create({ data: { ...rest, code } });
     if (departmentId) {
       await this.prisma.department.update({
@@ -489,8 +500,17 @@ export class UnitsService {
 
   async update(id: number, dto: UpdateUnitDto) {
     await this.findOne(id);
-    const { departmentId, ...rest } = dto;
-    const unit = await this.prisma.unit.update({ where: { id }, data: rest });
+    const { departmentId, code: explicitCode, ...rest } = dto;
+    const data: Prisma.UnitUncheckedUpdateInput = { ...rest };
+    if (explicitCode) {
+      const code = explicitCode.toUpperCase();
+      const clash = await this.prisma.unit.findFirst({
+        where: { code: { equals: code, mode: 'insensitive' }, id: { not: id } },
+      });
+      if (clash) throw new ConflictException(`Código "${code}" já existe`);
+      data.code = code;
+    }
+    const unit = await this.prisma.unit.update({ where: { id }, data });
     if (departmentId) {
       await this.prisma.department.update({ where: { id: departmentId }, data: { unitId: id } });
     }

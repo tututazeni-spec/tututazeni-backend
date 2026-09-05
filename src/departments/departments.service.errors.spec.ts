@@ -9,7 +9,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma = {
-  unit: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
+  unit: {
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
+  department: { update: jest.fn() },
   role: {
     findUnique: jest.fn(),
     findFirst: jest.fn(),
@@ -67,6 +74,55 @@ describe('UnitsService — erros', () => {
     mockPrisma.unit.findUnique.mockResolvedValue(null);
     await expect(service.remove(1)).rejects.toBeInstanceOf(NotFoundException);
     expect(mockPrisma.unit.delete).not.toHaveBeenCalled();
+  });
+
+  it('create sem code → auto-gera UNI-xxxxx (comportamento pré-existente)', async () => {
+    mockPrisma.unit.findFirst.mockResolvedValue(null);
+    mockPrisma.unit.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({ id: 1, ...data }),
+    );
+    await service.create({ name: 'Sede', type: 'HQ' } as any);
+    const call = mockPrisma.unit.create.mock.calls[0][0] as any;
+    expect(call.data.code).toMatch(/^UNI-\d{5}$/);
+  });
+
+  it('create com code explícito → valida case-insensitive e persiste UPPERCASE', async () => {
+    mockPrisma.unit.findFirst.mockResolvedValue(null);
+    mockPrisma.unit.create.mockImplementation(({ data }: any) =>
+      Promise.resolve({ id: 1, ...data }),
+    );
+    await service.create({ name: 'Filial Norte', type: 'BRANCH', code: 'fn' } as any);
+    expect(mockPrisma.unit.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ code: 'FN' }) }),
+    );
+  });
+
+  it('create com code já existente (case-insensitive) → ConflictException', async () => {
+    mockPrisma.unit.findFirst.mockResolvedValue({ id: 7, code: 'FN' });
+    await expect(
+      service.create({ name: 'x', type: 'BRANCH', code: 'fn' } as any),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(mockPrisma.unit.create).not.toHaveBeenCalled();
+  });
+
+  it('update com code explícito → valida contra outros e persiste UPPERCASE', async () => {
+    mockPrisma.unit.findUnique.mockResolvedValue({ id: 1, code: 'OLD' });
+    mockPrisma.unit.findFirst.mockResolvedValue(null);
+    mockPrisma.unit.update.mockImplementation(({ data }: any) =>
+      Promise.resolve({ id: 1, ...data }),
+    );
+    await service.update(1, { code: 'nw' } as any);
+    expect(mockPrisma.unit.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          code: expect.objectContaining({ mode: 'insensitive' }),
+          id: { not: 1 },
+        }),
+      }),
+    );
+    expect(mockPrisma.unit.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ code: 'NW' }) }),
+    );
   });
 });
 

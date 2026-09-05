@@ -164,6 +164,12 @@ export class CreateUnitDto {
   @MaxLength(120)
   name: string;
 
+  @ApiPropertyOptional({ description: 'Código único; auto-gerado (UNI-xxxxx) se omitido' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  code?: string;
+
   @ApiProperty({ enum: UnitType, example: UnitType.BRANCH })
   @IsEnum(UnitType)
   type: UnitType;
