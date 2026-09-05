@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { CourseCompletionService } from './course-completion.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -160,6 +161,98 @@ describe('CourseCompletionService', () => {
         complete: false,
         reason: 'no-enrollment',
       });
+    });
+  });
+
+  describe('finalizeCompletion', () => {
+    const baseEnrollment = {
+      id: 1,
+      userId: 10,
+      courseId: 20,
+      status: 'IN_PROGRESS',
+      course: { id: 20, title: 'Curso X', certificateValidityDays: null },
+    };
+
+    it('primeira chamada aplica os 5 efeitos e devolve finalized:true', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment });
+      mockPrisma.certificate.findFirst.mockResolvedValue(null);
+      mockPrisma.certificate.create.mockResolvedValue({ id: 500, enrollmentId: 1 });
+      mockPrisma.userPoints.upsert.mockResolvedValue({});
+      mockPrisma.notificationLog.create.mockResolvedValue({});
+
+      const res = await service.finalizeCompletion(1);
+
+      expect(res).toEqual({ finalized: true });
+      expect(mockPrisma.enrollment.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { status: 'COMPLETED', completedAt: expect.any(Date) },
+      });
+      expect(mockPrisma.courseAnalytics.updateMany).toHaveBeenCalledWith({
+        where: { courseId: 20 },
+        data: { totalCompleted: { increment: 1 } },
+      });
+      expect(mockPrisma.certificate.create).toHaveBeenCalled();
+      expect(mockPrisma.userPoints.upsert).toHaveBeenCalledWith({
+        where: { userId: 10 },
+        create: { userId: 10, points: 100 },
+        update: { points: { increment: 100 } },
+      });
+      expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ type: 'COURSE_COMPLETED', userId: 10 }),
+        }),
+      );
+    });
+
+    it('idempotente: se já COMPLETED, não faz nada e devolve finalized:false', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        ...baseEnrollment,
+        status: 'COMPLETED',
+      });
+      const res = await service.finalizeCompletion(1);
+      expect(res).toEqual({ finalized: false });
+      expect(mockPrisma.enrollment.update).not.toHaveBeenCalled();
+      expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
+      expect(mockPrisma.userPoints.upsert).not.toHaveBeenCalled();
+    });
+
+    it('certificado já existe → não volta a criar, mas os outros efeitos aplicam-se na mesma', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment });
+      mockPrisma.certificate.findFirst.mockResolvedValue({ id: 500, enrollmentId: 1 });
+      mockPrisma.userPoints.upsert.mockResolvedValue({});
+      mockPrisma.notificationLog.create.mockResolvedValue({});
+
+      await service.finalizeCompletion(1);
+
+      expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
+      expect(mockPrisma.enrollment.update).toHaveBeenCalled();
+      expect(mockPrisma.userPoints.upsert).toHaveBeenCalled();
+    });
+
+    it('P2002 ao criar certificado é engolido (corrida) e a conclusão prossegue', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment });
+      mockPrisma.certificate.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 501, enrollmentId: 1 });
+      const p2002 = Object.assign(new Error('unique'), { code: 'P2002' });
+      Object.setPrototypeOf(p2002, Prisma.PrismaClientKnownRequestError.prototype);
+      mockPrisma.certificate.create.mockRejectedValue(p2002);
+      mockPrisma.userPoints.upsert.mockResolvedValue({});
+      mockPrisma.notificationLog.create.mockResolvedValue({});
+
+      const res = await service.finalizeCompletion(1);
+      expect(res).toEqual({ finalized: true });
+    });
+
+    it('falha ao atribuir pontos não faz a conclusão falhar', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment });
+      mockPrisma.certificate.findFirst.mockResolvedValue(null);
+      mockPrisma.certificate.create.mockResolvedValue({ id: 500 });
+      mockPrisma.userPoints.upsert.mockRejectedValue(new Error('db down'));
+      mockPrisma.notificationLog.create.mockResolvedValue({});
+
+      const res = await service.finalizeCompletion(1);
+      expect(res).toEqual({ finalized: true });
     });
   });
 });

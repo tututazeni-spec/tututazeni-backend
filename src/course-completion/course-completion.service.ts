@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { CertificateType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { createNotificationSafe } from '../common/helpers/notification.helper';
 
 /** Entrada mínima de progresso de aula — os controllers mantêm os seus próprios DTOs validados. */
 export interface MarkLessonProgressInput {
@@ -95,5 +97,86 @@ export class CourseCompletionService {
       complete: true,
       reason: mandatory.length > 0 ? 'mandatory-modules' : 'all-modules',
     };
+  }
+
+  async finalizeCompletion(enrollmentId: number): Promise<{ finalized: boolean }> {
+    const enrollment = await this.prisma.enrollment.findUnique({
+      where: { id: enrollmentId },
+      include: { course: { select: { id: true, title: true, certificateValidityDays: true } } },
+    });
+    if (!enrollment) return { finalized: false };
+    if (enrollment.status === 'COMPLETED') return { finalized: false };
+
+    await this.prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+
+    await this.prisma.courseAnalytics.updateMany({
+      where: { courseId: enrollment.courseId },
+      data: { totalCompleted: { increment: 1 } },
+    });
+
+    await this.issueCertificateInternal(enrollment);
+    await this.awardCompletionPoints(enrollment.userId);
+
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: enrollment.userId,
+      type: 'COURSE_COMPLETED',
+      message: `Concluíste o curso "${enrollment.course?.title}"! Certificado emitido. 🎉`,
+      metadata: { courseId: enrollment.courseId, enrollmentId },
+    });
+
+    return { finalized: true };
+  }
+
+  private async issueCertificateInternal(enrollment: {
+    id: number;
+    userId: number;
+    courseId: number;
+    course: { certificateValidityDays: number | null } | null;
+  }) {
+    const existing = await this.prisma.certificate.findFirst({
+      where: { enrollmentId: enrollment.id },
+    });
+    if (existing) return existing;
+
+    const validityDays = enrollment.course?.certificateValidityDays ?? null;
+    const expiresAt = validityDays ? new Date(Date.now() + validityDays * 86400 * 1000) : null;
+
+    try {
+      return await this.prisma.certificate.create({
+        data: {
+          enrollmentId: enrollment.id,
+          userId: enrollment.userId,
+          courseId: enrollment.courseId,
+          type: CertificateType.COURSE,
+          validationCode: `CERT-${enrollment.courseId}-${enrollment.userId}-${Date.now()}`,
+          issuedAt: new Date(),
+          expiresAt,
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        return this.prisma.certificate.findFirst({ where: { enrollmentId: enrollment.id } });
+      }
+      throw e;
+    }
+  }
+
+  private async awardCompletionPoints(userId: number) {
+    try {
+      await this.prisma.userPoints.upsert({
+        where: { userId },
+        create: { userId, points: 100 },
+        update: { points: { increment: 100 } },
+      });
+    } catch (e: unknown) {
+      this.logger.warn(
+        `Falha ao atribuir pontos de conclusão (não bloqueante) — userId=${userId}: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
   }
 }
