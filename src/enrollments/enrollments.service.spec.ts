@@ -2,7 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { EnrollmentsService } from './enrollments.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
 import { EnrollmentStatus } from './enrollments.dto';
+
+const mockCourseCompletion = {
+  issueCertificateFor: jest.fn(),
+  finalizeCompletion: jest.fn(),
+};
 
 const mockPrisma = {
   enrollment: {
@@ -84,7 +90,11 @@ describe('EnrollmentsService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EnrollmentsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        EnrollmentsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CourseCompletionService, useValue: mockCourseCompletion },
+      ],
     }).compile();
     service = module.get<EnrollmentsService>(EnrollmentsService);
   });
@@ -201,6 +211,59 @@ describe('EnrollmentsService', () => {
       mockPrisma.enrollment.findFirst.mockResolvedValue(null);
       mockPrisma.course.findUnique.mockResolvedValue({ ...baseCourse, status: 'DRAFT' });
       await expect(service.enroll(enrollDto)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ─── generateCertificate (delega em CourseCompletionService) ───────────────
+
+  describe('generateCertificate', () => {
+    it('delega em CourseCompletionService.issueCertificateFor(enrollmentId, user)', async () => {
+      mockCourseCompletion.issueCertificateFor.mockResolvedValue({ id: 500, enrollmentId: 7 });
+      const user = { id: 10 } as any;
+      const res = await service.generateCertificate(7, user);
+      expect(mockCourseCompletion.issueCertificateFor).toHaveBeenCalledWith(7, user);
+      expect(res).toEqual({ id: 500, enrollmentId: 7 });
+    });
+  });
+
+  // ─── updateStatus (COMPLETED delega em finalizeCompletion) ────────────────
+
+  describe('updateStatus', () => {
+    it('status COMPLETED → chama finalizeCompletion e devolve a matrícula recarregada', async () => {
+      mockCourseCompletion.finalizeCompletion.mockResolvedValue({ finalized: true });
+      mockPrisma.enrollment.findUnique
+        .mockResolvedValueOnce({ id: 7, status: 'IN_PROGRESS', completedAt: null })
+        .mockResolvedValueOnce({ id: 7, status: 'COMPLETED', completedAt: new Date() });
+
+      const res = await service.updateStatus(7, { status: 'COMPLETED' } as any);
+
+      expect(mockCourseCompletion.finalizeCompletion).toHaveBeenCalledWith(7);
+      expect((res as any).status).toBe('COMPLETED');
+      expect(mockPrisma.enrollment.update).not.toHaveBeenCalled();
+    });
+
+    it('transição inválida COMPLETED → NOT_STARTED continua a lançar BadRequestException', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        id: 7,
+        status: 'COMPLETED',
+        completedAt: new Date(),
+      });
+      await expect(service.updateStatus(7, { status: 'NOT_STARTED' } as any)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockCourseCompletion.finalizeCompletion).not.toHaveBeenCalled();
+    });
+
+    it('status não-COMPLETED (ex. CANCELLED) → update directo, sem finalizeCompletion', async () => {
+      mockPrisma.enrollment.findUnique.mockResolvedValue({
+        id: 7,
+        status: 'IN_PROGRESS',
+        completedAt: null,
+      });
+      mockPrisma.enrollment.update.mockResolvedValue({ id: 7, status: 'CANCELLED' });
+      await service.updateStatus(7, { status: 'CANCELLED' } as any);
+      expect(mockCourseCompletion.finalizeCompletion).not.toHaveBeenCalled();
+      expect(mockPrisma.enrollment.update).toHaveBeenCalled();
     });
   });
 });
