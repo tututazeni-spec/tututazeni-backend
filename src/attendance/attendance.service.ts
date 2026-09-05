@@ -545,34 +545,29 @@ export class AttendanceService {
   }
 
   async getLeaveBalance(userId: number) {
-    const year = new Date().getFullYear();
-    const start = new Date(year, 0, 1);
-    const end = new Date(year, 11, 31);
+    // Fonte de verdade passa a ser LeaveTypeConfig (entitled) + LeaveBalance
+    // (used/remaining reais), ambos geridos por LeaveManagementService — os
+    // valores hardcoded (22/30/90/2/3/6) que existiam aqui antes da Fase B
+    // divergiam do saldo mostrado em /leave/my/balance. A forma da resposta
+    // (array de {type, entitled, used, remaining}) mantém-se idêntica para
+    // não obrigar a alterações no frontend.
+    const [types, balances] = await Promise.all([
+      this.leaveManagement.getLeaveTypes(),
+      this.leaveManagement.getBalance(userId),
+    ]);
 
-    const approved = await this.prisma.read.leaveRequest.findMany({
-      where: { userId, status: LeaveStatus.APPROVED, startDate: { gte: start, lte: end } },
+    const configByCode = new Map(types.map(t => [t.code, t]));
+    const balanceByCode = new Map(balances.map(b => [b.leaveTypeCode, b]));
+
+    return AttendanceService.LEGACY_BALANCE_TYPES.map(type => {
+      const code = AttendanceService.LEAVE_TYPE_TO_CODE[type];
+      const config = configByCode.get(code);
+      const balance = balanceByCode.get(code);
+      const entitled = config?.annualLimit ?? 0;
+      const used = balance?.used ?? 0;
+      const remaining = balance ? balance.effectiveBalance : entitled;
+      return { type, entitled, used, remaining };
     });
-
-    const used: Record<string, number> = {};
-    for (const l of approved) {
-      used[l.leaveType as string] = (used[l.leaveType as string] ?? 0) + (l.workDays ?? 1);
-    }
-
-    const entitlements: Record<string, number> = {
-      [LeaveType.VACATION]: 22,
-      [LeaveType.SICK_LEAVE]: 30,
-      [LeaveType.MATERNITY]: 90,
-      [LeaveType.PATERNITY]: 2,
-      [LeaveType.BEREAVEMENT]: 3,
-      [LeaveType.JUSTIFIED_ABSENCE]: 6,
-    };
-
-    return Object.entries(entitlements).map(([type, total]) => ({
-      type,
-      entitled: total,
-      used: used[type] ?? 0,
-      remaining: total - (used[type] ?? 0),
-    }));
   }
 
   async createWorkSchedule(dto: CreateWorkScheduleDto) {

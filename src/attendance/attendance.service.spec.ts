@@ -435,10 +435,39 @@ describe('AttendanceService', () => {
   // ─── getLeaveBalance ──────────────────────────────────────────────────────
 
   describe('getLeaveBalance', () => {
-    it('deve retornar saldo de licenças', async () => {
-      mockPrisma.leaveRequest.findMany.mockResolvedValue([]);
+    it('compõe entitled/used/remaining a partir do catálogo e do saldo real, mantendo a forma [{type,...}]', async () => {
+      mockLeaveManagement.getLeaveTypes.mockResolvedValue([
+        { code: 'VACATION', annualLimit: 22 },
+        { code: 'SICK', annualLimit: null },
+        { code: 'MATERNITY', annualLimit: 120 },
+        { code: 'PATERNITY', annualLimit: 28 },
+        { code: 'BEREAVEMENT', annualLimit: 5 },
+        { code: 'JUSTIFIED_ABSENCE', annualLimit: 6 },
+      ]);
+      mockLeaveManagement.getBalance.mockResolvedValue([
+        { leaveTypeCode: 'VACATION', used: 4, effectiveBalance: 18 },
+      ]);
+
       const result = await service.getLeaveBalance(1);
-      expect(result).toBeDefined();
+
+      expect(result).toEqual(
+        expect.arrayContaining([
+          { type: 'VACATION', entitled: 22, used: 4, remaining: 18 },
+          { type: 'SICK_LEAVE', entitled: 0, used: 0, remaining: 0 },
+          { type: 'BEREAVEMENT', entitled: 5, used: 0, remaining: 5 },
+        ]),
+      );
+      expect(result).toHaveLength(6);
+    });
+
+    it('utilizador sem nenhum LeaveBalance inicializado → remaining = entitled cheio (não 0)', async () => {
+      mockLeaveManagement.getLeaveTypes.mockResolvedValue([{ code: 'VACATION', annualLimit: 22 }]);
+      mockLeaveManagement.getBalance.mockResolvedValue([]);
+
+      const result = await service.getLeaveBalance(1);
+      const vacation = result.find(r => r.type === 'VACATION');
+
+      expect(vacation).toEqual({ type: 'VACATION', entitled: 22, used: 0, remaining: 22 });
     });
   });
 
