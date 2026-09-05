@@ -455,4 +455,90 @@ describe('Enrollments (admin/RH) Integration', () => {
         .expect(403);
     });
   });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Fase A — forçar COMPLETED por via administrativa (PUT /:id/status) passa
+  // pelo CourseCompletionService: emite certificado + pontos, não só muda o
+  // estado. E o caminho manual de certificado continua idempotente.
+  // ───────────────────────────────────────────────────────────────────────────
+  describe('conclusão consolidada (Fase A)', () => {
+    let faseCourseId: number;
+    let enrollmentId: number;
+    // targetUserId = employeeId (int.employee); targetUserToken = employeeToken
+    const targetUserId = (): number => employeeId;
+
+    beforeAll(async () => {
+      const course = await prisma.course.create({
+        data: {
+          title: 'Curso Conclusão Consolidada (enrollments)',
+          internalCode: `INT-ENROLLMENTS-FASEA-${Date.now()}`,
+          description: 'x',
+          status: 'PUBLISHED',
+        },
+      });
+      faseCourseId = course.id;
+
+      const enr = await prisma.enrollment.create({
+        data: {
+          userId: employeeId,
+          courseId: faseCourseId,
+          status: 'IN_PROGRESS',
+          startedAt: new Date(),
+        },
+      });
+      enrollmentId = enr.id;
+      createdEnrollmentIds.push(enrollmentId);
+    });
+
+    afterAll(async () => {
+      await prisma.certificate.deleteMany({ where: { enrollmentId } }).catch(() => undefined);
+      await prisma.enrollment
+        .deleteMany({ where: { courseId: faseCourseId } })
+        .catch(() => undefined);
+      await prisma.courseAnalytics
+        .deleteMany({ where: { courseId: faseCourseId } })
+        .catch(() => undefined);
+      await prisma.course.deleteMany({ where: { id: faseCourseId } }).catch(() => undefined);
+      await prisma.notificationLog
+        .deleteMany({
+          where: { userId: employeeId, metadata: { contains: `"courseId":${faseCourseId}` } },
+        })
+        .catch(() => undefined);
+    });
+
+    it('PUT /enrollments/:id/status {COMPLETED} (admin) → certificado + pontos, não só o estado', async () => {
+      const pointsBefore =
+        (await prisma.userPoints.findUnique({ where: { userId: targetUserId() } }))?.points ?? 0;
+
+      const res = await request(app.getHttpServer())
+        .put(`/enrollments/${enrollmentId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'COMPLETED' })
+        .expect(200);
+      expect(res.body.status).toBe('COMPLETED');
+
+      const enr = await prisma.enrollment.findUnique({ where: { id: enrollmentId } });
+      expect(enr!.status).toBe('COMPLETED');
+      expect(enr!.completedAt).not.toBeNull();
+
+      const cert = await prisma.certificate.findFirst({ where: { enrollmentId } });
+      expect(cert).not.toBeNull();
+
+      expect(
+        (await prisma.userPoints.findUnique({ where: { userId: targetUserId() } }))?.points ?? 0,
+      ).toBeGreaterThan(pointsBefore);
+    });
+
+    it('POST /enrollments/my/:id/certificate sobre curso já concluído → devolve o mesmo certificado (idempotente)', async () => {
+      const first = await request(app.getHttpServer())
+        .post(`/enrollments/my/${enrollmentId}/certificate`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      const second = await request(app.getHttpServer())
+        .post(`/enrollments/my/${enrollmentId}/certificate`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      expect(second.body.id).toBe(first.body.id);
+    });
+  });
 });

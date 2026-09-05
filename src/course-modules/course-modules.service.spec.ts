@@ -2,6 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { CourseModulesService } from './course-modules.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
+
+const mockCourseCompletion = {
+  markLessonComplete: jest.fn(),
+  isModuleCompleted: jest.fn(),
+};
 
 const mockPrisma = {
   courseModule: {
@@ -60,6 +66,7 @@ describe('CourseModulesService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockCourseCompletion.isModuleCompleted.mockResolvedValue(false);
     Object.defineProperty(mockPrisma, 'read', {
       get() {
         return mockPrisma;
@@ -67,7 +74,11 @@ describe('CourseModulesService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CourseModulesService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        CourseModulesService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CourseCompletionService, useValue: mockCourseCompletion },
+      ],
     }).compile();
     service = module.get<CourseModulesService>(CourseModulesService);
   });
@@ -169,7 +180,7 @@ describe('CourseModulesService', () => {
   // ─── markLessonComplete ───────────────────────────────────────────────────
 
   describe('markLessonComplete', () => {
-    it('deve marcar lição como completa', async () => {
+    it('acessível → delega em CourseCompletionService e devolve a forma histórica', async () => {
       const mockLesson = {
         id: 1,
         moduleId: 1,
@@ -192,10 +203,24 @@ describe('CourseModulesService', () => {
         status: 'IN_PROGRESS',
         enrolledAt: new Date('2026-01-01'),
       });
-      mockPrisma.lessonProgress.upsert.mockResolvedValue({ id: 1, completed: true });
-      mockPrisma.enrollment.update.mockResolvedValue({});
+      mockCourseCompletion.markLessonComplete.mockResolvedValue({
+        progress: { id: 1, completed: true },
+        courseProgress: {},
+        courseCompleted: false,
+      });
+      mockCourseCompletion.isModuleCompleted.mockResolvedValue(false);
+
       const result = await service.markLessonComplete(1, { lessonId: 1 } as any);
-      expect(result).toBeDefined();
+
+      expect(mockCourseCompletion.markLessonComplete).toHaveBeenCalledWith(1, 1, {
+        watchedSeconds: undefined,
+        resumePosition: undefined,
+      });
+      expect(result).toEqual({
+        progress: { id: 1, completed: true },
+        moduleCompleted: false,
+        courseId: 1,
+      });
     });
   });
 

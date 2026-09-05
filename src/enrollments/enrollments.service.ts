@@ -6,8 +6,9 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { CertificateType, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
 import {
   EnrollmentsCreateEnrollmentDto,
   UpdateEnrollmentStatusDto,
@@ -49,14 +50,23 @@ const ENROLLMENT_INCLUDE_BASIC = {
 export class EnrollmentsService {
   private readonly logger = new Logger(EnrollmentsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly courseCompletion: CourseCompletionService,
+  ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
-  private async computeProgress(enrollmentId: number, courseId: number, userId: number) {
+  private async computeProgress(
+    enrollmentId: number,
+    courseId: number,
+    userId: number,
+    opts?: { fromPrimary?: boolean },
+  ) {
+    const db = opts?.fromPrimary ? this.prisma : this.prisma.read;
     const [totalLessons, completedLessons] = await Promise.all([
-      this.prisma.read.lesson.count({ where: { module: { courseId } } }),
-      this.prisma.read.lessonProgress.count({
+      db.lesson.count({ where: { module: { courseId } } }),
+      db.lessonProgress.count({
         where: { userId, completed: true, lesson: { module: { courseId } } },
       }),
     ]);
@@ -164,8 +174,12 @@ export class EnrollmentsService {
 
   // ─── DETALHE ──────────────────────────────────────────────────────────────
 
-  async findOne(id: number, user?: CurrentUserData) {
-    const e = await this.prisma.read.enrollment.findUnique({
+  async findOne(id: number, user?: CurrentUserData, opts?: { fromPrimary?: boolean }) {
+    // `fromPrimary` força a leitura na primária — usado logo após uma escrita no
+    // mesmo pedido (ex.: PUT /enrollments/:id/status {COMPLETED}), onde a réplica
+    // ainda devolveria o estado antigo e um `certificate` nulo.
+    const db = opts?.fromPrimary ? this.prisma : this.prisma.read;
+    const e = await db.enrollment.findUnique({
       where: { id },
       include: {
         ...ENROLLMENT_INCLUDE_BASIC,
@@ -179,7 +193,7 @@ export class EnrollmentsService {
     if (user) assertCanAccess(e, e?.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
     else if (!e) throw new NotFoundException('Matrícula não encontrada');
 
-    const prog = await this.computeProgress(id, e.courseId, e.userId);
+    const prog = await this.computeProgress(id, e.courseId, e.userId, opts);
     return {
       ...e,
       ...prog,
@@ -325,11 +339,14 @@ export class EnrollmentsService {
       throw new BadRequestException(`Transição inválida: ${current} → ${dto.status}`);
     }
 
-    const data: Prisma.EnrollmentUpdateInput = { status: dto.status };
-    if (dto.status === 'COMPLETED' && !e.completedAt) {
-      data.completedAt = new Date();
+    if (dto.status === 'COMPLETED') {
+      await this.courseCompletion.finalizeCompletion(id);
+      // Recarrega da primária: `finalizeCompletion` acabou de escrever COMPLETED +
+      // certificado na primária; a réplica ainda devolveria IN_PROGRESS/sem cert.
+      return this.findOne(id, undefined, { fromPrimary: true });
     }
 
+    const data: Prisma.EnrollmentUpdateInput = { status: dto.status };
     return this.prisma.enrollment.update({ where: { id }, data });
   }
 
@@ -397,61 +414,7 @@ export class EnrollmentsService {
   // ─── GERAR CERTIFICADO ────────────────────────────────────────────────────
 
   async generateCertificate(enrollmentId: number, user: CurrentUserData) {
-    // A10-16: findOne sem `user` saltava o ownership — qualquer autenticado
-    // gerava/lia o certificado de outra pessoa a partir do enrollmentId.
-    const e = await this.findOne(enrollmentId, user);
-
-    if (e.status !== 'COMPLETED') {
-      throw new BadRequestException('Curso ainda não concluído');
-    }
-
-    // Guard de idempotência antes de criar: força primary para evitar certificado duplicado.
-    const exists = await this.prisma.certificate.findFirst({
-      where: { enrollmentId },
-    });
-    if (exists) return exists;
-
-    const course = await this.prisma.course.findUnique({ where: { id: e.courseId } });
-    const validationCode = `CERT-${e.courseId}-${e.userId}-${Date.now()}`;
-
-    const expiresAt = course?.certificateValidityDays
-      ? new Date(Date.now() + course.certificateValidityDays * 86400 * 1000)
-      : null;
-
-    // ← corrigido: adicionados campos obrigatórios type e validationCode; removido campo inexistente 'code'
-    const cert = await this.prisma.certificate.create({
-      data: {
-        enrollmentId,
-        userId: e.userId,
-        courseId: e.courseId,
-        type: CertificateType.COURSE,
-        validationCode,
-        issuedAt: new Date(),
-        expiresAt,
-      },
-    });
-
-    await this.prisma.notificationLog
-      .create({
-        data: {
-          userId: e.userId,
-          type: 'CERTIFICATE_ISSUED',
-          message: `Certificado emitido para "${course?.title}"`,
-          metadata: JSON.stringify({}),
-        },
-      })
-      .catch((err: unknown) => {
-        this.logger.warn({
-          userId: e.userId,
-          courseId: e.courseId,
-          enrollmentId,
-          action: 'CERTIFICATE_ISSUED',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar notificação de emissão de certificado',
-        });
-      });
-
-    return cert;
+    return this.courseCompletion.issueCertificateFor(enrollmentId, user);
   }
 
   // ─── MATRÍCULAS DO UTILIZADOR ─────────────────────────────────────────────

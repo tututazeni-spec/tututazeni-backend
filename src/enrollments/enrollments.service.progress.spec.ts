@@ -6,6 +6,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EnrollmentsService } from './enrollments.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
+
+const mockCourseCompletion = {
+  issueCertificateFor: jest.fn(),
+  finalizeCompletion: jest.fn(),
+};
 
 function buildMockPrisma() {
   return {
@@ -85,7 +91,11 @@ describe('EnrollmentsService (progress)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EnrollmentsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        EnrollmentsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CourseCompletionService, useValue: mockCourseCompletion },
+      ],
     }).compile();
 
     service = module.get<EnrollmentsService>(EnrollmentsService);
@@ -109,23 +119,21 @@ describe('EnrollmentsService (progress)', () => {
       expect(mockPrisma.enrollment.update).toHaveBeenCalled();
     });
 
-    it('deve actualizar status para COMPLETED a partir de IN_PROGRESS (fluxo normal)', async () => {
-      // Bug corrigido: o mapa estava indexado pelo estado alvo em vez do
-      // estado actual, bloqueando sempre esta transição — o próprio propósito
-      // do endpoint. invalidTransitions é agora indexado por `current`.
-      mockPrisma.enrollment.findUnique.mockResolvedValue({
-        ...baseEnrollment,
-        status: 'IN_PROGRESS',
-      });
+    it('status COMPLETED → delega em finalizeCompletion e devolve a matrícula recarregada', async () => {
+      // A transição normal IN_PROGRESS → COMPLETED passou a ser tratada pelo
+      // CourseCompletionService (status + completedAt + analytics + certificado
+      // + pontos + notificação). O serviço apenas orquestra e recarrega.
+      mockCourseCompletion.finalizeCompletion.mockResolvedValue({ finalized: true });
+      mockPrisma.enrollment.findUnique
+        .mockResolvedValueOnce({ ...baseEnrollment, status: 'IN_PROGRESS' })
+        .mockResolvedValueOnce({ ...baseEnrollment, status: 'COMPLETED' });
       mockPrisma.lesson.count.mockResolvedValue(5);
       mockPrisma.lessonProgress.count.mockResolvedValue(3);
-      mockPrisma.enrollment.update.mockResolvedValue({ id: 1, status: 'COMPLETED' });
 
-      const result = await service.updateStatus(1, { status: 'COMPLETED' } as any);
-      expect(result).toBeDefined();
-      expect(mockPrisma.enrollment.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) }),
-      );
+      const result = (await service.updateStatus(1, { status: 'COMPLETED' } as any)) as any;
+      expect(mockCourseCompletion.finalizeCompletion).toHaveBeenCalledWith(1);
+      expect(result.status).toBe('COMPLETED');
+      expect(mockPrisma.enrollment.update).not.toHaveBeenCalled();
     });
 
     it('deve lançar BadRequestException ao tentar CANCELLED a partir de COMPLETED', async () => {
@@ -140,6 +148,7 @@ describe('EnrollmentsService (progress)', () => {
       await expect(service.updateStatus(1, { status: 'CANCELLED' } as any)).rejects.toThrow(
         BadRequestException,
       );
+      expect(mockCourseCompletion.finalizeCompletion).not.toHaveBeenCalled();
     });
   });
 
@@ -213,46 +222,16 @@ describe('EnrollmentsService (progress)', () => {
   // ─── generateCertificate ──────────────────────────────────────────────────
 
   describe('generateCertificate', () => {
-    it('deve lançar BadRequestException se curso não concluído', async () => {
-      mockPrisma.enrollment.findUnique.mockResolvedValue({
-        ...baseEnrollment,
-        status: 'IN_PROGRESS',
-      });
-      mockPrisma.lesson.count.mockResolvedValue(5);
-      mockPrisma.lessonProgress.count.mockResolvedValue(3);
+    it('delega em CourseCompletionService.issueCertificateFor(enrollmentId, user)', async () => {
+      // Toda a lógica (ownership, status COMPLETED, idempotência, notificação)
+      // vive agora no CourseCompletionService — aqui só se verifica a delegação.
+      const cert = { id: 1, validationCode: 'CERT-1-5-123' };
+      mockCourseCompletion.issueCertificateFor.mockResolvedValue(cert);
+      const user = { id: 5, role: { name: 'COLABORADOR' } } as any;
 
-      await expect(service.generateCertificate(1)).rejects.toThrow(BadRequestException);
-    });
-
-    it('deve retornar certificado existente sem criar novo', async () => {
-      mockPrisma.enrollment.findUnique.mockResolvedValue({
-        ...baseEnrollment,
-        status: 'COMPLETED',
-      });
-      mockPrisma.lesson.count.mockResolvedValue(5);
-      mockPrisma.lessonProgress.count.mockResolvedValue(5);
-      const existingCert = { id: 99, validationCode: 'CERT-OLD' };
-      mockPrisma.certificate.findFirst.mockResolvedValue(existingCert);
-
-      const result = await service.generateCertificate(1);
-      expect(result).toBe(existingCert);
-      expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
-    });
-
-    it('deve gerar novo certificado para curso concluído', async () => {
-      mockPrisma.enrollment.findUnique.mockResolvedValue({
-        ...baseEnrollment,
-        status: 'COMPLETED',
-      });
-      mockPrisma.lesson.count.mockResolvedValue(5);
-      mockPrisma.lessonProgress.count.mockResolvedValue(5);
-      mockPrisma.certificate.findFirst.mockResolvedValue(null);
-      const newCert = { id: 1, validationCode: 'CERT-1-5-123' };
-      mockPrisma.certificate.create.mockResolvedValue(newCert);
-
-      const result = await service.generateCertificate(1);
-      expect(result).toBe(newCert);
-      expect(mockPrisma.certificate.create).toHaveBeenCalled();
+      const result = await service.generateCertificate(1, user);
+      expect(mockCourseCompletion.issueCertificateFor).toHaveBeenCalledWith(1, user);
+      expect(result).toBe(cert);
     });
   });
 

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
 
 const baseCourse = {
   id: 1,
@@ -113,6 +114,13 @@ const mockPrisma: any = {
   userPoints: { update: jest.fn().mockResolvedValue({}) },
 };
 
+const mockCourseCompletion = {
+  markLessonComplete: jest.fn(),
+  getCourseProgressNumbers: jest
+    .fn()
+    .mockResolvedValue({ totalLessons: 5, completedLessons: 2, pct: 40 }),
+};
+
 describe('CoursesService (progress & quiz & analytics)', () => {
   let service: CoursesService;
 
@@ -132,7 +140,11 @@ describe('CoursesService (progress & quiz & analytics)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CoursesService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        CoursesService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CourseCompletionService, useValue: mockCourseCompletion },
+      ],
     }).compile();
     service = module.get<CoursesService>(CoursesService);
   });
@@ -161,75 +173,23 @@ describe('CoursesService (progress & quiz & analytics)', () => {
   // ─── markLessonComplete ───────────────────────────────────────────────────
 
   describe('markLessonComplete', () => {
-    it('deve marcar aula como concluída', async () => {
-      mockPrisma.lesson.findUnique.mockResolvedValue({
-        id: 10,
-        module: { courseId: 1, id: 1 },
-      });
-      mockPrisma.enrollment.findFirst.mockResolvedValue(baseEnrollment);
-      mockPrisma.lesson.count.mockResolvedValue(5);
-      mockPrisma.lessonProgress.count.mockResolvedValue(3);
-
-      const result = await service.markLessonComplete(10, 1, {
-        watchedSeconds: 120,
-        resumePosition: 0,
-      });
-      expect(result).toHaveProperty('progress');
-      expect(result).toHaveProperty('courseProgress');
-      expect(result.courseProgress.pct).toBe(60);
-    });
-
-    it('deve completar curso se 100% das aulas concluídas', async () => {
-      mockPrisma.lesson.findUnique.mockResolvedValue({
-        id: 10,
-        module: { courseId: 1, id: 1 },
-      });
-      mockPrisma.enrollment.findFirst.mockResolvedValue({
-        ...baseEnrollment,
-        status: 'IN_PROGRESS',
-      });
-      mockPrisma.enrollment.findUnique.mockResolvedValue({
-        ...baseEnrollment,
-        status: 'IN_PROGRESS',
-      });
-      mockPrisma.lesson.count.mockResolvedValue(3);
-      mockPrisma.lessonProgress.count.mockResolvedValue(3);
-      mockPrisma.course.findUnique.mockResolvedValue({
-        ...baseCourse,
-        certificateValidityDays: 365,
+    it('delega em CourseCompletionService.markLessonComplete(userId, lessonId, {watchedSeconds, resumePosition})', async () => {
+      mockCourseCompletion.markLessonComplete.mockResolvedValue({
+        progress: { id: 1 },
+        courseProgress: { totalLessons: 2, completedLessons: 1, pct: 50 },
+        courseCompleted: false,
       });
 
-      const result = await service.markLessonComplete(10, 1, { watchedSeconds: 300 });
-      expect(result.courseProgress.pct).toBe(100);
-      expect(mockPrisma.enrollment.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) }),
-      );
-    });
+      const res = await service.markLessonComplete(1, 10, {
+        watchedSeconds: 30,
+        resumePosition: 5,
+      } as any);
 
-    it('deve actualizar status para IN_PROGRESS se estava NOT_STARTED', async () => {
-      mockPrisma.lesson.findUnique.mockResolvedValue({ id: 10, module: { courseId: 1, id: 1 } });
-      mockPrisma.enrollment.findFirst.mockResolvedValue({
-        ...baseEnrollment,
-        status: 'NOT_STARTED',
+      expect(mockCourseCompletion.markLessonComplete).toHaveBeenCalledWith(10, 1, {
+        watchedSeconds: 30,
+        resumePosition: 5,
       });
-      mockPrisma.lesson.count.mockResolvedValue(5);
-      mockPrisma.lessonProgress.count.mockResolvedValue(1);
-
-      await service.markLessonComplete(10, 1, {});
-      expect(mockPrisma.enrollment.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ status: 'IN_PROGRESS' }) }),
-      );
-    });
-
-    it('deve lançar NotFoundException se aula não existe', async () => {
-      mockPrisma.lesson.findUnique.mockResolvedValue(null);
-      await expect(service.markLessonComplete(99, 1, {})).rejects.toThrow(NotFoundException);
-    });
-
-    it('deve lançar ForbiddenException se não matriculado', async () => {
-      mockPrisma.lesson.findUnique.mockResolvedValue({ id: 10, module: { courseId: 1 } });
-      mockPrisma.enrollment.findFirst.mockResolvedValue(null);
-      await expect(service.markLessonComplete(10, 99, {})).rejects.toThrow(ForbiddenException);
+      expect(res.courseProgress.pct).toBe(50);
     });
   });
 
