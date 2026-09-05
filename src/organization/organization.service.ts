@@ -8,6 +8,11 @@
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  DepartmentsService,
+  PositionsService,
+  UnitsService,
+} from '../departments/departments.service';
+import {
   CreateOrgDepartmentDto,
   UpdateOrgDepartmentDto,
   OrganizationDepartmentFilterDto,
@@ -40,7 +45,12 @@ export interface OrgChartNode extends OrgChartUser {
 export class OrganizationService {
   private readonly logger = new Logger(OrganizationService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly departments: DepartmentsService,
+    private readonly positions: PositionsService,
+    private readonly units: UnitsService,
+  ) {}
 
   // ─── ESTATÍSTICAS / DASHBOARD ─────────────────────────────────────────────
 
