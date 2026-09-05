@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CertificateType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
@@ -153,18 +147,11 @@ export class CourseCompletionService {
     });
     if (!enrollment) throw new NotFoundException('Matrícula não encontrada');
 
-    // `assertCanAccess` lança NotFoundException por design (auditoria A-3, para não
-    // revelar a existência do recurso). Aqui a matrícula já está garantidamente
-    // carregada, por isso a única causa possível de erro é a recusa de acesso —
-    // que este endpoint manual expõe explicitamente como 403.
-    try {
-      assertCanAccess(enrollment, enrollment.userId, user, [Role.ADMIN, Role.RH]);
-    } catch (e) {
-      if (e instanceof NotFoundException) {
-        throw new ForbiddenException('Sem permissão para emitir o certificado desta matrícula');
-      }
-      throw e;
-    }
+    // `assertCanAccess` lança NotFoundException a não-donos sem papel privilegiado,
+    // por design (auditoria A10/IDOR — não revelar a existência do recurso). Mantém-se
+    // sem embrulho para preservar o 404 que o endpoint `POST /enrollments/:id/certificate`
+    // já devolve hoje via EnrollmentsService.generateCertificate.
+    assertCanAccess(enrollment, enrollment.userId, user, [Role.ADMIN, Role.RH]);
 
     if (enrollment.status !== 'COMPLETED') {
       throw new BadRequestException('Curso ainda não concluído');

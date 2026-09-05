@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { CourseCompletionService } from './course-completion.service';
@@ -275,11 +275,9 @@ describe('CourseCompletionService', () => {
       await expect(service.issueCertificateFor(1, ownerUser)).rejects.toThrow(BadRequestException);
     });
 
-    it('utilizador que não é dono nem ADMIN/RH → ForbiddenException', async () => {
+    it('utilizador que não é dono nem ADMIN/RH → NotFoundException (não revela existência; paridade com o endpoint que substitui)', async () => {
       mockPrisma.enrollment.findUnique.mockResolvedValue({ ...completed });
-      await expect(service.issueCertificateFor(1, strangerUser)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.issueCertificateFor(1, strangerUser)).rejects.toThrow(NotFoundException);
     });
 
     it('dono, curso concluído, sem certificado → cria e devolve', async () => {
