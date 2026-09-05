@@ -10,6 +10,7 @@ import {
   SimulatePermissionDto,
   RoleTemplateDto,
 } from './roles-permissions.dto';
+import { ROLE_DEFAULTS } from './role-defaults';
 
 // Re-export DTOs so controller can import from service (legacy compat)
 export {
@@ -109,6 +110,15 @@ export class RolesPermissionsService {
         skipDuplicates: true,
       });
     }
+
+    // Auto-seed de permissões por omissão quando o code do role bate num
+    // preset conhecido (comportamento migrado de AclService.createRole na
+    // Fase D). Idempotente via skipDuplicates.
+    const roleDefaults = ROLE_DEFAULTS[created.code ?? ''] ?? [];
+    if (roleDefaults.length > 0) {
+      await this.seedDefaultPermissionsForRole(created.id, created.code ?? '', roleDefaults);
+    }
+
     const role = await this.findOne(created.id);
 
     await this.prisma.auditLog
@@ -391,6 +401,46 @@ export class RolesPermissionsService {
 
   async deletePermission(permissionId: number) {
     return this.prisma.permission.delete({ where: { id: permissionId } });
+  }
+
+  // ══════════════════════════════════════════════════════
+  // DEFAULT ROLES / SEED (absorvido de departments.RolesService e acl.service.ts)
+  // ══════════════════════════════════════════════════════
+
+  async initDefaultRoles() {
+    const defaults = [
+      { name: 'ADMIN', description: 'Administrador do sistema' },
+      { name: 'RH', description: 'Recursos Humanos' },
+      { name: 'GESTOR', description: 'Gestor de equipa' },
+      { name: 'COLABORADOR', description: 'Colaborador' },
+      { name: 'AUDITOR', description: 'Auditor (apenas leitura)' },
+    ];
+    const created = [];
+    for (const r of defaults) {
+      const exists = await this.prisma.role.findFirst({ where: { name: r.name } });
+      if (!exists) created.push(await this.prisma.role.create({ data: r }));
+    }
+    return { created: created.length, roles: created };
+  }
+
+  // `permNames` pode conter '*' (wildcard = todas as permissões do catálogo).
+  // Só cria linhas de associação (RolePermission) — nunca permissões novas.
+  async seedDefaultPermissionsForRole(roleId: number, roleCode: string, permNames: string[]) {
+    const isWildcard = permNames.includes('*');
+
+    const perms = isWildcard
+      ? await this.prisma.read.permission.findMany({ select: { id: true } })
+      : await this.prisma.read.permission.findMany({
+          where: { name: { in: permNames } },
+          select: { id: true },
+        });
+
+    if (perms?.length) {
+      await this.prisma.rolePermission.createMany({
+        data: perms.map(p => ({ roleId, permissionId: p.id })),
+        skipDuplicates: true,
+      });
+    }
   }
 
   // ══════════════════════════════════════════════════════

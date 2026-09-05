@@ -14,7 +14,7 @@ const mockPrisma = {
     count: jest.fn(),
   },
   permission: {
-    findMany: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
     findFirst: jest.fn(),
     findUnique: jest.fn(),
     create: jest.fn(),
@@ -245,6 +245,61 @@ describe('RolesPermissionsService', () => {
       mockPrisma.permission.delete.mockResolvedValue({ id: 9 });
       await service.deletePermission(9);
       expect(mockPrisma.permission.delete).toHaveBeenCalledWith({ where: { id: 9 } });
+    });
+  });
+
+  // ─── initDefaultRoles + auto-seed ROLE_DEFAULTS (absorvido do acl/departments) ──
+
+  describe('initDefaultRoles', () => {
+    it('cria só os roles em falta', async () => {
+      mockPrisma.role.findFirst.mockImplementation(({ where }: any) =>
+        Promise.resolve(where.name === 'ADMIN' ? { id: 1, name: 'ADMIN' } : null),
+      );
+      mockPrisma.role.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 99, ...data }),
+      );
+
+      const res = await service.initDefaultRoles();
+
+      expect(res.created).toBe(4); // todas menos ADMIN, que já existia
+      expect(res.roles).toHaveLength(4);
+    });
+  });
+
+  describe('create com ROLE_DEFAULTS', () => {
+    it('role cujo code está em ROLE_DEFAULTS → auto-atribui as permissões default', async () => {
+      mockPrisma.role.findFirst.mockResolvedValue(null);
+      mockPrisma.role.create.mockResolvedValue({ id: 7, code: 'RH', name: 'RH' });
+      mockPrisma.role.findUnique.mockResolvedValue({ ...baseRole, id: 7, code: 'RH', name: 'RH' });
+      mockPrisma.permission.findMany.mockResolvedValue([
+        { id: 1, name: 'users:view' },
+        { id: 2, name: 'users:create' },
+      ]);
+
+      await service.create({ name: 'RH', code: 'RH' } as never);
+
+      expect(mockPrisma.rolePermission.createMany).toHaveBeenCalledWith({
+        data: [
+          { roleId: 7, permissionId: 1 },
+          { roleId: 7, permissionId: 2 },
+        ],
+        skipDuplicates: true,
+      });
+    });
+
+    it('role cujo code NÃO está em ROLE_DEFAULTS → não auto-atribui nada', async () => {
+      mockPrisma.role.findFirst.mockResolvedValue(null);
+      mockPrisma.role.create.mockResolvedValue({ id: 8, code: 'CUSTOM_X', name: 'Custom X' });
+      mockPrisma.role.findUnique.mockResolvedValue({
+        ...baseRole,
+        id: 8,
+        code: 'CUSTOM_X',
+        name: 'Custom X',
+      });
+
+      await service.create({ name: 'Custom X' } as never);
+
+      expect(mockPrisma.rolePermission.createMany).not.toHaveBeenCalled();
     });
   });
 });
