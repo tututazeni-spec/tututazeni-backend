@@ -1,6 +1,6 @@
 ﻿// src/roles-permissions/roles-permissions.service.ts
 import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
-import { Permission } from '@prisma/client';
+import { Permission, PermissionAction, PermissionSubject } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { flattenRolePermissions, withFlatPermissions } from '../common/utils/role-permissions';
 import {
@@ -354,6 +354,43 @@ export class RolesPermissionsService {
     await this.findOne(roleId);
     await this.replacePermissionsForRole(roleId, permissionIds);
     return this.findOne(roleId);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // PERMISSION CATALOG (absorvido de acl.service.ts e departments.RolesService)
+  // ══════════════════════════════════════════════════════
+
+  async getAllPermissions() {
+    return this.prisma.read.permission.findMany({
+      orderBy: [{ subject: 'asc' }, { action: 'asc' }],
+    });
+  }
+
+  // Permission é um catálogo independente (M2M via RolePermission) — não tem
+  // coluna `sensitive` nem `description` no schema real (ver acl.service.ts
+  // original), por isso só name/action/subject são persistidos. Se `roleId`
+  // vier, associa-se de imediato via RolePermission (comportamento do antigo
+  // departments.RolesService.addPermission); caso contrário fica só no
+  // catálogo, para atribuição posterior.
+  async createPermission(dto: {
+    name: string;
+    action: PermissionAction;
+    subject: PermissionSubject;
+    roleId?: number;
+  }) {
+    const permission = await this.prisma.permission.create({
+      data: { name: dto.name, action: dto.action, subject: dto.subject },
+    });
+    if (dto.roleId) {
+      await this.prisma.rolePermission.create({
+        data: { roleId: dto.roleId, permissionId: permission.id },
+      });
+    }
+    return permission;
+  }
+
+  async deletePermission(permissionId: number) {
+    return this.prisma.permission.delete({ where: { id: permissionId } });
   }
 
   // ══════════════════════════════════════════════════════

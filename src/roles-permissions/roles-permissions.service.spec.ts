@@ -23,6 +23,7 @@ const mockPrisma = {
   },
   rolePermission: {
     findMany: jest.fn().mockResolvedValue([]),
+    create: jest.fn().mockResolvedValue({}),
     createMany: jest.fn().mockResolvedValue({ count: 0 }),
     deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
@@ -192,6 +193,58 @@ describe('RolesPermissionsService', () => {
 
       expect(mockPrisma.rolePermission.deleteMany).not.toHaveBeenCalled();
       expect(mockPrisma.rolePermission.createMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── catálogo de permissões (absorvido do acl/departments) ────────────────
+
+  describe('catálogo de permissões (absorvido do acl/departments)', () => {
+    it('getAllPermissions ordena por subject, action', async () => {
+      mockPrisma.permission.findMany.mockResolvedValue([]);
+      await service.getAllPermissions();
+      expect(mockPrisma.permission.findMany).toHaveBeenCalledWith({
+        orderBy: [{ subject: 'asc' }, { action: 'asc' }],
+      });
+    });
+
+    it('createPermission persiste só name/action/subject (schema não tem sensitive/description)', async () => {
+      mockPrisma.permission.create.mockResolvedValue({ id: 1 });
+      await service.createPermission({
+        name: 'course.read',
+        action: 'VIEW',
+        subject: 'LMS',
+        sensitive: true,
+        description: 'x',
+      } as never);
+      expect(mockPrisma.permission.create).toHaveBeenCalledWith({
+        data: { name: 'course.read', action: 'VIEW', subject: 'LMS' },
+      });
+    });
+
+    it('createPermission com roleId → cria também a RolePermission', async () => {
+      mockPrisma.permission.create.mockResolvedValue({ id: 5 });
+      mockPrisma.rolePermission.create.mockResolvedValue({});
+      await service.createPermission({
+        name: 'x',
+        action: 'VIEW',
+        subject: 'LMS',
+        roleId: 3,
+      } as never);
+      expect(mockPrisma.rolePermission.create).toHaveBeenCalledWith({
+        data: { roleId: 3, permissionId: 5 },
+      });
+    });
+
+    it('createPermission sem roleId → não toca em RolePermission', async () => {
+      mockPrisma.permission.create.mockResolvedValue({ id: 7 });
+      await service.createPermission({ name: 'x', action: 'VIEW', subject: 'LMS' } as never);
+      expect(mockPrisma.rolePermission.create).not.toHaveBeenCalled();
+    });
+
+    it('deletePermission chama prisma.permission.delete', async () => {
+      mockPrisma.permission.delete.mockResolvedValue({ id: 9 });
+      await service.deletePermission(9);
+      expect(mockPrisma.permission.delete).toHaveBeenCalledWith({ where: { id: 9 } });
     });
   });
 });
