@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsArray,
   IsEnum,
+  IsNumber,
   Min,
   MaxLength,
 } from 'class-validator';
@@ -17,6 +18,7 @@ import {
   PermissionAction,
   PermissionSubject,
   SeniorityLevel,
+  DepartmentStatus,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
@@ -68,6 +70,22 @@ export class CreateDepartmentDto {
   @IsInt()
   @Min(0)
   trainingBudget?: number;
+
+  @ApiPropertyOptional({ description: 'Unidade/filial a associar (Department.unitId)' })
+  @IsOptional()
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional({ description: 'Orçamento anual (Kz)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  annualBudget?: number;
+
+  @ApiPropertyOptional({ enum: DepartmentStatus, default: DepartmentStatus.ACTIVE })
+  @IsOptional()
+  @IsEnum(DepartmentStatus)
+  status?: DepartmentStatus;
 }
 
 export class UpdateDepartmentDto extends PartialType(CreateDepartmentDto) {}

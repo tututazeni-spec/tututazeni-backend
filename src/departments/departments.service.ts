@@ -143,11 +143,12 @@ export class DepartmentsService {
   }
 
   async create(dto: CreateDepartmentDto) {
-    // Validar código único
+    // Validar código único (case-insensitive; persistido em UPPERCASE)
+    const code = dto.code.toUpperCase();
     const codeExists = await this.prisma.department.findFirst({
-      where: { code: dto.code },
+      where: { code: { equals: code, mode: 'insensitive' } },
     });
-    if (codeExists) throw new ConflictException(`Código ${dto.code} já existe`);
+    if (codeExists) throw new ConflictException(`Código ${code} já existe`);
 
     // Validar parentId
     if (dto.parentId) {
@@ -155,10 +156,13 @@ export class DepartmentsService {
       if (!parent) throw new NotFoundException('Departamento pai não encontrado');
     }
 
+    // active é a fonte de verdade; status é espelhado (campos redundantes no schema)
+    const active = dto.status ? dto.status === 'ACTIVE' : true;
+
     const dept = await this.prisma.department.create({
       data: {
         name: dto.name,
-        code: dto.code,
+        code,
         description: dto.description,
         parentId: dto.parentId,
         headId: dto.headId,
@@ -166,7 +170,10 @@ export class DepartmentsService {
         icon: dto.icon,
         costCenter: dto.costCenter,
         trainingBudget: dto.trainingBudget,
-        active: true,
+        annualBudget: dto.annualBudget,
+        unitId: dto.unitId,
+        active,
+        status: active ? 'ACTIVE' : 'INACTIVE',
       },
       include: {
         head: { select: { id: true, fullName: true } },

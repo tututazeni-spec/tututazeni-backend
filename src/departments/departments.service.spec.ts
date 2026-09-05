@@ -195,5 +195,66 @@ describe('DepartmentsService', () => {
 
       expect(mockPrisma.departmentHeadHistory.create).toHaveBeenCalled();
     });
+
+    it('código é validado case-insensitively e persistido em UPPERCASE', async () => {
+      mockPrisma.department.findFirst.mockResolvedValue(null);
+      mockPrisma.department.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 1, ...data }),
+      );
+
+      await service.create({ name: 'Eng', code: 'eng' } as any);
+
+      expect(mockPrisma.department.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            code: expect.objectContaining({ mode: 'insensitive' }),
+          }),
+        }),
+      );
+      expect(mockPrisma.department.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ code: 'ENG' }) }),
+      );
+    });
+
+    it('aceita unitId / annualBudget / status e espelha status↔active', async () => {
+      mockPrisma.department.findFirst.mockResolvedValue(null);
+      mockPrisma.department.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 1, ...data }),
+      );
+
+      await service.create({
+        name: 'Ops',
+        code: 'OPS',
+        unitId: 4,
+        annualBudget: 100000,
+        status: 'INACTIVE',
+      } as any);
+
+      expect(mockPrisma.department.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            unitId: 4,
+            annualBudget: 100000,
+            status: 'INACTIVE',
+            active: false,
+          }),
+        }),
+      );
+    });
+
+    it('sem status no DTO → active:true e status:ACTIVE', async () => {
+      mockPrisma.department.findFirst.mockResolvedValue(null);
+      mockPrisma.department.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 1, ...data }),
+      );
+
+      await service.create({ name: 'X', code: 'X' } as any);
+
+      expect(mockPrisma.department.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ active: true, status: 'ACTIVE' }),
+        }),
+      );
+    });
   });
 });
