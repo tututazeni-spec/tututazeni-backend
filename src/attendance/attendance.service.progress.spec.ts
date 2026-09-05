@@ -9,6 +9,7 @@ import { AttendanceService } from './attendance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CacheService } from '../cache/cache.service';
+import { LeaveManagementService } from '../leave-management/leave-management.service';
 
 // ─── Mock de attendanceRecord (acedido via proxy) ──────────────────────────────
 
@@ -69,6 +70,13 @@ function buildMockPrismaBase() {
 
 const mockAudit = { log: jest.fn().mockResolvedValue({}) };
 
+const mockLeaveManagement = {
+  create: jest.fn(),
+  processApproval: jest.fn(),
+  getBalance: jest.fn(),
+  getLeaveTypes: jest.fn(),
+};
+
 function buildMockCache() {
   const store = new Map<string, unknown>();
   return {
@@ -114,6 +122,7 @@ describe('AttendanceService (progress)', () => {
         { provide: PrismaService, useValue: mockPrismaProxy },
         { provide: AuditService, useValue: mockAudit },
         { provide: CacheService, useValue: buildMockCache() },
+        { provide: LeaveManagementService, useValue: mockLeaveManagement },
       ],
     }).compile();
 
@@ -123,36 +132,43 @@ describe('AttendanceService (progress)', () => {
   // ─── reviewLeave ───────────────────────────────────────────────────────────
 
   describe('reviewLeave', () => {
-    const pendingLeave = {
+    const approvedLeave = {
       id: 1,
       userId: 5,
-      status: 'PENDING',
-      leaveType: 'ANNUAL',
+      status: 'APPROVED',
+      leaveTypeCode: 'VACATION',
       startDate: new Date('2026-08-01'),
       endDate: new Date('2026-08-05'),
       workDays: 5,
     };
 
-    it('deve lançar NotFoundException se pedido não encontrado', async () => {
-      mockPrismaBase.leaveRequest.findUnique.mockResolvedValue(null);
+    const rejectedLeave = {
+      id: 1,
+      userId: 5,
+      status: 'REJECTED',
+      leaveTypeCode: 'VACATION',
+      startDate: new Date('2026-08-01'),
+      endDate: new Date('2026-08-05'),
+      workDays: 5,
+    };
+
+    it('deve lançar BadRequestException se status inválido (não APPROVED nem REJECTED)', async () => {
+      await expect(service.reviewLeave(1, { status: 'CANCELLED' } as any, 1)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('deve lançar NotFoundException se pedido não encontrado (via leaveManagement.processApproval)', async () => {
+      mockLeaveManagement.processApproval.mockRejectedValue(
+        new NotFoundException('Leave not found'),
+      );
       await expect(service.reviewLeave(99, { status: 'APPROVED' } as any, 1)).rejects.toThrow(
         NotFoundException,
       );
     });
 
-    it('deve lançar BadRequestException se pedido já processado', async () => {
-      mockPrismaBase.leaveRequest.findUnique.mockResolvedValue({
-        ...pendingLeave,
-        status: 'APPROVED',
-      });
-      await expect(service.reviewLeave(1, { status: 'APPROVED' } as any, 1)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
     it('deve aprovar pedido e criar registos de presença', async () => {
-      mockPrismaBase.leaveRequest.findUnique.mockResolvedValue(pendingLeave);
-      mockPrismaBase.leaveRequest.update.mockResolvedValue({ ...pendingLeave, status: 'APPROVED' });
+      mockLeaveManagement.processApproval.mockResolvedValue(approvedLeave);
       mockAR.createMany.mockResolvedValue({ count: 5 });
 
       const result = await service.reviewLeave(
@@ -161,22 +177,23 @@ describe('AttendanceService (progress)', () => {
         9,
       );
 
-      expect(mockPrismaBase.leaveRequest.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 1 },
-          data: expect.objectContaining({ status: 'APPROVED' }),
-        }),
-      );
+      expect(mockLeaveManagement.processApproval).toHaveBeenCalledWith(1, 9, {
+        action: 'APPROVE',
+        notes: 'OK',
+      });
       expect(mockAR.createMany).toHaveBeenCalled();
       expect(result).toBeDefined();
     });
 
     it('deve rejeitar pedido sem criar registos de presença', async () => {
-      mockPrismaBase.leaveRequest.findUnique.mockResolvedValue(pendingLeave);
-      mockPrismaBase.leaveRequest.update.mockResolvedValue({ ...pendingLeave, status: 'REJECTED' });
+      mockLeaveManagement.processApproval.mockResolvedValue(rejectedLeave);
 
       await service.reviewLeave(1, { status: 'REJECTED', reviewNotes: 'Sem fundos' } as any, 9);
 
+      expect(mockLeaveManagement.processApproval).toHaveBeenCalledWith(1, 9, {
+        action: 'REJECT',
+        notes: 'Sem fundos',
+      });
       expect(mockAR.createMany).not.toHaveBeenCalled();
     });
   });
