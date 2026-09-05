@@ -444,6 +444,16 @@ export class RolesPermissionsService {
     return this.findOne(roleId);
   }
 
+  // Wrappers single-permission — servem as rotas /roles/:id/permissions/:permissionId/*
+  // (antigo departments.RolesService). Idempotentes via os métodos array acima.
+  assignPermissionToRole(roleId: number, permissionId: number) {
+    return this.addPermissionsToRole(roleId, [permissionId]);
+  }
+
+  revokePermissionFromRole(roleId: number, permissionId: number) {
+    return this.removePermissionsFromRole(roleId, [permissionId]);
+  }
+
   // Substitui o conjunto de permissões do role pela lista dada — diff entre
   // o estado actual e o pedido, em vez de {set:[...]} (que na relação antiga
   // implicava um disconnect implícito; aqui é só limpeza + inserção directa

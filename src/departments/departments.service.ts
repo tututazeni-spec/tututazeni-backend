@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { flattenRolePermissions } from '../common/utils/role-permissions';
 import {
   CreateDepartmentDto,
   UpdateDepartmentDto,
@@ -17,9 +16,6 @@ import {
   BulkTransferDto,
   CreateUnitDto,
   UpdateUnitDto,
-  DepartmentsCreateRoleDto,
-  UpdateRoleDto,
-  DepartmentsCreatePermissionDto,
   CreatePositionDto,
   UpdatePositionDto,
   CreateCareerPositionDto,
@@ -520,102 +516,6 @@ export class UnitsService {
   async remove(id: number) {
     await this.findOne(id);
     return this.prisma.unit.delete({ where: { id } });
-  }
-}
-
-// ─── ROLES ────────────────────────────────────────────────────────────────────
-
-@Injectable()
-export class RolesService {
-  constructor(private prisma: PrismaService) {}
-
-  async findAll() {
-    const roles = await this.prisma.read.role.findMany({
-      include: {
-        rolePermissions: { include: { permission: true } },
-        _count: { select: { users: true } },
-      },
-      orderBy: { name: 'asc' },
-    });
-    return roles.map(({ rolePermissions, ...r }) => ({
-      ...r,
-      permissions: flattenRolePermissions(rolePermissions),
-    }));
-  }
-
-  async findOne(id: number) {
-    const r = await this.prisma.read.role.findUnique({
-      where: { id },
-      include: {
-        rolePermissions: { include: { permission: true } },
-      },
-    });
-    if (!r) throw new NotFoundException('Role não encontrada');
-    const { rolePermissions, ...rest } = r;
-    return { ...rest, permissions: flattenRolePermissions(rolePermissions) };
-  }
-
-  async create(dto: DepartmentsCreateRoleDto) {
-    const exists = await this.prisma.role.findFirst({ where: { name: dto.name } });
-    if (exists) throw new ConflictException(`Role '${dto.name}' já existe`);
-    return this.prisma.role.create({ data: dto });
-  }
-
-  async update(id: number, dto: UpdateRoleDto) {
-    await this.findOne(id);
-    return this.prisma.role.update({ where: { id }, data: dto });
-  }
-
-  async remove(id: number) {
-    await this.findOne(id);
-    return this.prisma.role.delete({ where: { id } });
-  }
-
-  // Permission é um catálogo independente (M2M via RolePermission) — criar
-  // uma permissão não precisa de um role "dono". Se `dto.roleId` for
-  // fornecido, atribui-se de imediato via RolePermission; caso contrário
-  // fica só no catálogo, para atribuição posterior.
-  async addPermission(dto: DepartmentsCreatePermissionDto) {
-    const { roleId, ...data } = dto;
-    const permission = await this.prisma.permission.create({ data });
-    if (roleId) {
-      await this.prisma.rolePermission.create({ data: { roleId, permissionId: permission.id } });
-    }
-    return permission;
-  }
-
-  async removePermission(permissionId: number) {
-    return this.prisma.permission.delete({ where: { id: permissionId } });
-  }
-
-  async assignPermissionToRole(roleId: number, permissionId: number) {
-    // upsert por chave composta (roleId, permissionId) — idempotente desde
-    // que RolePermission ganhou @@unique([roleId, permissionId]).
-    return this.prisma.rolePermission.upsert({
-      where: { roleId_permissionId: { roleId, permissionId } },
-      create: { roleId, permissionId },
-      update: {},
-    });
-  }
-
-  async revokePermissionFromRole(roleId: number, permissionId: number) {
-    return this.prisma.rolePermission.deleteMany({ where: { roleId, permissionId } });
-  }
-
-  async initDefaultRoles() {
-    const defaults = [
-      { name: 'ADMIN', description: 'Administrador do sistema' },
-      { name: 'RH', description: 'Recursos Humanos' },
-      { name: 'GESTOR', description: 'Gestor de equipa' },
-      { name: 'COLABORADOR', description: 'Colaborador' },
-      { name: 'AUDITOR', description: 'Auditor (apenas leitura)' },
-    ];
-    const created = [];
-    for (const r of defaults) {
-      const exists = await this.prisma.role.findFirst({ where: { name: r.name } });
-      if (!exists) created.push(await this.prisma.role.create({ data: r }));
-    }
-    return { created: created.length, roles: created };
   }
 }
 

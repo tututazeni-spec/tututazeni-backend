@@ -394,6 +394,20 @@ describe('RolesPermissionsService', () => {
       );
     });
 
+    it('assignPermissionToRole delega em addPermissionsToRole com array de 1', async () => {
+      const spy = jest.spyOn(service, 'addPermissionsToRole').mockResolvedValue({} as never);
+      await service.assignPermissionToRole(3, 7);
+      expect(spy).toHaveBeenCalledWith(3, [7]);
+      spy.mockRestore();
+    });
+
+    it('revokePermissionFromRole delega em removePermissionsFromRole com array de 1', async () => {
+      const spy = jest.spyOn(service, 'removePermissionsFromRole').mockResolvedValue({} as never);
+      await service.revokePermissionFromRole(3, 7);
+      expect(spy).toHaveBeenCalledWith(3, [7]);
+      spy.mockRestore();
+    });
+
     it('getStats devolve a forma histórica de GET /acl/stats', async () => {
       mockPrisma.user.count.mockResolvedValue(6000);
       mockPrisma.role.count.mockResolvedValue(7);

@@ -1,10 +1,10 @@
 // src/departments/departments.module.ts
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
+import { RolesPermissionsModule } from '../roles-permissions/roles-permissions.module';
 import {
   DepartmentsService,
   UnitsService,
-  RolesService,
   PositionsService,
   CareersService,
 } from './departments.service';
@@ -17,8 +17,10 @@ import {
 } from './departments.controller';
 
 @Module({
-  imports: [PrismaModule],
-  providers: [DepartmentsService, UnitsService, RolesService, PositionsService, CareersService],
+  // Fase D: RolesController é servido pelo RolesPermissionsService canónico
+  // (via RolesPermissionsModule). departments.RolesService foi eliminado.
+  imports: [PrismaModule, RolesPermissionsModule],
+  providers: [DepartmentsService, UnitsService, PositionsService, CareersService],
   controllers: [
     DepartmentsController,
     UnitsController,
@@ -26,6 +28,6 @@ import {
     PositionsController,
     CareersController,
   ],
-  exports: [DepartmentsService, UnitsService, RolesService, PositionsService, CareersService],
+  exports: [DepartmentsService, UnitsService, PositionsService, CareersService],
 })
 export class DepartmentsModule {}
