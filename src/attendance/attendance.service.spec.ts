@@ -320,22 +320,62 @@ describe('AttendanceService', () => {
   // ─── createLeaveRequest ───────────────────────────────────────────────────
 
   describe('createLeaveRequest', () => {
-    it('deve criar pedido de licença', async () => {
-      mockPrisma.leaveRequest.create.mockResolvedValue({
-        id: 1,
-        userId: 1,
-        type: 'ANNUAL',
-        status: 'PENDING',
-      });
+    it('deve delegar em LeaveManagementService.create com o código traduzido', async () => {
+      mockLeaveManagement.create.mockResolvedValue({ id: 1, userId: 1, status: 'PENDING' });
 
       const result = await service.createLeaveRequest(1, {
-        type: 'ANNUAL' as any,
+        type: 'VACATION' as any,
         startDate: '2024-08-01',
         endDate: '2024-08-05',
         reason: 'Férias',
       } as any);
 
+      expect(mockLeaveManagement.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          leaveTypeCode: 'VACATION',
+          startDate: '2024-08-01',
+          endDate: '2024-08-05',
+          reason: 'Férias',
+          durationMode: 'FULL_DAY',
+        }),
+        1,
+      );
       expect(result).toBeDefined();
+    });
+
+    it('traduz SICK_LEAVE (Prisma) para o código SICK (LeaveTypeConfig)', async () => {
+      mockLeaveManagement.create.mockResolvedValue({ id: 2, userId: 1, status: 'PENDING' });
+
+      await service.createLeaveRequest(1, {
+        type: 'SICK_LEAVE' as any,
+        startDate: '2024-08-01',
+        endDate: '2024-08-02',
+        reason: 'Doença',
+      } as any);
+
+      expect(mockLeaveManagement.create).toHaveBeenCalledWith(
+        expect.objectContaining({ leaveTypeCode: 'SICK' }),
+        1,
+      );
+    });
+
+    it('meio-dia → durationMode HALF_AM/HALF_PM conforme halfDayPeriod', async () => {
+      mockLeaveManagement.create.mockResolvedValue({ id: 3, userId: 1, status: 'PENDING' });
+
+      await service.createLeaveRequest(1, {
+        type: 'VACATION' as any,
+        startDate: '2024-08-01',
+        endDate: '2024-08-01',
+        reason: 'Manhã livre',
+        halfDay: true,
+        halfDayPeriod: 'PM' as any,
+      } as any);
+
+      expect(mockLeaveManagement.create).toHaveBeenCalledWith(
+        expect.objectContaining({ durationMode: 'HALF_PM' }),
+        1,
+      );
     });
   });
 

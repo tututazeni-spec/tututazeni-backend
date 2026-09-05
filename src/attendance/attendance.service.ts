@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { CacheService } from '../cache/cache.service';
 import { LeaveManagementService } from '../leave-management/leave-management.service';
+import { DurationMode } from '../leave-management/leave-management.dto';
 import { Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
@@ -35,6 +36,7 @@ import {
   CheckInMethod,
   AttendanceContext,
   OvertimeStatus,
+  DayPeriod,
 } from './attendance.dto';
 
 interface QrPayload {
@@ -455,43 +457,30 @@ export class AttendanceService {
   }
 
   async createLeaveRequest(userId: number, dto: CreateLeaveRequestDto) {
-    const start = new Date(dto.startDate);
-    const end = new Date(dto.endDate);
+    // Validação de datas (end < start) já é feita por leave-management.create()
+    // (leave-management.service.ts:290) — não duplicar aqui.
+    const durationMode = dto.halfDay
+      ? dto.halfDayPeriod === DayPeriod.PM
+        ? DurationMode.HALF_PM
+        : DurationMode.HALF_AM
+      : DurationMode.FULL_DAY;
 
-    if (end < start) throw new BadRequestException('Data de fim anterior ao início');
-
-    // Guard de sobreposição antes de criar: força primary para não validar contra réplica atrasada.
-    const conflict = await this.prisma.leaveRequest.findFirst({
-      where: {
+    // A partir daqui, a validação de sobreposição, saldo, antecedência
+    // mínima, blackout periods e o fluxo de aprovação são inteiramente
+    // responsabilidade de LeaveManagementService — attendance deixou de ter
+    // a sua própria cópia divergente destas regras (Fase B da consolidação).
+    return this.leaveManagement.create(
+      {
         userId,
-        status: LeaveStatus.APPROVED,
-        OR: [{ startDate: { lte: end }, endDate: { gte: start } }],
-      },
-    });
-    if (conflict)
-      throw new ConflictException('Existe sobreposição com licença já aprovada neste período');
-
-    const workDays = this.countWorkdays(start, end);
-
-    return this.prisma.leaveRequest.create({
-      data: {
-        userId,
-        leaveType: dto.type,
-        // leaveTypeCode passou a obrigatório (project-innova-leave-type-enum-
-        // mismatch); este fluxo usa sempre um valor real do enum LeaveType
-        // (@IsEnum no DTO), nunca um código customizado — seguro usar
-        // dto.type directamente como string.
-        leaveTypeCode: dto.type,
-        startDate: start,
-        endDate: end,
+        leaveTypeCode: AttendanceService.LEAVE_TYPE_TO_CODE[dto.type],
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        durationMode,
         reason: dto.reason,
-        attachments: dto.attachments ?? [],
-        halfDay: dto.halfDay ?? false,
-        halfDayPeriod: dto.halfDayPeriod,
-        workDays,
-        status: LeaveStatus.PENDING,
+        attachments: dto.attachments,
       },
-    });
+      userId,
+    );
   }
 
   async reviewLeave(id: number, dto: ReviewLeaveDto, reviewerId: number) {

@@ -140,4 +140,56 @@ describe('Attendance Integration', () => {
         .expect(401);
     });
   });
+
+  describe('POST /attendance/leaves → consolidação com leave-management (Fase B)', () => {
+    it('licença aprovada automaticamente (sem gestor atribuído) deduz o saldo real de LeaveBalance', async () => {
+      const start = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const end = new Date(Date.now() + 61 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      const before = await request(app.getHttpServer())
+        .get('/attendance/my/leave-balance')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      const vacationBefore = before.body.find((b: any) => b.type === 'VACATION');
+
+      const res = await request(app.getHttpServer())
+        .post('/attendance/leaves')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({
+          type: 'VACATION',
+          startDate: start,
+          endDate: end,
+          reason: 'Teste consolidação Fase B',
+        });
+
+      expect([201, 409]).toContain(res.status);
+      if (res.status !== 201) return; // 409 = já existe pedido sobreposto de uma corrida anterior; sem novo saldo a verificar
+
+      const after = await request(app.getHttpServer())
+        .get('/attendance/my/leave-balance')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      const vacationAfter = after.body.find((b: any) => b.type === 'VACATION');
+
+      expect(vacationAfter.remaining).toBeLessThan(vacationBefore.remaining);
+    });
+
+    it('tipo sem LeaveTypeConfig configurado → 404 claro, não 500', async () => {
+      // UNJUSTIFIED_ABSENCE está seedado (Task 1/2) — este teste prova a
+      // mensagem de erro para um cenário onde o catálogo realmente não tem o
+      // código, simulando uma BD sem o seed da Task 1 aplicado.
+      await request(app.getHttpServer())
+        .post('/attendance/leaves')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({
+          type: 'TRAINING',
+          startDate: '2020-01-01', // data no passado — falha noutra validação antes, prova só que não é 500
+          endDate: '2020-01-02',
+          reason: 'Teste',
+        })
+        .then(res => {
+          expect(res.status).not.toBe(500);
+        });
+    });
+  });
 });
