@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
 
 const mockPrisma = {
   course: {
@@ -65,6 +66,11 @@ const mockPrisma = {
   },
 };
 
+const mockCourseCompletion = {
+  markLessonComplete: jest.fn(),
+  getCourseProgressNumbers: jest.fn(),
+};
+
 const baseCourse = {
   id: 1,
   title: 'Curso Teste',
@@ -90,7 +96,11 @@ describe('CoursesService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CoursesService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        CoursesService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CourseCompletionService, useValue: mockCourseCompletion },
+      ],
     }).compile();
     service = module.get<CoursesService>(CoursesService);
   });

@@ -6,8 +6,9 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { CertificateType, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import {
@@ -36,7 +37,10 @@ const COURSE_BASE_INCLUDE = {
 export class CoursesService {
   private readonly logger = new Logger(CoursesService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly courseCompletion: CourseCompletionService,
+  ) {}
 
   // ─── Catálogo ─────────────────────────────────────────────────────────────
 
@@ -430,85 +434,17 @@ export class CoursesService {
   // ─── Progresso ────────────────────────────────────────────────────────────
 
   async markLessonComplete(lessonId: number, userId: number, dto: MarkLessonCompleteDto) {
-    const lesson = await this.prisma.read.lesson.findUnique({
-      where: { id: lessonId },
-      include: { module: { include: { course: true } } },
+    return this.courseCompletion.markLessonComplete(userId, lessonId, {
+      watchedSeconds: dto.watchedSeconds,
+      resumePosition: dto.resumePosition,
     });
-    if (!lesson) throw new NotFoundException('Aula não encontrada');
-
-    const courseId = lesson.module.courseId;
-    // Lê matrícula no primary: o estado decide a escrita (transição NOT_STARTED→IN_PROGRESS).
-    const enrollment = await this.prisma.enrollment.findFirst({ where: { userId, courseId } });
-    if (!enrollment) throw new ForbiddenException('Não está matriculado neste curso');
-
-    const progress = await this.prisma.lessonProgress.upsert({
-      where: { lessonId_userId: { lessonId, userId } },
-      create: {
-        lessonId,
-        userId,
-        completed: true,
-        completedAt: new Date(),
-        watchedSeconds: dto.watchedSeconds,
-        resumePosition: dto.resumePosition,
-      },
-      update: {
-        completed: true,
-        completedAt: new Date(),
-        watchedSeconds: dto.watchedSeconds,
-        resumePosition: dto.resumePosition,
-      },
-    });
-
-    if (enrollment.status === 'NOT_STARTED') {
-      await this.prisma.enrollment.update({
-        where: { id: enrollment.id },
-        data: { status: 'IN_PROGRESS', startedAt: new Date() },
-      });
-    }
-
-    const courseProgress = await this.calculateCourseProgress(courseId, userId);
-    if (courseProgress.pct >= 100) {
-      await this.completeCourse(enrollment.id, userId, courseId);
-    }
-
-    return { progress, courseProgress };
-  }
-
-  private async calculateCourseProgress(courseId: number, userId: number) {
-    // Usado no fluxo de conclusão logo após upsert de progresso: lê do primary para
-    // não computar a percentagem sobre contagens de réplica atrasada.
-    const [totalLessons, completedLessons] = await Promise.all([
-      this.prisma.lesson.count({ where: { module: { courseId } } }),
-      this.prisma.lessonProgress.count({
-        where: { userId, completed: true, lesson: { module: { courseId } } },
-      }),
-    ]);
-    const pct = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
-    return { totalLessons, completedLessons, pct };
-  }
-
-  private async completeCourse(enrollmentId: number, userId: number, courseId: number) {
-    const enrollment = await this.prisma.enrollment.findUnique({ where: { id: enrollmentId } });
-    if (!enrollment || enrollment.status === 'COMPLETED') return;
-
-    await this.prisma.enrollment.update({
-      where: { id: enrollmentId },
-      data: { status: 'COMPLETED', completedAt: new Date() },
-    });
-
-    await this.prisma.courseAnalytics.updateMany({
-      where: { courseId },
-      data: { totalCompleted: { increment: 1 } },
-    });
-
-    await this.issueCertificate(enrollmentId, userId, courseId);
   }
 
   async getCourseProgress(courseId: number, userId: number) {
     const enrollment = await this.prisma.read.enrollment.findFirst({ where: { userId, courseId } });
     if (!enrollment) return null;
 
-    const courseProgress = await this.calculateCourseProgress(courseId, userId);
+    const courseProgress = await this.courseCompletion.getCourseProgressNumbers(courseId, userId);
     const moduleProgress = await this.prisma.read.courseModule.findMany({
       where: { courseId },
       orderBy: { seq: 'asc' },
@@ -537,34 +473,6 @@ export class CoursesService {
   }
 
   // ─── Certificados ─────────────────────────────────────────────────────────
-
-  private async issueCertificate(enrollmentId: number, userId: number, courseId: number) {
-    const course = await this.prisma.course.findUnique({ where: { id: courseId } });
-    const code = `CERT-${courseId}-${userId}-${Date.now()}`;
-    const expiresAt = course?.certificateValidityDays
-      ? new Date(Date.now() + course.certificateValidityDays * 86400 * 1000)
-      : null;
-
-    const cert = await this.prisma.certificate.create({
-      data: {
-        enrollmentId,
-        userId,
-        courseId,
-        issuedAt: new Date(),
-        expiresAt,
-        type: CertificateType.COURSE,
-        validationCode: code,
-      },
-    });
-
-    await createNotificationSafe(this.prisma, this.logger, {
-      userId,
-      type: 'CERTIFICATE_ISSUED',
-      message: `Certificado emitido para o curso "${course?.title}"`,
-    });
-
-    return cert;
-  }
 
   async getMyCertificates(userId: number) {
     return this.prisma.read.certificate.findMany({
