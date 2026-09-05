@@ -254,13 +254,36 @@ export class DepartmentsService {
     }
     return this.prisma.department.update({
       where: { id },
-      data: { active: false },
+      data: { active: false, status: 'INACTIVE' },
     });
   }
 
   async activate(id: number) {
     await this.findOne(id);
-    return this.prisma.department.update({ where: { id }, data: { active: true } });
+    return this.prisma.department.update({
+      where: { id },
+      data: { active: true, status: 'ACTIVE' },
+    });
+  }
+
+  // Hard-delete guardado — alvo do DELETE /organization/departments/:id.
+  // Só elimina departamentos sem colaboradores e sem sub-departamentos.
+  async remove(id: number) {
+    const dept = await this.prisma.read.department.findUnique({
+      where: { id },
+      include: { _count: { select: { users: true, children: true } } },
+    });
+    if (!dept) throw new NotFoundException('Departamento não encontrado');
+    if (dept._count.users > 0) {
+      throw new BadRequestException(
+        `Departamento tem ${dept._count.users} colaboradores. Transfira-os primeiro.`,
+      );
+    }
+    if (dept._count.children > 0) {
+      throw new BadRequestException('Departamento tem sub-departamentos. Elimine-os primeiro.');
+    }
+    await this.prisma.department.delete({ where: { id } });
+    return { message: 'Departamento eliminado' };
   }
 
   // Transferir membro entre departamentos

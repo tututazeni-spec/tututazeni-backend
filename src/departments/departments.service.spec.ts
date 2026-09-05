@@ -325,4 +325,40 @@ describe('DepartmentsService', () => {
       await expect(service.update(1, { parentId: 2 } as any)).rejects.toThrow(BadRequestException);
     });
   });
+
+  // ─── remove (hard-delete guardado) ───────────────────────────────────────
+
+  describe('remove', () => {
+    it('departamento inexistente → NotFoundException', async () => {
+      mockPrisma.department.findUnique.mockResolvedValue(null);
+      await expect(service.remove(999)).rejects.toThrow(NotFoundException);
+    });
+
+    it('com colaboradores → BadRequestException', async () => {
+      mockPrisma.department.findUnique.mockResolvedValue({
+        id: 1,
+        _count: { users: 3, children: 0 },
+      });
+      await expect(service.remove(1)).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.department.delete).not.toHaveBeenCalled();
+    });
+
+    it('com sub-departamentos → BadRequestException', async () => {
+      mockPrisma.department.findUnique.mockResolvedValue({
+        id: 1,
+        _count: { users: 0, children: 2 },
+      });
+      await expect(service.remove(1)).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.department.delete).not.toHaveBeenCalled();
+    });
+
+    it('vazio → elimina e devolve mensagem', async () => {
+      mockPrisma.department.findUnique.mockResolvedValue({
+        id: 1,
+        _count: { users: 0, children: 0 },
+      });
+      mockPrisma.department.delete.mockResolvedValue({ id: 1 });
+      expect(await service.remove(1)).toEqual({ message: 'Departamento eliminado' });
+    });
+  });
 });
