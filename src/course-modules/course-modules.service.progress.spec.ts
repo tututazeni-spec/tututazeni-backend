@@ -7,6 +7,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CourseModulesService } from './course-modules.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
+
+const mockCourseCompletion = {
+  markLessonComplete: jest.fn(),
+  isModuleCompleted: jest.fn(),
+};
 
 function buildMockPrisma() {
   const crud = () => ({
@@ -56,30 +62,15 @@ const baseModule = {
   _count: { lessons: 1 },
 };
 
-const baseLesson = {
-  id: 5,
-  moduleId: 1,
-  title: 'Aula 1',
-  seq: 1,
-  type: 'VIDEO',
-  module: {
-    id: 1,
-    courseId: 10,
-    status: 'PUBLISHED',
-    seq: 1,
-    progressionType: 'FREE',
-    dripDays: null,
-    availableFrom: null,
-    course: { id: 10, title: 'Curso Base' },
-  },
-};
-
 describe('CourseModulesService (progress)', () => {
   let service: CourseModulesService;
   let mockPrisma: ReturnType<typeof buildMockPrisma>;
 
   beforeEach(async () => {
     mockPrisma = buildMockPrisma();
+    mockCourseCompletion.markLessonComplete.mockReset();
+    mockCourseCompletion.isModuleCompleted.mockReset();
+    mockCourseCompletion.isModuleCompleted.mockResolvedValue(false);
 
     Object.defineProperty(mockPrisma, 'read', {
       get() {
@@ -88,7 +79,11 @@ describe('CourseModulesService (progress)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CourseModulesService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        CourseModulesService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CourseCompletionService, useValue: mockCourseCompletion },
+      ],
     }).compile();
 
     service = module.get<CourseModulesService>(CourseModulesService);
@@ -245,100 +240,16 @@ describe('CourseModulesService (progress)', () => {
   // ─── isModuleCompleted ─────────────────────────────────────────────────────────
 
   describe('isModuleCompleted', () => {
-    it('deve retornar true se não há aulas (MIN_PERCENT com 0 aulas)', async () => {
-      mockPrisma.courseModule.findUnique.mockResolvedValue({
-        id: 1,
-        completionRule: 'ALL_LESSONS',
-        lessons: [],
-      });
-      const result = await service.isModuleCompleted(1, 1);
+    it('delega em CourseCompletionService e propaga o resultado', async () => {
+      mockCourseCompletion.isModuleCompleted.mockResolvedValue(true);
+      const result = await service.isModuleCompleted(7, 42);
+      expect(mockCourseCompletion.isModuleCompleted).toHaveBeenCalledWith(7, 42);
       expect(result).toBe(true);
     });
 
-    it('deve calcular regra MIN_PERCENT (70% completo)', async () => {
-      mockPrisma.courseModule.findUnique.mockResolvedValue({
-        id: 1,
-        completionRule: 'MIN_PERCENT',
-        minCompletionPercent: 50,
-        lessons: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }],
-      });
-      mockPrisma.lessonProgress.count.mockResolvedValue(3); // 3/4 = 75% >= 50%
-      const result = await service.isModuleCompleted(1, 1);
-      expect(result).toBe(true);
-    });
-
-    it('deve retornar false com MIN_PERCENT insuficiente', async () => {
-      mockPrisma.courseModule.findUnique.mockResolvedValue({
-        id: 1,
-        completionRule: 'MIN_PERCENT',
-        minCompletionPercent: 80,
-        lessons: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }],
-      });
-      mockPrisma.lessonProgress.count.mockResolvedValue(2); // 2/4 = 50% < 80%
-      const result = await service.isModuleCompleted(1, 1);
-      expect(result).toBe(false);
-    });
-
-    it('deve retornar true com QUIZ_PASS quando quiz passou', async () => {
-      mockPrisma.courseModule.findUnique.mockResolvedValue({
-        id: 1,
-        completionRule: 'QUIZ_PASS',
-        lessons: [{ id: 1 }],
-      });
-      mockPrisma.lessonProgress.count.mockResolvedValue(0);
-      mockPrisma.quiz.findFirst.mockResolvedValue({ id: 10 });
-      mockPrisma.quizAttempt.findFirst.mockResolvedValue({ id: 1, passed: true });
-      const result = await service.isModuleCompleted(1, 1);
-      expect(result).toBe(true);
-    });
-
-    it('deve retornar false com QUIZ_PASS quando quiz não passou', async () => {
-      mockPrisma.courseModule.findUnique.mockResolvedValue({
-        id: 1,
-        completionRule: 'QUIZ_PASS',
-        lessons: [{ id: 1 }],
-      });
-      mockPrisma.lessonProgress.count.mockResolvedValue(0);
-      mockPrisma.quiz.findFirst.mockResolvedValue({ id: 10 });
-      mockPrisma.quizAttempt.findFirst.mockResolvedValue(null);
-      const result = await service.isModuleCompleted(1, 1);
-      expect(result).toBe(false);
-    });
-
-    it('deve usar fallback ALL_LESSONS quando QUIZ_PASS sem quiz', async () => {
-      mockPrisma.courseModule.findUnique.mockResolvedValue({
-        id: 1,
-        completionRule: 'QUIZ_PASS',
-        lessons: [{ id: 1 }],
-      });
-      mockPrisma.lessonProgress.count.mockResolvedValue(1);
-      mockPrisma.quiz.findFirst.mockResolvedValue(null); // sem quiz
-      const result = await service.isModuleCompleted(1, 1);
-      expect(result).toBe(true); // completedCount(1) >= totalLessons(1)
-    });
-
-    it('deve calcular regra COMBINED (lições + quiz)', async () => {
-      mockPrisma.courseModule.findUnique.mockResolvedValue({
-        id: 1,
-        completionRule: 'COMBINED',
-        minCompletionPercent: 80,
-        lessons: [{ id: 1 }, { id: 2 }],
-      });
-      mockPrisma.lessonProgress.count.mockResolvedValue(2); // 100% >= 80%
-      mockPrisma.quiz.findFirst.mockResolvedValue({ id: 10 });
-      mockPrisma.quizAttempt.findFirst.mockResolvedValue({ id: 1, passed: true });
-      const result = await service.isModuleCompleted(1, 1);
-      expect(result).toBe(true);
-    });
-
-    it('deve retornar false com regra desconhecida', async () => {
-      mockPrisma.courseModule.findUnique.mockResolvedValue({
-        id: 1,
-        completionRule: 'UNKNOWN_RULE',
-        lessons: [{ id: 1 }],
-      });
-      mockPrisma.lessonProgress.count.mockResolvedValue(1);
-      const result = await service.isModuleCompleted(1, 1);
+    it('propaga false do CourseCompletionService', async () => {
+      mockCourseCompletion.isModuleCompleted.mockResolvedValue(false);
+      const result = await service.isModuleCompleted(7, 42);
       expect(result).toBe(false);
     });
   });
@@ -346,62 +257,67 @@ describe('CourseModulesService (progress)', () => {
   // ─── markLessonComplete ───────────────────────────────────────────────────────
 
   describe('markLessonComplete', () => {
-    it('deve lançar ForbiddenException se aula inacessível (módulo não publicado)', async () => {
-      mockPrisma.lesson.findUnique.mockResolvedValue({
-        ...baseLesson,
-        module: { ...baseLesson.module, status: 'DRAFT' },
-      });
-      await expect(
-        service.markLessonComplete(1, { lessonId: 5, watchedSeconds: 60 }),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it('deve lançar ForbiddenException se utilizador não está inscrito', async () => {
-      mockPrisma.lesson.findUnique.mockResolvedValue(baseLesson);
-      mockPrisma.enrollment.findFirst.mockResolvedValue(null); // não inscrito
-      await expect(service.markLessonComplete(1, { lessonId: 5 })).rejects.toThrow(
+    it('bloqueia se a aula não está acessível (progressão sequencial) — não delega', async () => {
+      jest
+        .spyOn(service as any, 'isLessonAccessible')
+        .mockResolvedValue({ accessible: false, reason: 'Módulo bloqueado' });
+      await expect(service.markLessonComplete(10, { lessonId: 1 } as any)).rejects.toThrow(
         ForbiddenException,
       );
+      expect(mockCourseCompletion.markLessonComplete).not.toHaveBeenCalled();
     });
 
-    it('deve marcar aula como completa (módulo FREE, inscrito)', async () => {
-      // isLessonAccessible: lesson encontrada, módulo PUBLISHED, FREE, inscrito
-      mockPrisma.lesson.findUnique.mockResolvedValue(baseLesson);
-      mockPrisma.enrollment.findFirst.mockResolvedValue({
-        id: 1,
-        userId: 1,
-        courseId: 10,
-        status: 'IN_PROGRESS',
-        enrolledAt: new Date(),
+    it('acessível → delega em CourseCompletionService e devolve {progress, moduleCompleted, courseId}', async () => {
+      jest.spyOn(service as any, 'isLessonAccessible').mockResolvedValue({ accessible: true });
+      mockCourseCompletion.markLessonComplete.mockResolvedValue({
+        progress: { id: 1, completed: true },
+        courseProgress: {},
+        courseCompleted: false,
       });
-      mockPrisma.lessonProgress.upsert.mockResolvedValue({ id: 1, completed: true });
-      // isModuleCompleted: courseModule.findUnique retorna módulo com lições
-      mockPrisma.courseModule.findUnique.mockResolvedValue({
+      mockPrisma.lesson.findUnique.mockResolvedValue({
         id: 1,
-        completionRule: 'ALL_LESSONS',
-        lessons: [{ id: 5 }],
+        moduleId: 5,
+        module: { courseId: 20 },
       });
-      mockPrisma.lessonProgress.count.mockResolvedValue(1); // 1/1 = 100%
-      // checkAndCompleteCourse: enrollment já exists, mandatory modules
-      mockPrisma.enrollment.findUnique.mockResolvedValue({
-        id: 1,
-        status: 'IN_PROGRESS',
-      });
-      mockPrisma.courseModule.findMany.mockResolvedValue([{ id: 1 }]); // 1 mandatory module
-      // notifyNextModuleUnlock
-      mockPrisma.courseModule.findFirst.mockResolvedValue(null); // no next module
-      // checkAndCompleteCourse → update enrollment
-      mockPrisma.enrollment.update.mockResolvedValue({});
-      mockPrisma.courseAnalytics.updateMany.mockResolvedValue({});
-      mockPrisma.userPoints.upsert.mockResolvedValue({});
-      mockPrisma.course.findUnique.mockResolvedValue({ id: 10, title: 'Curso Base' });
+      mockCourseCompletion.isModuleCompleted.mockResolvedValue(true);
+      jest.spyOn(service, 'notifyNextModuleUnlock' as any).mockResolvedValue(undefined as any);
 
-      const result = (await service.markLessonComplete(1, {
-        lessonId: 5,
-        watchedSeconds: 300,
-      })) as any;
-      expect(result.progress).toBeDefined();
-      expect(result.moduleCompleted).toBe(true);
+      const res = await service.markLessonComplete(10, {
+        lessonId: 1,
+        watchedSeconds: 5,
+      } as any);
+
+      expect(mockCourseCompletion.markLessonComplete).toHaveBeenCalledWith(10, 1, {
+        watchedSeconds: 5,
+        resumePosition: undefined,
+      });
+      expect(res).toEqual({
+        progress: { id: 1, completed: true },
+        moduleCompleted: true,
+        courseId: 20,
+      });
+      expect((service as any).notifyNextModuleUnlock).toHaveBeenCalledWith(5, 10, 20);
+    });
+
+    it('módulo não concluído → não notifica desbloqueio', async () => {
+      jest.spyOn(service as any, 'isLessonAccessible').mockResolvedValue({ accessible: true });
+      mockCourseCompletion.markLessonComplete.mockResolvedValue({
+        progress: { id: 1 },
+        courseProgress: {},
+        courseCompleted: false,
+      });
+      mockPrisma.lesson.findUnique.mockResolvedValue({
+        id: 1,
+        moduleId: 5,
+        module: { courseId: 20 },
+      });
+      mockCourseCompletion.isModuleCompleted.mockResolvedValue(false);
+      const notifySpy = jest
+        .spyOn(service, 'notifyNextModuleUnlock' as any)
+        .mockResolvedValue(undefined as any);
+
+      await service.markLessonComplete(10, { lessonId: 1 } as any);
+      expect(notifySpy).not.toHaveBeenCalled();
     });
   });
 
@@ -439,12 +355,8 @@ describe('CourseModulesService (progress)', () => {
         ],
       };
       mockPrisma.courseModule.findMany.mockResolvedValue([modWithLessons]);
-      // isModuleCompleted: courseModule.findUnique
-      mockPrisma.courseModule.findUnique.mockResolvedValue({
-        id: 1,
-        completionRule: 'ALL_LESSONS',
-        lessons: [{ id: 5 }],
-      });
+      // isModuleCompleted delega no CourseCompletionService
+      mockCourseCompletion.isModuleCompleted.mockResolvedValue(true);
       mockPrisma.lessonProgress.count.mockResolvedValue(1);
 
       const result = (await service.getLessonProgress(1, 10)) as any[];

@@ -7,6 +7,7 @@
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
 import {
   CreateModuleDto,
   UpdateModuleDto,
@@ -23,7 +24,10 @@ import {
 export class CourseModulesService {
   private readonly logger = new Logger(CourseModulesService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly courseCompletion: CourseCompletionService,
+  ) {}
 
   // ─── MÓDULOS — CRUD ───────────────────────────────────────────────────────
 
@@ -379,125 +383,38 @@ export class CourseModulesService {
     return { accessible: true };
   }
 
-  // Verificar se módulo está concluído segundo as regras configuradas
+  // Verificar se módulo está concluído — delega no orquestrador único.
   async isModuleCompleted(moduleId: number, userId: number): Promise<boolean> {
-    const mod = await this.prisma.read.courseModule.findUnique({
-      where: { id: moduleId },
-      include: { lessons: true },
-    });
-    if (!mod) return false;
-
-    // FIX: casts desnecessários — `lessons`/`completionRule`/
-    // `minCompletionPercent` são campos/relações reais de CourseModule, já
-    // inferidos pelo `include: { lessons: true }` acima.
-    const lessons = mod.lessons;
-    const totalLessons = lessons.length;
-    if (totalLessons === 0) return true;
-
-    const completedCount = await this.prisma.read.lessonProgress.count({
-      where: { userId, completed: true, lessonId: { in: lessons.map(l => l.id) } },
-    });
-
-    const rule = mod.completionRule ?? 'ALL_LESSONS';
-
-    if (rule === 'ALL_LESSONS') {
-      return completedCount >= totalLessons;
-    }
-
-    if (rule === 'MIN_PERCENT') {
-      const pct = mod.minCompletionPercent ?? 100;
-      return (completedCount / totalLessons) * 100 >= pct;
-    }
-
-    if (rule === 'QUIZ_PASS') {
-      const quiz = await this.prisma.read.quiz.findFirst({
-        where: { lesson: { moduleId } },
-      });
-      if (!quiz) return completedCount >= totalLessons;
-      const passed = await this.prisma.read.quizAttempt.findFirst({
-        where: { quizId: quiz.id, userId, passed: true },
-      });
-      return !!passed;
-    }
-
-    if (rule === 'COMBINED') {
-      const pct = mod.minCompletionPercent ?? 80;
-      const lessonOk = (completedCount / totalLessons) * 100 >= pct;
-      const quiz = await this.prisma.read.quiz.findFirst({ where: { lesson: { moduleId } } });
-      const quizOk = quiz
-        ? !!(await this.prisma.read.quizAttempt.findFirst({
-            where: { quizId: quiz.id, userId, passed: true },
-          }))
-        : true;
-      return lessonOk && quizOk;
-    }
-
-    return false;
+    return this.courseCompletion.isModuleCompleted(moduleId, userId);
   }
 
   async markLessonComplete(userId: number, dto: MarkModuleLessonCompleteDto) {
-    // Segurança: verificar se aula está acessível
+    // Segurança: gate de progressão sequencial (efeito próprio de course-modules)
     const access = await this.isLessonAccessible(dto.lessonId, userId);
     if (!access.accessible) {
       throw new ForbiddenException(access.reason ?? 'Aula não acessível');
     }
 
+    // Upsert de progresso + promoção de matrícula + conclusão do curso → orquestrador
+    const { progress } = await this.courseCompletion.markLessonComplete(userId, dto.lessonId, {
+      watchedSeconds: dto.watchedSeconds,
+      resumePosition: dto.resumePosition,
+    });
+
     const lesson = await this.prisma.read.lesson.findUnique({
       where: { id: dto.lessonId },
-      include: { module: { include: { course: true } } },
+      include: { module: { select: { courseId: true } } },
     });
-    // FIX: `as any` escondia a ausência da guarda de nulidade (isLessonAccessible
-    // já validou a aula noutra query, mas o TS não tem como saber isso aqui).
     if (!lesson) throw new NotFoundException('Aula não encontrada');
-    const courseId = lesson.module.courseId;
     const moduleId = lesson.moduleId;
+    const courseId = lesson.module.courseId;
 
-    // Upsert progresso da aula
-    const progress = await this.prisma.lessonProgress.upsert({
-      where: { lessonId_userId: { lessonId: dto.lessonId, userId } },
-      create: {
-        lessonId: dto.lessonId,
-        userId,
-        completed: true,
-        completedAt: new Date(),
-        watchedSeconds: dto.watchedSeconds,
-        resumePosition: dto.resumePosition,
-      },
-      update: {
-        completed: true,
-        completedAt: new Date(),
-        watchedSeconds: dto.watchedSeconds,
-        resumePosition: dto.resumePosition,
-      },
-    });
-
-    // Actualizar enrollment para IN_PROGRESS se necessário
-    const enrollment = await this.prisma.read.enrollment.findFirst({ where: { userId, courseId } });
-    if (enrollment && enrollment.status === 'NOT_STARTED') {
-      await this.prisma.enrollment.update({
-        where: { id: enrollment.id },
-        data: { status: 'IN_PROGRESS', startedAt: new Date() },
-      });
-    }
-
-    // Verificar conclusão do módulo
-    const moduleCompleted = await this.isModuleCompleted(moduleId, userId);
-
-    // Verificar conclusão do curso
-    if (enrollment) {
-      await this.checkAndCompleteCourse(enrollment.id, userId, courseId);
-    }
-
-    // Notificar desbloqueio do próximo módulo
+    const moduleCompleted = await this.courseCompletion.isModuleCompleted(moduleId, userId);
     if (moduleCompleted) {
       await this.notifyNextModuleUnlock(moduleId, userId, courseId);
     }
 
-    return {
-      progress,
-      moduleCompleted,
-      courseId,
-    };
+    return { progress, moduleCompleted, courseId };
   }
 
   // Text-to-speech da aula via ElevenLabs. A chave fica só no backend — o
@@ -670,77 +587,6 @@ export class CourseModulesService {
     );
 
     return result;
-  }
-
-  // Verificar e marcar curso como concluído
-  private async checkAndCompleteCourse(enrollmentId: number, userId: number, courseId: number) {
-    const enrollment = await this.prisma.read.enrollment.findUnique({
-      where: { id: enrollmentId },
-    });
-    if (!enrollment || enrollment.status === 'COMPLETED') return;
-
-    const mandatoryModules = await this.prisma.read.courseModule.findMany({
-      where: { courseId, mandatory: true, status: 'PUBLISHED' },
-    });
-
-    let allMandatoryDone = true;
-    for (const mod of mandatoryModules) {
-      const done = await this.isModuleCompleted(mod.id, userId);
-      if (!done) {
-        allMandatoryDone = false;
-        break;
-      }
-    }
-
-    if (!allMandatoryDone) return;
-
-    await this.prisma.enrollment.update({
-      where: { id: enrollmentId },
-      data: { status: 'COMPLETED', completedAt: new Date() },
-    });
-
-    await this.prisma.courseAnalytics.updateMany({
-      where: { courseId },
-      data: { totalCompleted: { increment: 1 } },
-    });
-
-    // Gamificação — pontuar
-    await this.prisma.userPoints
-      .upsert({
-        where: { userId },
-        create: { userId, points: 100 },
-        update: { points: { increment: 100 } },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          userId,
-          action: 'COURSE_COMPLETION_POINTS',
-          entityId: courseId,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao atribuir pontos de gamificação por conclusão de curso',
-        });
-      });
-
-    // Notificar
-    const course = await this.prisma.read.course.findUnique({ where: { id: courseId } });
-    await this.prisma.notificationLog
-      .create({
-        data: {
-          userId,
-          type: 'COURSE_COMPLETED',
-          message: `Concluíste o curso "${course?.title}"! 🎉`,
-          metadata: JSON.stringify({}),
-        },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          userId,
-          action: 'COURSE_COMPLETED_NOTIFY',
-          entityId: courseId,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao notificar utilizador sobre conclusão de curso',
-        });
-      });
   }
 
   // ─── ANALYTICS POR MÓDULO ─────────────────────────────────────────────────
