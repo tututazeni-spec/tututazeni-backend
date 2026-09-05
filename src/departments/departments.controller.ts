@@ -21,10 +21,10 @@ import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   DepartmentsService,
   UnitsService,
-  RolesService,
   PositionsService,
   CareersService,
 } from './departments.service';
+import { RolesPermissionsService } from '../roles-permissions/roles-permissions.service';
 import {
   CreateDepartmentDto,
   UpdateDepartmentDto,
@@ -194,7 +194,8 @@ export class UnitsController {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('roles')
 export class RolesController {
-  constructor(private readonly svc: RolesService) {}
+  // Fase D: delega no serviço canónico. departments.RolesService foi eliminado.
+  constructor(private readonly svc: RolesPermissionsService) {}
 
   @Get()
   @ApiOperation({ summary: 'Listar roles com permissões' })
@@ -226,7 +227,7 @@ export class RolesController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Criar permissão' })
   addPermission(@Body() dto: DepartmentsCreatePermissionDto) {
-    return this.svc.addPermission(dto);
+    return this.svc.createPermission(dto);
   }
 
   @Post(':id/permissions/:permissionId/assign')
@@ -267,7 +268,7 @@ export class RolesController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Remover permissão global' })
   removePermission(@Param('permissionId', ParseIntPipe) id: number) {
-    return this.svc.removePermission(id);
+    return this.svc.deletePermission(id);
   }
 }
 

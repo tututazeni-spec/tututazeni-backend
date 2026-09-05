@@ -9,10 +9,10 @@ import {
 import {
   DepartmentsService,
   UnitsService,
-  RolesService,
   PositionsService,
   CareersService,
 } from './departments.service';
+import { RolesPermissionsService } from '../roles-permissions/roles-permissions.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -178,22 +178,22 @@ const mockRolesSvc = {
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
   create: jest.fn().mockResolvedValue({ id: 1 }),
   initDefaultRoles: jest.fn().mockResolvedValue([]),
-  addPermission: jest.fn().mockResolvedValue({}),
+  createPermission: jest.fn().mockResolvedValue({}),
   assignPermissionToRole: jest.fn().mockResolvedValue({}),
   revokePermissionFromRole: jest.fn().mockResolvedValue({}),
   update: jest.fn().mockResolvedValue({}),
   remove: jest.fn().mockResolvedValue({}),
-  removePermission: jest.fn().mockResolvedValue({}),
+  deletePermission: jest.fn().mockResolvedValue({}),
 };
 
-describe('RolesController', () => {
+describe('RolesController (delega em RolesPermissionsService — Fase D)', () => {
   let controller: RolesController;
 
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RolesController],
-      providers: [{ provide: RolesService, useValue: mockRolesSvc }],
+      providers: [{ provide: RolesPermissionsService, useValue: mockRolesSvc }],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -223,9 +223,9 @@ describe('RolesController', () => {
     expect(mockRolesSvc.initDefaultRoles).toHaveBeenCalled();
   });
 
-  it('addPermission', async () => {
+  it('addPermission → createPermission', async () => {
     await controller.addPermission({} as any);
-    expect(mockRolesSvc.addPermission).toHaveBeenCalled();
+    expect(mockRolesSvc.createPermission).toHaveBeenCalled();
   });
 
   it('assignPermission', async () => {
@@ -248,9 +248,9 @@ describe('RolesController', () => {
     expect(mockRolesSvc.remove).toHaveBeenCalledWith(1);
   });
 
-  it('removePermission', async () => {
+  it('removePermission → deletePermission', async () => {
     await controller.removePermission(2);
-    expect(mockRolesSvc.removePermission).toHaveBeenCalledWith(2);
+    expect(mockRolesSvc.deletePermission).toHaveBeenCalledWith(2);
   });
 });
 

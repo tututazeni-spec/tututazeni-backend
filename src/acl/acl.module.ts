@@ -1,13 +1,12 @@
 // src/acl/acl.module.ts
+// Fase D: shell — as rotas /acl/* são servidas pelo RolesPermissionsService
+// canónico. Não há mais AclService.
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '../prisma/prisma.module';
-import { AclService } from './acl.service';
+import { RolesPermissionsModule } from '../roles-permissions/roles-permissions.module';
 import { AclController } from './acl.controller';
 
 @Module({
-  imports: [PrismaModule],
-  providers: [AclService],
+  imports: [RolesPermissionsModule],
   controllers: [AclController],
-  exports: [AclService],
 })
 export class AclModule {}

@@ -1,8 +1,10 @@
 ﻿// src/roles-permissions/roles-permissions.service.ts
 import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
-import { Permission } from '@prisma/client';
+import { Permission, PermissionAction, PermissionSubject, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CacheService } from '../cache/cache.service';
 import { flattenRolePermissions, withFlatPermissions } from '../common/utils/role-permissions';
+import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import {
   RolesPermissionsCreateRoleDto,
   RolesPermissionsUpdateRoleDto,
@@ -10,6 +12,27 @@ import {
   SimulatePermissionDto,
   RoleTemplateDto,
 } from './roles-permissions.dto';
+import { ROLE_DEFAULTS, BUILTIN_PERMISSIONS } from './role-defaults';
+
+// ─── Cache de permissões efectivas por utilizador (Redis via CacheService) —
+// migrado de acl.service.ts na Fase D. Um Map em memória do processo dava
+// permissões desactualizadas noutras réplicas após uma mudança de role.
+const PERM_CACHE_TTL_SECONDS = 60;
+
+function permKey(userId: number): string {
+  return `acl:perm:${userId}`;
+}
+
+// Forma estrutural dos filtros de audit log — igual a AclAuditFilterDto
+// (evita um import de acl no serviço canónico).
+interface AuditLogFilters {
+  page?: number;
+  limit?: number;
+  userId?: number;
+  action?: string;
+  from?: string;
+  to?: string;
+}
 
 // Re-export DTOs so controller can import from service (legacy compat)
 export {
@@ -31,7 +54,10 @@ export {
 export class RolesPermissionsService {
   private readonly logger = new Logger(RolesPermissionsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   // ══════════════════════════════════════════════════════
   // ROLES — CRUD
@@ -109,6 +135,15 @@ export class RolesPermissionsService {
         skipDuplicates: true,
       });
     }
+
+    // Auto-seed de permissões por omissão quando o code do role bate num
+    // preset conhecido (comportamento migrado de AclService.createRole na
+    // Fase D). Idempotente via skipDuplicates.
+    const roleDefaults = ROLE_DEFAULTS[created.code ?? ''] ?? [];
+    if (roleDefaults.length > 0) {
+      await this.seedDefaultPermissionsForRole(created.id, created.code ?? '', roleDefaults);
+    }
+
     const role = await this.findOne(created.id);
 
     await this.prisma.auditLog
@@ -299,6 +334,91 @@ export class RolesPermissionsService {
     return { total: dto.userIds.length, succeeded, failed };
   }
 
+  // ── Atribuição via /acl/users/assign-role (forma de resposta e invalidação
+  // de cache preservadas do antigo AclService.assignRoleToUser) ──
+  async assignRoleToUser(dto: { userId: number; roleId: number }) {
+    await this.prisma.user.update({
+      where: { id: dto.userId },
+      data: { roleId: dto.roleId },
+    });
+    await this.cache.del(permKey(dto.userId));
+
+    await this.prisma.auditLog
+      .create({
+        data: {
+          userId: dto.userId,
+          action: 'ROLE_ASSIGNED',
+          entity: 'User',
+          entityId: dto.userId,
+          changes: JSON.stringify({ roleId: dto.roleId }),
+        },
+      })
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.userId,
+          action: 'ROLE_ASSIGNED',
+          entityId: dto.userId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao escrever audit log de atribuição de role',
+        });
+      });
+
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: dto.userId,
+          type: 'ROLE_CHANGED',
+          message: 'O teu perfil de acesso foi actualizado',
+          metadata: JSON.stringify({ roleId: dto.roleId }),
+        },
+      })
+      .catch(e => {
+        this.logger.warn({
+          userId: dto.userId,
+          action: 'ROLE_CHANGED',
+          roleId: dto.roleId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de mudança de role',
+        });
+      });
+
+    return { message: 'Role atribuído com sucesso', userId: dto.userId, roleId: dto.roleId };
+  }
+
+  // ══════════════════════════════════════════════════════
+  // PERMISSÕES EFECTIVAS DO UTILIZADOR (cache Redis) — /acl/my-permissions
+  // ══════════════════════════════════════════════════════
+
+  async getUserPermissions(userId: number) {
+    const cached = await this.cache.get<{ permissions: string[]; roleCode: string }>(
+      permKey(userId),
+    );
+    if (cached)
+      return { userId, roleCode: cached.roleCode, permissions: cached.permissions, cached: true };
+
+    const user = await this.prisma.read.user.findUnique({
+      where: { id: userId },
+      include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
+    });
+
+    const roleCode = user?.role?.code ?? user?.role?.name ?? 'COLABORADOR';
+    const permissions = user?.role
+      ? flattenRolePermissions(user.role.rolePermissions).map(p => p.name)
+      : [];
+
+    const effective =
+      roleCode === 'ADMIN' || permissions.includes('*')
+        ? ['*', ...BUILTIN_PERMISSIONS.map(p => p.name)]
+        : permissions;
+
+    await this.cache.set(
+      permKey(userId),
+      { permissions: effective, roleCode },
+      PERM_CACHE_TTL_SECONDS,
+    );
+    return { userId, roleCode, permissions: effective, cached: false };
+  }
+
   // ══════════════════════════════════════════════════════
   // PERMISSION MANAGEMENT
   // ══════════════════════════════════════════════════════
@@ -322,6 +442,16 @@ export class RolesPermissionsService {
       where: { roleId, permissionId: { in: permissionIds } },
     });
     return this.findOne(roleId);
+  }
+
+  // Wrappers single-permission — servem as rotas /roles/:id/permissions/:permissionId/*
+  // (antigo departments.RolesService). Idempotentes via os métodos array acima.
+  assignPermissionToRole(roleId: number, permissionId: number) {
+    return this.addPermissionsToRole(roleId, [permissionId]);
+  }
+
+  revokePermissionFromRole(roleId: number, permissionId: number) {
+    return this.removePermissionsFromRole(roleId, [permissionId]);
   }
 
   // Substitui o conjunto de permissões do role pela lista dada — diff entre
@@ -354,6 +484,83 @@ export class RolesPermissionsService {
     await this.findOne(roleId);
     await this.replacePermissionsForRole(roleId, permissionIds);
     return this.findOne(roleId);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // PERMISSION CATALOG (absorvido de acl.service.ts e departments.RolesService)
+  // ══════════════════════════════════════════════════════
+
+  async getAllPermissions() {
+    return this.prisma.read.permission.findMany({
+      orderBy: [{ subject: 'asc' }, { action: 'asc' }],
+    });
+  }
+
+  // Permission é um catálogo independente (M2M via RolePermission) — não tem
+  // coluna `sensitive` nem `description` no schema real (ver acl.service.ts
+  // original), por isso só name/action/subject são persistidos. Se `roleId`
+  // vier, associa-se de imediato via RolePermission (comportamento do antigo
+  // departments.RolesService.addPermission); caso contrário fica só no
+  // catálogo, para atribuição posterior.
+  async createPermission(dto: {
+    name: string;
+    action: PermissionAction;
+    subject: PermissionSubject;
+    roleId?: number;
+  }) {
+    const permission = await this.prisma.permission.create({
+      data: { name: dto.name, action: dto.action, subject: dto.subject },
+    });
+    if (dto.roleId) {
+      await this.prisma.rolePermission.create({
+        data: { roleId: dto.roleId, permissionId: permission.id },
+      });
+    }
+    return permission;
+  }
+
+  async deletePermission(permissionId: number) {
+    return this.prisma.permission.delete({ where: { id: permissionId } });
+  }
+
+  // ══════════════════════════════════════════════════════
+  // DEFAULT ROLES / SEED (absorvido de departments.RolesService e acl.service.ts)
+  // ══════════════════════════════════════════════════════
+
+  async initDefaultRoles() {
+    const defaults = [
+      { name: 'ADMIN', description: 'Administrador do sistema' },
+      { name: 'RH', description: 'Recursos Humanos' },
+      { name: 'GESTOR', description: 'Gestor de equipa' },
+      { name: 'COLABORADOR', description: 'Colaborador' },
+      { name: 'AUDITOR', description: 'Auditor (apenas leitura)' },
+    ];
+    const created = [];
+    for (const r of defaults) {
+      const exists = await this.prisma.role.findFirst({ where: { name: r.name } });
+      if (!exists) created.push(await this.prisma.role.create({ data: r }));
+    }
+    return { created: created.length, roles: created };
+  }
+
+  // `permNames` pode conter '*' (wildcard = todas as permissões do catálogo).
+  // Só cria linhas de associação (RolePermission) — nunca permissões novas.
+  async seedDefaultPermissionsForRole(roleId: number, roleCode: string, permNames: string[]) {
+    const isWildcard = permNames.includes('*');
+
+    const perms = isWildcard
+      ? await this.prisma.read.permission.findMany({ select: { id: true } })
+      : await this.prisma.read.permission.findMany({
+          where: { name: { in: permNames } },
+          select: { id: true },
+        });
+
+    if (perms?.length) {
+      await this.prisma.rolePermission.createMany({
+        data: perms.map(p => ({ roleId, permissionId: p.id })),
+        skipDuplicates: true,
+      });
+    }
   }
 
   // ══════════════════════════════════════════════════════
@@ -630,6 +837,112 @@ export class RolesPermissionsService {
           : []),
       ],
     };
+  }
+
+  // ══════════════════════════════════════════════════════
+  // AUDIT / STATS (absorvido de acl.service.ts — /acl/audit, /acl/stats)
+  // ══════════════════════════════════════════════════════
+
+  async getAuditLog(filters: AuditLogFilters) {
+    const { page = 1, limit = 30, userId, action, from, to } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const where: Prisma.AuditLogWhereInput = {
+      entity: { in: ['User', 'Role', 'Permission', 'ACL'] },
+    };
+    if (userId) where.userId = userId;
+    if (action) where.action = { contains: action, mode: 'insensitive' };
+    if (from || to) {
+      where.timestamp = {};
+      if (from) where.timestamp.gte = new Date(from);
+      if (to) where.timestamp.lte = new Date(to);
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.auditLog.findMany({
+        where,
+        skip,
+        take,
+        include: { user: { select: { id: true, fullName: true, email: true } } },
+        orderBy: { timestamp: 'desc' },
+      }),
+      this.prisma.read.auditLog.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  async getDeniedLog(filters: AuditLogFilters) {
+    const { page = 1, limit = 30 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const where: Prisma.AuditLogWhereInput = { action: 'ACCESS_DENIED' };
+    if (filters.userId) where.userId = filters.userId;
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.auditLog.findMany({
+        where,
+        skip,
+        take,
+        include: { user: { select: { id: true, fullName: true } } },
+        orderBy: { timestamp: 'desc' },
+      }),
+      this.prisma.read.auditLog.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  // Forma histórica exacta de GET /acl/stats — distinta de getGovernanceStats().
+  async getStats() {
+    const recentDeniedQuery = this.prisma.auditLog.findMany({
+      where: { action: 'ACCESS_DENIED' },
+      include: { user: { select: { id: true, fullName: true } } },
+      orderBy: { timestamp: 'desc' },
+      take: 5,
+    });
+
+    const [totalUsers, totalRoles, totalPermissions, deniedCount, recentDenied] = await Promise.all(
+      [
+        this.prisma.read.user.count({ where: { active: true } }),
+        this.prisma.read.role.count(),
+        this.prisma.read.permission.count(),
+        this.prisma.read.auditLog.count({ where: { action: 'ACCESS_DENIED' } }).catch(e => {
+          this.logger.warn({
+            action: 'getStats',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao contar acessos negados para estatísticas ACL',
+          });
+          return 0;
+        }),
+        recentDeniedQuery.catch((e: unknown): Awaited<typeof recentDeniedQuery> => {
+          this.logger.warn({
+            action: 'getStats',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter acessos negados recentes para estatísticas ACL',
+          });
+          return [];
+        }),
+      ],
+    );
+
+    const roleBreakdown = await this.prisma.user
+      .groupBy({
+        by: ['roleId'],
+        where: { active: true },
+        _count: { id: true },
+      })
+      .then(async rows => {
+        const ids = rows.map(r => r.roleId).filter(Boolean);
+        const roles = await this.prisma.read.role.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, name: true, code: true },
+        });
+        const rMap = new Map(roles.map(r => [r.id, r]));
+        return rows
+          .map(r => ({ role: rMap.get(r.roleId), count: r._count.id }))
+          .sort((a, b) => b.count - a.count);
+      });
+
+    return { totalUsers, totalRoles, totalPermissions, deniedCount, roleBreakdown, recentDenied };
   }
 
   // ══════════════════════════════════════════════════════
