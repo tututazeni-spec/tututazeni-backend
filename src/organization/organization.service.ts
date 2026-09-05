@@ -1,12 +1,11 @@
-﻿import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-  BadRequestException,
-  Logger,
-} from '@nestjs/common';
+﻿import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  DepartmentsService,
+  PositionsService,
+  UnitsService,
+} from '../departments/departments.service';
 import {
   CreateOrgDepartmentDto,
   UpdateOrgDepartmentDto,
@@ -40,7 +39,12 @@ export interface OrgChartNode extends OrgChartUser {
 export class OrganizationService {
   private readonly logger = new Logger(OrganizationService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly departments: DepartmentsService,
+    private readonly positions: PositionsService,
+    private readonly units: UnitsService,
+  ) {}
 
   // ─── ESTATÍSTICAS / DASHBOARD ─────────────────────────────────────────────
 
@@ -256,62 +260,19 @@ export class OrganizationService {
     return dept;
   }
 
+  // Escrita consolidada na Fase C: delega no serviço canónico de `departments`
+  // (que absorveu a UNIÃO das validações dos dois lados). As rotas
+  // /organization/departments não mudam.
   async createDepartment(dto: CreateOrgDepartmentDto) {
-    const exists = await this.prisma.department.findFirst({
-      where: { code: { equals: dto.code, mode: 'insensitive' } },
-    });
-    if (exists) throw new ConflictException(`Código "${dto.code}" já existe`);
-
-    if (dto.parentId) {
-      const parent = await this.prisma.read.department.findUnique({ where: { id: dto.parentId } });
-      if (!parent) throw new NotFoundException('Departamento pai não encontrado');
-    }
-
-    return this.prisma.department.create({
-      data: {
-        name: dto.name,
-        code: dto.code.toUpperCase(),
-        description: dto.description,
-        parentId: dto.parentId,
-        headId: dto.headId,
-        unitId: dto.unitId,
-        costCenter: dto.costCenter,
-        annualBudget: dto.annualBudget,
-        status: dto.status ?? 'ACTIVE',
-        color: dto.color,
-      },
-      include: { head: { select: { id: true, fullName: true } } },
-    });
+    return this.departments.create(dto);
   }
 
   async updateDepartment(id: number, dto: UpdateOrgDepartmentDto) {
-    const dept = await this.prisma.read.department.findUnique({ where: { id } });
-    if (!dept) throw new NotFoundException('Departamento não encontrado');
-
-    // Verificar loop hierárquico
-    if (dto.parentId && dto.parentId === id) {
-      throw new BadRequestException('Departamento não pode ser pai de si próprio');
-    }
-
-    return this.prisma.department.update({ where: { id }, data: dto });
+    return this.departments.update(id, dto);
   }
 
   async deleteDepartment(id: number) {
-    const dept = await this.prisma.read.department.findUnique({
-      where: { id },
-      include: { _count: { select: { users: true, children: true } } },
-    });
-    if (!dept) throw new NotFoundException('Departamento não encontrado');
-    if (dept._count.users > 0) {
-      throw new BadRequestException(
-        `Departamento tem ${dept._count.users} colaboradores. Transfira-os primeiro.`,
-      );
-    }
-    if (dept._count.children > 0) {
-      throw new BadRequestException('Departamento tem sub-departamentos. Elimine-os primeiro.');
-    }
-    await this.prisma.department.delete({ where: { id } });
-    return { message: 'Departamento eliminado' };
+    return this.departments.remove(id);
   }
 
   // ─── POSIÇÕES ─────────────────────────────────────────────────────────────
@@ -352,49 +313,15 @@ export class OrganizationService {
   }
 
   async createPosition(dto: CreateOrgPositionDto) {
-    const exists = await this.prisma.position.findFirst({
-      where: {
-        name: { equals: dto.name, mode: 'insensitive' },
-        departmentId: dto.departmentId ?? undefined,
-      },
-    });
-    if (exists) throw new ConflictException(`Posição "${dto.name}" já existe neste departamento`);
-
-    return this.prisma.position.create({
-      data: {
-        name: dto.name,
-        code: dto.code,
-        description: dto.description,
-        level: dto.level,
-        departmentId: dto.departmentId,
-        salaryMin: dto.salaryMin,
-        salaryMax: dto.salaryMax,
-        headcountPlanned: dto.headcountPlanned ?? 1,
-      },
-    });
+    return this.positions.create(dto);
   }
 
   async updatePosition(id: number, dto: UpdateOrgPositionDto) {
-    const pos = await this.prisma.read.position.findUnique({ where: { id } });
-    if (!pos) throw new NotFoundException('Posição não encontrada');
-    // competencyIds não é uma coluna do Position — a associação real é via o
-    // modelo PositionCompetency (que exige requiredLevel, não fornecido pelo
-    // DTO); aceite mas ainda não persistido, ver memória do módulo.
-    const { competencyIds, ...data } = dto;
-    return this.prisma.position.update({ where: { id }, data });
+    return this.positions.update(id, dto);
   }
 
   async deletePosition(id: number) {
-    const pos = await this.prisma.read.position.findUnique({
-      where: { id },
-      include: { _count: { select: { users: true } } },
-    });
-    if (!pos) throw new NotFoundException('Posição não encontrada');
-    if (pos._count.users > 0) {
-      throw new BadRequestException(`Posição tem ${pos._count.users} colaboradores activos`);
-    }
-    await this.prisma.position.delete({ where: { id } });
-    return { message: 'Posição eliminada' };
+    return this.positions.remove(id);
   }
 
   // ─── UNIDADES ─────────────────────────────────────────────────────────────
@@ -409,20 +336,11 @@ export class OrganizationService {
   }
 
   async createUnit(dto: CreateOrgUnitDto) {
-    const exists = await this.prisma.unit.findFirst({
-      where: { code: { equals: dto.code, mode: 'insensitive' } },
-    });
-    if (exists) throw new ConflictException(`Código "${dto.code}" já existe`);
-
-    return this.prisma.unit.create({
-      data: { ...dto, code: dto.code.toUpperCase() },
-    });
+    return this.units.create(dto);
   }
 
   async updateUnit(id: number, dto: UpdateOrgUnitDto) {
-    const unit = await this.prisma.read.unit.findUnique({ where: { id } });
-    if (!unit) throw new NotFoundException('Unidade não encontrada');
-    return this.prisma.unit.update({ where: { id }, data: dto });
+    return this.units.update(id, dto);
   }
 
   // ─── AUDIT / HISTÓRICO DE MOVIMENTAÇÕES ──────────────────────────────────

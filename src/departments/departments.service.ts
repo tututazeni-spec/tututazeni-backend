@@ -143,11 +143,12 @@ export class DepartmentsService {
   }
 
   async create(dto: CreateDepartmentDto) {
-    // Validar código único
+    // Validar código único (case-insensitive; persistido em UPPERCASE)
+    const code = dto.code.toUpperCase();
     const codeExists = await this.prisma.department.findFirst({
-      where: { code: dto.code },
+      where: { code: { equals: code, mode: 'insensitive' } },
     });
-    if (codeExists) throw new ConflictException(`Código ${dto.code} já existe`);
+    if (codeExists) throw new ConflictException(`Código ${code} já existe`);
 
     // Validar parentId
     if (dto.parentId) {
@@ -155,10 +156,13 @@ export class DepartmentsService {
       if (!parent) throw new NotFoundException('Departamento pai não encontrado');
     }
 
+    // active é a fonte de verdade; status é espelhado (campos redundantes no schema)
+    const active = dto.status ? dto.status === 'ACTIVE' : true;
+
     const dept = await this.prisma.department.create({
       data: {
         name: dto.name,
-        code: dto.code,
+        code,
         description: dto.description,
         parentId: dto.parentId,
         headId: dto.headId,
@@ -166,7 +170,10 @@ export class DepartmentsService {
         icon: dto.icon,
         costCenter: dto.costCenter,
         trainingBudget: dto.trainingBudget,
-        active: true,
+        annualBudget: dto.annualBudget,
+        unitId: dto.unitId,
+        active,
+        status: active ? 'ACTIVE' : 'INACTIVE',
       },
       include: {
         head: { select: { id: true, fullName: true } },
@@ -187,15 +194,19 @@ export class DepartmentsService {
   async update(id: number, dto: UpdateDepartmentDto) {
     const existing = await this.findOne(id);
 
-    // Validar código único
-    if (dto.code && dto.code !== existing.code) {
+    // Validar código único (case-insensitive; persistido em UPPERCASE)
+    const nextCode = dto.code ? dto.code.toUpperCase() : undefined;
+    if (nextCode && nextCode !== existing.code) {
       const codeExists = await this.prisma.department.findFirst({
-        where: { code: dto.code, id: { not: id } },
+        where: { code: { equals: nextCode, mode: 'insensitive' }, id: { not: id } },
       });
-      if (codeExists) throw new ConflictException(`Código ${dto.code} já em uso`);
+      if (codeExists) throw new ConflictException(`Código ${nextCode} já em uso`);
     }
 
     // Validar hierarquia circular
+    if (dto.parentId && dto.parentId === id) {
+      throw new BadRequestException('Departamento não pode ser pai de si próprio');
+    }
     if (dto.parentId && dto.parentId !== existing.parentId) {
       const isCircular = await this.detectCircularHierarchy(id, dto.parentId);
       if (isCircular) throw new BadRequestException('Hierarquia circular detectada');
@@ -212,9 +223,18 @@ export class DepartmentsService {
       });
     }
 
+    // active é a fonte de verdade; se o DTO trouxer status, espelha-se em active
+    const { status, code: _code, ...rest } = dto;
+    const data: Prisma.DepartmentUncheckedUpdateInput = { ...rest };
+    if (nextCode) data.code = nextCode;
+    if (status !== undefined) {
+      data.status = status;
+      data.active = status === 'ACTIVE';
+    }
+
     return this.prisma.department.update({
       where: { id },
-      data: dto,
+      data,
       include: {
         head: { select: { id: true, fullName: true } },
         parent: { select: { id: true, name: true, code: true } },
@@ -234,13 +254,36 @@ export class DepartmentsService {
     }
     return this.prisma.department.update({
       where: { id },
-      data: { active: false },
+      data: { active: false, status: 'INACTIVE' },
     });
   }
 
   async activate(id: number) {
     await this.findOne(id);
-    return this.prisma.department.update({ where: { id }, data: { active: true } });
+    return this.prisma.department.update({
+      where: { id },
+      data: { active: true, status: 'ACTIVE' },
+    });
+  }
+
+  // Hard-delete guardado — alvo do DELETE /organization/departments/:id.
+  // Só elimina departamentos sem colaboradores e sem sub-departamentos.
+  async remove(id: number) {
+    const dept = await this.prisma.read.department.findUnique({
+      where: { id },
+      include: { _count: { select: { users: true, children: true } } },
+    });
+    if (!dept) throw new NotFoundException('Departamento não encontrado');
+    if (dept._count.users > 0) {
+      throw new BadRequestException(
+        `Departamento tem ${dept._count.users} colaboradores. Transfira-os primeiro.`,
+      );
+    }
+    if (dept._count.children > 0) {
+      throw new BadRequestException('Departamento tem sub-departamentos. Elimine-os primeiro.');
+    }
+    await this.prisma.department.delete({ where: { id } });
+    return { message: 'Departamento eliminado' };
   }
 
   // Transferir membro entre departamentos
@@ -432,8 +475,19 @@ export class UnitsService {
 
   async create(dto: CreateUnitDto) {
     // Department é o lado proprietário da relação (Department.unitId), não o inverso
-    const { departmentId, ...rest } = dto;
-    const code = await this.generateCode();
+    const { departmentId, code: explicitCode, ...rest } = dto;
+
+    let code: string;
+    if (explicitCode) {
+      code = explicitCode.toUpperCase();
+      const exists = await this.prisma.unit.findFirst({
+        where: { code: { equals: code, mode: 'insensitive' } },
+      });
+      if (exists) throw new ConflictException(`Código "${code}" já existe`);
+    } else {
+      code = await this.generateCode();
+    }
+
     const unit = await this.prisma.unit.create({ data: { ...rest, code } });
     if (departmentId) {
       await this.prisma.department.update({
@@ -446,8 +500,17 @@ export class UnitsService {
 
   async update(id: number, dto: UpdateUnitDto) {
     await this.findOne(id);
-    const { departmentId, ...rest } = dto;
-    const unit = await this.prisma.unit.update({ where: { id }, data: rest });
+    const { departmentId, code: explicitCode, ...rest } = dto;
+    const data: Prisma.UnitUncheckedUpdateInput = { ...rest };
+    if (explicitCode) {
+      const code = explicitCode.toUpperCase();
+      const clash = await this.prisma.unit.findFirst({
+        where: { code: { equals: code, mode: 'insensitive' }, id: { not: id } },
+      });
+      if (clash) throw new ConflictException(`Código "${code}" já existe`);
+      data.code = code;
+    }
+    const unit = await this.prisma.unit.update({ where: { id }, data });
     if (departmentId) {
       await this.prisma.department.update({ where: { id: departmentId }, data: { unitId: id } });
     }
@@ -583,17 +646,41 @@ export class PositionsService {
   }
 
   async create(dto: CreatePositionDto) {
-    return this.prisma.position.create({ data: dto });
+    // Sem posições com o mesmo nome (case-insensitive) no mesmo departamento
+    const exists = await this.prisma.position.findFirst({
+      where: {
+        name: { equals: dto.name, mode: 'insensitive' },
+        departmentId: dto.departmentId ?? undefined,
+      },
+    });
+    if (exists) throw new ConflictException(`Posição "${dto.name}" já existe neste departamento`);
+
+    // competencyIds não é coluna de Position — a associação real é via
+    // PositionCompetency (que exige requiredLevel, não fornecido pelo DTO);
+    // aceite mas não persistido, ver memória do módulo.
+    const { competencyIds: _competencyIds, ...rest } = dto;
+    return this.prisma.position.create({
+      data: { ...rest, headcountPlanned: dto.headcountPlanned ?? 1 },
+    });
   }
 
   async update(id: number, dto: UpdatePositionDto) {
     await this.findOne(id);
-    return this.prisma.position.update({ where: { id }, data: dto });
+    const { competencyIds: _competencyIds, ...data } = dto;
+    return this.prisma.position.update({ where: { id }, data });
   }
 
   async remove(id: number) {
-    await this.findOne(id);
-    return this.prisma.position.delete({ where: { id } });
+    const pos = await this.prisma.read.position.findUnique({
+      where: { id },
+      include: { _count: { select: { users: true } } },
+    });
+    if (!pos) throw new NotFoundException('Posição não encontrada');
+    if (pos._count.users > 0) {
+      throw new BadRequestException(`Posição tem ${pos._count.users} colaboradores activos`);
+    }
+    await this.prisma.position.delete({ where: { id } });
+    return { message: 'Posição eliminada' };
   }
 }
 

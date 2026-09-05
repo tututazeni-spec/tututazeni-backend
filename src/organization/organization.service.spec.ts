@@ -1,6 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OrganizationService } from './organization.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  DepartmentsService,
+  PositionsService,
+  UnitsService,
+} from '../departments/departments.service';
+
+const mockDepartments = { create: jest.fn(), update: jest.fn(), remove: jest.fn() };
+const mockPositions = { create: jest.fn(), update: jest.fn(), remove: jest.fn() };
+const mockUnits = { create: jest.fn(), update: jest.fn() };
 
 const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
 const makeFind = (data: any[] = []) => jest.fn().mockResolvedValue(data);
@@ -40,7 +49,13 @@ describe('OrganizationService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [OrganizationService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        OrganizationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DepartmentsService, useValue: mockDepartments },
+        { provide: PositionsService, useValue: mockPositions },
+        { provide: UnitsService, useValue: mockUnits },
+      ],
     }).compile();
     service = module.get<OrganizationService>(OrganizationService);
   });

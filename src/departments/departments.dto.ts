@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsArray,
   IsEnum,
+  IsNumber,
   Min,
   MaxLength,
 } from 'class-validator';
@@ -17,6 +18,7 @@ import {
   PermissionAction,
   PermissionSubject,
   SeniorityLevel,
+  DepartmentStatus,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
@@ -68,6 +70,22 @@ export class CreateDepartmentDto {
   @IsInt()
   @Min(0)
   trainingBudget?: number;
+
+  @ApiPropertyOptional({ description: 'Unidade/filial a associar (Department.unitId)' })
+  @IsOptional()
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional({ description: 'Orçamento anual (Kz)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  annualBudget?: number;
+
+  @ApiPropertyOptional({ enum: DepartmentStatus, default: DepartmentStatus.ACTIVE })
+  @IsOptional()
+  @IsEnum(DepartmentStatus)
+  status?: DepartmentStatus;
 }
 
 export class UpdateDepartmentDto extends PartialType(CreateDepartmentDto) {}
@@ -146,6 +164,12 @@ export class CreateUnitDto {
   @MaxLength(120)
   name: string;
 
+  @ApiPropertyOptional({ description: 'Código único; auto-gerado (UNI-xxxxx) se omitido' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  code?: string;
+
   @ApiProperty({ enum: UnitType, example: UnitType.BRANCH })
   @IsEnum(UnitType)
   type: UnitType;
@@ -206,6 +230,17 @@ export class CreatePositionDto {
   @MaxLength(120)
   name: string;
 
+  @ApiPropertyOptional({ description: 'Código do cargo' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
   @ApiPropertyOptional({ enum: PositionLevel, example: PositionLevel.SENIOR })
   @IsOptional()
   @IsEnum(PositionLevel)
@@ -227,6 +262,20 @@ export class CreatePositionDto {
   @IsInt()
   @Min(0)
   salaryMax?: number;
+
+  @ApiPropertyOptional({ description: 'Headcount planeado (default 1)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  headcountPlanned?: number;
+
+  @ApiPropertyOptional({
+    description: 'Competências obrigatórias (IDs) — aceite mas não persistido',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  competencyIds?: number[];
 }
 
 export class UpdatePositionDto extends PartialType(CreatePositionDto) {}

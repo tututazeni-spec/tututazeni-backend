@@ -298,4 +298,52 @@ describe('Organization Integration', () => {
       parentDeptId = 0 as any;
     });
   });
+
+  // A escrita de /organization/* delega agora no serviço canónico de
+  // `departments` (Fase C). Estes testes provam a paridade: as regras que só
+  // um dos lados tinha aplicam-se agora em ambos.
+  describe('escrita consolidada — paridade organization ↔ departments (Fase C)', () => {
+    it('POST /organization/departments — código minúsculo persiste UPPERCASE e mantém active↔status coerentes', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/organization/departments')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ name: 'Int Test Fase C', code: 'int-test-fasec' })
+        .expect(201);
+
+      expect(res.body.code).toBe('INT-TEST-FASEC');
+
+      const row = await prisma.department.findUnique({ where: { id: res.body.id } });
+      expect(row?.active).toBe(true);
+      expect(row?.status).toBe('ACTIVE');
+
+      // dup case-insensitive rejeitado, tal como em POST /departments
+      await request(app.getHttpServer())
+        .post('/organization/departments')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ name: 'Outro', code: 'INT-TEST-FASEC' })
+        .expect(409);
+
+      await prisma.department.deleteMany({ where: { code: 'INT-TEST-FASEC' } });
+    });
+
+    it('PUT /organization/departments/:id — status:INACTIVE espelha active:false', async () => {
+      const created = await request(app.getHttpServer())
+        .post('/organization/departments')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ name: 'Int Test Fase C Status', code: 'INT-TEST-FASEC-ST' })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .put(`/organization/departments/${created.body.id}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ status: 'INACTIVE' })
+        .expect(200);
+
+      const row = await prisma.department.findUnique({ where: { id: created.body.id } });
+      expect(row?.status).toBe('INACTIVE');
+      expect(row?.active).toBe(false);
+
+      await prisma.department.deleteMany({ where: { code: 'INT-TEST-FASEC-ST' } });
+    });
+  });
 });

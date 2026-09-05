@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { DepartmentsService } from './departments.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -13,7 +13,10 @@ const mockPrisma = {
     count: jest.fn(),
     delete: jest.fn(),
   },
-  departmentHeadHistory: { create: jest.fn().mockResolvedValue({}) },
+  departmentHeadHistory: {
+    create: jest.fn().mockResolvedValue({}),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
   user: {
     findMany: jest.fn(),
     update: jest.fn(),
@@ -194,6 +197,168 @@ describe('DepartmentsService', () => {
       await service.create({ ...dto, headId: 1 });
 
       expect(mockPrisma.departmentHeadHistory.create).toHaveBeenCalled();
+    });
+
+    it('código é validado case-insensitively e persistido em UPPERCASE', async () => {
+      mockPrisma.department.findFirst.mockResolvedValue(null);
+      mockPrisma.department.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 1, ...data }),
+      );
+
+      await service.create({ name: 'Eng', code: 'eng' } as any);
+
+      expect(mockPrisma.department.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            code: expect.objectContaining({ mode: 'insensitive' }),
+          }),
+        }),
+      );
+      expect(mockPrisma.department.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ code: 'ENG' }) }),
+      );
+    });
+
+    it('aceita unitId / annualBudget / status e espelha status↔active', async () => {
+      mockPrisma.department.findFirst.mockResolvedValue(null);
+      mockPrisma.department.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 1, ...data }),
+      );
+
+      await service.create({
+        name: 'Ops',
+        code: 'OPS',
+        unitId: 4,
+        annualBudget: 100000,
+        status: 'INACTIVE',
+      } as any);
+
+      expect(mockPrisma.department.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            unitId: 4,
+            annualBudget: 100000,
+            status: 'INACTIVE',
+            active: false,
+          }),
+        }),
+      );
+    });
+
+    it('sem status no DTO → active:true e status:ACTIVE', async () => {
+      mockPrisma.department.findFirst.mockResolvedValue(null);
+      mockPrisma.department.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 1, ...data }),
+      );
+
+      await service.create({ name: 'X', code: 'X' } as any);
+
+      expect(mockPrisma.department.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ active: true, status: 'ACTIVE' }),
+        }),
+      );
+    });
+  });
+
+  // ─── update ───────────────────────────────────────────────────────────────
+
+  describe('update', () => {
+    it('novo código é validado case-insensitively contra outros e persistido UPPERCASE', async () => {
+      jest.spyOn(service, 'findOne').mockResolvedValue({
+        id: 1,
+        code: 'ENG',
+        parentId: null,
+        headId: null,
+        _count: { users: 0 },
+      } as any);
+      mockPrisma.department.findFirst.mockResolvedValue(null);
+      mockPrisma.department.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 1, ...data }),
+      );
+
+      await service.update(1, { code: 'ops' } as any);
+
+      expect(mockPrisma.department.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            code: expect.objectContaining({ mode: 'insensitive' }),
+            id: { not: 1 },
+          }),
+        }),
+      );
+      expect(mockPrisma.department.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ code: 'OPS' }) }),
+      );
+    });
+
+    it('status no DTO → espelha active', async () => {
+      jest.spyOn(service, 'findOne').mockResolvedValue({
+        id: 1,
+        code: 'ENG',
+        parentId: null,
+        headId: 5,
+        _count: { users: 0 },
+      } as any);
+      mockPrisma.department.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({ id: 1, ...data }),
+      );
+
+      await service.update(1, { status: 'INACTIVE' } as any);
+
+      expect(mockPrisma.department.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'INACTIVE', active: false }),
+        }),
+      );
+    });
+
+    it('parentId circular → BadRequestException (comportamento pré-existente preservado)', async () => {
+      jest.spyOn(service, 'findOne').mockResolvedValue({
+        id: 1,
+        code: 'ENG',
+        parentId: null,
+        headId: null,
+        _count: { users: 0 },
+      } as any);
+      jest.spyOn(service as any, 'detectCircularHierarchy').mockResolvedValue(true);
+      await expect(service.update(1, { parentId: 2 } as any)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ─── remove (hard-delete guardado) ───────────────────────────────────────
+
+  describe('remove', () => {
+    it('departamento inexistente → NotFoundException', async () => {
+      mockPrisma.department.findUnique.mockResolvedValue(null);
+      await expect(service.remove(999)).rejects.toThrow(NotFoundException);
+    });
+
+    it('com colaboradores → BadRequestException', async () => {
+      mockPrisma.department.findUnique.mockResolvedValue({
+        id: 1,
+        _count: { users: 3, children: 0 },
+      });
+      await expect(service.remove(1)).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.department.delete).not.toHaveBeenCalled();
+    });
+
+    it('com sub-departamentos → BadRequestException', async () => {
+      mockPrisma.department.findUnique.mockResolvedValue({
+        id: 1,
+        _count: { users: 0, children: 2 },
+      });
+      await expect(service.remove(1)).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.department.delete).not.toHaveBeenCalled();
+    });
+
+    it('vazio → elimina e devolve mensagem', async () => {
+      mockPrisma.department.findUnique.mockResolvedValue({
+        id: 1,
+        _count: { users: 0, children: 0 },
+      });
+      mockPrisma.department.delete.mockResolvedValue({ id: 1 });
+      expect(await service.remove(1)).toEqual({ message: 'Departamento eliminado' });
     });
   });
 });
