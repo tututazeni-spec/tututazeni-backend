@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { LeaderService } from './leader.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
 
 const makeFind = (data: any[] = []) => jest.fn().mockResolvedValue(data);
 const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
@@ -50,7 +51,11 @@ describe('LeaderService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [LeaderService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        LeaderService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DevelopmentPlansService, useValue: { approvePlan: jest.fn() } },
+      ],
     }).compile();
     service = module.get<LeaderService>(LeaderService);
   });

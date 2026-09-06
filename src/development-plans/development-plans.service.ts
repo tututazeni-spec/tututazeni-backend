@@ -272,7 +272,7 @@ export class DevelopmentPlansService {
 
     const updated = await this.prisma.developmentPlan.update({
       where: { id },
-      data: { status: 'COMPLETED', completedAt: new Date() },
+      data: { status: 'COMPLETED', completedAt: new Date(), overallProgress: 100 },
     });
 
     // Certificado
@@ -342,6 +342,24 @@ export class DevelopmentPlansService {
     return this.prisma.developmentPlan.update({
       where: { id },
       data: { status: 'CANCELLED', cancelReason: reason },
+    });
+  }
+
+  // Transição para PAUSED — portada de talent-development.pausePlan (Fase G3),
+  // para o lifecycle de PDI ter um só dono.
+  async pause(id: number, reason?: string) {
+    const plan = await this.findOne(id);
+    if (plan.status !== 'ACTIVE') {
+      throw new BadRequestException('Apenas planos activos podem ser pausados');
+    }
+    return this.prisma.developmentPlan.update({
+      where: { id },
+      data: {
+        status: 'PAUSED',
+        notes: reason
+          ? `${plan.notes ? plan.notes + '\n' : ''}[PAUSA ${new Date().toLocaleDateString('pt')}] ${reason}`
+          : plan.notes,
+      },
     });
   }
 

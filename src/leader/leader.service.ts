@@ -14,6 +14,8 @@ import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { ApprovalDecision } from '../development-plans/development-plans.dto';
 
 // ─── Schema Fixes Applied ─────────────────────────────────────────
 // ✅ role is a RELATION — never use { role: { in: ['GESTOR'] } }
@@ -80,7 +82,10 @@ function safeLeaderProfile(prisma: PrismaService): LeaderProfileDelegate {
 export class LeaderService {
   private readonly logger = new Logger(LeaderService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly developmentPlans: DevelopmentPlansService,
+  ) {}
 
   // ══════════════════════════════════════════════════════
   // LEADERS LIST
@@ -763,59 +768,16 @@ export class LeaderService {
     });
   }
 
+  // Delegado no fluxo canónico (Fase G3) — elimina a 4ª cópia de approvePlan.
+  // O ownership (gestor designado do plano OU ADMIN/RH) e o registo em
+  // PdiApproval passam a viver num só sítio. Mudança de comportamento: exige
+  // que o plano esteja em PENDING_APPROVAL (deixa de forçar ACTIVE a partir
+  // de qualquer estado).
   async approvePlan(planId: number, approver: CurrentUserData) {
-    const existing = await this.prisma.read.developmentPlan.findUnique({
-      where: { id: planId },
-      select: { id: true, user: { select: { managerId: true } } },
-    });
-    if (!existing) throw new NotFoundException('PDI não encontrado');
-    // Ownership: só o gestor directo do colaborador (ou ADMIN/RH) pode aprovar
-    // o PDI — sem isto, qualquer LIDER/DIRECTOR aprovava o PDI de um
-    // colaborador de outra equipa, fora da sua cadeia de gestão.
-    const isOwnTeam = existing.user?.managerId === approver.id;
-    if (!isOwnTeam && !isPrivileged(approver, [Role.ADMIN, Role.RH])) {
-      throw new NotFoundException('PDI não encontrado');
-    }
-
-    const plan = await this.prisma.developmentPlan.update({
-      where: { id: planId },
-      data: { status: 'ACTIVE', activatedAt: new Date() },
-      include: { user: { select: { id: true, fullName: true } } },
-    });
-
-    await this.prisma.pdiApproval
-      .create({
-        data: { planId, approverId: approver.id, decision: 'APPROVE' },
-      })
-      .catch(e => {
-        this.logger.warn({
-          planId,
-          approverId: approver.id,
-          action: 'approvePlan.pdiApproval',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao registar aprovação de PDI em PdiApproval',
-        });
-      });
-
-    await this.prisma.notificationLog
-      .create({
-        data: {
-          userId: plan.userId,
-          type: 'PDI_APPROVED',
-          message: `O teu PDI "${plan.name}" foi aprovado!`,
-          metadata: JSON.stringify({}),
-        },
-      })
-      .catch(e => {
-        this.logger.warn({
-          userId: plan.userId,
-          action: 'PDI_APPROVED',
-          planId,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao criar notificação de PDI aprovado',
-        });
-      });
-
+    const plan = await this.developmentPlans.approvePlan(
+      { planId, decision: 'approve' as ApprovalDecision },
+      approver,
+    );
     return { message: 'PDI aprovado', plan };
   }
 

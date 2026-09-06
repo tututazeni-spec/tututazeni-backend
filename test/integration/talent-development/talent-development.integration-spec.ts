@@ -162,12 +162,26 @@ describe('Talent Development Integration', () => {
       actionId = res.body.id;
     });
 
-    it('activa o plano agora que tem acções', async () => {
+    it('activar o plano DRAFT com acções → submete para aprovação (PENDING_APPROVAL)', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/talent/plans/${planId}/activate`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(201);
+      expect(res.body.status).toBe('PENDING_APPROVAL');
+    });
+
+    it('activar de novo (agora PENDING_APPROVAL) → aprova e fica ACTIVE, com rasto em PdiApproval', async () => {
       const res = await request(app.getHttpServer())
         .post(`/talent/plans/${planId}/activate`)
         .set('Authorization', `Bearer ${rhToken}`)
         .expect(201);
       expect(res.body.status).toBe('ACTIVE');
+
+      const detail = await request(app.getHttpServer())
+        .get(`/talent/plans/${planId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(detail.body.approvals.length).toBeGreaterThanOrEqual(1);
     });
 
     it('colaborador dono actualiza progresso da acção COM evidência (bug: PdiEvidence.actionId inexistente rebentava sempre)', async () => {

@@ -123,9 +123,9 @@ describe('TalentDevelopmentController', () => {
     expect(mockSvc.updatePlan).toHaveBeenCalledWith(1, dto);
   });
 
-  it('activate → activatePlan(id, userId)', async () => {
+  it('activate → activatePlan(id, user)', async () => {
     await controller.activate(2, mockUser as any);
-    expect(mockSvc.activatePlan).toHaveBeenCalledWith(2, 1);
+    expect(mockSvc.activatePlan).toHaveBeenCalledWith(2, mockUser);
   });
 
   it('pause → pausePlan(id, undefined)', async () => {

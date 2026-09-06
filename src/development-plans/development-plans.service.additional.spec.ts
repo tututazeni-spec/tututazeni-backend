@@ -36,6 +36,7 @@ const mockPrisma: any = {
     update: jest.fn(),
   },
   actionEvidence: { create: jest.fn() },
+  certificate: { create: jest.fn().mockResolvedValue({}) },
   pdiApproval: { create: jest.fn().mockResolvedValue({}) },
   pdiEvidence: { create: jest.fn().mockResolvedValue({}) },
   pdiGoal: {
@@ -224,6 +225,79 @@ describe('DevelopmentPlansService (additional)', () => {
         mockAdmin as any,
       );
       expect(result).toBeDefined();
+    });
+
+    it('aprovador sem autoridade sobre o plano (GESTOR de outra equipa) → NotFoundException', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        status: 'PENDING_APPROVAL',
+        managerId: 1,
+      });
+      await expect(
+        service.approvePlan(
+          { planId: 1, decision: 'approve' } as any,
+          {
+            id: 777,
+            role: { name: 'GESTOR' },
+          } as any,
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.pdiApproval.create).not.toHaveBeenCalled();
+    });
+
+    it('sucesso regista uma linha em PdiApproval', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        status: 'PENDING_APPROVAL',
+        managerId: 1,
+      });
+      mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'ACTIVE' });
+      await service.approvePlan(
+        { planId: 1, decision: 'approve' } as any,
+        { id: 1, role: { name: 'GESTOR' } } as any,
+      );
+      expect(mockPrisma.pdiApproval.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ planId: 1, approverId: 1, decision: 'APPROVE' }),
+        }),
+      );
+    });
+  });
+
+  // ─── complete ─────────────────────────────────────────────────
+
+  describe('complete', () => {
+    it('ACTIVE → COMPLETED com overallProgress 100, certificado e +300 XP', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, status: 'ACTIVE' });
+      mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'COMPLETED' });
+      await service.complete(1);
+      const data = mockPrisma.developmentPlan.update.mock.calls[0][0].data;
+      expect(data).toMatchObject({ status: 'COMPLETED', overallProgress: 100 });
+      expect(mockPrisma.certificate.create).toHaveBeenCalled();
+      expect(mockPrisma.userPoints.upsert).toHaveBeenCalled();
+    });
+  });
+
+  // ─── pause ────────────────────────────────────────────────────
+
+  describe('pause', () => {
+    it('ACTIVE → PAUSED com nota de pausa', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        status: 'ACTIVE',
+        notes: 'nota original',
+      });
+      mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'PAUSED' });
+      await service.pause(1, 'férias');
+      const data = mockPrisma.developmentPlan.update.mock.calls[0][0].data;
+      expect(data.status).toBe('PAUSED');
+      expect(data.notes).toContain('nota original');
+      expect(data.notes).toContain('férias');
+    });
+
+    it('rejeita pausar plano que não está ACTIVE', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, status: 'DRAFT' });
+      await expect(service.pause(1)).rejects.toThrow();
     });
   });
 
