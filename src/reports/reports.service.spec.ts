@@ -204,6 +204,15 @@ describe('ReportsService', () => {
       expect(result.byPosition).toEqual([{ id: 9, name: 'Dev', level: 'SENIOR', count: 20 }]);
     });
 
+    it('propaga managerId/positionId do filtro a metrics.headcount', async () => {
+      await service.headcountReport({ managerId: 7, positionId: 4 });
+      expect(mockMetrics.headcount).toHaveBeenCalledWith(
+        expect.objectContaining({ managerId: 7, positionId: 4 }),
+      );
+      const arg = mockMetrics.headcount.mock.calls[0][0];
+      expect(arg).not.toHaveProperty('departmentId'); // não incluído quando ausente
+    });
+
     it('degrada para relatório zerado (shape-válido) + logger.warn quando metrics.headcount falha', async () => {
       const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
       mockMetrics.headcount.mockRejectedValue(new Error('db down'));
@@ -251,6 +260,21 @@ describe('ReportsService', () => {
       expect(result.summary.turnoverRate).toBe(8);
       expect(result.summary.retentionRate).toBe(92);
       expect(result.insights).toEqual(['linha 1', 'linha 2']);
+    });
+
+    it('propaga managerId/positionId do filtro a metrics.turnover (escopo consistente com os counts locais)', async () => {
+      await service.turnoverReport({ managerId: 7, positionId: 4 });
+      expect(mockMetrics.turnover).toHaveBeenCalledWith(
+        expect.objectContaining({ managerId: 7, positionId: 4 }),
+      );
+      const arg = mockMetrics.turnover.mock.calls[0][0];
+      expect(arg).not.toHaveProperty('departmentId'); // não incluído quando ausente
+      // os counts locais também usam o mesmo escopo
+      expect(mockPrisma.user.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ managerId: 7, positionId: 4 }),
+        }),
+      );
     });
 
     it('degrada (turnover 0, retention 100, insights []) + warn quando metrics.turnover falha', async () => {

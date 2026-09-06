@@ -84,6 +84,8 @@ export class ReportsService {
     const r = await this.metrics
       .headcount({
         ...(filter.departmentId != null ? { departmentId: filter.departmentId } : {}),
+        ...(filter.managerId != null ? { managerId: filter.managerId } : {}),
+        ...(filter.positionId != null ? { positionId: filter.positionId } : {}),
         from: range.gte,
         to: range.lte,
       })
@@ -157,6 +159,8 @@ export class ReportsService {
         from: range.gte,
         to: range.lte,
         ...(filter.departmentId != null ? { departmentId: filter.departmentId } : {}),
+        ...(filter.managerId != null ? { managerId: filter.managerId } : {}),
+        ...(filter.positionId != null ? { positionId: filter.positionId } : {}),
       })
       .catch((e: unknown) => {
         this.logger.warn({
