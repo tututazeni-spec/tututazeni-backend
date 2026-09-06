@@ -246,4 +246,180 @@ describe('MetricsAggregationService', () => {
       }
     });
   });
+
+  // ════════════════════════════════════════════════════════════════
+  // turnover — nota §2.2
+  // ════════════════════════════════════════════════════════════════
+
+  describe('turnover', () => {
+    // ordem das 6 contagens no Promise.all:
+    // 0 leavers · 1 headcountStart · 2 headcountEnd · 3 leaversPrev · 4 headcountPrevStart · 5 newHires
+    const scenario = () =>
+      jest
+        .fn()
+        .mockResolvedValueOnce(12) // leavers
+        .mockResolvedValueOnce(100) // headcountStart
+        .mockResolvedValueOnce(140) // headcountEnd
+        .mockResolvedValueOnce(6) // leaversPrev
+        .mockResolvedValueOnce(80) // headcountPrevStart
+        .mockResolvedValueOnce(20); // newHires
+
+    it('leavers conta exitDate ∈ [from,to] — NUNCA updatedAt, NUNCA active:false', async () => {
+      mockPrisma.user.count = scenario();
+      const from = new Date('2025-01-01T00:00:00.000Z');
+      const to = new Date('2025-12-31T23:59:59.999Z');
+
+      await service.turnover({ from, to });
+
+      const leaversCall = mockPrisma.user.count.mock.calls[0][0];
+      expect(leaversCall.where.exitDate).toEqual({ gte: from, lte: to });
+      expect(leaversCall.where).not.toHaveProperty('active');
+      expect(JSON.stringify(leaversCall)).not.toContain('updatedAt');
+    });
+
+    it('headcountStart/End = activos ponto-a-ponto (hireDate<=fronteira && (exitDate null || exitDate>fronteira))', async () => {
+      mockPrisma.user.count = scenario();
+      const from = new Date('2025-01-01T00:00:00.000Z');
+      const to = new Date('2025-12-31T23:59:59.999Z');
+
+      await service.turnover({ from, to });
+
+      const startCall = mockPrisma.user.count.mock.calls[1][0];
+      const endCall = mockPrisma.user.count.mock.calls[2][0];
+      expect(startCall.where.hireDate).toEqual({ lte: from });
+      expect(startCall.where.OR).toEqual([{ exitDate: null }, { exitDate: { gt: from } }]);
+      expect(endCall.where.hireDate).toEqual({ lte: to });
+      expect(endCall.where.OR).toEqual([{ exitDate: null }, { exitDate: { gt: to } }]);
+    });
+
+    it('avgHeadcount = (headcountStart + headcountEnd) / 2', async () => {
+      mockPrisma.user.count = scenario();
+      const result = await service.turnover({});
+      expect(result.avgHeadcount).toBe(120); // (100 + 140) / 2
+    });
+
+    it('turnoverRate = round(leavers / avgHeadcount * 100, 1); retentionRate = 100 - turnoverRate', async () => {
+      mockPrisma.user.count = scenario();
+      const result = await service.turnover({});
+      expect(result.turnoverRate).toBe(10); // 12 / 120 * 100
+      expect(result.retentionRate).toBe(90); // 100 - 10
+    });
+
+    it('turnoverTrend = turnoverRate - turnoverRatePrev (janela anterior de igual duração)', async () => {
+      mockPrisma.user.count = scenario();
+      const from = new Date('2025-07-01T00:00:00.000Z');
+      const to = new Date('2025-08-01T00:00:00.000Z');
+      const durationMs = to.getTime() - from.getTime();
+      const prevFrom = new Date(from.getTime() - durationMs);
+
+      const result = await service.turnover({ from, to });
+
+      // leaversPrev usa [prevFrom, from)
+      const leaversPrevCall = mockPrisma.user.count.mock.calls[3][0];
+      expect(leaversPrevCall.where.exitDate).toEqual({ gte: prevFrom, lt: from });
+
+      // headcountPrevStart ponto-a-ponto em prevFrom
+      const prevStartCall = mockPrisma.user.count.mock.calls[4][0];
+      expect(prevStartCall.where.hireDate).toEqual({ lte: prevFrom });
+
+      // prevAvgHc = (80 + 100)/2 = 90 → ratePrev = round(6/90*100,1) = 6.7 → trend = 10 - 6.7 = 3.3
+      expect(result.turnoverRatePrev).toBe(6.7);
+      expect(result.turnoverTrend).toBe(3.3);
+    });
+
+    it('newHires conta hireDate ∈ [from,to]; netHeadcountChange = newHires - leavers', async () => {
+      mockPrisma.user.count = scenario();
+      const from = new Date('2025-01-01T00:00:00.000Z');
+      const to = new Date('2025-12-31T23:59:59.999Z');
+
+      const result = await service.turnover({ from, to });
+
+      const newHiresCall = mockPrisma.user.count.mock.calls[5][0];
+      expect(newHiresCall.where.hireDate).toEqual({ gte: from, lte: to });
+      expect(result.newHires).toBe(20);
+      expect(result.netHeadcountChange).toBe(8); // 20 - 12
+    });
+
+    it('guarda divisão-por-zero: avgHeadcount 0 → turnoverRate 0 (não NaN)', async () => {
+      mockPrisma.user.count = makeCount(0);
+      const result = await service.turnover({});
+      expect(result.avgHeadcount).toBe(0);
+      expect(result.turnoverRate).toBe(0);
+      expect(Number.isNaN(result.turnoverRate)).toBe(false);
+      expect(result.retentionRate).toBe(100);
+      expect(result.turnoverRatePrev).toBe(0);
+      expect(result.turnoverTrend).toBe(0);
+    });
+
+    it('janela default = trailing 12 meses até agora', async () => {
+      mockPrisma.user.count = makeCount(0);
+      const before = Date.now();
+      const result = await service.turnover({});
+      const after = Date.now();
+
+      expect(result.period.to.getTime()).toBeGreaterThanOrEqual(before);
+      expect(result.period.to.getTime()).toBeLessThanOrEqual(after);
+      const spanMonths =
+        (result.period.to.getFullYear() - result.period.from.getFullYear()) * 12 +
+        (result.period.to.getMonth() - result.period.from.getMonth());
+      expect(spanMonths).toBe(12);
+    });
+
+    it('scope filter (departmentId/managerId/positionId) aplica-se a todas as contagens', async () => {
+      mockPrisma.user.count = makeCount(0);
+      await service.turnover({ departmentId: 7, managerId: 3, positionId: 9 });
+      for (const call of mockPrisma.user.count.mock.calls) {
+        expect(call[0].where.departmentId).toBe(7);
+        expect(call[0].where.managerId).toBe(3);
+        expect(call[0].where.positionId).toBe(9);
+      }
+      expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { departmentId: 7, managerId: 3, positionId: 9, active: true },
+        }),
+      );
+    });
+
+    it('insights: variante emoji do dashboard-rh; não-vazio; 🚨 crítico acima de 20%', async () => {
+      mockPrisma.user.count = jest
+        .fn()
+        .mockResolvedValueOnce(30) // leavers
+        .mockResolvedValueOnce(50) // headcountStart
+        .mockResolvedValueOnce(50) // headcountEnd
+        .mockResolvedValueOnce(0) // leaversPrev
+        .mockResolvedValueOnce(50) // headcountPrevStart
+        .mockResolvedValueOnce(0); // newHires
+
+      const result = await service.turnover({});
+
+      expect(result.turnoverRate).toBe(60); // 30 / 50 * 100
+      expect(result.insights.length).toBeGreaterThan(0);
+      expect(result.insights[0]).toBe('🚨 Turnover crítico: 60% — investigar causas urgentemente');
+      expect(result.insights[1]).toBe('30 saída(s) nos últimos 3 meses');
+    });
+
+    it('insights: turnover saudável quando taxa <= 10%', async () => {
+      mockPrisma.user.count = scenario();
+      const result = await service.turnover({});
+      expect(result.insights[0]).toBe('✅ Turnover saudável: 10%');
+    });
+
+    it('avgTenureMonths: média sobre activos, base hireDate ?? createdAt', async () => {
+      mockPrisma.user.count = makeCount(0);
+      const now = Date.now();
+      const monthsAgo = (m: number) => new Date(now - m * 30 * 86400000);
+      mockPrisma.user.findMany = jest.fn().mockResolvedValue([
+        { hireDate: monthsAgo(6), createdAt: monthsAgo(6) },
+        { hireDate: null, createdAt: monthsAgo(24) },
+      ]);
+      const result = await service.turnover({});
+      expect(result.avgTenureMonths).toBeGreaterThan(0);
+      expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { active: true },
+          select: { hireDate: true, createdAt: true },
+        }),
+      );
+    });
+  });
 });

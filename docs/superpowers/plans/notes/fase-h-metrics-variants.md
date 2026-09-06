@@ -632,6 +632,7 @@ export interface TurnoverResult {
   newHires: number;             // hireDate ∈ [from, to]
   netHeadcountChange: number;   // newHires - leavers
   avgTenureMonths: number;      // média sobre activos
+  insights: string[];          // buildTurnoverInsights portado (variante emoji dashboard-rh) — Task 3 controller ruling
   period: MetricPeriod;
 }
 

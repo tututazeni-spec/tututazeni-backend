@@ -39,7 +39,7 @@ export interface HeadcountParams extends MetricScopeFilter {
 export interface HeadcountBreakdownEntry {
   id: number;
   name: string;
-  level?: number; // só em byPosition
+  level?: string; // só em byPosition — Prisma enum PositionLevel (string), ex. 'SENIOR'
   count: number; // scoped a active:true
 }
 
@@ -92,6 +92,7 @@ export interface TurnoverResult {
   newHires: number; // hireDate ∈ [from, to]
   netHeadcountChange: number; // newHires - leavers
   avgTenureMonths: number; // média sobre activos
+  insights: string[]; // buildTurnoverInsights (variante emoji do dashboard-rh) — Task 1 review ruling
   period: MetricPeriod;
 }
 
