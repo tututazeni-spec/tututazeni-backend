@@ -27,10 +27,6 @@ const mockSvc = {
   getContentRatings: jest.fn().mockResolvedValue({}),
   saveNote: jest.fn().mockResolvedValue({}),
   getMyNote: jest.fn().mockResolvedValue({}),
-  getLearningPaths: jest.fn().mockResolvedValue([]),
-  getLearningPath: jest.fn().mockResolvedValue({ id: 1 }),
-  createLearningPath: jest.fn().mockResolvedValue({ id: 1 }),
-  enrollLearningPath: jest.fn().mockResolvedValue({}),
   getAnalyticsDashboard: jest.fn().mockResolvedValue({}),
   getUserAnalytics: jest.fn().mockResolvedValue({}),
 };
@@ -168,28 +164,6 @@ describe('ContentLibraryController', () => {
   it('getNote → getMyNote(id, userId)', async () => {
     await controller.getNote(5, mockUser as any);
     expect(mockSvc.getMyNote).toHaveBeenCalledWith(5, 1);
-  });
-
-  it('getLearningPaths → getLearningPaths(filters)', async () => {
-    const filters = {} as any;
-    await controller.getLearningPaths(filters);
-    expect(mockSvc.getLearningPaths).toHaveBeenCalledWith(filters);
-  });
-
-  it('getLearningPath → getLearningPath(id, userId)', async () => {
-    await controller.getLearningPath(2, mockUser as any);
-    expect(mockSvc.getLearningPath).toHaveBeenCalledWith(2, 1);
-  });
-
-  it('createLearningPath → createLearningPath(dto, userId)', async () => {
-    const dto = {} as any;
-    await controller.createLearningPath(dto, mockUser as any);
-    expect(mockSvc.createLearningPath).toHaveBeenCalledWith(dto, 1);
-  });
-
-  it('enrollPath → enrollLearningPath(id, userId)', async () => {
-    await controller.enrollPath(3, mockUser as any);
-    expect(mockSvc.enrollLearningPath).toHaveBeenCalledWith(3, 1);
   });
 
   it('analyticsDashboard sem deptId → getAnalyticsDashboard(undefined)', async () => {

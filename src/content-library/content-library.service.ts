@@ -9,8 +9,6 @@ import {
   RateContentDto,
   UpdateProgressDto,
   SaveNoteDto,
-  CreateLearningPathDto,
-  ContentLibraryLearningPathFilterDto,
   ContentStatus,
   ContentFormat,
 } from './content-library.dto';
@@ -73,17 +71,6 @@ export interface ContentRatingRow {
   comment?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
-}
-
-// learningPath/learningPathEnrollment também não existem em
-// prisma/schema.prisma, e o shape assumido por este ficheiro (items/
-// hasCertification/xpReward) diverge do modelo real "LearningPath" que lá
-// existe (ver nota estrutural junto de createLearningPath() abaixo) — por
-// isso este tipo é deliberadamente permissivo (index signature) em vez de
-// fingir conhecer a forma real de um registo que nunca chega a persistir.
-export interface LearningPathItemRow {
-  contentId: number;
-  [key: string]: unknown;
 }
 
 function buildWhereFromFilters(filters: ContentFilterDto): Prisma.ContentAssetWhereInput {
@@ -855,179 +842,6 @@ export class ContentLibraryService {
       progress: pMap.get(c.id)?.progress ?? 0,
       completed: pMap.get(c.id)?.progress === 100,
     }));
-  }
-
-  // ══════════════════════════════════════════════════════
-  // LEARNING PATHS
-  //
-  // ACHADO ESTRUTURAL (não corrigido nesta limpeza de tipos): o modelo real
-  // "LearningPath" em prisma/schema.prisma tem um shape completamente
-  // diferente do que este bloco assume — sem hasCertification, xpReward,
-  // createdById nem relação "items" (tem antes courses/milestones/
-  // assignments). O enrollLearningPath também usa a chave composta errada
-  // ("userId_pathId" em vez de "learningPathId_userId") e campos
-  // inexistentes (pathId, resumedAt). Como estas chamadas passam sempre por
-  // safeModel(), qualquer erro de validação do Prisma é apanhado pelo
-  // .catch() e degrada silenciosamente — na prática, este bloco NUNCA
-  // persiste um learning path real, sempre cai no fallback "modo
-  // compatibilidade". Corrigir isto é uma decisão de produto (que campos
-  // reais mapear, ou se este módulo deve passar a usar directamente o
-  // LearningPath real) e fica fora do âmbito de uma limpeza de `any` — os
-  // tipos aqui ficam propositadamente pouco fiáveis para não mascarar o
-  // problema com uma falsa sensação de segurança de tipos.
-  // ══════════════════════════════════════════════════════
-
-  async createLearningPath(dto: CreateLearningPathDto, createdById: number) {
-    const path = await safeModel(this.prisma, 'learningPath')
-      .create({
-        data: {
-          title: dto.title,
-          description: dto.description,
-          thumbnailUrl: dto.thumbnailUrl,
-          hasCertification: dto.hasCertification ?? false,
-          xpReward: dto.xpReward ?? 100,
-          createdById,
-          items: {
-            create: dto.items.map((item, i) => ({
-              contentId: item.contentId,
-              order: item.order ?? i,
-              mandatory: item.mandatory ?? true,
-            })),
-          },
-        },
-      })
-      .catch(e => {
-        this.logger.warn({
-          createdById,
-          action: 'createLearningPath',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao criar learning path — modelo learningPath pode estar ausente',
-        });
-        return { ...dto, id: null, message: 'Learning path criada (modo compatibilidade)' };
-      });
-
-    return path;
-  }
-
-  async getLearningPaths(filters: ContentLibraryLearningPathFilterDto = {}) {
-    const { page = 1, limit = 20, search } = filters;
-    const { skip, take } = calculatePagination(page, limit);
-    // Record<string, unknown> em vez de `any` — learningPath não existe em
-    // prisma/schema.prisma (ver nota estrutural acima), por isso não há
-    // Prisma.LearningPathWhereInput real a que amarrar este filtro.
-    const where: Record<string, unknown> = {};
-    if (search) where.title = { contains: search, mode: 'insensitive' };
-
-    const data = await (
-      safeModel(this.prisma, 'learningPath').findMany({
-        where,
-        skip,
-        take,
-        orderBy: { createdAt: 'desc' },
-      }) as Promise<Record<string, unknown>[]>
-    ).catch(e => {
-      this.logger.warn({
-        action: 'getLearningPaths.findMany',
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao obter learning paths — modelo learningPath pode estar ausente',
-      });
-      return [];
-    });
-
-    const total = await (
-      safeModel(this.prisma, 'learningPath').count({ where }) as Promise<number>
-    ).catch(e => {
-      this.logger.warn({
-        action: 'getLearningPaths.count',
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao contar learning paths — modelo learningPath pode estar ausente',
-      });
-      return 0;
-    });
-    return buildPaginatedResponse(data, total, page, limit);
-  }
-
-  async getLearningPath(id: number, userId?: number) {
-    const path: { items?: LearningPathItemRow[]; [key: string]: unknown } | null = await (
-      safeModel(this.prisma, 'learningPath').findUnique({
-        where: { id },
-        include: {
-          items: {
-            orderBy: { order: 'asc' },
-            include: { content: true },
-          },
-        },
-      }) as Promise<{ items?: LearningPathItemRow[]; [key: string]: unknown } | null>
-    ).catch(e => {
-      this.logger.warn({
-        learningPathId: id,
-        action: 'getLearningPath.findUnique',
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao obter learning path — modelo learningPath pode estar ausente',
-      });
-      return null;
-    });
-
-    if (!path) throw new NotFoundException('Learning Path não encontrada');
-
-    if (!userId) return path;
-
-    // Enrich items with user progress
-    const contentIds = (path.items ?? []).map(i => i.contentId);
-    const progs: ContentProgressRow[] = await (
-      safeModel(this.prisma, 'contentProgress').findMany({
-        where: { userId, contentId: { in: contentIds } },
-      }) as Promise<ContentProgressRow[]>
-    ).catch(e => {
-      this.logger.warn({
-        userId,
-        learningPathId: id,
-        action: 'getLearningPath.progress',
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao obter progresso da learning path — modelo contentProgress pode estar ausente',
-      });
-      return [];
-    });
-    const pMap = new Map(progs.map(p => [p.contentId, p]));
-
-    const enrichedItems = (path.items ?? []).map(item => ({
-      ...item,
-      progress: pMap.get(item.contentId)?.progress ?? 0,
-      completed: pMap.get(item.contentId)?.progress === 100,
-    }));
-
-    const totalItems = enrichedItems.length;
-    const completedItems = enrichedItems.filter(i => i.completed).length;
-    const overallPct = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
-
-    return {
-      ...path,
-      items: enrichedItems,
-      overallProgress: overallPct,
-      completedItems,
-      totalItems,
-    };
-  }
-
-  async enrollLearningPath(pathId: number, userId: number) {
-    await safeModel(this.prisma, 'learningPathEnrollment')
-      .upsert({
-        where: { userId_pathId: { userId, pathId } },
-        create: { userId, pathId, enrolledAt: new Date() },
-        update: { resumedAt: new Date() },
-      })
-      .catch(e => {
-        this.logger.warn({
-          userId,
-          pathId,
-          action: 'enrollLearningPath',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao inscrever utilizador na learning path — modelo learningPathEnrollment pode estar ausente',
-        });
-        return null;
-      });
-
-    return { message: 'Inscrito com sucesso na learning path', pathId, userId };
   }
 
   // ══════════════════════════════════════════════════════

@@ -124,31 +124,8 @@ export class RateContentDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) comment?: string;
 }
 
-// ─── Learning Path DTOs ───────────────────────────────────────────
-
-export class LearningPathItemDto {
-  @ApiProperty() @IsInt() contentId!: number;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) order?: number;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() mandatory?: boolean;
-}
-
-export class CreateLearningPathDto {
-  @ApiProperty() @IsString() @MaxLength(200) title!: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() thumbnailUrl?: string;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() hasCertification?: boolean;
-  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) xpReward?: number;
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsArray()
-  @IsInt({ each: true })
-  targetPositionIds?: number[];
-  @ApiProperty({ type: [LearningPathItemDto] }) @IsArray() items!: LearningPathItemDto[];
-}
-
-export class ContentLibraryLearningPathFilterDto extends BaseFilterDto {
-  @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
-}
+// Learning Path DTOs removidos na Fase F1 — o dono é o módulo `learning-paths`
+// (`LearningPathsCreateLearningPathDto` / `LearningPathFilterDto`).
 
 // ─── Note DTOs ────────────────────────────────────────────────────
 
