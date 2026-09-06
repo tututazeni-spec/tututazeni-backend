@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { CourseCompletionService } from './course-completion.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { GamificationService } from '../gamification/gamification.service';
 
 // A decisão de conclusão passou a ler da primária (regressão evitada da antiga
 // calculateCourseProgress): os stubs de lesson/lessonProgress/courseModule/quiz/
@@ -30,9 +31,13 @@ const mockPrisma = {
   quizAttempt,
   certificate: { findFirst: jest.fn(), create: jest.fn() },
   courseAnalytics: { updateMany: jest.fn() },
-  userPoints: { upsert: jest.fn() },
   notificationLog: { create: jest.fn() },
   read: { courseModule, lesson, lessonProgress, quiz, quizAttempt, enrollment },
+};
+
+const mockGamification = {
+  awardPoints: jest.fn().mockResolvedValue(undefined),
+  awardBadge: jest.fn().mockResolvedValue(undefined),
 };
 
 describe('CourseCompletionService', () => {
@@ -41,7 +46,11 @@ describe('CourseCompletionService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     const moduleRef = await Test.createTestingModule({
-      providers: [CourseCompletionService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        CourseCompletionService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: GamificationService, useValue: mockGamification },
+      ],
     }).compile();
     service = moduleRef.get(CourseCompletionService);
   });
@@ -294,7 +303,6 @@ describe('CourseCompletionService', () => {
       mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment });
       mockPrisma.certificate.findFirst.mockResolvedValue(null);
       mockPrisma.certificate.create.mockResolvedValue({ id: 500, enrollmentId: 1 });
-      mockPrisma.userPoints.upsert.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
       const res = await service.finalizeCompletion(1);
@@ -309,11 +317,7 @@ describe('CourseCompletionService', () => {
         data: { totalCompleted: { increment: 1 } },
       });
       expect(mockPrisma.certificate.create).toHaveBeenCalled();
-      expect(mockPrisma.userPoints.upsert).toHaveBeenCalledWith({
-        where: { userId: 10 },
-        create: { userId: 10, points: 100 },
-        update: { points: { increment: 100 } },
-      });
+      expect(mockGamification.awardPoints).toHaveBeenCalledWith(10, 100, 'course-completion');
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ type: 'COURSE_COMPLETED', userId: 10 }),
@@ -327,21 +331,20 @@ describe('CourseCompletionService', () => {
       expect(res).toEqual({ finalized: false });
       expect(mockPrisma.enrollment.findUnique).not.toHaveBeenCalled();
       expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
-      expect(mockPrisma.userPoints.upsert).not.toHaveBeenCalled();
+      expect(mockGamification.awardPoints).not.toHaveBeenCalled();
       expect(mockPrisma.courseAnalytics.updateMany).not.toHaveBeenCalled();
     });
 
     it('certificado já existe → não volta a criar, mas os outros efeitos aplicam-se na mesma', async () => {
       mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment });
       mockPrisma.certificate.findFirst.mockResolvedValue({ id: 500, enrollmentId: 1 });
-      mockPrisma.userPoints.upsert.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
       await service.finalizeCompletion(1);
 
       expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
       expect(mockPrisma.enrollment.updateMany).toHaveBeenCalled();
-      expect(mockPrisma.userPoints.upsert).toHaveBeenCalled();
+      expect(mockGamification.awardPoints).toHaveBeenCalled();
     });
 
     it('P2002 ao criar certificado é engolido (corrida) e a conclusão prossegue', async () => {
@@ -352,22 +355,21 @@ describe('CourseCompletionService', () => {
       const p2002 = Object.assign(new Error('unique'), { code: 'P2002' });
       Object.setPrototypeOf(p2002, Prisma.PrismaClientKnownRequestError.prototype);
       mockPrisma.certificate.create.mockRejectedValue(p2002);
-      mockPrisma.userPoints.upsert.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
       const res = await service.finalizeCompletion(1);
       expect(res).toEqual({ finalized: true });
     });
 
-    it('falha ao atribuir pontos não faz a conclusão falhar', async () => {
+    it('delega os pontos ao GamificationService — não escreve UserPoints directamente', async () => {
       mockPrisma.enrollment.findUnique.mockResolvedValue({ ...baseEnrollment });
       mockPrisma.certificate.findFirst.mockResolvedValue(null);
       mockPrisma.certificate.create.mockResolvedValue({ id: 500 });
-      mockPrisma.userPoints.upsert.mockRejectedValue(new Error('db down'));
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
       const res = await service.finalizeCompletion(1);
       expect(res).toEqual({ finalized: true });
+      expect(mockGamification.awardPoints).toHaveBeenCalledWith(10, 100, 'course-completion');
     });
   });
 

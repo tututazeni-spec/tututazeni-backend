@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ApiIntegrationService } from '../api-integration/api-integration.service';
 import { AutomationTrigger } from './scalability.dto';
 
 const baseTenant = {
@@ -112,6 +113,9 @@ const mockNotifications = {
   sendToUser: jest.fn().mockResolvedValue({}),
   send: jest.fn().mockResolvedValue({}),
 };
+const mockApiIntegration = {
+  recordSync: jest.fn().mockResolvedValue({ id: 'sync-log-1', status: 'RUNNING' }),
+};
 
 describe('ScalabilityService (additional)', () => {
   let service: ScalabilityService;
@@ -150,6 +154,7 @@ describe('ScalabilityService (additional)', () => {
         { provide: NotificationsService, useValue: mockNotifications },
         { provide: AuditService, useValue: mockAudit },
         { provide: EventEmitter2, useValue: mockEvents },
+        { provide: ApiIntegrationService, useValue: mockApiIntegration },
       ],
     }).compile();
     service = module.get<ScalabilityService>(ScalabilityService);
@@ -241,11 +246,12 @@ describe('ScalabilityService (additional)', () => {
   // ─── triggerSync ──────────────────────────────────────────────────────────
 
   describe('triggerSync', () => {
-    it('deve iniciar sincronização', async () => {
+    it('deve iniciar sincronização — delega o log em ApiIntegrationService.recordSync', async () => {
       integrationMock.findUnique.mockResolvedValue({ ...baseIntegration, isActive: true });
       const result = await service.triggerSync('int-1', 'admin');
-      expect(result).toHaveProperty('syncLogId');
+      expect(result).toHaveProperty('syncLogId', 'sync-log-1');
       expect(result.message).toContain('Sincronização iniciada');
+      expect(mockApiIntegration.recordSync).toHaveBeenCalledWith('int-1');
       expect(mockEvents.emit).toHaveBeenCalledWith(
         'integration.sync.requested',
         expect.any(Object),

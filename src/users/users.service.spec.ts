@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException } from '@nestjs/common';
+import { getQueueToken } from '@nestjs/bull';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { MailService } from '../mail/mail.service';
+
+const mockEmailQueue = { add: jest.fn().mockResolvedValue(undefined) };
 
 const userMock = {
   findUnique: jest.fn(),
@@ -95,13 +97,7 @@ describe('UsersService', () => {
       providers: [
         UsersService,
         { provide: PrismaService, useValue: mockPrisma },
-        {
-          provide: MailService,
-          useValue: {
-            sendUserInvite: jest.fn().mockResolvedValue(undefined),
-            sendPasswordReset: jest.fn().mockResolvedValue(undefined),
-          },
-        },
+        { provide: getQueueToken('email'), useValue: mockEmailQueue },
       ],
     }).compile();
     service = module.get<UsersService>(UsersService);
@@ -324,85 +320,80 @@ describe('UsersService', () => {
   // ─── invite ───────────────────────────────────────────────────────────────
 
   describe('invite()', () => {
-    const mockMail = {
-      sendUserInvite: jest.fn().mockResolvedValue(undefined),
-    };
-
-    let serviceWithMail: UsersService;
-
-    beforeEach(async () => {
+    beforeEach(() => {
       jest.clearAllMocks();
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          UsersService,
-          { provide: PrismaService, useValue: mockPrisma },
-          { provide: MailService, useValue: mockMail },
-        ],
-      }).compile();
-      serviceWithMail = module.get<UsersService>(UsersService);
     });
 
-    it('gera tempPassword com 24 chars hexadecimais (CSPRNG)', async () => {
+    it('gera tempPassword com 24 chars hexadecimais (CSPRNG) e passa-o no job de email', async () => {
       userMock.findUnique.mockResolvedValue(null);
       userMock.create.mockResolvedValue({ id: 1, email: 'novo@innova.com', fullName: 'Novo User' });
 
-      await serviceWithMail.invite({
+      await service.invite({
         email: 'novo@innova.com',
         fullName: 'Novo User',
         roleId: 1,
         departmentId: 1,
       });
 
-      const [, , tempPassword] = mockMail.sendUserInvite.mock.calls[0] as [string, string, string];
-      expect(tempPassword).toHaveLength(24);
-      expect(tempPassword).toMatch(/^[0-9a-f]{24}$/);
+      const [, jobData] = mockEmailQueue.add.mock.calls[0] as [string, { tempPassword: string }];
+      expect(jobData.tempPassword).toHaveLength(24);
+      expect(jobData.tempPassword).toMatch(/^[0-9a-f]{24}$/);
     });
 
-    it('chama sendUserInvite com email e fullName correctos', async () => {
+    it('enfileira o job "userInvite" com email/fullName correctos e retry configurado', async () => {
       userMock.findUnique.mockResolvedValue(null);
       userMock.create.mockResolvedValue({ id: 2, email: 'x@innova.com', fullName: 'Ana Costa' });
 
-      await serviceWithMail.invite({
+      await service.invite({
         email: 'x@innova.com',
         fullName: 'Ana Costa',
         roleId: 1,
         departmentId: 1,
       });
 
-      expect(mockMail.sendUserInvite).toHaveBeenCalledWith(
-        'x@innova.com',
-        'Ana Costa',
-        expect.any(String),
+      expect(mockEmailQueue.add).toHaveBeenCalledWith(
+        'userInvite',
+        expect.objectContaining({ email: 'x@innova.com', fullName: 'Ana Costa' }),
+        expect.objectContaining({
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+        }),
       );
     });
 
-    it('lança ConflictException se email já existe', async () => {
+    it('cria o utilizador ANTES de enfileirar o email (a criação não depende do envio)', async () => {
+      userMock.findUnique.mockResolvedValue(null);
+      const createOrder: string[] = [];
+      userMock.create.mockImplementation(() => {
+        createOrder.push('create');
+        return Promise.resolve({ id: 3, email: 'ordem@innova.com', fullName: 'Ordem' });
+      });
+      mockEmailQueue.add.mockImplementation(() => {
+        createOrder.push('enqueue');
+        return Promise.resolve(undefined);
+      });
+
+      await service.invite({
+        email: 'ordem@innova.com',
+        fullName: 'Ordem',
+        roleId: 1,
+        departmentId: 1,
+      });
+
+      expect(createOrder).toEqual(['create', 'enqueue']);
+    });
+
+    it('lança ConflictException se email já existe — e não enfileira nada', async () => {
       userMock.findUnique.mockResolvedValue({ id: 99 });
       await expect(
-        serviceWithMail.invite({
+        service.invite({
           email: 'dup@innova.com',
           fullName: 'Dup',
           roleId: 1,
           departmentId: 1,
         }),
       ).rejects.toThrow(ConflictException);
-      expect(mockMail.sendUserInvite).not.toHaveBeenCalled();
-    });
-
-    it('não cria o utilizador se sendUserInvite lançar (SMTP configurado mas falha)', async () => {
-      mockMail.sendUserInvite.mockRejectedValueOnce(new Error('SMTP timeout'));
-      userMock.findUnique.mockResolvedValue(null);
-
-      await expect(
-        serviceWithMail.invite({
-          email: 'fail@innova.com',
-          fullName: 'Fail',
-          roleId: 1,
-          departmentId: 1,
-        }),
-      ).rejects.toThrow('SMTP timeout');
-
-      expect(userMock.create).not.toHaveBeenCalled();
+      expect(mockEmailQueue.add).not.toHaveBeenCalled();
     });
   });
 });

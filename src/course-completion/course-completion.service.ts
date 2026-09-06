@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { CertificateType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { GamificationService } from '../gamification/gamification.service';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -22,7 +23,10 @@ export interface MarkLessonProgressInput {
 export class CourseCompletionService {
   private readonly logger = new Logger(CourseCompletionService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly gamification: GamificationService,
+  ) {}
 
   /**
    * Números de progresso de um curso para um utilizador — a antiga
@@ -211,7 +215,7 @@ export class CourseCompletionService {
     if (!enrollment) return { finalized: true };
 
     await this.issueCertificateInternal(enrollment);
-    await this.awardCompletionPoints(enrollment.userId);
+    await this.gamification.awardPoints(enrollment.userId, 100, 'course-completion');
 
     await createNotificationSafe(this.prisma, this.logger, {
       userId: enrollment.userId,
@@ -309,22 +313,6 @@ export class CourseCompletionService {
         return this.prisma.certificate.findFirst({ where: { enrollmentId: enrollment.id } });
       }
       throw e;
-    }
-  }
-
-  private async awardCompletionPoints(userId: number) {
-    try {
-      await this.prisma.userPoints.upsert({
-        where: { userId },
-        create: { userId, points: 100 },
-        update: { points: { increment: 100 } },
-      });
-    } catch (e: unknown) {
-      this.logger.warn(
-        `Falha ao atribuir pontos de conclusão (não bloqueante) — userId=${userId}: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
-      );
     }
   }
 }

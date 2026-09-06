@@ -1,7 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { getQueueToken } from '@nestjs/bull';
 import { ApiIntegrationService } from './api-integration.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+const mockWebhooksQueue = { add: jest.fn().mockResolvedValue(undefined) };
 
 const makeFind = (val: any = null) => jest.fn().mockResolvedValue(val);
 const makeFindMany = (data: any[] = []) => jest.fn().mockResolvedValue(data);
@@ -65,7 +68,11 @@ describe('ApiIntegrationService — additional coverage', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ApiIntegrationService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        ApiIntegrationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: getQueueToken('webhooks'), useValue: mockWebhooksQueue },
+      ],
     }).compile();
     service = module.get<ApiIntegrationService>(ApiIntegrationService);
   });

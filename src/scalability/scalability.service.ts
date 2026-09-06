@@ -14,6 +14,7 @@ import { Prisma, AuthType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/services/audit.service';
+import { ApiIntegrationService } from '../api-integration/api-integration.service';
 import {
   CreateTenantConfigDto,
   UpdateTenantConfigDto,
@@ -105,6 +106,7 @@ export class ScalabilityService {
     private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
     private readonly events: EventEmitter2,
+    private readonly apiIntegration: ApiIntegrationService,
   ) {}
 
   // ============================================================
@@ -313,10 +315,9 @@ export class ScalabilityService {
     if (!integration) throw new NotFoundException('Integração não encontrada.');
     if (!integration.isActive) throw new BadRequestException('Integração inativa.');
 
-    // Criar log de sincronização
-    const syncLog = await this.prisma.integrationSyncLog.create({
-      data: { integrationId, status: 'RUNNING' },
-    });
+    // Criar log de sincronização — delega no dono do modelo `IntegrationSyncLog`
+    // (ApiIntegrationService) em vez de escrever directamente (Fase J J-b).
+    const syncLog = await this.apiIntegration.recordSync(integrationId);
 
     // Disparar evento assíncrono para o worker
     this.events.emit('integration.sync.requested', {

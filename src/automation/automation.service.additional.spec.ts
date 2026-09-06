@@ -1,7 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { AutomationService } from './automation.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { EnrollmentsService } from '../enrollments/enrollments.service';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { GamificationService } from '../gamification/gamification.service';
+
+const mockEnrollments = { enroll: jest.fn().mockResolvedValue({ id: 1 }) };
+const mockDevPlans = { create: jest.fn().mockResolvedValue({ id: 1, status: 'DRAFT' }) };
+const mockGamification = {
+  awardPoints: jest.fn().mockResolvedValue(undefined),
+  awardBadge: jest.fn().mockResolvedValue(undefined),
+};
 
 const makeExec = () => ({
   findMany: jest.fn().mockResolvedValue([]),
@@ -63,7 +73,13 @@ describe('AutomationService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AutomationService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        AutomationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: EnrollmentsService, useValue: mockEnrollments },
+        { provide: DevelopmentPlansService, useValue: mockDevPlans },
+        { provide: GamificationService, useValue: mockGamification },
+      ],
     }).compile();
     service = module.get<AutomationService>(AutomationService);
   });
@@ -178,6 +194,97 @@ describe('AutomationService (additional)', () => {
       mockPrisma.automationRule.findMany.mockResolvedValue([]);
       await service.triggerEvent({ event: 'COURSE_COMPLETED' as any, userId: 1, payload: {} });
       expect(mockPrisma.automationExecution.create).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── J-a: executeAction delega nos serviços de domínio ────────
+
+  describe('J-a — executeAction delega nos serviços de domínio', () => {
+    beforeEach(() => {
+      mockPrisma.automationExecution.create.mockResolvedValue({ id: 'exec-1' });
+    });
+
+    const ruleFor = (action: string, actionParams: Record<string, unknown>) => ({
+      ...baseRule,
+      action,
+      condition: '',
+      actionParams: JSON.stringify(actionParams),
+    });
+
+    it('ASSIGN_COURSE delega em EnrollmentsService.enroll e não escreve prisma.enrollment', async () => {
+      mockPrisma.automationRule.findMany.mockResolvedValue([
+        ruleFor('assign_course', { courseId: 5 }),
+      ]);
+      const res = (await service.triggerEvent({
+        event: 'COURSE_COMPLETED' as any,
+        userId: 10,
+        payload: {},
+      })) as any;
+      expect(mockEnrollments.enroll).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 10, courseId: 5 }),
+      );
+      expect(res.results[0].status).toBe('SUCCESS');
+    });
+
+    it('ASSIGN_COURSE — erro de domínio (matrícula duplicada) → acção FAILED, sem propagar 500', async () => {
+      mockPrisma.automationRule.findMany.mockResolvedValue([
+        ruleFor('assign_course', { courseId: 5 }),
+      ]);
+      mockEnrollments.enroll.mockRejectedValueOnce(
+        new ConflictException('Utilizador já tem matrícula activa neste curso'),
+      );
+      const res = (await service.triggerEvent({
+        event: 'COURSE_COMPLETED' as any,
+        userId: 10,
+        payload: {},
+      })) as any;
+      expect(res.results[0].status).toBe('FAILED');
+      expect(res.results[0].error).toMatch(/matrícula/i);
+    });
+
+    it('ASSIGN_COURSE — curso não publicado (BadRequest do domínio) → acção FAILED', async () => {
+      mockPrisma.automationRule.findMany.mockResolvedValue([
+        ruleFor('assign_course', { courseId: 5 }),
+      ]);
+      mockEnrollments.enroll.mockRejectedValueOnce(
+        new BadRequestException('Apenas cursos publicados aceitam matrículas'),
+      );
+      const res = (await service.triggerEvent({
+        event: 'COURSE_COMPLETED' as any,
+        userId: 10,
+        payload: {},
+      })) as any;
+      expect(res.results[0].status).toBe('FAILED');
+    });
+
+    it('CREATE_PDI delega em DevelopmentPlansService.create (entra em DRAFT/aprovação)', async () => {
+      mockPrisma.automationRule.findMany.mockResolvedValue([
+        ruleFor('create_pdi', { name: 'PDI X' }),
+      ]);
+      await service.triggerEvent({ event: 'EVALUATION_SUBMITTED' as any, userId: 10, payload: {} });
+      expect(mockDevPlans.create).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 10, name: 'PDI X' }),
+      );
+      expect(mockPrisma.developmentPlan.create).not.toHaveBeenCalled();
+    });
+
+    it('AWARD_POINTS delega em GamificationService.awardPoints', async () => {
+      mockPrisma.automationRule.findMany.mockResolvedValue([
+        ruleFor('award_points', { points: 50 }),
+      ]);
+      await service.triggerEvent({ event: 'COURSE_COMPLETED' as any, userId: 10, payload: {} });
+      expect(mockGamification.awardPoints).toHaveBeenCalledWith(10, 50, 'automation');
+      expect(mockPrisma.userPoints.upsert).not.toHaveBeenCalled();
+    });
+
+    it('AWARD_BADGE delega em GamificationService.awardBadge', async () => {
+      mockPrisma.automationRule.findMany.mockResolvedValue([
+        ruleFor('award_badge', { badgeCode: 'COURSE_COMPLETE' }),
+      ]);
+      await service.triggerEvent({ event: 'COURSE_COMPLETED' as any, userId: 10, payload: {} });
+      expect(mockGamification.awardBadge).toHaveBeenCalledWith(10, 'COURSE_COMPLETE');
+      expect(mockPrisma.badge.findFirst).not.toHaveBeenCalled();
+      expect(mockPrisma.badgeAward.create).not.toHaveBeenCalled();
     });
   });
 
