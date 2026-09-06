@@ -2,6 +2,21 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardService } from './dashboard.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+
+// Fase H — Task 7: getAlerts / getManagerDashboard delegam a esta camada canónica.
+const mockMetrics = {
+  alerts: jest.fn(),
+  managerDashboard: jest.fn(),
+};
+const emptyManagerResult = {
+  teamSize: 0,
+  team: [],
+  kpis: {},
+  competencyGaps: [],
+  nineBox: [],
+  alerts: [],
+};
 
 const mockPrisma: any = {
   user: {
@@ -112,6 +127,8 @@ describe('DashboardService (additional)', () => {
     jest.clearAllMocks();
     mockPrisma.user.findUnique.mockResolvedValue(baseUser);
     mockPrisma.user.findMany.mockResolvedValue([]);
+    mockMetrics.alerts.mockResolvedValue([]);
+    mockMetrics.managerDashboard.mockResolvedValue(emptyManagerResult);
 
     Object.defineProperty(mockPrisma, 'read', {
       get() {
@@ -127,6 +144,7 @@ describe('DashboardService (additional)', () => {
           provide: CacheService,
           useValue: { getOrSet: jest.fn((_k: string, _ttl: number, fn: () => any) => fn()) },
         },
+        { provide: MetricsAggregationService, useValue: mockMetrics },
       ],
     }).compile();
     service = module.get<DashboardService>(DashboardService);
@@ -200,10 +218,58 @@ describe('DashboardService (additional)', () => {
   // ─── getManagerDashboard ───────────────────────────────────────
 
   describe('getManagerDashboard', () => {
-    it('deve retornar dashboard do gestor', async () => {
-      mockPrisma.user.findMany.mockResolvedValue([{ id: 2 }, { id: 3 }]);
-      const result = await service.getManagerDashboard(1, {});
-      expect(result).toBeDefined();
+    it('embrulha o retorno canónico da camada de métricas', async () => {
+      mockMetrics.managerDashboard.mockResolvedValue({
+        teamSize: 1,
+        team: [
+          {
+            user: {
+              id: 2,
+              fullName: 'Bea',
+              avatarUrl: null,
+              position: null,
+              department: { name: 'TI' },
+            },
+            xp: 0,
+            enrollment: { completed: 0, inProgress: 0 },
+            plan: null,
+            lastScore: null,
+            atRisk: false,
+          },
+        ],
+        kpis: {
+          pdpCoverage: 0,
+          activePlans: 0,
+          completedPlans: 0,
+          inProgress: 0,
+          completedEnrollments: 0,
+          enrollmentsTotal: 0,
+          completions: 0,
+          completionRate: 0,
+          avgScore: null,
+          scoreTrend: null,
+          mandatoryRate: 100,
+          engagementResponses: 0,
+          avatarSessions: 0,
+          pendingEvals: 0,
+          overdueActions: 0,
+        },
+        competencyGaps: [],
+        nineBox: [],
+        alerts: [],
+      });
+      const result: any = await service.getManagerDashboard(1, {});
+      expect(result.teamSize).toBe(1);
+      expect(result.team[0]).toEqual({
+        user: { id: 2, fullName: 'Bea', avatarUrl: null, position: null },
+        xp: 0,
+        enrollment: { completed: 0, inProgress: 0 },
+        plan: null,
+        lastScore: null,
+        alert: false,
+      });
+      expect(result.kpis).not.toHaveProperty('overdueActions');
+      expect(result.alerts).toEqual([]);
     });
   });
 
@@ -219,10 +285,121 @@ describe('DashboardService (additional)', () => {
   // ─── getAlerts ────────────────────────────────────────────────
 
   describe('getAlerts', () => {
-    it('deve retornar alertas do sistema', async () => {
+    it('sem roleCode delega só nos alertas pessoais (scope user), sem chamada de equipa', async () => {
+      mockMetrics.alerts.mockResolvedValue([]);
       const result = await service.getAlerts(1);
-      expect(result).toBeDefined();
-      expect(Array.isArray(result)).toBe(true);
+      expect(result).toEqual([]);
+      expect(mockMetrics.alerts).toHaveBeenCalledTimes(1);
+      expect(mockMetrics.alerts).toHaveBeenCalledWith({ scope: 'user', userId: 1 });
+    });
+
+    it('remapeia key→type histórico, severidade→prioridade e mantém actionUrl; ordena por prioridade', async () => {
+      mockMetrics.alerts.mockResolvedValue([
+        {
+          key: 'SURVEYS_PENDING',
+          type: 'SURVEY',
+          severity: 'MEDIUM',
+          message: '2 survey(s) por responder',
+          count: 2,
+          actionUrl: '/engagement',
+          scope: 'user',
+        },
+        {
+          key: 'EVAL_360_PENDING',
+          type: 'EVALUATION',
+          severity: 'HIGH',
+          message: '1 avaliação(ões) 360° pendentes',
+          count: 1,
+          actionUrl: '/evaluations/pending',
+          scope: 'user',
+        },
+        {
+          key: 'MANDATORY_TRAINING_PENDING',
+          type: 'COMPLIANCE',
+          severity: 'MEDIUM',
+          message: '3 formação(ões) obrigatória(s) por concluir',
+          count: 3,
+          actionUrl: '/content-library/mandatory',
+          scope: 'user',
+        },
+      ]);
+      const result = await service.getAlerts(1);
+      expect(result).toEqual([
+        {
+          type: 'EVALUATION',
+          message: '1 avaliação(ões) 360° pendentes',
+          priority: 'URGENT',
+          actionUrl: '/evaluations/pending',
+        },
+        {
+          type: 'SURVEY',
+          message: '2 survey(s) por responder',
+          priority: 'ATTENTION',
+          actionUrl: '/engagement',
+        },
+        {
+          type: 'TRAINING',
+          message: '3 formação(ões) obrigatória(s) por concluir',
+          priority: 'ATTENTION',
+          actionUrl: '/content-library/mandatory',
+        },
+      ]);
+    });
+
+    it('roleCode privilegiado adiciona TEAM_PERFORMANCE_AT_RISK do scope team (só essa key)', async () => {
+      mockMetrics.alerts.mockImplementation((p: any) => {
+        if (p.scope === 'user') return Promise.resolve([]);
+        return Promise.resolve([
+          {
+            key: 'EVAL_360_PENDING',
+            type: 'EVALUATION',
+            severity: 'HIGH',
+            message: 'ignorar',
+            scope: 'team',
+          },
+          {
+            key: 'TEAM_PERFORMANCE_AT_RISK',
+            type: 'PERFORMANCE',
+            severity: 'HIGH',
+            message: '2 membro(s) da equipa com performance abaixo da média',
+            count: 2,
+            actionUrl: '/evaluations',
+            scope: 'team',
+          },
+        ]);
+      });
+      const result = await service.getAlerts(1, 'LIDER');
+      expect(mockMetrics.alerts).toHaveBeenCalledWith({ scope: 'user', userId: 1 });
+      expect(mockMetrics.alerts).toHaveBeenCalledWith({
+        scope: 'team',
+        userId: 1,
+        roleCode: 'LIDER',
+      });
+      expect(result).toEqual([
+        {
+          type: 'PERFORMANCE',
+          message: '2 membro(s) da equipa com performance abaixo da média',
+          priority: 'URGENT',
+          actionUrl: '/evaluations',
+        },
+      ]);
+    });
+
+    it('roleCode não privilegiado (EMPLOYEE) não faz a chamada de equipa', async () => {
+      mockMetrics.alerts.mockResolvedValue([]);
+      await service.getAlerts(1, 'EMPLOYEE');
+      expect(mockMetrics.alerts).toHaveBeenCalledTimes(1);
+      expect(mockMetrics.alerts).toHaveBeenCalledWith({ scope: 'user', userId: 1 });
+    });
+
+    it('degrada (resolve) e loga quando metrics.alerts falha', async () => {
+      const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+      mockMetrics.alerts.mockRejectedValue(new Error('db down'));
+      await expect(service.getAlerts(1)).resolves.toEqual([]);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'DASHBOARD_ALERTS_USER' }),
+      );
+      warn.mockRestore();
     });
   });
 
