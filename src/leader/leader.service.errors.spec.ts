@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { LeaderService } from './leader.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
 
 const mockPrisma = {
   developmentPlan: { findUnique: jest.fn(), update: jest.fn() },
@@ -26,6 +27,15 @@ describe('LeaderService.approvePlan — delegação (Fase G3)', () => {
         LeaderService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: DevelopmentPlansService, useValue: mockDevelopmentPlans },
+        {
+          provide: OneOnOneService,
+          useValue: {
+            schedule: jest.fn(),
+            getOne: jest.fn(),
+            listForUser: jest.fn(),
+            complete: jest.fn(),
+          },
+        },
       ],
     }).compile();
     service = module.get<LeaderService>(LeaderService);

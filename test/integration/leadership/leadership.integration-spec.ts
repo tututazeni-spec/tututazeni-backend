@@ -72,7 +72,8 @@ describe('Leadership Integration', () => {
     });
 
     if (oneOnOneId)
-      await prisma.oneOnOne.deleteMany({ where: { id: oneOnOneId } }).catch(() => undefined);
+      // Fase G4: /leadership/1on1 grava agora em OneOnOneMeeting.
+      await prisma.oneOnOneMeeting.deleteMany({ where: { id: oneOnOneId } }).catch(() => undefined);
     if (mentoringId) {
       await prisma.mentoringSession.deleteMany({ where: { mentoringId } }).catch(() => undefined);
       await prisma.mentoring.deleteMany({ where: { id: mentoringId } }).catch(() => undefined);
@@ -283,8 +284,8 @@ describe('Leadership Integration', () => {
     });
   });
 
-  describe('1:1 (OneOnOne)', () => {
-    it('gestor agenda 1:1 com o subordinado → 201', async () => {
+  describe('1:1 (Fase G4 — grava em OneOnOneMeeting, contrato managerId/subordinateId preservado)', () => {
+    it('gestor agenda 1:1 com o subordinado → 201, forma managerId/subordinateId', async () => {
       const res = await request(app.getHttpServer())
         .post('/leadership/1on1')
         .set('Authorization', `Bearer ${managerToken}`)
@@ -294,14 +295,24 @@ describe('Leadership Integration', () => {
         })
         .expect(201);
       oneOnOneId = res.body.id;
+      expect(res.body.managerId).toBe(managerId);
+      expect(res.body.subordinateId).toBe(employeeId);
+
+      // persiste em OneOnOneMeeting (host/participant), não no modelo legado
+      const row = await prisma.oneOnOneMeeting.findUnique({ where: { id: oneOnOneId } });
+      expect(row).toBeTruthy();
+      expect(row!.hostId).toBe(managerId);
+      expect(row!.participantId).toBe(employeeId);
     });
 
-    it('GET /leadership/1on1 — lista o agendado', async () => {
+    it('GET /leadership/1on1 — lista o agendado com a forma leadership', async () => {
       const res = await request(app.getHttpServer())
         .get('/leadership/1on1')
         .set('Authorization', `Bearer ${managerToken}`)
         .expect(200);
-      expect(res.body.some((m: any) => m.id === oneOnOneId)).toBe(true);
+      const mine = res.body.find((m: any) => m.id === oneOnOneId);
+      expect(mine).toBeTruthy();
+      expect(mine.subordinateId).toBe(employeeId);
     });
 
     it('concluir 1:1 → grava minutes/status', async () => {
@@ -311,6 +322,10 @@ describe('Leadership Integration', () => {
         .send({ oneOnOneId, minutes: 'Discutimos objectivos.' })
         .expect(200);
       expect(res.body.status).toBe('COMPLETED');
+
+      const row = await prisma.oneOnOneMeeting.findUnique({ where: { id: oneOnOneId } });
+      expect(row!.status).toBe('COMPLETED');
+      expect(row!.minutes).toBe('Discutimos objectivos.');
     });
   });
 

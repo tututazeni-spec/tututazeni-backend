@@ -2,6 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import { LeadershipService } from './leadership.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
+
+const mockOneOnOne = {
+  schedule: jest.fn(),
+  getOne: jest.fn(),
+  listForUser: jest.fn().mockResolvedValue([]),
+  complete: jest.fn(),
+  update: jest.fn(),
+  cancel: jest.fn(),
+};
 
 const mockPrisma = {
   leadershipProgram: {
@@ -63,7 +73,11 @@ describe('LeadershipService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [LeadershipService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        LeadershipService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: OneOnOneService, useValue: mockOneOnOne },
+      ],
     }).compile();
     service = module.get<LeadershipService>(LeadershipService);
   });

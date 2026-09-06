@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { EngagementService } from './engagement.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
 
 const mockPrisma: any = {
   engagementSurvey: {
@@ -99,7 +100,19 @@ describe('EngagementService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EngagementService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        EngagementService,
+        { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: OneOnOneService,
+          useValue: {
+            schedule: jest.fn(),
+            getOne: jest.fn(),
+            listForUser: jest.fn(),
+            update: jest.fn(),
+          },
+        },
+      ],
     }).compile();
     service = module.get<EngagementService>(EngagementService);
   });

@@ -2,6 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { LeadershipService } from './leadership.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
+
+const mockOneOnOne = {
+  schedule: jest.fn(),
+  getOne: jest.fn(),
+  listForUser: jest.fn().mockResolvedValue([]),
+  complete: jest.fn(),
+  update: jest.fn(),
+  cancel: jest.fn(),
+};
 
 const makeFind = (val: any = null) => jest.fn().mockResolvedValue(val);
 const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
@@ -80,7 +90,11 @@ describe('LeadershipService — additional coverage', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [LeadershipService, { provide: PrismaService, useValue: mockPrismaProxy }],
+      providers: [
+        LeadershipService,
+        { provide: PrismaService, useValue: mockPrismaProxy },
+        { provide: OneOnOneService, useValue: mockOneOnOne },
+      ],
     }).compile();
     service = module.get<LeadershipService>(LeadershipService);
   });

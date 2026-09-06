@@ -26,12 +26,17 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
+import { meetingToLeadershipShape } from '../one-on-one/one-on-one-legacy-adapter';
 
 @Injectable()
 export class LeadershipService {
   private readonly logger = new Logger(LeadershipService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly oneOnOne: OneOnOneService,
+  ) {}
 
   // ─── PROGRAMAS ────────────────────────────────────────────────────────────
 
@@ -408,17 +413,18 @@ export class LeadershipService {
   // ─── ONE-ON-ONE ───────────────────────────────────────────────────────────
 
   async createOneOnOne(managerId: number, dto: LeadershipCreateOneOnOneDto) {
-    const oneOnOne = await this.prisma.oneOnOne.create({
-      data: {
-        managerId,
-        subordinateId: dto.subordinateId,
-        scheduledAt: new Date(dto.scheduledAt),
-        durationMinutes: dto.durationMinutes ?? 30,
-        agenda: dto.agenda,
-        meetingUrl: dto.meetingUrl,
-        status: 'SCHEDULED',
-      },
+    // 1:1 tem um só modelo (OneOnOneMeeting) e um só serviço (Fase G4).
+    // O contrato de /leadership/1on1 (managerId/subordinateId) é preservado
+    // pelo adaptador meetingToLeadershipShape.
+    const meeting = await this.oneOnOne.schedule({
+      hostId: managerId,
+      participantId: dto.subordinateId,
+      scheduledAt: dto.scheduledAt,
+      durationMinutes: dto.durationMinutes,
+      agenda: dto.agenda,
+      meetingUrl: dto.meetingUrl,
     });
+    const oneOnOne = meetingToLeadershipShape(meeting);
 
     await this.prisma.notificationLog
       .create({
@@ -443,42 +449,35 @@ export class LeadershipService {
   }
 
   async getOneOnOnes(managerId: number, subordinateId?: number) {
-    const where: Prisma.OneOnOneWhereInput = { managerId };
-    if (subordinateId) where.subordinateId = subordinateId;
-
-    return this.prisma.read.oneOnOne.findMany({
-      where,
-      include: {
-        subordinate: {
-          select: {
-            id: true,
-            fullName: true,
-            avatarUrl: true,
-            position: { select: { name: true } },
-          },
-        },
-      },
-      orderBy: { scheduledAt: 'desc' },
-      take: 50,
+    const meetings = await this.oneOnOne.listForUser(managerId, {
+      hostOnly: true,
+      otherPartyId: subordinateId,
     });
+    return meetings.map(meetingToLeadershipShape);
   }
 
   async completeOneOnOne(managerId: number, dto: CompleteOneOnOneDto) {
-    const meeting = await this.prisma.read.oneOnOne.findFirst({
-      where: { id: dto.oneOnOneId, managerId },
-    });
-    if (!meeting) throw new NotFoundException('1:1 não encontrado');
+    // /leadership/1on1 expôs sempre o id do OneOnOne; para linhas migradas esse
+    // id é `legacyOneOnOneId`, para as novas é o id do OneOnOneMeeting — aceita
+    // os dois.
+    const meeting =
+      (await this.prisma.read.oneOnOneMeeting.findUnique({
+        where: { id: dto.oneOnOneId },
+      })) ??
+      (await this.prisma.read.oneOnOneMeeting.findUnique({
+        where: { legacyOneOnOneId: dto.oneOnOneId },
+      }));
+    // Ownership: o líder autenticado tem de ser o host da reunião.
+    if (!meeting || meeting.hostId !== managerId) {
+      throw new NotFoundException('1:1 não encontrado');
+    }
 
-    return this.prisma.oneOnOne.update({
-      where: { id: dto.oneOnOneId },
-      data: {
-        status: 'COMPLETED',
-        completedAt: new Date(),
-        minutes: dto.minutes,
-        actionItems: dto.actionItems,
-        nextMeetingDate: dto.nextMeetingDate ? new Date(dto.nextMeetingDate) : null,
-      },
+    const updated = await this.oneOnOne.complete(meeting.id, {
+      minutes: dto.minutes,
+      actionItems: dto.actionItems,
+      nextMeetingDate: dto.nextMeetingDate ?? null,
     });
+    return meetingToLeadershipShape(updated);
   }
 
   // ─── FEEDBACK 360° ────────────────────────────────────────────────────────
@@ -727,7 +726,10 @@ export class LeadershipService {
         where: { userId: leaderId, status: 'COMPLETED' },
       }),
       this.get360Summary(leaderId),
-      this.prisma.read.oneOnOne.count({ where: { managerId: leaderId, status: 'COMPLETED' } }),
+      // Fase G4: 1:1 vive em OneOnOneMeeting (hostId).
+      this.prisma.read.oneOnOneMeeting.count({
+        where: { hostId: leaderId, status: 'COMPLETED' },
+      }),
     ]);
 
     const teamHealthScore = teamHealth ? (teamHealth.engagementScore ?? 0) : 0;
@@ -787,12 +789,14 @@ export class LeadershipService {
       this.getLeadershipScore(userId),
       this.getMyPrograms(userId),
       this.getMyMentoring(userId),
-      this.prisma.read.oneOnOne.findMany({
-        where: { managerId: userId, status: 'SCHEDULED', scheduledAt: { gte: new Date() } },
-        include: { subordinate: { select: { id: true, fullName: true, avatarUrl: true } } },
-        orderBy: { scheduledAt: 'asc' },
-        take: 5,
-      }),
+      this.prisma.read.oneOnOneMeeting
+        .findMany({
+          where: { hostId: userId, status: 'SCHEDULED', scheduledAt: { gte: new Date() } },
+          include: { participant: { select: { id: true, fullName: true, avatarUrl: true } } },
+          orderBy: { scheduledAt: 'asc' },
+          take: 5,
+        })
+        .then(rows => rows.map(meetingToLeadershipShape)),
       this.getKudosWall(userId),
     ]);
 
