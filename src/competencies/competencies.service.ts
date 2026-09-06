@@ -87,7 +87,28 @@ export class CompetenciesService {
         category: dto.category,
         tags: dto.tags ?? [],
         status: dto.status ?? 'ACTIVE',
+        // Campos do catálogo de Avaliação 360º — só enviados quando presentes,
+        // para o schema aplicar os seus defaults nos restantes fluxos.
+        ...(dto.type !== undefined ? { type: dto.type } : {}),
+        ...(dto.scaleMin !== undefined ? { scaleMin: dto.scaleMin } : {}),
+        ...(dto.scaleMax !== undefined ? { scaleMax: dto.scaleMax } : {}),
+        ...(dto.isGlobal !== undefined ? { isGlobal: dto.isGlobal } : {}),
+        // tenantId: vestigial (§7 single-tenant) — encaminhado apenas para
+        // preservar o comportamento histórico de /evaluation360/competencies.
+        ...(dto.tenantId !== undefined ? { tenantId: dto.tenantId } : {}),
+        ...(dto.indicators?.length
+          ? {
+              indicators: {
+                create: dto.indicators.map(ind => ({
+                  level: ind.level,
+                  description: ind.description,
+                  examples: ind.examples,
+                })),
+              },
+            }
+          : {}),
       },
+      include: { indicators: true },
     });
   }
 
@@ -101,7 +122,36 @@ export class CompetenciesService {
       if (nameConflict) throw new ConflictException(`Nome "${dto.name}" já existe`);
     }
 
-    return this.prisma.competency.update({ where: { id }, data: dto });
+    // `indicators` é uma relação (create aninhado) — não é atribuível num
+    // update de campos escalares.
+    const { indicators: _indicators, ...data } = dto;
+    return this.prisma.competency.update({ where: { id }, data });
+  }
+
+  /**
+   * Vista de catálogo tenant-scoped consumida por GET /evaluation360/competencies.
+   * Difere de `findAll` de propósito: devolve um array simples (sem envelope
+   * paginado), inclui os indicadores e filtra por `isActive`/`isGlobal`/`tenantId`
+   * — preserva a forma de resposta histórica desse endpoint.
+   */
+  async listCatalogue(params: {
+    tenantId?: string;
+    search?: string;
+    offset?: number;
+    limit?: number;
+  }) {
+    const where: Prisma.CompetencyWhereInput = { isActive: true };
+    if (params.tenantId) where.OR = [{ isGlobal: true }, { tenantId: params.tenantId }];
+    else where.isGlobal = true;
+    if (params.search) where.name = { contains: params.search };
+
+    return this.prisma.read.competency.findMany({
+      where,
+      include: { indicators: { orderBy: { level: 'asc' } } },
+      orderBy: { name: 'asc' },
+      skip: params.offset ?? 0,
+      take: params.limit ?? 50,
+    });
   }
 
   async archive(id: number) {
