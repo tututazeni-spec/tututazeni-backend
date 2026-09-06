@@ -8517,6 +8517,8 @@ model OneOnOneMeeting {
   nextMeetingDate DateTime?
   completedAt     DateTime?
   createdAt       DateTime       @default(now())
+  // Fase G4: id do OneOnOne (legado) que originou esta linha via backfill.
+  legacyOneOnOneId Int?          @unique
   host            User           @relation("OneOnOneMeetingHost", fields: [hostId], references: [id], onDelete: Cascade)
   participant     User           @relation("OneOnOneMeetingParticipant", fields: [participantId], references: [id], onDelete: Cascade)
 
