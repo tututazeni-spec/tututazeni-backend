@@ -21,6 +21,9 @@ describe('Fase F3 — backfill DigitalBadge/BadgeIssuance -> Badge/BadgeAward', 
   const dbPlain = `dbid-plain-${tag}`;
   const dbCollide = `dbid-collide-${tag}`;
   const dbSoftDel = `dbid-softdel-${tag}`;
+  const dbSuffixA = `dbid-suffixA-${tag}`;
+  const dbSuffixB = `dbid-suffixB-${tag}`;
+  const sharedName = `F3 Nome Partilhado ${tag}`;
   // BadgeIssuance ids
   const biActive = `biid-active-${tag}`;
   const biRevoked = `biid-revoked-${tag}`;
@@ -56,6 +59,9 @@ describe('Fase F3 — backfill DigitalBadge/BadgeIssuance -> Badge/BadgeAward', 
     await mkBadge({ id: dbPlain, level: 'EXPERT' });
     await mkBadge({ id: dbCollide, name: nativeName }); // colide com o Badge nativo
     await mkBadge({ id: dbSoftDel, deletedAt: new Date('2026-05-01') });
+    // dois DigitalBadge com o mesmo `name` (nenhum nativo) -> 2º sufixado " (2)"
+    await mkBadge({ id: dbSuffixA, name: sharedName });
+    await mkBadge({ id: dbSuffixB, name: sharedName });
 
     const mkIssuance = (over: Record<string, unknown>) =>
       prisma.badgeIssuance.create({
@@ -88,10 +94,14 @@ describe('Fase F3 — backfill DigitalBadge/BadgeIssuance -> Badge/BadgeAward', 
       .deleteMany({ where: { id: { in: [biActive, biRevoked] } } })
       .catch(() => undefined);
     await prisma.badge
-      .deleteMany({ where: { legacyDigitalBadgeId: { in: [dbPlain, dbSoftDel] } } })
+      .deleteMany({
+        where: { legacyDigitalBadgeId: { in: [dbPlain, dbSoftDel, dbSuffixA, dbSuffixB] } },
+      })
       .catch(() => undefined);
     await prisma.digitalBadge
-      .deleteMany({ where: { id: { in: [dbPlain, dbCollide, dbSoftDel] } } })
+      .deleteMany({
+        where: { id: { in: [dbPlain, dbCollide, dbSoftDel, dbSuffixA, dbSuffixB] } },
+      })
       .catch(() => undefined);
     await prisma.badge.delete({ where: { id: nativeBadgeId } }).catch(() => undefined);
     await prisma.$disconnect();
@@ -111,12 +121,22 @@ describe('Fase F3 — backfill DigitalBadge/BadgeIssuance -> Badge/BadgeAward', 
     expect(plain!.createdById).toBe(issuerId);
 
     // colisão de name -> o DigitalBadge liga-se ao Badge nativo, não cria duplicado
-    const collideLink = await prisma.badge.findUnique({ where: { legacyDigitalBadgeId: dbCollide } });
+    const collideLink = await prisma.badge.findUnique({
+      where: { legacyDigitalBadgeId: dbCollide },
+    });
     expect(collideLink!.id).toBe(nativeBadgeId);
     expect(await prisma.badge.count({ where: { name: nativeName } })).toBe(1);
 
     const softDel = await prisma.badge.findUnique({ where: { legacyDigitalBadgeId: dbSoftDel } });
     expect(softDel!.deletedAt).not.toBeNull();
+  });
+
+  it('dois DigitalBadge com o mesmo name -> o segundo é sufixado " (2)"', async () => {
+    const a = await prisma.badge.findUnique({ where: { legacyDigitalBadgeId: dbSuffixA } });
+    const b = await prisma.badge.findUnique({ where: { legacyDigitalBadgeId: dbSuffixB } });
+    const names = [a!.name, b!.name].sort();
+    expect(names).toEqual([sharedName, `${sharedName} (2)`]);
+    expect(a!.id).not.toBe(b!.id);
   });
 
   it('cria BadgeAward por BadgeIssuance com verifyCode/isRevoked e awardedAt = issuedAt', async () => {
@@ -142,7 +162,7 @@ describe('Fase F3 — backfill DigitalBadge/BadgeIssuance -> Badge/BadgeAward', 
     expect(r2.badgesCreated).toBe(0);
     expect(r2.badgesLinked).toBe(0);
     expect(r2.issuancesCreated).toBe(0);
-    for (const id of [dbPlain, dbCollide, dbSoftDel]) {
+    for (const id of [dbPlain, dbCollide, dbSoftDel, dbSuffixA, dbSuffixB]) {
       expect(await prisma.badge.count({ where: { legacyDigitalBadgeId: id } })).toBe(1);
     }
     for (const id of [biActive, biRevoked]) {
