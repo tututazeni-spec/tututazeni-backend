@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { AutomationTrigger, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import {
   CreateNotificationDto,
   BulkNotificationDto,
@@ -432,25 +433,15 @@ export class NotificationsService {
   // expõe os campos modernos), por isso `data: data as any` escondia que
   // POST /notifications/automation-rules rebentava SEMPRE com "Argument
   // tenantId is missing" — endpoint 100% inoperante. Resolvido com um
-  // tenant/trigger por omissão (mesmo padrão de getDefaultTenantId() usado
-  // noutros serviços do projecto) em vez de expandir o contrato público
-  // desta rota legada.
-  private async getDefaultTenantId(): Promise<string> {
-    const existing = await this.prisma.tenantConfig.findFirst();
-    if (existing) return existing.id;
-    const created = await this.prisma.tenantConfig.create({
-      data: { tenantCode: 'DEFAULT', tenantName: 'Default Tenant' },
-    });
-    return created.id;
-  }
-
+  // tenant/trigger por omissão (helper partilhado resolveDefaultTenantId) em vez
+  // de expandir o contrato público desta rota legada.
   async createAutomationRule(data: {
     name: string;
     trigger: string;
     action: string;
     condition: string;
   }) {
-    const tenantId = await this.getDefaultTenantId();
+    const tenantId = await resolveDefaultTenantId(this.prisma);
     return this.prisma.automationRule.create({
       data: {
         name: data.name,

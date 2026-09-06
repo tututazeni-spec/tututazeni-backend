@@ -17,6 +17,7 @@ import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
 import { DeclarationType, Prisma, TemplateLanguage } from '@prisma/client';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
+import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 
 // ─── Variable resolver ────────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ export class DocumentDeclarationsService {
     const detected = [
       ...new Set((dto.content.match(/\{\{(\w+)\}\}/g) ?? []).map(m => m.slice(2, -2))),
     ];
-    const tenantId = await this.getDefaultTenantId();
+    const tenantId = await resolveDefaultTenantId(this.prisma);
 
     const template = await this.prisma.declarationTemplate.create({
       data: {
@@ -503,15 +504,6 @@ export class DocumentDeclarationsService {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-
-  private async getDefaultTenantId(): Promise<string> {
-    const existing = await this.prisma.tenantConfig.findFirst();
-    if (existing) return existing.id;
-    const created = await this.prisma.tenantConfig.create({
-      data: { tenantCode: 'DEFAULT', tenantName: 'Default Tenant' },
-    });
-    return created.id;
-  }
 
   private async loadUserData(userId: number) {
     // FIX: removed employee sub-select — User has no employee relation.

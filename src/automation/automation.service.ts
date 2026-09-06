@@ -13,6 +13,7 @@ import {
 } from './automation.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
+import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -223,17 +224,6 @@ export class AutomationService {
     return r;
   }
 
-  // AutomationRule.tenantId é uma FK obrigatória (multi-tenant) nunca populada
-  // aqui — mesmo helper de tenant único por omissão usado em ApiIntegrationService.
-  private async getDefaultTenantId(): Promise<string> {
-    const existing = await this.prisma.tenantConfig.findFirst();
-    if (existing) return existing.id;
-    const created = await this.prisma.tenantConfig.create({
-      data: { tenantCode: 'DEFAULT', tenantName: 'Default Tenant' },
-    });
-    return created.id;
-  }
-
   // TriggerType (DTO) usa strings livres/legacy ("course.completed", "manual")
   // que não correspondem a nenhum valor do enum Prisma AutomationTrigger
   // ("COURSE_COMPLETED", "MANUAL", ...). Sem mapeamento, o create() rebentava
@@ -257,7 +247,8 @@ export class AutomationService {
   }
 
   async createRule(dto: CreateRuleDto, createdById = 0) {
-    const tenantId = await this.getDefaultTenantId();
+    // AutomationRule.tenantId é FK obrigatória (multi-tenant) nunca populada aqui.
+    const tenantId = await resolveDefaultTenantId(this.prisma);
 
     const rule = await this.prisma.automationRule.create({
       data: {

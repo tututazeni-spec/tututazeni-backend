@@ -6,6 +6,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfService } from '../pdf/pdf.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import {
   DeclarationAuditAction,
   DeclarationStatus as PrismaDeclarationStatus,
@@ -76,13 +77,7 @@ export class WorkDeclarationService {
    * Mesmo padrão usado em declarations/document-declarations.service.ts.
    */
   private async resolveTenantId(tenantId?: string): Promise<string> {
-    if (tenantId) return tenantId;
-    const existing = await this.prisma.tenantConfig.findFirst();
-    if (existing) return existing.id;
-    const created = await this.prisma.tenantConfig.create({
-      data: { tenantCode: 'DEFAULT', tenantName: 'Default Tenant' },
-    });
-    return created.id;
+    return resolveDefaultTenantId(this.prisma, tenantId);
   }
 
   // ══════════════════════════════════════════════════════════
