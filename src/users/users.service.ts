@@ -8,8 +8,9 @@ import {
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { Prisma } from '@prisma/client';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
-import { MailService } from '../mail/mail.service';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import {
@@ -67,7 +68,7 @@ export class UsersService {
 
   constructor(
     private prisma: PrismaService,
-    private readonly mail: MailService,
+    @InjectQueue('email') private readonly emailQueue: Queue,
   ) {}
 
   // ─── Sanitizar (remover password) ────────────────────────────────────────
@@ -598,14 +599,20 @@ export class UsersService {
     // CSPRNG — 12 bytes = 24 chars hexadecimais
     const tempPassword = crypto.randomBytes(12).toString('hex');
 
-    // Enviar email ANTES de criar o user — se SMTP falhar, o user não é criado
-    await this.mail.sendUserInvite(dto.email, dto.fullName, tempPassword);
-
+    // Mudança deliberada (Fase J): o utilizador é criado primeiro e o email de
+    // convite vai para a fila `email` (retry gerido pelo Bull). Deixa de
+    // bloquear a resposta e de impedir a criação quando o SMTP está em baixo.
     const user = await this.create({
       ...dto,
       password: tempPassword,
       accountStatus: AccountStatus.PENDING,
     });
+
+    await this.emailQueue.add(
+      'userInvite',
+      { email: dto.email, fullName: dto.fullName, tempPassword },
+      { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: true },
+    );
 
     await this.prisma.notificationLog
       .create({
