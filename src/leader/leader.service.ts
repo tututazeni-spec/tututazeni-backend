@@ -16,6 +16,7 @@ import { CurrentUserData } from '../common/types/current-user';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { DevelopmentPlansService } from '../development-plans/development-plans.service';
 import { ApprovalDecision } from '../development-plans/development-plans.dto';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
 
 // ─── Schema Fixes Applied ─────────────────────────────────────────
 // ✅ role is a RELATION — never use { role: { in: ['GESTOR'] } }
@@ -85,6 +86,7 @@ export class LeaderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly developmentPlans: DevelopmentPlansService,
+    private readonly oneOnOne: OneOnOneService,
   ) {}
 
   // ══════════════════════════════════════════════════════
@@ -619,27 +621,14 @@ export class LeaderService {
       throw new NotFoundException('Membro não encontrado');
     }
 
-    // FIX: OneOnOneMeeting é um modelo real — mesmo achado de Feedback acima.
-    const meeting = await this.prisma.oneOnOneMeeting
-      .create({
-        data: {
-          hostId: leaderId,
-          participantId: dto.participantId,
-          scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : new Date(),
-          agenda: dto.agenda,
-          status: dto.status ?? 'SCHEDULED',
-        },
-      })
-      .catch(e => {
-        this.logger.warn({
-          leaderId,
-          participantId: dto.participantId,
-          action: 'createOneOnOne',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao criar reunião 1:1',
-        });
-        return { leaderId, participantId: dto.participantId, status: 'SCHEDULED', ...dto };
-      });
+    // OneOnOneMeeting tem um dono de escrita único — OneOnOneService (Fase G4).
+    const meeting = await this.oneOnOne.schedule({
+      hostId: leaderId,
+      participantId: dto.participantId,
+      scheduledAt: dto.scheduledAt ?? new Date(),
+      agenda: dto.agenda,
+      status: dto.status ?? 'SCHEDULED',
+    });
 
     await this.prisma.notificationLog
       .create({
@@ -663,44 +652,14 @@ export class LeaderService {
   }
 
   async getOneOnOnes(leaderId: number, memberId?: number) {
-    const where: Prisma.OneOnOneMeetingWhereInput = { hostId: leaderId };
-    if (memberId) where.participantId = memberId;
-    return this.prisma.read.oneOnOneMeeting
-      .findMany({
-        where,
-        orderBy: { scheduledAt: 'desc' },
-        take: 20,
-      })
-      .catch(e => {
-        this.logger.warn({
-          leaderId,
-          memberId,
-          action: 'getOneOnOnes',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter reuniões 1:1',
-        });
-        return [];
-      });
+    return this.oneOnOne.listForUser(leaderId, { hostOnly: true, otherPartyId: memberId });
   }
 
   async completeOneOnOne(meetingId: number, notes: string, user: CurrentUserData) {
-    const meeting = await this.prisma.read.oneOnOneMeeting
-      .findUnique({ where: { id: meetingId } })
-      .catch(e => {
-        this.logger.warn({
-          meetingId,
-          userId: user?.id,
-          action: 'completeOneOnOne.findUnique',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao procurar reunião 1:1',
-        });
-        return null;
-      });
+    const meeting = await this.oneOnOne.getOne(meetingId);
 
     // Ownership (A3): a reunião 1:1 tem dois donos possíveis — o líder (hostId)
-    // e o membro (participantId) — além de ADMIN/RH. Verificação manual porque
-    // assertCanAccess só suporta um único ownerId.
-    if (!meeting) throw new NotFoundException('Reunião 1:1 não encontrada');
+    // e o membro (participantId) — além de ADMIN/RH.
     const isOwner =
       String(meeting.hostId) === String(user.id) ||
       String(meeting.participantId) === String(user.id);
@@ -708,23 +667,7 @@ export class LeaderService {
       throw new NotFoundException('Reunião 1:1 não encontrada');
     }
 
-    // FIX: OneOnOneMeeting é um modelo real — mesmo achado de Feedback/
-    // createOneOnOne/getOneOnOnes acima; o wrapper safeM() nunca disparava.
-    return this.prisma.oneOnOneMeeting
-      .update({
-        where: { id: meetingId },
-        data: { status: 'COMPLETED', minutes: notes, completedAt: new Date() },
-      })
-      .catch(e => {
-        this.logger.warn({
-          meetingId,
-          userId: user?.id,
-          action: 'completeOneOnOne.update',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao actualizar reunião 1:1 como concluída',
-        });
-        return { id: meetingId, status: 'COMPLETED', notes };
-      });
+    return this.oneOnOne.complete(meetingId, { minutes: notes });
   }
 
   // ══════════════════════════════════════════════════════

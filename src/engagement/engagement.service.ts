@@ -31,6 +31,7 @@ import {
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/decorators';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
 
 // ─── Scoring helpers ──────────────────────────────────────────────
 
@@ -55,7 +56,10 @@ function toIndex(avg: number, scale: number): number {
 export class EngagementService {
   private readonly logger = new Logger(EngagementService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly oneOnOne: OneOnOneService,
+  ) {}
 
   // ══════════════════════════════════════════════════════
   // SURVEYS (CRUD + LIFECYCLE)
@@ -848,17 +852,15 @@ export class EngagementService {
   // ══════════════════════════════════════════════════════
 
   async createOneOnOne(userId: number, dto: CreateOneOnOneDto) {
-    const oneOnOne = await this.prisma.oneOnOneMeeting.create({
-      data: {
-        hostId: userId,
-        participantId: dto.participantId,
-        scheduledAt: new Date(dto.scheduledAt),
-        durationMinutes: dto.durationMinutes ?? 30,
-        agenda: dto.agenda,
-        status: 'SCHEDULED',
-        recurring: dto.recurring ?? false,
-        frequency: dto.frequency,
-      },
+    // OneOnOneMeeting tem um dono de escrita único — OneOnOneService (Fase G4).
+    const oneOnOne = await this.oneOnOne.schedule({
+      hostId: userId,
+      participantId: dto.participantId,
+      scheduledAt: dto.scheduledAt,
+      durationMinutes: dto.durationMinutes,
+      agenda: dto.agenda,
+      recurring: dto.recurring,
+      frequency: dto.frequency,
     });
 
     // Notify participant
@@ -885,19 +887,11 @@ export class EngagementService {
   }
 
   async getOneOnOnes(userId: number) {
-    return this.prisma.oneOnOneMeeting.findMany({
-      where: { OR: [{ hostId: userId }, { participantId: userId }] },
-      include: {
-        host: { select: { id: true, fullName: true, avatarUrl: true } },
-        participant: { select: { id: true, fullName: true, avatarUrl: true } },
-      },
-      orderBy: { scheduledAt: 'desc' },
-    });
+    return this.oneOnOne.listForUser(userId);
   }
 
   async updateOneOnOne(id: number, user: CurrentUserData, dto: EngagementUpdateOneOnOneDto) {
-    const meeting = await this.prisma.oneOnOneMeeting.findUnique({ where: { id } });
-    if (!meeting) throw new NotFoundException('1:1 não encontrado');
+    const meeting = await this.oneOnOne.getOne(id);
 
     // Ownership (A3): host OU participante OU ADMIN/RH; senão 404 (não revela existência).
     const isOwner =
@@ -907,20 +901,12 @@ export class EngagementService {
       throw new NotFoundException('1:1 não encontrado');
     }
 
-    // OneOnOneMeeting não tem coluna `completed` (só `completedAt`/`status`)
-    // nem `notes` (a coluna real chama-se `minutes`).
+    // `completed` → status/completedAt; `notes` → coluna real `minutes`.
     const { completed, notes, ...rest } = dto;
-    const data: Prisma.OneOnOneMeetingUpdateInput = { ...rest };
-    if (notes !== undefined) data.minutes = notes;
-    if (dto.scheduledAt) data.scheduledAt = new Date(dto.scheduledAt);
-    if (completed) {
-      data.status = 'COMPLETED';
-      data.completedAt = new Date();
-    }
-
-    return this.prisma.oneOnOneMeeting.update({
-      where: { id },
-      data,
+    return this.oneOnOne.update(id, {
+      ...rest,
+      minutes: notes,
+      ...(completed ? { status: 'COMPLETED', completedAt: new Date() } : {}),
     });
   }
 

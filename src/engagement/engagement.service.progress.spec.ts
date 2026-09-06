@@ -10,6 +10,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { EngagementService } from './engagement.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
+
+const mockOneOnOne = {
+  schedule: jest.fn().mockResolvedValue({ id: 1, hostId: 1, participantId: 2 }),
+  getOne: jest.fn(),
+  listForUser: jest.fn().mockResolvedValue([]),
+  update: jest.fn().mockResolvedValue({ id: 1 }),
+  complete: jest.fn(),
+  cancel: jest.fn(),
+};
 
 function buildMockPrisma() {
   const crud = () => ({
@@ -65,6 +75,7 @@ describe('EngagementService (progress)', () => {
 
   beforeEach(async () => {
     mockPrisma = buildMockPrisma();
+    jest.clearAllMocks();
 
     Object.defineProperty(mockPrisma, 'read', {
       get() {
@@ -73,7 +84,11 @@ describe('EngagementService (progress)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EngagementService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        EngagementService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: OneOnOneService, useValue: mockOneOnOne },
+      ],
     }).compile();
 
     service = module.get<EngagementService>(EngagementService);
@@ -413,13 +428,16 @@ describe('EngagementService (progress)', () => {
   // ─── createOneOnOne ─────────────────────────────────────────────
 
   describe('createOneOnOne', () => {
-    it('deve criar reunião 1:1 e notificar participante', async () => {
+    it('delega em OneOnOneService.schedule e notifica participante', async () => {
       const result = (await service.createOneOnOne(1, {
         participantId: 2,
         scheduledAt: '2026-07-01T10:00:00',
         durationMinutes: 30,
         agenda: 'Revisão mensal',
       } as any)) as any;
+      expect(mockOneOnOne.schedule).toHaveBeenCalledWith(
+        expect.objectContaining({ hostId: 1, participantId: 2 }),
+      );
       expect(result).toBeDefined();
       expect(mockPrisma.notificationLog.create).toHaveBeenCalled();
     });
@@ -428,9 +446,11 @@ describe('EngagementService (progress)', () => {
   // ─── getOneOnOnes ───────────────────────────────────────────────
 
   describe('getOneOnOnes', () => {
-    it('deve retornar lista de reuniões 1:1 (modelo opcional)', async () => {
+    it('delega em OneOnOneService.listForUser', async () => {
+      mockOneOnOne.listForUser.mockResolvedValue([{ id: 1 }]);
       const result = (await service.getOneOnOnes(1)) as any;
-      expect(result).toBeDefined();
+      expect(mockOneOnOne.listForUser).toHaveBeenCalledWith(1);
+      expect(result).toEqual([{ id: 1 }]);
     });
   });
 
@@ -443,40 +463,38 @@ describe('EngagementService (progress)', () => {
     const otherUser = { id: 99, role: { name: 'COLABORADOR' } } as any;
     const admin = { id: 50, role: { name: 'ADMIN' } } as any;
 
-    it('deve actualizar reunião 1:1 quando é o host', async () => {
-      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue(meeting);
+    it('host delega em OneOnOneService.update', async () => {
+      mockOneOnOne.getOne.mockResolvedValue(meeting);
       const result = await service.updateOneOnOne(1, host, { completed: true } as any);
+      expect(mockOneOnOne.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ status: 'COMPLETED' }),
+      );
       expect(result).toBeDefined();
     });
 
-    it('deve converter scheduledAt para Date', async () => {
-      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue(meeting);
-      await service.updateOneOnOne(1, host, { scheduledAt: '2026-07-15T14:00:00' } as any);
-      // No error expected
+    it('participante pode actualizar o seu próprio 1:1', async () => {
+      mockOneOnOne.getOne.mockResolvedValue(meeting);
+      await service.updateOneOnOne(1, participant, { completed: true } as any);
+      expect(mockOneOnOne.update).toHaveBeenCalled();
     });
 
-    it('permite ao participante actualizar o seu próprio 1:1', async () => {
-      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue(meeting);
-      const result = await service.updateOneOnOne(1, participant, { completed: true } as any);
-      expect(result).toBeDefined();
+    it('ADMIN/RH pode actualizar qualquer 1:1', async () => {
+      mockOneOnOne.getOne.mockResolvedValue(meeting);
+      await service.updateOneOnOne(1, admin, { completed: true } as any);
+      expect(mockOneOnOne.update).toHaveBeenCalled();
     });
 
-    it('permite a ADMIN/RH actualizar qualquer 1:1', async () => {
-      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue(meeting);
-      const result = await service.updateOneOnOne(1, admin, { completed: true } as any);
-      expect(result).toBeDefined();
-    });
-
-    it('IDOR: utilizador C não pode actualizar 1:1 alheio (nem host nem participante)', async () => {
-      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue(meeting);
+    it('IDOR: utilizador C não pode actualizar 1:1 alheio', async () => {
+      mockOneOnOne.getOne.mockResolvedValue(meeting);
       await expect(
         service.updateOneOnOne(1, otherUser, { completed: true } as any),
       ).rejects.toBeInstanceOf(NotFoundException);
-      expect(mockPrisma.oneOnOneMeeting.update).not.toHaveBeenCalled();
+      expect(mockOneOnOne.update).not.toHaveBeenCalled();
     });
 
-    it('1:1 inexistente → 404', async () => {
-      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue(null);
+    it('1:1 inexistente → 404 (propaga do canónico)', async () => {
+      mockOneOnOne.getOne.mockRejectedValue(new NotFoundException('1:1 não encontrado'));
       await expect(
         service.updateOneOnOne(1, host, { completed: true } as any),
       ).rejects.toBeInstanceOf(NotFoundException);

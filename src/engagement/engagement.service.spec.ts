@@ -2,7 +2,17 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { EngagementService } from './engagement.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
 import { SurveyStatus, SurveyType } from '@prisma/client';
+
+const mockOneOnOne = {
+  schedule: jest.fn(),
+  getOne: jest.fn(),
+  listForUser: jest.fn().mockResolvedValue([]),
+  update: jest.fn(),
+  complete: jest.fn(),
+  cancel: jest.fn(),
+};
 
 const engagementSurveyMock = {
   findUnique: jest.fn(),
@@ -96,7 +106,11 @@ describe('EngagementService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EngagementService, { provide: PrismaService, useValue: mockPrismaProxy }],
+      providers: [
+        EngagementService,
+        { provide: PrismaService, useValue: mockPrismaProxy },
+        { provide: OneOnOneService, useValue: mockOneOnOne },
+      ],
     }).compile();
     service = module.get<EngagementService>(EngagementService);
   });
@@ -406,18 +420,44 @@ describe('EngagementService', () => {
   // ─── createOneOnOne ───────────────────────────────────────────────────────
 
   describe('createOneOnOne', () => {
-    it('deve criar 1:1', async () => {
-      oneOnOneMock.create.mockResolvedValue({
-        id: 1,
-        userId: 1,
-        managerId: 2,
-        scheduledAt: new Date(),
-      });
+    it('delega em OneOnOneService.schedule (host = userId)', async () => {
+      mockOneOnOne.schedule.mockResolvedValue({ id: 1, hostId: 1, participantId: 2 });
       const result = await service.createOneOnOne(1, {
-        managerId: 2,
+        participantId: 2,
         scheduledAt: new Date().toISOString(),
+        recurring: true,
       } as any);
+      expect(mockOneOnOne.schedule).toHaveBeenCalledWith(
+        expect.objectContaining({ hostId: 1, participantId: 2, recurring: true }),
+      );
       expect(result).toBeDefined();
+    });
+  });
+
+  describe('updateOneOnOne', () => {
+    it('host delega em OneOnOneService.update, mapeando notes→minutes e completed→status', async () => {
+      mockOneOnOne.getOne.mockResolvedValue({ id: 9, hostId: 1, participantId: 2 });
+      mockOneOnOne.update.mockResolvedValue({ id: 9, status: 'COMPLETED' });
+      await service.updateOneOnOne(
+        9,
+        { id: 1, role: { name: 'COLABORADOR' } } as any,
+        {
+          notes: 'acta',
+          completed: true,
+        } as any,
+      );
+      expect(mockOneOnOne.update).toHaveBeenCalledWith(
+        9,
+        expect.objectContaining({ minutes: 'acta', status: 'COMPLETED' }),
+      );
+    });
+
+    it('não-dono não privilegiado → NotFoundException (não delega)', async () => {
+      mockOneOnOne.getOne.mockResolvedValue({ id: 9, hostId: 1, participantId: 2 });
+      await expect(
+        service.updateOneOnOne(9, { id: 77, role: { name: 'COLABORADOR' } } as any, {} as any),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockOneOnOne.update).not.toHaveBeenCalled();
     });
   });
 });

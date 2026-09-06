@@ -2,6 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { LeaderService } from './leader.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
+
+const mockOneOnOne = {
+  schedule: jest.fn().mockResolvedValue({ id: 1, hostId: 1, participantId: 2 }),
+  getOne: jest.fn(),
+  listForUser: jest.fn().mockResolvedValue([]),
+  complete: jest.fn().mockResolvedValue({ id: 1, status: 'COMPLETED' }),
+};
 
 const makeFind = (data: any[] = []) => jest.fn().mockResolvedValue(data);
 const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
@@ -55,6 +63,7 @@ describe('LeaderService', () => {
         LeaderService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: DevelopmentPlansService, useValue: { approvePlan: jest.fn() } },
+        { provide: OneOnOneService, useValue: mockOneOnOne },
       ],
     }).compile();
     service = module.get<LeaderService>(LeaderService);
@@ -311,59 +320,32 @@ describe('LeaderService', () => {
   // ─── completeOneOnOne ─────────────────────────────────────────────────────
 
   describe('completeOneOnOne', () => {
-    it('permite ao host (líder dono) concluir a reunião', async () => {
-      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue({
-        id: 10,
-        hostId: 1,
-        participantId: 2,
-        status: 'SCHEDULED',
-      });
-      mockPrisma.oneOnOneMeeting.update.mockResolvedValue({ id: 10, status: 'COMPLETED' });
-
+    it('host (líder dono) → delega em OneOnOneService.complete', async () => {
+      mockOneOnOne.getOne.mockResolvedValue({ id: 10, hostId: 1, participantId: 2 });
       const result = await service.completeOneOnOne(10, 'notas', leaderUser as any);
       expect(result).toBeDefined();
-      expect(mockPrisma.oneOnOneMeeting.update).toHaveBeenCalled();
+      expect(mockOneOnOne.complete).toHaveBeenCalledWith(10, { minutes: 'notas' });
     });
 
-    it('permite ao participante concluir a reunião', async () => {
-      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue({
-        id: 11,
-        hostId: 1,
-        participantId: 2,
-        status: 'SCHEDULED',
-      });
-      mockPrisma.oneOnOneMeeting.update.mockResolvedValue({ id: 11, status: 'COMPLETED' });
-
+    it('participante → delega', async () => {
+      mockOneOnOne.getOne.mockResolvedValue({ id: 11, hostId: 1, participantId: 2 });
       const participantUser = { id: 2, email: 'member@innova.com', role: { name: 'COLABORADOR' } };
-      const result = await service.completeOneOnOne(11, 'notas', participantUser as any);
-      expect(result).toBeDefined();
+      await service.completeOneOnOne(11, 'notas', participantUser as any);
+      expect(mockOneOnOne.complete).toHaveBeenCalled();
     });
 
-    it('não permite líder B (nem host nem participante) concluir reunião de A', async () => {
-      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue({
-        id: 12,
-        hostId: 1,
-        participantId: 2,
-        status: 'SCHEDULED',
-      });
-
+    it('líder B (nem host nem participante) → NotFoundException, não delega', async () => {
+      mockOneOnOne.getOne.mockResolvedValue({ id: 12, hostId: 1, participantId: 2 });
       await expect(service.completeOneOnOne(12, 'notas', otherLeaderUser as any)).rejects.toThrow(
         'Reunião 1:1 não encontrada',
       );
-      expect(mockPrisma.oneOnOneMeeting.update).not.toHaveBeenCalled();
+      expect(mockOneOnOne.complete).not.toHaveBeenCalled();
     });
 
-    it('permite ADMIN concluir reunião de qualquer líder', async () => {
-      mockPrisma.oneOnOneMeeting.findUnique.mockResolvedValue({
-        id: 13,
-        hostId: 1,
-        participantId: 2,
-        status: 'SCHEDULED',
-      });
-      mockPrisma.oneOnOneMeeting.update.mockResolvedValue({ id: 13, status: 'COMPLETED' });
-
-      const result = await service.completeOneOnOne(13, 'notas', adminUser as any);
-      expect(result).toBeDefined();
+    it('ADMIN → delega', async () => {
+      mockOneOnOne.getOne.mockResolvedValue({ id: 13, hostId: 1, participantId: 2 });
+      await service.completeOneOnOne(13, 'notas', adminUser as any);
+      expect(mockOneOnOne.complete).toHaveBeenCalled();
     });
   });
 
