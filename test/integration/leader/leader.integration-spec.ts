@@ -77,8 +77,17 @@ describe('Leader Integration', () => {
     });
     courseId = course.id;
 
+    // Fase G3: leader.approvePlan delega no fluxo canónico — o plano tem de estar
+    // em PENDING_APPROVAL e ter um managerId designado (a chave de ownership passou
+    // a ser plan.managerId, não user.managerId).
     const plan = await prisma.developmentPlan.create({
-      data: { name: 'PDI Integração Leader', goal: 'Crescer', userId: employeeId, status: 'DRAFT' },
+      data: {
+        name: 'PDI Integração Leader',
+        goal: 'Crescer',
+        userId: employeeId,
+        managerId,
+        status: 'PENDING_APPROVAL',
+      },
     });
     planId = plan.id;
   });
