@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EnrollmentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoiFilterDto, CalculateRoiDto, WhatIfDto, RoiConfidence } from './roi-impact.dto';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
 
 // ─────────────────────────────────────────────────────────────────
 // CONSTANTS & HELPERS
@@ -26,10 +27,6 @@ function roiFormula(benefit: number, cost: number): number {
 
 function bcr(benefit: number, cost: number): number {
   return cost > 0 ? +(benefit / cost).toFixed(2) : 0;
-}
-
-function paybackMonths(cost: number, benefitPerMonth: number): number {
-  return benefitPerMonth > 0 ? +(cost / benefitPerMonth).toFixed(1) : 0;
 }
 
 function dateRange(filter: RoiFilterDto): { gte: Date; lte: Date } {
@@ -65,7 +62,10 @@ function buildNarrative(roi: number, benefit: number, cost: number, completions:
 export class RoiImpactService {
   private readonly logger = new Logger(RoiImpactService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly metrics: MetricsAggregationService,
+  ) {}
 
   // ══════════════════════════════════════════════════════
   // CORE ROI CALCULATION
@@ -79,8 +79,6 @@ export class RoiImpactService {
   async calculateRoiFull(filter: RoiFilterDto, params: Partial<CalculateRoiDto>) {
     const range = dateRange(filter);
     const uWhere = filter.departmentId ? { user: { departmentId: filter.departmentId } } : {};
-    const costPerEnroll = params.costPerEnrollment ?? DEFAULTS.costPerEnrollment;
-    const benefitPerC = params.benefitPerCompletion ?? DEFAULTS.benefitPerCompletion;
 
     const where: Prisma.EnrollmentWhereInput = {
       enrolledAt: { gte: range.gte, lte: range.lte },
@@ -88,22 +86,44 @@ export class RoiImpactService {
       ...(filter.courseId ? { courseId: filter.courseId } : {}),
     };
 
+    // Núcleo financeiro (Fase H, nota §3.2): volume + custo/benefício + ROI% /
+    // BCR / payback / confiança / horas de formação vêm da camada canónica
+    // (`metrics.trainingRoi`). Deltas deliberados p/ ratificação no PR da Task
+    // 10: `totalHours` = Σ Course.workloadHours (era `Σ lessons × 15min`);
+    // `confidence` usa o limiar simples do canónico. Overlays (retenção,
+    // performance-lift, competência, narrativa) continuam calculados aqui.
+    const r = await this.metrics
+      .trainingRoi({
+        from: range.gte,
+        to: range.lte,
+        ...(filter.departmentId != null ? { departmentId: filter.departmentId } : {}),
+        ...(filter.courseId != null ? { courseId: filter.courseId } : {}),
+        ...(params.costPerEnrollment != null
+          ? { costPerEnrollment: params.costPerEnrollment }
+          : {}),
+        ...(params.benefitPerCompletion != null
+          ? { benefitPerCompletion: params.benefitPerCompletion }
+          : {}),
+      })
+      .catch((e: unknown) => {
+        this.logger.warn({
+          departmentId: filter.departmentId,
+          action: 'ROI_IMPACT_TRAINING_ROI',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter núcleo financeiro canónico para ROI de formação',
+        });
+        return null;
+      });
+
     const [
-      enrollments,
-      completed,
       inProgress,
       avgAssessmentScore,
-      totalLessonCompletions,
       performanceBefore,
       performanceAfter,
       turnoverBefore,
       turnoverAfter,
       competencyEvolution,
     ] = await Promise.all([
-      this.prisma.read.enrollment.count({ where }),
-      this.prisma.read.enrollment.count({
-        where: { ...where, status: EnrollmentStatus.COMPLETED },
-      }),
       this.prisma.read.enrollment.count({
         where: { ...where, status: EnrollmentStatus.IN_PROGRESS },
       }),
@@ -127,22 +147,6 @@ export class RoiImpactService {
             msg: 'Falha ao calcular média de notas de avaliação para ROI de formação',
           });
           return { _avg: { score: null } };
-        }),
-      // Achado real: LessonProgress NÃO tem coluna `updatedAt` (só
-      // completedAt) — mesmo problema de avgAssessmentScore acima,
-      // totalLessonCompletions ficava sempre 0.
-      this.prisma.lessonProgress
-        .count({
-          where: { completed: true, completedAt: { gte: range.gte, lte: range.lte } },
-        })
-        .catch(e => {
-          this.logger.warn({
-            departmentId: filter.departmentId,
-            metric: 'totalLessonCompletions',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao contar conclusões de lições para ROI de formação',
-          });
-          return 0;
         }),
       // Performance before training period
       this.prisma.performanceReview
@@ -202,12 +206,22 @@ export class RoiImpactService {
         }),
     ]);
 
-    const completionRate = pct(completed, enrollments);
-    const totalCost = enrollments * costPerEnroll;
-    const totalBenefit = completed * benefitPerC;
-    const roi = roiFormula(totalBenefit, totalCost);
-    const bcrVal = bcr(totalBenefit, totalCost);
-    const payback = paybackMonths(totalCost, totalBenefit / 12);
+    // Núcleo financeiro canónico (com degradação all-zero em caso de falha).
+    const enrollments = r?.enrollments ?? 0;
+    const completed = r?.completed ?? 0;
+    const completionRate = r?.completionRate ?? 0;
+    const totalCost = r?.totalCost ?? 0;
+    const totalBenefit = r?.grossBenefit ?? 0;
+    const roi = r?.roiPct ?? 0;
+    const bcrVal = r?.bcr ?? 0;
+    const payback = r?.paybackMonths ?? 0;
+    const netBenefit = r?.netBenefit ?? 0;
+    const totalHours = r?.trainingHours ?? 0;
+    const confidence: RoiConfidence = (r?.confidence as RoiConfidence) ?? RoiConfidence.LOW;
+    const costPerEnroll =
+      r?.costPerEnrollment ?? params.costPerEnrollment ?? DEFAULTS.costPerEnrollment;
+    const benefitPerC =
+      r?.benefitPerCompletion ?? params.benefitPerCompletion ?? DEFAULTS.benefitPerCompletion;
 
     // Retention impact
     const retentionSaved = Math.max(0, turnoverBefore - turnoverAfter);
@@ -217,18 +231,6 @@ export class RoiImpactService {
     const perfBefore = performanceBefore._avg.score ?? 0;
     const perfAfter = performanceAfter._avg.score ?? 0;
     const perfLift = perfBefore > 0 ? +(perfAfter - perfBefore).toFixed(2) : 0;
-
-    // Learning hours
-    const totalHours = Math.round((totalLessonCompletions * 15) / 60);
-
-    const confidence = confidenceLevel(
-      completed,
-      [
-        avgAssessmentScore._avg.score !== null ? 1 : 0,
-        perfBefore > 0 && perfAfter > 0 ? 1 : 0,
-        retentionSaved > 0 ? 1 : 0,
-      ].filter(Boolean).length,
-    );
 
     return {
       period: { from: range.gte, to: range.lte },
@@ -247,7 +249,7 @@ export class RoiImpactService {
         roi,
         bcrVal,
         paybackMonths: payback,
-        netBenefit: +(totalBenefit - totalCost).toFixed(0),
+        netBenefit: +netBenefit.toFixed(0),
         retentionBenefit,
         totalWithRetention: +(totalBenefit + retentionBenefit).toFixed(0),
         roiWithRetention: roiFormula(totalBenefit + retentionBenefit, totalCost),

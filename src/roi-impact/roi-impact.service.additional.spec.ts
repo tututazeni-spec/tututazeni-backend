@@ -1,6 +1,34 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RoiImpactService } from './roi-impact.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+
+// ─── MetricsAggregationService mock (Fase H — Task 8) ─────────────────────
+// calculateRoiFull tira o NÚCLEO financeiro de metrics.trainingRoi; os overlays
+// (retenção / performance-lift / competência / narrativa) continuam locais.
+const DEFAULT_TRAINING_ROI = {
+  enrollments: 0,
+  completed: 0,
+  completionRate: 0,
+  costPerEnrollment: 200,
+  benefitPerCompletion: 500,
+  totalCost: 0,
+  grossBenefit: 0,
+  netBenefit: 0,
+  roiPct: 0,
+  bcr: 0,
+  paybackMonths: 0,
+  trainingHours: 0,
+  confidence: 'LOW' as const,
+  methodology: 'test-methodology',
+  period: { from: new Date('2026-01-01'), to: new Date('2026-12-31') },
+};
+const mockMetrics = {
+  headcount: jest.fn(),
+  turnover: jest.fn(),
+  trainingRoi: jest.fn(),
+  alerts: jest.fn(),
+};
 
 const mockPrisma: any = {
   enrollment: {
@@ -38,6 +66,7 @@ describe('RoiImpactService (additional)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockMetrics.trainingRoi.mockResolvedValue({ ...DEFAULT_TRAINING_ROI });
     Object.defineProperty(mockPrisma, 'read', {
       get() {
         return mockPrisma;
@@ -45,7 +74,11 @@ describe('RoiImpactService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RoiImpactService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        RoiImpactService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: MetricsAggregationService, useValue: mockMetrics },
+      ],
     }).compile();
     service = module.get<RoiImpactService>(RoiImpactService);
   });
@@ -53,45 +86,104 @@ describe('RoiImpactService (additional)', () => {
   // ─── calculateTrainingRoi ──────────────────────────────────────
 
   describe('calculateTrainingRoi', () => {
-    it('deve calcular ROI de formação para o período', async () => {
-      mockPrisma.enrollment.count.mockResolvedValue(100);
-      mockPrisma.certificate.count.mockResolvedValue(80);
+    it('delega o núcleo financeiro a metrics.trainingRoi', async () => {
+      mockMetrics.trainingRoi.mockResolvedValue({
+        ...DEFAULT_TRAINING_ROI,
+        enrollments: 100,
+        completed: 80,
+        completionRate: 80,
+        totalCost: 20000,
+        grossBenefit: 40000,
+        netBenefit: 20000,
+        roiPct: 100,
+        bcr: 2,
+        paybackMonths: 6,
+      });
       const result = await service.calculateTrainingRoi('2026-01-01', '2026-12-31');
-      expect(result).toBeDefined();
-      expect(result).toHaveProperty('financial.roi');
-      expect(result).toHaveProperty('financial.totalBenefit');
-      expect(result).toHaveProperty('financial.totalCost');
+      expect(mockMetrics.trainingRoi).toHaveBeenCalledWith(
+        expect.objectContaining({ from: expect.any(Date), to: expect.any(Date) }),
+      );
+      expect(result.volume.enrollments).toBe(100);
+      expect(result.volume.completed).toBe(80);
+      expect(result.financial.totalCost).toBe(20000);
+      expect(result.financial.totalBenefit).toBe(40000);
+      expect(result.financial.roi).toBe(100);
+      expect(result.financial.bcrVal).toBe(2);
+      expect(result.financial.paybackMonths).toBe(6);
     });
 
-    it('deve filtrar por departamento', async () => {
-      mockPrisma.enrollment.count.mockResolvedValue(20);
-      mockPrisma.certificate.count.mockResolvedValue(15);
+    it('passa departmentId a metrics.trainingRoi', async () => {
       const result = await service.calculateTrainingRoi('2026-01-01', '2026-12-31', 1);
+      expect(mockMetrics.trainingRoi).toHaveBeenCalledWith(
+        expect.objectContaining({ departmentId: 1 }),
+      );
       expect(result).toBeDefined();
     });
 
     it('deve retornar roi=0 quando sem conclusões', async () => {
-      mockPrisma.enrollment.count.mockResolvedValue(0);
-      mockPrisma.certificate.count.mockResolvedValue(0);
       const result = await service.calculateTrainingRoi('2026-01-01', '2026-12-31');
-      expect(result).toBeDefined();
+      expect(result.financial.roi).toBe(0);
     });
   });
 
   // ─── calculateRoiFull ─────────────────────────────────────────
 
   describe('calculateRoiFull', () => {
-    it('deve calcular ROI com parâmetros personalizados', async () => {
-      mockPrisma.enrollment.count.mockResolvedValue(50);
-      mockPrisma.certificate.count.mockResolvedValue(40);
+    it('núcleo financeiro vem do canónico; params passam através', async () => {
+      mockMetrics.trainingRoi.mockResolvedValue({
+        ...DEFAULT_TRAINING_ROI,
+        enrollments: 50,
+        completed: 40,
+        completionRate: 80,
+        costPerEnrollment: 300,
+        benefitPerCompletion: 700,
+        totalCost: 15000,
+        grossBenefit: 28000,
+        netBenefit: 13000,
+        roiPct: 86.7,
+        bcr: 1.87,
+        paybackMonths: 6.4,
+        trainingHours: 320,
+        confidence: 'MEDIUM',
+      });
       const result = await service.calculateRoiFull(
-        { from: '2026-01-01', to: '2026-12-31' },
+        { from: '2026-01-01', to: '2026-12-31', courseId: 9 },
         { costPerEnrollment: 300, benefitPerCompletion: 700 },
       );
-      expect(result).toBeDefined();
-      expect(result).toHaveProperty('financial.roi');
-      expect(result).toHaveProperty('financial.bcrVal');
-      expect(result).toHaveProperty('financial.paybackMonths');
+      expect(mockMetrics.trainingRoi).toHaveBeenCalledWith(
+        expect.objectContaining({
+          courseId: 9,
+          costPerEnrollment: 300,
+          benefitPerCompletion: 700,
+        }),
+      );
+      expect(result.financial.roi).toBe(86.7);
+      expect(result.financial.bcrVal).toBe(1.87);
+      expect(result.financial.paybackMonths).toBe(6.4);
+      expect(result.financial.netBenefit).toBe(13000);
+      expect(result.volume.totalHours).toBe(320); // r.trainingHours
+      expect(result.confidence).toBe('MEDIUM'); // r.confidence
+      expect(result.assumptions.costPerEnrollment).toBe(300);
+      expect(result.assumptions.benefitPerCompletion).toBe(700);
+      // overlays locais preservados
+      expect(result).toHaveProperty('impact.perfLift');
+      expect(result).toHaveProperty('financial.retentionBenefit');
+      expect(result.financial.roiLabel).toBe('POSITIVE'); // recomputado de r.roiPct (>=0)
+    });
+
+    it('degrada para shape all-zero (+ logger.warn) quando metrics.trainingRoi falha', async () => {
+      const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+      mockMetrics.trainingRoi.mockRejectedValue(new Error('replica down'));
+      const result = await service.calculateRoiFull({ from: '2026-01-01', to: '2026-12-31' }, {});
+      expect(result.volume.enrollments).toBe(0);
+      expect(result.volume.completed).toBe(0);
+      expect(result.financial.totalCost).toBe(0);
+      expect(result.financial.roi).toBe(0);
+      expect(result.confidence).toBe('LOW');
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ROI_IMPACT_TRAINING_ROI' }),
+      );
+      warn.mockRestore();
     });
   });
 
