@@ -395,7 +395,7 @@ describe('MetricsAggregationService', () => {
       expect(result.turnoverRate).toBe(60); // 30 / 50 * 100
       expect(result.insights.length).toBeGreaterThan(0);
       expect(result.insights[0]).toBe('🚨 Turnover crítico: 60% — investigar causas urgentemente');
-      expect(result.insights[1]).toBe('30 saída(s) nos últimos 3 meses');
+      expect(result.insights[1]).toBe('30 saída(s) no período');
     });
 
     it('insights: turnover saudável quando taxa <= 10%', async () => {

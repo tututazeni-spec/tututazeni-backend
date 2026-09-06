@@ -268,18 +268,20 @@ export class MetricsAggregationService {
 
   // ── helpers privados ──────────────────────────────────────────────
 
-  // Portado VERBATIM de `src/dashboard-rh/dashboard-rh.service.ts:1255`
-  // (variante emoji, thresholds 10% / 20% — nota §8 risco 4). Existe uma 2ª cópia
-  // sem emojis em `src/reports/reports.service.ts:1134`. As duas originais são
-  // removidas nas Tasks 6/8, que passam a ler `result.insights` (Task 9 assere
+  // Portado de `src/dashboard-rh/dashboard-rh.service.ts:1255` (variante emoji,
+  // thresholds 10% / 20% — nota §8 risco 4). Existe uma 2ª cópia sem emojis em
+  // `src/reports/reports.service.ts:1134`. As duas originais são removidas nas
+  // Tasks 6/8, que passam a ler `result.insights` (Task 9 assere
   // `grep buildTurnoverInsights == 1`). O 2º argumento é o `leavers` da janela
-  // analisada (o dashboard-rh passava um sub-total de 3 meses; ver report da Task 3).
-  private buildTurnoverInsights(rate: number, left3: number): string[] {
+  // analisada; o texto da 2ª linha foi tornado neutro à janela ("no período") —
+  // o original do dashboard-rh dizia "nos últimos 3 meses" porque lá recebia um
+  // sub-total de 3 meses, o que não se aplica a esta janela configurável.
+  private buildTurnoverInsights(rate: number, leavers: number): string[] {
     const out: string[] = [];
     if (rate > 20) out.push(`🚨 Turnover crítico: ${rate}% — investigar causas urgentemente`);
     else if (rate > 10) out.push(`⚠️ Turnover acima da média: ${rate}%`);
     else out.push(`✅ Turnover saudável: ${rate}%`);
-    if (left3 > 0) out.push(`${left3} saída(s) nos últimos 3 meses`);
+    if (leavers > 0) out.push(`${leavers} saída(s) no período`);
     return out;
   }
 }
