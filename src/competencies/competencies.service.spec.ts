@@ -135,6 +135,57 @@ describe('CompetenciesService', () => {
         service.create({ name: 'TypeScript', category: CompetencyCategory.HARD_SKILL }),
       ).rejects.toThrow(ConflictException);
     });
+
+    it('grava os campos do catálogo 360 (type/scale/isGlobal/tenantId) quando presentes', async () => {
+      mockPrisma.competency.findFirst.mockResolvedValue(null);
+      mockPrisma.competency.create.mockResolvedValue(baseCompetency);
+      await service.create({
+        name: 'Liderança',
+        category: CompetencyCategory.SOFT_SKILL,
+        type: 'LEADERSHIP' as any,
+        scaleMin: 1,
+        scaleMax: 7,
+        isGlobal: false,
+        tenantId: 't1',
+      });
+      expect(mockPrisma.competency.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: 'LEADERSHIP',
+            scaleMin: 1,
+            scaleMax: 7,
+            isGlobal: false,
+            tenantId: 't1',
+          }),
+          include: { indicators: true },
+        }),
+      );
+    });
+
+    it('cria os indicadores aninhados quando enviados', async () => {
+      mockPrisma.competency.findFirst.mockResolvedValue(null);
+      mockPrisma.competency.create.mockResolvedValue(baseCompetency);
+      await service.create({
+        name: 'Comunicação',
+        category: CompetencyCategory.SOFT_SKILL,
+        indicators: [{ level: 1, description: 'Nível básico', examples: 'ex' }],
+      });
+      const data = mockPrisma.competency.create.mock.calls[0][0].data;
+      expect(data.indicators).toEqual({
+        create: [{ level: 1, description: 'Nível básico', examples: 'ex' }],
+      });
+    });
+
+    it('não envia type/scale/tenantId quando ausentes (usa defaults do schema)', async () => {
+      mockPrisma.competency.findFirst.mockResolvedValue(null);
+      mockPrisma.competency.create.mockResolvedValue(baseCompetency);
+      await service.create({ name: 'X', category: CompetencyCategory.HARD_SKILL });
+      const data = mockPrisma.competency.create.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('type');
+      expect(data).not.toHaveProperty('scaleMin');
+      expect(data).not.toHaveProperty('tenantId');
+      expect(data).not.toHaveProperty('indicators');
+    });
   });
 
   describe('update', () => {
@@ -149,6 +200,51 @@ describe('CompetenciesService', () => {
     it('deve lançar NotFoundException se não encontrada', async () => {
       mockPrisma.competency.findUnique.mockResolvedValue(null);
       await expect(service.update(99, { name: 'X' })).rejects.toThrow(NotFoundException);
+    });
+
+    it('faz strip de `indicators` (relação) antes do update escalar', async () => {
+      mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
+      mockPrisma.competency.findFirst.mockResolvedValue(null);
+      mockPrisma.competency.update.mockResolvedValue(baseCompetency);
+      await service.update(1, {
+        description: 'nova',
+        indicators: [{ level: 1, description: 'x' }],
+      } as any);
+      const data = mockPrisma.competency.update.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('indicators');
+      expect(data).toMatchObject({ description: 'nova' });
+    });
+  });
+
+  describe('listCatalogue', () => {
+    it('filtra por isActive + isGlobal quando não há tenantId e inclui indicadores', async () => {
+      mockPrisma.competency.findMany.mockResolvedValue([baseCompetency]);
+      const res = await service.listCatalogue({});
+      expect(Array.isArray(res)).toBe(true);
+      expect(mockPrisma.competency.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ isActive: true, isGlobal: true }),
+          include: { indicators: { orderBy: { level: 'asc' } } },
+          skip: 0,
+          take: 50,
+        }),
+      );
+    });
+
+    it('com tenantId usa OR [isGlobal, tenantId] e aplica search/paginação', async () => {
+      mockPrisma.competency.findMany.mockResolvedValue([]);
+      await service.listCatalogue({ tenantId: 't1', search: 'lid', offset: 10, limit: 5 });
+      expect(mockPrisma.competency.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            isActive: true,
+            OR: [{ isGlobal: true }, { tenantId: 't1' }],
+            name: { contains: 'lid' },
+          }),
+          skip: 10,
+          take: 5,
+        }),
+      );
     });
   });
 

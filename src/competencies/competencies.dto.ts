@@ -4,11 +4,13 @@ import {
   IsOptional,
   IsInt,
   IsArray,
+  IsBoolean,
   IsEnum,
   Min,
   Max,
   MaxLength,
   IsNumber,
+  ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -16,14 +18,32 @@ import {
   CompetencyCategory,
   CompetencyStatus,
   CompetencySource,
+  CompetencyType,
   MappingPriority,
 } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export { CompetencyCategory, CompetencyStatus, CompetencySource, MappingPriority };
+export { CompetencyCategory, CompetencyStatus, CompetencySource, CompetencyType, MappingPriority };
 
 // ─── Competency ───────────────────────────────────────────────────────────────
+
+export class CompetencyIndicatorInputDto {
+  @ApiProperty()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  level!: number;
+
+  @ApiProperty()
+  @IsString()
+  description!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  examples?: string;
+}
 
 export class CreateCompetencyDto {
   @ApiProperty({ example: 'Comunicação Eficaz' })
@@ -50,6 +70,47 @@ export class CreateCompetencyDto {
   @IsOptional()
   @IsEnum(CompetencyStatus)
   status?: CompetencyStatus;
+
+  // ─── Campos do catálogo de Avaliação 360º (delegação de /evaluation360/competencies) ───
+  @ApiPropertyOptional({ enum: CompetencyType })
+  @IsOptional()
+  @IsEnum(CompetencyType)
+  type?: CompetencyType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  scaleMin?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(10)
+  scaleMax?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isGlobal?: boolean;
+
+  /**
+   * Campo vestigial (§7 — plataforma single-tenant). Encaminhado apenas para
+   * preservar o comportamento histórico de POST /evaluation360/competencies.
+   * Não construir lógica nova sobre este campo.
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  tenantId?: string;
+
+  @ApiPropertyOptional({ type: [CompetencyIndicatorInputDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CompetencyIndicatorInputDto)
+  indicators?: CompetencyIndicatorInputDto[];
 }
 
 export class UpdateCompetencyDto extends PartialType(CreateCompetencyDto) {}
