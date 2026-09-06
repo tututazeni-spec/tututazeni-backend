@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bull';
 import { ApiIntegrationService } from './api-integration.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+const mockWebhooksQueue = { add: jest.fn().mockResolvedValue(undefined) };
 
 // Nota: ApiKey e Webhook NÃO existem no schema Prisma (nunca migrados). O
 // serviço usa safeM() para degradar sem erro (create() devolve os dados sem
@@ -23,7 +26,11 @@ describe('ApiIntegrationService — modelo ApiKey/Webhook ausente (fallback segu
   beforeEach(async () => {
     mockPrisma = makePrismaWithoutApiKeyAndWebhook();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ApiIntegrationService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        ApiIntegrationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: getQueueToken('webhooks'), useValue: mockWebhooksQueue },
+      ],
     }).compile();
     service = module.get<ApiIntegrationService>(ApiIntegrationService);
   });
@@ -79,7 +86,11 @@ describe('ApiIntegrationService — API Key com modelo presente', () => {
       auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ApiIntegrationService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        ApiIntegrationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: getQueueToken('webhooks'), useValue: mockWebhooksQueue },
+      ],
     }).compile();
     service = module.get<ApiIntegrationService>(ApiIntegrationService);
   });
@@ -147,7 +158,11 @@ describe('ApiIntegrationService — Webhook com modelo presente', () => {
       auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ApiIntegrationService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        ApiIntegrationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: getQueueToken('webhooks'), useValue: mockWebhooksQueue },
+      ],
     }).compile();
     service = module.get<ApiIntegrationService>(ApiIntegrationService);
   });
@@ -181,6 +196,37 @@ describe('ApiIntegrationService — Webhook com modelo presente', () => {
     const result = await service.triggerWebhook({ event: 'user.created', payload: {} } as any);
     expect(result.dispatched).toBe(0);
     expect(result.message).toMatch(/Sem subscribers/);
+  });
+
+  it('triggerWebhook enfileira a entrega (job "deliver") em vez de fazer fetch síncrono', async () => {
+    mockWebhooksQueue.add.mockClear();
+    mockPrisma.webhook.findMany.mockResolvedValue([
+      {
+        id: 7,
+        url: 'https://hook.test/in',
+        events: ['user.created'],
+        secret: 'segredo',
+        active: true,
+        retryMax: 5,
+      },
+    ]);
+
+    await service.triggerWebhook({ event: 'user.created', payload: { a: 1 } } as any);
+
+    expect(mockWebhooksQueue.add).toHaveBeenCalledTimes(1);
+    const [jobName, jobData, jobOpts] = mockWebhooksQueue.add.mock.calls[0];
+    expect(jobName).toBe('deliver');
+    expect(jobData).toMatchObject({
+      url: 'https://hook.test/in',
+      event: 'user.created',
+      webhookId: 7,
+    });
+    expect(typeof jobData.body).toBe('string');
+    expect(jobData.signature).toMatch(/^sha256=/);
+    expect(jobOpts).toMatchObject({
+      attempts: 6,
+      backoff: { type: 'exponential', delay: 2000 },
+    });
   });
 
   it('deleteWebhook remove e devolve mensagem de sucesso', async () => {

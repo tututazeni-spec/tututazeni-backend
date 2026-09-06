@@ -1,5 +1,7 @@
 // src/api-integration/api-integration.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
 import { Prisma, ApiIntegrationLog } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -12,7 +14,6 @@ import {
   WebhookEventType,
 } from './api-integration.dto';
 import * as crypto from 'crypto';
-import { sanitizeForLog } from '../common/logging/sanitize';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 
@@ -110,8 +111,6 @@ function maskApiKey(key: string): string {
   return key.slice(0, 10) + '••••••••' + key.slice(-4);
 }
 
-const RETRY_DELAYS = [10, 60, 300, 1800]; // seconds: 10s, 1m, 5m, 30m
-
 // ─────────────────────────────────────────────────────────────────
 // SERVICE
 // ─────────────────────────────────────────────────────────────────
@@ -120,7 +119,10 @@ const RETRY_DELAYS = [10, 60, 300, 1800]; // seconds: 10s, 1m, 5m, 30m
 export class ApiIntegrationService {
   private readonly logger = new Logger(ApiIntegrationService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue('webhooks') private readonly webhooksQueue: Queue,
+  ) {}
 
   // ══════════════════════════════════════════════════════
   // INTEGRATIONS — CRUD
@@ -729,131 +731,24 @@ export class ApiIntegrationService {
     event: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
+    // O corpo e a assinatura são calculados uma vez aqui (timestamp fixo) e
+    // enfileirados — a entrega, com retry/backoff, corre no WebhooksProcessor
+    // e deixa de bloquear o request HTTP num loop de fetch+setTimeout.
+    // A persistência de WebhookDelivery continua a degradar via safeM()
+    // (modelo ausente do schema) — migração desse modelo fica como follow-up.
     const body = JSON.stringify({ event, data: payload, timestamp: new Date().toISOString() });
     const signature = hook.secret ? signPayload(hook.secret, body) : undefined;
 
-    const deliveryId: string | null = await safeM(this.prisma, 'webhookDelivery')
-      .create({
-        data: { webhookId: hook.id, event, payload: body, status: 'PENDING', attempt: 1 },
-      })
-      .then((d: WebhookDeliveryRecord) => d.id)
-      .catch((err: unknown) => {
-        this.logger.error({
-          webhookId: hook.id,
-          url: hook.url,
-          event,
-          action: 'WEBHOOK_DELIVERY_CREATE',
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao registar tentativa de entrega de webhook — entrega prossegue sem tracking em BD',
-        });
-        return null;
-      });
-
-    let attempt = 0;
-    const maxAttempts = (hook.retryMax ?? 3) + 1;
-
-    while (attempt < maxAttempts) {
-      try {
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'X-Innova-Event': event,
-          'X-Innova-Delivery': deliveryId ?? `del_${Date.now()}`,
-        };
-        if (signature) headers['X-Innova-Signature'] = signature;
-
-        const res = await fetch(hook.url, {
-          method: 'POST',
-          body,
-          headers,
-          signal: AbortSignal.timeout(10000),
-        });
-
-        if (res.ok) {
-          if (deliveryId) {
-            await safeM(this.prisma, 'webhookDelivery')
-              .update({
-                where: { id: deliveryId },
-                data: {
-                  status: 'DELIVERED',
-                  deliveredAt: new Date(),
-                  attempts: attempt + 1,
-                  responseCode: res.status,
-                },
-              })
-              .catch((err: unknown) =>
-                this.logger.warn({
-                  webhookId: hook.id,
-                  deliveryId,
-                  event,
-                  action: 'WEBHOOK_DELIVERY_UPDATE',
-                  err: { message: err instanceof Error ? err.message : String(err) },
-                  msg: 'Webhook entregue com sucesso mas falhou ao actualizar registo de entrega',
-                }),
-              );
-          }
-          return;
-        }
-
-        let responseBody: unknown;
-        try {
-          responseBody = await res.clone().text();
-        } catch {
-          responseBody = undefined;
-        }
-        this.logger.warn({
-          webhookId: hook.id,
-          url: hook.url,
-          event,
-          attempt: attempt + 1,
-          maxAttempts,
-          statusCode: res.status,
-          responseBody: responseBody ? sanitizeForLog(responseBody) : undefined,
-          msg: 'Falha ao entregar webhook — HTTP não OK',
-        });
-      } catch (err: unknown) {
-        this.logger.warn({
-          webhookId: hook.id,
-          url: hook.url,
-          event,
-          attempt: attempt + 1,
-          maxAttempts,
-          err: { message: err instanceof Error ? err.message : String(err) },
-          msg: 'Falha ao entregar webhook — erro de rede/timeout',
-        });
-      }
-
-      attempt++;
-      if (attempt < maxAttempts) {
-        const delay = (RETRY_DELAYS[attempt - 1] ?? 1800) * 1000;
-        await new Promise(r => setTimeout(r, Math.min(delay, 5000))); // cap at 5s in dev
-      }
-    }
-
-    // All attempts exhausted → mark as FAILED
-    if (deliveryId) {
-      await safeM(this.prisma, 'webhookDelivery')
-        .update({
-          where: { id: deliveryId },
-          data: { status: 'FAILED', attempts: maxAttempts },
-        })
-        .catch((err: unknown) =>
-          this.logger.warn({
-            webhookId: hook.id,
-            deliveryId,
-            event,
-            action: 'WEBHOOK_DELIVERY_UPDATE',
-            err: { message: err instanceof Error ? err.message : String(err) },
-            msg: 'Webhook falhou definitivamente e também falhou ao actualizar registo de entrega para FAILED',
-          }),
-        );
-    }
-    this.logger.error({
-      webhookId: hook.id,
-      url: hook.url,
-      event,
-      maxAttempts,
-      msg: 'Webhook falhou permanentemente após esgotar todas as tentativas',
-    });
+    await this.webhooksQueue.add(
+      'deliver',
+      { url: hook.url, event, body, signature, webhookId: hook.id },
+      {
+        attempts: (hook.retryMax ?? 3) + 1,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    );
   }
 
   async getWebhookDeliveries(webhookId: number, limit = 20): Promise<WebhookDeliveryRecord[]> {
