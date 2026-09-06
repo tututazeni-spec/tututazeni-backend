@@ -131,14 +131,95 @@ describe('SuccessionService', () => {
   });
 
   describe('create', () => {
-    it('deve criar plano de sucessão', async () => {
+    beforeEach(() => {
       mockPrisma.criticalPosition.findUnique.mockResolvedValue(baseCritical);
       mockPrisma.user.findUnique.mockResolvedValue({ id: 2, fullName: 'Candidato', positionId: 1 });
       mockPrisma.successionPlan.findFirst.mockResolvedValue(null);
+      mockPrisma.successionPlan.count.mockResolvedValue(0);
       mockPrisma.successionPlan.create.mockResolvedValue(basePlan);
+    });
 
+    it('deve criar plano de sucessão', async () => {
       const result = await service.create({ criticalPositionId: 1, candidateId: 2 } as any);
       expect(result).toBeDefined();
+    });
+
+    it('usa a priority do DTO quando fornecida', async () => {
+      await service.create({
+        criticalPositionId: 1,
+        candidateId: 2,
+        readinessLevel: 'READY_NOW',
+        priority: 'SECONDARY',
+      } as any);
+      expect(mockPrisma.successionPlan.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ priority: 'SECONDARY' }) }),
+      );
+      expect(mockPrisma.successionPlan.count).not.toHaveBeenCalled();
+    });
+
+    it('calcula a priority por contagem quando ausente (0 → PRIMARY)', async () => {
+      mockPrisma.successionPlan.count.mockResolvedValue(0);
+      await service.create({
+        criticalPositionId: 1,
+        candidateId: 2,
+        readinessLevel: 'READY_NOW',
+      } as any);
+      expect(mockPrisma.successionPlan.count).toHaveBeenCalledWith({
+        where: { criticalPositionId: 1 },
+      });
+      expect(mockPrisma.successionPlan.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ priority: 'PRIMARY' }) }),
+      );
+    });
+
+    it('calcula a priority por contagem (1 → SECONDARY, >=2 → TERTIARY)', async () => {
+      mockPrisma.successionPlan.count.mockResolvedValue(1);
+      await service.create({
+        criticalPositionId: 1,
+        candidateId: 2,
+        readinessLevel: 'READY_NOW',
+      } as any);
+      expect(mockPrisma.successionPlan.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ priority: 'SECONDARY' }) }),
+      );
+      mockPrisma.successionPlan.count.mockResolvedValue(5);
+      await service.create({
+        criticalPositionId: 1,
+        candidateId: 2,
+        readinessLevel: 'READY_NOW',
+      } as any);
+      expect(mockPrisma.successionPlan.create).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ priority: 'TERTIARY' }) }),
+      );
+    });
+
+    it('emite uma notificação SUCCESSION_PLAN_ADDED', async () => {
+      await service.create({
+        criticalPositionId: 1,
+        candidateId: 2,
+        readinessLevel: 'READY_NOW',
+      } as any);
+      expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ userId: 2, type: 'SUCCESSION_PLAN_ADDED' }),
+        }),
+      );
+    });
+
+    it('colisão @@unique (P2002) → ConflictException', async () => {
+      const p2002 = Object.assign(new Error('unique'), { code: 'P2002' });
+      Object.setPrototypeOf(
+        p2002,
+        require('@prisma/client').Prisma.PrismaClientKnownRequestError.prototype,
+      );
+      mockPrisma.successionPlan.create.mockRejectedValue(p2002);
+      await expect(
+        service.create({
+          criticalPositionId: 1,
+          candidateId: 2,
+          readinessLevel: 'READY_NOW',
+        } as any),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
