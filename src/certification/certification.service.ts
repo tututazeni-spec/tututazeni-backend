@@ -22,6 +22,7 @@ import {
   CERT_TYPE_LEGACY_TO_CANONICAL,
   IssuedShape,
 } from './certificate-legacy-adapter';
+import { badgeToDigitalShape, badgeAwardToIssuanceShape } from './badge-legacy-adapter';
 
 @Injectable()
 export class CertificationService {
@@ -363,39 +364,60 @@ export class CertificationService {
   // ─── BADGES DIGITAIS ─────────────────────────────────
 
   private async generateBadgeCode(): Promise<string> {
-    // Geração de código sequencial: força primary para não gerar códigos duplicados via réplica.
-    const last = await this.prisma.digitalBadge.findFirst({
+    // Fase F3: sequência agora sobre `Badge` (só os códigos BDG-*, para não colidir
+    // com badges nativos sem `code`). Força primary para não duplicar via réplica.
+    const last = await this.prisma.badge.findFirst({
+      where: { code: { startsWith: 'BDG-' } },
       orderBy: { code: 'desc' },
       select: { code: true },
     });
-    const num = last ? parseInt(last.code.replace('BDG-', ''), 10) + 1 : 1;
+    const num = last?.code ? parseInt(last.code.replace('BDG-', ''), 10) + 1 : 1;
     return `BDG-${String(num).padStart(5, '0')}`;
+  }
+
+  /** `where` para resolver o id de rota (cuid legado / uuid sintético / Int) num `Badge`. */
+  private badgeRouteWhere(id: string) {
+    return /^\d+$/.test(id)
+      ? { OR: [{ legacyDigitalBadgeId: id }, { id: Number(id) }] }
+      : { legacyDigitalBadgeId: id };
   }
 
   async createBadge(dto: CreateBadgeDto, userId: number) {
     const code = await this.generateBadgeCode();
-    const badge = await this.prisma.digitalBadge.create({
-      data: { ...dto, code, createdById: userId },
+    // `courseId`/`programId` do DTO são descartados na F3 (sem coluna em `Badge`).
+    const badge = await this.prisma.badge.create({
+      data: {
+        name: dto.name,
+        description: dto.description,
+        imageUrl: dto.imageUrl,
+        criteria: dto.criteria,
+        skills: dto.skills ?? [],
+        level: dto.level,
+        code,
+        createdById: userId,
+        legacyDigitalBadgeId: crypto.randomUUID(),
+      },
     });
-    await this.audit.logEntity(userId, 'CREATE', 'DigitalBadge', badge.id, {
+    await this.audit.logEntity(userId, 'CREATE', 'Badge', String(badge.id), {
       code,
       name: dto.name,
     });
-    return badge;
+    return badgeToDigitalShape(badge);
   }
 
   async findAllBadges() {
-    return this.prisma.read.digitalBadge.findMany({
+    const badges = await this.prisma.read.badge.findMany({
       where: { deletedAt: null, isActive: true },
       orderBy: { level: 'asc' },
-      include: { _count: { select: { issuances: true } } },
+      include: { _count: { select: { awards: true } } },
     });
+    return badges.map(b => badgeToDigitalShape(b));
   }
 
   async issueBadge(dto: IssueBadgeDto, issuerId: number) {
     // Leituras de guard/enrichment dentro de emissão (escrita): força primary.
     const [badge, user] = await this.prisma.$transaction([
-      this.prisma.digitalBadge.findUnique({ where: { id: dto.badgeId } }),
+      this.prisma.badge.findFirst({ where: this.badgeRouteWhere(dto.badgeId) }),
       this.prisma.user.findUnique({
         where: { id: dto.userId },
         select: { fullName: true },
@@ -404,25 +426,29 @@ export class CertificationService {
     if (!badge) throw new NotFoundException('Badge não encontrado');
     if (!user) throw new NotFoundException('Utilizador não encontrado');
 
-    const existing = await this.prisma.badgeIssuance.findUnique({
-      where: { badgeId_userId: { badgeId: dto.badgeId, userId: dto.userId } },
+    const existing = await this.prisma.badgeAward.findUnique({
+      where: { badgeId_userId: { badgeId: badge.id, userId: dto.userId } },
     });
-    if (existing && !existing.deletedAt) {
+    // `BadgeAward` tem @@unique([badgeId, userId]) — re-emissão após revogação/
+    // soft-delete não é suportada (paridade com o antigo @@unique de BadgeIssuance).
+    if (existing && !existing.deletedAt && !existing.isRevoked) {
       throw new ConflictException('Utilizador já possui este badge');
     }
 
     const verifyCode = `BADGE-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
-    const issuance = await this.prisma.badgeIssuance.create({
+    const award = await this.prisma.badgeAward.create({
       data: {
-        badgeId: dto.badgeId,
+        badgeId: badge.id,
         userId: dto.userId,
         verifyCode,
+        assertionId: crypto.randomUUID(),
         evidenceUrl: dto.evidenceUrl,
         shareUrl: `https://innova.evos.co.ao/badge/${verifyCode}`,
         issuedById: issuerId,
+        legacyBadgeIssuanceId: crypto.randomUUID(),
       },
     });
-    await this.audit.logEntity(issuerId, 'CREATE', 'BadgeIssuance', issuance.id, {
+    await this.audit.logEntity(issuerId, 'CREATE', 'BadgeAward', String(award.id), {
       badgeId: dto.badgeId,
       userId: dto.userId,
     });
@@ -433,15 +459,16 @@ export class CertificationService {
       message: `Conquistaste o badge "${badge.name}".`,
       metadata: { badgeId: badge.id, verifyCode },
     });
-    return issuance;
+    return badgeAwardToIssuanceShape(award, { badgeLegacyId: badge.legacyDigitalBadgeId });
   }
 
   async getMyBadges(userId: number) {
-    return this.prisma.read.badgeIssuance.findMany({
+    const awards = await this.prisma.read.badgeAward.findMany({
       where: { userId, deletedAt: null, isRevoked: false },
-      orderBy: { issuedAt: 'desc' },
+      orderBy: { awardedAt: 'desc' },
       include: { badge: true },
     });
+    return awards.map(a => badgeAwardToIssuanceShape(a));
   }
 
   async getMyCertificates(userId: number, filters: MyCertificatesFilterDto) {
@@ -515,10 +542,11 @@ export class CertificationService {
       this.prisma.read.certificate.count({
         where: { ...certScope, expiresAt: { lt: now }, revoked: false },
       }),
-      this.prisma.read.digitalBadge.count({
+      // Fase F3: DigitalBadge/BadgeIssuance absorvidos por Badge/BadgeAward.
+      this.prisma.read.badge.count({
         where: { deletedAt: null, isActive: true },
       }),
-      this.prisma.read.badgeIssuance.count({
+      this.prisma.read.badgeAward.count({
         where: { deletedAt: null, isRevoked: false },
       }),
       this.prisma.read.certificateTemplate.count({

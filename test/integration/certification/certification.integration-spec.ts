@@ -85,13 +85,17 @@ describe('Certification Integration', () => {
         .deleteMany({ where: { id: templateId } })
         .catch(() => undefined);
     if (badgeId) {
-      // BadgeIssuance referencia badgeId com FK RESTRICT — tem de ser
-      // eliminado antes do badge, senão a eliminação falha silenciosamente
-      // (catch) e o registo fica órfão, bloqueando reexecuções futuras.
-      await (prisma as any).badgeIssuance.deleteMany({ where: { badgeId } }).catch(() => undefined);
-      await (prisma as any).digitalBadge
-        .deleteMany({ where: { id: badgeId } })
-        .catch(() => undefined);
+      // Fase F3: badges servidos por Badge/BadgeAward. `badgeId` é o
+      // legacyDigitalBadgeId (uuid). BadgeAward referencia badgeId com FK
+      // RESTRICT — eliminar os filhos antes do Badge, senão a eliminação
+      // falha em silêncio (catch) e o registo fica órfão.
+      const b = await prisma.badge
+        .findUnique({ where: { legacyDigitalBadgeId: badgeId }, select: { id: true } })
+        .catch(() => null);
+      if (b) {
+        await prisma.badgeAward.deleteMany({ where: { badgeId: b.id } }).catch(() => undefined);
+        await prisma.badge.delete({ where: { id: b.id } }).catch(() => undefined);
+      }
     }
     await prisma.user.deleteMany({ where: { email: OTHER_EMPLOYEE_EMAIL } }).catch(() => undefined);
 
@@ -278,18 +282,25 @@ describe('Certification Integration', () => {
         .expect(403);
     });
 
-    it('RH cria badge → 201', async () => {
+    it('RH cria badge → 201 (grava um Badge com legacyDigitalBadgeId)', async () => {
       const res = await request(app.getHttpServer())
         .post('/certification/badges')
         .set('Authorization', `Bearer ${rhToken}`)
         .send({
-          name: 'Badge Integração',
+          name: `Badge Integração ${Date.now()}`,
           description: 'x',
           imageUrl: 'https://x.test/b.png',
           criteria: 'y',
+          level: 'ADVANCED',
         })
         .expect(201);
       badgeId = res.body.id;
+      expect(typeof badgeId).toBe('string');
+      expect(res.body.level).toBe('ADVANCED');
+
+      const row = await prisma.badge.findUnique({ where: { legacyDigitalBadgeId: badgeId } });
+      expect(row).toBeTruthy();
+      expect(row!.code).toMatch(/^BDG-/);
     });
 
     it('lista badges → 200', async () => {
@@ -300,20 +311,41 @@ describe('Certification Integration', () => {
       expect(Array.isArray(res.body)).toBe(true);
     });
 
-    it('RH atribui badge ao colaborador → 201', async () => {
-      await request(app.getHttpServer())
+    it('RH atribui badge ao colaborador → 201 (grava um BadgeAward)', async () => {
+      const res = await request(app.getHttpServer())
         .post('/certification/badges/issue')
         .set('Authorization', `Bearer ${rhToken}`)
         .send({ badgeId, userId: employeeId })
         .expect(201);
+      expect(res.body).toHaveProperty('verifyCode');
+      expect(res.body).toHaveProperty('isRevoked', false);
+
+      const b = await prisma.badge.findUnique({
+        where: { legacyDigitalBadgeId: badgeId },
+        select: { id: true },
+      });
+      expect(await prisma.badgeAward.count({ where: { badgeId: b!.id, userId: employeeId } })).toBe(
+        1,
+      );
     });
 
-    it('colaborador vê os seus badges → 200', async () => {
+    it('segunda atribuição ao mesmo colaborador → 409', async () => {
+      await request(app.getHttpServer())
+        .post('/certification/badges/issue')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ badgeId, userId: employeeId })
+        .expect(409);
+    });
+
+    it('colaborador vê os seus badges → 200 (forma legada)', async () => {
       const res = await request(app.getHttpServer())
         .get('/certification/my-badges')
         .set('Authorization', `Bearer ${employeeToken}`)
         .expect(200);
-      expect(res.body.some((b: any) => b.badgeId === badgeId)).toBe(true);
+      const mine = res.body.find((b: any) => b.badgeId === badgeId);
+      expect(mine).toBeTruthy();
+      expect(mine).toHaveProperty('issuedAt');
+      expect(mine.badge?.id).toBe(badgeId);
     });
   });
 

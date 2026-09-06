@@ -61,14 +61,14 @@ const mockPrisma = {
     groupBy: jest.fn(),
     aggregate: jest.fn(),
   },
-  digitalBadge: {
+  badge: {
     create: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
     findFirst: jest.fn(),
     count: jest.fn(),
   },
-  badgeIssuance: {
+  badgeAward: {
     create: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
@@ -267,40 +267,68 @@ describe('CertificationService', () => {
   });
 
   describe('createBadge', () => {
-    it('deve criar badge com código BDG-', async () => {
-      mockPrisma.digitalBadge.findFirst.mockResolvedValue(null);
-      mockPrisma.digitalBadge.create.mockResolvedValue({
-        id: 'bdg-1',
+    it('cria um Badge (não DigitalBadge) com código BDG- e legacyDigitalBadgeId, devolve a forma DigitalShape', async () => {
+      mockPrisma.badge.findFirst.mockResolvedValue(null); // generateBadgeCode
+      mockPrisma.badge.create.mockResolvedValue({
+        id: 7,
+        name: 'Líder',
+        description: 'x',
         code: 'BDG-00001',
+        imageUrl: 'http://i',
+        criteria: 'y',
+        skills: [],
+        level: 'BASIC',
+        issuerName: 'INNOVA',
+        isActive: true,
+        createdById: 1,
+        deletedAt: null,
+        legacyDigitalBadgeId: 'uuid-db-1',
       });
       mockPrisma.auditLog.create.mockResolvedValue({});
 
       const result = await service.createBadge(
-        {
-          name: 'Líder',
-          description: 'x',
-          imageUrl: 'http://i',
-          criteria: 'y',
-        },
+        { name: 'Líder', description: 'x', imageUrl: 'http://i', criteria: 'y' },
         1,
       );
+      expect(mockPrisma.badge.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ code: 'BDG-00001', createdById: 1 }),
+        }),
+      );
       expect(result.code).toBe('BDG-00001');
+      expect(result.id).toBe('uuid-db-1'); // legacyDigitalBadgeId dá o id string ao contrato
+      expect(result.courseId).toBeNull();
     });
   });
 
   describe('issueBadge', () => {
-    it('deve emitir badge e notificar', async () => {
+    it('cria um BadgeAward (não BadgeIssuance) e devolve a forma IssuanceShape', async () => {
       mockPrisma.$transaction.mockResolvedValue([
-        { id: 'badge-1', name: 'Badge Teste' },
+        { id: 5, name: 'Badge Teste', legacyDigitalBadgeId: 'db1' },
         { fullName: 'João Teste' },
       ]);
-      mockPrisma.badgeIssuance.findUnique.mockResolvedValue(null);
-      mockPrisma.badgeIssuance.create.mockResolvedValue({ id: 'iss-1' });
+      mockPrisma.badgeAward.findUnique.mockResolvedValue(null);
+      mockPrisma.badgeAward.create.mockResolvedValue({
+        id: 1,
+        badgeId: 5,
+        userId: 1,
+        awardedAt: new Date('2026-03-15'),
+        isRevoked: false,
+        verifyCode: 'BADGE-x',
+        legacyBadgeIssuanceId: 'uuid-bi-1',
+      });
       mockPrisma.auditLog.create.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
-      const result = await service.issueBadge({ badgeId: 'badge-1', userId: 1 }, 1);
-      expect(result.id).toBe('iss-1');
+      const result = await service.issueBadge({ badgeId: 'db1', userId: 1 }, 9);
+      expect(mockPrisma.badgeAward.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ badgeId: 5, userId: 1, issuedById: 9 }),
+        }),
+      );
+      expect(result.id).toBe('uuid-bi-1');
+      expect(result).toHaveProperty('verifyCode', 'BADGE-x');
+      expect(result).toHaveProperty('isRevoked', false);
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ type: 'BADGE_EARNED' }),
@@ -308,25 +336,52 @@ describe('CertificationService', () => {
       );
     });
 
-    it('deve lançar ConflictException se já possui o badge', async () => {
+    it('deve lançar ConflictException se já possui o badge (award activo)', async () => {
       mockPrisma.$transaction.mockResolvedValue([
-        { id: 'badge-1', name: 'Badge Teste' },
+        { id: 5, name: 'Badge Teste', legacyDigitalBadgeId: 'db1' },
         { fullName: 'João Teste' },
       ]);
-      mockPrisma.badgeIssuance.findUnique.mockResolvedValue({
-        id: 'iss-1',
+      mockPrisma.badgeAward.findUnique.mockResolvedValue({
+        id: 9,
         deletedAt: null,
+        isRevoked: false,
       });
-      await expect(service.issueBadge({ badgeId: 'badge-1', userId: 1 }, 1)).rejects.toThrow(
+      await expect(service.issueBadge({ badgeId: 'db1', userId: 1 }, 9)).rejects.toThrow(
         ConflictException,
       );
     });
 
     it('deve lançar NotFoundException se badge não existir', async () => {
       mockPrisma.$transaction.mockResolvedValue([null, { fullName: 'João' }]);
-      await expect(service.issueBadge({ badgeId: 'nao-existe', userId: 1 }, 1)).rejects.toThrow(
+      await expect(service.issueBadge({ badgeId: 'nao-existe', userId: 1 }, 9)).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('getMyBadges', () => {
+    it('lê BadgeAward (não BadgeIssuance) e devolve a forma IssuanceShape com badge', async () => {
+      mockPrisma.badgeAward.findMany.mockResolvedValue([
+        {
+          id: 1,
+          badgeId: 5,
+          userId: 1,
+          awardedAt: new Date('2026-03-15'),
+          isRevoked: false,
+          verifyCode: 'BADGE-x',
+          legacyBadgeIssuanceId: 'bi1',
+          badge: { id: 5, name: 'B', skills: [], level: 'BASIC', legacyDigitalBadgeId: 'db1' },
+        },
+      ]);
+      const result = await service.getMyBadges(1);
+      expect(mockPrisma.badgeAward.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ userId: 1, isRevoked: false }),
+        }),
+      );
+      expect(result[0].id).toBe('bi1');
+      expect(result[0].badgeId).toBe('db1');
+      expect(result[0].badge?.id).toBe('db1');
     });
   });
 

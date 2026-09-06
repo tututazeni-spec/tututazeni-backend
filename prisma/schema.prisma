@@ -4227,6 +4227,17 @@ model Badge {
   id           Int           @id @default(autoincrement())
   name         String        @unique
   description  String?       @db.Text
+  // Fase F3: colunas absorvidas de DigitalBadge (deprecado). Todas nullable/defaulted.
+  code                 String?    @unique
+  imageUrl             String?
+  criteria             String?
+  skills               String[]   @default([])
+  level                BadgeLevel @default(BASIC)
+  issuerName           String?    @default("INNOVA")
+  isActive             Boolean    @default(true)
+  createdById          Int?
+  deletedAt            DateTime?
+  legacyDigitalBadgeId String?    @unique
   awards       BadgeAward[]
   recognitions Recognition[]
 }
@@ -4237,10 +4248,23 @@ model BadgeAward {
   badgeId      Int
   awardedAt    DateTime    @default(now())
   userPointsId Int?
+  // Fase F3: colunas absorvidas de BadgeIssuance (deprecado). Todas nullable/defaulted.
+  verifyCode            String?   @unique
+  assertionId           String?   @unique
+  evidenceUrl           String?
+  shareUrl              String?
+  isRevoked             Boolean   @default(false)
+  revokedAt             DateTime?
+  revokeReason          String?
+  expiresAt             DateTime?
+  issuedById            Int?
+  deletedAt             DateTime?
+  legacyBadgeIssuanceId String?   @unique
   user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   badge        Badge       @relation(fields: [badgeId], references: [id], onDelete: Cascade)
   userPoints   UserPoints? @relation(fields: [userPointsId], references: [id])
 
+  @@unique([badgeId, userId])
   @@index([userId])
   @@index([awardedAt])
 }
