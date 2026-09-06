@@ -188,6 +188,18 @@ Divergências-chave:
 **endurecida** com o denominador **médio** (padrão HR) e o **trend** do
 `roi-impact.getRetentionImpact`.
 
+> **Ruling do controller (Task 1 review, 2026-09-06):** o denominador canónico é
+> `avgHeadcount = (headcountStart + headcountEnd) / 2`, tal como escrito abaixo —
+> apesar de nenhuma variante existente o usar. Justificação: (1) a Task 1 Step 2 do
+> plano lista explicitamente "headcount médio" como candidato a denominador — logo é
+> escolha de entre as opções enumeradas pelo plano, não invenção; (2) é a fórmula
+> padrão de RH (separations / average headcount); (3) o numerador (`exitDate` na
+> janela) e o sub-cálculo de headcount ponto-a-ponto vêm ambos, verbatim, das
+> variantes 3/4/7 do `analytics` — só a média de dois desses counts é acrescentada.
+> **Fallback aceitável** (se os 2 counts ponto-a-ponto extra por chamada forem
+> caros): usar `headcountEnd`. O PR da Task 10 pede ratificação do dono do produto
+> para o delta de valor de turnover (como para todas as métricas).
+
 **Fórmula exacta:**
 
 ```
