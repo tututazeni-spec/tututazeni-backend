@@ -17,7 +17,7 @@ const mockPrisma = {
   funderReport: { count: jest.fn() },
   libraryItem: { count: jest.fn() },
   certificate: { count: jest.fn() },
-  badgeIssuance: { count: jest.fn() },
+  badgeAward: { count: jest.fn() },
   institutionalSnapshot: {
     create: jest.fn(),
     findMany: jest.fn(),

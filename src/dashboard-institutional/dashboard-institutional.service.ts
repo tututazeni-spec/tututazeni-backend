@@ -72,7 +72,8 @@ export class DashboardInstitutionalService {
           this.prisma.read.certificate.count({
             where: { legacyIssuedCertId: { not: null }, deletedAt: null },
           }),
-          this.prisma.read.badgeIssuance.count({
+          // Fase F3: BadgeIssuance absorvido por BadgeAward.
+          this.prisma.read.badgeAward.count({
             where: { deletedAt: null, isRevoked: false },
           }),
         ]);
