@@ -3,12 +3,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { AnalyticsFilterDto, AnalyticsPeriod } from './analytics.dto';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
 
 @Injectable()
 export class AnalyticsService {
   private readonly logger = new Logger(AnalyticsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly metrics: MetricsAggregationService,
+  ) {}
 
   private getDateRange(
     period: AnalyticsPeriod = AnalyticsPeriod.LAST_30_DAYS,
@@ -633,6 +637,30 @@ export class AnalyticsService {
       take: 20,
     });
 
+    // Fase H: as CONTAGENS do `summary` passam a vir da camada canónica
+    // (`metrics.alerts`, §4.6), filtradas às 3 regras de risco de que este
+    // endpoint sempre foi a fonte (INACTIVE_COLLABORATORS / PDI_PLAN_OVERDUE /
+    // PDI_ACTION_CRITICAL) — para que os números batam com dashboard/dashboard-rh.
+    // As listas de entidades acima continuam locais (o frontend de
+    // /analytics/risks renderiza detalhe por-entidade que `alerts()` não dá).
+    // Se uma contagem canónica divergir do tamanho da lista local é sinal de
+    // que a definição da regra derivou — follow-up, não esta task.
+    const canonicalAlerts = await this.metrics
+      .alerts({
+        scope: 'organization',
+        ...(filters.departmentId != null ? { departmentId: filters.departmentId } : {}),
+      })
+      .catch((e: unknown) => {
+        this.logger.warn({
+          filters,
+          action: 'ANALYTICS_RISK_ALERTS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter contagens canónicas de alertas de risco',
+        });
+        return [] as Awaited<ReturnType<MetricsAggregationService['alerts']>>;
+      });
+    const canonicalCount = (key: string) => canonicalAlerts.find(a => a.key === key)?.count ?? 0;
+
     return {
       inactiveCollaborators: inactiveUsers.slice(0, 20),
       overduePDIs: overduePDIs.map(p => ({
@@ -654,9 +682,9 @@ export class AnalyticsService {
           : 0,
       })),
       summary: {
-        inactiveCount: inactiveUsers.length,
-        overduePDICount: overduePDIs.length,
-        criticalActionCount: criticalActions.length,
+        inactiveCount: canonicalCount('INACTIVE_COLLABORATORS'),
+        overduePDICount: canonicalCount('PDI_PLAN_OVERDUE'),
+        criticalActionCount: canonicalCount('PDI_ACTION_CRITICAL'),
       },
     };
   }

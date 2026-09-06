@@ -8,6 +8,7 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import type { CurrentUserData } from '../common/decorators';
 import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS
@@ -23,10 +24,6 @@ function dateRange(filter: ReportFilterDto): { gte: Date; lte: Date } {
 
 function pct(num: number, den: number): number {
   return den > 0 ? +((num / den) * 100).toFixed(1) : 0;
-}
-
-function trend(curr: number, prev: number): number {
-  return prev > 0 ? +(((curr - prev) / prev) * 100).toFixed(1) : 0;
 }
 
 /** Build user filter from department/manager */
@@ -65,93 +62,145 @@ export interface SkillGapEntry {
 export class ReportsService {
   private readonly logger = new Logger(ReportsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly metrics: MetricsAggregationService,
+  ) {}
 
   // ══════════════════════════════════════════════════════
   // HR REPORTS
   // ══════════════════════════════════════════════════════
 
+  // Delega os números à camada canónica (`MetricsAggregationService`, Fase H) e
+  // monta o relatório (CSV/XLSX/PDF a jusante) à volta deles. A forma do payload
+  // é preservada; `summary.turnoverRate` é derivado de inactive/total (o
+  // primitivo headcount não expõe esse campo — mesmo derive da Task 6).
+  // Deltas deliberados (ratificação no PR da Task 10): `newHires` conta por
+  // `hireDate` e não `createdAt`; `byDepartment`/`byPosition` são scoped a
+  // `active:true`.
   async headcountReport(filter: ReportFilterDto) {
     const range = dateRange(filter);
-    const uWhere = userWhere(filter);
-    const baseWhere = uWhere ? { ...uWhere } : {};
 
-    const [total, active, newHires, prevHires] = await Promise.all([
-      this.prisma.read.user.count({ where: baseWhere }),
-      this.prisma.read.user.count({ where: { ...baseWhere, active: true } }),
-      this.prisma.read.user.count({
-        where: { ...baseWhere, createdAt: { gte: range.gte, lte: range.lte } },
-      }),
-      this.prisma.read.user.count({
-        where: {
-          ...baseWhere,
-          createdAt: {
-            gte: new Date(range.gte.getTime() - (range.lte.getTime() - range.gte.getTime())),
-            lt: range.gte,
-          },
+    const r = await this.metrics
+      .headcount({
+        ...(filter.departmentId != null ? { departmentId: filter.departmentId } : {}),
+        ...(filter.managerId != null ? { managerId: filter.managerId } : {}),
+        ...(filter.positionId != null ? { positionId: filter.positionId } : {}),
+        from: range.gte,
+        to: range.lte,
+      })
+      .catch((e: unknown) => {
+        this.logger.warn({
+          filter,
+          action: 'REPORTS_HEADCOUNT',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter headcount canónico para relatório de headcount',
+        });
+        return null;
+      });
+
+    if (!r) {
+      return {
+        report: 'HEADCOUNT',
+        period: { from: range.gte, to: range.lte },
+        summary: {
+          total: 0,
+          active: 0,
+          inactive: 0,
+          newHires: 0,
+          newHiresTrend: 0,
+          turnoverRate: 0,
         },
-      }),
-    ]);
-
-    const byDept = await this.prisma.read.department.findMany({
-      select: { id: true, name: true, _count: { select: { users: true } } },
-    });
-
-    const byPosition = await this.prisma.read.position.findMany({
-      select: { id: true, name: true, level: true, _count: { select: { users: true } } },
-      // Ordenar um findMany por contagem de relação usa { relação: { _count } },
-      // não { _count: { relação } } (essa forma é só válida em groupBy/aggregate)
-      // — ver o padrão já correcto em analytics.service.ts. Isto rebentava
-      // sempre com PrismaClientValidationError (500 incondicional).
-      orderBy: { users: { _count: 'desc' } },
-      take: 10,
-    });
+        byDepartment: [] as { id: number; name: string; count: number }[],
+        byPosition: [] as { id: number; name: string; level: string | null; count: number }[],
+        generatedAt: new Date(),
+      };
+    }
 
     return {
       report: 'HEADCOUNT',
-      period: { from: range.gte, to: range.lte },
+      period: r.period,
       summary: {
-        total,
-        active,
-        inactive: total - active,
-        newHires,
-        newHiresTrend: trend(newHires, prevHires),
-        turnoverRate: total > 0 ? pct(total - active, total) : 0,
+        total: r.total,
+        active: r.active,
+        inactive: r.inactive,
+        newHires: r.newHires,
+        newHiresTrend: r.newHiresTrend,
+        turnoverRate: pct(r.inactive, r.total),
       },
-      byDepartment: byDept.map(d => ({ id: d.id, name: d.name, count: d._count.users })),
-      byPosition: byPosition.map(p => ({
+      byDepartment: r.byDepartment,
+      byPosition: r.byPosition.map(p => ({
         id: p.id,
         name: p.name,
-        level: p.level,
-        count: p._count.users,
+        level: p.level ?? null,
+        count: p.count,
       })),
       generatedAt: new Date(),
     };
   }
 
+  // Delega a `metrics.turnover` (Fase H); mantém 2 `user.count` locais para
+  // `summary.total`/`summary.inactive` (contexto de população — o primitivo
+  // turnover não tem um total de toda a população). `insights` vem de
+  // `r.insights` (a geração de insights de turnover vive agora só na camada canónica).
+  // Delta deliberado: `leftInPeriod`/`turnoverRate` contam agora `exitDate ∈
+  // janela` (canónico) vs. o antigo `active:false && updatedAt ∈ janela`.
   async turnoverReport(filter: ReportFilterDto) {
     const range = dateRange(filter);
     const uWhere = userWhere(filter);
 
-    const [total, inactive, newInPeriod, leftInPeriod] = await Promise.all([
+    const [total, inactive] = await Promise.all([
       this.prisma.read.user.count({ where: uWhere ?? {} }),
       this.prisma.read.user.count({ where: { ...uWhere, active: false } }),
-      this.prisma.read.user.count({
-        where: { ...uWhere, createdAt: { gte: range.gte, lte: range.lte } },
-      }),
-      this.prisma.read.user.count({
-        where: { ...uWhere, active: false, updatedAt: { gte: range.gte, lte: range.lte } },
-      }),
     ]);
 
-    const turnoverRate = total > 0 ? pct(leftInPeriod, total) : 0;
-    const retentionRate = 100 - turnoverRate;
+    const r = await this.metrics
+      .turnover({
+        from: range.gte,
+        to: range.lte,
+        ...(filter.departmentId != null ? { departmentId: filter.departmentId } : {}),
+        ...(filter.managerId != null ? { managerId: filter.managerId } : {}),
+        ...(filter.positionId != null ? { positionId: filter.positionId } : {}),
+      })
+      .catch((e: unknown) => {
+        this.logger.warn({
+          filter,
+          action: 'REPORTS_TURNOVER',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter turnover canónico para relatório de turnover',
+        });
+        return null;
+      });
+
+    if (!r) {
+      return {
+        report: 'TURNOVER',
+        period: { from: range.gte, to: range.lte },
+        summary: {
+          total,
+          inactive,
+          newInPeriod: 0,
+          leftInPeriod: 0,
+          turnoverRate: 0,
+          retentionRate: 100,
+        },
+        insights: [] as string[],
+        generatedAt: new Date(),
+      };
+    }
 
     return {
       report: 'TURNOVER',
       period: { from: range.gte, to: range.lte },
-      summary: { total, inactive, newInPeriod, leftInPeriod, turnoverRate, retentionRate },
-      insights: this.buildTurnoverInsights(turnoverRate, leftInPeriod),
+      summary: {
+        total,
+        inactive,
+        newInPeriod: r.newHires,
+        leftInPeriod: r.leavers,
+        turnoverRate: r.turnoverRate,
+        retentionRate: r.retentionRate,
+      },
+      insights: r.insights,
       generatedAt: new Date(),
     };
   }
@@ -1130,15 +1179,6 @@ export class ReportsService {
   // ══════════════════════════════════════════════════════
   // HELPERS — insight builders
   // ══════════════════════════════════════════════════════
-
-  private buildTurnoverInsights(rate: number, left: number): string[] {
-    const out = [];
-    if (rate > 20) out.push(`Taxa de turnover crítica: ${rate}% — investigar causas urgentemente`);
-    else if (rate > 10) out.push(`Turnover acima da média de mercado: ${rate}%`);
-    else out.push(`Turnover dentro do esperado: ${rate}%`);
-    if (left > 0) out.push(`${left} colaborador(es) saíram no período`);
-    return out;
-  }
 
   private buildTrainingInsights(completionRate: number, abandonment: number): string[] {
     const out = [];

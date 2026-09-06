@@ -4,17 +4,31 @@ import { EnrollmentStatus, ReviewStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+
+// ─── Alertas: mapeamento p/ a forma histórica de GET /dashboard-rh/alerts ──
+// A camada canónica (`metrics.alerts`) devolve TODAS as regras de organização;
+// este ecrã só mostrava 4 (§4.3). O `type` histórico é reconstruído por `key`
+// (o `SURVEY_PARTICIPATION_LOW` canónico tem `type: 'SURVEY'` — aqui volta a
+// 'ENGAGEMENT' para preservar a forma do payload).
+const RH_ALERT_KEYS = new Set([
+  'PERFORMANCE_CRITICAL',
+  'MANDATORY_TRAINING_PENDING',
+  'PDI_ACTIONS_OVERDUE',
+  'SURVEY_PARTICIPATION_LOW',
+]);
+const RH_ALERT_HIST_TYPE: Record<string, string> = {
+  PERFORMANCE_CRITICAL: 'PERFORMANCE',
+  MANDATORY_TRAINING_PENDING: 'COMPLIANCE',
+  PDI_ACTIONS_OVERDUE: 'PDI',
+  SURVEY_PARTICIPATION_LOW: 'ENGAGEMENT',
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
 function monthStart(offset = 0): Date {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth() - offset, 1);
-}
-
-function monthEnd(offset = 0): Date {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth() - offset + 1, 0, 23, 59, 59);
 }
 
 function pct(num: number, den: number): number {
@@ -56,6 +70,7 @@ export class DashboardRhService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
+    private readonly metrics: MetricsAggregationService,
   ) {}
 
   // ══════════════════════════════════════════════════════
@@ -232,78 +247,31 @@ export class DashboardRhService {
   // HEADCOUNT & STRUCTURE
   // ══════════════════════════════════════════════════════
 
+  // Delega no `MetricsAggregationService` (Fase H). A forma do payload
+  // (`turnoverRate` derivado de inactive/total, `byPosition.level` sempre
+  // presente) é preservada; a *fonte* dos números passou a ser a canónica.
   async getHeadcountPanel(departmentId?: number) {
-    const deptFilter = departmentId ? { departmentId } : {};
-
-    const [total, active, byDept, byPos, byTenure] = await Promise.all([
-      this.prisma.read.user.count({ where: deptFilter }),
-      this.prisma.read.user.count({ where: { ...deptFilter, active: true } }),
-      this.prisma.read.department.findMany({
-        select: { id: true, name: true, _count: { select: { users: true } } },
-      }),
-      this.prisma.position.findMany({
-        select: { id: true, name: true, level: true, _count: { select: { users: true } } },
-        orderBy: { users: { _count: 'desc' } },
-        take: 10,
-      }),
-      this.prisma.user
-        .findMany({
-          where: { ...deptFilter, active: true },
-          select: { createdAt: true },
-        })
-        .then(users => {
-          const buckets = { '<1yr': 0, '1-2yr': 0, '2-5yr': 0, '5+yr': 0 };
-          for (const u of users) {
-            const months = tenureMonths(u.createdAt);
-            if (months < 12) buckets['<1yr']++;
-            else if (months < 24) buckets['1-2yr']++;
-            else if (months < 60) buckets['2-5yr']++;
-            else buckets['5+yr']++;
-          }
-          return buckets;
-        }),
-    ]);
-
-    const avgTenure = await this.prisma.user
-      .findMany({ where: { ...deptFilter, active: true }, select: { createdAt: true } })
-      .then(us =>
-        us.length
-          ? +(us.reduce((s, u) => s + tenureMonths(u.createdAt), 0) / us.length).toFixed(1)
-          : 0,
-      );
-
+    const r = await this.metrics.headcount(departmentId != null ? { departmentId } : {});
     return {
-      total,
-      active,
-      inactive: total - active,
-      turnoverRate: pct(total - active, total),
-      avgTenureMonths: avgTenure,
-      byDepartment: byDept
-        .map(d => ({ id: d.id, name: d.name, count: d._count.users }))
-        .sort((a, b) => b.count - a.count),
-      byPosition: byPos.map(p => ({
+      total: r.total,
+      active: r.active,
+      inactive: r.inactive,
+      turnoverRate: pct(r.inactive, r.total),
+      avgTenureMonths: r.avgTenureMonths,
+      byDepartment: r.byDepartment,
+      byPosition: r.byPosition.map(p => ({
         id: p.id,
         name: p.name,
-        level: p.level,
-        count: p._count.users,
+        level: p.level ?? null,
+        count: p.count,
       })),
-      byTenure,
+      byTenure: r.byTenure,
     };
   }
 
   async getHeadcountTrend(months = 6) {
-    const trend: { month: string; count: number; new: number }[] = [];
-    for (let i = months - 1; i >= 0; i--) {
-      const endDate = monthEnd(i);
-      const start = monthStart(i);
-      const [count, newInMonth] = await Promise.all([
-        this.prisma.read.user.count({ where: { createdAt: { lte: endDate }, active: true } }),
-        this.prisma.read.user.count({ where: { createdAt: { gte: start, lte: endDate } } }),
-      ]);
-      const label = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}`;
-      trend.push({ month: label, count, new: newInMonth });
-    }
-    return trend;
+    const points = await this.metrics.headcountTrend({ months });
+    return points.map(p => ({ month: p.month, count: p.headcount, new: p.new }));
   }
 
   // ══════════════════════════════════════════════════════
@@ -311,34 +279,8 @@ export class DashboardRhService {
   // ══════════════════════════════════════════════════════
 
   async getTurnoverPanel(months = 12) {
-    const [total, inactive] = await Promise.all([
-      this.prisma.read.user.count(),
-      this.prisma.read.user.count({ where: { active: false } }),
-    ]);
-
-    const recent3 = await this.prisma.read.user.count({
-      where: { active: false, updatedAt: { gte: monthStart(3) } },
-    });
-
-    // Tenure distribution of active users
-    const activeUsers = await this.prisma.read.user.findMany({
-      where: { active: true },
-      select: {
-        id: true,
-        fullName: true,
-        createdAt: true,
-        managerId: true,
-        department: { select: { name: true } },
-        position: { select: { name: true } },
-      },
-    });
-
-    const tenures = activeUsers.map(u => tenureMonths(u.createdAt));
-    const avgTenure = tenures.length
-      ? +(tenures.reduce((a, b) => a + b, 0) / tenures.length).toFixed(1)
-      : 0;
-
-    // At-risk heuristic: active users + low performance
+    // At-risk heuristic: active users + low performance — enriquecimento local
+    // de entidades (NÃO é métrica canónica), mantido via prisma.read.
     const atRiskUsersQuery = this.prisma.performanceReview.findMany({
       where: { score: { lt: 2.5 }, status: ReviewStatus.PUBLISHED },
       include: {
@@ -366,21 +308,27 @@ export class DashboardRhService {
       },
     );
 
-    const turnoverRate = pct(inactive, total);
+    // Números canónicos: janela default de 12 meses. 2ª chamada só para o
+    // sub-total de 3 meses — `leftLast3Months` não existe no primitivo turnover
+    // (ratificação no PR da Task 10).
+    const [r, last3] = await Promise.all([
+      this.metrics.turnover({}),
+      this.metrics.turnover({ from: monthStart(3), to: new Date() }),
+    ]);
 
     return {
-      turnoverRate,
-      retentionRate: +(100 - turnoverRate).toFixed(1),
-      totalLeft: inactive,
-      leftLast3Months: recent3,
-      avgTenureMonths: avgTenure,
-      avgTenureYears: +(avgTenure / 12).toFixed(1),
-      atRiskUsers: atRiskUsers.map(r => ({
-        user: r.user,
-        score: r.score,
-        risk: (r.score ?? 0) < 2 ? 'HIGH' : 'MEDIUM',
+      turnoverRate: r.turnoverRate,
+      retentionRate: r.retentionRate,
+      totalLeft: r.leavers,
+      leftLast3Months: last3.leavers,
+      avgTenureMonths: r.avgTenureMonths,
+      avgTenureYears: +(r.avgTenureMonths / 12).toFixed(1),
+      atRiskUsers: atRiskUsers.map(x => ({
+        user: x.user,
+        score: x.score,
+        risk: (x.score ?? 0) < 2 ? 'HIGH' : 'MEDIUM',
       })),
-      insights: this.buildTurnoverInsights(turnoverRate, recent3),
+      insights: r.insights,
     };
   }
 
@@ -973,98 +921,36 @@ export class DashboardRhService {
   // AI ALERTS & PREDICTIONS
   // ══════════════════════════════════════════════════════
 
-  async getAlerts() {
-    const alerts: {
-      type: string;
-      severity: 'HIGH' | 'MEDIUM' | 'LOW';
-      message: string;
-      count?: number;
-    }[] = [];
-    const mS = monthStart();
-
-    const [overdueActions, mandatoryPending, atRiskPerf, lowEngagement] = await Promise.all([
-      this.prisma.developmentPlanAction
-        .count({
-          where: { status: { notIn: ['COMPLETED', 'CANCELLED'] }, dueDate: { lt: new Date() } },
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'DASHBOARD_RH_ALERTS_OVERDUE',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter acções de PDI em atraso nos alertas do dashboard RH',
-          });
-          return 0;
-        }),
-      this.prisma.enrollment
-        .count({
-          where: {
-            course: { mandatory: true },
-            status: { not: EnrollmentStatus.COMPLETED },
-          },
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'DASHBOARD_RH_ALERTS_MANDATORY_PENDING',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter formações obrigatórias pendentes nos alertas do dashboard RH',
-          });
-          return 0;
-        }),
-      this.prisma.performanceReview
-        .count({ where: { score: { lt: 2 }, status: ReviewStatus.PUBLISHED } })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'DASHBOARD_RH_ALERTS_AT_RISK_PERF',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter colaboradores com performance crítica nos alertas do dashboard RH',
-          });
-          return 0;
-        }),
-      this.prisma.surveyResponse
-        .count({ where: { createdAt: { gte: mS } } })
-        .then(async r => {
-          const total = await this.prisma.read.user.count({ where: { active: true } });
-          return total > 0 && r / total < 0.3; // <30% participation = low
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'DASHBOARD_RH_ALERTS_LOW_ENGAGEMENT',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao calcular baixa participação em surveys nos alertas do dashboard RH',
-          });
-          return false;
-        }),
-    ]);
-
-    if (atRiskPerf > 0)
-      alerts.push({
-        type: 'PERFORMANCE',
-        severity: 'HIGH',
-        message: `${atRiskPerf} colaborador(es) com performance crítica`,
-        count: atRiskPerf,
+  // Delega no catálogo canónico (`metrics.alerts`, §4.6) e filtra o
+  // subconjunto de 4 regras de organização que este ecrã sempre mostrou
+  // (§4.3). A ordem passa a ser a canónica (severidade, depois `key`) em vez
+  // da antiga ordem de `push` — cosmético para um consumidor de lista.
+  //
+  // A camada canónica propaga falhas de leitura; a política de degradação é
+  // deste consumidor: `getAlerts` NUNCA pode rebentar (o antigo código
+  // envolvia cada count em `.catch`), porque `getFullRhDashboard` chama-o sem
+  // try/catch dentro do `cache.getOrSet` — sem isto uma falha transitória
+  // passava a 500 tanto em `GET /dashboard-rh/alerts` como no agregado
+  // `GET /dashboard-rh`.
+  async getAlerts(): Promise<
+    { type: string; severity: 'HIGH' | 'MEDIUM' | 'LOW'; message: string; count?: number }[]
+  > {
+    const canonical = await this.metrics.alerts({ scope: 'organization' }).catch((e: unknown) => {
+      this.logger.warn({
+        action: 'DASHBOARD_RH_ALERTS',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter alertas canónicos no dashboard RH',
       });
-    if (mandatoryPending > 0)
-      alerts.push({
-        type: 'COMPLIANCE',
-        severity: 'HIGH',
-        message: `${mandatoryPending} formação(ões) obrigatória(s) por concluir`,
-        count: mandatoryPending,
-      });
-    if (overdueActions > 0)
-      alerts.push({
-        type: 'PDI',
-        severity: 'MEDIUM',
-        message: `${overdueActions} acção(ões) de PDI em atraso`,
-        count: overdueActions,
-      });
-    if (lowEngagement)
-      alerts.push({
-        type: 'ENGAGEMENT',
-        severity: 'MEDIUM',
-        message: 'Taxa de participação em surveys abaixo de 30%',
-      });
-
-    return alerts;
+      return [] as Awaited<ReturnType<typeof this.metrics.alerts>>;
+    });
+    return canonical
+      .filter(a => RH_ALERT_KEYS.has(a.key))
+      .map(a => ({
+        type: RH_ALERT_HIST_TYPE[a.key],
+        severity: a.severity,
+        message: a.message,
+        ...(a.count != null ? { count: a.count } : {}),
+      }));
   }
 
   async getPredictions() {
@@ -1251,15 +1137,6 @@ export class DashboardRhService {
   // ══════════════════════════════════════════════════════
   // HELPERS
   // ══════════════════════════════════════════════════════
-
-  private buildTurnoverInsights(rate: number, left3: number): string[] {
-    const out = [];
-    if (rate > 20) out.push(`🚨 Turnover crítico: ${rate}% — investigar causas urgentemente`);
-    else if (rate > 10) out.push(`⚠️ Turnover acima da média: ${rate}%`);
-    else out.push(`✅ Turnover saudável: ${rate}%`);
-    if (left3 > 0) out.push(`${left3} saída(s) nos últimos 3 meses`);
-    return out;
-  }
 
   private buildPerformanceInsights(avg: number, atRisk: number, total: number): string[] {
     const out = [];

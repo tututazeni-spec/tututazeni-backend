@@ -6,6 +6,22 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardService } from './dashboard.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+
+// Fase H — Task 7: DashboardService injecta a camada canónica de métricas.
+// Estes testes não exercitam getAlerts/getManagerDashboard, mas o provider
+// tem de existir para o DI do Nest resolver o serviço.
+const mockMetrics = {
+  alerts: jest.fn().mockResolvedValue([]),
+  managerDashboard: jest.fn().mockResolvedValue({
+    teamSize: 0,
+    team: [],
+    kpis: {},
+    competencyGaps: [],
+    nineBox: [],
+    alerts: [],
+  }),
+};
 
 function buildMockPrisma() {
   const crud = () => ({
@@ -64,6 +80,7 @@ describe('DashboardService (progress)', () => {
           provide: CacheService,
           useValue: { getOrSet: jest.fn((_k: string, _ttl: number, fn: () => any) => fn()) },
         },
+        { provide: MetricsAggregationService, useValue: mockMetrics },
       ],
     }).compile();
 

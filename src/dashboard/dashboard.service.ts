@@ -5,6 +5,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
 import { DashboardFilterDto, OrgFilterDto, DashboardPeriod, AlertPriority } from './dashboard.dto';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+import { MetricAlert, MetricAlertSeverity } from '../metrics-aggregation/metrics.types';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -52,6 +54,7 @@ export class DashboardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
+    private readonly metrics: MetricsAggregationService,
   ) {}
 
   // ══════════════════════════════════════════════════════
@@ -231,210 +234,67 @@ export class DashboardService {
   // ══════════════════════════════════════════════════════
 
   async getManagerDashboard(userId: number, filters: DashboardFilterDto = {}) {
-    const since = periodStart(filters.period);
-    const prev = prevPeriodStart(filters.period);
+    // Fase H: os números e o enriquecimento da equipa vêm da camada canónica
+    // (`MetricsAggregationService.managerDashboard`). A forma do payload de
+    // `GET /dashboard/manager` é preservada — os KPIs são projectados de volta
+    // aos 11 campos históricos (o superset canónico — enrollmentsTotal,
+    // completions, completionRate, overdueActions — e competencyGaps/nineBox
+    // ficam para o `analytics`, Task 8) e `atRisk` volta a chamar-se `alert`
+    // em cada membro.
+    //
+    // Degradação: a camada canónica propaga falhas de leitura; este consumidor
+    // nunca pode 500 — em falha devolve a forma histórica de "equipa vazia".
+    const r = await this.metrics
+      .managerDashboard({
+        userId,
+        period: filters.period,
+        departmentId: filters.departmentId,
+      })
+      .catch((e: unknown) => {
+        this.logger.warn({
+          userId,
+          departmentId: filters.departmentId,
+          period: filters.period,
+          action: 'DASHBOARD_MANAGER_METRICS',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter o dashboard do gestor a partir da camada canónica',
+        });
+        return null;
+      });
 
-    const user = await this.prisma.read.user.findUnique({
-      where: { id: userId },
-      select: { departmentId: true, fullName: true },
-    });
-    const deptId = filters.departmentId ?? user?.departmentId;
-    const teamWhere: Prisma.UserWhereInput = { managerId: userId, active: true };
-
-    const team = await this.prisma.read.user.findMany({
-      where: teamWhere,
-      select: {
-        id: true,
-        fullName: true,
-        avatarUrl: true,
-        position: { select: { name: true } },
-        department: { select: { name: true } },
-        points: { select: { points: true } },
-      },
-    });
-    const teamIds = team.map(u => u.id);
-
-    if (!teamIds.length) return { teamSize: 0, team: [], kpis: {}, alerts: [], pendingItems: [] };
-
-    const [
-      activePlans,
-      completedPlans,
-      inProgress,
-      completed,
-      mandatory,
-      mandatoryComplete,
-      pendingEvals,
-      engagementResponses,
-      avatarSessions,
-      avgPerf,
-      prevAvgPerf,
-    ] = await Promise.all([
-      this.prisma.read.developmentPlan.count({
-        where: { userId: { in: teamIds }, status: 'ACTIVE', isTemplate: false },
-      }),
-      this.prisma.read.developmentPlan.count({
-        where: { userId: { in: teamIds }, status: 'COMPLETED', isTemplate: false },
-      }),
-      this.prisma.read.enrollment.count({
-        where: { userId: { in: teamIds }, status: EnrollmentStatus.IN_PROGRESS },
-      }),
-      this.prisma.read.enrollment.count({
-        where: {
-          userId: { in: teamIds },
-          status: EnrollmentStatus.COMPLETED,
-          enrolledAt: { gte: since },
-        },
-      }),
-      this.prisma.enrollment
-        .count({ where: { userId: { in: teamIds }, course: { mandatory: true } } })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            userId,
-            departmentId: deptId,
-            period: filters.period,
-            action: 'DASHBOARD_MANAGER_MANDATORY_COUNT',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter contagem de formações obrigatórias da equipa',
-          });
-          return 0;
-        }),
-      this.prisma.enrollment
-        .count({
-          where: {
-            userId: { in: teamIds },
-            course: { mandatory: true },
-            status: EnrollmentStatus.COMPLETED,
-          },
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            userId,
-            departmentId: deptId,
-            period: filters.period,
-            action: 'DASHBOARD_MANAGER_MANDATORY_COMPLETE',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter contagem de formações obrigatórias concluídas pela equipa',
-          });
-          return 0;
-        }),
-      this.prisma.evaluationRequest
-        .count({ where: { evaluatorId: userId, status: 'PENDING' } })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            userId,
-            departmentId: deptId,
-            period: filters.period,
-            action: 'DASHBOARD_MANAGER_PENDING_EVALS',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter contagem de avaliações pendentes para o dashboard do gestor',
-          });
-          return 0;
-        }),
-      this.prisma.read.surveyResponse.count({
-        where: { userId: { in: teamIds }, createdAt: { gte: since } },
-      }),
-      this.prisma.read.avatarSession.count({
-        where: { userId: { in: teamIds }, status: 'COMPLETED' },
-      }),
-      this.prisma.performanceReview
-        .aggregate({
-          where: { userId: { in: teamIds }, createdAt: { gte: since } },
-          _avg: { score: true },
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            userId,
-            departmentId: deptId,
-            period: filters.period,
-            action: 'DASHBOARD_MANAGER_AVG_PERF',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter média de performance actual da equipa',
-          });
-          return { _avg: { score: null } };
-        }),
-      this.prisma.performanceReview
-        .aggregate({
-          where: { userId: { in: teamIds }, createdAt: { gte: prev, lt: since } },
-          _avg: { score: true },
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            userId,
-            departmentId: deptId,
-            period: filters.period,
-            action: 'DASHBOARD_MANAGER_PREV_AVG_PERF',
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter média de performance do período anterior da equipa',
-          });
-          return { _avg: { score: null } };
-        }),
-    ]);
-
-    const avgScore = avgPerf._avg.score;
-    const prevScore = prevAvgPerf._avg.score;
-    const scoreTrend = avgScore !== null && prevScore !== null ? trend(avgScore, prevScore) : null;
-    const pdpCoverage = teamIds.length > 0 ? +((activePlans / teamIds.length) * 100).toFixed(1) : 0;
-    const mandatoryRate = mandatory > 0 ? +((mandatoryComplete / mandatory) * 100).toFixed(1) : 100;
-
-    // Per-team-member enrichment
-    const memberEnrollments = await this.prisma.read.enrollment.findMany({
-      where: { userId: { in: teamIds } },
-      select: { userId: true, status: true },
-    });
-    const memberPlans = await this.prisma.read.developmentPlan.findMany({
-      where: { userId: { in: teamIds }, isTemplate: false, status: { in: ['ACTIVE', 'DRAFT'] } },
-      select: { userId: true, status: true, overallProgress: true },
-    });
-    const memberPerfReviews = await this.prisma.read.performanceReview.findMany({
-      where: { userId: { in: teamIds } },
-      select: { userId: true, score: true, createdAt: true },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const enriched = team.map(u => {
-      const uEnrolls = memberEnrollments.filter(e => e.userId === u.id);
-      const uPlan = memberPlans.find(p => p.userId === u.id);
-      const uLatestPerf = memberPerfReviews.find(r => r.userId === u.id);
-      const uCompleted = uEnrolls.filter(e => e.status === EnrollmentStatus.COMPLETED).length;
-      const uInProgress = uEnrolls.filter(e => e.status === EnrollmentStatus.IN_PROGRESS).length;
-
-      return {
-        user: { id: u.id, fullName: u.fullName, avatarUrl: u.avatarUrl, position: u.position },
-        xp: u.points?.points ?? 0,
-        enrollment: { completed: uCompleted, inProgress: uInProgress },
-        plan: uPlan ? { progress: uPlan.overallProgress ?? 0, status: uPlan.status } : null,
-        lastScore: uLatestPerf?.score ?? null,
-        alert:
-          (uLatestPerf !== undefined && (uLatestPerf.score ?? 0) < 2.5) ||
-          (uCompleted === 0 && uEnrolls.length > 0),
-      };
-    });
-
-    // Alerts
-    const alerts = this.buildManagerAlerts({
-      atRisk: enriched.filter(u => u.alert).length,
-      mandatoryRate,
-      pdpCoverage,
-      pendingEvals,
-    });
+    if (!r || r.teamSize === 0) {
+      return { teamSize: 0, team: [], kpis: {}, alerts: [], pendingItems: [] };
+    }
 
     return {
-      teamSize: teamIds.length,
+      teamSize: r.teamSize,
       kpis: {
-        pdpCoverage,
-        activePlans,
-        completedPlans,
-        inProgress,
-        completedEnrollments: completed,
-        avgScore: avgScore ? +avgScore.toFixed(2) : null,
-        scoreTrend,
-        mandatoryRate,
-        engagementResponses,
-        avatarSessions,
-        pendingEvals,
+        pdpCoverage: r.kpis.pdpCoverage,
+        activePlans: r.kpis.activePlans,
+        completedPlans: r.kpis.completedPlans,
+        inProgress: r.kpis.inProgress,
+        completedEnrollments: r.kpis.completedEnrollments,
+        avgScore: r.kpis.avgScore,
+        scoreTrend: r.kpis.scoreTrend,
+        mandatoryRate: r.kpis.mandatoryRate,
+        engagementResponses: r.kpis.engagementResponses,
+        avatarSessions: r.kpis.avatarSessions,
+        pendingEvals: r.kpis.pendingEvals,
       },
-      team: enriched,
-      alerts,
+      team: r.team.map(m => ({
+        user: {
+          id: m.user.id,
+          fullName: m.user.fullName,
+          avatarUrl: m.user.avatarUrl,
+          position: m.user.position,
+        },
+        xp: m.xp,
+        enrollment: m.enrollment,
+        plan: m.plan,
+        lastScore: m.lastScore,
+        alert: m.atRisk,
+      })),
+      alerts: this.adaptManagerAlerts(r.alerts),
     };
   }
 
@@ -787,119 +647,65 @@ export class DashboardService {
   // ══════════════════════════════════════════════════════
 
   async getAlerts(userId: number, roleCode?: string) {
-    const alerts: { type: string; message: string; priority: AlertPriority; actionUrl?: string }[] =
-      [];
+    // Fase H: delega no catálogo canónico de alertas (`metrics.alerts`, §4.6).
+    // `GET /dashboard/alerts` mostra o subconjunto pessoal (scope 'user') mais
+    // — para ADMIN/RH/LIDER — a regra de risco de equipa TEAM_PERFORMANCE_AT_RISK
+    // (scope 'team'). O `type` histórico e a prioridade
+    // URGENT/ATTENTION/INFORMATIVE são reconstruídos por `key`; a ordenação por
+    // prioridade do ecrã antigo é preservada.
+    const SEV_TO_PRIORITY: Record<MetricAlertSeverity, AlertPriority> = {
+      HIGH: AlertPriority.URGENT,
+      MEDIUM: AlertPriority.ATTENTION,
+      LOW: AlertPriority.INFORMATIVE,
+    };
+    // canonical ALERT_TYPE → `type` histórico deste ecrã (§4.1)
+    const HIST_TYPE: Record<string, string> = {
+      SURVEYS_PENDING: 'SURVEY',
+      EVAL_360_PENDING: 'EVALUATION',
+      PDI_ACTIONS_OVERDUE: 'PDI',
+      MANDATORY_TRAINING_PENDING: 'TRAINING', // type canónico é 'COMPLIANCE' — remap
+      TEAM_PERFORMANCE_AT_RISK: 'PERFORMANCE',
+    };
 
-    // Personal pending surveys
-    const pendingSurveys = await this.prisma.read.engagementSurvey.count({
-      where: { status: 'ACTIVE', responses: { none: { userId } } },
+    const userAlerts = await this.metrics.alerts({ scope: 'user', userId }).catch((e: unknown) => {
+      this.logger.warn({
+        userId,
+        roleCode,
+        action: 'DASHBOARD_ALERTS_USER',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter alertas pessoais a partir da camada canónica',
+      });
+      return [] as MetricAlert[];
     });
-    if (pendingSurveys > 0)
-      alerts.push({
-        type: 'SURVEY',
-        message: `${pendingSurveys} survey(s) por responder`,
-        priority: AlertPriority.ATTENTION,
-        actionUrl: '/engagement',
-      });
 
-    // Pending evaluations
-    const pendingEvals = await this.prisma.evaluationRequest
-      .count({ where: { evaluatorId: userId, status: 'PENDING' } })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          userId,
-          roleCode,
-          action: 'DASHBOARD_ALERTS_PENDING_EVALS',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter contagem de avaliações pendentes para os alertas',
+    const privileged = !!roleCode && ['ADMIN', 'RH', 'LIDER'].includes(roleCode);
+    let teamPerf: MetricAlert[] = [];
+    if (privileged) {
+      const teamAlerts = await this.metrics
+        .alerts({ scope: 'team', userId, roleCode })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            roleCode,
+            action: 'DASHBOARD_ALERTS_TEAM',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter alertas de equipa a partir da camada canónica',
+          });
+          return [] as MetricAlert[];
         });
-        return 0;
-      });
-    if (pendingEvals > 0)
-      alerts.push({
-        type: 'EVALUATION',
-        message: `${pendingEvals} avaliação(ões) 360° pendentes`,
-        priority: AlertPriority.URGENT,
-        actionUrl: '/evaluations/pending',
-      });
-
-    // Overdue development actions
-    const overdueActions = await this.prisma.developmentPlanAction
-      .count({
-        where: {
-          plan: { userId },
-          status: { notIn: ['COMPLETED', 'CANCELLED'] },
-          dueDate: { lt: new Date() },
-        },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          userId,
-          roleCode,
-          action: 'DASHBOARD_ALERTS_OVERDUE_ACTIONS',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter contagem de acções de PDI em atraso para os alertas',
-        });
-        return 0;
-      });
-    if (overdueActions > 0)
-      alerts.push({
-        type: 'PDI',
-        message: `${overdueActions} acção(ões) de PDI em atraso`,
-        priority: AlertPriority.URGENT,
-        actionUrl: '/talent-development/plans',
-      });
-
-    // Mandatory training not completed
-    // FIX: `as any` desnecessário — `enrollments` é uma relação real de
-    // Course, o where já é um Prisma.CourseWhereInput válido sem cast.
-    const mandatoryPending = await this.prisma.course
-      .count({
-        where: {
-          mandatory: true,
-          enrollments: { none: { userId, status: EnrollmentStatus.COMPLETED } },
-        },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          userId,
-          roleCode,
-          action: 'DASHBOARD_ALERTS_MANDATORY_PENDING',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter contagem de formações obrigatórias por concluir para os alertas',
-        });
-        return 0;
-      });
-    if (mandatoryPending > 0)
-      alerts.push({
-        type: 'TRAINING',
-        message: `${mandatoryPending} formação(ões) obrigatória(s) por concluir`,
-        priority: AlertPriority.ATTENTION,
-        actionUrl: '/content-library/mandatory',
-      });
-
-    // Manager alerts
-    if (roleCode && ['ADMIN', 'RH', 'LIDER'].includes(roleCode)) {
-      const teamAtRisk = await this.prisma.read.user.count({
-        where: {
-          managerId: userId,
-          active: true,
-          performanceReviews: { some: { score: { lt: 2.5 } } },
-        },
-      });
-      if (teamAtRisk > 0)
-        alerts.push({
-          type: 'PERFORMANCE',
-          message: `${teamAtRisk} membro(s) da equipa com performance abaixo da média`,
-          priority: AlertPriority.URGENT,
-          actionUrl: '/evaluations',
-        });
+      teamPerf = teamAlerts.filter(a => a.key === 'TEAM_PERFORMANCE_AT_RISK');
     }
 
-    return alerts.sort((a, b) => {
-      const order = { URGENT: 0, ATTENTION: 1, INFORMATIVE: 2 };
-      return order[a.priority] - order[b.priority];
-    });
+    const priorityRank = { URGENT: 0, ATTENTION: 1, INFORMATIVE: 2 } as const;
+
+    return [...userAlerts, ...teamPerf]
+      .map(a => ({
+        type: HIST_TYPE[a.key] ?? a.type,
+        message: a.message,
+        priority: SEV_TO_PRIORITY[a.severity],
+        ...(a.actionUrl ? { actionUrl: a.actionUrl } : {}),
+      }))
+      .sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority]);
   }
 
   // ══════════════════════════════════════════════════════
@@ -1018,38 +824,26 @@ export class DashboardService {
     return { level: 1, label: 'Iniciante', nextAt: 250 };
   }
 
-  private buildManagerAlerts(data: {
-    atRisk: number;
-    mandatoryRate: number;
-    pdpCoverage: number;
-    pendingEvals: number;
-  }): { message: string; priority: AlertPriority; type: string }[] {
-    const alerts = [];
-    if (data.atRisk > 0)
-      alerts.push({
-        type: 'RISK',
-        priority: AlertPriority.URGENT,
-        message: `${data.atRisk} colaborador(es) em risco de performance`,
-      });
-    if (data.mandatoryRate < 80)
-      alerts.push({
-        type: 'TRAINING',
-        priority: AlertPriority.ATTENTION,
-        message: `Taxa de formações obrigatórias abaixo de 80% (${data.mandatoryRate}%)`,
-      });
-    if (data.pdpCoverage < 50)
-      alerts.push({
-        type: 'PDI',
-        priority: AlertPriority.ATTENTION,
-        message: `Apenas ${data.pdpCoverage}% da equipa tem PDI activo`,
-      });
-    if (data.pendingEvals > 0)
-      alerts.push({
-        type: 'EVALUATION',
-        priority: AlertPriority.ATTENTION,
-        message: `${data.pendingEvals} avaliação(ões) 360° pendentes`,
-      });
-    return alerts;
+  // Fase H: subconjunto histórico de `buildManagerAlerts` (§4.2) — as 4 regras
+  // de equipa que `GET /dashboard/manager` sempre mostrou, reconstruídas a
+  // partir dos alertas canónicos de scope 'team'. Sem `count` nem `actionUrl`
+  // (a forma antiga também não os tinha). Delta sancionado (ratificação no PR
+  // da Task 10): `EVAL_360_PENDING` sai agora como URGENT — antes era ATTENTION
+  // — por causa da unificação de severidade canónica (HIGH → URGENT). A ordem
+  // passa a ser a canónica (severidade, depois `key`) em vez da antiga ordem
+  // de `push` — cosmético para um consumidor de lista.
+  private adaptManagerAlerts(
+    alerts: MetricAlert[],
+  ): { message: string; priority: AlertPriority; type: string }[] {
+    const MAP: Record<string, { type: string; priority: AlertPriority }> = {
+      MANAGER_TEAM_RISK: { type: 'RISK', priority: AlertPriority.URGENT },
+      MANDATORY_RATE_LOW: { type: 'TRAINING', priority: AlertPriority.ATTENTION },
+      PDP_COVERAGE_LOW: { type: 'PDI', priority: AlertPriority.ATTENTION },
+      EVAL_360_PENDING: { type: 'EVALUATION', priority: AlertPriority.URGENT },
+    };
+    return alerts
+      .filter(a => MAP[a.key] !== undefined)
+      .map(a => ({ message: a.message, priority: MAP[a.key].priority, type: MAP[a.key].type }));
   }
 
   private buildOrgInsights(data: {

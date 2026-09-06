@@ -2,6 +2,29 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardRhService } from './dashboard-rh.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+
+// Fase H — Task 6: dashboard-rh delega headcount/headcountTrend/turnover/alerts.
+const mockMetrics = {
+  headcount: jest.fn().mockResolvedValue({
+    total: 0,
+    active: 0,
+    inactive: 0,
+    avgTenureMonths: 0,
+    byTenure: { '<1yr': 0, '1-2yr': 0, '2-5yr': 0, '5+yr': 0 },
+    byDepartment: [],
+    byPosition: [],
+  }),
+  headcountTrend: jest.fn().mockResolvedValue([]),
+  turnover: jest.fn().mockResolvedValue({
+    leavers: 0,
+    turnoverRate: 0,
+    retentionRate: 100,
+    avgTenureMonths: 0,
+    insights: [],
+  }),
+  alerts: jest.fn().mockResolvedValue([]),
+};
 
 const fallbackModel = () => ({
   findMany: jest.fn().mockResolvedValue([]),
@@ -69,6 +92,24 @@ describe('DashboardRhService (additional)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockMetrics.headcount.mockResolvedValue({
+      total: 0,
+      active: 0,
+      inactive: 0,
+      avgTenureMonths: 0,
+      byTenure: { '<1yr': 0, '1-2yr': 0, '2-5yr': 0, '5+yr': 0 },
+      byDepartment: [],
+      byPosition: [],
+    });
+    mockMetrics.headcountTrend.mockResolvedValue([]);
+    mockMetrics.turnover.mockResolvedValue({
+      leavers: 0,
+      turnoverRate: 0,
+      retentionRate: 100,
+      avgTenureMonths: 0,
+      insights: [],
+    });
+    mockMetrics.alerts.mockResolvedValue([]);
     Object.defineProperty(mockPrisma, 'read', {
       get() {
         return mockPrisma;
@@ -83,6 +124,7 @@ describe('DashboardRhService (additional)', () => {
           provide: CacheService,
           useValue: { getOrSet: jest.fn((_k: string, _ttl: number, fn: () => any) => fn()) },
         },
+        { provide: MetricsAggregationService, useValue: mockMetrics },
       ],
     }).compile();
     service = module.get<DashboardRhService>(DashboardRhService);
