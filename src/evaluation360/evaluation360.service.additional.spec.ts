@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CompetenciesService } from '../competencies/competencies.service';
 
 const baseCycle = {
   id: 'cycle-1',
@@ -95,6 +96,14 @@ describe('Evaluation360Service (additional)', () => {
         { provide: NotificationsService, useValue: mockNotifications },
         { provide: AuditService, useValue: mockAudit },
         { provide: EventEmitter2, useValue: mockEvents },
+        {
+          provide: CompetenciesService,
+          useValue: {
+            create: jest.fn().mockResolvedValue({ id: 1 }),
+            update: jest.fn().mockResolvedValue({ id: 1 }),
+            listCatalogue: jest.fn().mockResolvedValue([]),
+          },
+        },
       ],
     }).compile();
     service = module.get<Evaluation360Service>(Evaluation360Service);

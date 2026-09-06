@@ -12,12 +12,14 @@ import { Evaluation360EventListeners } from './evaluation360.events';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AuditModule } from '../audit/audit.module';
+import { CompetenciesModule } from '../competencies/competencies.module';
 
 @Module({
   imports: [
     PrismaModule,
     NotificationsModule,
     AuditModule,
+    CompetenciesModule,
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot({ wildcard: true, delimiter: '.' }),
   ],

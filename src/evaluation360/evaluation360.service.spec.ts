@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CompetenciesService } from '../competencies/competencies.service';
 
 const competencyMock = {
   create: jest.fn(),
@@ -12,6 +13,12 @@ const competencyMock = {
   update: jest.fn(),
   findMany: jest.fn().mockResolvedValue([]),
   count: jest.fn().mockResolvedValue(0),
+};
+
+const mockCompetencies = {
+  create: jest.fn(),
+  update: jest.fn(),
+  listCatalogue: jest.fn().mockResolvedValue([]),
 };
 const cycleMock = {
   create: jest.fn(),
@@ -97,46 +104,66 @@ describe('Evaluation360Service', () => {
         { provide: NotificationsService, useValue: { send: jest.fn().mockResolvedValue({}) } },
         { provide: AuditService, useValue: mockAudit },
         { provide: EventEmitter2, useValue: mockEvents },
+        { provide: CompetenciesService, useValue: mockCompetencies },
       ],
     }).compile();
     service = module.get<Evaluation360Service>(Evaluation360Service);
   });
 
   describe('createCompetency', () => {
-    it('deve criar competência 360', async () => {
-      competencyMock.create.mockResolvedValue(baseCompetency);
+    it('delega em CompetenciesService.create (mapeando os campos do catálogo 360) e audita', async () => {
+      mockCompetencies.create.mockResolvedValue({ id: 7, name: 'Comunicação' });
       const result = await service.createCompetency(
-        { name: 'Comunicação', type: 'BEHAVIORAL' } as any,
+        { name: 'Comunicação', type: 'BEHAVIORAL', scaleMax: 7 } as any,
         'user-1',
+      );
+      expect(mockCompetencies.create).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Comunicação', type: 'BEHAVIORAL', scaleMax: 7 }),
+      );
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'Competency', action: 'CREATE', entityId: 7 }),
       );
       expect(result.name).toBe('Comunicação');
     });
   });
 
   describe('listCompetencies', () => {
-    it('deve listar competências', async () => {
-      competencyMock.findMany.mockResolvedValue([baseCompetency]);
-      competencyMock.count.mockResolvedValue(1);
-      const result = await service.listCompetencies();
-      expect(result).toBeDefined();
+    it('delega em CompetenciesService.listCatalogue com tenantId + paginação', async () => {
+      mockCompetencies.listCatalogue.mockResolvedValue([baseCompetency]);
+      const result = await service.listCompetencies('t1', {
+        search: 'com',
+        offset: 5,
+        limit: 10,
+      } as any);
+      expect(mockCompetencies.listCatalogue).toHaveBeenCalledWith({
+        tenantId: 't1',
+        search: 'com',
+        offset: 5,
+        limit: 10,
+      });
+      expect(result).toEqual([baseCompetency]);
     });
   });
 
   describe('updateCompetency', () => {
-    it('deve actualizar competência', async () => {
-      competencyMock.findUnique.mockResolvedValue(baseCompetency);
-      competencyMock.update.mockResolvedValue({ ...baseCompetency, name: 'Actualizado' });
-      const result = await service.updateCompetency(
-        'comp-1',
-        { name: 'Actualizado' } as any,
-        'user-1',
+    it('converte id string→number, delega em CompetenciesService.update e audita', async () => {
+      mockCompetencies.update.mockResolvedValue({ id: 3, name: 'Actualizado' });
+      const result = await service.updateCompetency('3', { name: 'Actualizado' } as any, 'user-1');
+      expect(mockCompetencies.update).toHaveBeenCalledWith(
+        3,
+        expect.objectContaining({ name: 'Actualizado' }),
+      );
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ entity: 'Competency', action: 'UPDATE', entityId: '3' }),
       );
       expect(result.name).toBe('Actualizado');
     });
 
-    it('deve lançar NotFoundException se não encontrada', async () => {
-      competencyMock.findUnique.mockResolvedValue(null);
-      await expect(service.updateCompetency('x', {}, 'user-1')).rejects.toThrow(NotFoundException);
+    it('propaga NotFoundException do serviço canónico', async () => {
+      mockCompetencies.update.mockRejectedValue(
+        new NotFoundException('Competência não encontrada'),
+      );
+      await expect(service.updateCompetency('99', {}, 'user-1')).rejects.toThrow(NotFoundException);
     });
   });
 

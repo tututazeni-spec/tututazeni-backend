@@ -18,6 +18,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CurrentUserData } from '../common/decorators';
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
+import { CompetenciesService } from '../competencies/competencies.service';
+import { CreateCompetencyDto, UpdateCompetencyDto } from '../competencies/competencies.dto';
 import {
   Evaluation360CreateCompetencyDto,
   Evaluation360UpdateCompetencyDto,
@@ -85,35 +87,29 @@ export class Evaluation360Service {
     private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
     private readonly events: EventEmitter2,
+    private readonly competencies: CompetenciesService,
   ) {}
 
   // ============================================================
   // BANCO DE COMPETÊNCIAS
   // ============================================================
 
+  // O modelo `Competency` tem um único dono de escrita — `CompetenciesService`
+  // (Fase G1). Estes métodos delegam e mantêm apenas a auditoria específica de
+  // Avaliação 360º e a conversão de `id` string→number das rotas deste módulo.
+
   async createCompetency(dto: Evaluation360CreateCompetencyDto, actorId: string) {
-    const competency = await this.prisma.competency.create({
-      data: {
-        name: dto.name,
-        description: dto.description,
-        type: dto.type,
-        category: dto.category,
-        scaleMin: dto.scaleMin ?? 1,
-        scaleMax: dto.scaleMax ?? 5,
-        isGlobal: dto.isGlobal ?? true,
-        tenantId: dto.tenantId,
-        indicators: dto.indicators?.length
-          ? {
-              create: dto.indicators.map(ind => ({
-                level: ind.level,
-                description: ind.description,
-                examples: ind.examples,
-              })),
-            }
-          : undefined,
-      },
-      include: { indicators: true },
-    });
+    const competency = await this.competencies.create({
+      name: dto.name,
+      description: dto.description,
+      category: dto.category,
+      type: dto.type,
+      scaleMin: dto.scaleMin,
+      scaleMax: dto.scaleMax,
+      isGlobal: dto.isGlobal,
+      tenantId: dto.tenantId,
+      indicators: dto.indicators,
+    } as CreateCompetencyDto);
     await this.audit.log({
       entity: 'Competency',
       entityId: competency.id,
@@ -125,12 +121,7 @@ export class Evaluation360Service {
   }
 
   async updateCompetency(id: string, dto: Evaluation360UpdateCompetencyDto, actorId: string) {
-    const comp = await this.prisma.competency.findUnique({ where: { id: +id } });
-    if (!comp) throw new NotFoundException('Competência não encontrada.');
-    // indicators é uma relação (create aninhado) — não é atribuível
-    // directamente num update de campos escalares.
-    const { indicators, ...data } = dto;
-    const updated = await this.prisma.competency.update({ where: { id: +id }, data });
+    const updated = await this.competencies.update(+id, dto as unknown as UpdateCompetencyDto);
     await this.audit.log({
       entity: 'Competency',
       entityId: id,
@@ -142,16 +133,11 @@ export class Evaluation360Service {
   }
 
   async listCompetencies(tenantId?: string, query?: Evaluation360PaginationDto) {
-    const where: Prisma.CompetencyWhereInput = { isActive: true };
-    if (tenantId) where.OR = [{ isGlobal: true }, { tenantId }];
-    else where.isGlobal = true;
-    if (query?.search) where.name = { contains: query.search };
-    return this.prisma.competency.findMany({
-      where,
-      include: { indicators: { orderBy: { level: 'asc' } } },
-      orderBy: { name: 'asc' },
-      skip: query?.offset ?? 0,
-      take: query?.limit ?? 50,
+    return this.competencies.listCatalogue({
+      tenantId,
+      search: query?.search,
+      offset: query?.offset,
+      limit: query?.limit,
     });
   }
 
