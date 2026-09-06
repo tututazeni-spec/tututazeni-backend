@@ -9,6 +9,42 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardRhService } from './dashboard-rh.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+
+// Fase H — Task 6: headcount/headcountTrend/turnover/alerts delegam a esta camada.
+function buildMockMetrics() {
+  return {
+    headcount: jest.fn().mockResolvedValue({
+      total: 0,
+      active: 0,
+      inactive: 0,
+      newHires: 0,
+      newHiresPrev: 0,
+      newHiresTrend: 0,
+      avgTenureMonths: 0,
+      byTenure: { '<1yr': 0, '1-2yr': 0, '2-5yr': 0, '5+yr': 0 },
+      byDepartment: [],
+      byPosition: [],
+      period: { from: new Date(), to: new Date() },
+      generatedAt: new Date(),
+    }),
+    headcountTrend: jest.fn().mockResolvedValue([]),
+    turnover: jest.fn().mockResolvedValue({
+      leavers: 0,
+      avgHeadcount: 0,
+      turnoverRate: 0,
+      retentionRate: 100,
+      turnoverRatePrev: 0,
+      turnoverTrend: 0,
+      newHires: 0,
+      netHeadcountChange: 0,
+      avgTenureMonths: 0,
+      insights: [],
+      period: { from: new Date(), to: new Date() },
+    }),
+    alerts: jest.fn().mockResolvedValue([]),
+  };
+}
 
 function buildMockPrisma() {
   const crud = () => ({
@@ -56,9 +92,11 @@ function buildMockPrisma() {
 describe('DashboardRhService (progress)', () => {
   let service: DashboardRhService;
   let mockPrisma: ReturnType<typeof buildMockPrisma>;
+  let mockMetrics: ReturnType<typeof buildMockMetrics>;
 
   beforeEach(async () => {
     mockPrisma = buildMockPrisma();
+    mockMetrics = buildMockMetrics();
 
     Object.defineProperty(mockPrisma, 'read', {
       get() {
@@ -74,103 +112,101 @@ describe('DashboardRhService (progress)', () => {
           provide: CacheService,
           useValue: { getOrSet: jest.fn((_k: string, _ttl: number, fn: () => any) => fn()) },
         },
+        { provide: MetricsAggregationService, useValue: mockMetrics },
       ],
     }).compile();
 
     service = module.get<DashboardRhService>(DashboardRhService);
   });
 
-  // ─── getHeadcountPanel ──────────────────────────────────────────
+  // ─── getHeadcountPanel (delega a metrics.headcount) ─────────────
 
   describe('getHeadcountPanel', () => {
-    it('deve retornar dados de headcount com departamentos e posições', async () => {
-      mockPrisma.user.count
-        .mockResolvedValueOnce(100) // total
-        .mockResolvedValueOnce(90); // active
-      mockPrisma.department.findMany.mockResolvedValue([
-        { id: 1, name: 'TI', _count: { users: 30 } },
-      ]);
-      mockPrisma.position.findMany.mockResolvedValue([
-        { id: 1, name: 'Dev', level: 2, _count: { users: 20 } },
-      ]);
-      mockPrisma.user.findMany
-        .mockResolvedValueOnce([{ createdAt: new Date('2022-01-01') }]) // byTenure
-        .mockResolvedValueOnce([{ createdAt: new Date('2022-01-01') }]); // avgTenure
+    const canonical = {
+      total: 100,
+      active: 90,
+      inactive: 10,
+      avgTenureMonths: 25,
+      byTenure: { '<1yr': 1, '1-2yr': 1, '2-5yr': 1, '5+yr': 1 },
+      byDepartment: [{ id: 1, name: 'TI', count: 30 }],
+      byPosition: [{ id: 1, name: 'Dev', level: 'PLENO', count: 20 }],
+    };
 
+    it('devolve os dados canónicos embrulhados na forma histórica', async () => {
+      mockMetrics.headcount.mockResolvedValue(canonical);
       const result = (await service.getHeadcountPanel()) as any;
       expect(result.total).toBe(100);
       expect(result.active).toBe(90);
+      expect(result.inactive).toBe(10);
+      expect(result.turnoverRate).toBe(10); // 10 / 100 * 100
       expect(result.byDepartment).toHaveLength(1);
       expect(result.byPosition).toHaveLength(1);
+      expect(result.byTenure).toEqual(canonical.byTenure);
     });
 
-    it('deve filtrar por departmentId', async () => {
-      mockPrisma.user.count.mockResolvedValue(0);
-      mockPrisma.department.findMany.mockResolvedValue([]);
-      mockPrisma.position.findMany.mockResolvedValue([]);
-      mockPrisma.user.findMany.mockResolvedValue([]);
+    it('propaga o departmentId para metrics.headcount', async () => {
+      mockMetrics.headcount.mockResolvedValue(canonical);
       await service.getHeadcountPanel(5);
-      expect(mockPrisma.user.count).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ departmentId: 5 }) }),
-      );
-    });
-
-    it('deve calcular categorias de tenure correctamente', async () => {
-      const tenureData = [
-        { createdAt: new Date(Date.now() - 6 * 30 * 86400000) }, // <1yr
-        { createdAt: new Date(Date.now() - 18 * 30 * 86400000) }, // 1-2yr
-        { createdAt: new Date(Date.now() - 36 * 30 * 86400000) }, // 2-5yr
-        { createdAt: new Date(Date.now() - 72 * 30 * 86400000) }, // 5+yr
-      ];
-      mockPrisma.user.count.mockResolvedValue(4);
-      mockPrisma.department.findMany.mockResolvedValue([]);
-      mockPrisma.position.findMany.mockResolvedValue([]);
-      mockPrisma.user.findMany.mockResolvedValueOnce(tenureData).mockResolvedValueOnce(tenureData);
-      const result = (await service.getHeadcountPanel()) as any;
-      expect(result.byTenure['<1yr']).toBe(1);
-      expect(result.byTenure['1-2yr']).toBe(1);
-      expect(result.byTenure['2-5yr']).toBe(1);
-      expect(result.byTenure['5+yr']).toBe(1);
+      expect(mockMetrics.headcount).toHaveBeenCalledWith({ departmentId: 5 });
     });
   });
 
-  // ─── getHeadcountTrend ──────────────────────────────────────────
+  // ─── getHeadcountTrend (delega a metrics.headcountTrend) ────────
 
   describe('getHeadcountTrend', () => {
-    it('deve retornar trend de headcount para N meses', async () => {
-      mockPrisma.user.count.mockResolvedValue(100);
+    it('mapeia headcount→count e remove left', async () => {
+      mockMetrics.headcountTrend.mockResolvedValue([
+        { month: '2025-07', headcount: 100, new: 2, left: 1 },
+        { month: '2025-08', headcount: 101, new: 3, left: 2 },
+        { month: '2025-09', headcount: 102, new: 4, left: 3 },
+      ]);
       const result = (await service.getHeadcountTrend(3)) as any[];
+      expect(mockMetrics.headcountTrend).toHaveBeenCalledWith({ months: 3 });
       expect(result).toHaveLength(3);
       result.forEach(m => {
         expect(m.month).toMatch(/^\d{4}-\d{2}$/);
         expect(m.count).toBeDefined();
         expect(m.new).toBeDefined();
+        expect(m).not.toHaveProperty('left');
       });
     });
 
     it('deve usar 6 meses como padrão', async () => {
-      mockPrisma.user.count.mockResolvedValue(0);
-      const result = (await service.getHeadcountTrend()) as any[];
-      expect(result).toHaveLength(6);
+      mockMetrics.headcountTrend.mockResolvedValue([]);
+      await service.getHeadcountTrend();
+      expect(mockMetrics.headcountTrend).toHaveBeenCalledWith({ months: 6 });
     });
   });
 
-  // ─── getTurnoverPanel ───────────────────────────────────────────
+  // ─── getTurnoverPanel (números via metrics.turnover) ───────────
 
   describe('getTurnoverPanel', () => {
-    it('deve retornar turnover panel com zero saídas', async () => {
-      mockPrisma.user.count.mockResolvedValue(100);
-      mockPrisma.auditLog.findMany.mockResolvedValue([]);
-      const result = (await service.getTurnoverPanel(12)) as any;
-      expect(result).toBeDefined();
-      expect(result.turnoverRate).toBeDefined();
+    beforeEach(() => {
+      mockPrisma.performanceReview.findMany.mockResolvedValue([]);
     });
 
-    it('deve usar 12 meses como padrão', async () => {
-      mockPrisma.user.count.mockResolvedValue(100);
-      mockPrisma.auditLog.findMany.mockResolvedValue([]);
-      const result = (await service.getTurnoverPanel()) as any;
+    it('deve retornar turnover panel com zero saídas', async () => {
+      const result = (await service.getTurnoverPanel(12)) as any;
       expect(result).toBeDefined();
+      expect(result.turnoverRate).toBe(0);
+      expect(mockMetrics.turnover).toHaveBeenCalledWith({});
+    });
+
+    it('leftLast3Months vem de uma 2ª chamada com janela de 3 meses', async () => {
+      mockMetrics.turnover.mockImplementation((p: any) =>
+        Promise.resolve({
+          leavers: p && p.from ? 4 : 12,
+          turnoverRate: 5,
+          retentionRate: 95,
+          avgTenureMonths: 36,
+          insights: [],
+        }),
+      );
+      const result = (await service.getTurnoverPanel()) as any;
+      expect(mockMetrics.turnover).toHaveBeenCalledTimes(2);
+      expect(result.totalLeft).toBe(12);
+      expect(result.leftLast3Months).toBe(4);
+      expect(result.avgTenureYears).toBe(3);
     });
   });
 
@@ -321,27 +357,54 @@ describe('DashboardRhService (progress)', () => {
   // ─── getAlerts ──────────────────────────────────────────────────
 
   describe('getAlerts', () => {
-    it('deve retornar lista vazia de alertas quando sem problemas', async () => {
-      mockPrisma.developmentPlanAction.count.mockResolvedValue(0);
-      mockPrisma.enrollment.count.mockResolvedValue(0);
-      mockPrisma.performanceReview.count.mockResolvedValue(0);
-      mockPrisma.surveyResponse.count.mockResolvedValue(100); // alta participação
-      mockPrisma.user.count.mockResolvedValue(100);
+    it('deve retornar lista vazia de alertas quando a camada não devolve nada', async () => {
+      mockMetrics.alerts.mockResolvedValue([]);
       const result = (await service.getAlerts()) as any[];
+      expect(mockMetrics.alerts).toHaveBeenCalledWith({ scope: 'organization' });
       expect(Array.isArray(result)).toBe(true);
       expect(result).toHaveLength(0);
     });
 
-    it('deve adicionar alertas HIGH quando existem problemas', async () => {
-      mockPrisma.developmentPlanAction.count.mockResolvedValue(5); // PDI em atraso
-      mockPrisma.enrollment.count.mockResolvedValue(10); // formações obrigatórias
-      mockPrisma.performanceReview.count.mockResolvedValue(3); // performance crítica
-      mockPrisma.surveyResponse.count.mockResolvedValue(5);
-      mockPrisma.user.count.mockResolvedValue(100); // 5% participação < 30%
+    it('filtra o subconjunto RH e remapeia o type para a forma histórica', async () => {
+      mockMetrics.alerts.mockResolvedValue([
+        {
+          key: 'PERFORMANCE_CRITICAL',
+          type: 'PERFORMANCE',
+          severity: 'HIGH',
+          message: '3 colaborador(es) com performance crítica',
+          count: 3,
+          scope: 'organization',
+        },
+        {
+          key: 'MANDATORY_TRAINING_PENDING',
+          type: 'COMPLIANCE',
+          severity: 'HIGH',
+          message: '10 formação(ões) obrigatória(s) por concluir',
+          count: 10,
+          scope: 'organization',
+        },
+        {
+          key: 'SURVEY_PARTICIPATION_LOW',
+          type: 'SURVEY',
+          severity: 'MEDIUM',
+          message: 'Taxa de participação em surveys abaixo de 30%',
+          scope: 'organization',
+        },
+        {
+          key: 'PDI_ACTION_CRITICAL',
+          type: 'PDI',
+          severity: 'HIGH',
+          message: 'fora do subconjunto',
+          count: 1,
+          scope: 'organization',
+        },
+      ]);
       const result = (await service.getAlerts()) as any[];
-      expect(result.length).toBeGreaterThan(0);
+      expect(result).toHaveLength(3);
       const severities = result.map((a: any) => a.severity);
       expect(severities).toContain('HIGH');
+      expect(result.map((a: any) => a.type)).toEqual(['PERFORMANCE', 'COMPLIANCE', 'ENGAGEMENT']);
+      expect(result.find((a: any) => a.type === 'ENGAGEMENT')).not.toHaveProperty('count');
     });
   });
 
