@@ -2,6 +2,18 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { TalentDevelopmentService } from './talent-development.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+
+const mockDevelopmentPlans = {
+  create: jest.fn(),
+  update: jest.fn(),
+  findOne: jest.fn(),
+  submitForApproval: jest.fn(),
+  approvePlan: jest.fn(),
+  complete: jest.fn(),
+  cancel: jest.fn(),
+  pause: jest.fn(),
+};
 
 const makeFind = (data: any[] = []) => jest.fn().mockResolvedValue(data);
 const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
@@ -138,7 +150,11 @@ describe('TalentDevelopmentService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TalentDevelopmentService, { provide: PrismaService, useValue: proxyPrisma }],
+      providers: [
+        TalentDevelopmentService,
+        { provide: PrismaService, useValue: proxyPrisma },
+        { provide: DevelopmentPlansService, useValue: mockDevelopmentPlans },
+      ],
     }).compile();
     service = module.get<TalentDevelopmentService>(TalentDevelopmentService);
   });
@@ -247,22 +263,28 @@ describe('TalentDevelopmentService', () => {
   // ─── createPlan ───────────────────────────────────────────────────────────
 
   describe('createPlan', () => {
-    it('deve criar plano de desenvolvimento', async () => {
+    it('valida o colaborador e delega em DevelopmentPlansService.create (forma via getPlan)', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 1, fullName: 'Test' });
-      mockPrisma.developmentPlan.create.mockResolvedValue({ ...basePlan, id: 1 });
+      mockDevelopmentPlans.create.mockResolvedValue({ id: 7 });
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, id: 7 });
 
       const result = await service.createPlan(
         { name: 'PDI 2024', userId: 1, goal: 'Crescer', managerId: 2 } as any,
         1,
       );
-      expect(result).toBeDefined();
+      expect(mockDevelopmentPlans.create).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'PDI 2024', userId: 1 }),
+      );
+      expect(result.id).toBe(7);
+      expect((result as any).stats).toBeDefined();
     });
 
-    it('deve lançar NotFoundException se user não existe', async () => {
+    it('deve lançar NotFoundException se user não existe (não delega)', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
       await expect(
         service.createPlan({ name: 'PDI', userId: 99, goal: 'Goal' } as any, 1),
       ).rejects.toThrow(NotFoundException);
+      expect(mockDevelopmentPlans.create).not.toHaveBeenCalled();
     });
   });
 
@@ -332,97 +354,89 @@ describe('TalentDevelopmentService', () => {
   // ─── updatePlan ───────────────────────────────────────────────────────────
 
   describe('updatePlan', () => {
-    it('deve actualizar plano', async () => {
-      mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
-      mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, name: 'PDI Actualizado' });
-
+    it('delega em DevelopmentPlansService.update', async () => {
+      mockDevelopmentPlans.update.mockResolvedValue({ ...basePlan, name: 'PDI Actualizado' });
       const result = await service.updatePlan(1, { name: 'PDI Actualizado' });
+      expect(mockDevelopmentPlans.update).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ name: 'PDI Actualizado' }),
+      );
       expect(result.name).toBe('PDI Actualizado');
     });
   });
 
-  // ─── activatePlan ─────────────────────────────────────────────────────────
+  // ─── activatePlan (fluxo de aprovação, Fase G3) ──────────────────────────
 
   describe('activatePlan', () => {
-    it('deve activar plano com acções', async () => {
-      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
-        ...basePlan,
+    const mgmtUser = { id: 9, role: { name: 'GESTOR' } } as any;
+
+    it('plano DRAFT com acções → submitForApproval (PENDING_APPROVAL)', async () => {
+      mockDevelopmentPlans.findOne.mockResolvedValue({
+        id: 1,
         status: 'DRAFT',
-        actions: [{ id: 1, status: 'TODO', progress: 0 }],
-      });
-      mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'ACTIVE' });
-
-      const result = await service.activatePlan(1, 2);
-      expect(result).toBeDefined();
-    });
-
-    it('deve lançar BadRequestException se já activo', async () => {
-      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
-        ...basePlan,
-        status: 'ACTIVE',
         actions: [{ id: 1 }],
       });
-      await expect(service.activatePlan(1, 2)).rejects.toThrow(BadRequestException);
+      mockDevelopmentPlans.submitForApproval.mockResolvedValue({
+        id: 1,
+        status: 'PENDING_APPROVAL',
+      });
+      const result = await service.activatePlan(1, mgmtUser);
+      expect(mockDevelopmentPlans.submitForApproval).toHaveBeenCalledWith(1, mgmtUser);
+      expect(result.status).toBe('PENDING_APPROVAL');
+      expect(mockPrisma.developmentPlan.update).not.toHaveBeenCalled();
     });
 
-    it('deve lançar BadRequestException se sem acções', async () => {
-      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
-        ...basePlan,
-        status: 'DRAFT',
-        actions: [],
+    it('plano DRAFT sem acções → BadRequestException', async () => {
+      mockDevelopmentPlans.findOne.mockResolvedValue({ id: 1, status: 'DRAFT', actions: [] });
+      await expect(service.activatePlan(1, mgmtUser)).rejects.toThrow(BadRequestException);
+      expect(mockDevelopmentPlans.submitForApproval).not.toHaveBeenCalled();
+    });
+
+    it('plano PENDING_APPROVAL → approvePlan (decision approve)', async () => {
+      mockDevelopmentPlans.findOne.mockResolvedValue({
+        id: 1,
+        status: 'PENDING_APPROVAL',
+        actions: [{ id: 1 }],
       });
-      await expect(service.activatePlan(1, 2)).rejects.toThrow(BadRequestException);
+      mockDevelopmentPlans.approvePlan.mockResolvedValue({ id: 1, status: 'ACTIVE' });
+      const result = await service.activatePlan(1, mgmtUser);
+      expect(mockDevelopmentPlans.approvePlan).toHaveBeenCalledWith(
+        { planId: 1, decision: 'approve' },
+        mgmtUser,
+      );
+      expect(result.status).toBe('ACTIVE');
     });
   });
 
   // ─── pausePlan ────────────────────────────────────────────────────────────
 
   describe('pausePlan', () => {
-    it('deve pausar plano activo', async () => {
-      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
-        ...basePlan,
-        status: 'ACTIVE',
-        actions: [],
-      });
-      mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'PAUSED' });
-
+    it('delega em DevelopmentPlansService.pause', async () => {
+      mockDevelopmentPlans.pause.mockResolvedValue({ ...basePlan, status: 'PAUSED' });
       const result = await service.pausePlan(1, 'Motivo de pausa');
+      expect(mockDevelopmentPlans.pause).toHaveBeenCalledWith(1, 'Motivo de pausa');
       expect(result).toBeDefined();
-    });
-
-    it('deve lançar BadRequestException se não activo', async () => {
-      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
-        ...basePlan,
-        status: 'DRAFT',
-        actions: [],
-      });
-      await expect(service.pausePlan(1)).rejects.toThrow(BadRequestException);
     });
   });
 
   // ─── completePlan ─────────────────────────────────────────────────────────
 
   describe('completePlan', () => {
-    it('deve completar plano', async () => {
-      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
-        ...basePlan,
-        actions: [{ xpReward: 30, status: 'COMPLETED' }],
-      });
-      mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'COMPLETED' });
-
+    it('delega em DevelopmentPlansService.complete e devolve a forma histórica', async () => {
+      mockDevelopmentPlans.complete.mockResolvedValue({ id: 1, status: 'COMPLETED' });
       const result = await service.completePlan(1);
-      expect((result as any).message).toBe('Plano concluído');
+      expect(mockDevelopmentPlans.complete).toHaveBeenCalledWith(1);
+      expect(result).toEqual({ message: 'Plano concluído', xpEarned: 300 });
     });
   });
 
   // ─── cancelPlan ───────────────────────────────────────────────────────────
 
   describe('cancelPlan', () => {
-    it('deve cancelar plano', async () => {
-      mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
-      mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'CANCELLED' });
-
+    it('delega em DevelopmentPlansService.cancel', async () => {
+      mockDevelopmentPlans.cancel.mockResolvedValue({ ...basePlan, status: 'CANCELLED' });
       const result = await service.cancelPlan(1, 'Motivo de cancelamento');
+      expect(mockDevelopmentPlans.cancel).toHaveBeenCalledWith(1, 'Motivo de cancelamento');
       expect(result).toBeDefined();
     });
   });

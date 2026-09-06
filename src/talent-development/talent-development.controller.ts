@@ -154,7 +154,7 @@ export class TalentDevelopmentController {
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Activar plano' })
   activate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
-    return this.svc.activatePlan(id, user.id);
+    return this.svc.activatePlan(id, user);
   }
 
   @Post('plans/:id/pause')

@@ -26,7 +26,6 @@ import {
   CareerSimulationDto,
   CreateFromTemplateDto,
   TalentDevelopmentDashboardFilterDto,
-  PlanStatus,
   ActionStatus,
   TalentTier,
 } from './talent-development.dto';
@@ -34,6 +33,12 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import type { CurrentUserData } from '../common/types/current-user';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import {
+  ApprovalDecision,
+  CreateDevelopmentPlanDto,
+  UpdateDevelopmentPlanDto,
+} from '../development-plans/development-plans.dto';
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS
@@ -98,7 +103,10 @@ function getTier(score: number): TalentTier {
 export class TalentDevelopmentService {
   private readonly logger = new Logger(TalentDevelopmentService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly developmentPlans: DevelopmentPlansService,
+  ) {}
 
   // ══════════════════════════════════════════════════════
   // TALENT POOL & SCORING
@@ -338,54 +346,15 @@ export class TalentDevelopmentService {
   // DEVELOPMENT PLANS — CRUD
   // ══════════════════════════════════════════════════════
 
+  // O lifecycle de PDI tem um dono único — DevelopmentPlansService (Fase G3).
+  // Estes métodos delegam; aqui fica só a validação de existência do colaborador
+  // e a forma de resposta histórica de /talent-development/plans (via getPlan).
   async createPlan(dto: TalentDevelopmentCreateDevelopmentPlanDto, _createdById: number) {
     const user = await this.prisma.read.user.findUnique({ where: { id: dto.userId } });
     if (!user) throw new NotFoundException('Colaborador não encontrado');
 
-    const plan = await this.prisma.developmentPlan.create({
-      data: {
-        name: dto.name,
-        goal: dto.goal,
-        userId: dto.userId,
-        managerId: dto.managerId,
-        priority: dto.priority ?? 'MEDIUM',
-        status: 'DRAFT',
-        startDate: dto.startDate ? new Date(dto.startDate) : null,
-        endDate: dto.endDate ? new Date(dto.endDate) : null,
-        period: dto.period,
-        notes: dto.notes,
-        isTemplate: dto.isTemplate ?? false,
-        performanceCycleId: dto.performanceCycleId,
-        overallProgress: 0,
-      },
-      include: {
-        user: { select: { id: true, fullName: true, avatarUrl: true } },
-        manager: { select: { id: true, fullName: true } },
-      },
-    });
-
-    if (!dto.isTemplate) {
-      await this.prisma.notificationLog
-        .create({
-          data: {
-            userId: dto.userId,
-            type: 'DEVELOPMENT_PLAN_CREATED',
-            message: `Um novo plano de desenvolvimento "${dto.name}" foi criado para si`,
-            metadata: JSON.stringify({}),
-          },
-        })
-        .catch(e => {
-          this.logger.warn({
-            userId: dto.userId,
-            action: 'DEVELOPMENT_PLAN_CREATED',
-            planId: plan.id,
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao criar notificação de plano de desenvolvimento criado',
-          });
-        });
-    }
-
-    return plan;
+    const plan = await this.developmentPlans.create(dto as unknown as CreateDevelopmentPlanDto);
+    return this.getPlan(plan.id);
   }
 
   async getPlans(filters: PlanFilterDto) {
@@ -455,112 +424,42 @@ export class TalentDevelopmentService {
   }
 
   async updatePlan(id: number, dto: TalentDevelopmentUpdateDevelopmentPlanDto) {
-    await this.getPlan(id);
-    const data: Prisma.DevelopmentPlanUpdateInput = {
-      ...dto,
-      startDate: undefined,
-      endDate: undefined,
-    };
-    if (dto.startDate) data.startDate = new Date(dto.startDate);
-    if (dto.endDate) data.endDate = new Date(dto.endDate);
-    return this.prisma.developmentPlan.update({ where: { id }, data });
+    return this.developmentPlans.update(id, dto as unknown as UpdateDevelopmentPlanDto);
   }
 
-  async activatePlan(id: number, _activatedById: number) {
-    const plan = await this.getPlan(id);
-    if (plan.status === PlanStatus.ACTIVE) throw new BadRequestException('Plano já está activo');
-    if (!plan.actions || plan.actions.length === 0)
-      throw new BadRequestException('Adicione pelo menos uma acção antes de activar');
-
-    const updated = await this.prisma.developmentPlan.update({
-      where: { id },
-      data: { status: 'ACTIVE', activatedAt: new Date() },
-    });
-
-    await this.prisma.notificationLog
-      .create({
-        data: {
-          userId: plan.user.id,
-          type: 'DEVELOPMENT_PLAN_ACTIVATED',
-          message: `O teu plano de desenvolvimento "${plan.name}" foi activado`,
-          metadata: JSON.stringify({}),
-        },
-      })
-      .catch(e => {
-        this.logger.warn({
-          userId: plan.user.id,
-          action: 'DEVELOPMENT_PLAN_ACTIVATED',
-          planId: id,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao criar notificação de plano de desenvolvimento activado',
-        });
-      });
-
-    return updated;
+  /**
+   * "Activar" um PDI passa pelo fluxo de aprovação canónico (Fase G3, decisão do
+   * dono do produto 2026-09-06): em `DRAFT` → submete para aprovação
+   * (`PENDING_APPROVAL`); já pendente → aprova (`ACTIVE`, com registo em
+   * `PdiApproval`). Fecha o buraco de auditoria de `DRAFT → ACTIVE` directo.
+   */
+  async activatePlan(id: number, user: CurrentUserData) {
+    const plan = await this.developmentPlans.findOne(id);
+    if (plan.status === 'DRAFT') {
+      if (!plan.actions || plan.actions.length === 0) {
+        throw new BadRequestException('Adicione pelo menos uma acção antes de activar');
+      }
+      return this.developmentPlans.submitForApproval(id, user);
+    }
+    return this.developmentPlans.approvePlan(
+      { planId: id, decision: 'approve' as ApprovalDecision },
+      user,
+    );
   }
 
   async pausePlan(id: number, reason?: string) {
-    const plan = await this.getPlan(id);
-    if (plan.status !== PlanStatus.ACTIVE)
-      throw new BadRequestException('Apenas planos activos podem ser pausados');
-
-    return this.prisma.developmentPlan.update({
-      where: { id },
-      data: {
-        status: 'PAUSED',
-        notes: reason
-          ? `${plan.notes ? plan.notes + '\n' : ''}[PAUSA ${new Date().toLocaleDateString('pt')}] ${reason}`
-          : plan.notes,
-      },
-    });
+    return this.developmentPlans.pause(id, reason);
   }
 
   async completePlan(id: number) {
-    const plan = await this.getPlan(id);
-
-    const totalXp = plan.actions.reduce((s, a) => s + (a.xpReward ?? 0), 0);
-
-    await this.prisma.developmentPlan.update({
-      where: { id },
-      data: { status: 'COMPLETED', completedAt: new Date(), overallProgress: 100 },
-    });
-
-    if (totalXp > 0) {
-      await this.prisma.userPoints.upsert({
-        where: { userId: plan.user.id },
-        create: { userId: plan.user.id, points: totalXp },
-        update: { points: { increment: totalXp } },
-      });
-    }
-
-    await this.prisma.notificationLog
-      .create({
-        data: {
-          userId: plan.user.id,
-          type: 'DEVELOPMENT_PLAN_COMPLETED',
-          message: `🎉 Parabéns! Concluíste o plano "${plan.name}"`,
-          metadata: JSON.stringify({}),
-        },
-      })
-      .catch(e => {
-        this.logger.warn({
-          userId: plan.user.id,
-          action: 'DEVELOPMENT_PLAN_COMPLETED',
-          planId: id,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao criar notificação de plano de desenvolvimento concluído',
-        });
-      });
-
-    return { message: 'Plano concluído', xpEarned: totalXp };
+    await this.developmentPlans.complete(id);
+    // Forma de resposta histórica de /talent-development/plans/:id/complete.
+    // O XP é o valor fixo do fluxo canónico (300).
+    return { message: 'Plano concluído', xpEarned: 300 };
   }
 
   async cancelPlan(id: number, reason: string) {
-    await this.getPlan(id);
-    return this.prisma.developmentPlan.update({
-      where: { id },
-      data: { status: 'CANCELLED', cancelReason: reason },
-    });
+    return this.developmentPlans.cancel(id, reason);
   }
 
   // ─── Templates ───────────────────────────────────────
