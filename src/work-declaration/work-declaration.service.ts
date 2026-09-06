@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PdfService } from '../pdf/pdf.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
+import { buildEmployeeSnapshotData, generateDeclarationTitle } from './declaration-render.helpers';
 import {
   DeclarationAuditAction,
   DeclarationStatus as PrismaDeclarationStatus,
@@ -217,7 +218,7 @@ export class WorkDeclarationService {
         purpose: dto.purpose,
         showSalary: dto.showSalary && (config?.allowSalaryExposure ?? false),
         watermark: dto.watermark ?? false,
-        employeeSnapshot,
+        employeeSnapshot: employeeSnapshot as unknown as Prisma.InputJsonObject,
         requestNotes: dto.requestNotes,
         expiresAt: config?.defaultValidity
           ? new Date(Date.now() + config.defaultValidity * 86400 * 1000)
@@ -273,7 +274,7 @@ export class WorkDeclarationService {
         purpose: dto.purpose,
         showSalary: dto.showSalary && (config?.allowSalaryExposure ?? false),
         watermark: dto.watermark ?? false,
-        employeeSnapshot,
+        employeeSnapshot: employeeSnapshot as unknown as Prisma.InputJsonObject,
         renderedContent,
         internalNotes: dto.internalNotes,
         expiresAt: config?.defaultValidity
@@ -741,65 +742,11 @@ export class WorkDeclarationService {
   }
 
   private generateTitle(type: string, templateName: string, locale?: string): string {
-    const titles: Record<string, Record<string, string>> = {
-      EMPLOYMENT: {
-        PT: 'Declaração de Vínculo Empregatício',
-        EN: 'Employment Declaration',
-        FR: "Déclaration d'Emploi",
-      },
-      TRAINING: {
-        PT: 'Declaração de Participação em Formação',
-        EN: 'Training Participation Declaration',
-        FR: 'Déclaration de Formation',
-      },
-      ATTENDANCE: {
-        PT: 'Declaração de Frequência',
-        EN: 'Attendance Declaration',
-        FR: 'Déclaration de Présence',
-      },
-      PERFORMANCE: {
-        PT: 'Declaração de Desempenho',
-        EN: 'Performance Declaration',
-        FR: 'Déclaration de Performance',
-      },
-      BANKING: {
-        PT: 'Declaração para Fins Bancários',
-        EN: 'Banking Purpose Declaration',
-        FR: 'Déclaration Bancaire',
-      },
-      LEGAL: {
-        PT: 'Declaração para Fins Legais',
-        EN: 'Legal Declaration',
-        FR: 'Déclaration Légale',
-      },
-      ACADEMIC: {
-        PT: 'Declaração para Fins Académicos',
-        EN: 'Academic Declaration',
-        FR: 'Déclaration Académique',
-      },
-      CUSTOM: { PT: templateName, EN: templateName, FR: templateName },
-    };
-    return titles[type]?.[locale ?? 'PT'] ?? templateName;
+    return generateDeclarationTitle(type, templateName, locale);
   }
 
   private async buildEmployeeSnapshot(employeeId: number, _tenantId: string) {
-    const employee = await this.prisma.user.findFirst({
-      where: { id: employeeId },
-      include: {
-        department: true,
-        position: true,
-      },
-    });
-    if (!employee) throw new NotFoundException('Colaborador não encontrado.');
-    return {
-      id: employee.id,
-      name: employee.fullName,
-      email: employee.email,
-      role: employee.position?.name ?? '',
-      department: employee.department?.name ?? '',
-      admissionDate: employee.hireDate ?? null,
-      nationalId: employee.nif ?? null,
-    };
+    return buildEmployeeSnapshotData(this.prisma, employeeId);
   }
 
   private buildVariableMap(
