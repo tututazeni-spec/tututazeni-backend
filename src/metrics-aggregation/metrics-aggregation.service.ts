@@ -70,8 +70,8 @@ const TRAINING_ROI_METHODOLOGY =
   'financeiro de roi-impact.calculateRoiFull + horas reais de analytics.getTrainingROI.';
 
 /** where escalar comum a headcount / trend (departmentId / managerId / positionId). */
-function scopeWhere(f: MetricScopeFilter): Record<string, number> {
-  const where: Record<string, number> = {};
+function scopeWhere(f: MetricScopeFilter): Prisma.UserWhereInput {
+  const where: Prisma.UserWhereInput = {};
   if (f.departmentId != null) where.departmentId = f.departmentId;
   if (f.managerId != null) where.managerId = f.managerId;
   if (f.positionId != null) where.positionId = f.positionId;
@@ -83,7 +83,7 @@ function scopeWhere(f: MetricScopeFilter): Record<string, number> {
  * já admitidos (`hireDate <= boundary`) e ainda não saídos nesse instante
  * (`exitDate == null || exitDate > boundary`). Mesmo padrão do `headcountTrend`.
  */
-function activeAsOfWhere(scope: Record<string, number>, boundary: Date): Record<string, unknown> {
+function activeAsOfWhere(scope: Prisma.UserWhereInput, boundary: Date): Prisma.UserWhereInput {
   return {
     ...scope,
     hireDate: { lte: boundary },
@@ -434,7 +434,7 @@ export class MetricsAggregationService {
     const costPerEnrollment = params.costPerEnrollment ?? TRAINING_ROI_COST_PER_ENROLLMENT;
     const benefitPerCompletion = params.benefitPerCompletion ?? TRAINING_ROI_BENEFIT_PER_COMPLETION;
 
-    const where: Record<string, unknown> = { enrolledAt: { gte: from, lte: to } };
+    const where: Prisma.EnrollmentWhereInput = { enrolledAt: { gte: from, lte: to } };
     if (params.departmentId != null) where.user = { departmentId: params.departmentId };
     if (params.courseId != null) where.courseId = params.courseId;
 
@@ -445,7 +445,7 @@ export class MetricsAggregationService {
       this.prisma.read.enrollment.count({ where: completedWhere }),
       this.prisma.read.enrollment.findMany({
         where: completedWhere,
-        include: { course: { select: { workloadHours: true } } },
+        select: { course: { select: { workloadHours: true } } },
       }),
     ]);
 
@@ -462,8 +462,7 @@ export class MetricsAggregationService {
     const paybackMonths = grossBenefit > 0 ? round(totalCost / (grossBenefit / 12), 1) : 0;
 
     const summedWorkloadHours = completedRows.reduce(
-      (sum, row) =>
-        sum + ((row as { course?: { workloadHours: number | null } }).course?.workloadHours ?? 0),
+      (sum, row) => sum + (row.course?.workloadHours ?? 0),
       0,
     );
     const trainingHours = summedWorkloadHours > 0 ? summedWorkloadHours : completed * 2;
@@ -763,7 +762,7 @@ export class MetricsAggregationService {
   // da equipa (do analytics). `completionRate` = `completions / enrollmentsTotal`.
 
   async managerDashboard(params: ManagerDashboardParams): Promise<ManagerDashboardResult> {
-    const { userId, period, departmentId } = params;
+    const { userId, period } = params;
     const since = periodStart(period);
     const prev = prevPeriodStart(period);
 
@@ -970,7 +969,14 @@ export class MetricsAggregationService {
     // `roleCode` omitido de propósito: no dashboard do gestor a regra
     // TEAM_PERFORMANCE_AT_RISK é estruturalmente inalcançável (só dispara com
     // roleCode ∈ {ADMIN,RH,LIDER}) — §5.2 / §7.
-    const alerts = await this.alerts({ scope: 'team', userId, departmentId });
+    //
+    // `departmentId` também omitido: a leitura da equipa (managerId + active,
+    // sem filtro de dept) e os KPIs correm sobre a equipa inteira do gestor;
+    // passar `departmentId` aqui estreitava `teamAlerts.teamWhere` a um
+    // sub-conjunto, produzindo `alerts[]` sobre uma população diferente dos
+    // KPIs ao lado. Comportamento igual ao antigo `dashboard.getManagerDashboard`
+    // (que usava `deptId` só como contexto de log).
+    const alerts = await this.alerts({ scope: 'team', userId });
 
     return {
       teamSize: teamIds.length,

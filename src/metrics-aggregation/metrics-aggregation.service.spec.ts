@@ -158,7 +158,7 @@ describe('MetricsAggregationService', () => {
       ]);
       mockPrisma.position.findMany = jest
         .fn()
-        .mockResolvedValue([{ id: 5, name: 'Dev', level: 2, _count: { users: 4 } }]);
+        .mockResolvedValue([{ id: 5, name: 'Dev', level: 'SENIOR', _count: { users: 4 } }]);
 
       const result = await service.headcount({});
 
@@ -184,7 +184,7 @@ describe('MetricsAggregationService', () => {
         { id: 2, name: 'RH', count: 9 },
         { id: 1, name: 'Eng', count: 3 },
       ]);
-      expect(result.byPosition).toEqual([{ id: 5, name: 'Dev', level: 2, count: 4 }]);
+      expect(result.byPosition).toEqual([{ id: 5, name: 'Dev', level: 'SENIOR', count: 4 }]);
     });
 
     it('byTenure faz bucketing sobre activos (base hireDate ?? createdAt)', async () => {
@@ -472,7 +472,7 @@ describe('MetricsAggregationService', () => {
         .mockResolvedValueOnce(completed);
     };
 
-    it('where usa a janela enrolledAt [from,to]; completed filtra status COMPLETED; findMany inclui course.workloadHours', async () => {
+    it('where usa a janela enrolledAt [from,to]; completed filtra status COMPLETED; findMany seleciona (não include) course.workloadHours', async () => {
       setCounts(10, 4);
       mockPrisma.enrollment.findMany = makeFind([]);
       const from = new Date('2025-01-01T00:00:00.000Z');
@@ -492,7 +492,8 @@ describe('MetricsAggregationService', () => {
 
       expect(findCall.where.enrolledAt).toEqual({ gte: from, lte: to });
       expect(findCall.where.status).toBe('COMPLETED');
-      expect(findCall.include).toEqual({ course: { select: { workloadHours: true } } });
+      expect(findCall.select).toEqual({ course: { select: { workloadHours: true } } });
+      expect(findCall.include).toBeUndefined();
     });
 
     it('roiPct = round((grossBenefit - totalCost) / totalCost * 100, 1); bcr; netBenefit; paybackMonths', async () => {
@@ -1198,6 +1199,15 @@ describe('MetricsAggregationService', () => {
         expect(a).toHaveProperty('key');
         expect(a).toHaveProperty('severity');
       });
+    });
+
+    it('a chamada interna a this.alerts é feita SEM departmentId (alerts sobre a equipa inteira, como os KPIs)', async () => {
+      mockPrisma.user.findMany = makeFind(teamRows);
+      const alertsSpy = jest.spyOn(service, 'alerts');
+      await service.managerDashboard({ userId: 7, departmentId: 99 });
+      expect(alertsSpy).toHaveBeenCalledWith({ scope: 'team', userId: 7 });
+      expect(alertsSpy.mock.calls[0][0]).not.toHaveProperty('departmentId');
+      alertsSpy.mockRestore();
     });
 
     it('KPIs: completedEnrollments (janela) e completions (bruto) são distintos', async () => {
