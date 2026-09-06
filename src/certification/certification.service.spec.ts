@@ -5,26 +5,45 @@ import { NotFoundException, ConflictException } from '@nestjs/common';
 import { AuditService } from '../common/services/audit.service';
 
 const mockUser = { fullName: 'João Teste', email: 'joao@teste.com' };
+// Fase F2: forma de `Certificate` (Int id, validationCode, revoked, legacyType,
+// legacyIssuedCertId dá o id string ao contrato).
 const mockCert = {
-  id: 'cert-1',
+  id: 1,
   code: 'CERT-00001',
-  verificationCode: 'INNOVA-123-ABCD',
+  validationCode: 'INNOVA-123-ABCD',
   hashCode: 'hash123',
   userId: 1,
+  courseId: null,
+  programId: null,
+  templateId: null,
   title: 'Curso Teste',
   recipientName: 'João Teste',
+  issuerName: 'INNOVA',
   type: 'COURSE',
-  isRevoked: false,
+  legacyType: 'COURSE',
+  legacyIssuedCertId: 'cert-1',
+  revoked: false,
+  revokedAt: null,
+  revokeReason: null,
+  revokedById: null,
   deletedAt: null,
   expiresAt: null,
+  fileUrl: null,
+  pdfUrl: null,
+  publicUrl: 'https://x/verify/INNOVA-123-ABCD',
+  score: null,
+  issuedById: 9,
+  issuedAt: new Date('2026-03-01'),
+  downloadCount: 0,
   verifyCount: 0,
+  metadata: null,
   user: mockUser,
-  issuedBy: { fullName: 'Admin' },
-  template: null,
 };
 
 const mockPrisma = {
-  user: { findUnique: jest.fn() },
+  user: { findUnique: jest.fn(), findMany: jest.fn() },
+  course: { findUnique: jest.fn() },
+  leadershipProgram: { findUnique: jest.fn() },
   certificateTemplate: {
     create: jest.fn(),
     findMany: jest.fn(),
@@ -32,7 +51,7 @@ const mockPrisma = {
     updateMany: jest.fn(),
     count: jest.fn(),
   },
-  issuedCertificate: {
+  certificate: {
     create: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
@@ -90,15 +109,34 @@ describe('CertificationService', () => {
   });
 
   describe('issueCertificate', () => {
-    it('deve emitir certificado com código e verificação', async () => {
+    it('deve emitir certificado (Certificate) com type traduzido e devolver a forma IssuedShape', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-      mockPrisma.issuedCertificate.findFirst.mockResolvedValue(null);
-      mockPrisma.issuedCertificate.create.mockResolvedValue(mockCert);
+      mockPrisma.certificate.findFirst.mockResolvedValue(null);
+      mockPrisma.certificate.create.mockResolvedValue({
+        ...mockCert,
+        type: 'LEADERSHIP',
+        legacyType: 'PROGRAM',
+      });
       mockPrisma.auditLog.create.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
-      const result = await service.issueCertificate({ userId: 1, title: 'Curso Teste' }, 1);
+      const result = await service.issueCertificate(
+        { userId: 1, title: 'Curso Teste', type: 'PROGRAM' } as any,
+        1,
+      );
+      expect(mockPrisma.certificate.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: 'LEADERSHIP',
+            legacyType: 'PROGRAM',
+            issuedById: 1,
+          }),
+        }),
+      );
       expect(result.code).toBe('CERT-00001');
+      expect(result.verificationCode).toBe('INNOVA-123-ABCD');
+      expect(result.isRevoked).toBe(false);
+      expect(result.type).toBe('PROGRAM'); // legacyType round-trip
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ type: 'CERTIFICATE_ISSUED' }),
@@ -116,8 +154,8 @@ describe('CertificationService', () => {
 
   describe('verify', () => {
     it('deve retornar valid:true para certificado válido', async () => {
-      mockPrisma.issuedCertificate.findUnique.mockResolvedValue(mockCert);
-      mockPrisma.issuedCertificate.update.mockResolvedValue({});
+      mockPrisma.certificate.findFirst.mockResolvedValue(mockCert);
+      mockPrisma.certificate.update.mockResolvedValue({});
 
       const result = await service.verify('INNOVA-123-ABCD');
       expect(result.valid).toBe(true);
@@ -125,15 +163,15 @@ describe('CertificationService', () => {
     });
 
     it('deve retornar valid:false para código inválido', async () => {
-      mockPrisma.issuedCertificate.findUnique.mockResolvedValue(null);
+      mockPrisma.certificate.findFirst.mockResolvedValue(null);
       const result = await service.verify('CODIGO-INVALIDO');
       expect(result.valid).toBe(false);
     });
 
     it('deve retornar valid:false para certificado revogado', async () => {
-      mockPrisma.issuedCertificate.findUnique.mockResolvedValue({
+      mockPrisma.certificate.findFirst.mockResolvedValue({
         ...mockCert,
-        isRevoked: true,
+        revoked: true,
         revokedAt: new Date(),
       });
       const result = await service.verify('INNOVA-123-ABCD');
@@ -142,7 +180,7 @@ describe('CertificationService', () => {
     });
 
     it('deve retornar valid:false para certificado expirado', async () => {
-      mockPrisma.issuedCertificate.findUnique.mockResolvedValue({
+      mockPrisma.certificate.findFirst.mockResolvedValue({
         ...mockCert,
         expiresAt: new Date('2020-01-01'),
       });
@@ -153,22 +191,27 @@ describe('CertificationService', () => {
   });
 
   describe('revokeCertificate', () => {
-    it('deve revogar e notificar o utilizador', async () => {
-      mockPrisma.issuedCertificate.findUnique.mockResolvedValue(mockCert);
-      mockPrisma.issuedCertificate.update.mockResolvedValue({
-        ...mockCert,
-        isRevoked: true,
-      });
+    it('deve revogar (revoked+revokedAt/revokeReason/revokedById) e notificar', async () => {
+      mockPrisma.certificate.findFirst.mockResolvedValue(mockCert);
+      mockPrisma.certificate.update.mockResolvedValue({ ...mockCert, revoked: true });
       mockPrisma.auditLog.create.mockResolvedValue({});
       mockPrisma.notificationLog.create.mockResolvedValue({});
 
       const result = await service.revokeCertificate(
         'cert-1',
         { reason: 'Erro de emissão' },
-        {
-          id: 1,
-          role: { name: 'ADMIN' },
-        },
+        { id: 1, role: { name: 'ADMIN' } },
+      );
+      expect(mockPrisma.certificate.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 1 },
+          data: expect.objectContaining({
+            revoked: true,
+            revokeReason: 'Erro de emissão',
+            revokedById: 1,
+            revokedAt: expect.any(Date),
+          }),
+        }),
       );
       expect(result.isRevoked).toBe(true);
       expect(mockPrisma.notificationLog.create).toHaveBeenCalledWith(
@@ -179,10 +222,7 @@ describe('CertificationService', () => {
     });
 
     it('deve lançar ConflictException se já revogado', async () => {
-      mockPrisma.issuedCertificate.findUnique.mockResolvedValue({
-        ...mockCert,
-        isRevoked: true,
-      });
+      mockPrisma.certificate.findFirst.mockResolvedValue({ ...mockCert, revoked: true });
       await expect(
         service.revokeCertificate(
           'cert-1',
@@ -195,8 +235,8 @@ describe('CertificationService', () => {
 
   describe('downloadCertificate', () => {
     it('deve incrementar downloadCount e auditar', async () => {
-      mockPrisma.issuedCertificate.findUnique.mockResolvedValue(mockCert);
-      mockPrisma.issuedCertificate.update.mockResolvedValue({});
+      mockPrisma.certificate.findFirst.mockResolvedValue(mockCert);
+      mockPrisma.certificate.update.mockResolvedValue({});
       mockPrisma.auditLog.create.mockResolvedValue({});
 
       const result = await service.downloadCertificate('cert-1', {
@@ -291,16 +331,19 @@ describe('CertificationService', () => {
   });
 
   describe('getMyCertificates', () => {
-    it('deve retornar certificados paginados do utilizador', async () => {
+    it('deve retornar certificados paginados do utilizador na forma IssuedShape', async () => {
       mockPrisma.$transaction.mockResolvedValue([[mockCert], 1]);
       const result = await service.getMyCertificates(1, { page: 1, limit: 20 });
       expect(result.total).toBe(1);
+      expect((result.data as any[])[0]).toEqual(
+        expect.objectContaining({ id: 'cert-1', verificationCode: 'INNOVA-123-ABCD' }),
+      );
     });
   });
 
   describe('getDashboard', () => {
     it('deve retornar totais de certificados e badges', async () => {
-      mockPrisma.read.issuedCertificate.groupBy.mockResolvedValue([]);
+      mockPrisma.read.certificate.groupBy.mockResolvedValue([]);
       mockPrisma.$transaction.mockResolvedValue([
         20,
         5,
