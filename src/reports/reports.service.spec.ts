@@ -1,6 +1,44 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ReportsService } from './reports.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+
+// ─── MetricsAggregationService mock (Fase H — Task 8) ─────────────────────
+// reports.headcountReport / reports.turnoverReport delegam os números à camada
+// canónica e montam o relatório à volta deles.
+const DEFAULT_HEADCOUNT = {
+  total: 0,
+  active: 0,
+  inactive: 0,
+  newHires: 0,
+  newHiresPrev: 0,
+  newHiresTrend: 0,
+  avgTenureMonths: 0,
+  byTenure: { '<1yr': 0, '1-2yr': 0, '2-5yr': 0, '5+yr': 0 },
+  byDepartment: [] as { id: number; name: string; count: number }[],
+  byPosition: [] as { id: number; name: string; level?: string; count: number }[],
+  period: { from: new Date('2026-01-01'), to: new Date('2026-12-31') },
+  generatedAt: new Date('2026-12-31'),
+};
+const DEFAULT_TURNOVER = {
+  leavers: 0,
+  avgHeadcount: 0,
+  turnoverRate: 0,
+  retentionRate: 100,
+  turnoverRatePrev: 0,
+  turnoverTrend: 0,
+  newHires: 0,
+  netHeadcountChange: 0,
+  avgTenureMonths: 0,
+  insights: [] as string[],
+  period: { from: new Date('2026-01-01'), to: new Date('2026-12-31') },
+};
+const mockMetrics = {
+  headcount: jest.fn(),
+  turnover: jest.fn(),
+  trainingRoi: jest.fn(),
+  alerts: jest.fn(),
+};
 
 const positionMock = {
   findMany: jest.fn().mockResolvedValue([]),
@@ -104,6 +142,8 @@ describe('ReportsService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockMetrics.headcount.mockResolvedValue(DEFAULT_HEADCOUNT);
+    mockMetrics.turnover.mockResolvedValue(DEFAULT_TURNOVER);
     mockPrisma.user.count.mockResolvedValue(100);
     mockPrisma.user.findMany.mockResolvedValue([]);
     mockPrisma.department.findMany.mockResolvedValue([]);
@@ -126,40 +166,111 @@ describe('ReportsService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ReportsService, { provide: PrismaService, useValue: mockPrismaProxy }],
+      providers: [
+        ReportsService,
+        { provide: PrismaService, useValue: mockPrismaProxy },
+        { provide: MetricsAggregationService, useValue: mockMetrics },
+      ],
     }).compile();
     service = module.get<ReportsService>(ReportsService);
   });
 
   describe('headcountReport', () => {
-    it('deve retornar relatório headcount', async () => {
-      mockPrisma.user.count
-        .mockResolvedValueOnce(100)
-        .mockResolvedValueOnce(90)
-        .mockResolvedValueOnce(5)
-        .mockResolvedValueOnce(3);
+    it('delega a metrics.headcount e monta o relatório à volta do número canónico', async () => {
+      mockMetrics.headcount.mockResolvedValue({
+        ...DEFAULT_HEADCOUNT,
+        total: 100,
+        active: 90,
+        inactive: 10,
+        newHires: 5,
+        newHiresTrend: 25,
+        byDepartment: [{ id: 1, name: 'TI', count: 40 }],
+        byPosition: [{ id: 9, name: 'Dev', level: 'SENIOR', count: 20 }],
+      });
+
+      const result = await service.headcountReport({ departmentId: 3 });
+
+      expect(mockMetrics.headcount).toHaveBeenCalledWith(
+        expect.objectContaining({ departmentId: 3, from: expect.any(Date), to: expect.any(Date) }),
+      );
+      expect(result.report).toBe('HEADCOUNT');
+      expect(result.summary.total).toBe(100);
+      expect(result.summary.active).toBe(90);
+      expect(result.summary.inactive).toBe(10);
+      expect(result.summary.newHires).toBe(5);
+      expect(result.summary.newHiresTrend).toBe(25);
+      expect(result.summary.turnoverRate).toBe(10); // 10 / 100 * 100 — derivado no adapter
+      expect(result.byDepartment).toEqual([{ id: 1, name: 'TI', count: 40 }]);
+      expect(result.byPosition).toEqual([{ id: 9, name: 'Dev', level: 'SENIOR', count: 20 }]);
+    });
+
+    it('degrada para relatório zerado (shape-válido) + logger.warn quando metrics.headcount falha', async () => {
+      const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+      mockMetrics.headcount.mockRejectedValue(new Error('db down'));
 
       const result = await service.headcountReport({});
 
       expect(result.report).toBe('HEADCOUNT');
-      expect(result.summary.total).toBe(100);
-      expect(result.summary.active).toBe(90);
+      expect(result.summary).toEqual({
+        total: 0,
+        active: 0,
+        inactive: 0,
+        newHires: 0,
+        newHiresTrend: 0,
+        turnoverRate: 0,
+      });
+      expect(result.byDepartment).toEqual([]);
+      expect(result.byPosition).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(expect.objectContaining({ action: 'REPORTS_HEADCOUNT' }));
+      warn.mockRestore();
     });
   });
 
   describe('turnoverReport', () => {
-    it('deve retornar relatório de turnover', async () => {
-      mockPrisma.user.count
-        .mockResolvedValueOnce(100)
-        .mockResolvedValueOnce(10)
-        .mockResolvedValueOnce(8)
-        .mockResolvedValueOnce(5);
+    it('delega a metrics.turnover, mantém total/inactive locais e usa r.insights', async () => {
+      mockPrisma.user.count.mockResolvedValueOnce(100).mockResolvedValueOnce(10); // total, inactive
+      mockMetrics.turnover.mockResolvedValue({
+        ...DEFAULT_TURNOVER,
+        leavers: 8,
+        turnoverRate: 8,
+        retentionRate: 92,
+        newHires: 5,
+        insights: ['linha 1', 'linha 2'],
+      });
+
+      const result = await service.turnoverReport({ departmentId: 2 });
+
+      expect(mockMetrics.turnover).toHaveBeenCalledWith(
+        expect.objectContaining({ departmentId: 2, from: expect.any(Date), to: expect.any(Date) }),
+      );
+      expect(result.report).toBe('TURNOVER');
+      expect(result.summary.total).toBe(100);
+      expect(result.summary.inactive).toBe(10);
+      expect(result.summary.newInPeriod).toBe(5);
+      expect(result.summary.leftInPeriod).toBe(8);
+      expect(result.summary.turnoverRate).toBe(8);
+      expect(result.summary.retentionRate).toBe(92);
+      expect(result.insights).toEqual(['linha 1', 'linha 2']);
+    });
+
+    it('degrada (turnover 0, retention 100, insights []) + warn quando metrics.turnover falha', async () => {
+      const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+      mockPrisma.user.count.mockResolvedValueOnce(50).mockResolvedValueOnce(4);
+      mockMetrics.turnover.mockRejectedValue(new Error('replica down'));
 
       const result = await service.turnoverReport({});
 
-      expect(result.report).toBe('TURNOVER');
-      expect(result.summary.turnoverRate).toBe(5);
-      expect(result.summary.retentionRate).toBe(95);
+      expect(result.summary).toEqual({
+        total: 50,
+        inactive: 4,
+        newInPeriod: 0,
+        leftInPeriod: 0,
+        turnoverRate: 0,
+        retentionRate: 100,
+      });
+      expect(result.insights).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(expect.objectContaining({ action: 'REPORTS_TURNOVER' }));
+      warn.mockRestore();
     });
   });
 

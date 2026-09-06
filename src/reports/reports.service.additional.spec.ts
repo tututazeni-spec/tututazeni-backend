@@ -1,6 +1,41 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ReportsService } from './reports.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+
+const DEFAULT_HEADCOUNT = {
+  total: 0,
+  active: 0,
+  inactive: 0,
+  newHires: 0,
+  newHiresPrev: 0,
+  newHiresTrend: 0,
+  avgTenureMonths: 0,
+  byTenure: { '<1yr': 0, '1-2yr': 0, '2-5yr': 0, '5+yr': 0 },
+  byDepartment: [] as { id: number; name: string; count: number }[],
+  byPosition: [] as { id: number; name: string; level?: string; count: number }[],
+  period: { from: new Date('2026-01-01'), to: new Date('2026-12-31') },
+  generatedAt: new Date('2026-12-31'),
+};
+const DEFAULT_TURNOVER = {
+  leavers: 0,
+  avgHeadcount: 0,
+  turnoverRate: 0,
+  retentionRate: 100,
+  turnoverRatePrev: 0,
+  turnoverTrend: 0,
+  newHires: 0,
+  netHeadcountChange: 0,
+  avgTenureMonths: 0,
+  insights: [] as string[],
+  period: { from: new Date('2026-01-01'), to: new Date('2026-12-31') },
+};
+const mockMetrics = {
+  headcount: jest.fn(),
+  turnover: jest.fn(),
+  trainingRoi: jest.fn(),
+  alerts: jest.fn(),
+};
 
 const mockPrisma: any = {
   user: {
@@ -50,6 +85,8 @@ describe('ReportsService (additional)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockMetrics.headcount.mockResolvedValue(DEFAULT_HEADCOUNT);
+    mockMetrics.turnover.mockResolvedValue(DEFAULT_TURNOVER);
     Object.defineProperty(mockPrisma, 'read', {
       get() {
         return mockPrisma;
@@ -57,7 +94,11 @@ describe('ReportsService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ReportsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        ReportsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: MetricsAggregationService, useValue: mockMetrics },
+      ],
     }).compile();
     service = module.get<ReportsService>(ReportsService);
   });
@@ -65,20 +106,25 @@ describe('ReportsService (additional)', () => {
   // ─── headcountReport ──────────────────────────────────────────
 
   describe('headcountReport', () => {
-    it('deve gerar relatório de headcount', async () => {
-      mockPrisma.user.count.mockResolvedValue(600);
-      mockPrisma.department.findMany.mockResolvedValue([
-        { id: 1, name: 'TI', _count: { users: 50 } },
-      ]);
+    it('delega a metrics.headcount e devolve a forma do relatório', async () => {
+      mockMetrics.headcount.mockResolvedValue({
+        ...DEFAULT_HEADCOUNT,
+        total: 600,
+        active: 580,
+        inactive: 20,
+        byDepartment: [{ id: 1, name: 'TI', count: 50 }],
+      });
       const result = await service.headcountReport(baseFilter);
-      expect(result).toBeDefined();
-      expect(result).toHaveProperty('summary.total');
+      expect(mockMetrics.headcount).toHaveBeenCalled();
+      expect(result).toHaveProperty('summary.total', 600);
+      expect(result.byDepartment).toEqual([{ id: 1, name: 'TI', count: 50 }]);
     });
 
-    it('deve filtrar por departamento', async () => {
-      mockPrisma.user.count.mockResolvedValue(50);
-      mockPrisma.department.findMany.mockResolvedValue([]);
+    it('passa o departmentId do filtro a metrics.headcount', async () => {
       const result = await service.headcountReport({ ...baseFilter, departmentId: 1 });
+      expect(mockMetrics.headcount).toHaveBeenCalledWith(
+        expect.objectContaining({ departmentId: 1 }),
+      );
       expect(result).toBeDefined();
     });
   });

@@ -7,8 +7,43 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ReportsService } from './reports.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
 
 const baseFilter = { from: '2026-01-01', to: '2026-06-30' };
+
+const DEFAULT_TURNOVER = {
+  leavers: 0,
+  avgHeadcount: 0,
+  turnoverRate: 0,
+  retentionRate: 100,
+  turnoverRatePrev: 0,
+  turnoverTrend: 0,
+  newHires: 0,
+  netHeadcountChange: 0,
+  avgTenureMonths: 0,
+  insights: [] as string[],
+  period: { from: new Date('2026-01-01'), to: new Date('2026-06-30') },
+};
+const DEFAULT_HEADCOUNT = {
+  total: 0,
+  active: 0,
+  inactive: 0,
+  newHires: 0,
+  newHiresPrev: 0,
+  newHiresTrend: 0,
+  avgTenureMonths: 0,
+  byTenure: { '<1yr': 0, '1-2yr': 0, '2-5yr': 0, '5+yr': 0 },
+  byDepartment: [] as { id: number; name: string; count: number }[],
+  byPosition: [] as { id: number; name: string; level?: string; count: number }[],
+  period: { from: new Date('2026-01-01'), to: new Date('2026-06-30') },
+  generatedAt: new Date('2026-06-30'),
+};
+const mockMetrics = {
+  headcount: jest.fn(),
+  turnover: jest.fn(),
+  trainingRoi: jest.fn(),
+  alerts: jest.fn(),
+};
 
 function buildMockPrisma() {
   const crud = () => ({
@@ -60,6 +95,8 @@ describe('ReportsService (progress)', () => {
 
   beforeEach(async () => {
     mockPrisma = buildMockPrisma();
+    mockMetrics.headcount.mockReset().mockResolvedValue(DEFAULT_HEADCOUNT);
+    mockMetrics.turnover.mockReset().mockResolvedValue(DEFAULT_TURNOVER);
 
     Object.defineProperty(mockPrisma, 'read', {
       get() {
@@ -68,7 +105,11 @@ describe('ReportsService (progress)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ReportsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        ReportsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: MetricsAggregationService, useValue: mockMetrics },
+      ],
     }).compile();
 
     service = module.get<ReportsService>(ReportsService);
@@ -77,35 +118,42 @@ describe('ReportsService (progress)', () => {
   // ─── turnoverReport ─────────────────────────────────────────────
 
   describe('turnoverReport', () => {
-    it('deve gerar relatório de turnover com zero saídas', async () => {
+    it('deve gerar relatório de turnover com zero saídas (números canónicos)', async () => {
       mockPrisma.user.count
-        .mockResolvedValueOnce(100) // total
-        .mockResolvedValueOnce(0) // inactive
-        .mockResolvedValueOnce(0) // newInPeriod
-        .mockResolvedValueOnce(0); // leftInPeriod (zero saídas)
+        .mockResolvedValueOnce(100) // total (local)
+        .mockResolvedValueOnce(0); // inactive (local)
+      mockMetrics.turnover.mockResolvedValue({ ...DEFAULT_TURNOVER });
       const result = (await service.turnoverReport(baseFilter)) as any;
       expect(result.report).toBe('TURNOVER');
       expect(result.summary).toBeDefined();
+      expect(result.summary.total).toBe(100);
       expect(result.summary.turnoverRate).toBe(0);
       expect(result.summary.retentionRate).toBe(100);
     });
 
-    it('deve filtrar por departamento', async () => {
+    it('delega o departmentId do filtro a metrics.turnover', async () => {
       mockPrisma.user.count.mockResolvedValue(50);
       await service.turnoverReport({ ...baseFilter, departmentId: 2 });
+      expect(mockMetrics.turnover).toHaveBeenCalledWith(
+        expect.objectContaining({ departmentId: 2, from: expect.any(Date), to: expect.any(Date) }),
+      );
       expect(mockPrisma.user.count).toHaveBeenCalledWith(
         expect.objectContaining({ where: expect.objectContaining({ departmentId: 2 }) }),
       );
     });
 
-    it('deve calcular turnoverRate quando há saídas', async () => {
-      mockPrisma.user.count
-        .mockResolvedValueOnce(100) // total
-        .mockResolvedValueOnce(10) // inactive
-        .mockResolvedValueOnce(5) // newInPeriod
-        .mockResolvedValueOnce(8); // leftInPeriod
+    it('turnoverRate/insights vêm do resultado canónico', async () => {
+      mockPrisma.user.count.mockResolvedValueOnce(100).mockResolvedValueOnce(10);
+      mockMetrics.turnover.mockResolvedValue({
+        ...DEFAULT_TURNOVER,
+        leavers: 8,
+        turnoverRate: 8,
+        retentionRate: 92,
+        insights: ['⚠️ Turnover acima da média: 8%', '8 saída(s) no período'],
+      });
       const result = (await service.turnoverReport(baseFilter)) as any;
       expect(result.summary.turnoverRate).toBe(8);
+      expect(result.summary.leftInPeriod).toBe(8);
       expect(result.insights.length).toBeGreaterThan(0);
     });
   });
