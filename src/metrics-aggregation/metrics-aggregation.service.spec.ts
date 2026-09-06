@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MetricsAggregationService } from './metrics-aggregation.service';
+import { evaluateRule_PDI_ACTION_CRITICAL, evaluateRule_PDI_PLAN_OVERDUE } from './alert-rules';
 import { PrismaService } from '../prisma/prisma.service';
 
 const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
@@ -1217,5 +1218,21 @@ describe('MetricsAggregationService', () => {
       expect(r.kpis.completions).toBe(8);
       expect(r.kpis.completionRate).toBe(40); // 8 / 20 * 100
     });
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// alert-rules — no-fire guards (regras 12/13, funções puras)
+// ════════════════════════════════════════════════════════════════════
+
+describe('alert-rules no-fire guards', () => {
+  it('#12 evaluateRule_PDI_PLAN_OVERDUE(0) → null (ambos os scopes)', () => {
+    expect(evaluateRule_PDI_PLAN_OVERDUE(0, 'team')).toBeNull();
+    expect(evaluateRule_PDI_PLAN_OVERDUE(0, 'organization')).toBeNull();
+  });
+
+  it('#13 evaluateRule_PDI_ACTION_CRITICAL(0) → null (ambos os scopes)', () => {
+    expect(evaluateRule_PDI_ACTION_CRITICAL(0, 'team')).toBeNull();
+    expect(evaluateRule_PDI_ACTION_CRITICAL(0, 'organization')).toBeNull();
   });
 });

@@ -142,6 +142,50 @@ function pctTrend(current: number, previous: number): number {
   return round(((current - previous) / previous) * 100, 1);
 }
 
+// ── helpers de alerta partilhados (drift-sensitive) ──────────────────
+// As 3 funções abaixo eram copiadas verbatim entre `organizationAlerts` /
+// `teamAlerts` / `managerDashboard`. São puras (não tocam na BD) — recebem as
+// linhas já lidas. Ter uma cópia única garante que os sites não divergem.
+
+/**
+ * Membro "em risco" (§4.2): última review com `score < 2.5` OU (0 conclusões e
+ * >0 inscrições). Usado por `teamAlerts` (contagem de `MANAGER_TEAM_RISK`) e por
+ * `managerDashboard` (`team[].atRisk` por membro). Ambos os sites calculavam
+ * `es` / `done` / `latest` de forma idêntica sobre selects idênticos
+ * (`{ userId, status }` / `{ userId, score, createdAt }` ordenado por
+ * `createdAt desc`) — comportamento preservado tal e qual.
+ */
+function isMemberAtRisk(
+  memberEnrollments: { userId: number; status: EnrollmentStatus }[],
+  memberReviews: { userId: number; score: number | null }[],
+  userId: number,
+): boolean {
+  const es = memberEnrollments.filter(e => e.userId === userId);
+  const done = es.filter(e => e.status === EnrollmentStatus.COMPLETED).length;
+  const latest = memberReviews.find(r => r.userId === userId);
+  return (latest !== undefined && (latest.score ?? 0) < 2.5) || (done === 0 && es.length > 0);
+}
+
+/**
+ * Taxa de formações obrigatórias concluídas (§4.2 / §5.2). Zero-caso → 100 (sem
+ * obrigatórias ⇒ sem incumprimento). Os dois sites (`teamAlerts` e
+ * `managerDashboard` kpis) usavam já este exacto shape e este mesmo default.
+ */
+function mandatoryRate(total: number, completed: number): number {
+  return total > 0 ? round((completed / total) * 100, 1) : 100;
+}
+
+/**
+ * Nº de colaboradores de `candidateIds` sem nenhuma inscrição recente. As
+ * `recentEnrollmentRows` já vêm filtradas na query por `enrolledAt >= since60`
+ * + `distinct: ['userId']`; aqui só se faz a diferença de conjuntos. Usado por
+ * `organizationAlerts` e `teamAlerts` (regra `INACTIVE_COLLABORATORS`).
+ */
+function countInactive(candidateIds: number[], recentEnrollmentRows: { userId: number }[]): number {
+  const recentIds = new Set(recentEnrollmentRows.map(e => e.userId));
+  return candidateIds.filter(id => !recentIds.has(id)).length;
+}
+
 function emptyManagerKpis(): ManagerDashboardKpis {
   return {
     pdpCoverage: 0,
@@ -579,8 +623,7 @@ export class MetricsAggregationService {
       }),
     ]);
 
-    const recentIds = new Set(recentRows.map(e => e.userId));
-    const inactiveCount = userIds.filter(id => !recentIds.has(id)).length;
+    const inactiveCount = countInactive(userIds, recentRows);
 
     return [
       evaluateRule_PDI_ACTIONS_OVERDUE(overdueActionsOrg, 'organization'),
@@ -675,18 +718,13 @@ export class MetricsAggregationService {
     ]);
 
     // atRisk por membro (§4.2): última review `< 2.5` OU (0 conclusões e >0 inscrições).
-    const atRisk = teamIds.filter(id => {
-      const es = memberEnrollments.filter(e => e.userId === id);
-      const done = es.filter(e => e.status === EnrollmentStatus.COMPLETED).length;
-      const latest = memberPerfReviews.find(r => r.userId === id);
-      return (latest !== undefined && (latest.score ?? 0) < 2.5) || (done === 0 && es.length > 0);
-    }).length;
+    const atRisk = teamIds.filter(id =>
+      isMemberAtRisk(memberEnrollments, memberPerfReviews, id),
+    ).length;
 
     const pdpCoverage = teamIds.length > 0 ? round((activePlans / teamIds.length) * 100, 1) : 0;
-    const mandatoryRate =
-      mandatoryTotal > 0 ? round((mandatoryComplete / mandatoryTotal) * 100, 1) : 100;
-    const recentIds = new Set(recentRows.map(e => e.userId));
-    const inactiveCount = teamIds.filter(id => !recentIds.has(id)).length;
+    const mandatoryRatePct = mandatoryRate(mandatoryTotal, mandatoryComplete);
+    const inactiveCount = countInactive(teamIds, recentRows);
 
     const out: (MetricAlert | null)[] = [
       evaluateRule_EVAL_360_PENDING(pendingEvals, 'team'),
@@ -698,7 +736,7 @@ export class MetricsAggregationService {
     if (teamIds.length > 0) {
       out.push(
         evaluateRule_MANAGER_TEAM_RISK(atRisk),
-        evaluateRule_MANDATORY_RATE_LOW(mandatoryRate),
+        evaluateRule_MANDATORY_RATE_LOW(mandatoryRatePct),
         evaluateRule_PDP_COVERAGE_LOW(pdpCoverage),
       );
     }
@@ -838,6 +876,7 @@ export class MetricsAggregationService {
       this.prisma.read.developmentPlan.findMany({
         where: { ...teamUserFilter, isTemplate: false, status: { in: ['ACTIVE', 'DRAFT'] } },
         select: { userId: true, status: true, overallProgress: true },
+        orderBy: { updatedAt: 'desc' },
       }),
       this.prisma.read.performanceReview.findMany({
         where: { ...teamUserFilter },
@@ -869,8 +908,7 @@ export class MetricsAggregationService {
       avgScore: avgScoreRaw != null ? round(avgScoreRaw, 2) : null,
       scoreTrend:
         avgScoreRaw != null && prevScoreRaw != null ? pctTrend(avgScoreRaw, prevScoreRaw) : null,
-      mandatoryRate:
-        mandatoryTotal > 0 ? round((mandatoryComplete / mandatoryTotal) * 100, 1) : 100,
+      mandatoryRate: mandatoryRate(mandatoryTotal, mandatoryComplete),
       engagementResponses,
       avatarSessions,
       pendingEvals,
@@ -895,8 +933,7 @@ export class MetricsAggregationService {
         enrollment: { completed: done, inProgress: inProg },
         plan: plan ? { progress: plan.overallProgress ?? 0, status: plan.status } : null,
         lastScore: latest?.score ?? null,
-        atRisk:
-          (latest !== undefined && (latest.score ?? 0) < 2.5) || (done === 0 && es.length > 0),
+        atRisk: isMemberAtRisk(memberEnrollments, memberPerfReviews, u.id),
       };
     });
 
@@ -917,15 +954,22 @@ export class MetricsAggregationService {
 
     // nineBox — `analytics.getManagerDashboard`. Fonte tem `performanceAxis`/
     // `potentialAxis` como Int; a interface (Task 2) tipa-os como string → coeridos.
-    const nineBox = nineBoxRows.map(p => ({
-      userId: p.userId,
-      fullName: p.user.fullName,
-      avatarUrl: p.user.avatarUrl ?? null,
-      performanceAxis: String(p.performanceAxis),
-      potentialAxis: String(p.potentialAxis),
-      quadrant: `${p.performanceAxis}-${p.potentialAxis}`,
-    }));
+    const nineBox = nineBoxRows.map(p => {
+      const performanceAxis = String(p.performanceAxis);
+      const potentialAxis = String(p.potentialAxis);
+      return {
+        userId: p.userId,
+        fullName: p.user.fullName,
+        avatarUrl: p.user.avatarUrl ?? null,
+        performanceAxis,
+        potentialAxis,
+        quadrant: `${performanceAxis}-${potentialAxis}`,
+      };
+    });
 
+    // `roleCode` omitido de propósito: no dashboard do gestor a regra
+    // TEAM_PERFORMANCE_AT_RISK é estruturalmente inalcançável (só dispara com
+    // roleCode ∈ {ADMIN,RH,LIDER}) — §5.2 / §7.
     const alerts = await this.alerts({ scope: 'team', userId, departmentId });
 
     return {
