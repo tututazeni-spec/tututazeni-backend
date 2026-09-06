@@ -1,7 +1,6 @@
 // src/content-library/content-library.service.additional.spec.ts
 // Cobre métodos não testados: getContinueWatching, rateContent, getContentRatings,
 // saveNote, getMyNote, getRecommended, getTrending, getNewContent, getMandatory,
-// createLearningPath, getLearningPaths, getLearningPath, enrollLearningPath,
 // getAnalyticsDashboard, getUserAnalytics, getCategoryBreakdown, getAllTags
 
 import { Test, TestingModule } from '@nestjs/testing';
@@ -240,57 +239,6 @@ describe('ContentLibraryService (additional)', () => {
       mockPrisma.contentAsset.findMany.mockResolvedValue([]);
       const result = await service.getMandatory(1);
       expect(result).toHaveLength(0);
-    });
-  });
-
-  // ─── createLearningPath ────────────────────────────────────────
-
-  describe('createLearningPath', () => {
-    it('deve criar learning path com items (via safeModel fallback)', async () => {
-      const dto = {
-        title: 'Trilha NestJS',
-        description: 'Aprenda NestJS',
-        hasCertification: true,
-        xpReward: 200,
-        items: [{ contentId: 1, order: 0, mandatory: true }],
-      };
-      const result = await service.createLearningPath(dto as any, 1);
-      expect(result).toBeDefined();
-    });
-  });
-
-  // ─── getLearningPaths ──────────────────────────────────────────
-
-  describe('getLearningPaths', () => {
-    it('deve retornar lista paginada de learning paths', async () => {
-      const result = await service.getLearningPaths({});
-      expect(result).toHaveProperty('data');
-      expect(result).toHaveProperty('meta');
-      expect(result.meta).toHaveProperty('page', 1);
-    });
-
-    it('deve filtrar por search quando fornecido', async () => {
-      const result = await service.getLearningPaths({ search: 'NestJS' });
-      expect(result).toBeDefined();
-    });
-  });
-
-  // ─── getLearningPath ───────────────────────────────────────────
-
-  describe('getLearningPath', () => {
-    it('deve lançar NotFoundException se path não existe (safeModel retorna null)', async () => {
-      await expect(service.getLearningPath(99)).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  // ─── enrollLearningPath ────────────────────────────────────────
-
-  describe('enrollLearningPath', () => {
-    it('deve inscrever utilizador na learning path', async () => {
-      const result = await service.enrollLearningPath(1, 1);
-      expect(result.message).toContain('Inscrito');
-      expect(result.pathId).toBe(1);
-      expect(result.userId).toBe(1);
     });
   });
 

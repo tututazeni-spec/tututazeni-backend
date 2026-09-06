@@ -24,8 +24,6 @@ import {
   RateContentDto,
   UpdateProgressDto,
   SaveNoteDto,
-  CreateLearningPathDto,
-  ContentLibraryLearningPathFilterDto,
 } from './content-library.dto';
 
 const AUTHOR_ROLES = [Role.ADMIN, Role.RH, Role.INSTRUCTOR] as const;
@@ -222,35 +220,10 @@ export class ContentLibraryController {
     return this.svc.getMyNote(id, user.id);
   }
 
-  // ─── Learning Paths ───────────────────────────────────────────
-
-  @Get('paths/all')
-  @Roles(...AUTHENTICATED_ROLES)
-  @ApiOperation({ summary: 'Listar learning paths' })
-  getLearningPaths(@Query() filters: ContentLibraryLearningPathFilterDto) {
-    return this.svc.getLearningPaths(filters);
-  }
-
-  @Get('paths/:id')
-  @Roles(...AUTHENTICATED_ROLES)
-  @ApiOperation({ summary: 'Detalhe de learning path com progresso do utilizador' })
-  getLearningPath(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
-    return this.svc.getLearningPath(id, user.id);
-  }
-
-  @Post('paths')
-  @Roles(...AUTHOR_ROLES)
-  @ApiOperation({ summary: 'Criar learning path com sequência de conteúdos' })
-  createLearningPath(@Body() dto: CreateLearningPathDto, @CurrentUser() user: CurrentUserData) {
-    return this.svc.createLearningPath(dto, user.id);
-  }
-
-  @Post('paths/:id/enroll')
-  @Roles(...AUTHENTICATED_ROLES)
-  @ApiOperation({ summary: 'Inscrever-se numa learning path' })
-  enrollPath(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
-    return this.svc.enrollLearningPath(id, user.id);
-  }
+  // Learning paths: o dono é `learning-paths` (`LearningPathsService` /
+  // `GET|POST /learning-paths`). Os endpoints `/content-library/paths/*` que
+  // aqui existiam nunca persistiam nada (assumiam um shape de `LearningPath`
+  // inexistente e degradavam via `safeModel`) — removidos na Fase F1.
 
   // ─── Analytics ────────────────────────────────────────────────
 
