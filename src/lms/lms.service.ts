@@ -50,6 +50,12 @@ export class LmsService {
   }
 
   // ─── PERCURSOS DE APRENDIZAGEM ───────────────────────
+  //
+  // Fase F1b (decisão do dono do produto, 2026-09-06): estes percursos NÃO se
+  // fundem com `LearningPath` (módulo `learning-paths`). É uma feature distinta
+  // — `courseIds` são códigos opacos (não FKs `Course`), progresso é
+  // auto-reportado (`updatePathProgress`), chave é o `code` humano. Ver
+  // docs/arquitetura-modular-analise.md §2.3 item 6.
 
   async createPath(dto: LmsCreateLearningPathDto, userId: number) {
     const existing = await this.prisma.lmsLearningPath.findUnique({
