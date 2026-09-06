@@ -181,10 +181,14 @@ export interface ManagerDashboardKpis {
   activePlans: number; // ≡ activePDIs
   completedPlans: number;
   inProgress: number; // inscrições em progresso (agregado da equipa)
-  completedEnrollments: number; // concluídas na janela
-  enrollmentsTotal: number; // contagem bruta (de analytics)
-  completions: number; // contagem bruta (de analytics)
-  completionRate: number;
+  // Task 5 ruling: `completedEnrollments` e `completions` são DISTINTOS (§5.1
+  // marcava-os `≈`). `completedEnrollments` = inscrições COMPLETED com
+  // `enrolledAt` dentro da janela do período (do dashboard). `completions` =
+  // contagem bruta all-time de COMPLETED da equipa (do analytics).
+  completedEnrollments: number; // concluídas na janela do período
+  enrollmentsTotal: number; // contagem bruta all-time (de analytics)
+  completions: number; // contagem bruta all-time (de analytics)
+  completionRate: number; // completions / enrollmentsTotal * 100, 1 dp
   avgScore: number | null; // ≡ avgPerformance
   scoreTrend: number | null;
   mandatoryRate: number;

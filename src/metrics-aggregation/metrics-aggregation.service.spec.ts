@@ -9,6 +9,7 @@ const mockPrisma = {
   user: {
     count: makeCount(0),
     findMany: makeFind(),
+    findUnique: makeFind() as unknown as jest.Mock,
   },
   department: { findMany: makeFind() },
   position: { findMany: makeFind() },
@@ -16,6 +17,20 @@ const mockPrisma = {
     count: makeCount(0),
     findMany: makeFind(),
   },
+  course: { count: makeCount(0) },
+  engagementSurvey: { count: makeCount(0) },
+  evaluationRequest: { count: makeCount(0) },
+  developmentPlanAction: { count: makeCount(0) },
+  developmentPlan: { count: makeCount(0), findMany: makeFind() },
+  performanceReview: {
+    count: makeCount(0),
+    aggregate: jest.fn().mockResolvedValue({ _avg: { score: null } }),
+    findMany: makeFind(),
+  },
+  surveyResponse: { count: makeCount(0) },
+  avatarSession: { count: makeCount(0) },
+  userCompetency: { findMany: makeFind() },
+  nineBoxPlacement: { findMany: makeFind() },
 };
 
 const mockPrismaProxy = mockPrisma as unknown as Record<string, unknown>;
@@ -27,10 +42,24 @@ describe('MetricsAggregationService', () => {
     jest.clearAllMocks();
     mockPrisma.user.count = makeCount(0);
     mockPrisma.user.findMany = makeFind();
+    mockPrisma.user.findUnique = makeFind() as unknown as jest.Mock;
     mockPrisma.department.findMany = makeFind();
     mockPrisma.position.findMany = makeFind();
     mockPrisma.enrollment.count = makeCount(0);
     mockPrisma.enrollment.findMany = makeFind();
+    mockPrisma.course.count = makeCount(0);
+    mockPrisma.engagementSurvey.count = makeCount(0);
+    mockPrisma.evaluationRequest.count = makeCount(0);
+    mockPrisma.developmentPlanAction.count = makeCount(0);
+    mockPrisma.developmentPlan.count = makeCount(0);
+    mockPrisma.developmentPlan.findMany = makeFind();
+    mockPrisma.performanceReview.count = makeCount(0);
+    mockPrisma.performanceReview.aggregate = jest.fn().mockResolvedValue({ _avg: { score: null } });
+    mockPrisma.performanceReview.findMany = makeFind();
+    mockPrisma.surveyResponse.count = makeCount(0);
+    mockPrisma.avatarSession.count = makeCount(0);
+    mockPrisma.userCompetency.findMany = makeFind();
+    mockPrisma.nineBoxPlacement.findMany = makeFind();
     Object.defineProperty(mockPrismaProxy, 'read', {
       get() {
         return mockPrismaProxy;
@@ -606,6 +635,587 @@ describe('MetricsAggregationService', () => {
       const result = await service.trainingRoi({});
       expect(typeof result.methodology).toBe('string');
       expect(result.methodology.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  // alerts — catálogo canónico de 13 regras (nota §4.6 + §4.8)
+  // ════════════════════════════════════════════════════════════════
+
+  describe('alerts', () => {
+    const keys = (list: { key: string }[]) => list.map(a => a.key);
+
+    // ── scope: 'user' → regras 1-4 ────────────────────────────────
+
+    describe("scope 'user'", () => {
+      it('userId em falta → devolve []', async () => {
+        expect(await service.alerts({ scope: 'user' })).toEqual([]);
+      });
+
+      it('#1 SURVEYS_PENDING dispara com surveys ACTIVE por responder; query certa', async () => {
+        mockPrisma.engagementSurvey.count = makeCount(2);
+        const r = await service.alerts({ scope: 'user', userId: 42 });
+        const a = r.find(x => x.key === 'SURVEYS_PENDING');
+        expect(a).toMatchObject({
+          key: 'SURVEYS_PENDING',
+          type: 'SURVEY',
+          severity: 'MEDIUM',
+          scope: 'user',
+          count: 2,
+          actionUrl: '/engagement',
+        });
+        expect(mockPrisma.engagementSurvey.count).toHaveBeenCalledWith({
+          where: { status: 'ACTIVE', responses: { none: { userId: 42 } } },
+        });
+      });
+
+      it('#1 SURVEYS_PENDING NÃO dispara quando 0', async () => {
+        mockPrisma.engagementSurvey.count = makeCount(0);
+        const r = await service.alerts({ scope: 'user', userId: 42 });
+        expect(keys(r)).not.toContain('SURVEYS_PENDING');
+      });
+
+      it('#2 EVAL_360_PENDING dispara (HIGH); query evaluatorId+PENDING', async () => {
+        mockPrisma.evaluationRequest.count = makeCount(3);
+        const r = await service.alerts({ scope: 'user', userId: 42 });
+        const a = r.find(x => x.key === 'EVAL_360_PENDING');
+        expect(a).toMatchObject({ severity: 'HIGH', scope: 'user', type: 'EVALUATION', count: 3 });
+        expect(mockPrisma.evaluationRequest.count).toHaveBeenCalledWith({
+          where: { evaluatorId: 42, status: 'PENDING' },
+        });
+      });
+
+      it('#2 EVAL_360_PENDING NÃO dispara quando 0', async () => {
+        mockPrisma.evaluationRequest.count = makeCount(0);
+        const r = await service.alerts({ scope: 'user', userId: 42 });
+        expect(keys(r)).not.toContain('EVAL_360_PENDING');
+      });
+
+      it('#3 PDI_ACTIONS_OVERDUE dispara (user → HIGH); query plan.userId + notIn + dueDate<now', async () => {
+        mockPrisma.developmentPlanAction.count = makeCount(5);
+        const r = await service.alerts({ scope: 'user', userId: 42 });
+        const a = r.find(x => x.key === 'PDI_ACTIONS_OVERDUE');
+        expect(a).toMatchObject({ severity: 'HIGH', scope: 'user', type: 'PDI', count: 5 });
+        const arg = mockPrisma.developmentPlanAction.count.mock.calls[0][0];
+        expect(arg.where.plan).toEqual({ userId: 42 });
+        expect(arg.where.status).toEqual({ notIn: ['COMPLETED', 'CANCELLED'] });
+        expect(arg.where.dueDate).toHaveProperty('lt');
+      });
+
+      it('#3 PDI_ACTIONS_OVERDUE NÃO dispara quando 0', async () => {
+        mockPrisma.developmentPlanAction.count = makeCount(0);
+        const r = await service.alerts({ scope: 'user', userId: 42 });
+        expect(keys(r)).not.toContain('PDI_ACTIONS_OVERDUE');
+      });
+
+      it('#4 MANDATORY_TRAINING_PENDING dispara (user → MEDIUM); query course.mandatory + enrollments none', async () => {
+        mockPrisma.course.count = makeCount(4);
+        const r = await service.alerts({ scope: 'user', userId: 42 });
+        const a = r.find(x => x.key === 'MANDATORY_TRAINING_PENDING');
+        expect(a).toMatchObject({
+          severity: 'MEDIUM',
+          scope: 'user',
+          type: 'COMPLIANCE',
+          count: 4,
+          actionUrl: '/content-library/mandatory',
+        });
+        expect(mockPrisma.course.count).toHaveBeenCalledWith({
+          where: { mandatory: true, enrollments: { none: { userId: 42, status: 'COMPLETED' } } },
+        });
+      });
+
+      it('#4 MANDATORY_TRAINING_PENDING NÃO dispara quando 0', async () => {
+        mockPrisma.course.count = makeCount(0);
+        const r = await service.alerts({ scope: 'user', userId: 42 });
+        expect(keys(r)).not.toContain('MANDATORY_TRAINING_PENDING');
+      });
+
+      it('scope→rules: só emite regras 1-4, ordenadas por severidade e depois key', async () => {
+        mockPrisma.engagementSurvey.count = makeCount(2);
+        mockPrisma.evaluationRequest.count = makeCount(3);
+        mockPrisma.developmentPlanAction.count = makeCount(5);
+        mockPrisma.course.count = makeCount(4);
+        const r = await service.alerts({ scope: 'user', userId: 42 });
+        expect(keys(r)).toEqual([
+          'EVAL_360_PENDING',
+          'PDI_ACTIONS_OVERDUE',
+          'MANDATORY_TRAINING_PENDING',
+          'SURVEYS_PENDING',
+        ]);
+        r.forEach(a => expect(a.scope).toBe('user'));
+      });
+    });
+
+    // ── scope: 'organization' → regras 3-4, 9-13 ──────────────────
+
+    describe("scope 'organization'", () => {
+      beforeEach(() => {
+        mockPrisma.user.findMany = makeFind([{ id: 1 }, { id: 2 }, { id: 3 }]);
+      });
+
+      it('#3 PDI_ACTIONS_OVERDUE (org → MEDIUM) usa contagem global (sem plan.userId)', async () => {
+        mockPrisma.developmentPlanAction.count = jest
+          .fn()
+          .mockResolvedValueOnce(7)
+          .mockResolvedValueOnce(0);
+        const r = await service.alerts({ scope: 'organization' });
+        const a = r.find(x => x.key === 'PDI_ACTIONS_OVERDUE');
+        expect(a).toMatchObject({ severity: 'MEDIUM', scope: 'organization', count: 7 });
+        const arg = mockPrisma.developmentPlanAction.count.mock.calls[0][0];
+        expect(arg.where).not.toHaveProperty('plan');
+        expect(arg.where.status).toEqual({ notIn: ['COMPLETED', 'CANCELLED'] });
+      });
+
+      it('#4 MANDATORY_TRAINING_PENDING (org → HIGH) via enrollment{course.mandatory, status≠COMPLETED}', async () => {
+        mockPrisma.enrollment.count = makeCount(9);
+        const r = await service.alerts({ scope: 'organization' });
+        const a = r.find(x => x.key === 'MANDATORY_TRAINING_PENDING');
+        expect(a).toMatchObject({ severity: 'HIGH', scope: 'organization', count: 9 });
+        expect(mockPrisma.enrollment.count).toHaveBeenCalledWith({
+          where: { course: { mandatory: true }, status: { not: 'COMPLETED' } },
+        });
+      });
+
+      it('#9 PERFORMANCE_CRITICAL dispara (HIGH); query score<2 + PUBLISHED', async () => {
+        mockPrisma.performanceReview.count = makeCount(6);
+        const r = await service.alerts({ scope: 'organization' });
+        const a = r.find(x => x.key === 'PERFORMANCE_CRITICAL');
+        expect(a).toMatchObject({
+          severity: 'HIGH',
+          scope: 'organization',
+          type: 'PERFORMANCE',
+          count: 6,
+        });
+        expect(mockPrisma.performanceReview.count).toHaveBeenCalledWith({
+          where: { score: { lt: 2 }, status: 'PUBLISHED' },
+        });
+      });
+
+      it('#9 PERFORMANCE_CRITICAL NÃO dispara quando 0', async () => {
+        mockPrisma.performanceReview.count = makeCount(0);
+        const r = await service.alerts({ scope: 'organization' });
+        expect(keys(r)).not.toContain('PERFORMANCE_CRITICAL');
+      });
+
+      it('#10 SURVEY_PARTICIPATION_LOW dispara quando respostas/activos < 0.30', async () => {
+        mockPrisma.surveyResponse.count = makeCount(1);
+        mockPrisma.user.count = makeCount(100);
+        const r = await service.alerts({ scope: 'organization' });
+        const a = r.find(x => x.key === 'SURVEY_PARTICIPATION_LOW');
+        expect(a).toMatchObject({ severity: 'MEDIUM', scope: 'organization', type: 'SURVEY' });
+        expect(a).not.toHaveProperty('count');
+      });
+
+      it('#10 SURVEY_PARTICIPATION_LOW NÃO dispara quando participação >= 30%', async () => {
+        mockPrisma.surveyResponse.count = makeCount(50);
+        mockPrisma.user.count = makeCount(100);
+        const r = await service.alerts({ scope: 'organization' });
+        expect(keys(r)).not.toContain('SURVEY_PARTICIPATION_LOW');
+      });
+
+      it('#11 INACTIVE_COLLABORATORS dispara: activos da população sem inscrição em 60d', async () => {
+        mockPrisma.enrollment.findMany = makeFind([{ userId: 1 }]); // só o user 1 teve actividade
+        const r = await service.alerts({ scope: 'organization' });
+        const a = r.find(x => x.key === 'INACTIVE_COLLABORATORS');
+        expect(a).toMatchObject({
+          severity: 'MEDIUM',
+          scope: 'organization',
+          type: 'RISK',
+          count: 2,
+        });
+        const arg = mockPrisma.enrollment.findMany.mock.calls[0][0];
+        expect(arg.where.userId).toEqual({ in: [1, 2, 3] });
+        expect(arg.where.enrolledAt).toHaveProperty('gte');
+        expect(arg.distinct).toEqual(['userId']);
+      });
+
+      it('#11 INACTIVE_COLLABORATORS NÃO dispara quando toda a população teve actividade', async () => {
+        mockPrisma.enrollment.findMany = makeFind([{ userId: 1 }, { userId: 2 }, { userId: 3 }]);
+        const r = await service.alerts({ scope: 'organization' });
+        expect(keys(r)).not.toContain('INACTIVE_COLLABORATORS');
+      });
+
+      it('#12 PDI_PLAN_OVERDUE dispara (MEDIUM); query status ACTIVE + endDate<now + userId da população', async () => {
+        mockPrisma.developmentPlan.count = makeCount(3);
+        const r = await service.alerts({ scope: 'organization' });
+        const a = r.find(x => x.key === 'PDI_PLAN_OVERDUE');
+        expect(a).toMatchObject({ severity: 'MEDIUM', scope: 'organization', count: 3 });
+        const arg = mockPrisma.developmentPlan.count.mock.calls[0][0];
+        expect(arg.where.userId).toEqual({ in: [1, 2, 3] });
+        expect(arg.where.status).toBe('ACTIVE');
+        expect(arg.where.endDate).toHaveProperty('lt');
+      });
+
+      it('#13 PDI_ACTION_CRITICAL dispara (HIGH); plan ACTIVE + not COMPLETED + dueDate < now-14d', async () => {
+        mockPrisma.developmentPlanAction.count = jest
+          .fn()
+          .mockResolvedValueOnce(0)
+          .mockResolvedValueOnce(4);
+        const r = await service.alerts({ scope: 'organization' });
+        const a = r.find(x => x.key === 'PDI_ACTION_CRITICAL');
+        expect(a).toMatchObject({ severity: 'HIGH', scope: 'organization', count: 4 });
+        const arg = mockPrisma.developmentPlanAction.count.mock.calls[1][0];
+        expect(arg.where.plan).toEqual({ userId: { in: [1, 2, 3] }, status: 'ACTIVE' });
+        expect(arg.where.status).toEqual({ not: 'COMPLETED' });
+        expect(arg.where.dueDate).toHaveProperty('lt');
+      });
+
+      it('scope→rules: emite exactamente {3,4,9,10,11,12,13}; nenhuma regra de user/team', async () => {
+        mockPrisma.developmentPlanAction.count = jest
+          .fn()
+          .mockResolvedValueOnce(7)
+          .mockResolvedValueOnce(4);
+        mockPrisma.enrollment.count = makeCount(9);
+        mockPrisma.performanceReview.count = makeCount(6);
+        mockPrisma.surveyResponse.count = makeCount(1);
+        mockPrisma.user.count = makeCount(100);
+        mockPrisma.enrollment.findMany = makeFind([]);
+        mockPrisma.developmentPlan.count = makeCount(3);
+        const r = await service.alerts({ scope: 'organization' });
+        expect([...keys(r)].sort()).toEqual([
+          'INACTIVE_COLLABORATORS',
+          'MANDATORY_TRAINING_PENDING',
+          'PDI_ACTIONS_OVERDUE',
+          'PDI_ACTION_CRITICAL',
+          'PDI_PLAN_OVERDUE',
+          'PERFORMANCE_CRITICAL',
+          'SURVEY_PARTICIPATION_LOW',
+        ]);
+        r.forEach(a => expect(a.scope).toBe('organization'));
+      });
+
+      it('resultado ordenado por severidade (HIGH→MEDIUM→LOW) e depois key', async () => {
+        mockPrisma.developmentPlanAction.count = jest
+          .fn()
+          .mockResolvedValueOnce(7) // rule 3 org → MEDIUM
+          .mockResolvedValueOnce(4); // rule 13 org → HIGH
+        mockPrisma.performanceReview.count = makeCount(6); // rule 9 → HIGH
+        // toda a população teve actividade recente → rule 11 não dispara
+        mockPrisma.enrollment.findMany = makeFind([{ userId: 1 }, { userId: 2 }, { userId: 3 }]);
+        const r = await service.alerts({ scope: 'organization' });
+        expect(keys(r)).toEqual([
+          'PDI_ACTION_CRITICAL',
+          'PERFORMANCE_CRITICAL',
+          'PDI_ACTIONS_OVERDUE',
+        ]);
+      });
+    });
+
+    // ── scope: 'team' → regras 2, 5-8, 11-13 (managerId = userId) ──
+
+    describe("scope 'team'", () => {
+      beforeEach(() => {
+        mockPrisma.user.findMany = makeFind([{ id: 10 }, { id: 11 }]);
+      });
+
+      it('userId em falta → devolve []', async () => {
+        expect(await service.alerts({ scope: 'team' })).toEqual([]);
+      });
+
+      it('população da equipa = user.findMany managerId + active', async () => {
+        await service.alerts({ scope: 'team', userId: 7 });
+        expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { managerId: 7, active: true } }),
+        );
+      });
+
+      it('#2 EVAL_360_PENDING dispara em scope team (HIGH)', async () => {
+        mockPrisma.evaluationRequest.count = makeCount(2);
+        const r = await service.alerts({ scope: 'team', userId: 7 });
+        const a = r.find(x => x.key === 'EVAL_360_PENDING');
+        expect(a).toMatchObject({ severity: 'HIGH', scope: 'team', count: 2 });
+        expect(mockPrisma.evaluationRequest.count).toHaveBeenCalledWith({
+          where: { evaluatorId: 7, status: 'PENDING' },
+        });
+      });
+
+      it('#5 TEAM_PERFORMANCE_AT_RISK dispara só com roleCode privilegiado', async () => {
+        mockPrisma.user.count = makeCount(1);
+        const withRole = await service.alerts({ scope: 'team', userId: 7, roleCode: 'LIDER' });
+        const a = withRole.find(x => x.key === 'TEAM_PERFORMANCE_AT_RISK');
+        expect(a).toMatchObject({ severity: 'HIGH', scope: 'team', type: 'PERFORMANCE', count: 1 });
+        expect(mockPrisma.user.count).toHaveBeenCalledWith({
+          where: {
+            managerId: 7,
+            active: true,
+            performanceReviews: { some: { score: { lt: 2.5 } } },
+          },
+        });
+      });
+
+      it('#5 TEAM_PERFORMANCE_AT_RISK NÃO dispara sem roleCode privilegiado (query nem corre)', async () => {
+        mockPrisma.user.count = makeCount(5);
+        const r = await service.alerts({ scope: 'team', userId: 7, roleCode: 'COLABORADOR' });
+        expect(keys(r)).not.toContain('TEAM_PERFORMANCE_AT_RISK');
+      });
+
+      it('#6 MANAGER_TEAM_RISK dispara quando membro tem inscrições e 0 conclusões', async () => {
+        mockPrisma.enrollment.findMany = jest
+          .fn()
+          .mockResolvedValueOnce([{ userId: 10, status: 'IN_PROGRESS' }]) // memberEnrollments
+          .mockResolvedValueOnce([]); // recentRows
+        mockPrisma.performanceReview.findMany = makeFind([]);
+        const r = await service.alerts({ scope: 'team', userId: 7 });
+        const a = r.find(x => x.key === 'MANAGER_TEAM_RISK');
+        expect(a).toMatchObject({ severity: 'HIGH', scope: 'team', type: 'PERFORMANCE', count: 1 });
+      });
+
+      it('#6 MANAGER_TEAM_RISK NÃO dispara quando ninguém em risco', async () => {
+        mockPrisma.enrollment.findMany = jest
+          .fn()
+          .mockResolvedValueOnce([{ userId: 10, status: 'COMPLETED' }])
+          .mockResolvedValueOnce([]);
+        mockPrisma.performanceReview.findMany = makeFind([
+          { userId: 10, score: 4, createdAt: new Date() },
+        ]);
+        const r = await service.alerts({ scope: 'team', userId: 7 });
+        expect(keys(r)).not.toContain('MANAGER_TEAM_RISK');
+      });
+
+      it('#7 MANDATORY_RATE_LOW dispara quando taxa < 80 (mensagem inclui a %)', async () => {
+        mockPrisma.enrollment.count = jest.fn().mockResolvedValueOnce(10).mockResolvedValueOnce(5);
+        const r = await service.alerts({ scope: 'team', userId: 7 });
+        const a = r.find(x => x.key === 'MANDATORY_RATE_LOW');
+        expect(a).toMatchObject({ severity: 'MEDIUM', scope: 'team', type: 'COMPLIANCE' });
+        expect(a?.message).toContain('50%');
+      });
+
+      it('#7 MANDATORY_RATE_LOW NÃO dispara quando taxa >= 80 nem quando não há obrigatórias', async () => {
+        mockPrisma.enrollment.count = jest.fn().mockResolvedValueOnce(10).mockResolvedValueOnce(9);
+        expect(keys(await service.alerts({ scope: 'team', userId: 7 }))).not.toContain(
+          'MANDATORY_RATE_LOW',
+        );
+        mockPrisma.enrollment.count = jest.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(0);
+        expect(keys(await service.alerts({ scope: 'team', userId: 7 }))).not.toContain(
+          'MANDATORY_RATE_LOW',
+        );
+      });
+
+      it('#8 PDP_COVERAGE_LOW dispara quando cobertura < 50', async () => {
+        mockPrisma.developmentPlan.count = jest
+          .fn()
+          .mockResolvedValueOnce(0)
+          .mockResolvedValueOnce(0);
+        const r = await service.alerts({ scope: 'team', userId: 7 });
+        const a = r.find(x => x.key === 'PDP_COVERAGE_LOW');
+        expect(a).toMatchObject({ severity: 'MEDIUM', scope: 'team', type: 'PDI' });
+        expect(a?.message).toContain('0%');
+      });
+
+      it('#8 PDP_COVERAGE_LOW NÃO dispara com cobertura >= 50 nem com equipa vazia', async () => {
+        mockPrisma.developmentPlan.count = jest
+          .fn()
+          .mockResolvedValueOnce(2)
+          .mockResolvedValueOnce(0);
+        expect(keys(await service.alerts({ scope: 'team', userId: 7 }))).not.toContain(
+          'PDP_COVERAGE_LOW',
+        );
+        mockPrisma.user.findMany = makeFind([]);
+        expect(keys(await service.alerts({ scope: 'team', userId: 7 }))).not.toContain(
+          'PDP_COVERAGE_LOW',
+        );
+      });
+
+      it('#11 INACTIVE_COLLABORATORS dispara em scope team sobre os membros', async () => {
+        mockPrisma.enrollment.findMany = jest
+          .fn()
+          .mockResolvedValueOnce([]) // memberEnrollments
+          .mockResolvedValueOnce([{ userId: 10 }]); // recentRows → 11 inactivo
+        const r = await service.alerts({ scope: 'team', userId: 7 });
+        const a = r.find(x => x.key === 'INACTIVE_COLLABORATORS');
+        expect(a).toMatchObject({ scope: 'team', count: 1 });
+      });
+
+      it('#12 PDI_PLAN_OVERDUE dispara em scope team', async () => {
+        mockPrisma.developmentPlan.count = jest
+          .fn()
+          .mockResolvedValueOnce(0)
+          .mockResolvedValueOnce(2);
+        const r = await service.alerts({ scope: 'team', userId: 7 });
+        const a = r.find(x => x.key === 'PDI_PLAN_OVERDUE');
+        expect(a).toMatchObject({ severity: 'MEDIUM', scope: 'team', count: 2 });
+      });
+
+      it('#13 PDI_ACTION_CRITICAL dispara em scope team', async () => {
+        mockPrisma.developmentPlanAction.count = makeCount(3);
+        const r = await service.alerts({ scope: 'team', userId: 7 });
+        const a = r.find(x => x.key === 'PDI_ACTION_CRITICAL');
+        expect(a).toMatchObject({ severity: 'HIGH', scope: 'team', count: 3 });
+      });
+
+      it('scope→rules: emite exactamente {2,5,6,7,8,11,12,13}', async () => {
+        mockPrisma.evaluationRequest.count = makeCount(2);
+        mockPrisma.user.count = makeCount(1);
+        mockPrisma.enrollment.findMany = jest
+          .fn()
+          .mockResolvedValueOnce([{ userId: 10, status: 'IN_PROGRESS' }])
+          .mockResolvedValueOnce([]);
+        mockPrisma.performanceReview.findMany = makeFind([]);
+        mockPrisma.enrollment.count = jest.fn().mockResolvedValueOnce(10).mockResolvedValueOnce(5);
+        mockPrisma.developmentPlan.count = jest
+          .fn()
+          .mockResolvedValueOnce(0)
+          .mockResolvedValueOnce(2);
+        mockPrisma.developmentPlanAction.count = makeCount(3);
+        const r = await service.alerts({ scope: 'team', userId: 7, roleCode: 'ADMIN' });
+        expect([...keys(r)].sort()).toEqual([
+          'EVAL_360_PENDING',
+          'INACTIVE_COLLABORATORS',
+          'MANAGER_TEAM_RISK',
+          'MANDATORY_RATE_LOW',
+          'PDI_ACTION_CRITICAL',
+          'PDI_PLAN_OVERDUE',
+          'PDP_COVERAGE_LOW',
+          'TEAM_PERFORMANCE_AT_RISK',
+        ]);
+        r.forEach(a => expect(a.scope).toBe('team'));
+      });
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  // managerDashboard — superconjunto dashboard ⊕ analytics (nota §5.2)
+  // ════════════════════════════════════════════════════════════════
+
+  describe('managerDashboard', () => {
+    const teamRows = [
+      {
+        id: 10,
+        fullName: 'Ana',
+        avatarUrl: null,
+        position: { name: 'Dev' },
+        department: { name: 'Eng' },
+        points: { points: 120 },
+      },
+      {
+        id: 11,
+        fullName: 'Rui',
+        avatarUrl: 'u.png',
+        position: null,
+        department: { name: 'Eng' },
+        points: null,
+      },
+    ];
+
+    it('early-return sem equipa: tudo a 0/null/[]', async () => {
+      mockPrisma.user.findMany = makeFind([]);
+      const r = await service.managerDashboard({ userId: 7 });
+      expect(r.teamSize).toBe(0);
+      expect(r.team).toEqual([]);
+      expect(r.competencyGaps).toEqual([]);
+      expect(r.nineBox).toEqual([]);
+      expect(r.alerts).toEqual([]);
+      expect(r.kpis.pdpCoverage).toBe(0);
+      expect(r.kpis.activePlans).toBe(0);
+      expect(r.kpis.avgScore).toBeNull();
+      expect(r.kpis.scoreTrend).toBeNull();
+      expect(r.kpis.overdueActions).toBe(0);
+    });
+
+    it('devolve todos os campos do superconjunto', async () => {
+      mockPrisma.user.findMany = makeFind(teamRows);
+      const r = await service.managerDashboard({ userId: 7 });
+
+      expect(r.teamSize).toBe(2);
+      // team[] shape do dashboard + department do analytics
+      const m = r.team[0];
+      expect(m.user).toEqual({
+        id: 10,
+        fullName: 'Ana',
+        avatarUrl: null,
+        position: { name: 'Dev' },
+        department: { name: 'Eng' },
+      });
+      expect(m.xp).toBe(120);
+      expect(m.enrollment).toEqual({ completed: 0, inProgress: 0 });
+      expect(m.plan).toBeNull();
+      expect(m.lastScore).toBeNull();
+      expect(m.atRisk).toBe(false);
+      expect(r.team[1].xp).toBe(0); // points null → 0
+
+      // kpis: superconjunto completo (nomes canónicos do dashboard + extras do analytics)
+      const expectedKpiKeys = [
+        'pdpCoverage',
+        'activePlans',
+        'completedPlans',
+        'inProgress',
+        'completedEnrollments',
+        'enrollmentsTotal',
+        'completions',
+        'completionRate',
+        'avgScore',
+        'scoreTrend',
+        'mandatoryRate',
+        'engagementResponses',
+        'avatarSessions',
+        'pendingEvals',
+        'overdueActions',
+      ];
+      expect(Object.keys(r.kpis).sort()).toEqual([...expectedKpiKeys].sort());
+      expect(r.kpis.mandatoryRate).toBe(100); // sem obrigatórias → 100
+      expect(Array.isArray(r.competencyGaps)).toBe(true);
+      expect(Array.isArray(r.nineBox)).toBe(true);
+      expect(Array.isArray(r.alerts)).toBe(true);
+    });
+
+    it('competencyGaps e nineBox vêm da lógica do analytics', async () => {
+      mockPrisma.user.findMany = makeFind(teamRows);
+      mockPrisma.userCompetency.findMany = makeFind([
+        { userId: 10, currentLevel: 1, targetLevel: 4, competency: { name: 'SQL' } },
+        { userId: 11, currentLevel: 2, targetLevel: 3, competency: { name: 'SQL' } },
+        { userId: 10, currentLevel: 5, targetLevel: 3, competency: { name: 'Git' } }, // gap <= 0 ignorado
+      ]);
+      mockPrisma.nineBoxPlacement.findMany = makeFind([
+        {
+          userId: 10,
+          performanceAxis: 3,
+          potentialAxis: 2,
+          user: { id: 10, fullName: 'Ana', avatarUrl: null },
+        },
+      ]);
+      const r = await service.managerDashboard({ userId: 7 });
+      expect(r.competencyGaps).toEqual([{ name: 'SQL', totalGap: 4, count: 2, avgGap: 2 }]);
+      expect(r.nineBox).toEqual([
+        {
+          userId: 10,
+          fullName: 'Ana',
+          avatarUrl: null,
+          performanceAxis: '3',
+          potentialAxis: '2',
+          quadrant: '3-2',
+        },
+      ]);
+    });
+
+    it('alerts é MetricAlert[] com scope team (delega em this.alerts)', async () => {
+      mockPrisma.user.findMany = makeFind(teamRows);
+      mockPrisma.developmentPlanAction.count = makeCount(3); // PDI_ACTION_CRITICAL team
+      const r = await service.managerDashboard({ userId: 7 });
+      expect(r.alerts.length).toBeGreaterThan(0);
+      r.alerts.forEach(a => {
+        expect(a.scope).toBe('team');
+        expect(a).toHaveProperty('key');
+        expect(a).toHaveProperty('severity');
+      });
+    });
+
+    it('KPIs: completedEnrollments (janela) e completions (bruto) são distintos', async () => {
+      mockPrisma.user.findMany = makeFind(teamRows);
+      // ordem do Promise.all: 0 activePlans 1 completedPlans 2 inProgress
+      // 3 completedEnrollments 4 enrollmentsTotal 5 completions 6 mandatoryTotal 7 mandatoryComplete
+      mockPrisma.enrollment.count = jest
+        .fn()
+        .mockResolvedValueOnce(2) // inProgress
+        .mockResolvedValueOnce(3) // completedEnrollments (janela)
+        .mockResolvedValueOnce(20) // enrollmentsTotal
+        .mockResolvedValueOnce(8) // completions (bruto)
+        .mockResolvedValueOnce(0) // mandatoryTotal
+        .mockResolvedValueOnce(0); // mandatoryComplete
+      const r = await service.managerDashboard({ userId: 7 });
+      expect(r.kpis.completedEnrollments).toBe(3);
+      expect(r.kpis.enrollmentsTotal).toBe(20);
+      expect(r.kpis.completions).toBe(8);
+      expect(r.kpis.completionRate).toBe(40); // 8 / 20 * 100
     });
   });
 });
