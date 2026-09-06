@@ -16,6 +16,12 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import {
+  certificateToIssuedShape,
+  issuedType,
+  CERT_TYPE_LEGACY_TO_CANONICAL,
+  IssuedShape,
+} from './certificate-legacy-adapter';
 
 @Injectable()
 export class CertificationService {
@@ -29,13 +35,44 @@ export class CertificationService {
   // ─── GERAÇÃO DE CÓDIGOS ──────────────────────────────
 
   private async generateCertCode(): Promise<string> {
-    // Geração de código sequencial: força primary para não gerar códigos duplicados via réplica.
-    const last = await this.prisma.issuedCertificate.findFirst({
+    // Fase F2: sequência agora sobre `Certificate` (só os códigos CERT-*, para não
+    // colidir com os formatos usados por outros escritores nativos). Força primary.
+    const last = await this.prisma.certificate.findFirst({
+      where: { code: { startsWith: 'CERT-' } },
       orderBy: { code: 'desc' },
       select: { code: true },
     });
-    const num = last ? parseInt(last.code.replace('CERT-', ''), 10) + 1 : 1;
+    const num = last?.code ? parseInt(last.code.replace('CERT-', ''), 10) + 1 : 1;
     return `CERT-${String(num).padStart(5, '0')}`;
+  }
+
+  /** Resolve o id de rota (cuid legado / uuid sintético / Int) para um `Certificate`. */
+  private async resolveCert(id: string) {
+    const where = /^\d+$/.test(id)
+      ? { OR: [{ legacyIssuedCertId: id }, { id: Number(id) }] }
+      : { legacyIssuedCertId: id };
+    return this.prisma.certificate.findFirst({
+      where,
+      include: { user: { select: { fullName: true, email: true } } },
+    });
+  }
+
+  private async enrichCert(cert: { issuedById: number | null; templateId: string | null }) {
+    const [issuedBy, template] = await Promise.all([
+      cert.issuedById
+        ? this.prisma.read.user.findUnique({
+            where: { id: cert.issuedById },
+            select: { fullName: true },
+          })
+        : null,
+      cert.templateId
+        ? this.prisma.read.certificateTemplate.findUnique({
+            where: { id: cert.templateId },
+            select: { name: true, html: true },
+          })
+        : null,
+    ]);
+    return { issuedBy, template };
   }
 
   private generateVerificationCode(): string {
@@ -97,18 +134,31 @@ export class CertificationService {
       }
     }
 
-    const certificate = await this.prisma.issuedCertificate.create({
+    const legacyType = dto.type || 'COURSE';
+    const legacyIssuedCertId = crypto.randomUUID();
+    const [courseId, programId] = await Promise.all([
+      this.toExistingFk(dto.courseId, id =>
+        this.prisma.course.findUnique({ where: { id }, select: { id: true } }),
+      ),
+      this.toExistingFk(dto.programId, id =>
+        this.prisma.leadershipProgram.findUnique({ where: { id }, select: { id: true } }),
+      ),
+    ]);
+
+    const certificate = await this.prisma.certificate.create({
       data: {
         code,
-        verificationCode,
+        validationCode: verificationCode,
         hashCode,
         userId: dto.userId,
         templateId: dto.templateId,
-        courseId: dto.courseId,
-        programId: dto.programId,
+        courseId,
+        programId,
         title: dto.title,
         recipientName: user.fullName,
-        type: dto.type || 'COURSE',
+        type: CERT_TYPE_LEGACY_TO_CANONICAL[legacyType],
+        legacyType,
+        legacyIssuedCertId,
         score: dto.score,
         publicUrl: `https://innova.evos.co.ao/verify/${verificationCode}`,
         issuedById: issuerId,
@@ -119,9 +169,10 @@ export class CertificationService {
           issuedAt: new Date().toISOString(),
         }),
       },
+      include: { user: { select: { fullName: true, email: true } } },
     });
 
-    await this.audit.logEntity(issuerId, 'CREATE', 'IssuedCertificate', certificate.id, {
+    await this.audit.logEntity(issuerId, 'CREATE', 'Certificate', String(certificate.id), {
       code,
       userId: dto.userId,
     });
@@ -130,64 +181,87 @@ export class CertificationService {
       type: 'CERTIFICATE_ISSUED',
       title: 'Certificado emitido',
       message: `O teu certificado "${dto.title}" está disponível.`,
-      metadata: { certificateId: certificate.id, verificationCode },
+      metadata: { certificateId: legacyIssuedCertId, verificationCode },
     });
-    return certificate;
+    return certificateToIssuedShape(certificate);
+  }
+
+  /** String livre de DTO -> Int se numérico E a linha existe; senão `undefined`. */
+  private async toExistingFk(
+    value: string | undefined,
+    lookup: (id: number) => Promise<{ id: number } | null>,
+  ): Promise<number | undefined> {
+    if (!value) return undefined;
+    const n = Number(value);
+    if (!Number.isInteger(n)) return undefined;
+    return (await lookup(n)) ? n : undefined;
   }
 
   async findAllCertificates(filters: FilterCertificateDto) {
     const { type, userId, search, isRevoked, page = 1, limit = 20 } = filters;
-    const where: Prisma.IssuedCertificateWhereInput = {
+    const where: Prisma.CertificateWhereInput = {
+      legacyIssuedCertId: { not: null },
       deletedAt: null,
-      ...(type && { type }),
+      ...(type && { legacyType: type }),
       ...(userId && { userId }),
-      ...(isRevoked !== undefined && { isRevoked }),
+      ...(isRevoked !== undefined && { revoked: isRevoked }),
       ...(search && {
         OR: [
           { recipientName: { contains: search, mode: 'insensitive' } },
           { title: { contains: search, mode: 'insensitive' } },
           { code: { contains: search, mode: 'insensitive' } },
-          { verificationCode: { contains: search, mode: 'insensitive' } },
+          { validationCode: { contains: search, mode: 'insensitive' } },
         ],
       }),
     };
     const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.read.issuedCertificate.findMany({
+      this.prisma.read.certificate.findMany({
         where,
         skip,
         take,
         orderBy: { issuedAt: 'desc' },
-        include: {
-          user: { select: { fullName: true } },
-          issuedBy: { select: { fullName: true } },
-        },
+        include: { user: { select: { fullName: true, email: true } } },
       }),
-      this.prisma.read.issuedCertificate.count({ where }),
+      this.prisma.read.certificate.count({ where }),
     ]);
-    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+
+    const issuerIds = [
+      ...new Set(data.map(c => c.issuedById).filter((v): v is number => v != null)),
+    ];
+    const issuers = issuerIds.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: issuerIds } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const issuerMap = new Map(issuers.map(u => [u.id, { fullName: u.fullName }]));
+
+    const shaped = data.map(c =>
+      certificateToIssuedShape(c, {
+        issuedBy: c.issuedById ? (issuerMap.get(c.issuedById) ?? null) : null,
+      }),
+    );
+    const { data: pageData, meta } = buildPaginatedResponse(shaped, total, page, limit);
     return { data: pageData, ...meta };
   }
 
-  async findCertificateById(id: string, user: { id: number; role?: { name: string } | null }) {
-    const cert = await this.prisma.read.issuedCertificate.findUnique({
-      where: { id },
-      include: {
-        user: { select: { fullName: true, email: true } },
-        template: { select: { name: true, html: true } },
-        issuedBy: { select: { fullName: true } },
-      },
-    });
+  async findCertificateById(
+    id: string,
+    user: { id: number; role?: { name: string } | null },
+  ): Promise<IssuedShape> {
+    const cert = await this.resolveCert(id);
     if (!cert || cert.deletedAt) throw new NotFoundException('Certificado não encontrado');
     assertCanAccess(cert, cert.userId, user, [Role.ADMIN, Role.RH]);
-    return cert;
+    const enrich = await this.enrichCert(cert);
+    return certificateToIssuedShape(cert, enrich);
   }
 
   // ─── VERIFICAÇÃO PÚBLICA ─────────────────────────────
 
   async verify(verificationCode: string) {
-    const cert = await this.prisma.read.issuedCertificate.findUnique({
-      where: { verificationCode },
+    const cert = await this.prisma.read.certificate.findFirst({
+      where: { validationCode: { in: [verificationCode, `LEG-${verificationCode}`] } },
       include: {
         user: { select: { fullName: true } },
       },
@@ -196,7 +270,7 @@ export class CertificationService {
     if (!cert) {
       return { valid: false, reason: 'Código de verificação inválido' };
     }
-    if (cert.isRevoked) {
+    if (cert.revoked) {
       return {
         valid: false,
         reason: 'Certificado revogado',
@@ -212,7 +286,7 @@ export class CertificationService {
       };
     }
 
-    await this.prisma.issuedCertificate.update({
+    await this.prisma.certificate.update({
       where: { id: cert.id },
       data: { verifyCount: { increment: 1 } },
     });
@@ -220,15 +294,15 @@ export class CertificationService {
     return {
       valid: true,
       certificate: {
-        code: cert.code,
+        code: cert.code?.startsWith('LEG-') ? cert.code.slice(4) : cert.code,
         holder: cert.recipientName,
         title: cert.title,
-        type: cert.type,
+        type: issuedType(cert),
         score: cert.score,
-        issuer: cert.issuerName,
+        issuer: cert.issuerName ?? 'INNOVA',
         issuedAt: cert.issuedAt,
         expiresAt: cert.expiresAt,
-        verificationCode: cert.verificationCode,
+        verificationCode: verificationCode,
         hashCode: cert.hashCode,
       },
     };
@@ -240,43 +314,50 @@ export class CertificationService {
     id: string,
     dto: RevokeDto,
     user: { id: number; role?: { name: string } | null },
-  ) {
-    const cert = await this.findCertificateById(id, user);
-    if (cert.isRevoked) throw new ConflictException('Certificado já revogado');
+  ): Promise<IssuedShape> {
+    const cert = await this.resolveCert(id);
+    if (!cert || cert.deletedAt) throw new NotFoundException('Certificado não encontrado');
+    assertCanAccess(cert, cert.userId, user, [Role.ADMIN, Role.RH]);
+    if (cert.revoked) throw new ConflictException('Certificado já revogado');
 
-    const updated = await this.prisma.issuedCertificate.update({
-      where: { id },
+    const updated = await this.prisma.certificate.update({
+      where: { id: cert.id },
       data: {
-        isRevoked: true,
+        revoked: true,
         revokedAt: new Date(),
         revokeReason: dto.reason,
         revokedById: user.id,
       },
+      include: { user: { select: { fullName: true, email: true } } },
     });
-    await this.audit.logEntity(user.id, 'UPDATE', 'IssuedCertificate', id, {
+    await this.audit.logEntity(user.id, 'UPDATE', 'Certificate', String(cert.id), {
       action: 'REVOKE',
       reason: dto.reason,
     });
-    await createNotificationSafe(this.prisma, this.logger, {
-      userId: cert.userId,
-      type: 'CERTIFICATE_REVOKED',
-      title: 'Certificado revogado',
-      message: `O teu certificado "${cert.title}" foi revogado.`,
-      metadata: { certificateId: id, reason: dto.reason },
-    });
-    return updated;
+    if (cert.userId) {
+      await createNotificationSafe(this.prisma, this.logger, {
+        userId: cert.userId,
+        type: 'CERTIFICATE_REVOKED',
+        title: 'Certificado revogado',
+        message: `O teu certificado "${cert.title}" foi revogado.`,
+        metadata: { certificateId: id, reason: dto.reason },
+      });
+    }
+    return certificateToIssuedShape(updated);
   }
 
   async downloadCertificate(id: string, user: { id: number; role?: { name: string } | null }) {
-    const cert = await this.findCertificateById(id, user);
-    await this.prisma.issuedCertificate.update({
-      where: { id },
+    const cert = await this.resolveCert(id);
+    if (!cert || cert.deletedAt) throw new NotFoundException('Certificado não encontrado');
+    assertCanAccess(cert, cert.userId, user, [Role.ADMIN, Role.RH]);
+    await this.prisma.certificate.update({
+      where: { id: cert.id },
       data: { downloadCount: { increment: 1 } },
     });
-    await this.audit.logEntity(user.id, 'DOWNLOAD', 'IssuedCertificate', id, {
+    await this.audit.logEntity(user.id, 'DOWNLOAD', 'Certificate', String(cert.id), {
       code: cert.code,
     });
-    return { pdfUrl: cert.pdfUrl, publicUrl: cert.publicUrl, title: cert.title };
+    return { pdfUrl: cert.pdfUrl ?? cert.fileUrl, publicUrl: cert.publicUrl, title: cert.title };
   }
 
   // ─── BADGES DIGITAIS ─────────────────────────────────
@@ -365,18 +446,28 @@ export class CertificationService {
 
   async getMyCertificates(userId: number, filters: MyCertificatesFilterDto) {
     const { page = 1, limit = 20 } = filters;
-    const where = { userId, deletedAt: null };
+    const where: Prisma.CertificateWhereInput = {
+      userId,
+      legacyIssuedCertId: { not: null },
+      deletedAt: null,
+    };
     const { skip, take } = calculatePagination(page, limit);
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.read.issuedCertificate.findMany({
+      this.prisma.read.certificate.findMany({
         where,
         skip,
         take,
         orderBy: { issuedAt: 'desc' },
+        include: { user: { select: { fullName: true, email: true } } },
       }),
-      this.prisma.read.issuedCertificate.count({ where }),
+      this.prisma.read.certificate.count({ where }),
     ]);
-    const { data: pageData, meta } = buildPaginatedResponse(data, total, page, limit);
+    const { data: pageData, meta } = buildPaginatedResponse(
+      data.map(c => certificateToIssuedShape(c)),
+      total,
+      page,
+      limit,
+    );
     return { data: pageData, ...meta };
   }
 
@@ -386,15 +477,20 @@ export class CertificationService {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // groupBy() fica fora do $transaction abaixo: dentro do array o TS tenta
-    // inferir um tipo partilhado para o tuplo inteiro e o
-    // IssuedCertificateScalarWhereWithAggregatesInput do groupBy entra em
-    // referência circular nesse contexto (TS2615) — não acontece chamado
-    // isoladamente. Sem impacto prático: é uma leitura de dashboard, não
-    // precisa de atomicidade com as restantes contagens.
-    const byTypePromise = this.prisma.read.issuedCertificate.groupBy({
-      by: ['type'],
-      where: { deletedAt: null },
+    // Fase F2: contagens de certificado sobre `Certificate`, restritas aos que
+    // vêm do módulo certification (`legacyIssuedCertId != null`) — preserva a
+    // semântica histórica e não conta os certificados nativos de course-completion.
+    const certScope: Prisma.CertificateWhereInput = {
+      legacyIssuedCertId: { not: null },
+      deletedAt: null,
+    };
+
+    // groupBy() fora do $transaction: dentro do array o TS entra em referência
+    // circular no where do groupBy (TS2615). Sem impacto: leitura de dashboard.
+    // Agrupa por `legacyType` para manter a granularidade histórica de 6 valores.
+    const byTypePromise = this.prisma.read.certificate.groupBy({
+      by: ['legacyType'],
+      where: certScope,
       _count: { id: true },
     });
 
@@ -409,15 +505,15 @@ export class CertificationService {
       totalVerifications,
       recentCerts,
     ] = await this.prisma.$transaction([
-      this.prisma.read.issuedCertificate.count({ where: { deletedAt: null } }),
-      this.prisma.read.issuedCertificate.count({
-        where: { issuedAt: { gte: startOfMonth } },
+      this.prisma.read.certificate.count({ where: certScope }),
+      this.prisma.read.certificate.count({
+        where: { ...certScope, issuedAt: { gte: startOfMonth } },
       }),
-      this.prisma.read.issuedCertificate.count({
-        where: { isRevoked: true, deletedAt: null },
+      this.prisma.read.certificate.count({
+        where: { ...certScope, revoked: true },
       }),
-      this.prisma.read.issuedCertificate.count({
-        where: { expiresAt: { lt: now }, isRevoked: false, deletedAt: null },
+      this.prisma.read.certificate.count({
+        where: { ...certScope, expiresAt: { lt: now }, revoked: false },
       }),
       this.prisma.read.digitalBadge.count({
         where: { deletedAt: null, isActive: true },
@@ -428,18 +524,19 @@ export class CertificationService {
       this.prisma.read.certificateTemplate.count({
         where: { deletedAt: null, isActive: true },
       }),
-      this.prisma.read.issuedCertificate.aggregate({
+      this.prisma.read.certificate.aggregate({
         _sum: { verifyCount: true },
-        where: { deletedAt: null },
+        where: certScope,
       }),
-      this.prisma.read.issuedCertificate.findMany({
-        where: { deletedAt: null },
+      this.prisma.read.certificate.findMany({
+        where: certScope,
         orderBy: { issuedAt: 'desc' },
         take: 5,
-        include: { user: { select: { fullName: true } } },
+        include: { user: { select: { fullName: true, email: true } } },
       }),
     ]);
-    const byType = await byTypePromise;
+    const byTypeRaw = await byTypePromise;
+    const byType = byTypeRaw.map(g => ({ type: g.legacyType, _count: g._count }));
 
     return {
       totals: {
@@ -454,7 +551,7 @@ export class CertificationService {
         totalVerifications: totalVerifications._sum.verifyCount || 0,
       },
       byType,
-      recentCertificates: recentCerts,
+      recentCertificates: recentCerts.map(c => certificateToIssuedShape(c)),
     };
   }
 

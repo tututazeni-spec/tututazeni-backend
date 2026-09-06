@@ -75,9 +75,10 @@ describe('Certification Integration', () => {
   });
 
   afterAll(async () => {
+    // Fase F2: /certification/certificates escreve em `Certificate` (legacyIssuedCertId).
     if (certificateId)
-      await (prisma as any).issuedCertificate
-        .deleteMany({ where: { id: certificateId } })
+      await prisma.certificate
+        .deleteMany({ where: { legacyIssuedCertId: certificateId } })
         .catch(() => undefined);
     if (templateId)
       await (prisma as any).certificateTemplate
@@ -146,6 +147,22 @@ describe('Certification Integration', () => {
       expect(res.body).toHaveProperty('verificationCode');
       certificateId = res.body.id;
       verificationCode = res.body.verificationCode;
+    });
+
+    it('Fase F2: o certificado foi escrito em `Certificate`, não em `IssuedCertificate`', async () => {
+      const cert = await prisma.certificate.findUnique({
+        where: { legacyIssuedCertId: certificateId },
+      });
+      expect(cert).not.toBeNull();
+      expect(cert!.legacyType).toBe('COURSE'); // type por omissão
+      expect(cert!.type).toBe('COURSE');
+      expect(cert!.issuedById).toBeTruthy();
+      expect(typeof certificateId).toBe('string'); // contrato mantém id string
+
+      const legacyRow = await (prisma as any).issuedCertificate.findFirst({
+        where: { verificationCode },
+      });
+      expect(legacyRow).toBeNull();
     });
 
     it('emitir para utilizador inexistente → 404', async () => {

@@ -1989,30 +1989,57 @@ model Enrollment {
 }
 
 model Certificate {
-  id                Int                @id @default(autoincrement())
+  id                Int             @id @default(autoincrement())
   type              CertificateType
   userId            Int?
-  enrollmentId      Int?               @unique
+  enrollmentId      Int?            @unique
   courseId          Int?
   programId         Int?
   developmentPlanId Int?
-  issuedAt          DateTime           @default(now())
-  code              String?            @unique
-  validationCode    String             @unique
-  fileUrl           String?            @db.Text
+  issuedAt          DateTime        @default(now())
+  code              String?         @unique
+  validationCode    String          @unique
+  fileUrl           String?         @db.Text
   expiresAt         DateTime?
-  revoked           Boolean            @default(false)
-  user              User?              @relation(fields: [userId], references: [id])
-  enrollment        Enrollment?        @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  course            Course?            @relation(fields: [courseId], references: [id])
-  program           LeadershipProgram? @relation(fields: [programId], references: [id])
-  developmentPlan   DevelopmentPlan?   @relation(fields: [developmentPlanId], references: [id])
-  eventId           Int?
-  event             Event?             @relation(fields: [eventId], references: [id])
+  revoked           Boolean         @default(false)
+
+  // Fase F2 — Certificate absorve IssuedCertificate (o modelo rico deixa de ser
+  // escrito). Colunas nullable/defaulted: os escritores nativos (course-completion,
+  // courses, events, ...) não são afectados. legacyType guarda o CertificateTemplateType
+  // original verbatim (a tradução para CertificateType é lossy). legacyIssuedCertId
+  // rastreia a migração 1:1 e dá um id string estável ao contrato /certification/*.
+  hashCode           String?
+  title              String?
+  recipientName      String?
+  issuerName         String?                  @default("INNOVA")
+  score              Float?
+  pdfUrl             String?
+  publicUrl          String?
+  linkedInUrl        String?
+  revokedAt          DateTime?
+  revokeReason       String?
+  revokedById        Int?
+  downloadCount      Int                      @default(0)
+  verifyCount        Int                      @default(0)
+  issuedById         Int?
+  templateId         String?
+  metadata           String?
+  deletedAt          DateTime?
+  legacyType         CertificateTemplateType?
+  legacyIssuedCertId String?                  @unique
+
+  user            User?              @relation(fields: [userId], references: [id])
+  enrollment      Enrollment?        @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  course          Course?            @relation(fields: [courseId], references: [id])
+  program         LeadershipProgram? @relation(fields: [programId], references: [id])
+  developmentPlan DevelopmentPlan?   @relation(fields: [developmentPlanId], references: [id])
+  eventId         Int?
+  event           Event?             @relation(fields: [eventId], references: [id])
 
   @@index([userId])
   @@index([courseId])
   @@index([enrollmentId])
+  @@index([legacyType])
 }
 
 model Quiz {

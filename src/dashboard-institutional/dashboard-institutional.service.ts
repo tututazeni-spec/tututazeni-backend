@@ -66,7 +66,12 @@ export class DashboardInstitutionalService {
             where: { status: 'ACTIVE', deletedAt: null },
           }),
           this.prisma.read.libraryItem.count({ where: { deletedAt: null } }),
-          this.prisma.read.issuedCertificate.count({ where: { deletedAt: null } }),
+          // Fase F2: IssuedCertificate absorvido por Certificate. Restrito aos
+          // certificados do módulo certification (legacyIssuedCertId != null) para
+          // preservar a contagem histórica.
+          this.prisma.read.certificate.count({
+            where: { legacyIssuedCertId: { not: null }, deletedAt: null },
+          }),
           this.prisma.read.badgeIssuance.count({
             where: { deletedAt: null, isRevoked: false },
           }),
@@ -159,8 +164,13 @@ export class DashboardInstitutionalService {
       overdueMilestones,
       pendingApprovals,
     ] = await this.prisma.$transaction([
-      this.prisma.read.issuedCertificate.count({
-        where: { expiresAt: { lt: now }, isRevoked: false, deletedAt: null },
+      this.prisma.read.certificate.count({
+        where: {
+          legacyIssuedCertId: { not: null },
+          expiresAt: { lt: now },
+          revoked: false,
+          deletedAt: null,
+        },
       }),
       this.prisma.read.funderReport.count({
         where: { dueDate: { lt: now }, status: { in: ['PENDING', 'REJECTED'] } },
