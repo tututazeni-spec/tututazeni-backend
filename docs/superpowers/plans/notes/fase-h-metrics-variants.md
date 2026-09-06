@@ -579,7 +579,7 @@ export interface HeadcountParams extends MetricScopeFilter {
 export interface HeadcountBreakdownEntry {
   id: number;
   name: string;
-  level?: number;      // só em byPosition
+  level?: string;      // só em byPosition — Prisma enum PositionLevel (string), ex. 'SENIOR' (corrigido de `number` na Task 2 review)
   count: number;       // scoped a active:true
 }
 
