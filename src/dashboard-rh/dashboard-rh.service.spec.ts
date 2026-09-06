@@ -383,6 +383,14 @@ describe('DashboardRhService', () => {
       expect(await service.getAlerts()).toEqual([]);
     });
 
+    it('degrada para [] (sem rebentar) e loga quando metrics.alerts falha', async () => {
+      const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+      mockMetrics.alerts.mockRejectedValue(new Error('read replica down'));
+      await expect(service.getAlerts()).resolves.toEqual([]);
+      expect(warn).toHaveBeenCalledWith(expect.objectContaining({ action: 'DASHBOARD_RH_ALERTS' }));
+      warn.mockRestore();
+    });
+
     it('SURVEY_PARTICIPATION_LOW não traz count e sai como ENGAGEMENT', async () => {
       mockMetrics.alerts.mockResolvedValue([
         {

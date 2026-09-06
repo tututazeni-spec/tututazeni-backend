@@ -925,10 +925,24 @@ export class DashboardRhService {
   // subconjunto de 4 regras de organização que este ecrã sempre mostrou
   // (§4.3). A ordem passa a ser a canónica (severidade, depois `key`) em vez
   // da antiga ordem de `push` — cosmético para um consumidor de lista.
+  //
+  // A camada canónica propaga falhas de leitura; a política de degradação é
+  // deste consumidor: `getAlerts` NUNCA pode rebentar (o antigo código
+  // envolvia cada count em `.catch`), porque `getFullRhDashboard` chama-o sem
+  // try/catch dentro do `cache.getOrSet` — sem isto uma falha transitória
+  // passava a 500 tanto em `GET /dashboard-rh/alerts` como no agregado
+  // `GET /dashboard-rh`.
   async getAlerts(): Promise<
     { type: string; severity: 'HIGH' | 'MEDIUM' | 'LOW'; message: string; count?: number }[]
   > {
-    const canonical = await this.metrics.alerts({ scope: 'organization' });
+    const canonical = await this.metrics.alerts({ scope: 'organization' }).catch((e: unknown) => {
+      this.logger.warn({
+        action: 'DASHBOARD_RH_ALERTS',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao obter alertas canónicos no dashboard RH',
+      });
+      return [] as Awaited<ReturnType<typeof this.metrics.alerts>>;
+    });
     return canonical
       .filter(a => RH_ALERT_KEYS.has(a.key))
       .map(a => ({
