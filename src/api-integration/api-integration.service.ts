@@ -259,6 +259,18 @@ export class ApiIntegrationService {
     return { message: 'Integração removida' };
   }
 
+  /**
+   * Regista o início de uma sincronização de integração — cria um
+   * `IntegrationSyncLog` com status `RUNNING` e devolve o registo. Ponto único
+   * de escrita deste modelo: `scalability.triggerSync` delega aqui (Fase J) em
+   * vez de escrever `integrationSyncLog` directamente.
+   */
+  async recordSync(integrationId: number) {
+    return this.prisma.integrationSyncLog.create({
+      data: { integrationId, status: 'RUNNING' },
+    });
+  }
+
   // ══════════════════════════════════════════════════════
   // TEST CONNECTIVITY
   // ══════════════════════════════════════════════════════

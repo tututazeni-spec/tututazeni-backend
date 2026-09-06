@@ -12,12 +12,14 @@ import { ScalabilityEventListeners } from './scalability.events';
 import { PrismaModule } from '../prisma/prisma.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AuditModule } from '../audit/audit.module';
+import { ApiIntegrationModule } from '../api-integration/api-integration.module';
 
 @Module({
   imports: [
     PrismaModule,
     NotificationsModule,
     AuditModule,
+    ApiIntegrationModule,
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot({
       // Wildcard events para padrões como 'integration.*'

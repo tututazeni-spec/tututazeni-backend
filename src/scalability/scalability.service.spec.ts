@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ApiIntegrationService } from '../api-integration/api-integration.service';
 
 const tenantMock = {
   findUnique: jest.fn(),
@@ -70,6 +71,12 @@ describe('ScalabilityService', () => {
           },
         },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+        {
+          provide: ApiIntegrationService,
+          useValue: {
+            recordSync: jest.fn().mockResolvedValue({ id: 'sync-log-1', status: 'RUNNING' }),
+          },
+        },
       ],
     }).compile();
     service = module.get<ScalabilityService>(ScalabilityService);

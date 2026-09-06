@@ -19,6 +19,7 @@ const mockPrisma: any = new Proxy(
       findFirst: jest.fn().mockResolvedValue(null),
       count: jest.fn().mockResolvedValue(0),
     },
+    integrationSyncLog: { create: jest.fn().mockResolvedValue({}) },
     auditLog: { create: jest.fn().mockResolvedValue({}) },
   },
   {
@@ -72,6 +73,21 @@ describe('ApiIntegrationService', () => {
     it('deve lançar NotFoundException', async () => {
       integrationMock.findUnique.mockResolvedValue(null);
       await expect(service.getIntegration(99)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('recordSync', () => {
+    it('cria um IntegrationSyncLog RUNNING para a integração e devolve-o', async () => {
+      mockPrisma.integrationSyncLog.create.mockResolvedValue({
+        id: 'sync-1',
+        integrationId: 3,
+        status: 'RUNNING',
+      });
+      const res = await service.recordSync(3);
+      expect(mockPrisma.integrationSyncLog.create).toHaveBeenCalledWith({
+        data: { integrationId: 3, status: 'RUNNING' },
+      });
+      expect(res).toEqual({ id: 'sync-1', integrationId: 3, status: 'RUNNING' });
     });
   });
 });
