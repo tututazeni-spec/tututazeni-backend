@@ -1,6 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AnalyticsService } from './analytics.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+
+// ─── MetricsAggregationService mock (Fase H — Task 8) ─────────────────────
+// analytics.getRiskAlerts delega as CONTAGENS do `summary` à camada canónica
+// (`metrics.alerts`, filtradas às 3 regras de risco); as listas de entidades
+// continuam a ser lidas localmente via prisma.
+const mockMetrics = {
+  headcount: jest.fn(),
+  turnover: jest.fn(),
+  trainingRoi: jest.fn(),
+  alerts: jest.fn(),
+};
 
 const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
 const makeFind = (data: any[] = []) => jest.fn().mockResolvedValue(data);
@@ -85,6 +97,7 @@ describe('AnalyticsService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockMetrics.alerts.mockResolvedValue([]);
     Object.defineProperty(mockPrismaProxy, 'read', {
       get() {
         return mockPrismaProxy;
@@ -92,7 +105,11 @@ describe('AnalyticsService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AnalyticsService, { provide: PrismaService, useValue: mockPrismaProxy }],
+      providers: [
+        AnalyticsService,
+        { provide: PrismaService, useValue: mockPrismaProxy },
+        { provide: MetricsAggregationService, useValue: mockMetrics },
+      ],
     }).compile();
     service = module.get<AnalyticsService>(AnalyticsService);
   });
@@ -210,6 +227,101 @@ describe('AnalyticsService', () => {
     it('deve retornar alertas de risco', async () => {
       const result = await service.getRiskAlerts({});
       expect(result).toBeDefined();
+    });
+
+    it('summary vem de metrics.alerts filtrado às 3 regras de risco; listas ficam locais', async () => {
+      mockPrismaProxy.user.findMany.mockResolvedValue([
+        { id: 1, fullName: 'Ana', avatarUrl: null, department: { name: 'TI' } },
+        { id: 2, fullName: 'Bea', avatarUrl: null, department: { name: 'RH' } },
+      ]);
+      // recentEnrollments (distinct) — Ana tem, Bea não → Bea inactiva
+      mockPrismaProxy.enrollment.findMany.mockResolvedValue([{ userId: 1 }]);
+      mockPrismaProxy.developmentPlan.findMany.mockResolvedValue([
+        {
+          id: 7,
+          name: 'PDI Bea',
+          user: { id: 2, fullName: 'Bea', avatarUrl: null },
+          endDate: new Date('2020-01-01'),
+        },
+      ]);
+      mockPrismaProxy.developmentPlanAction.findMany.mockResolvedValue([]);
+      mockMetrics.alerts.mockResolvedValue([
+        {
+          key: 'INACTIVE_COLLABORATORS',
+          type: 'RISK',
+          severity: 'MEDIUM',
+          message: 'x',
+          count: 9,
+          scope: 'organization',
+        },
+        {
+          key: 'PDI_PLAN_OVERDUE',
+          type: 'PDI',
+          severity: 'MEDIUM',
+          message: 'y',
+          count: 4,
+          scope: 'organization',
+        },
+        {
+          key: 'PDI_ACTION_CRITICAL',
+          type: 'PDI',
+          severity: 'HIGH',
+          message: 'z',
+          count: 2,
+          scope: 'organization',
+        },
+        // fora do subconjunto — deve ser ignorado
+        {
+          key: 'PERFORMANCE_CRITICAL',
+          type: 'PERFORMANCE',
+          severity: 'HIGH',
+          message: 'w',
+          count: 50,
+          scope: 'organization',
+        },
+      ]);
+
+      const result = await service.getRiskAlerts({ departmentId: 3 });
+
+      expect(mockMetrics.alerts).toHaveBeenCalledWith({ scope: 'organization', departmentId: 3 });
+      expect(result.summary).toEqual({
+        inactiveCount: 9,
+        overduePDICount: 4,
+        criticalActionCount: 2,
+      });
+      // listas ainda montadas localmente
+      expect(result.inactiveCollaborators).toEqual([
+        { id: 2, fullName: 'Bea', avatarUrl: null, department: { name: 'RH' } },
+      ]);
+      expect(result.overduePDIs).toHaveLength(1);
+      expect(result.overduePDIs[0].planId).toBe(7);
+    });
+
+    it('sem departmentId chama metrics.alerts só com { scope: organization }', async () => {
+      await service.getRiskAlerts({});
+      expect(mockMetrics.alerts).toHaveBeenCalledWith({ scope: 'organization' });
+    });
+
+    it('degrada summary para zeros (+ logger.warn) quando metrics.alerts falha; listas mantêm-se', async () => {
+      const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+      mockPrismaProxy.user.findMany.mockResolvedValue([
+        { id: 1, fullName: 'Ana', avatarUrl: null, department: null },
+      ]);
+      mockPrismaProxy.enrollment.findMany.mockResolvedValue([]);
+      mockMetrics.alerts.mockRejectedValue(new Error('read replica down'));
+
+      const result = await service.getRiskAlerts({});
+
+      expect(result.summary).toEqual({
+        inactiveCount: 0,
+        overduePDICount: 0,
+        criticalActionCount: 0,
+      });
+      expect(result.inactiveCollaborators).toHaveLength(1);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ANALYTICS_RISK_ALERTS' }),
+      );
+      warn.mockRestore();
     });
   });
 

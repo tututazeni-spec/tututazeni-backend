@@ -1,6 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AnalyticsService } from './analytics.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+
+const mockMetrics = {
+  headcount: jest.fn(),
+  turnover: jest.fn(),
+  trainingRoi: jest.fn(),
+  alerts: jest.fn().mockResolvedValue([]),
+};
 
 const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
 const makeFind = (data: any[] = []) => jest.fn().mockResolvedValue(data);
@@ -100,6 +108,7 @@ describe('AnalyticsService (additional)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockMetrics.alerts.mockResolvedValue([]);
     Object.defineProperty(mockPrismaProxy, 'read', {
       get() {
         return mockPrismaProxy;
@@ -107,7 +116,11 @@ describe('AnalyticsService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AnalyticsService, { provide: PrismaService, useValue: mockPrismaProxy }],
+      providers: [
+        AnalyticsService,
+        { provide: PrismaService, useValue: mockPrismaProxy },
+        { provide: MetricsAggregationService, useValue: mockMetrics },
+      ],
     }).compile();
     service = module.get<AnalyticsService>(AnalyticsService);
   });
