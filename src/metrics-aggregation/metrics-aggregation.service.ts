@@ -14,6 +14,7 @@
 //    `exitDate` preenchido; o de entrada é `hireDate` (§0/§2.0).
 
 import { Injectable } from '@nestjs/common';
+import { EnrollmentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   HeadcountBreakdownEntry,
@@ -22,11 +23,28 @@ import {
   HeadcountTrendParams,
   HeadcountTrendPoint,
   MetricScopeFilter,
+  TrainingRoiParams,
+  TrainingRoiResult,
   TurnoverParams,
   TurnoverResult,
 } from './metrics.types';
 
 const MONTH_MS = 30 * 86400000;
+
+// Assunções financeiras — DEFAULTS reais de `src/roi-impact/roi-impact.service.ts:11-13`
+// (`calculateRoiFull`, a única variante que produz ROI% / BCR / payback). Overridáveis
+// por chamada via `TrainingRoiParams`.
+const TRAINING_ROI_COST_PER_ENROLLMENT = 200; // USD
+const TRAINING_ROI_BENEFIT_PER_COMPLETION = 500; // USD
+
+// String constante que documenta a metodologia canónica escolhida (nota §3.2). Vai no
+// payload de `trainingRoi` para a ratificação do dono do produto no PR da Task 10.
+const TRAINING_ROI_METHODOLOGY =
+  'Custo = inscrições × 200 USD (costPerEnrollment); Benefício = conclusões × 500 USD ' +
+  '(benefitPerCompletion); ROI% = (benefício − custo) / custo × 100; BCR = benefício / custo; ' +
+  'payback (meses) = custo / (benefício / 12); horas = Σ Course.workloadHours das conclusões ' +
+  'na janela (fallback: conclusões × 2h); janela default = 12 meses até `to`. Base: modelo ' +
+  'financeiro de roi-impact.calculateRoiFull + horas reais de analytics.getTrainingROI.';
 
 /** where escalar comum a headcount / trend (departmentId / managerId / positionId). */
 function scopeWhere(f: MetricScopeFilter): Record<string, number> {
@@ -262,6 +280,87 @@ export class MetricsAggregationService {
       netHeadcountChange: newHires - leavers,
       avgTenureMonths,
       insights: this.buildTurnoverInsights(turnoverRate, leavers),
+      period: { from, to },
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // trainingRoi — nota §3.2
+  // ══════════════════════════════════════════════════════════════════
+  //
+  // Base = modelo financeiro do `roi-impact.calculateRoiFull` (única variante que
+  // produz ROI% / BCR / payback / confiança); correcção importada do
+  // `analytics.getTrainingROI`: as horas vêm de `Course.workloadHours` real das
+  // inscrições concluídas na janela — não do flat `completed × 2h`. Esse flat fica
+  // apenas como fallback quando `workloadHours` está ausente em massa.
+  //
+  // `where` = AND(enrolledAt ∈ [from,to], departmentId ? { user: { departmentId } } : {},
+  // courseId ? { courseId } : {}). Janela default = trailing 12 meses até `to`.
+  //
+  // Overlays (retenção, performance, Kirkpatrick, What-If, Program Library) ficam
+  // FORA do primitivo — compõem por cima nos módulos (nota §3.2).
+
+  async trainingRoi(params: TrainingRoiParams): Promise<TrainingRoiResult> {
+    const to = params.to ?? new Date();
+    const from =
+      params.from ??
+      new Date(to.getFullYear() - 1, to.getMonth(), to.getDate(), to.getHours(), to.getMinutes());
+
+    const costPerEnrollment = params.costPerEnrollment ?? TRAINING_ROI_COST_PER_ENROLLMENT;
+    const benefitPerCompletion = params.benefitPerCompletion ?? TRAINING_ROI_BENEFIT_PER_COMPLETION;
+
+    const where: Record<string, unknown> = { enrolledAt: { gte: from, lte: to } };
+    if (params.departmentId != null) where.user = { departmentId: params.departmentId };
+    if (params.courseId != null) where.courseId = params.courseId;
+
+    const completedWhere = { ...where, status: EnrollmentStatus.COMPLETED };
+
+    const [enrollments, completed, completedRows] = await Promise.all([
+      this.prisma.read.enrollment.count({ where }),
+      this.prisma.read.enrollment.count({ where: completedWhere }),
+      this.prisma.read.enrollment.findMany({
+        where: completedWhere,
+        include: { course: { select: { workloadHours: true } } },
+      }),
+    ]);
+
+    const completionRate = enrollments > 0 ? round((completed / enrollments) * 100, 1) : 0;
+
+    const totalCost = enrollments * costPerEnrollment;
+    const grossBenefit = completed * benefitPerCompletion;
+    const netBenefit = grossBenefit - totalCost;
+
+    // Guardas de divisão-por-zero obrigatórias (nunca NaN/Infinity):
+    // totalCost 0 → roiPct 0, bcr 0 · grossBenefit 0 → paybackMonths 0.
+    const roiPct = totalCost > 0 ? round(((grossBenefit - totalCost) / totalCost) * 100, 1) : 0;
+    const bcr = totalCost > 0 ? round(grossBenefit / totalCost, 2) : 0;
+    const paybackMonths = grossBenefit > 0 ? round(totalCost / (grossBenefit / 12), 1) : 0;
+
+    const summedWorkloadHours = completedRows.reduce(
+      (sum, row) =>
+        sum + ((row as { course?: { workloadHours: number | null } }).course?.workloadHours ?? 0),
+      0,
+    );
+    const trainingHours = summedWorkloadHours > 0 ? summedWorkloadHours : completed * 2;
+
+    const confidence: TrainingRoiResult['confidence'] =
+      completed >= 50 ? 'HIGH' : completed >= 20 ? 'MEDIUM' : 'LOW';
+
+    return {
+      enrollments,
+      completed,
+      completionRate,
+      costPerEnrollment,
+      benefitPerCompletion,
+      totalCost,
+      grossBenefit,
+      netBenefit,
+      roiPct,
+      bcr,
+      paybackMonths,
+      trainingHours,
+      confidence,
+      methodology: TRAINING_ROI_METHODOLOGY,
       period: { from, to },
     };
   }

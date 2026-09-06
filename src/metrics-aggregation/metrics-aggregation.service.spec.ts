@@ -12,6 +12,10 @@ const mockPrisma = {
   },
   department: { findMany: makeFind() },
   position: { findMany: makeFind() },
+  enrollment: {
+    count: makeCount(0),
+    findMany: makeFind(),
+  },
 };
 
 const mockPrismaProxy = mockPrisma as unknown as Record<string, unknown>;
@@ -25,6 +29,8 @@ describe('MetricsAggregationService', () => {
     mockPrisma.user.findMany = makeFind();
     mockPrisma.department.findMany = makeFind();
     mockPrisma.position.findMany = makeFind();
+    mockPrisma.enrollment.count = makeCount(0);
+    mockPrisma.enrollment.findMany = makeFind();
     Object.defineProperty(mockPrismaProxy, 'read', {
       get() {
         return mockPrismaProxy;
@@ -420,6 +426,186 @@ describe('MetricsAggregationService', () => {
           select: { hireDate: true, createdAt: true },
         }),
       );
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  // trainingRoi — nota §3.2
+  // ════════════════════════════════════════════════════════════════
+
+  describe('trainingRoi', () => {
+    // ordem das 2 contagens no Promise.all: 0 enrollments · 1 completed
+    const setCounts = (enrollments: number, completed: number) => {
+      mockPrisma.enrollment.count = jest
+        .fn()
+        .mockResolvedValueOnce(enrollments)
+        .mockResolvedValueOnce(completed);
+    };
+
+    it('where usa a janela enrolledAt [from,to]; completed filtra status COMPLETED; findMany inclui course.workloadHours', async () => {
+      setCounts(10, 4);
+      mockPrisma.enrollment.findMany = makeFind([]);
+      const from = new Date('2025-01-01T00:00:00.000Z');
+      const to = new Date('2025-12-31T23:59:59.999Z');
+
+      await service.trainingRoi({ from, to });
+
+      const enrollCall = mockPrisma.enrollment.count.mock.calls[0][0];
+      const completedCall = mockPrisma.enrollment.count.mock.calls[1][0];
+      const findCall = mockPrisma.enrollment.findMany.mock.calls[0][0];
+
+      expect(enrollCall.where.enrolledAt).toEqual({ gte: from, lte: to });
+      expect(enrollCall.where).not.toHaveProperty('status');
+
+      expect(completedCall.where.enrolledAt).toEqual({ gte: from, lte: to });
+      expect(completedCall.where.status).toBe('COMPLETED');
+
+      expect(findCall.where.enrolledAt).toEqual({ gte: from, lte: to });
+      expect(findCall.where.status).toBe('COMPLETED');
+      expect(findCall.include).toEqual({ course: { select: { workloadHours: true } } });
+    });
+
+    it('roiPct = round((grossBenefit - totalCost) / totalCost * 100, 1); bcr; netBenefit; paybackMonths', async () => {
+      setCounts(100, 40); // totalCost 20000, grossBenefit 20000
+      mockPrisma.enrollment.findMany = makeFind([]);
+      const result = await service.trainingRoi({});
+      expect(result.totalCost).toBe(20000);
+      expect(result.grossBenefit).toBe(20000);
+      expect(result.netBenefit).toBe(0);
+      expect(result.roiPct).toBe(0);
+      expect(result.bcr).toBe(1);
+      expect(result.completionRate).toBe(40);
+      expect(result.paybackMonths).toBe(12);
+    });
+
+    it('roiPct positivo quando benefício > custo', async () => {
+      setCounts(50, 40); // totalCost 10000, grossBenefit 20000
+      mockPrisma.enrollment.findMany = makeFind([]);
+      const result = await service.trainingRoi({});
+      expect(result.roiPct).toBe(100);
+      expect(result.bcr).toBe(2);
+      expect(result.netBenefit).toBe(10000);
+    });
+
+    it('guarda div-por-zero: enrollments 0 → completionRate 0; totalCost 0 → roiPct 0 e bcr 0 (nunca NaN/Infinity)', async () => {
+      setCounts(0, 0);
+      mockPrisma.enrollment.findMany = makeFind([]);
+      const result = await service.trainingRoi({});
+      expect(result.completionRate).toBe(0);
+      expect(result.totalCost).toBe(0);
+      expect(result.roiPct).toBe(0);
+      expect(result.bcr).toBe(0);
+      expect(Number.isNaN(result.roiPct)).toBe(false);
+      expect(Number.isFinite(result.bcr)).toBe(true);
+    });
+
+    it('guarda div-por-zero: grossBenefit 0 → paybackMonths 0', async () => {
+      setCounts(10, 0); // totalCost 2000, grossBenefit 0
+      mockPrisma.enrollment.findMany = makeFind([]);
+      const result = await service.trainingRoi({});
+      expect(result.grossBenefit).toBe(0);
+      expect(result.paybackMonths).toBe(0);
+      expect(result.roiPct).toBe(-100);
+      expect(result.bcr).toBe(0);
+      expect(Number.isFinite(result.paybackMonths)).toBe(true);
+    });
+
+    it('janela default = trailing 12 meses até agora', async () => {
+      setCounts(0, 0);
+      mockPrisma.enrollment.findMany = makeFind([]);
+      const before = Date.now();
+      const result = await service.trainingRoi({});
+      const after = Date.now();
+
+      expect(result.period.to.getTime()).toBeGreaterThanOrEqual(before);
+      expect(result.period.to.getTime()).toBeLessThanOrEqual(after);
+      const spanMonths =
+        (result.period.to.getFullYear() - result.period.from.getFullYear()) * 12 +
+        (result.period.to.getMonth() - result.period.from.getMonth());
+      expect(spanMonths).toBe(12);
+    });
+
+    it('departmentId → where.user.departmentId; courseId → where.courseId em todas as queries', async () => {
+      setCounts(0, 0);
+      mockPrisma.enrollment.findMany = makeFind([]);
+      await service.trainingRoi({ departmentId: 7, courseId: 3 });
+
+      for (const call of mockPrisma.enrollment.count.mock.calls) {
+        expect(call[0].where.user).toEqual({ departmentId: 7 });
+        expect(call[0].where.courseId).toBe(3);
+      }
+      const findCall = mockPrisma.enrollment.findMany.mock.calls[0][0];
+      expect(findCall.where.user).toEqual({ departmentId: 7 });
+      expect(findCall.where.courseId).toBe(3);
+    });
+
+    it('sem departmentId/courseId → where não tem user nem courseId', async () => {
+      setCounts(0, 0);
+      mockPrisma.enrollment.findMany = makeFind([]);
+      await service.trainingRoi({});
+      const enrollCall = mockPrisma.enrollment.count.mock.calls[0][0];
+      expect(enrollCall.where).not.toHaveProperty('user');
+      expect(enrollCall.where).not.toHaveProperty('courseId');
+    });
+
+    it('trainingHours = Σ course.workloadHours das inscrições concluídas na janela', async () => {
+      setCounts(20, 3);
+      mockPrisma.enrollment.findMany = makeFind([
+        { course: { workloadHours: 10 } },
+        { course: { workloadHours: 5 } },
+        { course: { workloadHours: null } },
+      ]);
+      const result = await service.trainingRoi({});
+      expect(result.trainingHours).toBe(15);
+    });
+
+    it('trainingHours fallback = completed * 2 quando workloadHours ausente em massa', async () => {
+      setCounts(60, 30);
+      mockPrisma.enrollment.findMany = makeFind([
+        { course: { workloadHours: null } },
+        { course: { workloadHours: null } },
+      ]);
+      const result = await service.trainingRoi({});
+      expect(result.trainingHours).toBe(60);
+    });
+
+    it('confidence: LOW abaixo de 20, MEDIUM em 20, MEDIUM abaixo de 50, HIGH em 50', async () => {
+      const run = async (completed: number) => {
+        setCounts(completed + 10, completed);
+        mockPrisma.enrollment.findMany = makeFind([]);
+        return (await service.trainingRoi({})).confidence;
+      };
+      expect(await run(19)).toBe('LOW');
+      expect(await run(20)).toBe('MEDIUM');
+      expect(await run(49)).toBe('MEDIUM');
+      expect(await run(50)).toBe('HIGH');
+    });
+
+    it('costPerEnrollment/benefitPerCompletion: default 200/500, overridáveis via params', async () => {
+      setCounts(10, 5);
+      mockPrisma.enrollment.findMany = makeFind([]);
+      const def = await service.trainingRoi({});
+      expect(def.costPerEnrollment).toBe(200);
+      expect(def.benefitPerCompletion).toBe(500);
+
+      setCounts(10, 5);
+      mockPrisma.enrollment.findMany = makeFind([]);
+      const custom = await service.trainingRoi({
+        costPerEnrollment: 100,
+        benefitPerCompletion: 1000,
+      });
+      expect(custom.costPerEnrollment).toBe(100);
+      expect(custom.benefitPerCompletion).toBe(1000);
+      expect(custom.totalCost).toBe(1000);
+      expect(custom.grossBenefit).toBe(5000);
+    });
+
+    it('methodology é uma string constante não-vazia', async () => {
+      setCounts(0, 0);
+      mockPrisma.enrollment.findMany = makeFind([]);
+      const result = await service.trainingRoi({});
+      expect(typeof result.methodology).toBe('string');
+      expect(result.methodology.length).toBeGreaterThan(0);
     });
   });
 });

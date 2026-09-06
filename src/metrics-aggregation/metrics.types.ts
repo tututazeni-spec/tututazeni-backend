@@ -123,6 +123,7 @@ export interface TrainingRoiResult {
   paybackMonths: number; // totalCost / (grossBenefit / 12), 1 dp
   trainingHours: number; // Σ Course.workloadHours das inscrições concluídas na janela
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  methodology: string; // string constante que documenta a fórmula escolhida (ratificação Task 10)
   period: MetricPeriod;
 }
 
