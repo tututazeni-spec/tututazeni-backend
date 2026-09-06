@@ -6396,22 +6396,33 @@ model Declaration {
   requestNotes   String?
   internalNotes  String?
   rejectedReason String?
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
-  tenant         TenantConfig            @relation(fields: [tenantId], references: [id])
-  template       DeclarationTemplate     @relation(fields: [templateId], references: [id])
-  requestedBy    User                    @relation("DeclarationRequestedBy", fields: [requestedById], references: [id])
-  assignedTo     User?                   @relation("DeclarationAssignedTo", fields: [assignedToId], references: [id])
-  employee       User                    @relation("DeclarationEmployee", fields: [employeeId], references: [id])
-  signatures     DeclarationSignature[]
-  auditLogs      DeclarationAuditLog[]
-  accessLogs     DeclarationAccessLog[]
-  attachments    DeclarationAttachment[]
+
+  // Rastreio da fusão declarations+work-declaration (Fase E). O caminho legado
+  // /declarations/documents é servido por esta tabela via LegacyDocumentDeclarationsService;
+  // DeclarationRequest deixou de ser escrito. legacyStatus é a fonte de verdade do
+  // estado no contrato legado (DocumentRequestStatus != DeclarationStatus).
+  legacyRequestId   Int?                   @unique
+  legacyStatus      DocumentRequestStatus?
+  legacyPurposeId   Int?
+  legacyGeneratedAt DateTime? // DeclarationRequest.generatedAt não tem coluna equivalente em Declaration
+
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  tenant      TenantConfig            @relation(fields: [tenantId], references: [id])
+  template    DeclarationTemplate     @relation(fields: [templateId], references: [id])
+  requestedBy User                    @relation("DeclarationRequestedBy", fields: [requestedById], references: [id])
+  assignedTo  User?                   @relation("DeclarationAssignedTo", fields: [assignedToId], references: [id])
+  employee    User                    @relation("DeclarationEmployee", fields: [employeeId], references: [id])
+  signatures  DeclarationSignature[]
+  auditLogs   DeclarationAuditLog[]
+  accessLogs  DeclarationAccessLog[]
+  attachments DeclarationAttachment[]
 
   @@index([tenantId, status])
   @@index([tenantId, employeeId])
   @@index([tenantId, requestedById])
   @@index([code])
+  @@index([legacyStatus])
   @@map("declarations")
 }
 

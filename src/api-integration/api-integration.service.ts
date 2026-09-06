@@ -14,6 +14,7 @@ import {
 import * as crypto from 'crypto';
 import { sanitizeForLog } from '../common/logging/sanitize';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -173,21 +174,10 @@ export class ApiIntegrationService {
     };
   }
 
-  // IntegrationConfig.tenantId é uma FK obrigatória (multi-tenant), mas o DTO não
-  // expõe tenantId ao chamador nem existe nenhum fluxo de seed/onboarding que crie
-  // um TenantConfig — sem isto, createIntegration() falharia sempre com "tenantId
-  // obrigatório". Usa-se (ou cria-se) um tenant único por omissão.
-  private async getDefaultTenantId(): Promise<string> {
-    const existing = await this.prisma.tenantConfig.findFirst();
-    if (existing) return existing.id;
-    const created = await this.prisma.tenantConfig.create({
-      data: { tenantCode: 'DEFAULT', tenantName: 'Default Tenant' },
-    });
-    return created.id;
-  }
-
   async createIntegration(dto: CreateIntegrationDto) {
-    const tenantId = await this.getDefaultTenantId();
+    // IntegrationConfig.tenantId é FK obrigatória (multi-tenant) nunca populada
+    // aqui — helper partilhado de tenant único por omissão.
+    const tenantId = await resolveDefaultTenantId(this.prisma);
     const data: Prisma.IntegrationConfigUncheckedCreateInput = {
       name: dto.name,
       type: dto.type,

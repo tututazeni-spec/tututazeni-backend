@@ -11,7 +11,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { DocumentDeclarationsService } from './document-declarations.service';
+import { LegacyDocumentDeclarationsService } from '../work-declaration/legacy-document-declarations.service';
+import { DeclarationPurposeService } from './declaration-purpose.service';
 import { WorkDeclarationsService } from './work-declarations.service';
 import {
   DocumentRequestFilterDto,
@@ -42,7 +43,10 @@ import { Role } from '../auth/enums/role.enum';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('declarations/documents')
 export class DocumentDeclarationsController {
-  constructor(private readonly svc: DocumentDeclarationsService) {}
+  constructor(
+    private readonly svc: LegacyDocumentDeclarationsService,
+    private readonly purposes: DeclarationPurposeService,
+  ) {}
 
   // Dashboard
   @Get('dashboard')
@@ -57,14 +61,14 @@ export class DocumentDeclarationsController {
   @ApiOperation({ summary: 'Listar finalidades de declaração' })
   @ApiQuery({ name: 'activeOnly', required: false, type: Boolean })
   getPurposes(@Query('activeOnly') ao?: string) {
-    return this.svc.getPurposes(ao !== 'false');
+    return this.purposes.getPurposes(ao !== 'false');
   }
 
   @Post('purposes')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar finalidade de declaração' })
   createPurpose(@Body() dto: CreateDeclarationPurposeDto) {
-    return this.svc.createPurpose(dto);
+    return this.purposes.createPurpose(dto);
   }
 
   @Patch('purposes/:id')
@@ -74,7 +78,7 @@ export class DocumentDeclarationsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: Partial<CreateDeclarationPurposeDto>,
   ) {
-    return this.svc.updatePurpose(id, dto);
+    return this.purposes.updatePurpose(id, dto);
   }
 
   // Templates

@@ -3,16 +3,20 @@ import {
   DocumentDeclarationsController,
   WorkDeclarationsController,
 } from './declarations.controller';
-import { DocumentDeclarationsService } from './document-declarations.service';
+import { LegacyDocumentDeclarationsService } from '../work-declaration/legacy-document-declarations.service';
+import { DeclarationPurposeService } from './declaration-purpose.service';
 import { WorkDeclarationsService } from './work-declarations.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
-const mockDocSvc = {
-  getDashboard: jest.fn().mockResolvedValue({}),
+const mockPurposeSvc = {
   getPurposes: jest.fn().mockResolvedValue([]),
   createPurpose: jest.fn().mockResolvedValue({ id: 1 }),
   updatePurpose: jest.fn().mockResolvedValue({}),
+};
+
+const mockDocSvc = {
+  getDashboard: jest.fn().mockResolvedValue({}),
   getTemplates: jest.fn().mockResolvedValue([]),
   getTemplate: jest.fn().mockResolvedValue({ id: 1 }),
   previewTemplate: jest.fn().mockResolvedValue('<html>'),
@@ -55,7 +59,10 @@ describe('DocumentDeclarationsController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DocumentDeclarationsController],
-      providers: [{ provide: DocumentDeclarationsService, useValue: mockDocSvc }],
+      providers: [
+        { provide: LegacyDocumentDeclarationsService, useValue: mockDocSvc },
+        { provide: DeclarationPurposeService, useValue: mockPurposeSvc },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -72,19 +79,19 @@ describe('DocumentDeclarationsController', () => {
 
   it('getPurposes → getPurposes(true)', async () => {
     await controller.getPurposes();
-    expect(mockDocSvc.getPurposes).toHaveBeenCalledWith(true);
+    expect(mockPurposeSvc.getPurposes).toHaveBeenCalledWith(true);
   });
 
   it('createPurpose → createPurpose(dto)', async () => {
     const dto = {} as any;
     await controller.createPurpose(dto);
-    expect(mockDocSvc.createPurpose).toHaveBeenCalledWith(dto);
+    expect(mockPurposeSvc.createPurpose).toHaveBeenCalledWith(dto);
   });
 
   it('updatePurpose → updatePurpose(id, dto)', async () => {
     const dto = {} as any;
     await controller.updatePurpose(1, dto);
-    expect(mockDocSvc.updatePurpose).toHaveBeenCalledWith(1, dto);
+    expect(mockPurposeSvc.updatePurpose).toHaveBeenCalledWith(1, dto);
   });
 
   it('getTemplates → getTemplates', async () => {

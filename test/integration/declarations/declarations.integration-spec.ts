@@ -83,6 +83,12 @@ describe('Declarations Integration', () => {
     await prisma.declarationApproval
       .deleteMany({ where: { requestId: { in: [requestId, rejectedRequestId].filter(Boolean) } } })
       .catch(() => undefined);
+    // Fase E: /declarations/documents escreve em `declarations` (legacyRequestId).
+    await prisma.declaration
+      .deleteMany({
+        where: { legacyRequestId: { in: [requestId, rejectedRequestId].filter(Boolean) } },
+      })
+      .catch(() => undefined);
     await prisma.declarationRequest
       .deleteMany({ where: { id: { in: [requestId, rejectedRequestId].filter(Boolean) } } })
       .catch(() => undefined);
@@ -199,9 +205,14 @@ describe('Declarations Integration', () => {
     });
 
     it('verificação pública por código (sem auth) → válida', async () => {
-      const req = await prisma.declarationRequest.findUnique({ where: { id: requestId } });
+      // Fase E: /declarations/documents é servido pela tabela `declarations`
+      // (legacyRequestId), não mais por `declarationRequest`.
+      const decl = await prisma.declaration.findUnique({
+        where: { legacyRequestId: requestId },
+      });
+      const code = decl!.verificationHash!.replace(/^LEG-/, '');
       const res = await request(app.getHttpServer())
-        .get(`/declarations/documents/verify/${req!.verificationCode}`)
+        .get(`/declarations/documents/verify/${code}`)
         .expect(200);
       expect(res.body.valid).toBe(true);
       expect(res.body.employee).toBe('Employee Int');
@@ -236,6 +247,29 @@ describe('Declarations Integration', () => {
         .set('Authorization', `Bearer ${rhToken}`)
         .expect(200);
       expect(res.body.total).toBeGreaterThanOrEqual(2);
+    });
+
+    it('Fase E: /declarations/documents é servido pela tabela `declarations`, não `declarationRequest`', async () => {
+      // O pedido emitido acima existe como Declaration (legacyRequestId) e NÃO como DeclarationRequest.
+      const decl = await prisma.declaration.findUnique({
+        where: { legacyRequestId: requestId },
+      });
+      expect(decl).not.toBeNull();
+      expect(decl!.legacyStatus).toBe('ISSUED');
+      expect(decl!.status).toBe('ISSUED'); // lifecycle nativo mapeado
+      expect(decl!.legacyGeneratedAt).not.toBeNull();
+      expect(decl!.verificationHash?.startsWith('LEG-')).toBe(true);
+
+      const legacyRow = await prisma.declarationRequest.findUnique({ where: { id: requestId } });
+      expect(legacyRow).toBeNull();
+
+      // o pedido rejeitado guardou o motivo + estado legado
+      const rej = await prisma.declaration.findUnique({
+        where: { legacyRequestId: rejectedRequestId },
+      });
+      expect(rej!.legacyStatus).toBe('REJECTED');
+      expect(rej!.status).toBe('REVOKED');
+      expect(rej!.rejectedReason).toBe('Dados insuficientes');
     });
   });
 
