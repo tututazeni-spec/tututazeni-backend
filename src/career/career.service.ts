@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, ReadinessLevel, ReviewStatus, CareerPlanStatus, GoalType } from '@prisma/client';
+import { SuccessionService } from '../succession/succession.service';
 import {
   CreateCareerPathDto,
   UpdateCareerPathDto,
@@ -28,7 +29,10 @@ import {
 export class CareerService {
   private readonly logger = new Logger(CareerService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly succession: SuccessionService,
+  ) {}
 
   // ─── PERFIL DE CARREIRA DO COLABORADOR ───────────────────────────────────
 
@@ -964,12 +968,11 @@ export class CareerService {
     });
   }
 
-  // SuccessionPlan exige criticalPositionId (FK obrigatória para CriticalPosition,
-  // gerido pelo módulo succession — ver succession.service.ts#createCriticalPosition)
-  // e priority — nenhum dos dois vinha do DTO nem era escrito aqui, e os nomes
-  // readiness/justification não existem no schema (são readinessLevel/notes).
+  // A escrita de SuccessionPlan tem um dono único — SuccessionService (Fase G2).
+  // Aqui resolve-se o cargo crítico a partir do positionId (contrato histórico
+  // de /career/succession) e delega-se; a priority é calculada pelo canónico.
   async createSuccessionPlan(dto: CreateSuccessionPlanDto) {
-    const criticalPosition = await this.prisma.criticalPosition.findUnique({
+    const criticalPosition = await this.prisma.read.criticalPosition.findUnique({
       where: { positionId: dto.positionId },
     });
     if (!criticalPosition) {
@@ -978,56 +981,33 @@ export class CareerService {
       );
     }
 
-    const existing = await this.prisma.successionPlan.findFirst({
-      where: { criticalPositionId: criticalPosition.id, candidateId: dto.candidateId },
-    });
-    if (existing) throw new ConflictException('Este candidato já está mapeado para este cargo');
-
-    const existingCount = await this.prisma.successionPlan.count({
-      where: { criticalPositionId: criticalPosition.id },
-    });
-    const priority =
-      existingCount === 0 ? 'PRIMARY' : existingCount === 1 ? 'SECONDARY' : 'TERTIARY';
-
-    // FIX: SuccessionPlan é um modelo real, já usado sem cast noutros
-    // métodos (findMany/findUnique/update abaixo) — `as any` desnecessário.
-    const plan = await this.prisma.successionPlan.create({
-      data: {
-        criticalPositionId: criticalPosition.id,
-        positionId: dto.positionId,
-        candidateId: dto.candidateId,
-        readinessLevel: dto.readiness,
-        priority,
-        notes: dto.justification,
-        readinessByDate: dto.estimatedReadyDate ? new Date(dto.estimatedReadyDate) : null,
-      },
-      include: {
-        position: { select: { id: true, name: true } },
-        candidate: { select: { id: true, fullName: true } },
-      },
+    const plan = await this.succession.create({
+      criticalPositionId: criticalPosition.id,
+      candidateId: dto.candidateId,
+      readinessLevel: dto.readiness,
+      notes: dto.justification,
+      readinessByDate: dto.estimatedReadyDate,
     });
 
-    // Notificar candidato
-    await this.prisma.notificationLog
-      .create({
-        data: {
-          userId: dto.candidateId,
-          type: 'SUCCESSION_MAPPED',
-          message: `Foste identificado como candidato a sucessor para um cargo estratégico.`,
-          metadata: JSON.stringify({ priority: 'HIGH', category: 'CAREER' }),
-        },
-      })
-      .catch(e => {
-        this.logger.warn({
-          userId: dto.candidateId,
-          positionId: dto.positionId,
-          action: 'NOTIFY_SUCCESSION_MAPPED',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao notificar candidato sobre mapeamento em plano de sucessão',
-        });
-      });
+    return this.toCareerSuccessionShape(plan);
+  }
 
-    return plan;
+  // Adaptador de forma: /career/succession sempre expôs `position` de topo e
+  // `candidate {id, fullName}`. O canónico devolve `criticalPosition.position`
+  // e `candidate {id, fullName, avatarUrl}` — re-mapeia-se, chaves sempre
+  // presentes (extras toleradas).
+  private toCareerSuccessionShape(plan: {
+    criticalPosition?: { position?: { id: number; name: string } | null } | null;
+    candidate?: unknown;
+    [k: string]: unknown;
+  }) {
+    return {
+      ...plan,
+      position: plan.criticalPosition?.position
+        ? { id: plan.criticalPosition.position.id, name: plan.criticalPosition.position.name }
+        : null,
+      candidate: plan.candidate ?? null,
+    };
   }
 
   async updateSuccessionReadiness(
@@ -1035,12 +1015,9 @@ export class CareerService {
     readiness: ReadinessLevel,
     justification?: string,
   ) {
-    const plan = await this.prisma.read.successionPlan.findUnique({ where: { id: planId } });
-    if (!plan) throw new NotFoundException('Plano de sucessão não encontrado');
-
-    return this.prisma.successionPlan.update({
-      where: { id: planId },
-      data: { readinessLevel: readiness, notes: justification ?? plan.notes },
+    return this.succession.update(planId, {
+      readinessLevel: readiness,
+      ...(justification !== undefined ? { notes: justification } : {}),
     });
   }
 

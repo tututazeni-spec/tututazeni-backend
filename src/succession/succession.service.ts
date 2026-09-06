@@ -1,6 +1,6 @@
 ﻿// src/succession/succession.service.ts
 import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, SuccessorPriority } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateCriticalPositionDto,
@@ -286,6 +286,11 @@ export class SuccessionService {
       matchScore = autoMatch.score;
     }
 
+    // `priority` pode vir do DTO (caminho `/succession`) ou ser calculada por
+    // contagem posicional (caminho `/career/succession`, que nunca a envia) —
+    // Fase G2 unificou as duas regras num só sítio.
+    const priority = dto.priority ?? (await this.computePriority(dto.criticalPositionId));
+
     const data: Prisma.SuccessionPlanUncheckedCreateInput = {
       criticalPositionId: dto.criticalPositionId,
       // SuccessionPlan.positionId é uma FK obrigatória (sem default) para
@@ -297,20 +302,28 @@ export class SuccessionService {
       positionId: cp.positionId,
       candidateId: dto.candidateId,
       readinessLevel: dto.readinessLevel,
-      priority: dto.priority,
+      priority,
       matchScore,
       geographicMobility: dto.geographicMobility ?? true,
       available: dto.available ?? true,
       notes: dto.notes,
       readinessByDate: dto.readinessByDate ? new Date(dto.readinessByDate) : null,
     };
-    const plan = await this.prisma.successionPlan.create({
-      data,
-      include: {
-        criticalPosition: { include: { position: true } },
-        candidate: { select: { id: true, fullName: true, avatarUrl: true } },
-      },
-    });
+    let plan;
+    try {
+      plan = await this.prisma.successionPlan.create({
+        data,
+        include: {
+          criticalPosition: { include: { position: true } },
+          candidate: { select: { id: true, fullName: true, avatarUrl: true } },
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('Candidato já está no plano de sucessão deste cargo');
+      }
+      throw e;
+    }
 
     // Notificar RH
     await this.prisma.notificationLog
@@ -333,6 +346,17 @@ export class SuccessionService {
       );
 
     return plan;
+  }
+
+  /**
+   * Regra de `priority` portada de `career.createSuccessionPlan` (Fase G2):
+   * contagem posicional dos planos já existentes para o cargo crítico —
+   * 0 → PRIMARY, 1 → SECONDARY, >=2 → TERTIARY. Usada só quando o DTO não
+   * traz `priority` (caminho `/career/succession`).
+   */
+  private async computePriority(criticalPositionId: number): Promise<SuccessorPriority> {
+    const count = await this.prisma.successionPlan.count({ where: { criticalPositionId } });
+    return count === 0 ? 'PRIMARY' : count === 1 ? 'SECONDARY' : 'TERTIARY';
   }
 
   async update(id: number, dto: UpdateSuccessionPlanDto) {

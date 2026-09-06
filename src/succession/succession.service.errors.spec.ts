@@ -11,6 +11,7 @@ const mockPrisma = {
     findUnique: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
     delete: jest.fn().mockResolvedValue({}),
   },
   talentPool: {
