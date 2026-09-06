@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { SuccessionService } from './succession.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -207,11 +208,10 @@ describe('SuccessionService', () => {
     });
 
     it('colisão @@unique (P2002) → ConflictException', async () => {
-      const p2002 = Object.assign(new Error('unique'), { code: 'P2002' });
-      Object.setPrototypeOf(
-        p2002,
-        require('@prisma/client').Prisma.PrismaClientKnownRequestError.prototype,
-      );
+      const p2002 = new Prisma.PrismaClientKnownRequestError('unique', {
+        code: 'P2002',
+        clientVersion: 'test',
+      });
       mockPrisma.successionPlan.create.mockRejectedValue(p2002);
       await expect(
         service.create({

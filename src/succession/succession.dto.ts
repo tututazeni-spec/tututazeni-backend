@@ -90,9 +90,12 @@ export class SuccessionCreateSuccessionPlanDto {
   @IsEnum(ReadinessLevel)
   readinessLevel!: ReadinessLevel;
 
-  @ApiProperty({ enum: SuccessorPriority })
+  // Opcional (Fase G2): quando ausente, o serviço calcula por contagem
+  // posicional. O caminho `/succession` continua a poder enviá-la.
+  @ApiPropertyOptional({ enum: SuccessorPriority })
+  @IsOptional()
   @IsEnum(SuccessorPriority)
-  priority!: SuccessorPriority;
+  priority?: SuccessorPriority;
 
   @ApiPropertyOptional({ description: 'Score de match manual (0-100)' })
   @IsOptional()
