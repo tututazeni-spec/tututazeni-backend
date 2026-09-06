@@ -6396,6 +6396,15 @@ model Declaration {
   requestNotes   String?
   internalNotes  String?
   rejectedReason String?
+
+  // Rastreio da fusão declarations+work-declaration (Fase E). O caminho legado
+  // /declarations/documents é servido por esta tabela via LegacyDocumentDeclarationsService;
+  // DeclarationRequest deixou de ser escrito. legacyStatus é a fonte de verdade do
+  // estado no contrato legado (DocumentRequestStatus != DeclarationStatus).
+  legacyRequestId Int?                   @unique
+  legacyStatus    DocumentRequestStatus?
+  legacyPurposeId Int?
+
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
   tenant         TenantConfig            @relation(fields: [tenantId], references: [id])
@@ -6412,6 +6421,7 @@ model Declaration {
   @@index([tenantId, employeeId])
   @@index([tenantId, requestedById])
   @@index([code])
+  @@index([legacyStatus])
   @@map("declarations")
 }
 
