@@ -2,6 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { AutomationService } from './automation.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { EnrollmentsService } from '../enrollments/enrollments.service';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { GamificationService } from '../gamification/gamification.service';
+
+const mockEnrollments = { enroll: jest.fn().mockResolvedValue({ id: 1 }) };
+const mockDevPlans = { create: jest.fn().mockResolvedValue({ id: 1, status: 'DRAFT' }) };
+const mockGamification = {
+  awardPoints: jest.fn().mockResolvedValue(undefined),
+  awardBadge: jest.fn().mockResolvedValue(undefined),
+};
 
 const automationRuleMock = {
   findMany: jest.fn().mockResolvedValue([]),
@@ -72,7 +82,13 @@ describe('AutomationService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AutomationService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        AutomationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: EnrollmentsService, useValue: mockEnrollments },
+        { provide: DevelopmentPlansService, useValue: mockDevPlans },
+        { provide: GamificationService, useValue: mockGamification },
+      ],
     }).compile();
     service = module.get<AutomationService>(AutomationService);
   });

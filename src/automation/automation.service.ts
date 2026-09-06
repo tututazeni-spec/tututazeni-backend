@@ -1,7 +1,16 @@
 ﻿// src/automation/automation.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { EnrollmentStatus, Prisma, AutomationTrigger, PlanStatus } from '@prisma/client';
+import {
+  EnrollmentStatus,
+  EnrollmentOrigin,
+  Prisma,
+  AutomationTrigger,
+  PlanStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { EnrollmentsService } from '../enrollments/enrollments.service';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { GamificationService } from '../gamification/gamification.service';
 import {
   CreateRuleDto,
   UpdateRuleDto,
@@ -176,7 +185,12 @@ const DEFAULT_RULES: Omit<CreateRuleDto, never>[] = [
 export class AutomationService {
   private readonly logger = new Logger(AutomationService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly enrollments: EnrollmentsService,
+    private readonly developmentPlans: DevelopmentPlansService,
+    private readonly gamification: GamificationService,
+  ) {}
 
   // ══════════════════════════════════════════════════════
   // RULES — CRUD
@@ -438,6 +452,9 @@ export class AutomationService {
 
     try {
       let result: ActionResult;
+      // Erro de domínio de uma acção delegada (matrícula duplicada, curso não
+      // publicado, ...): a execução fica FAILED mas NÃO se propaga como 500.
+      let actionError: string | undefined;
 
       switch (rule.action) {
         case ActionType.SEND_NOTIFICATION: {
@@ -455,65 +472,61 @@ export class AutomationService {
 
         case ActionType.ASSIGN_COURSE: {
           if (targetUserId && params.courseId) {
-            await this.prisma.enrollment
-              .create({
-                data: {
-                  userId: targetUserId,
-                  courseId: params.courseId,
-                  status: EnrollmentStatus.NOT_STARTED,
-                  enrolledAt: new Date(),
-                },
-              })
-              .catch(e => {
-                this.logger.warn({
-                  userId: targetUserId,
-                  courseId: params.courseId,
-                  ruleId: rule.id,
-                  action: 'AUTOMATION_ASSIGN_COURSE',
-                  err: { message: e instanceof Error ? e.message : String(e) },
-                  msg: 'Falha ao atribuir curso automaticamente ao utilizador',
-                });
-                return null;
+            try {
+              // Delega no dono do domínio: recupera as guardas de matrícula
+              // duplicada / curso PUBLISHED + analytics + notificação que a
+              // escrita directa saltava.
+              await this.enrollments.enroll({
+                userId: targetUserId,
+                courseId: params.courseId,
+                origin: EnrollmentOrigin.RULE_ENGINE,
               });
-            result = { affected: 1 };
+              result = { affected: 1 };
+            } catch (e: unknown) {
+              actionError = e instanceof Error ? e.message : String(e);
+              this.logger.warn({
+                userId: targetUserId,
+                courseId: params.courseId,
+                ruleId: rule.id,
+                action: 'AUTOMATION_ASSIGN_COURSE',
+                err: { message: actionError },
+                msg: 'Acção de automação ASSIGN_COURSE falhou (erro de domínio) — registada como falha',
+              });
+              result = { affected: 0, error: actionError };
+            }
           } else result = { affected: 0, message: 'courseId ou userId em falta' };
           break;
         }
 
         case ActionType.CREATE_PDI: {
           if (targetUserId) {
-            await this.prisma.developmentPlan
-              .create({
-                data: {
-                  userId: targetUserId,
-                  name: params.name ?? `PDI Automático — ${rule.name}`,
-                  status: params.status ?? 'DRAFT',
-                  isTemplate: false,
-                  goal: params.goal ?? 'Gerado automaticamente por automação',
-                },
-              })
-              .catch(e => {
-                this.logger.warn({
-                  userId: targetUserId,
-                  ruleId: rule.id,
-                  action: 'AUTOMATION_CREATE_PDI',
-                  err: { message: e instanceof Error ? e.message : String(e) },
-                  msg: 'Falha ao criar PDI automaticamente',
-                });
-                return null;
+            try {
+              // Delega no dono do domínio: o PDI entra no fluxo de aprovação
+              // (DevelopmentPlansService.create força status DRAFT) + notificação.
+              await this.developmentPlans.create({
+                userId: targetUserId,
+                name: params.name ?? `PDI Automático — ${rule.name}`,
+                goal: params.goal ?? 'Gerado automaticamente por automação',
               });
-            result = { affected: 1 };
+              result = { affected: 1 };
+            } catch (e: unknown) {
+              actionError = e instanceof Error ? e.message : String(e);
+              this.logger.warn({
+                userId: targetUserId,
+                ruleId: rule.id,
+                action: 'AUTOMATION_CREATE_PDI',
+                err: { message: actionError },
+                msg: 'Acção de automação CREATE_PDI falhou (erro de domínio) — registada como falha',
+              });
+              result = { affected: 0, error: actionError };
+            }
           } else result = { affected: 0 };
           break;
         }
 
         case ActionType.AWARD_POINTS: {
           if (targetUserId && params.points) {
-            await this.prisma.userPoints.upsert({
-              where: { userId: targetUserId },
-              create: { userId: targetUserId, points: params.points },
-              update: { points: { increment: params.points } },
-            });
+            await this.gamification.awardPoints(targetUserId, params.points, 'automation');
             result = { affected: 1, points: params.points };
           } else result = { affected: 0 };
           break;
@@ -521,36 +534,8 @@ export class AutomationService {
 
         case ActionType.AWARD_BADGE: {
           if (targetUserId && params.badgeCode) {
-            // FIX: Badge não tem campo `code` (só name/description) — o
-            // cast escondia que esta pesquisa nunca encontrava nada.
-            const badge = await this.prisma.badge
-              .findFirst({ where: { name: params.badgeCode } })
-              .catch(e => {
-                this.logger.warn({
-                  badgeCode: params.badgeCode,
-                  ruleId: rule.id,
-                  action: 'AUTOMATION_FIND_BADGE',
-                  err: { message: e instanceof Error ? e.message : String(e) },
-                  msg: 'Falha ao procurar badge para atribuição automática',
-                });
-                return null;
-              });
-            if (badge) {
-              await this.prisma.badgeAward
-                .create({ data: { userId: targetUserId, badgeId: badge.id } })
-                .catch(e => {
-                  this.logger.warn({
-                    userId: targetUserId,
-                    badgeId: badge.id,
-                    ruleId: rule.id,
-                    action: 'AUTOMATION_AWARD_BADGE',
-                    err: { message: e instanceof Error ? e.message : String(e) },
-                    msg: 'Falha ao atribuir badge automaticamente',
-                  });
-                  return null;
-                });
-            }
-            result = { affected: badge ? 1 : 0 };
+            await this.gamification.awardBadge(targetUserId, params.badgeCode);
+            result = { affected: 1 };
           } else result = { affected: 0 };
           break;
         }
@@ -630,14 +615,19 @@ export class AutomationService {
         }
       }
 
-      // Update execution as SUCCESS
+      // Um erro de domínio numa acção delegada marca a execução como FAILED
+      // (com a mensagem), mas nunca se propaga como 500 — a regra "correu",
+      // a acção é que falhou.
+      const execStatus = actionError ? 'FAILED' : 'SUCCESS';
+
       if (execId)
         await this.prisma.automationExecution
           .update({
             where: { id: execId },
             data: {
-              status: 'SUCCESS',
+              status: execStatus,
               actionsLog: JSON.stringify(result),
+              errorMessage: actionError,
               finishedAt: new Date(),
             },
           })
@@ -645,13 +635,13 @@ export class AutomationService {
             this.logger.warn({
               execId,
               ruleId: rule.id,
-              action: 'UPDATE_AUTOMATION_EXECUTION_SUCCESS',
+              action: 'UPDATE_AUTOMATION_EXECUTION_RESULT',
               err: { message: e instanceof Error ? e.message : String(e) },
-              msg: 'Falha ao actualizar execução da automação para SUCCESS',
+              msg: `Falha ao actualizar execução da automação para ${execStatus}`,
             });
           });
 
-      return { status: 'SUCCESS', ...result };
+      return { status: execStatus, ...result };
     } catch (err: unknown) {
       if (execId)
         await this.prisma.automationExecution
