@@ -16,7 +16,7 @@
 | Monitorização sem limites de recursos | `deploy.resources.limits` de memória em app/redis/caddy/prometheus/alertmanager/node-exporter |
 | Sem alerta de redundância | `AppRunningDegraded` (só 1 réplica de pé), `AppAllReplicasDown` (outage) |
 | `Sem frontend deployado` | Serviço `frontend` com **2 réplicas** no mesmo VPS, atrás do Caddy (`/` → `frontend`, `/api/*` → `app`) |
-| `Caddy: 1 container, sem healthcheck, 128 MB` | `restart: always` + healthcheck da admin API (reinício em *hang*, não só em *exit*) + limite 256 MB + `stop_grace_period` |
+| `Caddy: 1 container, sem healthcheck, 128 MB` | `restart: always` (cobre crash/OOM) + healthcheck da admin API (expõe um Caddy *pendurado* como `unhealthy`, monitorável) + limite 256 MB + `stop_grace_period` |
 
 ## O que passou a ser redundante (deixou de ser SPOF)
 
@@ -38,7 +38,7 @@
 | SPOF | Risco | Mitigação actual | Só resolve com… |
 |---|---|---|---|
 | **O VPS (host físico)** | Kernel panic, falha de disco, o datacenter em baixo, VPS suspenso → **outage total** | Cloudflare *Always Online* serve GETs em cache; backups off-box (pg_dump diário + WAL-G PITR); DR runbook; alerta externo (healthchecks.io dead-man) | 2º VPS atrás de LB (topologia "Médio") |
-| **Container Caddy** | Se o Caddy morre, não há borda → outage total (mesmo com as 2 réplicas vivas) | `restart: always`; **healthcheck de container** (reinicia um Caddy pendurado, não só um que saiu); config validada em CI; limite de memória 256 MB isola de OOM do vizinho | Caddy replicado / LB gerido do provider |
+| **Container Caddy** | Se o Caddy morre, não há borda → outage total (mesmo com as 2 réplicas vivas) | `restart: always` repõe o Caddy que **crashe ou seja morto por OOM**; **healthcheck** da admin API marca-o `unhealthy` (visível em `docker ps` / monitorização) mas o `docker compose` puro **não reinicia** por health — um Caddy *pendurado* (processo vivo, não serve) fica como risco residual até Swarm mode / sidecar autoheal / 2 VPS; config validada em CI; limite 256 MB isola de OOM do vizinho | Caddy replicado / LB gerido do provider |
 | **Frontend (mesma caixa)** | Partilha os SPOF do host / Caddy / Redis | 2 réplicas (falha de processo), `restart: unless-stopped` | 2º VPS (topologia "Médio") |
 | **Container Redis** | Filas Bull (webhooks, e-mail) e cache param; a app degrada mas **não perde dados de domínio** (Postgres é a fonte de verdade) | `--appendonly yes` (persiste entre restarts); `restart: unless-stopped`; readiness trata Redis como informativo (não derruba a app) | Redis gerido / Sentinel / cluster |
 | **Postgres** | — | **Já mitigado**: Postgres gerido/externo com failover do provider (`docs/db-architecture/`) | — (já OK) |

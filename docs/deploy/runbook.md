@@ -15,7 +15,7 @@
 ## 1. Provisionar o VPS (uma vez)
 
 Requisitos: Ubuntu 22.04+ (ou equivalente), **4 vCPU / 8 GB RAM recomendado**
-(2 réplicas da app + borda Caddy + stack de monitorização; ver o dimensionamento
+(2 réplicas da app + 2 réplicas do frontend + borda Caddy + stack de monitorização; ver o dimensionamento
 detalhado em `docs/deploy/ha-and-spof.md`). Num host de 4 GB funciona com os
 limites de memória do compose, mas sem folga. Docker Engine com o plugin compose.
 
