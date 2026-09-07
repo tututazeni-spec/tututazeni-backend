@@ -47,24 +47,43 @@ else
   echo "BUILD_SHA=${BUILD_SHA}" >> .env.production
 fi
 
-IMAGE_TAG="$TAG" docker compose -f "$COMPOSE_FILE" pull app \
+IMAGE_TAG="$TAG" docker compose -f "$COMPOSE_FILE" pull app migrate \
   || echo "⚠ pull falhou — a usar imagem local se existir"
+
+# `up -d` corre o job `migrate` até terminar (as réplicas `app` dependem de
+# `service_completed_successfully`) e sobe/recria tudo o resto. Se a migração
+# falhar, o compose sai != 0 → `set -e` aborta → o job de deploy falha → o
+# workflow dispara o rollback automático.
 IMAGE_TAG="$TAG" docker compose -f "$COMPOSE_FILE" up -d
 
 # configs de monitorização são bind-mounts — reiniciar para recarregar
 IMAGE_TAG="$TAG" docker compose -f "$COMPOSE_FILE" restart prometheus alertmanager
 
-echo "▶ à espera do health de innova-app (máx 90s)..."
-STATUS="starting"
-for _ in $(seq 1 30); do
-  STATUS="$(docker inspect -f '{{.State.Health.Status}}' innova-app 2>/dev/null || echo starting)"
-  if [ "$STATUS" = "healthy" ]; then
-    echo "✅ app saudável com a tag $TAG"
+# ─── Health gate: TODAS as réplicas de `app` têm de ficar healthy ───────────
+# (substitui a verificação antiga por nome de container, que já não existe —
+#  o serviço `app` passou a ser replicado, sem container_name.)
+echo "▶ à espera das réplicas de app (máx 120s)..."
+deadline=$((SECONDS + 120))
+summary="0/0"
+while [ "$SECONDS" -lt "$deadline" ]; do
+  ids="$(docker compose -f "$COMPOSE_FILE" ps -q app || true)"
+  total=0
+  healthy=0
+  for cid in $ids; do
+    total=$((total + 1))
+    st="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
+    [ "$st" = "healthy" ] && healthy=$((healthy + 1))
+  done
+  summary="$healthy/$total"
+  if [ "$total" -ge 1 ] && [ "$healthy" -eq "$total" ]; then
+    echo "✅ $summary réplicas saudáveis com a tag $TAG"
     exit 0
   fi
+  echo "  … réplicas saudáveis: $summary"
   sleep 3
 done
 
-echo "❌ app não ficou saudável em 90s (estado: $STATUS)"
-docker logs --tail 50 innova-app || true
+echo "❌ réplicas de app não ficaram saudáveis em 120s (última contagem: $summary)"
+docker compose -f "$COMPOSE_FILE" ps app || true
+docker compose -f "$COMPOSE_FILE" logs --tail 50 app || true
 exit 1

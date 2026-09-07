@@ -1,23 +1,62 @@
-# Borda TLS do INNOVA (auditoria A-1). Única porta pública do VPS.
-# {$DOMAIN} e {$ACME_EMAIL} vêm do ambiente do container (env_file .env.production).
-# Redirect HTTP→HTTPS: automático do Caddy — nunca serve conteúdo em :80.
+# Borda TLS + load balancer do INNOVA.
+#
+# Cadeia:  Cloudflare (WAF + CDN + anti-DDoS)  ──►  este Caddy  ──►  réplicas `app`
+#
+# - A Cloudflare é a borda pública. Ver docs/deploy/cloudflare.md.
+# - O ufw só deixa entrar 80/443 dos ranges Cloudflare (ops/deploy/origin-firewall.sh),
+#   por isso o Caddy nunca é alcançado pelo IP de origem — a WAF não é contornável.
+# - TLS de origem: certificado Cloudflare Origin CA (15 anos), montado em
+#   /etc/caddy/origin/. Modo SSL/TLS na Cloudflare: "Full (strict)". Sem ACME.
+# - {$DOMAIN} vem do ambiente do container (env_file .env.production).
 {
-	email {$ACME_EMAIL}
+	# Sem emissão automática de certificados (o cert é o Origin CA da Cloudflare)
+	# e sem redirecção HTTP→HTTPS local: o tráfego chega sempre em HTTPS a partir
+	# da Cloudflare ("Always Use HTTPS" trata o lado do cliente).
+	auto_https disable_redirects
+
+	servers {
+		# Só a Cloudflare pode definir o IP real do cliente. Sem esta lista,
+		# qualquer pedido que chegue ao origin podia forjar o Cf-Connecting-Ip
+		# / X-Forwarded-For. Ranges: https://www.cloudflare.com/ips/
+		# Manter em sincronia com ops/deploy/origin-firewall.sh.
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers Cf-Connecting-Ip X-Forwarded-For
+	}
 }
 
 {$DOMAIN} {
-	# HSTS emitido na borda; CSP/XFO/nosniff são responsabilidade das apps.
-	# preload: submeter a hstspreload.org só depois do TLS estabilizar.
+	tls /etc/caddy/origin/cert.pem /etc/caddy/origin/key.pem
+
+	# HSTS na borda (a Cloudflare também o pode emitir; manter aqui é defesa extra).
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 
-	# API: strip do prefixo /api → Nest (Swagger fica em /api/docs).
+	# API: strip do prefixo /api → réplicas do serviço `app`.
+	# `dynamic a` resolve o nome `app` do DNS do Docker para TODOS os IPs das
+	# réplicas (refresh 5s → apanha réplicas novas/recriadas). round-robin entre
+	# elas; uma réplica que devolva 5xx ou recuse ligação sai da rotação durante
+	# `fail_duration` (failover passivo — pontos 2 e 9). O health-check activo
+	# do container (Docker HEALTHCHECK) reinicia a réplica doente em paralelo.
 	handle_path /api/* {
-		reverse_proxy app:4000
+		reverse_proxy {
+			dynamic a {
+				name app
+				port 4000
+				refresh 5s
+			}
+			lb_policy round_robin
+			lb_try_duration 5s
+			lb_try_interval 250ms
+			fail_duration 30s
+			unhealthy_status 5xx
+			unhealthy_latency 10s
+		}
 	}
 
-	# Frontend ainda não deployado (fica para a Faixa H). Quando existir:
+	# Frontend ainda não deployado (Faixa H). Quando existir:
 	# handle {
-	# 	reverse_proxy frontend:3000
+	# 	reverse_proxy {
+	# 		dynamic a { name frontend port 3000 refresh 5s }
+	# 	}
 	# }
 	handle {
 		respond "Not Found" 404

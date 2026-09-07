@@ -4,14 +4,37 @@
 groups:
   - name: innova-app
     rules:
-      - alert: AppDown
+      # Réplica individual em baixo. Com 2+ réplicas a app continua a servir —
+      # daí `warning` e não `critical` (ver AppAllReplicasDown para o total).
+      - alert: AppReplicaDown
         expr: up{job="innova-app"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Réplica INNOVA em baixo ({{ $labels.instance }})'
+          description: 'O scrape de {{ $labels.instance }}/metrics falha há mais de 2 minutos.'
+
+      # A app está a correr sem redundância (só 1 de 2 réplicas de pé). Não há
+      # downtime, mas a próxima falha é total — tratar como incidente.
+      - alert: AppRunningDegraded
+        expr: count(up{job="innova-app"} == 1) < 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'App INNOVA sem redundância (réplicas de pé: {{ $value }})'
+          description: 'Menos de 2 réplicas `app` saudáveis há 5 minutos — ponto único de falha temporário.'
+
+      # Todas as réplicas em baixo = outage.
+      - alert: AppAllReplicasDown
+        expr: (count(up{job="innova-app"} == 1) or vector(0)) == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: 'App INNOVA em baixo'
-          description: 'O scrape de app:4000/metrics falha há mais de 1 minuto.'
+          summary: 'App INNOVA em baixo (todas as réplicas)'
+          description: 'Nenhuma réplica `app` responde ao scrape /metrics há mais de 1 minuto.'
 
       - alert: HighErrorRate
         expr: >
