@@ -1,37 +1,74 @@
 # Compose de produção — corre no VPS em /opt/innova (ver docs/deploy/runbook.md).
 # Postgres NÃO está aqui: é gerido/externo (decisão em docs/db-architecture/).
 # IMAGE_TAG vem do ambiente (deploy.sh exporta-o a partir de current_tag).
+#
+# Topologia da borda (pontos 2/4/9 da auditoria de arquitectura):
+#   Cloudflare (WAF + CDN + anti-DDoS)  ──►  Caddy (TLS origin, load balancer)
+#                                              ├──► app  (2 réplicas, round-robin)
+#                                              └──► app
+#   Ver docs/deploy/cloudflare.md e docs/deploy/ha-and-spof.md.
 name: innova
 
 services:
+  # ─── Migrations: job one-shot que corre ANTES das réplicas da app ──────────
+  # Tira o `prisma migrate deploy` do arranque de cada réplica — senão N
+  # réplicas correriam a migração em paralelo (o advisory lock do Prisma
+  # serializa-as, mas é frágil). Corre até terminar; `app` só arranca depois
+  # de este job sair com código 0.
+  migrate:
+    image: ghcr.io/tututazeni-spec/tututazeni-backend:${IMAGE_TAG:-latest}
+    container_name: innova-migrate
+    env_file: .env.production
+    entrypoint: ['npx', 'prisma', 'migrate', 'deploy']
+    restart: 'no'
+
   app:
     image: ghcr.io/tututazeni-spec/tututazeni-backend:${IMAGE_TAG:-latest}
-    container_name: innova-app
+    # SEM container_name: um nome fixo bloqueia `deploy.replicas` / `--scale`.
+    # SEM porta publicada no host: 2 réplicas não podem partilhar a :4000.
+    #   debug: `docker compose -f docker-compose.prod.yml exec app sh`
+    #   ou:    `docker compose -f docker-compose.prod.yml run --rm \
+    #             --service-ports -p 127.0.0.1:4000:4000 app`
     env_file: .env.production
-    ports:
-      - '127.0.0.1:4000:4000' # debug só via túnel SSH; público é o Caddy
     depends_on:
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
-    # healthcheck herdado do HEALTHCHECK da imagem (GET /health/ready)
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+    # healthcheck herdado do HEALTHCHECK da imagem (GET /health/ready).
+    # O Caddy faz balanceamento + tira da rotação a réplica que falhe o health.
 
-  # ─── Borda TLS (auditoria A-1) — única porta pública do VPS ───
+  # ─── Borda TLS + Load Balancer (pontos 2/4) — única porta pública do VPS ───
+  # Atrás da Cloudflare. O ufw só deixa entrar 80/443 dos ranges Cloudflare
+  # (ops/deploy/origin-firewall.sh), portanto o Caddy nunca é alcançado
+  # directamente pelo IP de origem — a WAF da Cloudflare não é contornável.
   caddy:
     image: caddy:2-alpine
     container_name: innova-caddy
-    env_file: .env.production # DOMAIN e ACME_EMAIL para o Caddyfile
+    env_file: .env.production # DOMAIN para o Caddyfile
     ports:
       - '80:80'
       - '443:443'
       - '443:443/udp' # HTTP/3
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data # certificados ACME — persistir entre deploys
+      - ./caddy/origin:/etc/caddy/origin:ro # cert Cloudflare Origin CA (cert.pem + key.pem)
+      - caddy-data:/data
       - caddy-config:/config
     depends_on:
       - app
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
   redis:
     image: redis:7-alpine
@@ -45,8 +82,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 192M
 
   # ─── Monitorização (regra 9) — sem portas públicas; UI só via túnel SSH ───
+  # Limites de memória (ponto 9): um pico do Prometheus/Alertmanager não pode
+  # matar por OOM a borda Caddy nem as réplicas da app.
   prometheus:
     image: prom/prometheus:v2.53.0
     container_name: innova-prometheus
@@ -63,6 +106,10 @@ services:
     depends_on:
       - app
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 400M
 
   alertmanager:
     image: prom/alertmanager:v0.27.0
@@ -73,6 +120,10 @@ services:
     ports:
       - '127.0.0.1:9093:9093'
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
   # ─── Métricas do SO (disco, CPU, RAM, rede) — B3-3 ───────────────────────
   # Expõe métricas do host para o Prometheus. Sem porta pública — só acessível
@@ -98,6 +149,10 @@ services:
       - '127.0.0.1:9100:9100'
     pid: host
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 96M
 
 volumes:
   redis-data:

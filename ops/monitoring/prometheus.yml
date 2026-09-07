@@ -19,8 +19,15 @@ scrape_configs:
     authorization:
       type: Bearer
       credentials_file: /etc/prometheus/secrets/metrics_token
-    static_configs:
-      - targets: ['app:4000']
+    # `app` é um serviço replicado (2+ réplicas, sem container_name). O DNS do
+    # Docker devolve um A record por réplica — o SD resolve-os todos e cada
+    # réplica vira um target distinto (instance = IP:4000). Assim um alerta
+    # `up == 0` dispara por réplica, e vê-se a app a correr degradada numa só.
+    dns_sd_configs:
+      - names: ['app']
+        type: A
+        port: 4000
+        refresh_interval: 15s
 
   # Métricas do SO: disco, CPU, RAM, rede (B3-3)
   - job_name: 'node-exporter'

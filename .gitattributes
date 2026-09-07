@@ -1,2 +1,5 @@
 # Scripts shell correm em containers/VPS Linux — nunca CRLF, mesmo em checkouts Windows
 *.sh text eol=lf
+
+# Caddyfile da borda — consumido em Linux (VPS), manter LF
+ops/caddy/Caddyfile text eol=lf

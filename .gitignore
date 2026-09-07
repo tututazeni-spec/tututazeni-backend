@@ -107,4 +107,7 @@ ops/previous_tag
 # Alertas (regra 9) — renderizados pelo deploy.sh, nunca commitados
 ops/monitoring/alertmanager.yml
 ops/monitoring/metrics_token
+
+# Borda TLS (ponto 4) — certificado Cloudflare Origin CA, colocado à mão no VPS
+ops/caddy/origin/*.pem
 .superpowers/
