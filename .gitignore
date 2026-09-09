@@ -111,3 +111,4 @@ ops/monitoring/metrics_token
 # Borda TLS (ponto 4) — certificado Cloudflare Origin CA, colocado à mão no VPS
 ops/caddy/origin/*.pem
 .superpowers/
+worktrees/
