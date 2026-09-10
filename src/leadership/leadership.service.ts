@@ -79,6 +79,31 @@ export class LeadershipService {
           },
           orderBy: { enrolledAt: 'desc' },
         },
+        // Agregado de configuração (Task 4): o detalhe do programa devolve o
+        // modelo de desenvolvimento completo tal como foi gravado por
+        // `LeadershipProgramsService.replaceConfiguration`.
+        objectives: { orderBy: { seq: 'asc' } },
+        targeting: { orderBy: { id: 'asc' } },
+        selectionCriteria: {
+          orderBy: { seq: 'asc' },
+          include: { competency: { select: { id: true, name: true } } },
+        },
+        competencies: {
+          orderBy: { seq: 'asc' },
+          include: { competency: { select: { id: true, name: true } } },
+        },
+        contents: {
+          orderBy: { seq: 'asc' },
+          include: {
+            course: { select: { id: true, title: true } },
+            learningPath: { select: { id: true, title: true } },
+          },
+        },
+        methodologies: { orderBy: { seq: 'asc' } },
+        advisors: {
+          orderBy: { id: 'asc' },
+          include: { user: { select: { id: true, fullName: true, email: true } } },
+        },
         _count: { select: { participants: true } },
       },
     });

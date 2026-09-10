@@ -28,6 +28,20 @@ const txModels = [
 describe('LeadershipProgramsService', () => {
   let service: LeadershipProgramsService;
 
+  // Modelos canónicos consultados por `assertCanonicalRefsExist` (Task 4).
+  const REF_MODELS = [
+    'competency',
+    'course',
+    'learningPath',
+    'microLearning',
+    'assessment',
+    'user',
+    'role',
+    'position',
+    'department',
+    'unit',
+  ] as const;
+
   const mockPrisma: any = {
     leadershipProgram: {
       create: jest.fn(),
@@ -36,6 +50,7 @@ describe('LeadershipProgramsService', () => {
       delete: jest.fn(),
     },
     $transaction: jest.fn(),
+    ...Object.fromEntries(REF_MODELS.map(m => [m, { findMany: jest.fn() }])),
   };
 
   beforeEach(async () => {
@@ -53,6 +68,13 @@ describe('LeadershipProgramsService', () => {
       id: where.id,
       ...data,
     }));
+
+    // Por omissão toda a referência canónica existe: eco dos ids pedidos.
+    for (const m of REF_MODELS) {
+      mockPrisma[m].findMany.mockImplementation(async ({ where }: any) =>
+        (where?.id?.in ?? []).map((id: number) => ({ id })),
+      );
+    }
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [LeadershipProgramsService, { provide: PrismaService, useValue: mockPrisma }],
@@ -278,6 +300,171 @@ describe('LeadershipProgramsService', () => {
     await expect(
       service.replaceConfiguration(actor(Role.LIDER, 7), 5, {} as any),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  // ─── replaceConfiguration: validação profunda (Task 4) ──────────────────
+
+  describe('replaceConfiguration — validação Task 4', () => {
+    const admin = actor(Role.ADMIN, 1);
+
+    beforeEach(() => {
+      mockPrisma.leadershipProgram.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'DRAFT',
+        createdById: null,
+        responsibleId: null,
+        _count: { participants: 0 },
+      });
+      const tx: any = { leadershipProgram: { findUnique: jest.fn().mockResolvedValue({ id: 1 }) } };
+      for (const m of txModels) {
+        tx[m] = {
+          deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+          createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        };
+      }
+      mockPrisma.$transaction.mockImplementation((cb: any) => cb(tx));
+    });
+
+    it('referência de curso inexistente → NotFoundException', async () => {
+      mockPrisma.course.findMany.mockResolvedValueOnce([]);
+      await expect(
+        service.replaceConfiguration(admin, 1, {
+          contents: [{ contentType: 'COURSE', courseId: 99999 }],
+        } as any),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('competência inexistente (só uma das duas existe) → NotFoundException', async () => {
+      mockPrisma.competency.findMany.mockResolvedValueOnce([{ id: 5 }]);
+      await expect(
+        service.replaceConfiguration(admin, 1, {
+          competencies: [
+            { competencyId: 5, targetLevel: 4 },
+            { competencyId: 7, targetLevel: 3 },
+          ],
+        } as any),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('competencyId de um critério COMPETENCY_ASSESSMENT também é validado', async () => {
+      mockPrisma.competency.findMany.mockResolvedValueOnce([]);
+      await expect(
+        service.replaceConfiguration(admin, 1, {
+          selectionCriteria: [
+            { name: 'Comp', source: 'COMPETENCY_ASSESSMENT', weight: 100, competencyId: 42 },
+          ],
+        } as any),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('advisor com userId inexistente → NotFoundException', async () => {
+      mockPrisma.user.findMany.mockResolvedValueOnce([]);
+      await expect(
+        service.replaceConfiguration(admin, 1, {
+          advisors: [{ userId: 12345, role: 'MENTOR' }],
+        } as any),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('competência associada duas vezes → BadRequestException', async () => {
+      await expect(
+        service.replaceConfiguration(admin, 1, {
+          competencies: [
+            { competencyId: 5, targetLevel: 4 },
+            { competencyId: 5, targetLevel: 2 },
+          ],
+        } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('nome de critério repetido → BadRequestException', async () => {
+      await expect(
+        service.replaceConfiguration(admin, 1, {
+          selectionCriteria: [
+            { name: 'Desempenho', source: 'PERFORMANCE_REVIEW', weight: 50 },
+            { name: 'Desempenho', source: 'LEADERSHIP_SCORE', weight: 50 },
+          ],
+        } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('mesmo advisor + papel repetido → BadRequestException', async () => {
+      await expect(
+        service.replaceConfiguration(admin, 1, {
+          advisors: [
+            { userId: 3, role: 'MENTOR' },
+            { userId: 3, role: 'MENTOR' },
+          ],
+        } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('pesos dos critérios de selecção activos ≠ 100 → BadRequestException', async () => {
+      await expect(
+        service.replaceConfiguration(admin, 1, {
+          selectionCriteria: [
+            { name: 'A', source: 'PERFORMANCE_REVIEW', weight: 40 },
+            { name: 'B', source: 'LEADERSHIP_SCORE', weight: 40 },
+          ],
+        } as any),
+      ).rejects.toThrow(/totalizar 100/);
+    });
+
+    it('critérios inactivos não contam para o total de 100', async () => {
+      await expect(
+        service.replaceConfiguration(admin, 1, {
+          selectionCriteria: [
+            { name: 'A', source: 'PERFORMANCE_REVIEW', weight: 100 },
+            { name: 'B', source: 'LEADERSHIP_SCORE', weight: 999, active: false },
+          ],
+        } as any),
+      ).resolves.toBeDefined();
+    });
+
+    it('pesos de metodologias ≠ 100 quando definidos → BadRequestException', async () => {
+      await expect(
+        service.replaceConfiguration(admin, 1, {
+          methodologies: [
+            { type: 'COACHING', weight: 40 },
+            { type: 'MENTORING', weight: 40 },
+          ],
+        } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('metodologias sem peso não são validadas (peso não activado)', async () => {
+      await expect(
+        service.replaceConfiguration(admin, 1, {
+          methodologies: [{ type: 'COACHING' }, { type: 'MENTORING' }],
+        } as any),
+      ).resolves.toBeDefined();
+    });
+
+    it('conteúdo COURSE sem courseId → BadRequestException', async () => {
+      await expect(
+        service.replaceConfiguration(admin, 1, {
+          contents: [{ contentType: 'COURSE' }],
+        } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('config totalmente válida com refs canónicas → round-trip + valida refs', async () => {
+      const res = await service.replaceConfiguration(admin, 1, {
+        competencies: [{ competencyId: 5, targetLevel: 4 }],
+        selectionCriteria: [
+          { name: 'Desempenho', source: 'PERFORMANCE_REVIEW', weight: 60 },
+          { name: 'Competência', source: 'COMPETENCY_ASSESSMENT', weight: 40, competencyId: 5 },
+        ],
+        contents: [{ contentType: 'COURSE', courseId: 10 }],
+        methodologies: [{ type: 'WORKSHOP', weight: 100 }],
+        advisors: [{ userId: 3, role: 'MENTOR' }],
+        targeting: [{ scope: 'DEPARTMENT', departmentId: 2 }],
+      } as any);
+      expect(res).toMatchObject({ id: 1 });
+      expect(mockPrisma.competency.findMany).toHaveBeenCalled();
+      expect(mockPrisma.course.findMany).toHaveBeenCalled();
+      expect(mockPrisma.department.findMany).toHaveBeenCalled();
+    });
   });
 
   // ─── remove ─────────────────────────────────────────────────────────────

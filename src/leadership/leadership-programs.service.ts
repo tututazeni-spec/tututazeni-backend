@@ -6,7 +6,7 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
-import { Prisma, ProgramStatus } from '@prisma/client';
+import { LeadershipContentType, Prisma, ProgramStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '../auth/enums/role.enum';
 import { isPrivileged } from '../common/authz/ownership';
@@ -15,6 +15,7 @@ import {
   CreateLeadershipProgramDto,
   UpdateLeadershipProgramDto,
   ReplaceProgramConfigurationDto,
+  ProgramContentInput,
 } from './leadership-program.dto';
 
 /**
@@ -259,10 +260,16 @@ export class LeadershipProgramsService {
    * recreate dentro de uma transacção). Todas as escritas são âmbitadas pelo
    * `programId` — uma linha de config nunca referencia linhas de outro programa.
    *
-   * TODO(Task 4): validar que toda a referência canónica existe (competencyId,
-   * courseId/learningPathId/microLearningId/assessmentId, userId dos advisors,
-   * roleId/positionId/departmentId/unitId do targeting) e que os pesos de
-   * selecção e de metodologias totalizam 100 quando `active`.
+   * Antes de tocar na BD, `validateConfiguration` garante que:
+   *   - toda a referência canónica existe (competência, curso, trilha,
+   *     micro-learning, assessment, utilizador do advisor, role/cargo/
+   *     departamento/unidade do público-alvo) → NotFoundException;
+   *   - não há associações duplicadas no mesmo payload (competência repetida,
+   *     nome de critério repetido, mesmo advisor+papel) → BadRequestException,
+   *     em vez de deixar rebentar um P2002 opaco no `createMany`;
+   *   - cada conteúdo traz o id correspondente ao seu tipo → BadRequestException;
+   *   - os pesos dos critérios de selecção activos e das metodologias
+   *     ponderadas totalizam 100 → BadRequestException.
    */
   async replaceConfiguration(
     actor: CurrentUserData,
@@ -271,6 +278,8 @@ export class LeadershipProgramsService {
   ) {
     const program = await this.loadForManage(actor, id);
     const programId = program.id;
+
+    await this.validateConfiguration(dto);
 
     return this.prisma.$transaction(async tx => {
       await Promise.all([
@@ -407,5 +416,173 @@ export class LeadershipProgramsService {
         },
       });
     });
+  }
+
+  // ─── Validação da configuração (Task 4) ──────────────────────────────────
+
+  /** Campo de id canónico exigido por cada tipo de conteúdo. */
+  private static readonly CONTENT_ID_FIELD: Record<
+    LeadershipContentType,
+    keyof ProgramContentInput
+  > = {
+    [LeadershipContentType.COURSE]: 'courseId',
+    [LeadershipContentType.LEARNING_PATH]: 'learningPathId',
+    [LeadershipContentType.MICRO_LEARNING]: 'microLearningId',
+    [LeadershipContentType.ASSESSMENT]: 'assessmentId',
+    [LeadershipContentType.EXTERNAL]: 'externalUrl',
+  };
+
+  private async validateConfiguration(dto: ReplaceProgramConfigurationDto): Promise<void> {
+    this.assertNoDuplicates(dto);
+    this.assertContentShape(dto.contents);
+    this.assertConfigWeights(dto);
+    await this.assertCanonicalRefsExist(dto);
+  }
+
+  /**
+   * Recusa associações repetidas dentro do próprio payload. O schema tem
+   * `@@unique` em `[programId, competencyId]`, `[programId, name]` e
+   * `[programId, userId, role]`; sem esta guarda o `createMany` rebentava com um
+   * P2002 traduzido para 500 (o repo ainda não tem filtro global P2002→409).
+   */
+  private assertNoDuplicates(dto: ReplaceProgramConfigurationDto): void {
+    const firstDuplicate = <T>(items: T[] | undefined, key: (t: T) => string): string | null => {
+      const seen = new Set<string>();
+      for (const it of items ?? []) {
+        const k = key(it);
+        if (seen.has(k)) return k;
+        seen.add(k);
+      }
+      return null;
+    };
+
+    const dupCompetency = firstDuplicate(dto.competencies, c => String(c.competencyId));
+    if (dupCompetency !== null) {
+      throw new BadRequestException(
+        `Competência ${dupCompetency} associada mais do que uma vez ao programa`,
+      );
+    }
+
+    // `@@unique([programId, name])` é sensível a maiúsculas — espelha-se aqui.
+    const dupCriterion = firstDuplicate(dto.selectionCriteria, c => c.name);
+    if (dupCriterion !== null) {
+      throw new BadRequestException(
+        `Critério de selecção "${dupCriterion}" definido mais do que uma vez`,
+      );
+    }
+
+    const dupAdvisor = firstDuplicate(dto.advisors, a => `${a.userId}:${a.role}`);
+    if (dupAdvisor !== null) {
+      const [userId, role] = dupAdvisor.split(':');
+      throw new BadRequestException(
+        `Acompanhante ${userId} com o papel ${role} definido mais do que uma vez`,
+      );
+    }
+  }
+
+  /** Cada conteúdo tem de trazer o id (ou URL) correspondente ao seu tipo. */
+  private assertContentShape(contents?: ProgramContentInput[]): void {
+    for (const c of contents ?? []) {
+      const field = LeadershipProgramsService.CONTENT_ID_FIELD[c.contentType];
+      if (c[field] == null) {
+        throw new BadRequestException(`Conteúdo do tipo ${c.contentType} exige o campo "${field}"`);
+      }
+    }
+  }
+
+  private assertConfigWeights(dto: ReplaceProgramConfigurationDto): void {
+    const activeCriteria = (dto.selectionCriteria ?? []).filter(c => c.active !== false);
+    if (activeCriteria.length) {
+      this.assertWeightsTotal100(
+        activeCriteria.map(c => c.weight),
+        'Os pesos dos critérios de selecção activos têm de totalizar 100',
+      );
+    }
+
+    // Peso da metodologia é opcional: 0 metodologias com peso = "peso não
+    // activado" e não se valida. Basta uma ter peso para exigir o total de 100.
+    const methodologies = dto.methodologies ?? [];
+    if (methodologies.some(m => m.weight != null)) {
+      this.assertWeightsTotal100(
+        methodologies.map(m => m.weight),
+        'Os pesos das metodologias têm de totalizar 100 quando definidos',
+      );
+    }
+  }
+
+  private assertWeightsTotal100(weights: Array<number | null | undefined>, message: string): void {
+    // Tolerância ±0.01 para arredondamento de `Decimal`.
+    const total = weights.reduce<number>((s, w) => s + Number(w ?? 0), 0);
+    if (Math.abs(total - 100) > 0.01) {
+      throw new BadRequestException(`${message} (actual: ${Math.round(total * 100) / 100}).`);
+    }
+  }
+
+  /**
+   * Confirma contra a BD que toda a referência canónica no payload existe. Uma
+   * consulta agregada por modelo; ordem determinística para mensagens estáveis.
+   */
+  private async assertCanonicalRefsExist(dto: ReplaceProgramConfigurationDto): Promise<void> {
+    const uniq = (xs: Array<number | null | undefined>): number[] => [
+      ...new Set(xs.filter((x): x is number => x != null)),
+    ];
+
+    const competencyIds = uniq([
+      ...(dto.competencies ?? []).map(c => c.competencyId),
+      ...(dto.selectionCriteria ?? []).map(c => c.competencyId),
+    ]);
+    const courseIds = uniq((dto.contents ?? []).map(c => c.courseId));
+    const learningPathIds = uniq([...(dto.contents ?? []).map(c => c.learningPathId)]);
+    const microLearningIds = uniq((dto.contents ?? []).map(c => c.microLearningId));
+    const assessmentIds = uniq((dto.contents ?? []).map(c => c.assessmentId));
+    const advisorUserIds = uniq((dto.advisors ?? []).map(a => a.userId));
+    const roleIds = uniq((dto.targeting ?? []).map(t => t.roleId));
+    const positionIds = uniq((dto.targeting ?? []).map(t => t.positionId));
+    const departmentIds = uniq((dto.targeting ?? []).map(t => t.departmentId));
+    const unitIds = uniq((dto.targeting ?? []).map(t => t.unitId));
+
+    await this.assertIdsExist('Competência', competencyIds, ids =>
+      this.prisma.competency.findMany({ where: { id: { in: ids } }, select: { id: true } }),
+    );
+    await this.assertIdsExist('Curso', courseIds, ids =>
+      this.prisma.course.findMany({ where: { id: { in: ids } }, select: { id: true } }),
+    );
+    await this.assertIdsExist('Trilha de aprendizagem', learningPathIds, ids =>
+      this.prisma.learningPath.findMany({ where: { id: { in: ids } }, select: { id: true } }),
+    );
+    await this.assertIdsExist('Micro-learning', microLearningIds, ids =>
+      this.prisma.microLearning.findMany({ where: { id: { in: ids } }, select: { id: true } }),
+    );
+    await this.assertIdsExist('Assessment', assessmentIds, ids =>
+      this.prisma.assessment.findMany({ where: { id: { in: ids } }, select: { id: true } }),
+    );
+    await this.assertIdsExist('Utilizador (acompanhante)', advisorUserIds, ids =>
+      this.prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true } }),
+    );
+    await this.assertIdsExist('Função', roleIds, ids =>
+      this.prisma.role.findMany({ where: { id: { in: ids } }, select: { id: true } }),
+    );
+    await this.assertIdsExist('Cargo', positionIds, ids =>
+      this.prisma.position.findMany({ where: { id: { in: ids } }, select: { id: true } }),
+    );
+    await this.assertIdsExist('Departamento', departmentIds, ids =>
+      this.prisma.department.findMany({ where: { id: { in: ids } }, select: { id: true } }),
+    );
+    await this.assertIdsExist('Unidade', unitIds, ids =>
+      this.prisma.unit.findMany({ where: { id: { in: ids } }, select: { id: true } }),
+    );
+  }
+
+  private async assertIdsExist(
+    label: string,
+    ids: number[],
+    lookup: (ids: number[]) => Promise<Array<{ id: number }>>,
+  ): Promise<void> {
+    if (!ids.length) return;
+    const found = new Set((await lookup(ids)).map(r => r.id));
+    const missing = ids.filter(id => !found.has(id));
+    if (missing.length) {
+      throw new NotFoundException(`${label}(s) inexistente(s): ${missing.join(', ')}`);
+    }
   }
 }
