@@ -239,6 +239,82 @@ const LeadershipAdvisorRole = {
   PROGRAM_MANAGER: 'PROGRAM_MANAGER',
 };
 
+// Execução do participante de LeadershipProgram (Task 5). Mantidos aqui para os
+// testes unitários que fazem mock de @prisma/client não rebentarem ao usar
+// estes enums como valores em runtime (arrays de estados, @IsEnum nos DTOs).
+const LeadershipAssessmentStage = {
+  INITIAL: 'INITIAL',
+  MIDPOINT: 'MIDPOINT',
+  FINAL: 'FINAL',
+  FOLLOW_UP: 'FOLLOW_UP',
+};
+
+const LeadershipAssessmentStatus = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+
+const LeadershipProjectStatus = {
+  PROPOSED: 'PROPOSED',
+  APPROVED: 'APPROVED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUBMITTED: 'SUBMITTED',
+  UNDER_REVIEW: 'UNDER_REVIEW',
+  COMPLETED: 'COMPLETED',
+  REJECTED: 'REJECTED',
+  CANCELLED: 'CANCELLED',
+};
+
+const LeadershipDocumentKind = {
+  SYLLABUS: 'SYLLABUS',
+  MATERIAL: 'MATERIAL',
+  EVIDENCE: 'EVIDENCE',
+  CONTRACT: 'CONTRACT',
+  REPORT: 'REPORT',
+  OTHER: 'OTHER',
+};
+
+const LeadershipCostCategory = {
+  INSTRUCTOR: 'INSTRUCTOR',
+  MATERIAL: 'MATERIAL',
+  VENUE: 'VENUE',
+  TRAVEL: 'TRAVEL',
+  ACCOMMODATION: 'ACCOMMODATION',
+  PLATFORM: 'PLATFORM',
+  CERTIFICATION: 'CERTIFICATION',
+  CONSULTING: 'CONSULTING',
+  OTHER: 'OTHER',
+};
+
+const LeadershipCommunicationEvent = {
+  INVITATION: 'INVITATION',
+  SELECTION_RESULT: 'SELECTION_RESULT',
+  ENROLLMENT_CONFIRMED: 'ENROLLMENT_CONFIRMED',
+  SESSION_REMINDER: 'SESSION_REMINDER',
+  DEADLINE_REMINDER: 'DEADLINE_REMINDER',
+  ASSESSMENT_DUE: 'ASSESSMENT_DUE',
+  PROJECT_DUE: 'PROJECT_DUE',
+  COMPLETION: 'COMPLETION',
+  CERTIFICATE_ISSUED: 'CERTIFICATE_ISSUED',
+  CANCELLATION: 'CANCELLATION',
+  CUSTOM: 'CUSTOM',
+};
+
+const LeadershipCommunicationChannel = {
+  IN_APP: 'IN_APP',
+  EMAIL: 'EMAIL',
+  BOTH: 'BOTH',
+};
+
+const LeadershipCommunicationStatus = {
+  SCHEDULED: 'SCHEDULED',
+  SENT: 'SENT',
+  FAILED: 'FAILED',
+  CANCELLED: 'CANCELLED',
+};
+
 const OneOnOneStatus = {
   SCHEDULED: 'SCHEDULED',
   COMPLETED: 'COMPLETED',
@@ -1810,6 +1886,14 @@ module.exports = {
   LeadershipContentType,
   LeadershipMethodologyType,
   LeadershipAdvisorRole,
+  LeadershipAssessmentStage,
+  LeadershipAssessmentStatus,
+  LeadershipProjectStatus,
+  LeadershipDocumentKind,
+  LeadershipCostCategory,
+  LeadershipCommunicationEvent,
+  LeadershipCommunicationChannel,
+  LeadershipCommunicationStatus,
   OneOnOneStatus,
   EngagementFeedbackType,
   FeedbackStatus,

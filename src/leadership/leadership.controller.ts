@@ -17,6 +17,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { LeadershipService } from './leadership.service';
 import { LeadershipProgramsService } from './leadership-programs.service';
 import { LeadershipEligibilityService } from './leadership-eligibility.service';
+import { LeadershipParticipantsService } from './leadership-participants.service';
+import { LeadershipExecutionService } from './leadership-execution.service';
 import {
   CreateLeadershipProgramDto,
   UpdateLeadershipProgramDto,
@@ -25,6 +27,18 @@ import {
   RecalculateEligibilityDto,
   ParticipantSelectionStatusDto,
 } from './leadership-program.dto';
+import {
+  ParticipantBaselineDto,
+  AssignAdvisorsDto,
+  LinkDevelopmentPlanDto,
+  ReplacePlanActionsDto,
+  RecordAssessmentDto,
+  UpsertProjectDto,
+  EvaluateProjectDto,
+  AttachDocumentDto,
+  AddCostDto,
+  ScheduleCommunicationDto,
+} from './leadership-participant.dto';
 import {
   LeadershipFilterDto,
   EnrollLeadershipDto,
@@ -63,6 +77,8 @@ export class LeadershipController {
     private readonly svc: LeadershipService,
     private readonly programsSvc: LeadershipProgramsService,
     private readonly eligibilitySvc: LeadershipEligibilityService,
+    private readonly participantsSvc: LeadershipParticipantsService,
+    private readonly executionSvc: LeadershipExecutionService,
   ) {}
 
   // ── Dashboard do Líder ────────────────────────────────────────────────────
@@ -246,6 +262,168 @@ export class LeadershipController {
     @Body() dto: ParticipantSelectionStatusDto,
   ) {
     return this.eligibilitySvc.advanceSelection(user, id, userId, dto.status);
+  }
+
+  // ── Percurso do participante (Task 5) ────────────────────────────────────
+  // Escritas = gestão do programa (@Roles + ownership no serviço). A leitura
+  // `my-participation` é aberta a qualquer autenticado — o serviço garante que
+  // só devolve o registo do próprio.
+
+  @Get('programs/:id/my-participation')
+  @ApiOperation({ summary: 'O meu percurso neste programa (baseline, PDI, avaliações)' })
+  myParticipation(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
+    return this.participantsSvc.getMyParticipation(user, id);
+  }
+
+  @Get('programs/:id/participants/:userId')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Detalhe do percurso de um participante' })
+  getParticipant(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+  ) {
+    return this.participantsSvc.getParticipant(user, id, userId);
+  }
+
+  @Put('programs/:id/participants/:userId/baseline')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Registar baseline / readiness do participante' })
+  setBaseline(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: ParticipantBaselineDto,
+  ) {
+    return this.participantsSvc.setBaseline(user, id, userId, dto);
+  }
+
+  @Put('programs/:id/participants/:userId/advisors')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Atribuir mentor / coach / mentoring canónico ao participante' })
+  assignAdvisors(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: AssignAdvisorsDto,
+  ) {
+    return this.participantsSvc.assignAdvisors(user, id, userId, dto);
+  }
+
+  @Put('programs/:id/participants/:userId/development-plan')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Ligar o percurso individual a um PDI (DevelopmentPlan) existente' })
+  linkDevelopmentPlan(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: LinkDevelopmentPlanDto,
+  ) {
+    return this.participantsSvc.linkDevelopmentPlan(user, id, userId, dto);
+  }
+
+  @Put('programs/:id/participants/:userId/plan-actions')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Substituir as acções do percurso individual (replace-all)' })
+  replacePlanActions(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: ReplacePlanActionsDto,
+  ) {
+    return this.participantsSvc.replacePlanActions(user, id, userId, dto);
+  }
+
+  // ── Execução do programa (Task 5) ───────────────────────────────────────
+
+  @Put('programs/:id/participants/:userId/assessments')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({
+    summary: 'Registar/actualizar a avaliação de uma etapa (INITIAL/MIDPOINT/FINAL)',
+  })
+  recordAssessment(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: RecordAssessmentDto,
+  ) {
+    return this.executionSvc.recordAssessment(user, id, userId, dto);
+  }
+
+  @Post('programs/:id/projects')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Criar ou actualizar o projecto de liderança' })
+  upsertProject(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpsertProjectDto,
+  ) {
+    return this.executionSvc.upsertProject(user, id, dto);
+  }
+
+  @Patch('projects/:projectId/evaluation')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Avaliar o projecto de liderança' })
+  @HttpCode(HttpStatus.OK)
+  evaluateProject(
+    @CurrentUser() user: CurrentUserData,
+    @Param('projectId', ParseIntPipe) projectId: number,
+    @Body() dto: EvaluateProjectDto,
+  ) {
+    return this.executionSvc.evaluateProject(user, projectId, dto);
+  }
+
+  @Post('programs/:id/documents')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Anexar um documento existente do repositório ao programa' })
+  attachDocument(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AttachDocumentDto,
+  ) {
+    return this.executionSvc.attachDocument(user, id, dto);
+  }
+
+  @Post('programs/:id/costs')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Registar uma componente de custo do programa' })
+  addCost(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AddCostDto,
+  ) {
+    return this.executionSvc.addCost(user, id, dto);
+  }
+
+  @Get('programs/:id/costs/summary')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({
+    summary: 'Totais de custo do programa (planeado, real, variação, por categoria)',
+  })
+  costSummary(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
+    return this.executionSvc.getCostSummary(user, id);
+  }
+
+  @Post('programs/:id/communications')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Agendar uma comunicação programática do programa' })
+  scheduleCommunication(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ScheduleCommunicationDto,
+  ) {
+    return this.executionSvc.scheduleCommunication(user, id, dto);
+  }
+
+  @Post('communications/:communicationId/dispatch')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Enviar uma comunicação agendada (idempotente)' })
+  @HttpCode(HttpStatus.OK)
+  dispatchCommunication(
+    @CurrentUser() user: CurrentUserData,
+    @Param('communicationId', ParseIntPipe) communicationId: number,
+  ) {
+    return this.executionSvc.dispatchCommunication(user, communicationId);
   }
 
   // ── Team Health ───────────────────────────────────────────────────────────

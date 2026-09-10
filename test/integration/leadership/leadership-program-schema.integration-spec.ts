@@ -88,13 +88,13 @@ describe('Leadership Program Schema (integração)', () => {
       const participants = await prisma.leadershipProgramParticipant
         .findMany({ where, select: { id: true } })
         .catch(() => [] as { id: number }[]);
-      const participantIds = participants.map((p) => p.id);
+      const participantIds = participants.map(p => p.id);
       if (participantIds.length) {
         const plans = await prisma.leadershipParticipantPlan
           .findMany({ where: { participantId: { in: participantIds } }, select: { id: true } })
           .catch(() => [] as { id: number }[]);
         await prisma.leadershipParticipantPlanAction
-          .deleteMany({ where: { planId: { in: plans.map((p) => p.id) } } })
+          .deleteMany({ where: { planId: { in: plans.map(p => p.id) } } })
           .catch(() => undefined);
         await prisma.leadershipParticipantPlan
           .deleteMany({ where: { participantId: { in: participantIds } } })
@@ -355,7 +355,7 @@ describe('Leadership Program Schema (integração)', () => {
 
     expect(full!.targeting).toHaveLength(2);
     expect(full!.selectionCriteria).toHaveLength(2);
-    expect(full!.selectionCriteria.find((c) => c.competencyId)!.competency!.id).toBe(competencyId);
+    expect(full!.selectionCriteria.find(c => c.competencyId)!.competency!.id).toBe(competencyId);
     expect(full!.competencies[0].competency.name).toBe('Liderança Schema Integração');
     expect(full!.objectives).toHaveLength(1);
     expect(full!.contents[0].course!.id).toBe(courseId);
@@ -376,6 +376,6 @@ describe('Leadership Program Schema (integração)', () => {
     expect(withCode).toBe(total);
 
     const codes = await prisma.leadershipProgram.findMany({ select: { code: true } });
-    expect(new Set(codes.map((c) => c.code)).size).toBe(codes.length);
+    expect(new Set(codes.map(c => c.code)).size).toBe(codes.length);
   });
 });

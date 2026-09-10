@@ -3,6 +3,8 @@ import { LeadershipController } from './leadership.controller';
 import { LeadershipService } from './leadership.service';
 import { LeadershipProgramsService } from './leadership-programs.service';
 import { LeadershipEligibilityService } from './leadership-eligibility.service';
+import { LeadershipParticipantsService } from './leadership-participants.service';
+import { LeadershipExecutionService } from './leadership-execution.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -21,6 +23,26 @@ const mockEligibilitySvc = {
     .mockResolvedValue({ score: 80, eligible: true, breakdown: [], missingData: [] }),
   selectCandidate: jest.fn().mockResolvedValue({ status: 'SELECTED' }),
   advanceSelection: jest.fn().mockResolvedValue({ status: 'INVITED' }),
+};
+
+const mockParticipantsSvc = {
+  getMyParticipation: jest.fn().mockResolvedValue({ id: 1 }),
+  getParticipant: jest.fn().mockResolvedValue({ id: 1 }),
+  setBaseline: jest.fn().mockResolvedValue({ id: 1 }),
+  assignAdvisors: jest.fn().mockResolvedValue({ id: 1 }),
+  linkDevelopmentPlan: jest.fn().mockResolvedValue({ id: 1 }),
+  replacePlanActions: jest.fn().mockResolvedValue({ id: 1 }),
+};
+
+const mockExecutionSvc = {
+  recordAssessment: jest.fn().mockResolvedValue({ id: 1 }),
+  upsertProject: jest.fn().mockResolvedValue({ id: 1 }),
+  evaluateProject: jest.fn().mockResolvedValue({ id: 1 }),
+  attachDocument: jest.fn().mockResolvedValue({ id: 1 }),
+  addCost: jest.fn().mockResolvedValue({ id: 1 }),
+  getCostSummary: jest.fn().mockResolvedValue({ totalPlanned: 0 }),
+  scheduleCommunication: jest.fn().mockResolvedValue({ id: 1 }),
+  dispatchCommunication: jest.fn().mockResolvedValue({ id: 1, status: 'SENT' }),
 };
 
 const mockSvc = {
@@ -64,6 +86,8 @@ describe('LeadershipController', () => {
         { provide: LeadershipService, useValue: mockSvc },
         { provide: LeadershipProgramsService, useValue: mockProgramsSvc },
         { provide: LeadershipEligibilityService, useValue: mockEligibilitySvc },
+        { provide: LeadershipParticipantsService, useValue: mockParticipantsSvc },
+        { provide: LeadershipExecutionService, useValue: mockExecutionSvc },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -152,6 +176,88 @@ describe('LeadershipController', () => {
   it('advanceSelectionStatus → eligibilitySvc.advanceSelection(user, id, userId, dto.status)', async () => {
     await controller.advanceSelectionStatus(mockUser as any, 5, 3, { status: 'INVITED' } as any);
     expect(mockEligibilitySvc.advanceSelection).toHaveBeenCalledWith(mockUser, 5, 3, 'INVITED');
+  });
+
+  // ── Task 5: percurso e execução do participante ─────────────────────────
+
+  it('myParticipation → participantsSvc.getMyParticipation(user, id)', async () => {
+    await controller.myParticipation(mockUser as any, 5);
+    expect(mockParticipantsSvc.getMyParticipation).toHaveBeenCalledWith(mockUser, 5);
+  });
+
+  it('getParticipant → participantsSvc.getParticipant(user, id, userId)', async () => {
+    await controller.getParticipant(mockUser as any, 5, 3);
+    expect(mockParticipantsSvc.getParticipant).toHaveBeenCalledWith(mockUser, 5, 3);
+  });
+
+  it('setBaseline → participantsSvc.setBaseline(user, id, userId, dto)', async () => {
+    const dto = {} as any;
+    await controller.setBaseline(mockUser as any, 5, 3, dto);
+    expect(mockParticipantsSvc.setBaseline).toHaveBeenCalledWith(mockUser, 5, 3, dto);
+  });
+
+  it('assignAdvisors → participantsSvc.assignAdvisors(user, id, userId, dto)', async () => {
+    const dto = {} as any;
+    await controller.assignAdvisors(mockUser as any, 5, 3, dto);
+    expect(mockParticipantsSvc.assignAdvisors).toHaveBeenCalledWith(mockUser, 5, 3, dto);
+  });
+
+  it('linkDevelopmentPlan → participantsSvc.linkDevelopmentPlan(user, id, userId, dto)', async () => {
+    const dto = {} as any;
+    await controller.linkDevelopmentPlan(mockUser as any, 5, 3, dto);
+    expect(mockParticipantsSvc.linkDevelopmentPlan).toHaveBeenCalledWith(mockUser, 5, 3, dto);
+  });
+
+  it('replacePlanActions → participantsSvc.replacePlanActions(user, id, userId, dto)', async () => {
+    const dto = { actions: [] } as any;
+    await controller.replacePlanActions(mockUser as any, 5, 3, dto);
+    expect(mockParticipantsSvc.replacePlanActions).toHaveBeenCalledWith(mockUser, 5, 3, dto);
+  });
+
+  it('recordAssessment → executionSvc.recordAssessment(user, id, userId, dto)', async () => {
+    const dto = { stage: 'INITIAL' } as any;
+    await controller.recordAssessment(mockUser as any, 5, 3, dto);
+    expect(mockExecutionSvc.recordAssessment).toHaveBeenCalledWith(mockUser, 5, 3, dto);
+  });
+
+  it('upsertProject → executionSvc.upsertProject(user, id, dto)', async () => {
+    const dto = { title: 'X' } as any;
+    await controller.upsertProject(mockUser as any, 5, dto);
+    expect(mockExecutionSvc.upsertProject).toHaveBeenCalledWith(mockUser, 5, dto);
+  });
+
+  it('evaluateProject → executionSvc.evaluateProject(user, projectId, dto)', async () => {
+    const dto = {} as any;
+    await controller.evaluateProject(mockUser as any, 9, dto);
+    expect(mockExecutionSvc.evaluateProject).toHaveBeenCalledWith(mockUser, 9, dto);
+  });
+
+  it('attachDocument → executionSvc.attachDocument(user, id, dto)', async () => {
+    const dto = { documentId: 1 } as any;
+    await controller.attachDocument(mockUser as any, 5, dto);
+    expect(mockExecutionSvc.attachDocument).toHaveBeenCalledWith(mockUser, 5, dto);
+  });
+
+  it('addCost → executionSvc.addCost(user, id, dto)', async () => {
+    const dto = { category: 'INSTRUCTOR' } as any;
+    await controller.addCost(mockUser as any, 5, dto);
+    expect(mockExecutionSvc.addCost).toHaveBeenCalledWith(mockUser, 5, dto);
+  });
+
+  it('costSummary → executionSvc.getCostSummary(user, id)', async () => {
+    await controller.costSummary(mockUser as any, 5);
+    expect(mockExecutionSvc.getCostSummary).toHaveBeenCalledWith(mockUser, 5);
+  });
+
+  it('scheduleCommunication → executionSvc.scheduleCommunication(user, id, dto)', async () => {
+    const dto = { event: 'INVITATION' } as any;
+    await controller.scheduleCommunication(mockUser as any, 5, dto);
+    expect(mockExecutionSvc.scheduleCommunication).toHaveBeenCalledWith(mockUser, 5, dto);
+  });
+
+  it('dispatchCommunication → executionSvc.dispatchCommunication(user, communicationId)', async () => {
+    await controller.dispatchCommunication(mockUser as any, 7);
+    expect(mockExecutionSvc.dispatchCommunication).toHaveBeenCalledWith(mockUser, 7);
   });
 
   it('enroll → enroll(dto)', async () => {
