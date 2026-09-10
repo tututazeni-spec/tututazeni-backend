@@ -113,13 +113,32 @@ const LeadershipProgramLevel = {
   ADVANCED: 'ADVANCED',
 };
 
-const ProgramStatus = { DRAFT: 'DRAFT', ACTIVE: 'ACTIVE', ARCHIVED: 'ARCHIVED' };
+// Espelham LeadershipProgram/LeadershipProgramParticipant no schema real. Sem o
+// alargamento, um teste unitário que valide contra estes enums passaria por
+// motivo errado (o mock, não o DTO, é que estaria a rejeitar o valor novo).
+const ProgramStatus = {
+  DRAFT: 'DRAFT',
+  PLANNED: 'PLANNED',
+  OPEN_FOR_SELECTION: 'OPEN_FOR_SELECTION',
+  SELECTION_CLOSED: 'SELECTION_CLOSED',
+  ACTIVE: 'ACTIVE',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+  ARCHIVED: 'ARCHIVED',
+};
 
 const ParticipantStatus = {
+  CANDIDATE: 'CANDIDATE',
+  INVITED: 'INVITED',
+  SELECTED: 'SELECTED',
+  REJECTED: 'REJECTED',
   ENROLLED: 'ENROLLED',
   IN_PROGRESS: 'IN_PROGRESS',
   COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
   WITHDRAWN: 'WITHDRAWN',
+  CANCELLED: 'CANCELLED',
 };
 
 const OneOnOneStatus = {

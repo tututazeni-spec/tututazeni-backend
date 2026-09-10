@@ -3396,7 +3396,7 @@ model LeadershipParticipantPlan {
 
   actions LeadershipParticipantPlanAction[]
 
-  @@index([participantId])
+  // participantId não leva @@index: o @unique já cria o índice.
   @@index([developmentPlanId])
   @@index([status])
 }

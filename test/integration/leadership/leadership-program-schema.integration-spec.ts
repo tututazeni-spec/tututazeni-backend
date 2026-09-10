@@ -138,7 +138,7 @@ describe('Leadership Program Schema (integração)', () => {
 
     await expect(
       prisma.leadershipProgram.create({ data: programData({ code: CODE_A }) }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ code: 'P2002' });
 
     const participant = await prisma.leadershipProgramParticipant.create({
       data: { userId: employeeId, programId: program.id },
@@ -149,7 +149,7 @@ describe('Leadership Program Schema (integração)', () => {
       prisma.leadershipProgramParticipant.create({
         data: { userId: employeeId, programId: program.id },
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ code: 'P2002' });
   });
 
   it('persiste os campos de planeamento do agregado com FKs canónicas', async () => {
@@ -240,7 +240,7 @@ describe('Leadership Program Schema (integração)', () => {
       prisma.leadershipSelectionCriterion.create({
         data: { programId, name: 'Desempenho', source: 'MANUAL', weight: 10 },
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ code: 'P2002' });
 
     await prisma.leadershipProgramCompetency.create({
       data: { programId, competencyId, baselineLevel: 2, targetLevel: 4, weight: 50 },
@@ -249,7 +249,7 @@ describe('Leadership Program Schema (integração)', () => {
       prisma.leadershipProgramCompetency.create({
         data: { programId, competencyId, targetLevel: 5 },
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ code: 'P2002' });
 
     await prisma.leadershipProgramObjective.create({
       data: {

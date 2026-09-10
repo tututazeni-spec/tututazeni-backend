@@ -545,9 +545,6 @@ CREATE INDEX "LeadershipProgramParticipant_selectedById_idx" ON "LeadershipProgr
 CREATE UNIQUE INDEX "LeadershipParticipantPlan_participantId_key" ON "LeadershipParticipantPlan"("participantId");
 
 -- CreateIndex
-CREATE INDEX "LeadershipParticipantPlan_participantId_idx" ON "LeadershipParticipantPlan"("participantId");
-
--- CreateIndex
 CREATE INDEX "LeadershipParticipantPlan_developmentPlanId_idx" ON "LeadershipParticipantPlan"("developmentPlanId");
 
 -- CreateIndex
