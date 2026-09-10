@@ -6,6 +6,7 @@ import {
   IsEnum,
   IsArray,
   IsNumber,
+  IsObject,
   IsDateString,
   Min,
   Max,
@@ -27,6 +28,7 @@ import {
   LeadershipContentType,
   LeadershipMethodologyType,
   LeadershipAdvisorRole,
+  ParticipantStatus,
 } from '@prisma/client';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -553,6 +555,29 @@ export class ProgramAdvisorInput {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+}
+
+// ─── Elegibilidade e selecção de candidatos (Task 3) ─────────────────────────
+
+export class RecalculateEligibilityDto {
+  @ApiPropertyOptional({
+    description:
+      'Valores manuais 0-100 por nome do critério (apenas para critérios source=MANUAL).',
+    example: { Entrevista: 85 },
+  })
+  @IsOptional()
+  @IsObject()
+  manualValues?: Record<string, number>;
+}
+
+export class ParticipantSelectionStatusDto {
+  @ApiProperty({
+    enum: ParticipantStatus,
+    description:
+      'Estado alvo na máquina de selecção (CANDIDATE→SELECTED→INVITED→ENROLLED→IN_PROGRESS→COMPLETED|WITHDRAWN|FAILED; REJECTED/CANCELLED).',
+  })
+  @IsEnum(ParticipantStatus)
+  status!: ParticipantStatus;
 }
 
 export class ReplaceProgramConfigurationDto {

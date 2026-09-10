@@ -16,11 +16,14 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { LeadershipService } from './leadership.service';
 import { LeadershipProgramsService } from './leadership-programs.service';
+import { LeadershipEligibilityService } from './leadership-eligibility.service';
 import {
   CreateLeadershipProgramDto,
   UpdateLeadershipProgramDto,
   TransitionProgramDto,
   ReplaceProgramConfigurationDto,
+  RecalculateEligibilityDto,
+  ParticipantSelectionStatusDto,
 } from './leadership-program.dto';
 import {
   LeadershipFilterDto,
@@ -59,6 +62,7 @@ export class LeadershipController {
   constructor(
     private readonly svc: LeadershipService,
     private readonly programsSvc: LeadershipProgramsService,
+    private readonly eligibilitySvc: LeadershipEligibilityService,
   ) {}
 
   // ── Dashboard do Líder ────────────────────────────────────────────────────
@@ -191,6 +195,57 @@ export class LeadershipController {
     @Param('programId', ParseIntPipe) programId: number,
   ) {
     return this.svc.withdraw(user.id, programId);
+  }
+
+  // ── Elegibilidade e selecção de candidatos (Task 3) ──────────────────────
+  // Manager-only: @Roles filtra os papéis; o ownership por-programa (autor/
+  // responsável ou ADMIN/RH) é validado NO SERVIÇO via assertCanManageProgram.
+
+  @Get('programs/:id/candidates')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({
+    summary: 'Candidatos do programa com a elegibilidade persistida (compute-on-read)',
+  })
+  listCandidates(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
+    return this.eligibilitySvc.listCandidates(user, id);
+  }
+
+  @Post('programs/:id/candidates/:userId/recalculate')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Recalcular e persistir o snapshot de elegibilidade de um candidato' })
+  @HttpCode(HttpStatus.OK)
+  recalculateEligibility(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: RecalculateEligibilityDto,
+  ) {
+    return this.eligibilitySvc.recalculate(user, id, userId, dto);
+  }
+
+  @Post('programs/:id/candidates/:userId/select')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Selecionar candidato (CANDIDATE→SELECTED; cria a linha se preciso)' })
+  @HttpCode(HttpStatus.OK)
+  selectCandidate(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+  ) {
+    return this.eligibilitySvc.selectCandidate(user, id, userId);
+  }
+
+  @Patch('programs/:id/participants/:userId/selection-status')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Avançar o participante na máquina de estados da selecção' })
+  @HttpCode(HttpStatus.OK)
+  advanceSelectionStatus(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: ParticipantSelectionStatusDto,
+  ) {
+    return this.eligibilitySvc.advanceSelection(user, id, userId, dto.status);
   }
 
   // ── Team Health ───────────────────────────────────────────────────────────

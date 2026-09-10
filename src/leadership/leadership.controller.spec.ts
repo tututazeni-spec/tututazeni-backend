@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { LeadershipController } from './leadership.controller';
 import { LeadershipService } from './leadership.service';
 import { LeadershipProgramsService } from './leadership-programs.service';
+import { LeadershipEligibilityService } from './leadership-eligibility.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -11,6 +12,15 @@ const mockProgramsSvc = {
   transition: jest.fn().mockResolvedValue({ id: 1, status: 'PLANNED' }),
   replaceConfiguration: jest.fn().mockResolvedValue({ id: 1 }),
   remove: jest.fn().mockResolvedValue({}),
+};
+
+const mockEligibilitySvc = {
+  listCandidates: jest.fn().mockResolvedValue([]),
+  recalculate: jest
+    .fn()
+    .mockResolvedValue({ score: 80, eligible: true, breakdown: [], missingData: [] }),
+  selectCandidate: jest.fn().mockResolvedValue({ status: 'SELECTED' }),
+  advanceSelection: jest.fn().mockResolvedValue({ status: 'INVITED' }),
 };
 
 const mockSvc = {
@@ -53,6 +63,7 @@ describe('LeadershipController', () => {
       providers: [
         { provide: LeadershipService, useValue: mockSvc },
         { provide: LeadershipProgramsService, useValue: mockProgramsSvc },
+        { provide: LeadershipEligibilityService, useValue: mockEligibilitySvc },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -120,6 +131,27 @@ describe('LeadershipController', () => {
   it('remove → programsSvc.remove(user, id)', async () => {
     await controller.remove(mockUser as any, 1);
     expect(mockProgramsSvc.remove).toHaveBeenCalledWith(mockUser, 1);
+  });
+
+  it('listCandidates → eligibilitySvc.listCandidates(user, id)', async () => {
+    await controller.listCandidates(mockUser as any, 5);
+    expect(mockEligibilitySvc.listCandidates).toHaveBeenCalledWith(mockUser, 5);
+  });
+
+  it('recalculateEligibility → eligibilitySvc.recalculate(user, id, userId, dto)', async () => {
+    const dto = { manualValues: { X: 90 } } as any;
+    await controller.recalculateEligibility(mockUser as any, 5, 3, dto);
+    expect(mockEligibilitySvc.recalculate).toHaveBeenCalledWith(mockUser, 5, 3, dto);
+  });
+
+  it('selectCandidate → eligibilitySvc.selectCandidate(user, id, userId)', async () => {
+    await controller.selectCandidate(mockUser as any, 5, 3);
+    expect(mockEligibilitySvc.selectCandidate).toHaveBeenCalledWith(mockUser, 5, 3);
+  });
+
+  it('advanceSelectionStatus → eligibilitySvc.advanceSelection(user, id, userId, dto.status)', async () => {
+    await controller.advanceSelectionStatus(mockUser as any, 5, 3, { status: 'INVITED' } as any);
+    expect(mockEligibilitySvc.advanceSelection).toHaveBeenCalledWith(mockUser, 5, 3, 'INVITED');
   });
 
   it('enroll → enroll(dto)', async () => {

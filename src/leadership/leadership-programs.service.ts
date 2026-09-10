@@ -92,6 +92,17 @@ export class LeadershipProgramsService {
     return program;
   }
 
+  /**
+   * Ponto de entrada PÚBLICO do ownership do agregado — para serviços satélite
+   * (ex.: `LeadershipEligibilityService`, Task 3) que operam sobre um programa
+   * mas não devem reimplementar a regra de dono/privilegiado. Devolve o programa
+   * carregado (com `_count.participants`). 404 se não existir, 403 se o actor não
+   * for autor/responsável nem ADMIN/RH.
+   */
+  async assertCanManageProgram(actor: CurrentUserData, programId: number) {
+    return this.loadForManage(actor, programId);
+  }
+
   private toDate(value?: string | null): Date | undefined {
     return value ? new Date(value) : undefined;
   }
