@@ -72,9 +72,14 @@ export class CreateLeadershipProgramDto {
   @IsEnum(LeadershipCorporateLevel)
   corporateLevel?: LeadershipCorporateLevel;
 
-  // O DTO aceita qualquer estado válido; é o guard `transition()` do serviço que
-  // rejeita transições ilegais entre estados.
-  @ApiPropertyOptional({ enum: ProgramStatus, default: ProgramStatus.DRAFT })
+  // Informativo apenas. `create()` IGNORA este campo — um programa nasce sempre
+  // em `DRAFT`; para o mover é preciso `PATCH .../transition` (máquina de
+  // estados). Mantido no DTO para retrocompatibilidade do payload de criação.
+  @ApiPropertyOptional({
+    enum: ProgramStatus,
+    default: ProgramStatus.DRAFT,
+    description: 'Ignorado na criação (nasce sempre DRAFT). Use PATCH .../transition.',
+  })
   @IsOptional()
   @IsEnum(ProgramStatus)
   status?: ProgramStatus;
@@ -238,9 +243,11 @@ export class CreateLeadershipProgramDto {
   learningPathId?: number;
 }
 
-// `code` é imutável depois de criado — omitido do DTO de actualização.
+// `code` é imutável depois de criado. `status` NÃO é editável por aqui — as
+// mudanças de estado passam exclusivamente por `PATCH .../transition`
+// (máquina de estados). Ambos omitidos do DTO de actualização.
 export class UpdateLeadershipProgramDto extends PartialType(
-  OmitType(CreateLeadershipProgramDto, ['code'] as const),
+  OmitType(CreateLeadershipProgramDto, ['code', 'status'] as const),
 ) {}
 
 // ─── Transição de estado ─────────────────────────────────────────────────────

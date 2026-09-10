@@ -84,6 +84,12 @@ describe('LeadershipProgramsService', () => {
     await expect(service.create(actor(Role.RH), dto)).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('create ignora qualquer status fornecido pelo caller — nasce sempre DRAFT', async () => {
+    const res = await service.create(actor(Role.ADMIN, 1), { ...dto, status: 'COMPLETED' } as any);
+    expect(res.status).toBe('DRAFT');
+    expect(mockPrisma.leadershipProgram.create.mock.calls[0][0].data.status).toBe('DRAFT');
+  });
+
   // ─── Step 1: ownership no update ──────────────────────────────────────────
 
   it('rejects editing another author program', async () => {
@@ -140,6 +146,23 @@ describe('LeadershipProgramsService', () => {
     await expect(
       service.update(actor(Role.ADMIN, 1), 404, { name: 'X' } as any),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('update NÃO escreve status — a máquina de estados não pode ser contornada por PUT', async () => {
+    mockPrisma.leadershipProgram.findUnique.mockResolvedValue({
+      id: 9,
+      status: 'DRAFT',
+      createdById: 7,
+      responsibleId: null,
+    });
+    const res = await service.update(actor(Role.GESTOR, 7), 9, {
+      name: 'X',
+      status: 'COMPLETED',
+    } as any);
+    // O serviço nunca lê dto.status, logo `data` não o contém e o estado fica
+    // por conta de transition().
+    expect(mockPrisma.leadershipProgram.update.mock.calls[0][0].data).not.toHaveProperty('status');
+    expect(res).not.toHaveProperty('status');
   });
 
   // ─── transition: máquina de estados ──────────────────────────────────────

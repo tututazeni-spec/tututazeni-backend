@@ -77,6 +77,8 @@ export class LeadershipProgramsService {
     if (isPrivileged(actor, LeadershipProgramsService.PRIVILEGED_ROLES)) return;
     if (program.createdById !== null && program.createdById === actor.id) return;
     if (program.responsibleId !== null && program.responsibleId === actor.id) return;
+    // 403 (not the repo's 404 assertCanAccess): the 6 manager roles are trusted
+    // staff, not participants — Task 2 brief Step 1 mandates ForbiddenException.
     throw new ForbiddenException('Sem permissão para gerir este programa de liderança');
   }
 
@@ -94,8 +96,16 @@ export class LeadershipProgramsService {
     return value ? new Date(value) : undefined;
   }
 
-  /** Campos escalares do agregado partilhados por create/update. */
-  private scalarData(
+  /**
+   * Campos escalares editáveis do agregado, partilhados por create/update.
+   *
+   * **`status` NÃO está aqui de propósito** — nem `create` nem `update` escrevem
+   * o estado directamente. O estado inicial é sempre `DRAFT` (forçado em
+   * `create`) e todas as mudanças subsequentes passam por `transition()`, que é
+   * o único ponto que valida a máquina de estados. `code` também não está —
+   * é imutável pós-criação (só `create` o escreve).
+   */
+  private editableScalars(
     dto: CreateLeadershipProgramDto | UpdateLeadershipProgramDto,
   ): Prisma.LeadershipProgramUncheckedUpdateInput {
     return {
@@ -105,7 +115,6 @@ export class LeadershipProgramsService {
       level: dto.level,
       type: dto.type,
       corporateLevel: dto.corporateLevel,
-      status: dto.status,
       mandatory: dto.mandatory,
       responsibleId: dto.responsibleId,
       departmentId: dto.departmentId,
@@ -140,17 +149,51 @@ export class LeadershipProgramsService {
   // ─── CRUD ────────────────────────────────────────────────────────────────
 
   async create(actor: CurrentUserData, dto: CreateLeadershipProgramDto) {
+    // Todos os campos obrigatórios (`code`, `name`, `level`) são garantidos pelo
+    // DTO validado. O estado inicial é SEMPRE `DRAFT` — um `status` fornecido
+    // pelo caller é ignorado (o programa "nasce em rascunho"; para o mover é
+    // preciso `transition()`).
+    const data: Prisma.LeadershipProgramUncheckedCreateInput = {
+      code: dto.code,
+      name: dto.name,
+      level: dto.level,
+      description: dto.description,
+      objective: dto.objective,
+      type: dto.type,
+      corporateLevel: dto.corporateLevel,
+      status: ProgramStatus.DRAFT,
+      mandatory: dto.mandatory,
+      createdById: actor.id,
+      responsibleId: dto.responsibleId,
+      departmentId: dto.departmentId,
+      startDate: this.toDate(dto.startDate),
+      endDate: this.toDate(dto.endDate),
+      selectionStartDate: this.toDate(dto.selectionStartDate),
+      selectionEndDate: this.toDate(dto.selectionEndDate),
+      durationWeeks: dto.durationWeeks,
+      workloadHours: dto.workloadHours,
+      totalSessions: dto.totalSessions,
+      sessionFrequency: dto.sessionFrequency,
+      modality: dto.modality,
+      location: dto.location,
+      capacity: dto.capacity,
+      minParticipants: dto.minParticipants,
+      schedule: dto.schedule,
+      calendarNotes: dto.calendarNotes,
+      minLeadershipScore: dto.minLeadershipScore,
+      minAttendanceRate: dto.minAttendanceRate,
+      minFinalScore: dto.minFinalScore,
+      requireFinalProject: dto.requireFinalProject,
+      requireAllContents: dto.requireAllContents,
+      completionCriteria: dto.completionCriteria,
+      certificationEnabled: dto.certificationEnabled,
+      certificateTitle: dto.certificateTitle,
+      certificateValidityDays: dto.certificateValidityDays,
+      certificateTemplateId: dto.certificateTemplateId,
+      learningPathId: dto.learningPathId,
+    };
+
     try {
-      // `scalarData` é tipado para update (todos os campos opcionais); no create
-      // os obrigatórios (`code`, `name`, `level`) são garantidos pelo DTO
-      // validado — daí o cast largo.
-      const data = {
-        ...this.scalarData(dto),
-        code: dto.code,
-        name: dto.name,
-        level: dto.level,
-        createdById: actor.id,
-      } as unknown as Prisma.LeadershipProgramUncheckedCreateInput;
       return await this.prisma.leadershipProgram.create({ data });
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
@@ -164,8 +207,10 @@ export class LeadershipProgramsService {
     await this.loadForManage(actor, id);
     return this.prisma.leadershipProgram.update({
       where: { id },
-      // `code` nunca chega no DTO de update (omitido) — imutável pós-criação.
-      data: this.scalarData(dto),
+      // `code` e `status` nunca chegam no DTO de update (omitidos). O estado só
+      // muda por `transition()` — a máquina de estados não pode ser contornada
+      // por um PUT.
+      data: this.editableScalars(dto),
     });
   }
 
