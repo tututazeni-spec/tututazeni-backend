@@ -27,7 +27,7 @@ const mockPrisma = {
     count: makeCount(1),
     delete: makeFind({}),
   },
-  leadershipParticipant: {
+  leadershipProgramParticipant: {
     findFirst: makeFind(null),
     findUnique: makeFind(null),
     create: makeFind({ id: 1, userId: 1, programId: 1, program: { name: 'Test' } }),
@@ -150,14 +150,14 @@ describe('LeadershipService — additional coverage', () => {
 
   describe('updateProgress', () => {
     it('deve actualizar progresso do participante', async () => {
-      mockPrisma.leadershipParticipant.findUnique.mockResolvedValue({
+      mockPrisma.leadershipProgramParticipant.findUnique.mockResolvedValue({
         id: 1,
         userId: 1,
         programId: 1,
         status: 'IN_PROGRESS',
         program: { name: 'Test' },
       });
-      mockPrisma.leadershipParticipant.update.mockResolvedValue({
+      mockPrisma.leadershipProgramParticipant.update.mockResolvedValue({
         id: 1,
         progress: 80,
         status: 'IN_PROGRESS',
@@ -168,7 +168,7 @@ describe('LeadershipService — additional coverage', () => {
     });
 
     it('deve lançar NotFoundException se participante não encontrado', async () => {
-      mockPrisma.leadershipParticipant.findUnique.mockResolvedValue(null);
+      mockPrisma.leadershipProgramParticipant.findUnique.mockResolvedValue(null);
 
       await expect(service.updateProgress(99, 99, { progress: 50 } as any)).rejects.toThrow(
         NotFoundException,
@@ -180,15 +180,18 @@ describe('LeadershipService — additional coverage', () => {
 
   describe('withdraw', () => {
     it('deve efectuar withdrawal do programa', async () => {
-      mockPrisma.leadershipParticipant.findUnique.mockResolvedValue({ id: 1 });
-      mockPrisma.leadershipParticipant.update.mockResolvedValue({ id: 1, status: 'WITHDRAWN' });
+      mockPrisma.leadershipProgramParticipant.findUnique.mockResolvedValue({ id: 1 });
+      mockPrisma.leadershipProgramParticipant.update.mockResolvedValue({
+        id: 1,
+        status: 'WITHDRAWN',
+      });
 
       const result = await service.withdraw(1, 1);
       expect(result).toBeDefined();
     });
 
     it('deve lançar NotFoundException se inscrição não encontrada', async () => {
-      mockPrisma.leadershipParticipant.findUnique.mockResolvedValue(null);
+      mockPrisma.leadershipProgramParticipant.findUnique.mockResolvedValue(null);
       await expect(service.withdraw(99, 99)).rejects.toThrow(NotFoundException);
     });
   });
@@ -197,7 +200,7 @@ describe('LeadershipService — additional coverage', () => {
 
   describe('getMyPrograms', () => {
     it('deve retornar programas do utilizador', async () => {
-      mockPrisma.leadershipParticipant.findMany.mockResolvedValue([
+      mockPrisma.leadershipProgramParticipant.findMany.mockResolvedValue([
         { id: 1, userId: 1, program: { id: 1, name: 'Test', level: 'BASIC', status: 'ACTIVE' } },
       ]);
 
@@ -215,8 +218,10 @@ describe('LeadershipService — additional coverage', () => {
         name: 'Prog',
         _count: { participants: 5 },
       });
-      mockPrisma.leadershipParticipant.count.mockResolvedValue(5);
-      mockPrisma.leadershipParticipant.aggregate.mockResolvedValue({ _avg: { progress: 60 } });
+      mockPrisma.leadershipProgramParticipant.count.mockResolvedValue(5);
+      mockPrisma.leadershipProgramParticipant.aggregate.mockResolvedValue({
+        _avg: { progress: 60 },
+      });
 
       const result = await service.getProgramStats(1);
 

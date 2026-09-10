@@ -97,7 +97,7 @@ describe('Leadership Integration', () => {
       await prisma.certificate
         .deleteMany({ where: { programId: { in: programIds } } })
         .catch(() => undefined);
-      await prisma.leadershipParticipant
+      await prisma.leadershipProgramParticipant
         .deleteMany({ where: { programId: { in: programIds } } })
         .catch(() => undefined);
       await prisma.leadershipProgram

@@ -5,6 +5,7 @@
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, ReviewStatus, LeadershipClassification } from '@prisma/client';
 import {
@@ -88,9 +89,20 @@ export class LeadershipService {
     return p;
   }
 
+  // `LeadershipProgram.code` passou a ser obrigatório e único com o agregado
+  // corporativo. Enquanto o fluxo de criação completo (com código escolhido
+  // pelo utilizador) não existir, o código é gerado aqui para que nenhum
+  // programa fique sem identificador estável.
+  private generateProgramCode(): string {
+    const stamp = Date.now().toString(36).toUpperCase();
+    const suffix = randomBytes(2).toString('hex').toUpperCase();
+    return `LDR-${stamp}-${suffix}`;
+  }
+
   async create(dto: CreateLeadershipProgramDto) {
     return this.prisma.leadershipProgram.create({
       data: {
+        code: this.generateProgramCode(),
         name: dto.name,
         description: dto.description,
         level: dto.level,
@@ -124,12 +136,12 @@ export class LeadershipService {
   // ─── PARTICIPAÇÃO ─────────────────────────────────────────────────────────
 
   async enroll(dto: EnrollLeadershipDto) {
-    const exists = await this.prisma.leadershipParticipant.findUnique({
+    const exists = await this.prisma.leadershipProgramParticipant.findUnique({
       where: { userId_programId: { userId: dto.userId, programId: dto.programId } },
     });
     if (exists) throw new ConflictException('Utilizador já inscrito neste programa');
 
-    const participant = await this.prisma.leadershipParticipant.create({
+    const participant = await this.prisma.leadershipProgramParticipant.create({
       data: {
         userId: dto.userId,
         programId: dto.programId,
@@ -165,7 +177,7 @@ export class LeadershipService {
   }
 
   async updateProgress(userId: number, programId: number, dto: UpdateParticipantProgressDto) {
-    const participant = await this.prisma.read.leadershipParticipant.findUnique({
+    const participant = await this.prisma.read.leadershipProgramParticipant.findUnique({
       where: { userId_programId: { userId, programId } },
       include: { program: true },
     });
@@ -175,7 +187,7 @@ export class LeadershipService {
     const isCompleting =
       !wasAlreadyCompleted && (dto.progress >= 100 || dto.status === 'COMPLETED');
 
-    const updated = await this.prisma.leadershipParticipant.update({
+    const updated = await this.prisma.leadershipProgramParticipant.update({
       where: { userId_programId: { userId, programId } },
       data: {
         progress: dto.progress,
@@ -233,18 +245,18 @@ export class LeadershipService {
   }
 
   async withdraw(userId: number, programId: number) {
-    const existing = await this.prisma.leadershipParticipant.findUnique({
+    const existing = await this.prisma.leadershipProgramParticipant.findUnique({
       where: { userId_programId: { userId, programId } },
     });
     if (!existing) throw new NotFoundException('Inscrição não encontrada');
-    return this.prisma.leadershipParticipant.update({
+    return this.prisma.leadershipProgramParticipant.update({
       where: { userId_programId: { userId, programId } },
       data: { status: 'WITHDRAWN' },
     });
   }
 
   async getMyPrograms(userId: number) {
-    return this.prisma.read.leadershipParticipant.findMany({
+    return this.prisma.read.leadershipProgramParticipant.findMany({
       where: { userId },
       include: {
         program: {
@@ -258,10 +270,14 @@ export class LeadershipService {
   async getProgramStats(programId: number) {
     await this.findOne(programId);
     const [total, completed, inProgress, avgProgress] = await Promise.all([
-      this.prisma.read.leadershipParticipant.count({ where: { programId } }),
-      this.prisma.read.leadershipParticipant.count({ where: { programId, status: 'COMPLETED' } }),
-      this.prisma.read.leadershipParticipant.count({ where: { programId, status: 'IN_PROGRESS' } }),
-      this.prisma.read.leadershipParticipant.aggregate({
+      this.prisma.read.leadershipProgramParticipant.count({ where: { programId } }),
+      this.prisma.read.leadershipProgramParticipant.count({
+        where: { programId, status: 'COMPLETED' },
+      }),
+      this.prisma.read.leadershipProgramParticipant.count({
+        where: { programId, status: 'IN_PROGRESS' },
+      }),
+      this.prisma.read.leadershipProgramParticipant.aggregate({
         where: { programId },
         _avg: { progress: true },
       }),
@@ -362,10 +378,10 @@ export class LeadershipService {
         where: { userId: { in: teamIds }, status: 'FINALIZED' },
       }),
       this.prisma.read.performanceReview.count({ where: { userId: { in: teamIds } } }),
-      this.prisma.read.leadershipParticipant.count({
+      this.prisma.read.leadershipProgramParticipant.count({
         where: { userId: { in: teamIds }, status: 'COMPLETED' },
       }),
-      this.prisma.read.leadershipParticipant.count({ where: { userId: { in: teamIds } } }),
+      this.prisma.read.leadershipProgramParticipant.count({ where: { userId: { in: teamIds } } }),
     ]);
 
     const evaluationsOnTimePct =
@@ -722,7 +738,7 @@ export class LeadershipService {
   async recalcLeadershipScore(leaderId: number) {
     const [teamHealth, programsCompleted, feedback360, oneOnOnes] = await Promise.all([
       this.prisma.read.teamHealth.findUnique({ where: { managerId: leaderId } }),
-      this.prisma.read.leadershipParticipant.count({
+      this.prisma.read.leadershipProgramParticipant.count({
         where: { userId: leaderId, status: 'COMPLETED' },
       }),
       this.get360Summary(leaderId),

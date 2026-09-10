@@ -24,7 +24,7 @@ import { BaseFilterDto } from '../common/dtos/pagination.dto';
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // NOTA: ParticipantStatus aqui é o `EventParticipantStatus` do Prisma — nome
 // local mantido por compatibilidade, distinto do `ParticipantStatus`
-// (LeadershipParticipant, lote 4) e `TrainingParticipantStatus` (lote 5).
+// (LeadershipProgramParticipant, lote 4) e `TrainingParticipantStatus` (lote 5).
 
 export { EventType, EventModalidade, EventStatus, ParticipantStatus };
 
