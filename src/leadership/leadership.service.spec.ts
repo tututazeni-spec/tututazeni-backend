@@ -105,16 +105,9 @@ describe('LeadershipService', () => {
     });
   });
 
-  describe('create', () => {
-    it('deve criar programa', async () => {
-      mockPrisma.leadershipProgram.create.mockResolvedValue(baseProgram);
-      const result = await service.create({
-        title: 'Programa de Liderança',
-        description: 'Desc',
-      } as any);
-      expect(result).toBeDefined();
-    });
-  });
+  // A escrita de programas (create/update/remove/transition/replaceConfiguration)
+  // migrou para `LeadershipProgramsService` — coberta em
+  // `leadership-programs.service.spec.ts`.
 
   describe('enroll', () => {
     it('deve inscrever utilizador no programa', async () => {

@@ -127,7 +127,12 @@ describe('Leadership Integration', () => {
       const res = await request(app.getHttpServer())
         .post('/leadership/programs')
         .set('Authorization', `Bearer ${rhToken}`)
-        .send({ name: 'Int Test Programa Obrigatório', level: 'INITIAL', mandatory: true })
+        .send({
+          code: `LDR-INT-M-${Date.now()}`,
+          name: 'Int Test Programa Obrigatório',
+          level: 'INITIAL',
+          mandatory: true,
+        })
         .expect(201);
       mandatoryProgramId = res.body.id;
     });
@@ -136,7 +141,12 @@ describe('Leadership Integration', () => {
       const res = await request(app.getHttpServer())
         .post('/leadership/programs')
         .set('Authorization', `Bearer ${rhToken}`)
-        .send({ name: 'Int Test Programa Normal', level: 'ADVANCED', mandatory: false })
+        .send({
+          code: `LDR-INT-N-${Date.now()}`,
+          name: 'Int Test Programa Normal',
+          level: 'ADVANCED',
+          mandatory: false,
+        })
         .expect(201);
       normalProgramId = res.body.id;
     });

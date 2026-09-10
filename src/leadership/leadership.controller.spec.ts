@@ -1,8 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { LeadershipController } from './leadership.controller';
 import { LeadershipService } from './leadership.service';
+import { LeadershipProgramsService } from './leadership-programs.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+
+const mockProgramsSvc = {
+  create: jest.fn().mockResolvedValue({ id: 2 }),
+  update: jest.fn().mockResolvedValue({ id: 1 }),
+  transition: jest.fn().mockResolvedValue({ id: 1, status: 'PLANNED' }),
+  replaceConfiguration: jest.fn().mockResolvedValue({ id: 1 }),
+  remove: jest.fn().mockResolvedValue({}),
+};
 
 const mockSvc = {
   getMyLeaderDashboard: jest.fn().mockResolvedValue({}),
@@ -11,9 +20,6 @@ const mockSvc = {
   getMyPrograms: jest.fn().mockResolvedValue([]),
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
   getProgramStats: jest.fn().mockResolvedValue({}),
-  create: jest.fn().mockResolvedValue({ id: 2 }),
-  update: jest.fn().mockResolvedValue({ id: 1 }),
-  remove: jest.fn().mockResolvedValue({}),
   enroll: jest.fn().mockResolvedValue({ id: 1 }),
   updateProgress: jest.fn().mockResolvedValue({}),
   withdraw: jest.fn().mockResolvedValue({}),
@@ -44,7 +50,10 @@ describe('LeadershipController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [LeadershipController],
-      providers: [{ provide: LeadershipService, useValue: mockSvc }],
+      providers: [
+        { provide: LeadershipService, useValue: mockSvc },
+        { provide: LeadershipProgramsService, useValue: mockProgramsSvc },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -85,21 +94,32 @@ describe('LeadershipController', () => {
     expect(mockSvc.getProgramStats).toHaveBeenCalledWith(2);
   });
 
-  it('create → create(dto)', async () => {
+  it('create → programsSvc.create(user, dto)', async () => {
     const dto = {} as any;
-    await controller.create(dto);
-    expect(mockSvc.create).toHaveBeenCalledWith(dto);
+    await controller.create(mockUser as any, dto);
+    expect(mockProgramsSvc.create).toHaveBeenCalledWith(mockUser, dto);
   });
 
-  it('update → update(id, dto)', async () => {
+  it('update → programsSvc.update(user, id, dto)', async () => {
     const dto = {} as any;
-    await controller.update(1, dto);
-    expect(mockSvc.update).toHaveBeenCalledWith(1, dto);
+    await controller.update(mockUser as any, 1, dto);
+    expect(mockProgramsSvc.update).toHaveBeenCalledWith(mockUser, 1, dto);
   });
 
-  it('remove → remove(id)', async () => {
-    await controller.remove(1);
-    expect(mockSvc.remove).toHaveBeenCalledWith(1);
+  it('transition → programsSvc.transition(user, id, dto.status)', async () => {
+    await controller.transition(mockUser as any, 3, { status: 'PLANNED' } as any);
+    expect(mockProgramsSvc.transition).toHaveBeenCalledWith(mockUser, 3, 'PLANNED');
+  });
+
+  it('replaceConfiguration → programsSvc.replaceConfiguration(user, id, dto)', async () => {
+    const dto = {} as any;
+    await controller.replaceConfiguration(mockUser as any, 4, dto);
+    expect(mockProgramsSvc.replaceConfiguration).toHaveBeenCalledWith(mockUser, 4, dto);
+  });
+
+  it('remove → programsSvc.remove(user, id)', async () => {
+    await controller.remove(mockUser as any, 1);
+    expect(mockProgramsSvc.remove).toHaveBeenCalledWith(mockUser, 1);
   });
 
   it('enroll → enroll(dto)', async () => {

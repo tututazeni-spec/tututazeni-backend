@@ -4,7 +4,6 @@ import {
   IsBoolean,
   IsInt,
   IsEnum,
-  IsIn,
   IsArray,
   IsNumber,
   IsDateString,
@@ -13,7 +12,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import {
   LeadershipProgramLevel as ProgramLevel,
@@ -27,25 +26,6 @@ import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 export { ProgramLevel, ProgramStatus, ParticipantStatus, OneOnOneStatus };
 
-// A Task 1 alargou `ProgramStatus` e `ParticipantStatus` com o ciclo de vida do
-// programa corporativo, mas a máquina de estados que valida as transições só
-// chega na Task 2. Até lá os endpoints existentes continuam a aceitar
-// exactamente o conjunto de valores legado — sem esta restrição um caller podia
-// saltar directamente para COMPLETED/CANCELLED (ou marcar um participante como
-// SELECTED/REJECTED) sem qualquer validação de pré-requisitos.
-// TODO(Task 2): widen to full ProgramStatus once transition guard exists
-export const LEGACY_PROGRAM_STATUS = ['DRAFT', 'ACTIVE', 'ARCHIVED'] as const;
-export type LegacyProgramStatus = (typeof LEGACY_PROGRAM_STATUS)[number];
-
-// TODO(Task 2): widen to full ParticipantStatus once transition guard exists
-export const LEGACY_PARTICIPANT_STATUS = [
-  'ENROLLED',
-  'IN_PROGRESS',
-  'COMPLETED',
-  'WITHDRAWN',
-] as const;
-export type LegacyParticipantStatus = (typeof LEGACY_PARTICIPANT_STATUS)[number];
-
 export enum LeadershipCompetency {
   COMMUNICATION = 'COMMUNICATION',
   DEVELOPMENT = 'DEVELOPMENT',
@@ -58,62 +38,9 @@ export enum LeadershipCompetency {
 }
 
 // ─── Leadership Program ───────────────────────────────────────────────────────
-
-export class CreateLeadershipProgramDto {
-  @ApiProperty({ example: 'Programa Líderes do Futuro 2026' })
-  @IsString()
-  @MaxLength(200)
-  name!: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  description?: string;
-
-  @ApiProperty({ enum: ProgramLevel })
-  @IsEnum(ProgramLevel)
-  level!: ProgramLevel;
-
-  @ApiPropertyOptional({ enum: [...LEGACY_PROGRAM_STATUS], default: 'DRAFT' })
-  @IsOptional()
-  @IsIn(LEGACY_PROGRAM_STATUS)
-  status?: LegacyProgramStatus;
-
-  @ApiPropertyOptional({ description: 'Duração em semanas' })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  durationWeeks?: number;
-
-  @ApiPropertyOptional({ description: 'Trilha de Aprendizagem associada' })
-  @IsOptional()
-  @IsInt()
-  learningPathId?: number;
-
-  @ApiPropertyOptional({ default: false })
-  @IsOptional()
-  @IsBoolean()
-  mandatory?: boolean;
-
-  @ApiPropertyOptional({ description: 'Pontuação mínima de liderança para acesso' })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(1000)
-  minLeadershipScore?: number;
-
-  @ApiPropertyOptional({ description: 'Data de início' })
-  @IsOptional()
-  @IsDateString()
-  startDate?: string;
-
-  @ApiPropertyOptional({ description: 'Data de fim' })
-  @IsOptional()
-  @IsDateString()
-  endDate?: string;
-}
-
-export class UpdateLeadershipProgramDto extends PartialType(CreateLeadershipProgramDto) {}
+// Os DTOs de criação/actualização do agregado `LeadershipProgram` vivem agora em
+// `leadership-program.dto.ts`, ao lado do serviço write-owner dedicado
+// (`LeadershipProgramsService`). O controller importa-os directamente de lá.
 
 // ─── Enroll ───────────────────────────────────────────────────────────────────
 
@@ -134,10 +61,13 @@ export class UpdateParticipantProgressDto {
   @Max(100)
   progress!: number;
 
-  @ApiPropertyOptional({ enum: [...LEGACY_PARTICIPANT_STATUS] })
+  // O DTO aceita qualquer estado de participante válido. A validação da
+  // transição (máquina de estados do participante) é da Task 3/5.
+  // TODO(Task 3): participant transition guard
+  @ApiPropertyOptional({ enum: ParticipantStatus })
   @IsOptional()
-  @IsIn(LEGACY_PARTICIPANT_STATUS)
-  status?: LegacyParticipantStatus;
+  @IsEnum(ParticipantStatus)
+  status?: ParticipantStatus;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -393,10 +323,10 @@ export class LeadershipFilterDto extends BaseFilterDto {
   @IsEnum(ProgramLevel)
   level?: ProgramLevel;
 
-  @ApiPropertyOptional({ enum: [...LEGACY_PROGRAM_STATUS] })
+  @ApiPropertyOptional({ enum: ProgramStatus })
   @IsOptional()
-  @IsIn(LEGACY_PROGRAM_STATUS)
-  status?: LegacyProgramStatus;
+  @IsEnum(ProgramStatus)
+  status?: ProgramStatus;
 
   @ApiPropertyOptional()
   @IsOptional()

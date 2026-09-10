@@ -15,9 +15,14 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { LeadershipService } from './leadership.service';
+import { LeadershipProgramsService } from './leadership-programs.service';
 import {
   CreateLeadershipProgramDto,
   UpdateLeadershipProgramDto,
+  TransitionProgramDto,
+  ReplaceProgramConfigurationDto,
+} from './leadership-program.dto';
+import {
   LeadershipFilterDto,
   EnrollLeadershipDto,
   UpdateParticipantProgressDto,
@@ -35,12 +40,26 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 
+// Papéis que podem criar programas de liderança e gerir aqueles de que são
+// autores/responsáveis (ADMIN/RH gerem todos — a distinção é feita no serviço).
+const PROGRAM_MANAGERS = [
+  Role.ADMIN,
+  Role.RH,
+  Role.GESTOR,
+  Role.INSTRUCTOR,
+  Role.DIRECTOR,
+  Role.LIDER,
+] as const;
+
 @ApiTags('Leadership')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('leadership')
 export class LeadershipController {
-  constructor(private readonly svc: LeadershipService) {}
+  constructor(
+    private readonly svc: LeadershipService,
+    private readonly programsSvc: LeadershipProgramsService,
+  ) {}
 
   // ── Dashboard do Líder ────────────────────────────────────────────────────
 
@@ -85,24 +104,55 @@ export class LeadershipController {
   }
 
   @Post('programs')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...PROGRAM_MANAGERS)
   @ApiOperation({ summary: 'Criar programa de liderança' })
-  create(@Body() dto: CreateLeadershipProgramDto) {
-    return this.svc.create(dto);
+  create(@CurrentUser() user: CurrentUserData, @Body() dto: CreateLeadershipProgramDto) {
+    return this.programsSvc.create(user, dto);
   }
 
   @Put('programs/:id')
-  @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Actualizar programa' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLeadershipProgramDto) {
-    return this.svc.update(id, dto);
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Actualizar programa (autor/responsável ou ADMIN/RH)' })
+  update(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateLeadershipProgramDto,
+  ) {
+    return this.programsSvc.update(user, id, dto);
+  }
+
+  @Patch('programs/:id/transition')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'Transição de estado do programa (máquina de estados)' })
+  @HttpCode(HttpStatus.OK)
+  transition(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: TransitionProgramDto,
+  ) {
+    return this.programsSvc.transition(user, id, dto.status);
+  }
+
+  @Put('programs/:id/configuration')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({
+    summary: 'Substituir a configuração do programa (público, critérios, competências, ...)',
+  })
+  replaceConfiguration(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReplaceProgramConfigurationDto,
+  ) {
+    return this.programsSvc.replaceConfiguration(user, id, dto);
   }
 
   @Delete('programs/:id')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Eliminar programa (só sem participantes)' })
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.remove(id);
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({
+    summary: 'Eliminar programa (autor/responsável ou ADMIN/RH; só sem participantes)',
+  })
+  remove(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
+    return this.programsSvc.remove(user, id);
   }
 
   @Post('programs/enroll')

@@ -5,12 +5,9 @@
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, ReviewStatus, LeadershipClassification } from '@prisma/client';
 import {
-  CreateLeadershipProgramDto,
-  UpdateLeadershipProgramDto,
   EnrollLeadershipDto,
   UpdateParticipantProgressDto,
   LeadershipCreateOneOnOneDto,
@@ -89,49 +86,10 @@ export class LeadershipService {
     return p;
   }
 
-  // `LeadershipProgram.code` passou a ser obrigatório e único com o agregado
-  // corporativo. Enquanto o fluxo de criação completo (com código escolhido
-  // pelo utilizador) não existir, o código é gerado aqui para que nenhum
-  // programa fique sem identificador estável.
-  private generateProgramCode(): string {
-    const stamp = Date.now().toString(36).toUpperCase();
-    const suffix = randomBytes(2).toString('hex').toUpperCase();
-    return `LDR-${stamp}-${suffix}`;
-  }
-
-  async create(dto: CreateLeadershipProgramDto) {
-    return this.prisma.leadershipProgram.create({
-      data: {
-        code: this.generateProgramCode(),
-        name: dto.name,
-        description: dto.description,
-        level: dto.level,
-        status: dto.status ?? 'DRAFT',
-        durationWeeks: dto.durationWeeks,
-        learningPathId: dto.learningPathId,
-        mandatory: dto.mandatory ?? false,
-        minLeadershipScore: dto.minLeadershipScore,
-        startDate: dto.startDate ? new Date(dto.startDate) : null,
-        endDate: dto.endDate ? new Date(dto.endDate) : null,
-      },
-    });
-  }
-
-  async update(id: number, dto: UpdateLeadershipProgramDto) {
-    await this.findOne(id);
-    return this.prisma.leadershipProgram.update({ where: { id }, data: dto });
-  }
-
-  async remove(id: number) {
-    const p = await this.findOne(id);
-    if (p._count.participants > 0) {
-      throw new BadRequestException(
-        'Programa com participantes não pode ser eliminado. Archive-o primeiro.',
-      );
-    }
-    await this.prisma.leadershipProgram.delete({ where: { id } });
-    return { message: 'Programa removido' };
-  }
+  // A escrita de programas (create/update/transition/replaceConfiguration/remove)
+  // é da responsabilidade de `LeadershipProgramsService` — o dono de escrita
+  // dedicado com ownership + máquina de estados. `LeadershipService` mantém só
+  // as leituras do catálogo.
 
   // ─── PARTICIPAÇÃO ─────────────────────────────────────────────────────────
 

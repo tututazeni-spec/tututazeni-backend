@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { LeadershipService } from './leadership.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OneOnOneService } from '../one-on-one/one-on-one.service';
@@ -99,52 +99,9 @@ describe('LeadershipService — additional coverage', () => {
     service = module.get<LeadershipService>(LeadershipService);
   });
 
-  // ─── update ───────────────────────────────────────────────────────────────
-
-  describe('update', () => {
-    it('deve actualizar programa existente', async () => {
-      mockPrisma.leadershipProgram.findUnique.mockResolvedValue({
-        id: 1,
-        name: 'Prog',
-        _count: { participants: 0 },
-      });
-      mockPrisma.leadershipProgram.update.mockResolvedValue({ id: 1, name: 'Actualizado' });
-
-      const result = await service.update(1, { name: 'Actualizado' } as any);
-      expect(result).toBeDefined();
-    });
-
-    it('deve lançar NotFoundException se programa não existe', async () => {
-      mockPrisma.leadershipProgram.findUnique.mockResolvedValue(null);
-      await expect(service.update(99, { name: 'X' } as any)).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  // ─── remove ───────────────────────────────────────────────────────────────
-
-  describe('remove', () => {
-    it('deve remover programa sem participantes', async () => {
-      mockPrisma.leadershipProgram.findUnique.mockResolvedValue({
-        id: 1,
-        name: 'Prog',
-        _count: { participants: 0 },
-      });
-      mockPrisma.leadershipProgram.delete.mockResolvedValue({});
-
-      const result = await service.remove(1);
-      expect(result).toHaveProperty('message');
-    });
-
-    it('deve lançar BadRequestException se tem participantes', async () => {
-      mockPrisma.leadershipProgram.findUnique.mockResolvedValue({
-        id: 1,
-        name: 'Prog',
-        _count: { participants: 3 },
-      });
-
-      await expect(service.remove(1)).rejects.toThrow(BadRequestException);
-    });
-  });
+  // ─── update / remove ──────────────────────────────────────────────────────
+  // Migraram para `LeadershipProgramsService` (write-owner com ownership +
+  // máquina de estados) — cobertos em `leadership-programs.service.spec.ts`.
 
   // ─── updateProgress ───────────────────────────────────────────────────────
 
