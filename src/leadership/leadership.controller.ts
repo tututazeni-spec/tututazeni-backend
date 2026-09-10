@@ -19,6 +19,7 @@ import { LeadershipProgramsService } from './leadership-programs.service';
 import { LeadershipEligibilityService } from './leadership-eligibility.service';
 import { LeadershipParticipantsService } from './leadership-participants.service';
 import { LeadershipExecutionService } from './leadership-execution.service';
+import { LeadershipAnalyticsService } from './leadership-analytics.service';
 import {
   CreateLeadershipProgramDto,
   UpdateLeadershipProgramDto,
@@ -79,6 +80,7 @@ export class LeadershipController {
     private readonly eligibilitySvc: LeadershipEligibilityService,
     private readonly participantsSvc: LeadershipParticipantsService,
     private readonly executionSvc: LeadershipExecutionService,
+    private readonly analyticsSvc: LeadershipAnalyticsService,
   ) {}
 
   // ── Dashboard do Líder ────────────────────────────────────────────────────
@@ -424,6 +426,29 @@ export class LeadershipController {
     @Param('communicationId', ParseIntPipe) communicationId: number,
   ) {
     return this.executionSvc.dispatchCommunication(user, communicationId);
+  }
+
+  // ── Conclusão e resultados (Task 6) ─────────────────────────────────────
+
+  @Post('programs/:id/participants/:userId/complete')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({
+    summary: 'Concluir o participante: valida critérios, emite certificado, snapshot readiness',
+  })
+  @HttpCode(HttpStatus.OK)
+  completeParticipant(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('userId', ParseIntPipe) userId: number,
+  ) {
+    return this.analyticsSvc.completeParticipant(user, id, userId);
+  }
+
+  @Get('programs/:id/outcomes')
+  @Roles(...PROGRAM_MANAGERS)
+  @ApiOperation({ summary: 'KPIs e resultados do programa (conclusão, readiness, custo, ...)' })
+  outcomes(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
+    return this.analyticsSvc.getProgramOutcomes(user, id);
   }
 
   // ── Team Health ───────────────────────────────────────────────────────────

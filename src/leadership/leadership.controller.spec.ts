@@ -5,6 +5,7 @@ import { LeadershipProgramsService } from './leadership-programs.service';
 import { LeadershipEligibilityService } from './leadership-eligibility.service';
 import { LeadershipParticipantsService } from './leadership-participants.service';
 import { LeadershipExecutionService } from './leadership-execution.service';
+import { LeadershipAnalyticsService } from './leadership-analytics.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -43,6 +44,11 @@ const mockExecutionSvc = {
   getCostSummary: jest.fn().mockResolvedValue({ totalPlanned: 0 }),
   scheduleCommunication: jest.fn().mockResolvedValue({ id: 1 }),
   dispatchCommunication: jest.fn().mockResolvedValue({ id: 1, status: 'SENT' }),
+};
+
+const mockAnalyticsSvc = {
+  completeParticipant: jest.fn().mockResolvedValue({ participant: { id: 1 }, certificate: null }),
+  getProgramOutcomes: jest.fn().mockResolvedValue({ programId: 1 }),
 };
 
 const mockSvc = {
@@ -88,6 +94,7 @@ describe('LeadershipController', () => {
         { provide: LeadershipEligibilityService, useValue: mockEligibilitySvc },
         { provide: LeadershipParticipantsService, useValue: mockParticipantsSvc },
         { provide: LeadershipExecutionService, useValue: mockExecutionSvc },
+        { provide: LeadershipAnalyticsService, useValue: mockAnalyticsSvc },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -258,6 +265,16 @@ describe('LeadershipController', () => {
   it('dispatchCommunication → executionSvc.dispatchCommunication(user, communicationId)', async () => {
     await controller.dispatchCommunication(mockUser as any, 7);
     expect(mockExecutionSvc.dispatchCommunication).toHaveBeenCalledWith(mockUser, 7);
+  });
+
+  it('completeParticipant → analyticsSvc.completeParticipant(user, id, userId)', async () => {
+    await controller.completeParticipant(mockUser as any, 5, 3);
+    expect(mockAnalyticsSvc.completeParticipant).toHaveBeenCalledWith(mockUser, 5, 3);
+  });
+
+  it('outcomes → analyticsSvc.getProgramOutcomes(user, id)', async () => {
+    await controller.outcomes(mockUser as any, 5);
+    expect(mockAnalyticsSvc.getProgramOutcomes).toHaveBeenCalledWith(mockUser, 5);
   });
 
   it('enroll → enroll(dto)', async () => {

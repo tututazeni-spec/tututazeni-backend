@@ -4,6 +4,7 @@ import { LeadershipProgramsService } from './leadership-programs.service';
 import { LeadershipEligibilityService } from './leadership-eligibility.service';
 import { LeadershipParticipantsService } from './leadership-participants.service';
 import { LeadershipExecutionService } from './leadership-execution.service';
+import { LeadershipAnalyticsService } from './leadership-analytics.service';
 import { LeadershipController } from './leadership.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { OneOnOneModule } from '../one-on-one/one-on-one.module';
@@ -17,6 +18,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     LeadershipEligibilityService,
     LeadershipParticipantsService,
     LeadershipExecutionService,
+    LeadershipAnalyticsService,
   ],
   controllers: [LeadershipController],
   exports: [
@@ -25,6 +27,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     LeadershipEligibilityService,
     LeadershipParticipantsService,
     LeadershipExecutionService,
+    LeadershipAnalyticsService,
   ],
 })
 export class LeadershipModule {}
