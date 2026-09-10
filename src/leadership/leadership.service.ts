@@ -104,6 +104,15 @@ export class LeadershipService {
           orderBy: { id: 'asc' },
           include: { user: { select: { id: true, fullName: true, email: true } } },
         },
+        // Execução (Task 5): o workspace de gestão lê projectos e custos daqui —
+        // não há endpoint de listagem dedicado.
+        projects: {
+          orderBy: { id: 'asc' },
+          include: {
+            participant: { select: { userId: true, user: { select: { fullName: true } } } },
+          },
+        },
+        costs: { orderBy: { id: 'asc' } },
         _count: { select: { participants: true } },
       },
     });
