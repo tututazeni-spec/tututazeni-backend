@@ -290,6 +290,15 @@ export class SendRemindersDto {
 
 // ─── PAGINATION ───────────────────────────────────────────────
 export class Evaluation360PaginationDto {
+  // listCycles/listCompetencies recebem tenantId como @Query('tenantId')
+  // separado, MAS este DTO também é ligado ao mesmo req.query via @Query()
+  // — com o ValidationPipe global (whitelist+forbidNonWhitelisted, main.ts),
+  // qualquer campo presente no query string e ausente daqui rebenta a
+  // pedido inteiro com 400 "should not exist". Sem esta propriedade,
+  // GET /evaluation360/cycles?tenantId=... (chamado por TODO o frontend,
+  // ver hooks/useEvaluation360.ts) nunca respondia — o módulo inteiro
+  // ficava sem dados de ciclo.
+  @ApiPropertyOptional() @IsOptional() @IsString() tenantId?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(200) limit?: number = 20;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) offset?: number = 0;
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
