@@ -29,6 +29,9 @@ const mockSvc = {
   calibrateReview: jest.fn().mockResolvedValue({}),
   createDispute: jest.fn().mockResolvedValue({ id: 1 }),
   update9Box: jest.fn().mockResolvedValue({}),
+  createPdiFromReview: jest.fn().mockResolvedValue({ id: 1 }),
+  scheduleFeedbackMeeting: jest.fn().mockResolvedValue({ id: 1 }),
+  acceptReview: jest.fn().mockResolvedValue({}),
 };
 
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
@@ -234,6 +237,22 @@ describe('PerformanceController', () => {
     const dto = {} as any;
     await controller.dispute(mockUser as any, dto);
     expect(mockSvc.createDispute).toHaveBeenCalledWith(1, dto);
+  });
+
+  it('createPdi → createPdiFromReview(id, user)', async () => {
+    await controller.createPdi(5, mockUser as any);
+    expect(mockSvc.createPdiFromReview).toHaveBeenCalledWith(5, mockUser);
+  });
+
+  it('scheduleMeeting → scheduleFeedbackMeeting(id, user, dto)', async () => {
+    const dto = { scheduledAt: '2026-10-01T10:00:00Z' } as any;
+    await controller.scheduleMeeting(5, mockUser as any, dto);
+    expect(mockSvc.scheduleFeedbackMeeting).toHaveBeenCalledWith(5, mockUser, dto);
+  });
+
+  it('accept → acceptReview(id, userId)', async () => {
+    await controller.accept(5, mockUser as any);
+    expect(mockSvc.acceptReview).toHaveBeenCalledWith(5, 1);
   });
 
   it('update9Box → update9Box(userId, dto)', async () => {

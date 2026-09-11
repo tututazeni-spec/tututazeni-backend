@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import {
   PerformanceCreateCycleDto,
+  PerformanceCycleRulesDto,
   CreatePerformanceReviewDto,
   UpdatePerformanceReviewDto,
   SubmitReviewDto,
@@ -21,19 +22,43 @@ import {
   PerformanceCreateDisputeDto,
   Update9BoxDto,
   PerformanceFilterDto,
+  ScheduleFeedbackMeetingDto,
   ReviewStatus,
+  ReviewType,
   PerformanceCategory,
   GoalStatus,
 } from './performance.dto';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import type { CurrentUserData } from '../common/types/current-user';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
 
 @Injectable()
 export class PerformanceService {
   private readonly logger = new Logger(PerformanceService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly developmentPlans: DevelopmentPlansService,
+    private readonly oneOnOne: OneOnOneService,
+  ) {}
+
+  // Regras/configurações do ciclo (secção 21 do formulário) vêm serializadas
+  // em PerformanceCycle.rules — nunca ler o campo bruto directamente fora
+  // daqui. Ausência/JSON inválido degrada para {} (todos os defaults do DTO
+  // aplicam-se: por omissão tudo fica activo excepto allowRhEvaluation e
+  // requireAcceptance).
+  private parseCycleRules(
+    cycle: { rules: string | null } | null | undefined,
+  ): Partial<PerformanceCycleRulesDto> {
+    if (!cycle?.rules) return {};
+    try {
+      return JSON.parse(cycle.rules) as Partial<PerformanceCycleRulesDto>;
+    } catch {
+      return {};
+    }
+  }
 
   // ─── CICLOS ───────────────────────────────────────────────────────────────
 
@@ -48,17 +73,24 @@ export class PerformanceService {
     return this.prisma.performanceCycle.create({
       data: {
         name: dto.name,
+        code: dto.code,
+        description: dto.description,
         type: dto.type,
         startDate: new Date(dto.startDate),
         endDate: new Date(dto.endDate),
         selfEvalDeadline: dto.selfEvalDeadline ? new Date(dto.selfEvalDeadline) : null,
         managerEvalDeadline: dto.managerEvalDeadline ? new Date(dto.managerEvalDeadline) : null,
+        // Vazio/omitido = população-alvo é toda a empresa (todos os
+        // departamentos) — mesma convenção de Assessment.targetDepartmentIds.
+        targetDepartmentIds: dto.targetDepartmentIds ?? [],
+        ownerId: dto.ownerId,
         goalsWeight: goalsW,
         competenciesWeight: compW,
         behaviorsWeight: behavW,
         selfBeforeManager: dto.selfBeforeManager ?? true,
         anonymous360: dto.anonymous360 ?? true,
         scoreScale: dto.scoreScale ?? 5,
+        rules: dto.rules ? JSON.stringify(dto.rules) : null,
         status: 'PLANNED',
       },
     });
@@ -99,10 +131,63 @@ export class PerformanceService {
       data: { status: 'ACTIVE' },
     });
 
+    const rules = this.parseCycleRules(cycle);
+
+    // População-alvo: targetDepartmentIds vazio = toda a empresa, tal como
+    // Assessment.getAvailableForUser (src/assessments). Antes desta
+    // alteração activateCycle notificava SEMPRE todos os activos, mesmo para
+    // um ciclo com departamentos-alvo específicos.
     const users = await this.prisma.user.findMany({
-      where: { active: true },
-      select: { id: true },
+      where: {
+        active: true,
+        ...(cycle.targetDepartmentIds?.length
+          ? { departmentId: { in: cycle.targetDepartmentIds } }
+          : {}),
+      },
+      select: { id: true, managerId: true },
     });
+
+    // Auto-inscrição da população-alvo: cria as reviews SELF/MANAGER através
+    // de create() — reutiliza a mesma validação/notificação (PERFORMANCE_
+    // REVIEW_CREATED) de uma criação manual. RH como avaliador
+    // (allowRhEvaluation) fica de fora da auto-inscrição em massa —
+    // ReviewType não tem um valor RH próprio; continua disponível criando
+    // manualmente uma review com reviewerId explícito via create().
+    const enrollments: Promise<unknown>[] = [];
+    for (const u of users) {
+      if (rules.allowSelfEvaluation !== false) {
+        enrollments.push(
+          this.create({ userId: u.id, cycleId, type: ReviewType.SELF }).catch(e => {
+            if (!(e instanceof ConflictException)) {
+              this.logger.warn({
+                userId: u.id,
+                cycleId,
+                action: 'PERFORMANCE_CYCLE_AUTO_ENROLL_SELF',
+                err: { message: e instanceof Error ? e.message : String(e) },
+                msg: 'Falha ao auto-inscrever autoavaliação na activação do ciclo',
+              });
+            }
+          }),
+        );
+      }
+      if (rules.allowManagerEvaluation !== false && u.managerId) {
+        enrollments.push(
+          this.create({ userId: u.id, cycleId, type: ReviewType.MANAGER }).catch(e => {
+            if (!(e instanceof ConflictException)) {
+              this.logger.warn({
+                userId: u.id,
+                cycleId,
+                action: 'PERFORMANCE_CYCLE_AUTO_ENROLL_MANAGER',
+                err: { message: e instanceof Error ? e.message : String(e) },
+                msg: 'Falha ao auto-inscrever avaliação de gestor na activação do ciclo',
+              });
+            }
+          }),
+        );
+      }
+    }
+    await Promise.all(enrollments);
+
     for (const u of users) {
       await this.prisma.notificationLog
         .create({
@@ -368,8 +453,27 @@ export class PerformanceService {
       throw new BadRequestException('Justificativa obrigatória para scores extremos');
     }
 
+    const rules = this.parseCycleRules(review.cycle);
+    if (
+      rules.requireCommentsBelow != null &&
+      (finalScore ?? 0) < rules.requireCommentsBelow &&
+      !dto.feedback
+    ) {
+      throw new BadRequestException(
+        `Comentário obrigatório para scores abaixo de ${rules.requireCommentsBelow}`,
+      );
+    }
+
+    // Calibração é opcional por ciclo (rules.calibrationEnabled) — quando
+    // desactivada, a avaliação do gestor/360 publica-se de imediato em vez
+    // de esperar por CALIBRATION. SELF continua sempre a transitar para
+    // PENDING_MANAGER, calibração ou não.
     const nextStatus =
-      review.type === 'SELF' ? ReviewStatus.PENDING_MANAGER : ReviewStatus.CALIBRATION;
+      review.type === 'SELF'
+        ? ReviewStatus.PENDING_MANAGER
+        : rules.calibrationEnabled === false
+          ? ReviewStatus.PUBLISHED
+          : ReviewStatus.CALIBRATION;
 
     const updated = await this.prisma.performanceReview.update({
       where: { id: dto.reviewId },
@@ -381,6 +485,9 @@ export class PerformanceService {
         category,
         status: nextStatus,
         submittedAt: new Date(),
+        ...(dto.evidenceUrls?.length && rules.allowAttachments !== false
+          ? { evidenceUrls: JSON.stringify(dto.evidenceUrls) }
+          : {}),
       },
     });
 
@@ -409,6 +516,52 @@ export class PerformanceService {
             });
           });
       }
+    } else if (nextStatus === ReviewStatus.CALIBRATION) {
+      // "Calibração aberta" (secção 22 do formulário) — avisa quem pode
+      // calibrar (ADMIN/RH, mesmo escopo de POST /performance/calibrate).
+      const rhUsers = await this.prisma.user.findMany({
+        where: { role: { code: { in: ['ADMIN', 'RH'] } } },
+        select: { id: true },
+      });
+      for (const rh of rhUsers) {
+        await this.prisma.notificationLog
+          .create({
+            data: {
+              userId: rh.id,
+              type: 'PERFORMANCE_CALIBRATION_OPEN',
+              message: `Avaliação #${dto.reviewId} está pronta para calibração`,
+              metadata: JSON.stringify({}),
+            },
+          })
+          .catch(e => {
+            this.logger.warn({
+              userId: rh.id,
+              action: 'PERFORMANCE_CALIBRATION_OPEN',
+              reviewId: dto.reviewId,
+              err: { message: e instanceof Error ? e.message : String(e) },
+              msg: 'Falha ao notificar RH sobre calibração em aberto',
+            });
+          });
+      }
+    } else if (nextStatus === ReviewStatus.PUBLISHED) {
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: review.userId,
+            type: 'PERFORMANCE_PUBLISHED',
+            message: 'O resultado da sua avaliação de desempenho foi publicado',
+            metadata: JSON.stringify({}),
+          },
+        })
+        .catch(e => {
+          this.logger.warn({
+            userId: review.userId,
+            action: 'PERFORMANCE_PUBLISHED',
+            reviewId: dto.reviewId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao criar notificação de publicação de avaliação de desempenho',
+          });
+        });
     }
 
     return updated;
@@ -622,6 +775,88 @@ export class PerformanceService {
     }
 
     return dispute;
+  }
+
+  // ─── PDI, REUNIÃO DE FEEDBACK E ACEITAÇÃO (secções 16, 19, 21) ───────────
+
+  async createPdiFromReview(reviewId: number, actor: CurrentUserData) {
+    // findOne() já aplica ownership (avaliado/avaliador/ADMIN/RH/GESTOR).
+    const review = await this.findOne(reviewId, actor);
+    const rules = this.parseCycleRules(review.cycle);
+    if (rules.pdiEnabled === false) {
+      throw new BadRequestException('PDI desactivado para este ciclo de avaliação');
+    }
+    if (review.status !== 'PUBLISHED' && review.status !== 'FINALIZED') {
+      throw new BadRequestException('Só é possível criar PDI a partir de uma avaliação publicada');
+    }
+
+    // Gaps: competências abaixo do esperado (nível avaliado <= 2/5) e
+    // objectivos não atingidos (score da GoalEvaluation < 60%) — secção 16.
+    const lowCompetencies = (review.competencyEvals ?? []).filter(c => c.evaluatedLevel <= 2);
+    const lowGoals = (review.goals ?? []).filter(g => g.score < 60);
+
+    const parts: string[] = [];
+    if (lowCompetencies.length)
+      parts.push(`${lowCompetencies.length} competência(s) abaixo do esperado`);
+    if (lowGoals.length) parts.push(`${lowGoals.length} objectivo(s) não atingido(s)`);
+    const goal = parts.length
+      ? `Desenvolver a partir da avaliação de desempenho: ${parts.join(', ')}.`
+      : `Plano de desenvolvimento gerado a partir da avaliação de desempenho "${review.cycle?.name ?? ''}".`;
+
+    // DevelopmentPlan tem um dono de escrita único — DevelopmentPlansService
+    // (Fase G3). O plano nasce em DRAFT e segue o fluxo normal de aprovação.
+    return this.developmentPlans.create({
+      userId: review.userId,
+      managerId: review.reviewerId ?? undefined,
+      name: `PDI — ${review.user?.fullName ?? 'Colaborador'} (${review.cycle?.name ?? 'Avaliação'})`,
+      goal,
+      period: review.cycle?.name,
+      performanceCycleId: review.cycleId,
+      focusCompetencyIds: lowCompetencies.map(c => c.competencyId),
+    });
+  }
+
+  async scheduleFeedbackMeeting(
+    reviewId: number,
+    actor: CurrentUserData,
+    dto: ScheduleFeedbackMeetingDto,
+  ) {
+    const review = await this.findOne(reviewId, actor);
+    const rules = this.parseCycleRules(review.cycle);
+    if (rules.feedbackMeetingEnabled === false) {
+      throw new BadRequestException('Reunião de feedback desactivada para este ciclo de avaliação');
+    }
+    if (!review.reviewerId) {
+      throw new BadRequestException(
+        'Avaliação sem avaliador definido — não é possível agendar reunião',
+      );
+    }
+
+    // OneOnOneMeeting tem um dono de escrita único — OneOnOneService (Fase G4).
+    return this.oneOnOne.schedule({
+      hostId: review.reviewerId,
+      participantId: review.userId,
+      scheduledAt: dto.scheduledAt,
+      agenda:
+        dto.notes ?? `Reunião de feedback — Avaliação de Desempenho (${review.cycle?.name ?? ''})`,
+      meetingUrl: dto.location,
+    });
+  }
+
+  async acceptReview(reviewId: number, userId: number) {
+    const review = await this.prisma.performanceReview.findUnique({ where: { id: reviewId } });
+    if (!review) throw new NotFoundException('Avaliação não encontrada');
+    // Só o próprio avaliado pode aceitar/assinar o seu resultado.
+    if (String(review.userId) !== String(userId)) {
+      throw new ForbiddenException('Sem permissão');
+    }
+    if (review.status !== 'PUBLISHED') {
+      throw new BadRequestException('Só é possível aceitar avaliações publicadas');
+    }
+    return this.prisma.performanceReview.update({
+      where: { id: reviewId },
+      data: { acceptedAt: new Date() },
+    });
   }
 
   // ─── HISTÓRICO E VISTAS DO UTILIZADOR ────────────────────────────────────

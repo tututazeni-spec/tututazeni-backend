@@ -673,6 +673,7 @@ model User {
   // ─── Performance ──────────────────────────────────────────────
   performanceReviews             PerformanceReview[]     @relation("ReviewedUser")
   performanceReviewsGiven        PerformanceReview[]     @relation("ReviewerUser")
+  performanceCyclesOwned          PerformanceCycle[]      @relation("PerformanceCycleOwner")
   performanceGoals               PerformanceGoal[]
   continuousFeedbackGiven        ContinuousFeedback[]    @relation("FeedbackGiver")
   continuousFeedbackReceived     ContinuousFeedback[]    @relation("FeedbackReceived")
@@ -2620,27 +2621,42 @@ enum CycleStatus {
 model PerformanceCycle {
   id                  Int         @id @default(autoincrement())
   name                String
+  code                String?
+  description         String?
   type                CycleType
   status              CycleStatus @default(PLANNED)
   startDate           DateTime
   endDate             DateTime
   selfEvalDeadline    DateTime?
   managerEvalDeadline DateTime?
+  // População-alvo: vazio = todos os departamentos, tal como
+  // Assessment.targetDepartmentIds (src/assessments) — mesma convenção.
+  targetDepartmentIds Int[]       @default([])
+  ownerId             Int?
   goalsWeight         Int         @default(40)
   competenciesWeight  Int         @default(40)
   behaviorsWeight     Int         @default(20)
   selfBeforeManager   Boolean     @default(true)
   anonymous360        Boolean     @default(true)
   scoreScale          Int         @default(5)
+  // Configurações da avaliação (secção 21 do formulário) — JSON serializado
+  // com PerformanceCycleRules (allowSelfEvaluation, allowComments,
+  // requireCommentsBelow, allowAttachments, allowManagerEvaluation,
+  // allowRhEvaluation, calibrationEnabled, pdiEnabled,
+  // feedbackMeetingEnabled, allowDispute, requireAcceptance) — sempre
+  // JSON.stringify() ao escrever, mesma convenção de NotificationLog.metadata.
+  rules               String?
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
+  owner    User?                @relation("PerformanceCycleOwner", fields: [ownerId], references: [id])
   reviews  PerformanceReview[]
   goals    PerformanceGoal[]
   feedback ContinuousFeedback[]
   nineBox  NineBoxPlacement[]
 
   @@index([status])
+  @@index([ownerId])
 }
 
 enum ReviewType {
@@ -2679,6 +2695,11 @@ model PerformanceReview {
   feedback       String?
   justification  String?
   category       PerformanceCategory?
+  // Evidências/anexos (secção 23) — array de URLs serializado em JSON, mesma
+  // convenção de PerformanceCycle.rules / NotificationLog.metadata.
+  evidenceUrls   String?
+  // Assinatura/aceitação do colaborador (secção 21 — requireAcceptance).
+  acceptedAt     DateTime?
   submittedAt    DateTime?
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt

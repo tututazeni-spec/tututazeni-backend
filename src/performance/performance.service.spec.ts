@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { PerformanceService } from './performance.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
 
 const mockPrisma = {
   performanceCycle: {
@@ -53,6 +55,9 @@ const mockPrisma = {
   },
 };
 
+const mockDevelopmentPlans = { create: jest.fn() };
+const mockOneOnOne = { schedule: jest.fn() };
+
 const baseCycle = {
   id: 1,
   name: 'Ciclo 2024',
@@ -75,7 +80,12 @@ describe('PerformanceService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PerformanceService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        PerformanceService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DevelopmentPlansService, useValue: mockDevelopmentPlans },
+        { provide: OneOnOneService, useValue: mockOneOnOne },
+      ],
     }).compile();
     service = module.get<PerformanceService>(PerformanceService);
   });
@@ -137,6 +147,35 @@ describe('PerformanceService', () => {
       mockPrisma.user.findMany.mockResolvedValue([]);
       const result = await service.activateCycle(1);
       expect(result).toBeDefined();
+    });
+
+    it('restringe a população-alvo aos departamentos do ciclo e auto-inscreve SELF+MANAGER', async () => {
+      const cycle = { ...baseCycle, status: 'PLANNED', targetDepartmentIds: [7], rules: null };
+      mockPrisma.performanceCycle.findUnique.mockResolvedValue(cycle);
+      mockPrisma.performanceCycle.updateMany.mockResolvedValue({ count: 0 });
+      mockPrisma.performanceCycle.update.mockResolvedValue({ ...cycle, status: 'ACTIVE' });
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 10, managerId: 20 }]);
+      mockPrisma.performanceReview.findFirst.mockResolvedValue(null);
+      mockPrisma.user.findUnique.mockResolvedValue({ managerId: 20 });
+      mockPrisma.performanceReview.create.mockResolvedValue({ id: 99 });
+
+      await service.activateCycle(1);
+
+      expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ departmentId: { in: [7] } }),
+        }),
+      );
+      // SELF (userId 10) + MANAGER (userId 10, gestor 20) — duas reviews criadas.
+      expect(mockPrisma.performanceReview.create).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.performanceReview.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ userId: 10, type: 'SELF' }) }),
+      );
+      expect(mockPrisma.performanceReview.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ userId: 10, type: 'MANAGER', reviewerId: 20 }),
+        }),
+      );
     });
   });
 
@@ -253,6 +292,125 @@ describe('PerformanceService', () => {
     it('deve retornar feedback do utilizador', async () => {
       const result = await service.getUserFeedback(1);
       expect(result).toBeDefined();
+    });
+  });
+
+  // ─── createPdiFromReview / scheduleFeedbackMeeting / acceptReview ─────────
+
+  describe('createPdiFromReview', () => {
+    const admin = { id: 1, role: { name: 'ADMIN' } } as any;
+    const publishedReview = {
+      id: 5,
+      userId: 7,
+      reviewerId: 9,
+      cycleId: 3,
+      status: 'PUBLISHED',
+      cycle: { id: 3, name: 'Ciclo 2026', rules: null },
+      user: { id: 7, fullName: 'Colaborador X' },
+      competencyEvals: [{ competencyId: 11, evaluatedLevel: 1 }],
+      goals: [{ goalId: 21, score: 40 }],
+    };
+
+    it('delega em DevelopmentPlansService.create com os gaps identificados', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue(publishedReview);
+      mockDevelopmentPlans.create.mockResolvedValue({ id: 100 });
+
+      await service.createPdiFromReview(5, admin);
+
+      expect(mockDevelopmentPlans.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 7,
+          managerId: 9,
+          performanceCycleId: 3,
+          focusCompetencyIds: [11],
+        }),
+      );
+    });
+
+    it('rejeita se a avaliação ainda não foi publicada', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue({
+        ...publishedReview,
+        status: 'PENDING_MANAGER',
+      });
+      await expect(service.createPdiFromReview(5, admin)).rejects.toThrow();
+      expect(mockDevelopmentPlans.create).not.toHaveBeenCalled();
+    });
+
+    it('rejeita se o ciclo tem pdiEnabled desactivado', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue({
+        ...publishedReview,
+        cycle: { ...publishedReview.cycle, rules: JSON.stringify({ pdiEnabled: false }) },
+      });
+      await expect(service.createPdiFromReview(5, admin)).rejects.toThrow();
+      expect(mockDevelopmentPlans.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('scheduleFeedbackMeeting', () => {
+    const admin = { id: 1, role: { name: 'ADMIN' } } as any;
+    const review = {
+      id: 5,
+      userId: 7,
+      reviewerId: 9,
+      cycleId: 3,
+      cycle: { id: 3, name: 'Ciclo 2026', rules: null },
+    };
+
+    it('delega em OneOnOneService.schedule com o gestor como host', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue(review);
+      mockOneOnOne.schedule.mockResolvedValue({ id: 200 });
+
+      await service.scheduleFeedbackMeeting(5, admin, { scheduledAt: '2026-10-01T10:00:00Z' });
+
+      expect(mockOneOnOne.schedule).toHaveBeenCalledWith(
+        expect.objectContaining({ hostId: 9, participantId: 7 }),
+      );
+    });
+
+    it('rejeita se o ciclo tem feedbackMeetingEnabled desactivado', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue({
+        ...review,
+        cycle: { ...review.cycle, rules: JSON.stringify({ feedbackMeetingEnabled: false }) },
+      });
+      await expect(
+        service.scheduleFeedbackMeeting(5, admin, { scheduledAt: '2026-10-01T10:00:00Z' }),
+      ).rejects.toThrow();
+      expect(mockOneOnOne.schedule).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('acceptReview', () => {
+    it('permite ao próprio avaliado aceitar uma avaliação publicada', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue({
+        id: 5,
+        userId: 7,
+        status: 'PUBLISHED',
+      });
+      mockPrisma.performanceReview.update.mockResolvedValue({ id: 5, acceptedAt: new Date() });
+
+      await service.acceptReview(5, 7);
+
+      expect(mockPrisma.performanceReview.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 5 } }),
+      );
+    });
+
+    it('rejeita se não for o próprio avaliado', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue({
+        id: 5,
+        userId: 7,
+        status: 'PUBLISHED',
+      });
+      await expect(service.acceptReview(5, 999)).rejects.toThrow();
+    });
+
+    it('rejeita se a avaliação ainda não está publicada', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue({
+        id: 5,
+        userId: 7,
+        status: 'DRAFT',
+      });
+      await expect(service.acceptReview(5, 7)).rejects.toThrow();
     });
   });
 });

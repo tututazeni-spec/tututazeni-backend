@@ -7,6 +7,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PerformanceService } from './performance.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
 
 function buildMockPrisma() {
   const crud = () => ({
@@ -92,7 +94,12 @@ describe('PerformanceService (progress)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PerformanceService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        PerformanceService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DevelopmentPlansService, useValue: { create: jest.fn() } },
+        { provide: OneOnOneService, useValue: { schedule: jest.fn() } },
+      ],
     }).compile();
 
     service = module.get<PerformanceService>(PerformanceService);

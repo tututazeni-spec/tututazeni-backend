@@ -40,13 +40,7 @@ import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 // frontend a consumir POST/PUT/DELETE /assessments fora deste fluxo (só
 // leitura via ListView/AssessmentPlayer/ReviewView), por isso restringir
 // aqui não muda nenhum fluxo LMS-quiz já em uso.
-const EVAL_CREATOR_ROLES = [
-  Role.ADMIN,
-  Role.RH,
-  Role.GESTOR,
-  Role.DIRECTOR,
-  Role.LIDER,
-] as const;
+const EVAL_CREATOR_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR, Role.LIDER] as const;
 
 @ApiTags('Assessments')
 @ApiBearerAuth()

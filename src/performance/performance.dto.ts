@@ -37,6 +37,73 @@ export {
   FeedbackType,
 };
 
+// ─── Regras/configurações do ciclo (secção 21 do formulário) ─────────────────
+// Serializado em PerformanceCycle.rules via JSON.stringify() — nunca gravar
+// como objecto directamente (mesma convenção de NotificationLog.metadata).
+
+export class PerformanceCycleRulesDto {
+  @ApiPropertyOptional({ description: 'Permitir autoavaliação', default: true })
+  @IsOptional()
+  @IsBoolean()
+  allowSelfEvaluation?: boolean;
+
+  @ApiPropertyOptional({ description: 'Permitir comentários', default: true })
+  @IsOptional()
+  @IsBoolean()
+  allowComments?: boolean;
+
+  @ApiPropertyOptional({ description: 'Comentário obrigatório abaixo desta nota' })
+  @IsOptional()
+  @IsNumber()
+  requireCommentsBelow?: number;
+
+  @ApiPropertyOptional({ description: 'Permitir anexos/evidências', default: true })
+  @IsOptional()
+  @IsBoolean()
+  allowAttachments?: boolean;
+
+  @ApiPropertyOptional({ description: 'Permitir avaliação pelo gestor', default: true })
+  @IsOptional()
+  @IsBoolean()
+  allowManagerEvaluation?: boolean;
+
+  @ApiPropertyOptional({ description: 'Permitir avaliação pelo RH', default: false })
+  @IsOptional()
+  @IsBoolean()
+  allowRhEvaluation?: boolean;
+
+  @ApiPropertyOptional({ description: 'Activar calibração', default: true })
+  @IsOptional()
+  @IsBoolean()
+  calibrationEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Activar criação de PDI a partir do resultado',
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  pdiEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Activar reunião de feedback', default: true })
+  @IsOptional()
+  @IsBoolean()
+  feedbackMeetingEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Permitir contestação/revisão', default: true })
+  @IsOptional()
+  @IsBoolean()
+  allowDispute?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Exigir assinatura/aceitação do colaborador sobre o resultado',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireAcceptance?: boolean;
+}
+
 // ─── Review Cycle ─────────────────────────────────────────────────────────────
 
 export class PerformanceCreateCycleDto {
@@ -44,6 +111,17 @@ export class PerformanceCreateCycleDto {
   @IsString()
   @MaxLength(200)
   name!: string;
+
+  @ApiPropertyOptional({ description: 'Código da avaliação', example: 'AD-2026-01' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  code?: string;
+
+  @ApiPropertyOptional({ description: 'Descrição' })
+  @IsOptional()
+  @IsString()
+  description?: string;
 
   @ApiProperty({ enum: CycleType })
   @IsEnum(CycleType)
@@ -66,6 +144,27 @@ export class PerformanceCreateCycleDto {
   @IsOptional()
   @IsDateString()
   managerEvalDeadline?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Departamentos-alvo (população a avaliar). Vazio/omitido = todos os departamentos.',
+    type: [Number],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  targetDepartmentIds?: number[];
+
+  @ApiPropertyOptional({ description: 'ID do responsável pela avaliação' })
+  @IsOptional()
+  @IsInt()
+  ownerId?: number;
+
+  @ApiPropertyOptional({ type: PerformanceCycleRulesDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PerformanceCycleRulesDto)
+  rules?: PerformanceCycleRulesDto;
 
   @ApiPropertyOptional({ description: 'Peso dos goals no score final (0-100)' })
   @IsOptional()
@@ -206,6 +305,12 @@ export class SubmitReviewDto {
   @Min(1)
   @Max(5)
   potentialScore?: number;
+
+  @ApiPropertyOptional({ description: 'URLs de evidências/anexos', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  evidenceUrls?: string[];
 }
 
 // ─── Goal ─────────────────────────────────────────────────────────────────────
@@ -334,6 +439,24 @@ export class PerformanceCreateDisputeDto {
   @IsOptional()
   @IsString()
   evidence?: string;
+}
+
+// ─── Reunião de feedback ────────────────────────────────────────────────────
+
+export class ScheduleFeedbackMeetingDto {
+  @ApiProperty({ description: 'Data/hora da reunião' })
+  @IsDateString()
+  scheduledAt!: string;
+
+  @ApiPropertyOptional({ description: 'Local ou link (online)' })
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({ description: 'Notas/agenda' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }
 
 // ─── 9-box ────────────────────────────────────────────────────────────────────

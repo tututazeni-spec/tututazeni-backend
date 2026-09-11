@@ -27,12 +27,31 @@ import {
   PerformanceCreateDisputeDto,
   Update9BoxDto,
   PerformanceFilterDto,
+  ScheduleFeedbackMeetingDto,
 } from './performance.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
 import { assertCanAccess } from '../common/authz/ownership';
+
+// Papéis que criam/gerem ciclos de avaliação de desempenho (departamento
+// específico ou toda a empresa) — espelha EVAL_CREATOR_ROLES em
+// src/assessments/assessments.controller.ts (mesmo conjunto de 5 papéis,
+// usado para "Avaliações Formais"). GESTOR/DIRECTOR/LIDER também precisam de
+// ver o que criaram: findAll/team/9box/departmentStats/userHistory/
+// goals-user/feedback-user ficam no mesmo conjunto (já incluíam GESTOR).
+// Analytics global e calibrar ficam ADMIN/RH-only, sem alteração — mesmo
+// precedente do módulo evaluation (ver memory
+// project_innova_evaluation_role_scoping): Análises/Calibração não seguem os
+// restantes separadores de gestão.
+const PERFORMANCE_MGMT_ROLES = [
+  Role.ADMIN,
+  Role.RH,
+  Role.GESTOR,
+  Role.DIRECTOR,
+  Role.LIDER,
+] as const;
 
 @ApiTags('Performance')
 @ApiBearerAuth()
@@ -56,15 +75,17 @@ export class PerformanceController {
   }
 
   @Post('cycles')
-  @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Criar ciclo de avaliação' })
+  @Roles(...PERFORMANCE_MGMT_ROLES)
+  @ApiOperation({
+    summary: 'Criar ciclo/avaliação de desempenho (departamento específico ou todos)',
+  })
   createCycle(@Body() dto: PerformanceCreateCycleDto) {
     return this.svc.createCycle(dto);
   }
 
   @Patch('cycles/:id/activate')
-  @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Activar ciclo (notifica todos os colaboradores)' })
+  @Roles(...PERFORMANCE_MGMT_ROLES)
+  @ApiOperation({ summary: 'Activar ciclo (auto-inscreve e notifica a população-alvo)' })
   @HttpCode(HttpStatus.OK)
   activateCycle(@Param('id', ParseIntPipe) id: number) {
     return this.svc.activateCycle(id);
@@ -73,7 +94,7 @@ export class PerformanceController {
   // ── Reviews ────────────────────────────────────────────────────────────────
 
   @Get()
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...PERFORMANCE_MGMT_ROLES)
   @ApiOperation({ summary: 'Listar avaliações com filtros' })
   findAll(@Query() filters: PerformanceFilterDto) {
     return this.svc.findAll(filters);
@@ -108,7 +129,7 @@ export class PerformanceController {
   }
 
   @Get('9box')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...PERFORMANCE_MGMT_ROLES)
   @ApiOperation({ summary: '9-Box Matrix (Performance vs Potencial)' })
   @ApiQuery({ name: 'cycleId', required: false })
   @ApiQuery({ name: 'departmentId', required: false })
@@ -120,7 +141,7 @@ export class PerformanceController {
   }
 
   @Get('team')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...PERFORMANCE_MGMT_ROLES)
   @ApiOperation({ summary: 'Performance da minha equipa' })
   @ApiQuery({ name: 'cycleId', required: false })
   teamPerformance(@CurrentUser() user: CurrentUserData, @Query('cycleId') cycleId?: string) {
@@ -134,7 +155,7 @@ export class PerformanceController {
   }
 
   @Get('department/:departmentId/stats')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...PERFORMANCE_MGMT_ROLES)
   @ApiOperation({ summary: 'Estatísticas de performance por departamento' })
   @ApiQuery({ name: 'cycleId', required: false })
   departmentStats(
@@ -145,7 +166,7 @@ export class PerformanceController {
   }
 
   @Get('user/:userId')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...PERFORMANCE_MGMT_ROLES)
   @ApiOperation({ summary: 'Histórico de performance de um colaborador' })
   userHistory(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.getUserHistory(userId);
@@ -158,7 +179,7 @@ export class PerformanceController {
   }
 
   @Post()
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...PERFORMANCE_MGMT_ROLES)
   @ApiOperation({ summary: 'Criar avaliação de desempenho' })
   create(@Body() dto: CreatePerformanceReviewDto) {
     return this.svc.create(dto);
@@ -178,7 +199,7 @@ export class PerformanceController {
   // mesmo padrão de bug já tinha sido encontrado e corrigido no módulo
   // leadership (feedback-360/my/summary vs feedback-360/:leaderId/summary).
   @Put('9box')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...PERFORMANCE_MGMT_ROLES)
   @ApiOperation({ summary: 'Posicionar/mover colaborador na 9-box (drag & drop)' })
   update9Box(@CurrentUser() user: CurrentUserData, @Body() dto: Update9BoxDto) {
     return this.svc.update9Box(user.id, dto);
@@ -205,7 +226,7 @@ export class PerformanceController {
   createGoal(@Body() dto: CreateGoalDto, @CurrentUser() user: CurrentUserData) {
     // A10-21: dto.userId não era verificado — qualquer autenticado podia criar
     // goals atribuídos a colegas arbitrários. Só o próprio ou ADMIN/RH/GESTOR.
-    assertCanAccess({}, dto.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    assertCanAccess({}, dto.userId, user, [...PERFORMANCE_MGMT_ROLES]);
     return this.svc.createGoal(dto);
   }
 
@@ -221,7 +242,7 @@ export class PerformanceController {
   }
 
   @Get('goals/user/:userId')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...PERFORMANCE_MGMT_ROLES)
   @ApiOperation({ summary: 'Goals de um utilizador' })
   @ApiQuery({ name: 'cycleId', required: false })
   userGoals(@Param('userId', ParseIntPipe) userId: number, @Query('cycleId') cycleId?: string) {
@@ -237,7 +258,7 @@ export class PerformanceController {
   }
 
   @Get('feedback/user/:userId')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...PERFORMANCE_MGMT_ROLES)
   @ApiOperation({ summary: 'Feedback de um colaborador' })
   userFeedback(@Param('userId', ParseIntPipe) userId: number, @Query('cycleId') cycleId?: string) {
     return this.svc.getUserFeedback(userId, cycleId ? parseInt(cycleId) : undefined);
@@ -259,5 +280,34 @@ export class PerformanceController {
   @ApiOperation({ summary: 'Contestar avaliação publicada' })
   dispute(@CurrentUser() user: CurrentUserData, @Body() dto: PerformanceCreateDisputeDto) {
     return this.svc.createDispute(user.id, dto);
+  }
+
+  // ── PDI, reunião de feedback e aceitação ──────────────────────────────────
+
+  @Post(':id/pdi')
+  @Roles(...PERFORMANCE_MGMT_ROLES)
+  @ApiOperation({
+    summary: 'Criar PDI a partir de uma avaliação publicada (gaps de competências/objectivos)',
+  })
+  createPdi(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.createPdiFromReview(id, user);
+  }
+
+  @Post(':id/schedule-meeting')
+  @Roles(...PERFORMANCE_MGMT_ROLES)
+  @ApiOperation({ summary: 'Agendar reunião de feedback (1:1) para uma avaliação' })
+  scheduleMeeting(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: ScheduleFeedbackMeetingDto,
+  ) {
+    return this.svc.scheduleFeedbackMeeting(id, user, dto);
+  }
+
+  @Post(':id/accept')
+  @ApiOperation({ summary: 'Aceitar/assinar o resultado (o próprio avaliado)' })
+  @HttpCode(HttpStatus.OK)
+  accept(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.acceptReview(id, user.id);
   }
 }
