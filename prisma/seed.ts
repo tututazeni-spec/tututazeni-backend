@@ -186,6 +186,105 @@ async function seedCareerRoles(prisma: PrismaClient) {
   console.log('✅ CareerRoles criados:', roles.map(r => r.name).join(', '));
 }
 
+// Banco fixo de competências de Avaliação 360º da INNOVA — os 8 critérios
+// pedidos, escala 1-5 (Nunca..Sempre), cada um com os seus indicadores
+// comportamentais. Idempotente (upsert por nome). Usado por
+// evaluation360.service.ts#attachStandardCompetencies quando um ciclo é
+// criado sem lista explícita de competências.
+async function seedEvaluation360Competencies(prisma: PrismaClient) {
+  const competencies = [
+    {
+      name: 'Liderança',
+      category: 'LEADERSHIP',
+      type: 'LEADERSHIP',
+      indicators: ['Inspira a equipa', 'Dá feedback', 'Toma decisões', 'Desenvolve pessoas'],
+    },
+    {
+      name: 'Comunicação',
+      category: 'SOFT_SKILL',
+      type: 'SOFT_SKILL',
+      indicators: [
+        'Comunica de forma clara',
+        'Escuta activamente',
+        'Adapta a comunicação ao público',
+      ],
+    },
+    {
+      name: 'Foco em Resultados',
+      category: 'HARD_SKILL',
+      type: 'HARD_SKILL',
+      indicators: ['Cumpre objectivos', 'Assume responsabilidade', 'Procura melhoria contínua'],
+    },
+    {
+      name: 'Trabalho em Equipa',
+      category: 'SOFT_SKILL',
+      type: 'SOFT_SKILL',
+      indicators: ['Colabora com os colegas', 'Partilha informação', 'Resolve conflitos'],
+    },
+    {
+      name: 'Pensamento Estratégico',
+      category: 'HARD_SKILL',
+      type: 'HARD_SKILL',
+      indicators: [
+        'Visão a médio e longo prazo',
+        'Capacidade de antecipação',
+        'Alinhamento com os objectivos da organização',
+      ],
+    },
+    {
+      name: 'Resiliência',
+      category: 'SOFT_SKILL',
+      type: 'SOFT_SKILL',
+      indicators: ['Gestão de pressão', 'Adaptação perante mudanças', 'Capacidade de manter o foco'],
+    },
+    {
+      name: 'Inovação',
+      category: 'HARD_SKILL',
+      type: 'HARD_SKILL',
+      indicators: ['Geração de novas ideias', 'Abertura a novas abordagens', 'Melhoria contínua'],
+    },
+    {
+      name: 'Bem-estar e Disciplina',
+      category: 'SOFT_SKILL',
+      type: 'VITALITY',
+      indicators: [
+        'Gestão de stress',
+        'Equilíbrio emocional',
+        'Contributo para um ambiente de trabalho positivo',
+        'Cumprimento de prazos',
+        'Pontualidade',
+        'Cumprimento de normas e procedimentos',
+        'Responsabilidade',
+      ],
+    },
+  ] as const;
+
+  for (const c of competencies) {
+    const competency = await prisma.competency.upsert({
+      where: { name: c.name },
+      update: {},
+      create: {
+        name: c.name,
+        category: c.category as any,
+        type: c.type as any,
+        isGlobal: true,
+        scaleMin: 1,
+        scaleMax: 5,
+      },
+    });
+    for (const [index, description] of c.indicators.entries()) {
+      const existing = await prisma.competencyIndicator.findFirst({
+        where: { competencyId: competency.id, description },
+      });
+      if (existing) continue;
+      await prisma.competencyIndicator.create({
+        data: { competencyId: competency.id, level: index + 1, description },
+      });
+    }
+  }
+  console.log('✅ Competências de Avaliação 360º criadas:', competencies.map(c => c.name).join(', '));
+}
+
 async function main() {
   console.log('🌱 A iniciar seed...');
 
@@ -387,6 +486,8 @@ async function main() {
   await seedCareerRoles(prisma);
 
   await seedPayroll(prisma);
+
+  await seedEvaluation360Competencies(prisma);
 
   console.log('🎉 Seed concluído!');
 }

@@ -158,6 +158,13 @@ export class AddParticipantsDto {
   @ApiProperty({ type: [String] }) @IsArray() @IsString({ each: true }) userIds: string[];
 }
 
+export class AddParticipantsByDepartmentDto {
+  @ApiProperty({ type: [String], description: 'IDs de Department (todos os utilizadores activos destes departamentos entram como participantes)' })
+  @IsArray()
+  @IsString({ each: true })
+  departmentIds: string[];
+}
+
 export class ConsentDto {
   @ApiProperty() @IsBoolean() consent: boolean;
 }
