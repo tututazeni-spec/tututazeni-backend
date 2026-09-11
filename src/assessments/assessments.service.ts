@@ -701,6 +701,7 @@ export class AssessmentsService {
         passingScore: assessment.passingScore,
       },
       roster: attempts.map(a => ({
+        attemptId: a.id,
         userId: a.userId,
         fullName: a.user.fullName,
         department: a.user.department?.name ?? null,

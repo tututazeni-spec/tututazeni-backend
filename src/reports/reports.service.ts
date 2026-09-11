@@ -1339,6 +1339,12 @@ export class ReportsService {
         reportKey: 'usage',
         description: 'Conteúdos mais vistos e sessões activas',
       },
+      {
+        id: 'TPL_EVALUATIONS',
+        name: 'Relatório de Avaliações',
+        category: 'PERFORMANCE',
+        reportKey: 'evaluations',
+      },
     ];
   }
 }

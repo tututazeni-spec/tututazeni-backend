@@ -345,6 +345,7 @@ describe('AssessmentsService (additional)', () => {
       mockPrisma.assessment.findUnique.mockResolvedValue({ ...baseAssessment, maxGrade: 20 });
       mockPrisma.assessmentAttempt.findMany.mockResolvedValue([
         {
+          id: 42,
           userId: 2,
           score: 90,
           passed: true,
@@ -356,6 +357,7 @@ describe('AssessmentsService (additional)', () => {
       const result = await service.getResultsRoster(1);
       expect(result.roster).toHaveLength(1);
       expect(result.roster[0]).toMatchObject({
+        attemptId: 42,
         fullName: 'Ana Silva',
         department: 'RH',
         displayGrade: 18,
