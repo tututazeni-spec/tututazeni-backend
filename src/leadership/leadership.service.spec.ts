@@ -22,7 +22,7 @@ const mockPrisma = {
     count: jest.fn(),
     delete: jest.fn(),
   },
-  leadershipParticipant: {
+  leadershipProgramParticipant: {
     findFirst: jest.fn(),
     create: jest.fn(),
     findMany: jest.fn(),
@@ -105,25 +105,18 @@ describe('LeadershipService', () => {
     });
   });
 
-  describe('create', () => {
-    it('deve criar programa', async () => {
-      mockPrisma.leadershipProgram.create.mockResolvedValue(baseProgram);
-      const result = await service.create({
-        title: 'Programa de Liderança',
-        description: 'Desc',
-      } as any);
-      expect(result).toBeDefined();
-    });
-  });
+  // A escrita de programas (create/update/remove/transition/replaceConfiguration)
+  // migrou para `LeadershipProgramsService` — coberta em
+  // `leadership-programs.service.spec.ts`.
 
   describe('enroll', () => {
     it('deve inscrever utilizador no programa', async () => {
-      mockPrisma.leadershipParticipant.findUnique.mockResolvedValue(null);
+      mockPrisma.leadershipProgramParticipant.findUnique.mockResolvedValue(null);
       mockPrisma.leadershipProgram.findUnique.mockResolvedValue({
         ...baseProgram,
         status: 'ACTIVE',
       });
-      mockPrisma.leadershipParticipant.create.mockResolvedValue({
+      mockPrisma.leadershipProgramParticipant.create.mockResolvedValue({
         id: 1,
         userId: 1,
         programId: 1,
@@ -135,7 +128,7 @@ describe('LeadershipService', () => {
     });
 
     it('deve lançar ConflictException se já inscrito', async () => {
-      mockPrisma.leadershipParticipant.findUnique.mockResolvedValue({ id: 1 });
+      mockPrisma.leadershipProgramParticipant.findUnique.mockResolvedValue({ id: 1 });
       await expect(service.enroll({ userId: 1, programId: 1 })).rejects.toThrow(ConflictException);
     });
   });

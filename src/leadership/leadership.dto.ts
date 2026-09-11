@@ -12,7 +12,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import {
   LeadershipProgramLevel as ProgramLevel,
@@ -38,62 +38,9 @@ export enum LeadershipCompetency {
 }
 
 // ─── Leadership Program ───────────────────────────────────────────────────────
-
-export class CreateLeadershipProgramDto {
-  @ApiProperty({ example: 'Programa Líderes do Futuro 2026' })
-  @IsString()
-  @MaxLength(200)
-  name!: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  description?: string;
-
-  @ApiProperty({ enum: ProgramLevel })
-  @IsEnum(ProgramLevel)
-  level!: ProgramLevel;
-
-  @ApiPropertyOptional({ enum: ProgramStatus, default: ProgramStatus.DRAFT })
-  @IsOptional()
-  @IsEnum(ProgramStatus)
-  status?: ProgramStatus;
-
-  @ApiPropertyOptional({ description: 'Duração em semanas' })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  durationWeeks?: number;
-
-  @ApiPropertyOptional({ description: 'Trilha de Aprendizagem associada' })
-  @IsOptional()
-  @IsInt()
-  learningPathId?: number;
-
-  @ApiPropertyOptional({ default: false })
-  @IsOptional()
-  @IsBoolean()
-  mandatory?: boolean;
-
-  @ApiPropertyOptional({ description: 'Pontuação mínima de liderança para acesso' })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(1000)
-  minLeadershipScore?: number;
-
-  @ApiPropertyOptional({ description: 'Data de início' })
-  @IsOptional()
-  @IsDateString()
-  startDate?: string;
-
-  @ApiPropertyOptional({ description: 'Data de fim' })
-  @IsOptional()
-  @IsDateString()
-  endDate?: string;
-}
-
-export class UpdateLeadershipProgramDto extends PartialType(CreateLeadershipProgramDto) {}
+// Os DTOs de criação/actualização do agregado `LeadershipProgram` vivem agora em
+// `leadership-program.dto.ts`, ao lado do serviço write-owner dedicado
+// (`LeadershipProgramsService`). O controller importa-os directamente de lá.
 
 // ─── Enroll ───────────────────────────────────────────────────────────────────
 
@@ -114,6 +61,9 @@ export class UpdateParticipantProgressDto {
   @Max(100)
   progress!: number;
 
+  // O DTO aceita qualquer estado de participante válido. A validação da
+  // transição (máquina de estados do participante) é da Task 3/5.
+  // TODO(Task 3): participant transition guard
   @ApiPropertyOptional({ enum: ParticipantStatus })
   @IsOptional()
   @IsEnum(ParticipantStatus)

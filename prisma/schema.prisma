@@ -686,15 +686,28 @@ model User {
   evaluationRequestsReceived     EvaluationRequest[]     @relation("RequestEvaluated")
 
   // ─── Liderança ────────────────────────────────────────────────
-  leadershipParticipations LeadershipParticipant[]
-  oneOnOnesAsManager       OneOnOne[]              @relation("OneOnOneManager")
-  oneOnOnesAsSubordinate   OneOnOne[]              @relation("OneOnOneSubordinate")
-  leadershipFeedbacks      LeadershipFeedback360[] @relation("LeaderFeedback")
-  mentoringAsMentor        Mentoring[]             @relation("MentoringMentor")
-  mentoringAsMentee        Mentoring[]             @relation("MentoringMentee")
-  kudosSent                Kudos[]                 @relation("KudosSender")
-  kudosReceived            Kudos[]                 @relation("KudosReceiver")
+  leadershipParticipations LeadershipProgramParticipant[]
+  oneOnOnesAsManager       OneOnOne[]                     @relation("OneOnOneManager")
+  oneOnOnesAsSubordinate   OneOnOne[]                     @relation("OneOnOneSubordinate")
+  leadershipFeedbacks      LeadershipFeedback360[]        @relation("LeaderFeedback")
+  mentoringAsMentor        Mentoring[]                    @relation("MentoringMentor")
+  mentoringAsMentee        Mentoring[]                    @relation("MentoringMentee")
+  kudosSent                Kudos[]                        @relation("KudosSender")
+  kudosReceived            Kudos[]                        @relation("KudosReceiver")
   leadershipScore          LeadershipScore?
+
+  // ─── Programas Corporativos de Liderança ──────────────────────
+  leadershipProgramsCreated      LeadershipProgram[]               @relation("LeadershipProgramCreator")
+  leadershipProgramsResponsible  LeadershipProgram[]               @relation("LeadershipProgramResponsible")
+  leadershipAdvisorRoles         LeadershipProgramAdvisor[]        @relation("LeadershipProgramAdvisorUser")
+  leadershipParticipantsMentored LeadershipProgramParticipant[]    @relation("LeadershipParticipantMentor")
+  leadershipParticipantsCoached  LeadershipProgramParticipant[]    @relation("LeadershipParticipantCoach")
+  leadershipParticipantsSelected LeadershipProgramParticipant[]    @relation("LeadershipParticipantSelector")
+  leadershipAssessmentsGiven     LeadershipParticipantAssessment[] @relation("LeadershipAssessor")
+  leadershipProjectsSponsored    LeadershipProject[]               @relation("LeadershipProjectSponsor")
+  leadershipProjectsMentored     LeadershipProject[]               @relation("LeadershipProjectMentor")
+  leadershipProjectsEvaluated    LeadershipProject[]               @relation("LeadershipProjectEvaluator")
+  leadershipDocumentsUploaded    LeadershipProgramDocument[]       @relation("LeadershipDocumentUploader")
 
   // ─── Carreira ─────────────────────────────────────────────────
   careers             UserCareer[]
@@ -951,6 +964,8 @@ model Role {
   code            String?          @unique
   rolePermissions RolePermission[]
   roleTemplates   RoleTemplate[]
+
+  leadershipTargetings LeadershipProgramTargeting[]
 }
 
 enum PermissionAction {
@@ -1071,6 +1086,9 @@ model Department {
   careerPaths         CareerPath[]
   engagementActions   EngagementAction[]
 
+  leadershipPrograms   LeadershipProgram[]
+  leadershipTargetings LeadershipProgramTargeting[]
+
   @@index([active])
   @@index([parentId])
 }
@@ -1108,20 +1126,21 @@ enum UnitType {
 }
 
 model Unit {
-  id                 Int                 @id @default(autoincrement())
-  name               String
-  code               String              @unique
-  type               UnitType            @default(BRANCH)
-  province           String?
-  address            String?
-  city               String?
-  country            String?
-  timezone           String?
-  phone              String?
-  email              String?
-  users              User[]
-  departments        Department[]
-  operationalMetrics OperationalMetric[]
+  id                   Int                          @id @default(autoincrement())
+  name                 String
+  code                 String                       @unique
+  type                 UnitType                     @default(BRANCH)
+  province             String?
+  address              String?
+  city                 String?
+  country              String?
+  timezone             String?
+  phone                String?
+  email                String?
+  users                User[]
+  departments          Department[]
+  operationalMetrics   OperationalMetric[]
+  leadershipTargetings LeadershipProgramTargeting[]
 }
 
 enum PositionLevel {
@@ -1155,6 +1174,8 @@ model Position {
   orgChangesTo        OrgChangeLog[]       @relation("OrgChangePosTto")
   criticalPositions   CriticalPosition[]
   roleTemplates       RoleTemplate[]
+
+  leadershipTargetings LeadershipProgramTargeting[]
 }
 
 enum OrgChangeType {
@@ -1476,6 +1497,8 @@ model SuccessionPlan {
   positionId         Int // ou String — verificar o tipo de Position.id
   position           Position          @relation(fields: [positionId], references: [id])
 
+  leadershipParticipants LeadershipProgramParticipant[]
+
   @@unique([criticalPositionId, candidateId])
   @@index([readinessLevel])
   @@index([candidateId])
@@ -1598,6 +1621,8 @@ model DevelopmentPlan {
   pdiActions         PdiAction[]
   certificates       Certificate[]
 
+  leadershipParticipantPlans LeadershipParticipantPlan[]
+
   @@index([userId])
   @@index([status])
   @@index([managerId])
@@ -1649,6 +1674,8 @@ model DevelopmentPlanAction {
   updatedAt     DateTime        @updatedAt
   plan          DevelopmentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   evidence      PdiEvidence[]
+
+  leadershipPlanActions LeadershipParticipantPlanAction[]
 
   @@index([planId])
   @@index([status])
@@ -1816,6 +1843,9 @@ model Course {
   trainingImpacts         TrainingImpact[]
   learningPaths           LearningPathCourse[]
   cohorts                 InstructorCohort[]
+
+  leadershipContents    LeadershipProgramContent[]
+  leadershipPlanActions LeadershipParticipantPlanAction[] @relation("LeadershipPlanActionCourse")
 
   @@index([status])
   @@index([category])
@@ -2174,6 +2204,9 @@ model LearningPath {
   assignments      LearningPathAssignment[]
   enrollments      LearningPathEnrollment[]
 
+  leadershipPrograms LeadershipProgram[]        @relation("LeadershipProgramPath")
+  leadershipContents LeadershipProgramContent[] @relation("LeadershipContentPath")
+
   @@index([status])
   @@index([category])
 }
@@ -2294,6 +2327,9 @@ model Assessment {
   module             CourseModule?        @relation(fields: [moduleId], references: [id])
   questions          AssessmentQuestion[]
   attempts           AssessmentAttempt[]
+
+  leadershipContents               LeadershipProgramContent[]
+  leadershipParticipantAssessments LeadershipParticipantAssessment[]
 
   @@index([courseId])
   @@index([status])
@@ -2434,6 +2470,9 @@ model Competency {
   indicators               CompetencyIndicator[]
   eval360CycleCompetencies Eval360CycleCompetency[]
   eval360Questions         Eval360Question[]        @relation("Eval360QuestionCompetency")
+
+  leadershipProgramCompetencies LeadershipProgramCompetency[]
+  leadershipSelectionCriteria   LeadershipSelectionCriterion[]
 
   @@index([category])
   @@index([status])
@@ -2840,55 +2879,800 @@ enum LeadershipProgramLevel {
   ADVANCED
 }
 
+// ProgramStatus é usado exclusivamente por LeadershipProgram. Os três valores
+// originais (DRAFT/ACTIVE/ARCHIVED) mantêm-se para não invalidar registos
+// existentes; os restantes cobrem o ciclo de vida completo do programa
+// corporativo (selecção → execução → conclusão).
 enum ProgramStatus {
   DRAFT
+  PLANNED
+  OPEN_FOR_SELECTION
+  SELECTION_CLOSED
   ACTIVE
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
   ARCHIVED
 }
 
+enum LeadershipProgramType {
+  DEVELOPMENT
+  SUCCESSION
+  HIGH_POTENTIAL
+  ONBOARDING_LEADERSHIP
+  EXECUTIVE
+  TECHNICAL_LEADERSHIP
+  CUSTOM
+}
+
+enum LeadershipCorporateLevel {
+  SUPERVISOR
+  COORDINATOR
+  MANAGER
+  SENIOR_MANAGER
+  DIRECTOR
+  EXECUTIVE
+  C_LEVEL
+}
+
+enum LeadershipSessionFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  INTENSIVE
+  CUSTOM
+}
+
 model LeadershipProgram {
-  id                 Int                    @id @default(autoincrement())
-  name               String
-  description        String?                @db.Text
-  level              LeadershipProgramLevel
-  status             ProgramStatus          @default(DRAFT)
-  durationWeeks      Int?
-  learningPathId     Int?
-  mandatory          Boolean                @default(false)
-  minLeadershipScore Int?
+  id          Int     @id @default(autoincrement())
+  code        String  @unique
+  name        String
+  description String? @db.Text
+  objective   String? @db.Text
+
+  // ─── Classificação ────────────────────────────────────────────
+  level          LeadershipProgramLevel
+  type           LeadershipProgramType     @default(DEVELOPMENT)
+  corporateLevel LeadershipCorporateLevel?
+  status         ProgramStatus             @default(DRAFT)
+  mandatory      Boolean                   @default(false)
+
+  // ─── Autoria e responsabilidade ───────────────────────────────
+  // Nullable: os programas legados foram criados antes de existir autor.
+  createdById   Int?
+  responsibleId Int?
+  departmentId  Int?
+
+  // ─── Planeamento ──────────────────────────────────────────────
   startDate          DateTime?
   endDate            DateTime?
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
+  selectionStartDate DateTime?
+  selectionEndDate   DateTime?
+  durationWeeks      Int?
+  workloadHours      Int?
+  totalSessions      Int?
+  sessionFrequency   LeadershipSessionFrequency?
+  modality           SessionModality             @default(PRESENTIAL)
+  location           String?
+  capacity           Int?
+  minParticipants    Int?
+  schedule           String?                     @db.Text
+  calendarNotes      String?                     @db.Text
 
-  participants LeadershipParticipant[]
-  certificates Certificate[]
+  // ─── Selecção e conclusão ─────────────────────────────────────
+  minLeadershipScore  Int?
+  minAttendanceRate   Int?
+  minFinalScore       Int?
+  requireFinalProject Boolean @default(false)
+  requireAllContents  Boolean @default(false)
+  completionCriteria  String? @db.Text
+
+  // ─── Certificação (emite o Certificate canónico) ──────────────
+  certificationEnabled    Boolean @default(false)
+  certificateTitle        String?
+  certificateValidityDays Int?
+  certificateTemplateId   String?
+
+  // ─── Conteúdo canónico associado ──────────────────────────────
+  learningPathId Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy           User?                @relation("LeadershipProgramCreator", fields: [createdById], references: [id])
+  responsible         User?                @relation("LeadershipProgramResponsible", fields: [responsibleId], references: [id])
+  department          Department?          @relation(fields: [departmentId], references: [id])
+  learningPath        LearningPath?        @relation("LeadershipProgramPath", fields: [learningPathId], references: [id])
+  certificateTemplate CertificateTemplate? @relation(fields: [certificateTemplateId], references: [id])
+
+  participants      LeadershipProgramParticipant[]
+  targeting         LeadershipProgramTargeting[]
+  selectionCriteria LeadershipSelectionCriterion[]
+  competencies      LeadershipProgramCompetency[]
+  objectives        LeadershipProgramObjective[]
+  contents          LeadershipProgramContent[]
+  methodologies     LeadershipProgramMethodology[]
+  advisors          LeadershipProgramAdvisor[]
+  projects          LeadershipProject[]
+  costs             LeadershipProgramCost[]
+  documents         LeadershipProgramDocument[]
+  communications    LeadershipProgramCommunication[]
+  certificates      Certificate[]
 
   @@index([level])
   @@index([status])
+  @@index([type])
+  @@index([corporateLevel])
+  @@index([createdById])
+  @@index([responsibleId])
+  @@index([departmentId])
+  @@index([learningPathId])
+  @@index([mandatory])
+  @@index([startDate])
+  @@index([certificateTemplateId])
 }
 
+// ──────────────────────────────────────────────────────────────────
+// Público-alvo — uma linha por critério de segmentação. Referencia as
+// entidades organizacionais canónicas por FK; nunca copia as colunas.
+// ──────────────────────────────────────────────────────────────────
+
+enum LeadershipTargetingScope {
+  ROLE
+  POSITION
+  POSITION_LEVEL
+  DEPARTMENT
+  UNIT
+  JOB_FAMILY
+  SENIORITY
+  PERFORMANCE
+  POTENTIAL
+  AGE
+  CUSTOM
+}
+
+model LeadershipProgramTargeting {
+  id        Int                      @id @default(autoincrement())
+  programId Int
+  scope     LeadershipTargetingScope
+  // `include: false` exprime uma exclusão explícita do público-alvo.
+  include   Boolean                  @default(true)
+
+  roleId         Int?
+  positionId     Int?
+  departmentId   Int?
+  unitId         Int?
+  positionLevel  PositionLevel?
+  seniorityLevel SeniorityLevel?
+  jobFamily      String?
+
+  // Faixas numéricas: antiguidade (meses), desempenho, potencial e idade —
+  // esta última só é usada quando uma regra organizacional a configura.
+  minValue Decimal? @db.Decimal(10, 2)
+  maxValue Decimal? @db.Decimal(10, 2)
+
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  program    LeadershipProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  role       Role?             @relation(fields: [roleId], references: [id])
+  position   Position?         @relation(fields: [positionId], references: [id])
+  department Department?       @relation(fields: [departmentId], references: [id])
+  unit       Unit?             @relation(fields: [unitId], references: [id])
+
+  @@index([programId])
+  @@index([scope])
+  @@index([roleId])
+  @@index([positionId])
+  @@index([departmentId])
+  @@index([unitId])
+  @@index([positionLevel])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Critérios de selecção — peso de elegibilidade e fonte de dados.
+// ──────────────────────────────────────────────────────────────────
+
+enum LeadershipCriterionSource {
+  PERFORMANCE_REVIEW
+  NINE_BOX_POTENTIAL
+  COMPETENCY_ASSESSMENT
+  FEEDBACK_360
+  LEADERSHIP_SCORE
+  TENURE
+  CAREER_HISTORY
+  TRAINING_HISTORY
+  MANUAL
+}
+
+model LeadershipSelectionCriterion {
+  id           Int                       @id @default(autoincrement())
+  programId    Int
+  name         String
+  description  String?                   @db.Text
+  source       LeadershipCriterionSource
+  weight       Decimal                   @db.Decimal(5, 2)
+  minScore     Decimal?                  @db.Decimal(5, 2)
+  // Preenchido quando source = COMPETENCY_ASSESSMENT.
+  competencyId Int?
+  required     Boolean                   @default(false)
+  active       Boolean                   @default(true)
+  seq          Int                       @default(0)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  program    LeadershipProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  competency Competency?       @relation(fields: [competencyId], references: [id])
+
+  @@unique([programId, name])
+  @@index([programId])
+  @@index([competencyId])
+  @@index([source])
+  @@index([active])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Competências do programa — reutiliza o modelo Competency canónico.
+// ──────────────────────────────────────────────────────────────────
+
+model LeadershipProgramCompetency {
+  id                   Int      @id @default(autoincrement())
+  programId            Int
+  competencyId         Int
+  baselineLevel        Int?
+  targetLevel          Int
+  weight               Decimal? @db.Decimal(5, 2)
+  behavioralIndicators String?  @db.Text
+  mandatory            Boolean  @default(true)
+  seq                  Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  program    LeadershipProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  competency Competency        @relation(fields: [competencyId], references: [id])
+
+  @@unique([programId, competencyId])
+  @@index([programId])
+  @@index([competencyId])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Objectivos mensuráveis do programa.
+// ──────────────────────────────────────────────────────────────────
+
+enum LeadershipObjectiveType {
+  STRATEGIC
+  BUSINESS
+  BEHAVIORAL
+  TECHNICAL
+  CULTURAL
+}
+
+model LeadershipProgramObjective {
+  id          Int                     @id @default(autoincrement())
+  programId   Int
+  title       String
+  description String?                 @db.Text
+  type        LeadershipObjectiveType @default(BEHAVIORAL)
+  indicator   String?
+  targetValue String?
+  unit        String?
+  seq         Int                     @default(0)
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  program LeadershipProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([type])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Conteúdos — apenas referências aos objectos da Academia (Course,
+// LearningPath, MicroLearning, Assessment). Nunca duplica colunas.
+// ──────────────────────────────────────────────────────────────────
+
+enum LeadershipContentType {
+  COURSE
+  LEARNING_PATH
+  MICRO_LEARNING
+  ASSESSMENT
+  EXTERNAL
+}
+
+model LeadershipProgramContent {
+  id              Int                   @id @default(autoincrement())
+  programId       Int
+  contentType     LeadershipContentType
+  courseId        Int?
+  learningPathId  Int?
+  microLearningId Int?
+  assessmentId    Int?
+  externalUrl     String?
+  title           String?
+  required        Boolean               @default(true)
+  weight          Decimal?              @db.Decimal(5, 2)
+  seq             Int                   @default(0)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  program       LeadershipProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  course        Course?           @relation(fields: [courseId], references: [id])
+  learningPath  LearningPath?     @relation("LeadershipContentPath", fields: [learningPathId], references: [id])
+  microLearning MicroLearning?    @relation(fields: [microLearningId], references: [id])
+  assessment    Assessment?       @relation(fields: [assessmentId], references: [id])
+
+  @@index([programId])
+  @@index([contentType])
+  @@index([courseId])
+  @@index([learningPathId])
+  @@index([microLearningId])
+  @@index([assessmentId])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Metodologias e respectivo peso.
+// ──────────────────────────────────────────────────────────────────
+
+enum LeadershipMethodologyType {
+  TRAINING
+  WORKSHOP
+  COACHING
+  MENTORING
+  PROJECT
+  SIMULATION
+  JOB_ROTATION
+  SHADOWING
+  SELF_STUDY
+  PEER_LEARNING
+  ACTION_LEARNING
+  OTHER
+}
+
+model LeadershipProgramMethodology {
+  id          Int                       @id @default(autoincrement())
+  programId   Int
+  type        LeadershipMethodologyType
+  name        String?
+  description String?                   @db.Text
+  weight      Decimal?                  @db.Decimal(5, 2)
+  hours       Int?
+  sessions    Int?
+  seq         Int                       @default(0)
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+
+  program LeadershipProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([type])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Equipa de acompanhamento — mentor, coach, especialista, formador.
+// ──────────────────────────────────────────────────────────────────
+
+enum LeadershipAdvisorRole {
+  MENTOR
+  COACH
+  SPECIALIST
+  INSTRUCTOR
+  SPONSOR
+  PROGRAM_MANAGER
+}
+
+model LeadershipProgramAdvisor {
+  id         Int                   @id @default(autoincrement())
+  programId  Int
+  userId     Int
+  role       LeadershipAdvisorRole
+  focusArea  String?
+  notes      String?               @db.Text
+  active     Boolean               @default(true)
+  assignedAt DateTime              @default(now())
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  program LeadershipProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  user    User              @relation("LeadershipProgramAdvisorUser", fields: [userId], references: [id])
+
+  @@unique([programId, userId, role])
+  @@index([programId])
+  @@index([userId])
+  @@index([role])
+  @@index([active])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Participante — evolução do modelo LeadershipParticipant (renomeado,
+// nunca recriado: mantém os registos e a chave composta userId+programId).
+// ──────────────────────────────────────────────────────────────────
+
 enum ParticipantStatus {
+  CANDIDATE
+  INVITED
+  SELECTED
+  REJECTED
   ENROLLED
   IN_PROGRESS
   COMPLETED
+  FAILED
   WITHDRAWN
+  CANCELLED
 }
 
-model LeadershipParticipant {
-  id          Int               @id @default(autoincrement())
-  userId      Int
-  programId   Int
-  progress    Int               @default(0)
-  status      ParticipantStatus @default(ENROLLED)
-  notes       String?
-  enrolledAt  DateTime          @default(now())
-  completedAt DateTime?
-  user        User              @relation(fields: [userId], references: [id])
-  program     LeadershipProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+model LeadershipProgramParticipant {
+  id        Int               @id @default(autoincrement())
+  userId    Int
+  programId Int
+  status    ParticipantStatus @default(ENROLLED)
+  progress  Int               @default(0)
+  notes     String?
+
+  // ─── Elegibilidade (calculada no servidor e persistida para auditoria) ──
+  eligibilityScore       Decimal?  @db.Decimal(5, 2)
+  eligibilityBreakdown   String?   @db.Text
+  eligibilityMissingData String?   @db.Text
+  eligibilityComputedAt  DateTime?
+
+  // ─── Baseline e readiness ─────────────────────────────────────
+  baselineScore      Decimal?        @db.Decimal(5, 2)
+  baselineNotes      String?         @db.Text
+  baselineCapturedAt DateTime?
+  readinessLevel     ReadinessLevel?
+
+  // ─── Resultado ────────────────────────────────────────────────
+  finalScore     Decimal?  @db.Decimal(5, 2)
+  attendanceRate Decimal?  @db.Decimal(5, 2)
+  certifiedAt    DateTime?
+
+  // ─── Acompanhamento (FKs canónicas) ───────────────────────────
+  mentorId         Int?
+  coachId          Int?
+  mentoringId      Int?
+  successionPlanId Int?
+  selectedById     Int?
+
+  invitedAt      DateTime?
+  selectedAt     DateTime?
+  enrolledAt     DateTime  @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  withdrawnAt    DateTime?
+  withdrawReason String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user           User              @relation(fields: [userId], references: [id])
+  program        LeadershipProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  mentor         User?             @relation("LeadershipParticipantMentor", fields: [mentorId], references: [id])
+  coach          User?             @relation("LeadershipParticipantCoach", fields: [coachId], references: [id])
+  selectedBy     User?             @relation("LeadershipParticipantSelector", fields: [selectedById], references: [id])
+  mentoring      Mentoring?        @relation(fields: [mentoringId], references: [id])
+  successionPlan SuccessionPlan?   @relation(fields: [successionPlanId], references: [id])
+
+  plan        LeadershipParticipantPlan?
+  assessments LeadershipParticipantAssessment[]
+  projects    LeadershipProject[]
+  costs       LeadershipProgramCost[]
+  documents   LeadershipProgramDocument[]
+
+  communications LeadershipProgramCommunication[]
 
   @@unique([userId, programId])
   @@index([userId])
+  @@index([programId, status])
+  @@index([status])
+  @@index([readinessLevel])
+  @@index([mentorId])
+  @@index([coachId])
+  @@index([mentoringId])
+  @@index([successionPlanId])
+  @@index([selectedById])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Percurso individual — espelha/aponta o DevelopmentPlan (PDI) canónico.
+// ──────────────────────────────────────────────────────────────────
+
+model LeadershipParticipantPlan {
+  id                Int        @id @default(autoincrement())
+  participantId     Int        @unique
+  developmentPlanId Int?
+  title             String?
+  summary           String?    @db.Text
+  status            PlanStatus @default(DRAFT)
+  startDate         DateTime?
+  endDate           DateTime?
+  progress          Int        @default(0)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  participant     LeadershipProgramParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  developmentPlan DevelopmentPlan?             @relation(fields: [developmentPlanId], references: [id])
+
+  actions LeadershipParticipantPlanAction[]
+
+  // participantId não leva @@index: o @unique já cria o índice.
+  @@index([developmentPlanId])
+  @@index([status])
+}
+
+model LeadershipParticipantPlanAction {
+  id                      Int          @id @default(autoincrement())
+  planId                  Int
+  // Aponta a acção canónica do PDI quando o percurso é executado via PDI.
+  developmentPlanActionId Int?
+  title                   String
+  description             String?      @db.Text
+  type                    ActionType   @default(OTHER)
+  status                  ActionStatus @default(TODO)
+  courseId                Int?
+  dueDate                 DateTime?
+  completedAt             DateTime?
+  progress                Int          @default(0)
+  seq                     Int          @default(0)
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  plan                  LeadershipParticipantPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  developmentPlanAction DevelopmentPlanAction?    @relation(fields: [developmentPlanActionId], references: [id])
+  course                Course?                   @relation("LeadershipPlanActionCourse", fields: [courseId], references: [id])
+
+  @@index([planId])
+  @@index([developmentPlanActionId])
+  @@index([courseId])
+  @@index([status])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Avaliações do participante — inicial, intermédia, final e follow-up.
+// ──────────────────────────────────────────────────────────────────
+
+enum LeadershipAssessmentStage {
+  INITIAL
+  MIDPOINT
+  FINAL
+  FOLLOW_UP
+}
+
+enum LeadershipAssessmentStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model LeadershipParticipantAssessment {
+  id             Int                        @id @default(autoincrement())
+  participantId  Int
+  stage          LeadershipAssessmentStage
+  status         LeadershipAssessmentStatus @default(PENDING)
+  assessorId     Int?
+  // Preenchido quando a avaliação corre pelo Assessment canónico da Academia.
+  assessmentId   Int?
+  score          Decimal?                   @db.Decimal(5, 2)
+  maxScore       Decimal?                   @db.Decimal(5, 2)
+  readinessLevel ReadinessLevel?
+  feedback       String?                    @db.Text
+  strengths      String?                    @db.Text
+  improvements   String?                    @db.Text
+  assessedAt     DateTime?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  participant LeadershipProgramParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  assessor    User?                        @relation("LeadershipAssessor", fields: [assessorId], references: [id])
+  assessment  Assessment?                  @relation(fields: [assessmentId], references: [id])
+
+  @@index([participantId])
+  @@index([stage])
+  @@index([status])
+  @@index([assessorId])
+  @@index([assessmentId])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Projecto de liderança — desafio prático, KPI, sponsor e avaliação.
+// ──────────────────────────────────────────────────────────────────
+
+enum LeadershipProjectStatus {
+  PROPOSED
+  APPROVED
+  IN_PROGRESS
+  SUBMITTED
+  UNDER_REVIEW
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+model LeadershipProject {
+  id            Int                     @id @default(autoincrement())
+  programId     Int
+  participantId Int?
+  title         String
+  challenge     String?                 @db.Text
+  description   String?                 @db.Text
+  status        LeadershipProjectStatus @default(PROPOSED)
+
+  kpiName   String?
+  kpiTarget String?
+  kpiResult String?
+
+  sponsorId     Int?
+  mentorId      Int?
+  evaluatedById Int?
+
+  startDate       DateTime?
+  endDate         DateTime?
+  submittedAt     DateTime?
+  evaluatedAt     DateTime?
+  score           Decimal?  @db.Decimal(5, 2)
+  outcome         String?   @db.Text
+  evaluationNotes String?   @db.Text
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  program     LeadershipProgram             @relation(fields: [programId], references: [id], onDelete: Cascade)
+  participant LeadershipProgramParticipant? @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  sponsor     User?                         @relation("LeadershipProjectSponsor", fields: [sponsorId], references: [id])
+  mentor      User?                         @relation("LeadershipProjectMentor", fields: [mentorId], references: [id])
+  evaluatedBy User?                         @relation("LeadershipProjectEvaluator", fields: [evaluatedById], references: [id])
+
+  documents LeadershipProgramDocument[]
+
+  @@index([programId])
+  @@index([participantId])
+  @@index([status])
+  @@index([sponsorId])
+  @@index([mentorId])
+  @@index([evaluatedById])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Custos — componentes por programa e, opcionalmente, por participante.
+// ──────────────────────────────────────────────────────────────────
+
+enum LeadershipCostCategory {
+  INSTRUCTOR
+  MATERIAL
+  VENUE
+  TRAVEL
+  ACCOMMODATION
+  PLATFORM
+  CERTIFICATION
+  CONSULTING
+  OTHER
+}
+
+model LeadershipProgramCost {
+  id            Int                    @id @default(autoincrement())
+  programId     Int
+  participantId Int?
+  category      LeadershipCostCategory
+  description   String?
+  plannedAmount Decimal?               @db.Decimal(14, 2)
+  actualAmount  Decimal?               @db.Decimal(14, 2)
+  currency      String                 @default("AOA")
+  incurredAt    DateTime?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  program     LeadershipProgram             @relation(fields: [programId], references: [id], onDelete: Cascade)
+  participant LeadershipProgramParticipant? @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([programId])
+  @@index([participantId])
+  @@index([category])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Documentos — só referências ao repositório documental canónico.
+// Serve também de evidência de projecto e do percurso do participante.
+// ──────────────────────────────────────────────────────────────────
+
+enum LeadershipDocumentKind {
+  SYLLABUS
+  MATERIAL
+  EVIDENCE
+  CONTRACT
+  REPORT
+  OTHER
+}
+
+model LeadershipProgramDocument {
+  id            Int                    @id @default(autoincrement())
+  programId     Int
+  participantId Int?
+  projectId     Int?
+  documentId    Int
+  kind          LeadershipDocumentKind @default(MATERIAL)
+  uploadedById  Int?
+  notes         String?                @db.Text
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  program     LeadershipProgram             @relation(fields: [programId], references: [id], onDelete: Cascade)
+  participant LeadershipProgramParticipant? @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  project     LeadershipProject?            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  document    Document                      @relation(fields: [documentId], references: [id])
+  uploadedBy  User?                         @relation("LeadershipDocumentUploader", fields: [uploadedById], references: [id])
+
+  @@index([programId])
+  @@index([participantId])
+  @@index([projectId])
+  @@index([documentId])
+  @@index([kind])
+  @@index([uploadedById])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Comunicações programáticas — apontam o NotificationLog canónico
+// depois de enviadas (metadata é sempre JSON.stringify no serviço).
+// ──────────────────────────────────────────────────────────────────
+
+enum LeadershipCommunicationEvent {
+  INVITATION
+  SELECTION_RESULT
+  ENROLLMENT_CONFIRMED
+  SESSION_REMINDER
+  DEADLINE_REMINDER
+  ASSESSMENT_DUE
+  PROJECT_DUE
+  COMPLETION
+  CERTIFICATE_ISSUED
+  CANCELLATION
+  CUSTOM
+}
+
+enum LeadershipCommunicationChannel {
+  IN_APP
+  EMAIL
+  BOTH
+}
+
+enum LeadershipCommunicationStatus {
+  SCHEDULED
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model LeadershipProgramCommunication {
+  id                Int                            @id @default(autoincrement())
+  programId         Int
+  participantId     Int?
+  event             LeadershipCommunicationEvent
+  channel           LeadershipCommunicationChannel @default(IN_APP)
+  status            LeadershipCommunicationStatus  @default(SCHEDULED)
+  subject           String?
+  body              String?                        @db.Text
+  // Agendamento relativo a uma data-âncora do programa (negativo = antes).
+  daysOffset        Int?
+  scheduledFor      DateTime?
+  sentAt            DateTime?
+  failureReason     String?
+  // Preenchido quando a notificação canónica é efectivamente criada.
+  notificationLogId Int?
+  active            Boolean                        @default(true)
+  createdAt         DateTime                       @default(now())
+  updatedAt         DateTime                       @updatedAt
+
+  program         LeadershipProgram             @relation(fields: [programId], references: [id], onDelete: Cascade)
+  participant     LeadershipProgramParticipant? @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  notificationLog NotificationLog?              @relation(fields: [notificationLogId], references: [id])
+
+  @@index([programId])
+  @@index([participantId])
+  @@index([event])
+  @@index([status])
+  @@index([scheduledFor])
+  @@index([notificationLogId])
+  @@index([active])
 }
 
 enum OneOnOneStatus {
@@ -2986,6 +3770,8 @@ model Mentoring {
   mentor           User               @relation("MentoringMentor", fields: [mentorId], references: [id])
   mentee           User               @relation("MentoringMentee", fields: [menteeId], references: [id])
   sessions         MentoringSession[]
+
+  leadershipParticipants LeadershipProgramParticipant[]
 
   @@index([mentorId])
   @@index([menteeId])
@@ -3277,6 +4063,8 @@ model MicroLearning {
   interactions    MicroLearningInteraction[]
   quizAttempts    MicroQuizAttempt[]
   playlistItems   PlaylistItem[]
+
+  leadershipContents LeadershipProgramContent[]
 
   @@index([status])
   @@index([contentType])
@@ -4224,45 +5012,45 @@ model UserPoints {
 }
 
 model Badge {
-  id           Int           @id @default(autoincrement())
-  name         String        @unique
-  description  String?       @db.Text
+  id                   Int           @id @default(autoincrement())
+  name                 String        @unique
+  description          String?       @db.Text
   // Fase F3: colunas absorvidas de DigitalBadge (deprecado). Todas nullable/defaulted.
-  code                 String?    @unique
+  code                 String?       @unique
   imageUrl             String?
   criteria             String?
-  skills               String[]   @default([])
-  level                BadgeLevel @default(BASIC)
-  issuerName           String?    @default("INNOVA")
-  isActive             Boolean    @default(true)
+  skills               String[]      @default([])
+  level                BadgeLevel    @default(BASIC)
+  issuerName           String?       @default("INNOVA")
+  isActive             Boolean       @default(true)
   createdById          Int?
   deletedAt            DateTime?
-  legacyDigitalBadgeId String?    @unique
-  awards       BadgeAward[]
-  recognitions Recognition[]
+  legacyDigitalBadgeId String?       @unique
+  awards               BadgeAward[]
+  recognitions         Recognition[]
 }
 
 model BadgeAward {
-  id           Int         @id @default(autoincrement())
-  userId       Int
-  badgeId      Int
-  awardedAt    DateTime    @default(now())
-  userPointsId Int?
+  id                    Int         @id @default(autoincrement())
+  userId                Int
+  badgeId               Int
+  awardedAt             DateTime    @default(now())
+  userPointsId          Int?
   // Fase F3: colunas absorvidas de BadgeIssuance (deprecado). Todas nullable/defaulted.
-  verifyCode            String?   @unique
-  assertionId           String?   @unique
+  verifyCode            String?     @unique
+  assertionId           String?     @unique
   evidenceUrl           String?
   shareUrl              String?
-  isRevoked             Boolean   @default(false)
+  isRevoked             Boolean     @default(false)
   revokedAt             DateTime?
   revokeReason          String?
   expiresAt             DateTime?
   issuedById            Int?
   deletedAt             DateTime?
-  legacyBadgeIssuanceId String?   @unique
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  badge        Badge       @relation(fields: [badgeId], references: [id], onDelete: Cascade)
-  userPoints   UserPoints? @relation(fields: [userPointsId], references: [id])
+  legacyBadgeIssuanceId String?     @unique
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge                 Badge       @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  userPoints            UserPoints? @relation(fields: [userPointsId], references: [id])
 
   @@unique([badgeId, userId])
   @@index([userId])
@@ -4326,6 +5114,8 @@ model Document {
   auditLogs        DocAuditLog[]
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
+
+  leadershipProgramDocuments LeadershipProgramDocument[]
 
   @@index([category, status])
   @@index([ownerId])
@@ -4741,6 +5531,8 @@ model NotificationLog {
   expiresAt   DateTime?
   createdAt   DateTime              @default(now())
   user        User                  @relation(fields: [userId], references: [id])
+
+  leadershipCommunications LeadershipProgramCommunication[]
 
   @@index([userId])
   @@index([read])
@@ -7511,6 +8303,8 @@ model CertificateTemplate {
   createdBy    User                @relation("TemplateCreator", fields: [createdById], references: [id])
   certificates IssuedCertificate[]
 
+  leadershipPrograms LeadershipProgram[]
+
   @@index([type])
   @@index([isDefault])
   @@index([isActive])
@@ -8502,25 +9296,25 @@ model Recognition {
 // ══════════════════════════════════════════════════════════════════
 
 model OneOnOneMeeting {
-  id              Int            @id @default(autoincrement())
-  hostId          Int
-  participantId   Int
-  scheduledAt     DateTime
-  durationMinutes Int            @default(30)
-  agenda          String?        @db.Text
-  status          OneOnOneStatus @default(SCHEDULED)
-  recurring       Boolean        @default(false)
-  frequency       String?
-  meetingUrl      String?
-  minutes         String?        @db.Text
-  actionItems     String?        @db.Text
-  nextMeetingDate DateTime?
-  completedAt     DateTime?
-  createdAt       DateTime       @default(now())
+  id               Int            @id @default(autoincrement())
+  hostId           Int
+  participantId    Int
+  scheduledAt      DateTime
+  durationMinutes  Int            @default(30)
+  agenda           String?        @db.Text
+  status           OneOnOneStatus @default(SCHEDULED)
+  recurring        Boolean        @default(false)
+  frequency        String?
+  meetingUrl       String?
+  minutes          String?        @db.Text
+  actionItems      String?        @db.Text
+  nextMeetingDate  DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime       @default(now())
   // Fase G4: id do OneOnOne (legado) que originou esta linha via backfill.
-  legacyOneOnOneId Int?          @unique
-  host            User           @relation("OneOnOneMeetingHost", fields: [hostId], references: [id], onDelete: Cascade)
-  participant     User           @relation("OneOnOneMeetingParticipant", fields: [participantId], references: [id], onDelete: Cascade)
+  legacyOneOnOneId Int?           @unique
+  host             User           @relation("OneOnOneMeetingHost", fields: [hostId], references: [id], onDelete: Cascade)
+  participant      User           @relation("OneOnOneMeetingParticipant", fields: [participantId], references: [id], onDelete: Cascade)
 
   @@index([hostId])
   @@index([participantId])
