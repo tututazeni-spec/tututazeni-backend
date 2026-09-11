@@ -113,13 +113,206 @@ const LeadershipProgramLevel = {
   ADVANCED: 'ADVANCED',
 };
 
-const ProgramStatus = { DRAFT: 'DRAFT', ACTIVE: 'ACTIVE', ARCHIVED: 'ARCHIVED' };
+// Espelham LeadershipProgram/LeadershipProgramParticipant no schema real. Sem o
+// alargamento, um teste unitário que valide contra estes enums passaria por
+// motivo errado (o mock, não o DTO, é que estaria a rejeitar o valor novo).
+const ProgramStatus = {
+  DRAFT: 'DRAFT',
+  PLANNED: 'PLANNED',
+  OPEN_FOR_SELECTION: 'OPEN_FOR_SELECTION',
+  SELECTION_CLOSED: 'SELECTION_CLOSED',
+  ACTIVE: 'ACTIVE',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+  ARCHIVED: 'ARCHIVED',
+};
 
 const ParticipantStatus = {
+  CANDIDATE: 'CANDIDATE',
+  INVITED: 'INVITED',
+  SELECTED: 'SELECTED',
+  REJECTED: 'REJECTED',
   ENROLLED: 'ENROLLED',
   IN_PROGRESS: 'IN_PROGRESS',
   COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
   WITHDRAWN: 'WITHDRAWN',
+  CANCELLED: 'CANCELLED',
+};
+
+// Agregado corporativo de LeadershipProgram (Task 1). Mantidos aqui para que os
+// DTOs validados (@IsEnum) e a máquina de estados funcionem sob o mock de Jest.
+const LeadershipProgramType = {
+  DEVELOPMENT: 'DEVELOPMENT',
+  SUCCESSION: 'SUCCESSION',
+  HIGH_POTENTIAL: 'HIGH_POTENTIAL',
+  ONBOARDING_LEADERSHIP: 'ONBOARDING_LEADERSHIP',
+  EXECUTIVE: 'EXECUTIVE',
+  TECHNICAL_LEADERSHIP: 'TECHNICAL_LEADERSHIP',
+  CUSTOM: 'CUSTOM',
+};
+
+const LeadershipCorporateLevel = {
+  SUPERVISOR: 'SUPERVISOR',
+  COORDINATOR: 'COORDINATOR',
+  MANAGER: 'MANAGER',
+  SENIOR_MANAGER: 'SENIOR_MANAGER',
+  DIRECTOR: 'DIRECTOR',
+  EXECUTIVE: 'EXECUTIVE',
+  C_LEVEL: 'C_LEVEL',
+};
+
+const LeadershipSessionFrequency = {
+  DAILY: 'DAILY',
+  WEEKLY: 'WEEKLY',
+  BIWEEKLY: 'BIWEEKLY',
+  MONTHLY: 'MONTHLY',
+  QUARTERLY: 'QUARTERLY',
+  INTENSIVE: 'INTENSIVE',
+  CUSTOM: 'CUSTOM',
+};
+
+const LeadershipTargetingScope = {
+  ROLE: 'ROLE',
+  POSITION: 'POSITION',
+  POSITION_LEVEL: 'POSITION_LEVEL',
+  DEPARTMENT: 'DEPARTMENT',
+  UNIT: 'UNIT',
+  JOB_FAMILY: 'JOB_FAMILY',
+  SENIORITY: 'SENIORITY',
+  PERFORMANCE: 'PERFORMANCE',
+  POTENTIAL: 'POTENTIAL',
+  AGE: 'AGE',
+  CUSTOM: 'CUSTOM',
+};
+
+const LeadershipCriterionSource = {
+  PERFORMANCE_REVIEW: 'PERFORMANCE_REVIEW',
+  NINE_BOX_POTENTIAL: 'NINE_BOX_POTENTIAL',
+  COMPETENCY_ASSESSMENT: 'COMPETENCY_ASSESSMENT',
+  FEEDBACK_360: 'FEEDBACK_360',
+  LEADERSHIP_SCORE: 'LEADERSHIP_SCORE',
+  TENURE: 'TENURE',
+  CAREER_HISTORY: 'CAREER_HISTORY',
+  TRAINING_HISTORY: 'TRAINING_HISTORY',
+  MANUAL: 'MANUAL',
+};
+
+const LeadershipObjectiveType = {
+  STRATEGIC: 'STRATEGIC',
+  BUSINESS: 'BUSINESS',
+  BEHAVIORAL: 'BEHAVIORAL',
+  TECHNICAL: 'TECHNICAL',
+  CULTURAL: 'CULTURAL',
+};
+
+const LeadershipContentType = {
+  COURSE: 'COURSE',
+  LEARNING_PATH: 'LEARNING_PATH',
+  MICRO_LEARNING: 'MICRO_LEARNING',
+  ASSESSMENT: 'ASSESSMENT',
+  EXTERNAL: 'EXTERNAL',
+};
+
+const LeadershipMethodologyType = {
+  TRAINING: 'TRAINING',
+  WORKSHOP: 'WORKSHOP',
+  COACHING: 'COACHING',
+  MENTORING: 'MENTORING',
+  PROJECT: 'PROJECT',
+  SIMULATION: 'SIMULATION',
+  JOB_ROTATION: 'JOB_ROTATION',
+  SHADOWING: 'SHADOWING',
+  SELF_STUDY: 'SELF_STUDY',
+  PEER_LEARNING: 'PEER_LEARNING',
+  ACTION_LEARNING: 'ACTION_LEARNING',
+  OTHER: 'OTHER',
+};
+
+const LeadershipAdvisorRole = {
+  MENTOR: 'MENTOR',
+  COACH: 'COACH',
+  SPECIALIST: 'SPECIALIST',
+  INSTRUCTOR: 'INSTRUCTOR',
+  SPONSOR: 'SPONSOR',
+  PROGRAM_MANAGER: 'PROGRAM_MANAGER',
+};
+
+// Execução do participante de LeadershipProgram (Task 5). Mantidos aqui para os
+// testes unitários que fazem mock de @prisma/client não rebentarem ao usar
+// estes enums como valores em runtime (arrays de estados, @IsEnum nos DTOs).
+const LeadershipAssessmentStage = {
+  INITIAL: 'INITIAL',
+  MIDPOINT: 'MIDPOINT',
+  FINAL: 'FINAL',
+  FOLLOW_UP: 'FOLLOW_UP',
+};
+
+const LeadershipAssessmentStatus = {
+  PENDING: 'PENDING',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+
+const LeadershipProjectStatus = {
+  PROPOSED: 'PROPOSED',
+  APPROVED: 'APPROVED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUBMITTED: 'SUBMITTED',
+  UNDER_REVIEW: 'UNDER_REVIEW',
+  COMPLETED: 'COMPLETED',
+  REJECTED: 'REJECTED',
+  CANCELLED: 'CANCELLED',
+};
+
+const LeadershipDocumentKind = {
+  SYLLABUS: 'SYLLABUS',
+  MATERIAL: 'MATERIAL',
+  EVIDENCE: 'EVIDENCE',
+  CONTRACT: 'CONTRACT',
+  REPORT: 'REPORT',
+  OTHER: 'OTHER',
+};
+
+const LeadershipCostCategory = {
+  INSTRUCTOR: 'INSTRUCTOR',
+  MATERIAL: 'MATERIAL',
+  VENUE: 'VENUE',
+  TRAVEL: 'TRAVEL',
+  ACCOMMODATION: 'ACCOMMODATION',
+  PLATFORM: 'PLATFORM',
+  CERTIFICATION: 'CERTIFICATION',
+  CONSULTING: 'CONSULTING',
+  OTHER: 'OTHER',
+};
+
+const LeadershipCommunicationEvent = {
+  INVITATION: 'INVITATION',
+  SELECTION_RESULT: 'SELECTION_RESULT',
+  ENROLLMENT_CONFIRMED: 'ENROLLMENT_CONFIRMED',
+  SESSION_REMINDER: 'SESSION_REMINDER',
+  DEADLINE_REMINDER: 'DEADLINE_REMINDER',
+  ASSESSMENT_DUE: 'ASSESSMENT_DUE',
+  PROJECT_DUE: 'PROJECT_DUE',
+  COMPLETION: 'COMPLETION',
+  CERTIFICATE_ISSUED: 'CERTIFICATE_ISSUED',
+  CANCELLATION: 'CANCELLATION',
+  CUSTOM: 'CUSTOM',
+};
+
+const LeadershipCommunicationChannel = {
+  IN_APP: 'IN_APP',
+  EMAIL: 'EMAIL',
+  BOTH: 'BOTH',
+};
+
+const LeadershipCommunicationStatus = {
+  SCHEDULED: 'SCHEDULED',
+  SENT: 'SENT',
+  FAILED: 'FAILED',
+  CANCELLED: 'CANCELLED',
 };
 
 const OneOnOneStatus = {
@@ -1684,6 +1877,23 @@ module.exports = {
   LeadershipProgramLevel,
   ProgramStatus,
   ParticipantStatus,
+  LeadershipProgramType,
+  LeadershipCorporateLevel,
+  LeadershipSessionFrequency,
+  LeadershipTargetingScope,
+  LeadershipCriterionSource,
+  LeadershipObjectiveType,
+  LeadershipContentType,
+  LeadershipMethodologyType,
+  LeadershipAdvisorRole,
+  LeadershipAssessmentStage,
+  LeadershipAssessmentStatus,
+  LeadershipProjectStatus,
+  LeadershipDocumentKind,
+  LeadershipCostCategory,
+  LeadershipCommunicationEvent,
+  LeadershipCommunicationChannel,
+  LeadershipCommunicationStatus,
   OneOnOneStatus,
   EngagementFeedbackType,
   FeedbackStatus,

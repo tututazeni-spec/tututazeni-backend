@@ -1,5 +1,17 @@
 # Corporate Leadership Programs Implementation Plan
 
+> **Status (2026-09-11): CONCLUÍDO.** Tasks 1–3 no branch `codex/leadership-programs`
+> (schema do agregado, ciclo de vida seguro, elegibilidade). Tasks 4–6 no mesmo
+> branch (modelo de desenvolvimento + validação de refs canónicas; execução do
+> participante — baseline/PDI/mentoring/avaliações/projecto/documentos/custos/
+> comunicações idempotentes; conclusão + certificado LEADERSHIP idempotente +
+> readiness + sucessão + KPIs). Task 7 (workspace frontend: assistente de 16
+> etapas + 7 separadores + testes Vitest) no branch `leadership-workspace` do repo
+> frontend. Task 8 — verificação: backend `jest` 4604 ✓, `tsc`/`eslint`/`prettier`
+> ✓; integração PostgreSQL do raio de impacto (certificates/certification/
+> competencies/leader/leadership/succession) 181 ✓; frontend `vitest` 408 ✓ +
+> `next build` ✓; `prisma migrate status` up to date.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver a complete corporate leadership-program workflow, integrated with the canonical INNOVA domains.

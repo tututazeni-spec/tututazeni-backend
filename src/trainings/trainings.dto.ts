@@ -25,7 +25,7 @@ import {
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // NOTA: ParticipantStatus aqui é o `TrainingParticipantStatus` do Prisma —
 // nome local mantido por compatibilidade, distinto do `ParticipantStatus`
-// (LeadershipParticipant) usado no módulo leadership.
+// (LeadershipProgramParticipant) usado no módulo leadership.
 
 export { TrainingType, TrainingLevel, TrainingStatus, ParticipantStatus, SessionModality };
 

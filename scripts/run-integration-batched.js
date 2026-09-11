@@ -11,13 +11,78 @@ const path = require('path');
 const jestBin = path.join(__dirname, '..', 'node_modules', 'jest', 'bin', 'jest.js');
 
 const BATCHES = [
-  ['academic', 'acl', 'ai-tutor', 'analytics', 'api-integration', 'assessments', 'attendance', 'audit', 'auth'],
-  ['automation', 'avatar-training', 'career', 'career-plans', 'certificates', 'certification', 'competencies', 'competency-map', 'content-library'],
-  ['course-modules', 'courses', 'crm-beneficiaries', 'crm-funders', 'crm-partners', 'dashboard', 'dashboard-institutional', 'dashboard-rh', 'declarations'],
-  ['departments', 'document-repository', 'employees', 'engagement', 'enrollment', 'evaluation', 'evaluation360', 'events', 'executive-reports'],
-  ['instructor', 'knowledge', 'leader', 'leadership', 'learning-paths', 'leave-management', 'library', 'live-classes', 'lms'],
-  ['metrics', 'micro-learning', 'mobile', 'monitoring', 'notifications', 'onboarding', 'organization', 'payslips', 'payroll', 'pdf'],
-  ['pdi', 'performance', 'process-standard', 'reports', 'roi-impact', 'roles-permissions', 'scalability', 'search', 'succession'],
+  [
+    'academic',
+    'acl',
+    'ai-tutor',
+    'analytics',
+    'api-integration',
+    'assessments',
+    'attendance',
+    'audit',
+    'auth',
+  ],
+  [
+    'automation',
+    'avatar-training',
+    'career',
+    'career-plans',
+    'certificates',
+    'certification',
+    'competencies',
+    'competency-map',
+    'content-library',
+  ],
+  [
+    'course-modules',
+    'courses',
+    'crm-beneficiaries',
+    'crm-funders',
+    'crm-partners',
+    'dashboard',
+    'dashboard-institutional',
+    'dashboard-rh',
+    'declarations',
+  ],
+  [
+    'departments',
+    'document-repository',
+    'employees',
+    'engagement',
+    'enrollment',
+    'evaluation',
+    'evaluation360',
+    'events',
+    'executive-reports',
+  ],
+  // `leadership` isolado: o workspace corporativo (plano 2026-09-09) trouxe 6
+  // specs que arrancam cada uma a sua app Nest completa; juntas com o resto do
+  // antigo batch 5 no mesmo processo jest esgotavam a heap ("exit null").
+  ['instructor', 'knowledge', 'leader', 'leadership'],
+  ['learning-paths', 'leave-management', 'library', 'live-classes', 'lms'],
+  [
+    'metrics',
+    'micro-learning',
+    'mobile',
+    'monitoring',
+    'notifications',
+    'onboarding',
+    'organization',
+    'payslips',
+    'payroll',
+    'pdf',
+  ],
+  [
+    'pdi',
+    'performance',
+    'process-standard',
+    'reports',
+    'roi-impact',
+    'roles-permissions',
+    'scalability',
+    'search',
+    'succession',
+  ],
   [
     'talent-development',
     'trainings',
@@ -38,10 +103,25 @@ for (const [i, modules] of BATCHES.entries()) {
 
   const result = spawnSync(
     process.execPath,
-    [jestBin, '--config', 'test/jest-integration.json', '--forceExit', '--runInBand', '--testPathPatterns', pattern],
+    [
+      jestBin,
+      '--config',
+      'test/jest-integration.json',
+      '--forceExit',
+      '--runInBand',
+      '--testPathPatterns',
+      pattern,
+    ],
     {
       stdio: 'inherit',
-      env: { ...process.env, NODE_ENV: 'test' },
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        // Cada spec arranca a sua própria app Nest; num batch grande a heap
+        // por omissão (~2 GB) não chega e o processo morre com "exit null".
+        // O runner do GitHub tem RAM de sobra — dá-lhe folga.
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=4096`.trim(),
+      },
     },
   );
 
