@@ -37,7 +37,6 @@ import {
   AnalyticsQueryDto,
   NineBoxQueryDto,
   GenerateReportDto,
-  Evaluation360CalibrateScoreDto,
   SendRemindersDto,
   Evaluation360PaginationDto,
 } from './evaluation360.dto';
@@ -51,8 +50,8 @@ import { CurrentUserData } from '../common/types/current-user';
 
 // Quem pode criar/publicar questionários 360º e distribuí-los automaticamente
 // — mesmo grupo de EVAL_CREATOR_ROLES em src/assessments/assessments.controller.ts
-// e frontend/lib/roles.ts. O banco de competências (createCompetency) e a
-// calibração (calibrateScore) continuam ADMIN/RH só — não são "criar questionário".
+// e frontend/lib/roles.ts. O banco de competências (createCompetency)
+// continua ADMIN/RH só — não é "criar questionário".
 const EVAL_CREATOR_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR, Role.LIDER] as const;
 
 @ApiTags('Avaliação 360°')
@@ -381,20 +380,9 @@ export class Evaluation360Controller {
     return this.service.generateReport(dto, String(user.id));
   }
 
-  // ============================================================
-  // CALIBRAÇÃO
-  // ============================================================
-
-  @Post('cycles/:cycleId/calibrate')
-  @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Calibrar score de participante (matriz de calibração RH)' })
-  async calibrateScore(
-    @Param('cycleId') cycleId: string,
-    @Body() dto: Evaluation360CalibrateScoreDto,
-    @CurrentUser() user: CurrentUserData,
-  ) {
-    return this.service.calibrateScore(cycleId, dto, String(user.id));
-  }
+  // Nota: POST cycles/:cycleId/calibrate (matriz de calibração RH) foi
+  // removido — ver evaluation360.service.ts, secção de comentário no lugar
+  // de calibrateScore().
 
   // ============================================================
   // FEEDBACK CONTÍNUO

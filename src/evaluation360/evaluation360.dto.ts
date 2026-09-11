@@ -268,11 +268,8 @@ export class GenerateReportDto {
 }
 
 // ─── CALIBRATION ─────────────────────────────────────────────
-export class Evaluation360CalibrateScoreDto {
-  @ApiProperty() @IsString() participantId: string;
-  @ApiProperty() @IsNumber() @Min(0) @Max(10) calibratedScore: number;
-  @ApiProperty() @IsString() @IsNotEmpty() justification: string;
-}
+// Nota: Evaluation360CalibrateScoreDto (matriz de calibração RH) foi
+// removido junto com calibrateScore() — ver evaluation360.service.ts.
 
 // ─── REMINDERS ───────────────────────────────────────────────
 export class SendRemindersDto {

@@ -40,7 +40,6 @@ import {
   AnalyticsQueryDto,
   NineBoxQueryDto,
   GenerateReportDto,
-  Evaluation360CalibrateScoreDto,
   SendRemindersDto,
   Evaluation360PaginationDto,
   EvaluatorRole,
@@ -1307,11 +1306,13 @@ export class Evaluation360Service {
 
     await this.findCycleOrFail(cycleId);
     // Regra explícita do produto: ninguém vê o resultado de outro utilizador
-    // — nem ADMIN nem RH têm excepção aqui (diferente de getTeamAnalytics/
-    // getOrganizationalAnalytics/calibrateScore, que continuam a mostrar
-    // dados agregados de equipa/organização a esses papéis). requesterId
-    // chega como number (User.id via JWT) e participantId como string
-    // (route param) — comparação estrita nunca era true sem o String().
+    // — nem ADMIN nem RH têm excepção aqui. getTeamAnalytics/
+    // getOrganizationalAnalytics continuam a existir mas só devolvem dados
+    // agregados (médias, contagens) sem identificar ninguém; calibrateScore
+    // foi removido — calibrar era, por definição, aceder/substituir o
+    // resultado individual de outra pessoa. requesterId chega como number
+    // (User.id via JWT) e participantId como string (route param) —
+    // comparação estrita nunca era true sem o String().
     const isOwnResult = String(requesterId) === String(participantId);
     if (!isOwnResult) throw new ForbiddenException('Sem permissão para ver este resultado.');
 
@@ -1326,28 +1327,58 @@ export class Evaluation360Service {
     };
   }
 
+  // Analytics agregados da equipa de um gestor — nunca resultados
+  // individuais. Devolvia antes participantId/participantName + score/gaps/
+  // strengths por pessoa, o que violava a mesma regra de getParticipantResult
+  // (ninguém vê o resultado de outro, nem sequer o próprio gestor sobre um
+  // subordinado). Agora só médias/contagens da equipa como um todo, no mesmo
+  // espírito de getOrganizationalAnalytics — dá ao gestor o pulso da equipa
+  // sem identificar ninguém.
   async getTeamAnalytics(cycleId: string, managerId: string) {
     const managedUsers = await this.prisma.user.findMany({
       where: { managerId: +managerId },
-      select: { id: true, fullName: true },
+      select: { id: true },
     });
-    const userIds = managedUsers.map(u => u.id);
+    const teamSize = managedUsers.length;
+    if (teamSize === 0) {
+      return {
+        teamSize: 0,
+        evaluatedCount: 0,
+        avgOverall: 0,
+        avgWeighted: 0,
+        eligiblePromotionCount: 0,
+        eligibleBonusCount: 0,
+        competencyAverages: [],
+      };
+    }
 
     const results = await this.prisma.evaluationResult.findMany({
-      where: { cycleId, participantId: { in: userIds.map(String) } },
+      where: { cycleId, participantId: { in: managedUsers.map(u => String(u.id)) } },
+      select: {
+        overallScore: true,
+        weightedScore: true,
+        scoresByCompetency: true,
+        isEligiblePromotion: true,
+        isEligibleBonus: true,
+      },
     });
 
-    return results.map(r => ({
-      participantId: r.participantId,
-      participantName:
-        managedUsers.find(u => String(u.id) === r.participantId)?.fullName ?? r.participantId,
-      weightedScore: r.weightedScore,
-      overallScore: r.overallScore,
-      isEligiblePromotion: r.isEligiblePromotion,
-      isEligibleBonus: r.isEligibleBonus,
-      gaps: r.gaps ? JSON.parse(r.gaps) : [],
-      strengths: r.strengths ? JSON.parse(r.strengths) : [],
-    }));
+    const avgOverall = results.length
+      ? results.reduce((s, r) => s + r.overallScore, 0) / results.length
+      : 0;
+    const avgWeighted = results.length
+      ? results.reduce((s, r) => s + r.weightedScore, 0) / results.length
+      : 0;
+
+    return {
+      teamSize,
+      evaluatedCount: results.length,
+      avgOverall,
+      avgWeighted,
+      eligiblePromotionCount: results.filter(r => r.isEligiblePromotion).length,
+      eligibleBonusCount: results.filter(r => r.isEligibleBonus).length,
+      competencyAverages: this.averageCompetencyScores(results),
+    };
   }
 
   async getOrganizationalAnalytics(query: AnalyticsQueryDto) {
@@ -1372,7 +1403,21 @@ export class Evaluation360Service {
       : 0;
     const eligiblePromotion = results.filter(r => r.isEligiblePromotion).length;
 
-    // Média por competência (cross-participants)
+    return {
+      totalParticipants: results.length,
+      avgOverall,
+      avgWeighted,
+      eligiblePromotion,
+      competencyAverages: this.averageCompetencyScores(results),
+    };
+  }
+
+  // Média por competência entre participantes (cross-participants) — usado
+  // por getTeamAnalytics e getOrganizationalAnalytics, os dois analytics
+  // agregados que sobrevivem à regra "ninguém vê o resultado de outro".
+  private averageCompetencyScores(
+    results: { scoresByCompetency: string | null }[],
+  ): { competencyId: string; average: number }[] {
     const compScores: Record<string, number[]> = {};
     for (const r of results) {
       const sc: Record<string, CompetencyScoreEntry> = JSON.parse(r.scoresByCompetency ?? '{}');
@@ -1381,18 +1426,10 @@ export class Evaluation360Service {
         if (data.score !== null) compScores[cId].push(data.score);
       }
     }
-    const compAverages = Object.entries(compScores).map(([compId, scores]) => ({
-      competencyId: compId,
+    return Object.entries(compScores).map(([competencyId, scores]) => ({
+      competencyId,
       average: scores.reduce((s, v) => s + v, 0) / scores.length,
     }));
-
-    return {
-      totalParticipants: results.length,
-      avgOverall,
-      avgWeighted,
-      eligiblePromotion,
-      competencyAverages: compAverages,
-    };
   }
 
   async getNineBox(query: NineBoxQueryDto) {
@@ -1495,33 +1532,9 @@ export class Evaluation360Service {
     });
   }
 
-  // ============================================================
-  // CALIBRAÇÃO (RH)
-  // ============================================================
-
-  async calibrateScore(cycleId: string, dto: Evaluation360CalibrateScoreDto, actorId: string) {
-    const result = await this.prisma.evaluationResult.findFirst({
-      where: { cycleId, participantId: dto.participantId },
-    });
-    if (!result) throw new NotFoundException('Resultado não encontrado.');
-
-    await this.prisma.evaluationResult.update({
-      where: { id: result.id },
-      data: { weightedScore: dto.calibratedScore },
-    });
-    await this.audit.log({
-      entity: 'EvaluationResult',
-      entityId: result.id,
-      action: 'CALIBRATE',
-      userId: actorId,
-      details: {
-        original: result.weightedScore,
-        calibrated: dto.calibratedScore,
-        justification: dto.justification,
-      },
-    });
-    return { message: 'Score calibrado com sucesso.', newScore: dto.calibratedScore };
-  }
+  // Nota: calibrateScore() (matriz de calibração RH) foi removido — calibrar
+  // era, por definição, ler e substituir o resultado individual de outra
+  // pessoa, o que a regra "ninguém vê o resultado de outro" já não permite.
 
   // ============================================================
   // RELATÓRIOS

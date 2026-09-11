@@ -31,7 +31,6 @@ const mockSvc = {
   getOrganizationalAnalytics: jest.fn().mockResolvedValue({}),
   getNineBox: jest.fn().mockResolvedValue([]),
   generateReport: jest.fn().mockResolvedValue({}),
-  calibrateScore: jest.fn().mockResolvedValue({}),
   createContinuousFeedback: jest.fn().mockResolvedValue({ id: 'fb1' }),
   listFeedbackForUser: jest.fn().mockResolvedValue([]),
   createPulseSurvey: jest.fn().mockResolvedValue({ id: 'ps1' }),
@@ -214,11 +213,8 @@ describe('Evaluation360Controller', () => {
     expect(mockSvc.generateReport).toHaveBeenCalledWith(dto, '1');
   });
 
-  it('calibrateScore → calibrateScore(cycleId, dto, userId)', async () => {
-    const dto = {} as any;
-    await controller.calibrateScore('cycle-1', dto, mockUser as any);
-    expect(mockSvc.calibrateScore).toHaveBeenCalledWith('cycle-1', dto, '1');
-  });
+  // calibrateScore foi removido (matriz de calibração RH) — ver
+  // evaluation360.service.ts/evaluation360.controller.ts.
 
   it('createFeedback → createContinuousFeedback(dto, userId)', async () => {
     const dto = {} as any;

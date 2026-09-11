@@ -715,8 +715,9 @@ describe('Evaluation360Service (additional)', () => {
   describe('getParticipantResult', () => {
     // Regra do produto: ninguém vê o resultado de outro utilizador — nem
     // ADMIN nem RH têm excepção aqui (só getTeamAnalytics/
-    // getOrganizationalAnalytics/calibrateScore continuam agregados a esses
-    // papéis). Cobria antes um "canSeeFull" que foi removido.
+    // getOrganizationalAnalytics continuam agregados, sem identificar
+    // ninguém, a esses papéis). Cobria antes um "canSeeFull" que foi
+    // removido.
     it('deve lançar ForbiddenException mesmo para ADMIN a ver resultado de outro', async () => {
       mockPrisma.evaluationResult = {
         findUnique: jest.fn().mockResolvedValue({
@@ -790,30 +791,26 @@ describe('Evaluation360Service (additional)', () => {
   // ─── getTeamAnalytics ─────────────────────────────────────────────────────
 
   describe('getTeamAnalytics', () => {
-    it('deve retornar analytics de equipa com scores', async () => {
-      mockPrisma.user.findMany.mockResolvedValue([
-        { id: 'u1', fullName: 'Alice' },
-        { id: 'u2', fullName: 'Bob' },
-      ]);
+    // Regra "ninguém vê o resultado de outro": devolve só agregados da
+    // equipa (médias/contagens), nunca participantId/participantName/score
+    // por pessoa — ver comentário em cima de getTeamAnalytics().
+    it('deve retornar agregados de equipa sem identificar ninguém', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 'u1' }, { id: 'u2' }]);
       mockPrisma.evaluationResult = {
         findMany: jest.fn().mockResolvedValue([
           {
-            participantId: 'u1',
             weightedScore: 4.0,
             overallScore: 3.8,
             isEligiblePromotion: true,
             isEligibleBonus: false,
-            gaps: '[]',
-            strengths: '[]',
+            scoresByCompetency: '{}',
           },
           {
-            participantId: 'u2',
             weightedScore: 3.2,
             overallScore: 3.5,
             isEligiblePromotion: false,
             isEligibleBonus: true,
-            gaps: '[]',
-            strengths: '[]',
+            scoresByCompetency: '{}',
           },
         ]),
         findUnique: jest.fn().mockResolvedValue(null),
@@ -822,8 +819,13 @@ describe('Evaluation360Service (additional)', () => {
         update: jest.fn().mockResolvedValue({}),
       };
       const result = await service.getTeamAnalytics('cycle-1', 'mgr-1');
-      expect(result).toHaveLength(2);
-      expect(result[0].participantName).toBe('Alice');
+      expect(result).not.toHaveProperty('participantId');
+      expect(result).not.toHaveProperty('participantName');
+      expect(result.teamSize).toBe(2);
+      expect(result.evaluatedCount).toBe(2);
+      expect(result.eligiblePromotionCount).toBe(1);
+      expect(result.eligibleBonusCount).toBe(1);
+      expect(result.avgWeighted).toBeCloseTo(3.6);
     });
   });
 
@@ -897,42 +899,9 @@ describe('Evaluation360Service (additional)', () => {
     });
   });
 
-  // ─── calibrateScore ───────────────────────────────────────────────────────
-
-  describe('calibrateScore', () => {
-    it('deve calibrar score com sucesso', async () => {
-      mockPrisma.evaluationResult = {
-        findFirst: jest.fn().mockResolvedValue({ id: 'r1', weightedScore: 3.5 }),
-        update: jest.fn().mockResolvedValue({ id: 'r1', weightedScore: 4.0 }),
-        findMany: jest.fn().mockResolvedValue([]),
-        findUnique: jest.fn().mockResolvedValue(null),
-        upsert: jest.fn().mockResolvedValue({}),
-      };
-      const result = await service.calibrateScore(
-        'cycle-1',
-        { participantId: 'user-1', calibratedScore: 4.0, justification: 'Boa performance' },
-        'rh-1',
-      );
-      expect(result.newScore).toBe(4.0);
-    });
-
-    it('deve lançar NotFoundException se resultado não existe', async () => {
-      mockPrisma.evaluationResult = {
-        findFirst: jest.fn().mockResolvedValue(null),
-        update: jest.fn(),
-        findMany: jest.fn().mockResolvedValue([]),
-        findUnique: jest.fn().mockResolvedValue(null),
-        upsert: jest.fn().mockResolvedValue({}),
-      };
-      await expect(
-        service.calibrateScore(
-          'cycle-1',
-          { participantId: 'ghost', calibratedScore: 4.0, justification: 'N/A' },
-          'rh-1',
-        ),
-      ).rejects.toThrow(NotFoundException);
-    });
-  });
+  // calibrateScore (matriz de calibração RH) foi removido — calibrar era,
+  // por definição, ler/substituir o resultado individual de outra pessoa,
+  // o que a regra "ninguém vê o resultado de outro" já não permite.
 
   // ─── generateReport ───────────────────────────────────────────────────────
 
