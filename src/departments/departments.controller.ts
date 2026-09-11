@@ -42,6 +42,13 @@ import {
 } from './departments.dto';
 import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
+// Módulo de departamentos: oculto na sidebar para COLABORADOR (ver
+// frontend/components/Sidebar.tsx) — espelhado aqui para que o acesso directo
+// à API fique igualmente bloqueado, não só escondido na UI.
+const DEPARTMENTS_VIEW_ROLES = AUTHENTICATED_ROLES.filter(
+  (r) => r !== Role.COLABORADOR,
+);
+
 // ─── DEPARTMENTS ──────────────────────────────────────────────────────────────
 
 @ApiTags('Departments')
@@ -52,14 +59,14 @@ export class DepartmentsController {
   constructor(private readonly svc: DepartmentsService) {}
 
   @Get()
-  @Roles(...AUTHENTICATED_ROLES)
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
   @ApiOperation({ summary: 'Listar departamentos (com filtros e paginação)' })
   findAll(@Query() filters: DepartmentFilterDto) {
     return this.svc.findAll(filters);
   }
 
   @Get('tree')
-  @Roles(...AUTHENTICATED_ROLES)
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
   @ApiOperation({ summary: 'Árvore hierárquica completa (Org Chart)' })
   getTree() {
     return this.svc.getTree();
@@ -73,19 +80,19 @@ export class DepartmentsController {
   }
 
   // Detalhe e métricas: mesmo nível de acesso que GET /departments e
-  // /departments/tree (AUTHENTICATED_ROLES). O organograma e a lista já são
-  // visíveis a qualquer autenticado; se o detalhe fosse mais restrito, um
-  // COLABORADOR/LIDER/INSTRUCTOR/AUDITOR que clicasse num nó do organograma
+  // /departments/tree (DEPARTMENTS_VIEW_ROLES). O organograma e a lista já são
+  // visíveis a qualquer autenticado não-COLABORADOR; se o detalhe fosse mais
+  // restrito, um LIDER/INSTRUCTOR/AUDITOR que clicasse num nó do organograma
   // levava 403. Escrita (create/update/(de)activate/transfer) continua restrita.
   @Get(':id')
-  @Roles(...AUTHENTICATED_ROLES)
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
   @ApiOperation({ summary: 'Detalhe do departamento (membros, sub-deptos, histórico)' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
   }
 
   @Get(':id/metrics')
-  @Roles(...AUTHENTICATED_ROLES)
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
   @ApiOperation({ summary: 'Métricas do departamento' })
   metrics(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getMetrics(id);
