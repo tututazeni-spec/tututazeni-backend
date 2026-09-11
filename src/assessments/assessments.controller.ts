@@ -33,16 +33,17 @@ import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
 // Papéis que podem criar/gerir avaliações formais (EXAM) dentro do módulo
 // evaluation — ADMIN/RH mantêm-se (também usados para os quizzes de curso
-// LMS pré-existentes); GESTOR/INSTRUCTOR/DIRECTOR/LIDER só passam a poder
-// gerir Assessment a partir desta funcionalidade. Não há hoje nenhuma UI
-// frontend a consumir POST/PUT/DELETE /assessments (só leitura via
-// ListView/AssessmentPlayer/ReviewView), por isso alargar aqui não muda
-// nenhum fluxo LMS-quiz já em uso.
+// LMS pré-existentes); GESTOR/DIRECTOR/LIDER só passam a poder gerir
+// Assessment a partir desta funcionalidade. INSTRUCTOR fica de fora — tal
+// como COLABORADOR/AUDITOR, só vê e participa nas avaliações abertas (ver
+// EVAL_CREATOR_ROLES em frontend/lib/roles.ts). Não há hoje nenhuma UI
+// frontend a consumir POST/PUT/DELETE /assessments fora deste fluxo (só
+// leitura via ListView/AssessmentPlayer/ReviewView), por isso restringir
+// aqui não muda nenhum fluxo LMS-quiz já em uso.
 const EVAL_CREATOR_ROLES = [
   Role.ADMIN,
   Role.RH,
   Role.GESTOR,
-  Role.INSTRUCTOR,
   Role.DIRECTOR,
   Role.LIDER,
 ] as const;
@@ -125,7 +126,7 @@ export class AssessmentsController {
     return this.svc.getAttemptDetailForReviewer(attemptId);
   }
 
-  // ── Gestão (Admin/RH/Gestor/Instrutor/Director/Líder) ───────────────────────
+  // ── Gestão (Admin/RH/Gestor/Director/Líder) ─────────────────────────────────
 
   @Post()
   @Roles(...EVAL_CREATOR_ROLES)
@@ -229,7 +230,7 @@ export class AssessmentsController {
   @Get('attempts/user/:userId')
   @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({
-    summary: 'Tentativas de um utilizador (Admin/RH/Gestor/Instrutor/Director/Líder)',
+    summary: 'Tentativas de um utilizador (Admin/RH/Gestor/Director/Líder)',
   })
   userAttempts(
     @Param('userId', ParseIntPipe) userId: number,
