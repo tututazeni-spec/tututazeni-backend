@@ -45,9 +45,7 @@ import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 // Módulo de departamentos: oculto na sidebar para COLABORADOR (ver
 // frontend/components/Sidebar.tsx) — espelhado aqui para que o acesso directo
 // à API fique igualmente bloqueado, não só escondido na UI.
-const DEPARTMENTS_VIEW_ROLES = AUTHENTICATED_ROLES.filter(
-  (r) => r !== Role.COLABORADOR,
-);
+const DEPARTMENTS_VIEW_ROLES = AUTHENTICATED_ROLES.filter(r => r !== Role.COLABORADOR);
 
 // ─── DEPARTMENTS ──────────────────────────────────────────────────────────────
 
