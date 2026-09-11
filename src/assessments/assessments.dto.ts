@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsBoolean,
   IsEnum,
+  IsDateString,
   Min,
   Max,
   MaxLength,
@@ -188,6 +189,34 @@ export class CreateAssessmentDto {
   @IsBoolean()
   allowReview?: boolean;
 
+  @ApiPropertyOptional({
+    description: 'IDs dos departamentos-alvo ([] ou omitido = todos os departamentos)',
+    type: [Number],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  targetDepartmentIds?: number[];
+
+  @ApiPropertyOptional({ description: 'Início da janela de disponibilidade (ISO 8601)' })
+  @IsOptional()
+  @IsDateString()
+  availableFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Fim da janela de disponibilidade (ISO 8601)' })
+  @IsOptional()
+  @IsDateString()
+  availableUntil?: string;
+
+  @ApiPropertyOptional({
+    description: 'Nota máxima da escala de apresentação (ex: 20, 10, 100)',
+    default: 20,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  maxGrade?: number;
+
   @ApiPropertyOptional({ type: [CreateQuestionDto] })
   @IsOptional()
   @IsArray()
@@ -222,6 +251,14 @@ export class AssessmentFilterDto {
   @IsOptional()
   @IsEnum(AssessmentStatus)
   status?: AssessmentStatus;
+
+  @ApiPropertyOptional({
+    enum: AssessmentType,
+    description: 'Excluir um tipo do resultado (ex: EXAM para o catálogo genérico de cursos)',
+  })
+  @IsOptional()
+  @IsEnum(AssessmentType)
+  excludeType?: AssessmentType;
 }
 
 // ─── Start Attempt ────────────────────────────────────────────────────────────

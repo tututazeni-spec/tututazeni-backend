@@ -11,6 +11,9 @@ const mockSvc = {
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
   getAnalytics: jest.fn().mockResolvedValue({}),
   getAttemptDetail: jest.fn().mockResolvedValue({}),
+  getAvailableForUser: jest.fn().mockResolvedValue([]),
+  getResultsRoster: jest.fn().mockResolvedValue({ roster: [] }),
+  getAttemptDetailForReviewer: jest.fn().mockResolvedValue({}),
   create: jest.fn().mockResolvedValue({ id: 2 }),
   update: jest.fn().mockResolvedValue({ id: 1 }),
   publish: jest.fn().mockResolvedValue({ status: 'PUBLISHED' }),
@@ -78,6 +81,21 @@ describe('AssessmentsController', () => {
   it('attemptDetail → getAttemptDetail(attemptId, userId)', async () => {
     await controller.attemptDetail(10, mockUser as any);
     expect(mockSvc.getAttemptDetail).toHaveBeenCalledWith(10, 1);
+  });
+
+  it('available → getAvailableForUser(userId)', async () => {
+    await controller.available(mockUser as any);
+    expect(mockSvc.getAvailableForUser).toHaveBeenCalledWith(1);
+  });
+
+  it('results → getResultsRoster(id)', async () => {
+    await controller.results(4);
+    expect(mockSvc.getResultsRoster).toHaveBeenCalledWith(4);
+  });
+
+  it('attemptDetailForReviewer → getAttemptDetailForReviewer(attemptId)', async () => {
+    await controller.attemptDetailForReviewer(10);
+    expect(mockSvc.getAttemptDetailForReviewer).toHaveBeenCalledWith(10);
   });
 
   it('create → create(dto)', async () => {

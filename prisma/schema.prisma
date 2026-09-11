@@ -2321,6 +2321,10 @@ model Assessment {
   randomizeQuestions Boolean              @default(false)
   randomizeOptions   Boolean              @default(false)
   allowReview        Boolean              @default(true)
+  targetDepartmentIds Int[]               @default([])
+  availableFrom      DateTime?
+  availableUntil     DateTime?
+  maxGrade           Float                @default(20)
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   course             Course?              @relation(fields: [courseId], references: [id])
