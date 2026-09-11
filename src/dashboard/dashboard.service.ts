@@ -86,6 +86,10 @@ export class DashboardService {
       avatarSessions,
       competencies,
       notifications,
+      pendingOnboardingTasks,
+      pendingProcessTasks,
+      pendingWorkDeclarations,
+      pending360Assignments,
     ] = await Promise.all([
       this.prisma.read.user.findUnique({
         where: { id: userId },
@@ -115,7 +119,7 @@ export class DashboardService {
       this.prisma.read.developmentPlan.findFirst({
         where: { userId, status: { in: ['ACTIVE', 'DRAFT'] }, isTemplate: false },
         include: {
-          actions: { select: { status: true, progress: true }, take: 20 },
+          actions: { select: { status: true, progress: true, dueDate: true }, take: 20 },
           goals: { select: { progress: true }, take: 10 },
         },
       }),
@@ -151,6 +155,66 @@ export class DashboardService {
         });
         return [];
       }),
+      // Tarefas de onboarding atribuídas ao utilizador ainda por concluir
+      this.prisma.read.onboardingTaskInstance
+        .count({ where: { status: 'PENDING', plan: { userId } } })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            action: 'DASHBOARD_MY_PENDING_ONBOARDING',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter tarefas de onboarding pendentes para o dashboard pessoal',
+          });
+          return 0;
+        }),
+      // Passos pendentes em instâncias de processos abertos onde o utilizador
+      // é o alvo ou o responsável (mesmo filtro de process-standard.getMyTasks)
+      this.prisma.read.stepProgress
+        .count({
+          where: {
+            status: 'PENDING',
+            OR: [{ instance: { targetUserId: userId } }, { step: { responsibleId: userId } }],
+          },
+        })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            action: 'DASHBOARD_MY_PENDING_PROCESS_TASKS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter tarefas pendentes em processos abertos para o dashboard pessoal',
+          });
+          return 0;
+        }),
+      // Declarações de trabalho atribuídas ao utilizador ainda por preencher
+      this.prisma.read.workDeclSubmission
+        .count({ where: { userId, status: 'PENDING' } })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            action: 'DASHBOARD_MY_PENDING_WORK_DECLARATIONS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter declarações de trabalho pendentes para o dashboard pessoal',
+          });
+          return 0;
+        }),
+      // Atribuições de avaliação 360° (Eval360Cycle) por completar como avaliador —
+      // modelo separado de `evaluationRequest`; evaluatorId é o User.id em String
+      this.prisma.read.evaluatorAssignment
+        .count({
+          where: {
+            evaluatorId: String(userId),
+            status: { in: ['PENDING', 'INVITED', 'IN_PROGRESS'] },
+          },
+        })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            userId,
+            action: 'DASHBOARD_MY_PENDING_360_ASSIGNMENTS',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter atribuições de avaliação 360° pendentes para o dashboard pessoal',
+          });
+          return 0;
+        }),
     ]);
 
     // PDI stats
@@ -160,8 +224,14 @@ export class DashboardService {
       ? Math.round(planActions.reduce((s, a) => s + (a.progress ?? 0), 0) / planActions.length)
       : 0;
     const completionRate = totalEnrolled > 0 ? +((completed / totalEnrolled) * 100).toFixed(1) : 0;
+    const overduePlanActions = planActions.filter(
+      a => a.status !== 'COMPLETED' && a.dueDate != null && new Date(a.dueDate) < new Date(),
+    ).length;
 
-    // Pending items list
+    // Pending items list — tudo o que exige acção do colaborador: cursos em
+    // curso, avaliações (assessments, 360° e ciclos de performance), surveys,
+    // tarefas de onboarding, declarações de trabalho e tarefas em processos
+    // (BPM) abertos.
     const pendingItems: { type: string; label: string; priority: string }[] = [];
     if (inProgress > 0)
       pendingItems.push({
@@ -187,6 +257,36 @@ export class DashboardService {
         label: `${pendingEvals} avaliação(ões) 360° para submeter`,
         priority: 'HIGH',
       });
+    if (pending360Assignments > 0)
+      pendingItems.push({
+        type: 'EVALUATION_360',
+        label: `${pending360Assignments} avaliação(ões) 360° por completar (ciclo)`,
+        priority: 'HIGH',
+      });
+    if (overduePlanActions > 0)
+      pendingItems.push({
+        type: 'PDI_ACTION',
+        label: `${overduePlanActions} acção(ões) do PDI atrasada(s)`,
+        priority: 'HIGH',
+      });
+    if (pendingOnboardingTasks > 0)
+      pendingItems.push({
+        type: 'ONBOARDING',
+        label: `${pendingOnboardingTasks} tarefa(s) de onboarding pendente(s)`,
+        priority: 'HIGH',
+      });
+    if (pendingWorkDeclarations > 0)
+      pendingItems.push({
+        type: 'WORK_DECLARATION',
+        label: `${pendingWorkDeclarations} declaração(ões) de trabalho por preencher`,
+        priority: 'MEDIUM',
+      });
+    if (pendingProcessTasks > 0)
+      pendingItems.push({
+        type: 'PROCESS',
+        label: `${pendingProcessTasks} tarefa(s) pendente(s) em processos abertos`,
+        priority: 'MEDIUM',
+      });
 
     return {
       user,
@@ -206,6 +306,7 @@ export class DashboardService {
               progress: planProgress,
               goals: planGoals.length,
               completedActions: planActions.filter(a => a.status === 'COMPLETED').length,
+              overdueActions: overduePlanActions,
             }
           : null,
       },

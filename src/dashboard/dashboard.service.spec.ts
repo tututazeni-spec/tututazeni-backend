@@ -77,6 +77,10 @@ const mockPrisma = {
     findUnique: jest.fn().mockResolvedValue({ points: 100 }),
     findFirst: jest.fn().mockResolvedValue({ points: 100 }),
   },
+  onboardingTaskInstance: { count: makeCount() },
+  stepProgress: { count: makeCount() },
+  workDeclSubmission: { count: makeCount() },
+  evaluatorAssignment: { count: makeCount() },
 };
 
 const baseUser = {
