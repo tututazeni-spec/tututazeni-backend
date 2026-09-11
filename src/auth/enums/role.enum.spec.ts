@@ -13,36 +13,36 @@ describe('AUTHENTICATED_ROLES', () => {
 });
 
 describe('Roles metadata — DepartmentsController (Grupo B)', () => {
-  // findOne/metrics são leitura e alinham com findAll/getTree: a lista e a
-  // árvore já são visíveis a qualquer autenticado (e o item de nav não tem
-  // restrição), por isso o detalhe não pode ser mais restrito — senão um
-  // COLABORADOR/LIDER/INSTRUCTOR/AUDITOR que clicasse num nó do organograma
-  // levava 403. A escrita continua restrita (ver testes de create/update).
-  it('findOne permite qualquer autenticado (contém COLABORADOR)', () => {
+  // findOne/metrics alinham com findAll/getTree: visíveis a qualquer
+  // autenticado NÃO-COLABORADOR (DEPARTMENTS_VIEW_ROLES). O módulo está
+  // oculto na sidebar para COLABORADOR (ver frontend/components/Sidebar.tsx)
+  // e isso é espelhado no backend — ver departments.controller.ts. Escrita
+  // (create/update/(de)activate/transfer) continua restrita à parte.
+  it('findOne permite qualquer autenticado excepto COLABORADOR', () => {
     const meta: string[] | undefined = Reflect.getMetadata(
       ROLES_KEY,
       DepartmentsController.prototype.findOne,
     );
     expect(meta).toBeDefined();
-    expect(meta).toContain(Role.COLABORADOR);
+    expect(meta).not.toContain(Role.COLABORADOR);
     expect(meta).toEqual(expect.arrayContaining([Role.GESTOR, Role.RH, Role.ADMIN, Role.DIRECTOR]));
   });
 
-  it('metrics permite qualquer autenticado (contém COLABORADOR)', () => {
+  it('metrics permite qualquer autenticado excepto COLABORADOR', () => {
     const meta: string[] | undefined = Reflect.getMetadata(
       ROLES_KEY,
       DepartmentsController.prototype.metrics,
     );
     expect(meta).toBeDefined();
-    expect(meta).toContain(Role.COLABORADOR);
+    expect(meta).not.toContain(Role.COLABORADOR);
   });
 
-  it('findAll permite qualquer autenticado (contém COLABORADOR)', () => {
+  it('findAll permite qualquer autenticado excepto COLABORADOR', () => {
     const meta: string[] | undefined = Reflect.getMetadata(
       ROLES_KEY,
       DepartmentsController.prototype.findAll,
     );
     expect(meta).toBeDefined();
-    expect(meta).toContain(Role.COLABORADOR);
+    expect(meta).not.toContain(Role.COLABORADOR);
   });
 });

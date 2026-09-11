@@ -51,14 +51,16 @@ export class EvaluationController {
   }
 
   @Get('cycles')
-  @Roles(...MGMT_ROLES)
-  @ApiOperation({ summary: 'Listar ciclos de avaliação' })
+  @Roles(...ALL_ROLES)
+  @ApiOperation({
+    summary: 'Listar ciclos de avaliação (leitura aberta a todos — só gestão é MGMT/ADMIN)',
+  })
   getCycles(@Query() filters: CycleFilterDto) {
     return this.svc.getCycles(filters);
   }
 
   @Get('cycles/:id')
-  @Roles(...MGMT_ROLES)
+  @Roles(...ALL_ROLES)
   @ApiOperation({ summary: 'Detalhe do ciclo com taxa de participação' })
   getCycle(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getCycle(id);
@@ -189,12 +191,13 @@ export class EvaluationController {
   results(
     @Param('userId', ParseIntPipe) userId: number,
     @Query('cycleId') cycleId: string | undefined,
+    @Query('period') period: string | undefined,
     @CurrentUser() user: CurrentUserData,
   ) {
     // A10-3: sem esta verificação, qualquer COLABORADOR lia o 360 completo
     // (score, nomes de avaliadores, texto qualitativo) de qualquer colega.
     assertCanAccess({}, userId, user, [Role.ADMIN, Role.RH, Role.LIDER, Role.GESTOR]);
-    return this.svc.getResults(userId, cycleId ? +cycleId : undefined);
+    return this.svc.getResults(userId, cycleId ? +cycleId : undefined, period);
   }
 
   @Get('evolution/:userId')

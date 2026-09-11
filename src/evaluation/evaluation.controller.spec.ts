@@ -149,13 +149,18 @@ describe('EvaluationController', () => {
   });
 
   it('results sem cycleId → getResults(userId, undefined)', async () => {
-    await controller.results(4, undefined, mockUser as any);
-    expect(mockSvc.getResults).toHaveBeenCalledWith(4, undefined);
+    await controller.results(4, undefined, undefined, mockUser as any);
+    expect(mockSvc.getResults).toHaveBeenCalledWith(4, undefined, undefined);
   });
 
   it('results com cycleId → getResults(userId, parsed)', async () => {
-    await controller.results(4, '3', mockUser as any);
-    expect(mockSvc.getResults).toHaveBeenCalledWith(4, 3);
+    await controller.results(4, '3', undefined, mockUser as any);
+    expect(mockSvc.getResults).toHaveBeenCalledWith(4, 3, undefined);
+  });
+
+  it('results com period → getResults(userId, undefined, period)', async () => {
+    await controller.results(4, undefined, '2026-03', mockUser as any);
+    expect(mockSvc.getResults).toHaveBeenCalledWith(4, undefined, '2026-03');
   });
 
   it('evolution → getUserEvolution(userId)', async () => {
@@ -171,18 +176,18 @@ describe('EvaluationController', () => {
     const manager = { id: 9, email: 'mgr@innova.com', role: { name: 'LIDER' } };
 
     it('colaborador não pode ver results de outro utilizador → excepção', () => {
-      expect(() => controller.results(4, undefined, other as any)).toThrow();
+      expect(() => controller.results(4, undefined, undefined, other as any)).toThrow();
       expect(mockSvc.getResults).not.toHaveBeenCalled();
     });
 
     it('colaborador pode ver os seus próprios results', async () => {
-      await controller.results(4, undefined, owner as any);
-      expect(mockSvc.getResults).toHaveBeenCalledWith(4, undefined);
+      await controller.results(4, undefined, undefined, owner as any);
+      expect(mockSvc.getResults).toHaveBeenCalledWith(4, undefined, undefined);
     });
 
     it('LIDER pode ver results de qualquer colaborador', async () => {
-      await controller.results(4, undefined, manager as any);
-      expect(mockSvc.getResults).toHaveBeenCalledWith(4, undefined);
+      await controller.results(4, undefined, undefined, manager as any);
+      expect(mockSvc.getResults).toHaveBeenCalledWith(4, undefined, undefined);
     });
 
     it('colaborador não pode ver evolution de outro utilizador → excepção', () => {

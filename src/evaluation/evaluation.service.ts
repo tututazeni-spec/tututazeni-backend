@@ -910,7 +910,7 @@ export class EvaluationService {
   // RESULTS & SCORING
   // ══════════════════════════════════════════════════════
 
-  async getResults(evaluatedId: number, cycleId?: number) {
+  async getResults(evaluatedId: number, cycleId?: number, period?: string) {
     const evaluated = await this.prisma.read.user.findUnique({
       where: { id: evaluatedId },
       select: {
@@ -925,6 +925,9 @@ export class EvaluationService {
 
     const where: Prisma.PerformanceEvaluationWhereInput = { evaluatedId };
     if (cycleId) where.cycleId = cycleId;
+    // "2026" (ano, para "ver total" desse ano) ou "2026-03" (mês específico) —
+    // mesma convenção `contains` de findByUser()/getSummary() acima.
+    if (period) where.period = { contains: period };
 
     const evaluations = await this.prisma.read.performanceEvaluation.findMany({
       where,
