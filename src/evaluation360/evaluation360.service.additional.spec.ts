@@ -713,7 +713,11 @@ describe('Evaluation360Service (additional)', () => {
   // ─── getParticipantResult ─────────────────────────────────────────────────
 
   describe('getParticipantResult', () => {
-    it('deve retornar resultado para ADMIN', async () => {
+    // Regra do produto: ninguém vê o resultado de outro utilizador — nem
+    // ADMIN nem RH têm excepção aqui (só getTeamAnalytics/
+    // getOrganizationalAnalytics/calibrateScore continuam agregados a esses
+    // papéis). Cobria antes um "canSeeFull" que foi removido.
+    it('deve lançar ForbiddenException mesmo para ADMIN a ver resultado de outro', async () => {
       mockPrisma.evaluationResult = {
         findUnique: jest.fn().mockResolvedValue({
           id: 'r1',
@@ -731,12 +735,12 @@ describe('Evaluation360Service (additional)', () => {
         findMany: jest.fn().mockResolvedValue([]),
       };
       cycleMock.findUnique.mockResolvedValue(baseCycle);
-      const result = await service.getParticipantResult('cycle-1', 'user-2', 'admin-1', 'ADMIN');
-      expect(result.overallScore).toBe(4.2);
-      expect(result.rawByEvaluator).toBeDefined();
+      await expect(
+        service.getParticipantResult('cycle-1', 'user-2', 'admin-1'),
+      ).rejects.toThrow(ForbiddenException);
     });
 
-    it('deve retornar resultado para o próprio utilizador', async () => {
+    it('deve retornar resultado para o próprio utilizador, sem dados por avaliador', async () => {
       mockPrisma.evaluationResult = {
         findUnique: jest.fn().mockResolvedValue({
           id: 'r1',
@@ -754,7 +758,7 @@ describe('Evaluation360Service (additional)', () => {
         findMany: jest.fn().mockResolvedValue([]),
       };
       cycleMock.findUnique.mockResolvedValue(baseCycle);
-      const result = await service.getParticipantResult('cycle-1', 'user-1', 'user-1', 'EMPLOYEE');
+      const result = await service.getParticipantResult('cycle-1', 'user-1', 'user-1');
       expect(result).toBeDefined();
       expect(result.rawByEvaluator).toBeNull();
     });
@@ -778,7 +782,7 @@ describe('Evaluation360Service (additional)', () => {
       };
       cycleMock.findUnique.mockResolvedValue(baseCycle);
       await expect(
-        service.getParticipantResult('cycle-1', 'user-2', 'user-3', 'EMPLOYEE'),
+        service.getParticipantResult('cycle-1', 'user-2', 'user-3'),
       ).rejects.toThrow(ForbiddenException);
     });
   });

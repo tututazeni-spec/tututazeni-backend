@@ -1299,33 +1299,30 @@ export class Evaluation360Service {
   // ANALYTICS
   // ============================================================
 
-  async getParticipantResult(
-    cycleId: string,
-    participantId: string,
-    requesterId: string,
-    requesterRole: string,
-  ) {
+  async getParticipantResult(cycleId: string, participantId: string, requesterId: string) {
     const result = await this.prisma.evaluationResult.findUnique({
       where: { cycleId_participantId: { cycleId, participantId } },
     });
     if (!result) throw new NotFoundException('Resultado não encontrado.');
 
     await this.findCycleOrFail(cycleId);
-    const canSeeFull = requesterRole === 'ADMIN' || requesterRole === 'RH';
-    // requesterId chega como number (User.id via JWT) e participantId como
-    // string (route param) — comparação estrita nunca era true.
+    // Regra explícita do produto: ninguém vê o resultado de outro utilizador
+    // — nem ADMIN nem RH têm excepção aqui (diferente de getTeamAnalytics/
+    // getOrganizationalAnalytics/calibrateScore, que continuam a mostrar
+    // dados agregados de equipa/organização a esses papéis). requesterId
+    // chega como number (User.id via JWT) e participantId como string
+    // (route param) — comparação estrita nunca era true sem o String().
     const isOwnResult = String(requesterId) === String(participantId);
-
-    if (!canSeeFull && !isOwnResult)
-      throw new ForbiddenException('Sem permissão para ver este resultado.');
+    if (!isOwnResult) throw new ForbiddenException('Sem permissão para ver este resultado.');
 
     return {
       ...result,
       scoresByCompetency: JSON.parse(result.scoresByCompetency),
       gaps: result.gaps ? JSON.parse(result.gaps) : [],
       strengths: result.strengths ? JSON.parse(result.strengths) : [],
-      // Colaborador vê dados agregados, não individuais por avaliador
-      rawByEvaluator: canSeeFull ? result : null,
+      // Nunca dados individuais por avaliador, nem para o próprio dono do
+      // resultado — manteria a identidade do avaliador rastreável.
+      rawByEvaluator: null,
     };
   }
 

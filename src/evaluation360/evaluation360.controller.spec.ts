@@ -186,9 +186,9 @@ describe('Evaluation360Controller', () => {
     expect(mockSvc.submitResponse).toHaveBeenCalled();
   });
 
-  it('getResult → getParticipantResult(cycleId, participantId, userId, roleCode)', async () => {
+  it('getResult → getParticipantResult(cycleId, participantId, userId)', async () => {
     await controller.getResult('cycle-1', 'p1', mockUser as any);
-    expect(mockSvc.getParticipantResult).toHaveBeenCalledWith('cycle-1', 'p1', '1', 'ADMIN');
+    expect(mockSvc.getParticipantResult).toHaveBeenCalledWith('cycle-1', 'p1', '1');
   });
 
   it('getTeamAnalytics → getTeamAnalytics(cycleId, userId)', async () => {

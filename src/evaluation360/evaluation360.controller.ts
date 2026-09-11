@@ -345,12 +345,7 @@ export class Evaluation360Controller {
     @Param('participantId') participantId: string,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.service.getParticipantResult(
-      cycleId,
-      participantId,
-      String(user.id),
-      user.role?.name,
-    );
+    return this.service.getParticipantResult(cycleId, participantId, String(user.id));
   }
 
   @Get('cycles/:cycleId/analytics/team')

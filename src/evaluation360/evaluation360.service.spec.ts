@@ -279,9 +279,9 @@ describe('Evaluation360Service', () => {
 
   describe('getParticipantResult', () => {
     it('deve lançar NotFoundException se resultado não existe', async () => {
-      await expect(
-        service.getParticipantResult('cycle-1', 'user-1', 'admin-1', 'ADMIN'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.getParticipantResult('cycle-1', 'user-1', 'admin-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
