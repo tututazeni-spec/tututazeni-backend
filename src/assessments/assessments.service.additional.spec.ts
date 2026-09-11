@@ -45,6 +45,7 @@ const mockPrisma: any = {
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   enrollment: { findFirst: jest.fn().mockResolvedValue(null) },
   userPoints: { upsert: jest.fn().mockResolvedValue({}) },
+  user: { findUnique: jest.fn().mockResolvedValue(null) },
 };
 
 const baseAssessment = {
@@ -223,6 +224,34 @@ describe('AssessmentsService (additional)', () => {
       const result = await service.startAttempt(2, { assessmentId: 1 } as any);
       expect(result).toBeDefined();
     });
+
+    it('deve lançar BadRequestException se ainda não abriu a janela de disponibilidade', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({
+        ...baseAssessment,
+        maxAttempts: 0,
+        feedbackMode: 'ON_SUBMIT',
+        _count: { attempts: 0 },
+        availableFrom: new Date(Date.now() + 3600_000),
+        availableUntil: null,
+      });
+      await expect(service.startAttempt(2, { assessmentId: 1 } as any)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('deve lançar BadRequestException se a janela de disponibilidade já fechou', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({
+        ...baseAssessment,
+        maxAttempts: 0,
+        feedbackMode: 'ON_SUBMIT',
+        _count: { attempts: 0 },
+        availableFrom: null,
+        availableUntil: new Date(Date.now() - 3600_000),
+      });
+      await expect(service.startAttempt(2, { assessmentId: 1 } as any)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
   });
 
   // ─── submitAttempt ────────────────────────────────────────────
@@ -266,9 +295,13 @@ describe('AssessmentsService (additional)', () => {
 
   describe('getUserAttempts', () => {
     it('deve retornar tentativas do utilizador', async () => {
-      mockPrisma.assessmentAttempt.findMany.mockResolvedValue([baseAttempt]);
+      mockPrisma.assessmentAttempt.findMany.mockResolvedValue([
+        { ...baseAttempt, score: 80, assessment: { maxGrade: 20 } },
+      ]);
       const result = await service.getUserAttempts(2);
       expect(result).toBeDefined();
+      expect(result[0].qualitativeLabel).toBe('Bom');
+      expect(result[0].displayGrade).toBe(16);
     });
   });
 
@@ -284,6 +317,73 @@ describe('AssessmentsService (additional)', () => {
         weight: 10,
       } as any);
       expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getAvailableForUser (avaliações formais) ──────────────────
+
+  describe('getAvailableForUser', () => {
+    it('inclui avaliações sem departamento-alvo e do departamento do utilizador', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ departmentId: 5 });
+      mockPrisma.assessment.findMany.mockResolvedValue([
+        { ...baseAssessment, type: 'EXAM', targetDepartmentIds: [] },
+      ]);
+      const result = await service.getAvailableForUser(2);
+      expect(result).toHaveLength(1);
+      expect(mockPrisma.assessment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ type: 'EXAM', status: 'PUBLISHED' }),
+        }),
+      );
+    });
+  });
+
+  // ─── getResultsRoster ───────────────────────────────────────────
+
+  describe('getResultsRoster', () => {
+    it('devolve o nome, a nota escalada e o rótulo qualitativo de cada participante', async () => {
+      mockPrisma.assessment.findUnique.mockResolvedValue({ ...baseAssessment, maxGrade: 20 });
+      mockPrisma.assessmentAttempt.findMany.mockResolvedValue([
+        {
+          userId: 2,
+          score: 90,
+          passed: true,
+          status: 'PASSED',
+          submittedAt: new Date(),
+          user: { id: 2, fullName: 'Ana Silva', department: { name: 'RH' } },
+        },
+      ]);
+      const result = await service.getResultsRoster(1);
+      expect(result.roster).toHaveLength(1);
+      expect(result.roster[0]).toMatchObject({
+        fullName: 'Ana Silva',
+        department: 'RH',
+        displayGrade: 18,
+        qualitativeLabel: 'Excelente',
+      });
+    });
+  });
+
+  // ─── getAttemptDetailForReviewer ────────────────────────────────
+
+  describe('getAttemptDetailForReviewer', () => {
+    it('devolve a tentativa de qualquer utilizador, sem filtrar por userId', async () => {
+      mockPrisma.assessmentAttempt.findUnique.mockResolvedValue({
+        ...baseAttempt,
+        score: 40,
+        assessment: { ...baseAssessment, maxGrade: 20, allowReview: false },
+        user: { id: 2, fullName: 'Ana Silva' },
+      });
+      const result = await service.getAttemptDetailForReviewer(1);
+      expect(result.qualitativeLabel).toBe('Mau');
+      expect(mockPrisma.assessmentAttempt.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 1 } }),
+      );
+    });
+
+    it('lança NotFoundException se a tentativa não existir', async () => {
+      mockPrisma.assessmentAttempt.findUnique.mockResolvedValue(null);
+      await expect(service.getAttemptDetailForReviewer(99)).rejects.toThrow(NotFoundException);
     });
   });
 });

@@ -31,6 +31,22 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
+// Papéis que podem criar/gerir avaliações formais (EXAM) dentro do módulo
+// evaluation — ADMIN/RH mantêm-se (também usados para os quizzes de curso
+// LMS pré-existentes); GESTOR/INSTRUCTOR/DIRECTOR/LIDER só passam a poder
+// gerir Assessment a partir desta funcionalidade. Não há hoje nenhuma UI
+// frontend a consumir POST/PUT/DELETE /assessments (só leitura via
+// ListView/AssessmentPlayer/ReviewView), por isso alargar aqui não muda
+// nenhum fluxo LMS-quiz já em uso.
+const EVAL_CREATOR_ROLES = [
+  Role.ADMIN,
+  Role.RH,
+  Role.GESTOR,
+  Role.INSTRUCTOR,
+  Role.DIRECTOR,
+  Role.LIDER,
+] as const;
+
 @ApiTags('Assessments')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -48,7 +64,7 @@ export class AssessmentsController {
   }
 
   @Get('pending-reviews')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Respostas abertas aguardando revisão manual' })
   pendingReviews() {
     return this.svc.getPendingReviews();
@@ -61,6 +77,14 @@ export class AssessmentsController {
     return this.svc.getUserAttempts(user.id, assessmentId ? parseInt(assessmentId) : undefined);
   }
 
+  @Get('available')
+  @ApiOperation({
+    summary: 'Avaliações formais (EXAM) disponíveis para o utilizador actual',
+  })
+  available(@CurrentUser() user: CurrentUserData) {
+    return this.svc.getAvailableForUser(user.id);
+  }
+
   @Get(':id')
   @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Detalhe da avaliação (sem respostas correctas para colaborador)' })
@@ -69,10 +93,19 @@ export class AssessmentsController {
   }
 
   @Get(':id/analytics')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Analytics da avaliação (taxa aprovação, perguntas difíceis)' })
   analytics(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAnalytics(id);
+  }
+
+  @Get(':id/results')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({
+    summary: 'Resultados totais de uma avaliação formal (nomes + nota gerada pela plataforma)',
+  })
+  results(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getResultsRoster(id);
   }
 
   @Get('attempts/:attemptId')
@@ -85,24 +118,31 @@ export class AssessmentsController {
     return this.svc.getAttemptDetail(attemptId, user.id);
   }
 
-  // ── Gestão (Admin/RH) ────────────────────────────────────────────────────
+  @Get('attempts/:attemptId/review')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({ summary: 'Detalhe completo das respostas de qualquer utilizador (criador)' })
+  attemptDetailForReviewer(@Param('attemptId', ParseIntPipe) attemptId: number) {
+    return this.svc.getAttemptDetailForReviewer(attemptId);
+  }
+
+  // ── Gestão (Admin/RH/Gestor/Instrutor/Director/Líder) ───────────────────────
 
   @Post()
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Criar avaliação' })
   create(@Body() dto: CreateAssessmentDto) {
     return this.svc.create(dto);
   }
 
   @Put(':id')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Actualizar avaliação' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateAssessmentDto) {
     return this.svc.update(id, dto);
   }
 
   @Patch(':id/publish')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Publicar avaliação (DRAFT → PUBLISHED)' })
   @HttpCode(HttpStatus.OK)
   publish(@Param('id', ParseIntPipe) id: number) {
@@ -110,7 +150,7 @@ export class AssessmentsController {
   }
 
   @Patch(':id/archive')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Arquivar avaliação' })
   @HttpCode(HttpStatus.OK)
   archive(@Param('id', ParseIntPipe) id: number) {
@@ -118,14 +158,14 @@ export class AssessmentsController {
   }
 
   @Post(':id/duplicate')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Duplicar avaliação' })
   duplicate(@Param('id', ParseIntPipe) id: number) {
     return this.svc.duplicate(id);
   }
 
   @Delete(':id')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Eliminar avaliação' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
@@ -134,14 +174,14 @@ export class AssessmentsController {
   // ── Perguntas ─────────────────────────────────────────────────────────────
 
   @Post(':id/questions')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Adicionar pergunta à avaliação' })
   addQuestion(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateQuestionDto) {
     return this.svc.addQuestion(id, dto);
   }
 
   @Delete('questions/:questionId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Remover pergunta' })
   removeQuestion(@Param('questionId', ParseIntPipe) questionId: number) {
     return this.svc.removeQuestion(questionId);
@@ -172,7 +212,7 @@ export class AssessmentsController {
   // ── Revisão Manual ────────────────────────────────────────────────────────
 
   @Post('review')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Avaliar resposta aberta manualmente' })
   reviewAnswer(@CurrentUser() reviewer: CurrentUserData, @Body() dto: ReviewAnswerDto) {
     return this.svc.reviewAnswer(dto, reviewer.id);
@@ -187,8 +227,10 @@ export class AssessmentsController {
   }
 
   @Get('attempts/user/:userId')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Tentativas de um utilizador (Admin/RH)' })
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({
+    summary: 'Tentativas de um utilizador (Admin/RH/Gestor/Instrutor/Director/Líder)',
+  })
   userAttempts(
     @Param('userId', ParseIntPipe) userId: number,
     @Query('assessmentId') assessmentId?: string,

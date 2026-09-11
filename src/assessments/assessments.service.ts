@@ -41,10 +41,30 @@ export class AssessmentsService {
 
   constructor(private prisma: PrismaService) {}
 
+  // ─── Rótulo qualitativo & nota escalada ──────────────────────────────────
+  // Limiares por defeito, ajustáveis — não há hoje nenhum util de "score →
+  // rótulo" partilhado no código (cada módulo hardcoda os seus próprios).
+  private qualitativeLabel(score: number | null): string | null {
+    if (score === null || score === undefined) return null;
+    if (score < 50) return 'Mau';
+    if (score < 70) return 'Regular';
+    if (score < 85) return 'Bom';
+    return 'Excelente';
+  }
+
+  // Converte o score interno (0-100%) para a escala de apresentação definida
+  // pelo criador (`maxGrade`, ex: 20, 10, 100). Puramente de apresentação —
+  // não altera a correcção/aprovação, que continua baseada em `score`.
+  private toDisplayGrade(score: number | null, maxGrade: number): number | null {
+    if (score === null || score === undefined) return null;
+    return Math.round((score / 100) * maxGrade * 100) / 100;
+  }
+
   // ─── CRUD Assessments ─────────────────────────────────────────────────────
 
   async create(dto: CreateAssessmentDto) {
     const { questions, ...data } = dto;
+    this.assertValidAvailabilityWindow(data.availableFrom, data.availableUntil);
 
     const assessment = await this.prisma.assessment.create({
       data: {
@@ -63,6 +83,10 @@ export class AssessmentsService {
         randomizeQuestions: data.randomizeQuestions ?? false,
         randomizeOptions: data.randomizeOptions ?? false,
         allowReview: data.allowReview ?? true,
+        targetDepartmentIds: data.targetDepartmentIds ?? [],
+        availableFrom: data.availableFrom ? new Date(data.availableFrom) : null,
+        availableUntil: data.availableUntil ? new Date(data.availableUntil) : null,
+        maxGrade: data.maxGrade ?? 20,
       },
     });
 
@@ -94,6 +118,7 @@ export class AssessmentsService {
     if (filters.moduleId) where.moduleId = filters.moduleId;
     if (filters.type) where.type = filters.type;
     if (filters.status) where.status = filters.status;
+    if (filters.excludeType) where.type = { not: filters.excludeType };
 
     return this.prisma.read.assessment.findMany({
       where,
@@ -101,6 +126,37 @@ export class AssessmentsService {
         _count: { select: { questions: true, attempts: true } },
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // Avaliações formais (EXAM) publicadas, dentro da janela de disponibilidade,
+  // e visíveis para o departamento do utilizador (array vazio = todos).
+  async getAvailableForUser(userId: number) {
+    const user = await this.prisma.read.user.findUnique({
+      where: { id: userId },
+      select: { departmentId: true },
+    });
+    const now = new Date();
+
+    return this.prisma.read.assessment.findMany({
+      where: {
+        type: 'EXAM',
+        status: 'PUBLISHED',
+        OR: [
+          { targetDepartmentIds: { isEmpty: true } },
+          ...(user?.departmentId != null
+            ? [{ targetDepartmentIds: { has: user.departmentId } }]
+            : []),
+        ],
+        AND: [
+          { OR: [{ availableFrom: null }, { availableFrom: { lte: now } }] },
+          { OR: [{ availableUntil: null }, { availableUntil: { gte: now } }] },
+        ],
+      },
+      include: {
+        _count: { select: { questions: true, attempts: true } },
+      },
+      orderBy: { availableUntil: 'asc' },
     });
   }
 
@@ -136,7 +192,8 @@ export class AssessmentsService {
 
   async update(id: number, dto: UpdateAssessmentDto) {
     await this.findOne(id);
-    const { questions, ...data } = dto;
+    const { questions, availableFrom, availableUntil, ...data } = dto;
+    this.assertValidAvailabilityWindow(availableFrom, availableUntil);
 
     if (questions) {
       await this.prisma.assessmentQuestion.deleteMany({ where: { assessmentId: id } });
@@ -158,7 +215,28 @@ export class AssessmentsService {
       });
     }
 
-    return this.prisma.assessment.update({ where: { id }, data });
+    return this.prisma.assessment.update({
+      where: { id },
+      data: {
+        ...data,
+        ...(availableFrom !== undefined && {
+          availableFrom: availableFrom ? new Date(availableFrom) : null,
+        }),
+        ...(availableUntil !== undefined && {
+          availableUntil: availableUntil ? new Date(availableUntil) : null,
+        }),
+      },
+    });
+  }
+
+  // Garante que a janela de disponibilidade (quando ambas as pontas são
+  // definidas) tem fim depois do início.
+  private assertValidAvailabilityWindow(availableFrom?: string, availableUntil?: string) {
+    if (availableFrom && availableUntil && new Date(availableUntil) <= new Date(availableFrom)) {
+      throw new BadRequestException(
+        'A data/hora de fim da disponibilidade tem de ser posterior à de início',
+      );
+    }
   }
 
   async publish(id: number) {
@@ -249,6 +327,17 @@ export class AssessmentsService {
 
     if (assessment.status !== 'PUBLISHED') {
       throw new BadRequestException('Avaliação não está publicada');
+    }
+
+    // Verificar janela de disponibilidade (avaliações formais/EXAM)
+    const now = new Date();
+    if (assessment.availableFrom && now < new Date(assessment.availableFrom)) {
+      throw new BadRequestException(
+        `Avaliação ainda não está disponível. Abre a ${new Date(assessment.availableFrom).toLocaleString('pt-PT')}.`,
+      );
+    }
+    if (assessment.availableUntil && now > new Date(assessment.availableUntil)) {
+      throw new BadRequestException('Avaliação encerrada. O prazo de disponibilidade terminou.');
     }
 
     // Verificar tentativas máximas
@@ -519,6 +608,8 @@ export class AssessmentsService {
       correctAnswers: results.filter(r => r.isCorrect === true).length,
       needsManualReview: needsManualReview.length > 0,
       results: assessment.feedbackMode !== 'RESULT_ONLY' ? results : undefined,
+      qualitativeLabel: this.qualitativeLabel(score),
+      displayGrade: this.toDisplayGrade(score, assessment.maxGrade),
     };
   }
 
@@ -533,6 +624,7 @@ export class AssessmentsService {
             passingScore: true,
             allowReview: true,
             feedbackMode: true,
+            maxGrade: true,
           },
         },
         answers: {
@@ -547,7 +639,79 @@ export class AssessmentsService {
       throw new ForbiddenException('Revisão não permitida para esta avaliação');
     }
 
-    return attempt;
+    return {
+      ...attempt,
+      qualitativeLabel: this.qualitativeLabel(attempt.score),
+      displayGrade: this.toDisplayGrade(attempt.score, attempt.assessment.maxGrade),
+    };
+  }
+
+  // Variante privilegiada de getAttemptDetail para os criadores de
+  // avaliações formais: vê a tentativa de QUALQUER utilizador (sem filtro
+  // userId) e ignora o gate `allowReview` (esse protege a experiência do
+  // próprio participante, não o criador que está a rever/corrigir).
+  async getAttemptDetailForReviewer(attemptId: number) {
+    const attempt = await this.prisma.read.assessmentAttempt.findUnique({
+      where: { id: attemptId },
+      include: {
+        assessment: {
+          select: {
+            id: true,
+            title: true,
+            passingScore: true,
+            allowReview: true,
+            feedbackMode: true,
+            maxGrade: true,
+          },
+        },
+        user: { select: { id: true, fullName: true } },
+        answers: {
+          include: { question: true },
+          orderBy: { question: { seq: 'asc' } },
+        },
+      },
+    });
+    if (!attempt) throw new NotFoundException('Tentativa não encontrada');
+
+    return {
+      ...attempt,
+      qualitativeLabel: this.qualitativeLabel(attempt.score),
+      displayGrade: this.toDisplayGrade(attempt.score, attempt.assessment.maxGrade),
+    };
+  }
+
+  // Resultados agregados de uma avaliação formal: todos os participantes,
+  // nota gerada pela plataforma e rótulo qualitativo — para o separador de
+  // resultados dos papéis criadores.
+  async getResultsRoster(assessmentId: number) {
+    const assessment = await this.findOne(assessmentId);
+    const attempts = await this.prisma.read.assessmentAttempt.findMany({
+      where: { assessmentId, status: { not: 'IN_PROGRESS' } },
+      include: {
+        user: { select: { id: true, fullName: true, department: { select: { name: true } } } },
+      },
+      orderBy: { score: 'desc' },
+    });
+
+    return {
+      assessment: {
+        id: assessment.id,
+        title: assessment.title,
+        maxGrade: assessment.maxGrade,
+        passingScore: assessment.passingScore,
+      },
+      roster: attempts.map(a => ({
+        userId: a.userId,
+        fullName: a.user.fullName,
+        department: a.user.department?.name ?? null,
+        score: a.score,
+        displayGrade: this.toDisplayGrade(a.score, assessment.maxGrade),
+        qualitativeLabel: this.qualitativeLabel(a.score),
+        passed: a.passed,
+        status: a.status,
+        submittedAt: a.submittedAt,
+      })),
+    };
   }
 
   // ─── Revisão manual ───────────────────────────────────────────────────────
@@ -622,13 +786,21 @@ export class AssessmentsService {
     const where: Prisma.AssessmentAttemptWhereInput = { userId };
     if (assessmentId) where.assessmentId = assessmentId;
 
-    return this.prisma.read.assessmentAttempt.findMany({
+    const attempts = await this.prisma.read.assessmentAttempt.findMany({
       where,
       include: {
-        assessment: { select: { id: true, title: true, type: true, passingScore: true } },
+        assessment: {
+          select: { id: true, title: true, type: true, passingScore: true, maxGrade: true },
+        },
       },
       orderBy: { startedAt: 'desc' },
     });
+
+    return attempts.map(a => ({
+      ...a,
+      qualitativeLabel: this.qualitativeLabel(a.score),
+      displayGrade: this.toDisplayGrade(a.score, a.assessment.maxGrade),
+    }));
   }
 
   // ─── Analytics ────────────────────────────────────────────────────────────

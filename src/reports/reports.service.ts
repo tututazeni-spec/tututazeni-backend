@@ -482,6 +482,71 @@ export class ReportsService {
   }
 
   // ══════════════════════════════════════════════════════
+  // EVALUATIONS REPORT (avaliações formais — Assessment type=EXAM)
+  // ══════════════════════════════════════════════════════
+
+  async evaluationsReportFull(filter: ReportFilterDto) {
+    const uWhere = userWhere(filter);
+    const where: Prisma.AssessmentAttemptWhereInput = {
+      assessment: { type: 'EXAM' },
+      status: { not: 'IN_PROGRESS' },
+    };
+    if (filter.from)
+      where.submittedAt = {
+        gte: new Date(filter.from),
+        ...(filter.to && { lte: new Date(filter.to) }),
+      };
+    if (uWhere) where.user = uWhere;
+
+    const attempts = await this.prisma.read.assessmentAttempt.findMany({
+      where,
+      include: {
+        user: {
+          select: { id: true, fullName: true, department: { select: { name: true } } },
+        },
+        assessment: { select: { title: true, maxGrade: true, passingScore: true } },
+      },
+      orderBy: { submittedAt: 'desc' },
+    });
+
+    const scores = attempts.map(a => a.score ?? 0);
+    const avg = scores.length ? +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : 0;
+    const passed = attempts.filter(a => a.passed === true).length;
+
+    const byDept: Record<string, { count: number; sum: number }> = {};
+    for (const a of attempts) {
+      const d = a.user?.department?.name ?? 'N/A';
+      if (!byDept[d]) byDept[d] = { count: 0, sum: 0 };
+      byDept[d].count++;
+      byDept[d].sum += a.score ?? 0;
+    }
+
+    const topPerformers = [...attempts]
+      .filter(a => a.score !== null)
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+      .slice(0, 10)
+      .map(a => ({ user: a.user, score: a.score }));
+
+    return {
+      report: 'EVALUATIONS',
+      summary: {
+        totalAttempts: attempts.length,
+        avgScore: avg,
+        passRate: pct(passed, attempts.length),
+      },
+      byDepartment: Object.entries(byDept)
+        .map(([dept, d]) => ({
+          department: dept,
+          count: d.count,
+          avgScore: +(d.sum / d.count).toFixed(1),
+        }))
+        .sort((a, b) => b.avgScore - a.avgScore),
+      topPerformers,
+      generatedAt: new Date(),
+    };
+  }
+
+  // ══════════════════════════════════════════════════════
   // ENGAGEMENT REPORT
   // ══════════════════════════════════════════════════════
 
