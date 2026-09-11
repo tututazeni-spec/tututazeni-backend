@@ -94,6 +94,10 @@ const mockPrisma: any = {
     count: jest.fn().mockResolvedValue(0),
   },
   courseAnalytics: { findMany: jest.fn().mockResolvedValue([]) },
+  onboardingTaskInstance: { count: jest.fn().mockResolvedValue(0) },
+  stepProgress: { count: jest.fn().mockResolvedValue(0) },
+  workDeclSubmission: { count: jest.fn().mockResolvedValue(0) },
+  evaluatorAssignment: { count: jest.fn().mockResolvedValue(0) },
 };
 
 // Proxy para safeM — garante que modelos opcionais existem
