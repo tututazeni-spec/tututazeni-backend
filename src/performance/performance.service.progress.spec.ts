@@ -511,6 +511,26 @@ describe('PerformanceService (progress)', () => {
       expect(result.grid['2-3']).toHaveLength(1);
       expect(result.grid['2-3'][0].user.fullName).toBe('Ana');
     });
+
+    // Regressão: departmentId era aceite pelo controller (@ApiQuery) e devolvido
+    // na resposta, mas nunca chegava a filtrar a query do Prisma — pedir a
+    // matriz de um departamento devolvia sempre a organização inteira.
+    it('deve filtrar por departmentId quando fornecido', async () => {
+      mockPrisma.nineBoxPlacement.findMany.mockResolvedValue([]);
+      await service.get9Box(1, 5);
+      expect(mockPrisma.nineBoxPlacement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ cycleId: 1, user: { departmentId: 5 } }),
+        }),
+      );
+    });
+
+    it('não filtra por departamento quando departmentId não é fornecido', async () => {
+      mockPrisma.nineBoxPlacement.findMany.mockResolvedValue([]);
+      await service.get9Box();
+      const { where } = mockPrisma.nineBoxPlacement.findMany.mock.calls[0][0];
+      expect(where).not.toHaveProperty('user');
+    });
   });
 
   // ─── getPerformanceAnalytics ──────────────────────────────────────────────────

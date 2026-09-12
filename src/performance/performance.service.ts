@@ -767,8 +767,14 @@ export class PerformanceService {
   }
 
   async get9Box(cycleId?: number, departmentId?: number) {
+    // departmentId era aceite pelo controller (@ApiQuery) e devolvido na
+    // resposta, mas nunca chegava a filtrar a query — pedir a matriz de um
+    // departamento devolvia sempre a organização inteira.
     const placements = await this.prisma.read.nineBoxPlacement.findMany({
-      where: { ...(cycleId ? { cycleId } : {}) },
+      where: {
+        ...(cycleId ? { cycleId } : {}),
+        ...(departmentId ? { user: { departmentId } } : {}),
+      },
       include: {
         user: {
           select: {
