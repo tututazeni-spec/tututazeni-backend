@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { Evaluation360Service } from './evaluation360.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
@@ -81,7 +81,10 @@ const mockPrisma = new Proxy(
   },
 );
 
-const mockAudit = { log: jest.fn().mockResolvedValue({}) };
+const mockAudit = {
+  log: jest.fn().mockResolvedValue({}),
+  logEntity: jest.fn().mockResolvedValue(undefined),
+};
 const mockEvents = { emit: jest.fn() };
 
 const baseCompetency = { id: 'comp-1', name: 'Comunicação', type: 'BEHAVIORAL', indicators: [] };
@@ -223,6 +226,137 @@ describe('Evaluation360Service', () => {
     it('deve lançar NotFoundException se não encontrado', async () => {
       cycleMock.findUnique.mockResolvedValue(null);
       await expect(service.getCycleDetail('invalid')).rejects.toThrow(NotFoundException);
+    });
+
+    it('deve tratar um ciclo eliminado (soft delete) como não encontrado', async () => {
+      cycleMock.findUnique.mockResolvedValue({
+        id: 'cycle-1',
+        name: 'Ciclo 360 2024',
+        status: 'DRAFT',
+        deletedAt: new Date(),
+        participants: [],
+        questions: [],
+      });
+      await expect(service.getCycleDetail('cycle-1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── deleteCycle / restoreCycle / listDeletedCycles (soft delete) ─────────
+
+  const deletableCycle = {
+    id: 'cycle-1',
+    tenantId: 'tenant-1',
+    name: 'Ciclo 360 2024',
+    description: null,
+    model: 'DEG_360',
+    type: 'SEMESTRAL',
+    status: 'PUBLISHED',
+    startDate: new Date('2024-01-01'),
+    endDate: new Date('2024-06-30'),
+    anonymityMode: 'ANONYMOUS',
+    quorumMinimum: 3,
+    weightSelf: 10,
+    weightManager: 30,
+    weightPeer: 20,
+    weightSubordinate: 40,
+    weightExternal: 0,
+    cutoffPromotion: null,
+    cutoffBonus: null,
+    cutoffProgram: null,
+    linkedToPdi: true,
+    linkedToBonus: false,
+    linkedToOkrs: false,
+    createdBy: '9',
+    createdAt: new Date('2023-12-01'),
+    deletedAt: null as Date | null,
+    competencies: [
+      { competencyId: 'comp-1', competency: { name: 'Comunicação', category: 'BEHAVIORAL' } },
+    ],
+    _count: { participants: 5, assignments: 5, responses: 3 },
+  };
+
+  describe('deleteCycle', () => {
+    it('soft-deleta o ciclo e regista snapshot completo via audit.logEntity', async () => {
+      cycleMock.findUnique.mockResolvedValue(deletableCycle);
+      cycleMock.update.mockResolvedValue({ ...deletableCycle, deletedAt: new Date() });
+
+      const result = await service.deleteCycle('cycle-1', '1');
+
+      expect(cycleMock.update).toHaveBeenCalledWith({
+        where: { id: 'cycle-1' },
+        data: { deletedAt: expect.any(Date), deletedById: '1' },
+      });
+      expect(mockAudit.logEntity).toHaveBeenCalledWith(
+        1,
+        'DELETE',
+        'EvaluationCycle',
+        'cycle-1',
+        expect.objectContaining({
+          snapshot: expect.objectContaining({
+            id: 'cycle-1',
+            name: 'Ciclo 360 2024',
+            competencies: [{ id: 'comp-1', name: 'Comunicação', category: 'BEHAVIORAL' }],
+            counts: deletableCycle._count,
+          }),
+        }),
+      );
+      expect(result).toEqual({ id: 'cycle-1', deletedAt: expect.any(Date) });
+    });
+
+    it('deve lançar NotFoundException se o ciclo não existir', async () => {
+      cycleMock.findUnique.mockResolvedValue(null);
+      await expect(service.deleteCycle('invalid', '1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('deve lançar NotFoundException se o ciclo já estiver eliminado', async () => {
+      cycleMock.findUnique.mockResolvedValue({ ...deletableCycle, deletedAt: new Date() });
+      await expect(service.deleteCycle('cycle-1', '1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('restoreCycle', () => {
+    it('limpa deletedAt/deletedById e regista RESTORE', async () => {
+      const deleted = { ...deletableCycle, deletedAt: new Date(), deletedById: '1' };
+      cycleMock.findUnique.mockResolvedValue(deleted);
+      cycleMock.update.mockResolvedValue({ ...deleted, deletedAt: null, deletedById: null });
+
+      const result = await service.restoreCycle('cycle-1', '2');
+
+      expect(cycleMock.update).toHaveBeenCalledWith({
+        where: { id: 'cycle-1' },
+        data: { deletedAt: null, deletedById: null },
+      });
+      expect(mockAudit.logEntity).toHaveBeenCalledWith(
+        2,
+        'RESTORE',
+        'EvaluationCycle',
+        'cycle-1',
+        { name: 'Ciclo 360 2024' },
+      );
+      expect(result.deletedAt).toBeNull();
+    });
+
+    it('deve lançar NotFoundException se o ciclo não existir', async () => {
+      cycleMock.findUnique.mockResolvedValue(null);
+      await expect(service.restoreCycle('invalid', '1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('deve lançar BadRequestException se o ciclo não estiver eliminado', async () => {
+      cycleMock.findUnique.mockResolvedValue({ ...deletableCycle, deletedAt: null });
+      await expect(service.restoreCycle('cycle-1', '1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('listDeletedCycles', () => {
+    it('lista só ciclos com deletedAt preenchido, opcionalmente filtrando por tenant', async () => {
+      cycleMock.findMany.mockResolvedValue([{ ...deletableCycle, deletedAt: new Date() }]);
+      const result = await service.listDeletedCycles('tenant-1');
+      expect(cycleMock.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { deletedAt: { not: null }, tenantId: 'tenant-1' },
+        }),
+      );
+      expect(result).toHaveLength(1);
     });
   });
 
