@@ -75,6 +75,14 @@ export class OnboardingTemplateTaskInputDto {
   @IsEnum(ResponsibleRole)
   responsible!: ResponsibleRole;
 
+  @ApiPropertyOptional({
+    description: 'Se a tarefa é obrigatória (ex: Formação obrigatória) ou opcional. Default true.',
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isMandatory?: boolean;
+
   @ApiProperty({ description: 'Prazo — dia limite a partir do início (ex: 5 = até ao dia 5)' })
   @IsInt()
   @Min(0)
@@ -185,8 +193,9 @@ export class CreateOnboardingTemplateDto {
     description:
       'Estrutura do plano: Tarefas, Formação obrigatória, Documentos, ' +
       'Apresentações/equipa, Acessos e equipamentos, Políticas e ' +
-      'procedimentos, Reuniões 1:1, Avaliações — criadas junto com o ' +
-      'template, cada uma já com Responsáveis e Prazos.',
+      'procedimentos, Reuniões 1:1 (categoria ONE_ON_ONE, distinta de ' +
+      'MEETING para reuniões de equipa), Avaliações — criadas junto com o ' +
+      'template, cada uma já com Responsáveis, Prazos e isMandatory.',
   })
   @IsOptional()
   @IsArray()

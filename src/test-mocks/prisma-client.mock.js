@@ -1481,6 +1481,7 @@ const TaskCategory = {
   MEETING: 'MEETING',
   POLICIES: 'POLICIES',
   EVALUATION: 'EVALUATION',
+  ONE_ON_ONE: 'ONE_ON_ONE',
 };
 
 const TaskType = {

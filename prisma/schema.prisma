@@ -3839,6 +3839,7 @@ enum TaskCategory {
   MEETING
   POLICIES
   EVALUATION
+  ONE_ON_ONE
 }
 
 enum TaskType {
@@ -3920,6 +3921,7 @@ model OnboardingTemplateTask {
   type             TaskType
   phase            TaskPhase
   responsible      ResponsibleRole
+  isMandatory      Boolean                  @default(true)
   dueDayOffset     Int?
   dependsOn        Int[]
   courseId         Int?

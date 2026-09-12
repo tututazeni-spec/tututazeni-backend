@@ -89,6 +89,56 @@ describe('CreateOnboardingTemplateDto — Estrutura aninhada (tasks)', () => {
     expect(await validate(dto, { whitelist: true })).toHaveLength(0);
   });
 
+  it('aceita ONE_ON_ONE (Reuniões 1:1) distinta de MEETING (reunião de equipa), com isMandatory explícito', async () => {
+    const dto = plainToInstance(CreateOnboardingTemplateDto, {
+      ...baseTemplate,
+      tasks: [
+        {
+          title: '1:1 com o gestor — semana 1',
+          category: 'ONE_ON_ONE',
+          type: 'MEETING',
+          phase: 'WEEK_1',
+          responsible: 'MANAGER',
+          dueDayOffset: 5,
+          isMandatory: true,
+          xpReward: 5,
+          seq: 0,
+        },
+        {
+          title: 'Formação de compliance (opcional para seniores)',
+          category: 'TRAINING',
+          type: 'COURSE',
+          phase: 'WEEK_1',
+          responsible: 'SELF',
+          dueDayOffset: 7,
+          isMandatory: false,
+          xpReward: 20,
+          seq: 1,
+        },
+      ],
+    });
+    expect(await validate(dto, { whitelist: true })).toHaveLength(0);
+  });
+
+  it('isMandatory é opcional — omitir não gera erro (default true fica ao critério do serviço)', async () => {
+    const dto = plainToInstance(CreateOnboardingTemplateDto, {
+      ...baseTemplate,
+      tasks: [
+        {
+          title: 'Assinar contrato',
+          category: 'ADMIN',
+          type: 'TASK',
+          phase: 'PRE_BOARDING',
+          responsible: 'HR',
+          dueDayOffset: 0,
+          xpReward: 10,
+          seq: 0,
+        },
+      ],
+    });
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
   it('rejeita task sem dueDayOffset (Prazo é obrigatório na Estrutura)', async () => {
     const dto = plainToInstance(CreateOnboardingTemplateDto, {
       ...baseTemplate,
