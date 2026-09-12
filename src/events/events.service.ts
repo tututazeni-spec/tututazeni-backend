@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { Prisma, CertificateType } from '@prisma/client';
@@ -18,6 +19,11 @@ import {
   ParticipantStatus,
 } from './events.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { CurrentUserData } from '../common/types/current-user';
+
+// Papéis com visão global (ver stats/audit-logs) — não sofrem filtro por
+// departamento restrito nem no catálogo nem em /events/upcoming.
+const DEPT_FILTER_BYPASS_ROLES = new Set(['ADMIN', 'RH']);
 
 @Injectable()
 export class EventsService {
@@ -27,7 +33,26 @@ export class EventsService {
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
 
-  async findAll(filters: EventFilterDto) {
+  /**
+   * Restringe `where` a eventos abertos a todos (restrictedDeptIds vazio) ou
+   * ao departamento do utilizador actual — a não ser que tenha visão global
+   * (ADMIN/RH). Não filtra findOne/getMyEvents/organizerDashboard.
+   */
+  private async applyDeptVisibility(where: Prisma.EventWhereInput, currentUser: CurrentUserData) {
+    if (currentUser.role?.name && DEPT_FILTER_BYPASS_ROLES.has(currentUser.role.name)) {
+      return;
+    }
+    const user = await this.prisma.read.user.findUnique({
+      where: { id: currentUser.id },
+      select: { departmentId: true },
+    });
+    where.OR = [
+      { restrictedDeptIds: { isEmpty: true } },
+      ...(user?.departmentId ? [{ restrictedDeptIds: { has: user.departmentId } }] : []),
+    ];
+  }
+
+  async findAll(filters: EventFilterDto, currentUser: CurrentUserData) {
     const {
       page = 1,
       limit = 20,
@@ -50,6 +75,7 @@ export class EventsService {
     if (status) where.status = status;
     else where.status = { in: ['PUBLISHED', 'LIVE'] };
     if (upcoming) where.startAt = { gte: new Date() };
+    await this.applyDeptVisibility(where, currentUser);
 
     const [data, total] = await Promise.all([
       this.prisma.read.event.findMany({
@@ -137,6 +163,7 @@ export class EventsService {
         minAttendancePercent: dto.minAttendancePercent ?? 80,
         tags: dto.tags ?? [],
         mandatory: dto.mandatory ?? false,
+        restrictedDeptIds: dto.restrictedDeptIds ?? [],
         courseId: dto.courseId,
         bannerUrl: dto.bannerUrl,
         status: 'DRAFT',
@@ -212,6 +239,20 @@ export class EventsService {
     const event = await this.findOne(eventId);
     if (event.status === 'CANCELLED') throw new BadRequestException('Evento cancelado');
     if (event.status === 'ENDED') throw new BadRequestException('Evento já encerrado');
+
+    if (event.restrictedDeptIds.length > 0) {
+      const requester = await this.prisma.read.user.findUnique({
+        where: { id: userId },
+        select: { departmentId: true, role: { select: { name: true } } },
+      });
+      const bypass = requester?.role?.name && DEPT_FILTER_BYPASS_ROLES.has(requester.role.name);
+      if (
+        !bypass &&
+        !(requester?.departmentId && event.restrictedDeptIds.includes(requester.departmentId))
+      ) {
+        throw new ForbiddenException('Este evento está reservado a outros departamentos');
+      }
+    }
 
     const existing = await this.prisma.eventParticipant.findUnique({
       where: { eventId_userId: { eventId, userId } },
@@ -562,9 +603,11 @@ export class EventsService {
     };
   }
 
-  async getUpcoming() {
+  async getUpcoming(currentUser: CurrentUserData) {
+    const where: Prisma.EventWhereInput = { startAt: { gte: new Date() }, status: 'PUBLISHED' };
+    await this.applyDeptVisibility(where, currentUser);
     const data = await this.prisma.read.event.findMany({
-      where: { startAt: { gte: new Date() }, status: 'PUBLISHED' },
+      where,
       include: {
         organizer: { select: { id: true, fullName: true, avatarUrl: true } },
         _count: { select: { participants: true } },

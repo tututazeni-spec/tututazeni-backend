@@ -42,11 +42,17 @@ const baseEvent = {
   endAt: new Date(Date.now() + 90000000),
   maxCapacity: 50,
   mandatory: false,
+  restrictedDeptIds: [],
   organizer: { id: 1, fullName: 'Organizer', avatarUrl: null },
   participants: [],
   feedbacks: [],
   _count: { participants: 10, feedbacks: 0 },
 };
+
+// ADMIN tem visão global — não sofre filtro de applyDeptVisibility (não
+// entra no prisma.read.user.findUnique), o que mantém estes testes focados
+// no comportamento pré-existente sem mockar o utilizador em cada caso.
+const adminUser: any = { id: 99, role: { name: 'ADMIN' } };
 
 describe('EventsService', () => {
   let service: EventsService;
@@ -72,7 +78,7 @@ describe('EventsService', () => {
       mockPrisma.event.findMany.mockResolvedValue([baseEvent]);
       mockPrisma.event.count.mockResolvedValue(1);
 
-      const result = await service.findAll({ page: 1, limit: 20 });
+      const result = await service.findAll({ page: 1, limit: 20 }, adminUser);
 
       expect(result.data).toHaveLength(1);
       expect((result.data[0] as any).isFull).toBe(false);
@@ -89,7 +95,7 @@ describe('EventsService', () => {
       ]);
       mockPrisma.event.count.mockResolvedValue(1);
 
-      const result = await service.findAll({});
+      const result = await service.findAll({}, adminUser);
 
       expect((result.data[0] as any).isFull).toBe(true);
       expect((result.data[0] as any).occupancyRate).toBe(100);
@@ -99,7 +105,7 @@ describe('EventsService', () => {
       mockPrisma.event.findMany.mockResolvedValue([]);
       mockPrisma.event.count.mockResolvedValue(0);
 
-      await service.findAll({ upcoming: true });
+      await service.findAll({ upcoming: true }, adminUser);
 
       expect(mockPrisma.event.findMany).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -6357,6 +6357,9 @@ model Event {
   minAttendancePercent Int                @default(80)
   tags                 String[]           @default([])
   mandatory            Boolean            @default(false)
+  // IDs de Department a que o evento fica restrito ([] = visível a todos —
+  // "enviar para todos"). Ver EventsService#applyDeptVisibility.
+  restrictedDeptIds    Int[]              @default([])
   bannerUrl            String?
   courseId             Int?
   organizerId          Int

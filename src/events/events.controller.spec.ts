@@ -42,15 +42,15 @@ describe('EventsController', () => {
     controller = module.get<EventsController>(EventsController);
   });
 
-  it('findAll → findAll(filters)', async () => {
+  it('findAll → findAll(filters, user)', async () => {
     const filters = {} as any;
-    await controller.findAll(filters);
-    expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
+    await controller.findAll(filters, mockUser as any);
+    expect(mockSvc.findAll).toHaveBeenCalledWith(filters, mockUser);
   });
 
-  it('upcoming → getUpcoming', async () => {
-    await controller.upcoming();
-    expect(mockSvc.getUpcoming).toHaveBeenCalled();
+  it('upcoming → getUpcoming(user)', async () => {
+    await controller.upcoming(mockUser as any);
+    expect(mockSvc.getUpcoming).toHaveBeenCalledWith(mockUser);
   });
 
   it('stats → getStats', async () => {
