@@ -6,15 +6,22 @@ import { RolesGuard } from '../common/guards/roles.guard';
 
 const mockSvc = {
   getAdminDashboard: jest.fn().mockResolvedValue({}),
+  findForManagement: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   getMyTrainings: jest.fn().mockResolvedValue([]),
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
   getAttendanceReport: jest.fn().mockResolvedValue({}),
+  getResults: jest.fn().mockResolvedValue({}),
   create: jest.fn().mockResolvedValue({ id: 2 }),
   update: jest.fn().mockResolvedValue({ id: 1 }),
   publish: jest.fn().mockResolvedValue({ status: 'PUBLISHED' }),
   archive: jest.fn().mockResolvedValue({ status: 'ARCHIVED' }),
   remove: jest.fn().mockResolvedValue({}),
+  notifyParticipants: jest.fn().mockResolvedValue({ sent: 0 }),
+  addDocument: jest.fn().mockResolvedValue({ id: 1 }),
+  removeDocument: jest.fn().mockResolvedValue({}),
+  linkAssessment: jest.fn().mockResolvedValue({ id: 1 }),
+  unlinkAssessment: jest.fn().mockResolvedValue({}),
   createSession: jest.fn().mockResolvedValue({ id: 1 }),
   updateSession: jest.fn().mockResolvedValue({}),
   removeSession: jest.fn().mockResolvedValue({}),
@@ -22,6 +29,8 @@ const mockSvc = {
   registerParticipant: jest.fn().mockResolvedValue({ id: 1 }),
   cancelParticipant: jest.fn().mockResolvedValue({}),
   updateParticipantStatus: jest.fn().mockResolvedValue({}),
+  approveParticipant: jest.fn().mockResolvedValue({}),
+  rejectParticipant: jest.fn().mockResolvedValue({}),
   bulkAttendance: jest.fn().mockResolvedValue({ updated: 0 }),
   rateTraining: jest.fn().mockResolvedValue({}),
 };
@@ -50,6 +59,12 @@ describe('TrainingController', () => {
     expect(mockSvc.getAdminDashboard).toHaveBeenCalled();
   });
 
+  it('manage → findForManagement(filters, user)', async () => {
+    const filters = {} as any;
+    await controller.manage(filters, mockUser as any);
+    expect(mockSvc.findForManagement).toHaveBeenCalledWith(filters, mockUser);
+  });
+
   it('findAll → findAll(filters)', async () => {
     const filters = {} as any;
     await controller.findAll(filters);
@@ -61,9 +76,9 @@ describe('TrainingController', () => {
     expect(mockSvc.getMyTrainings).toHaveBeenCalledWith(1);
   });
 
-  it('findOne → findOne(id)', async () => {
-    await controller.findOne(3);
-    expect(mockSvc.findOne).toHaveBeenCalledWith(3);
+  it('findOne → findOne(id, user)', async () => {
+    await controller.findOne(3, mockUser as any);
+    expect(mockSvc.findOne).toHaveBeenCalledWith(3, mockUser);
   });
 
   it('attendanceReport → getAttendanceReport(id)', async () => {
@@ -71,48 +86,81 @@ describe('TrainingController', () => {
     expect(mockSvc.getAttendanceReport).toHaveBeenCalledWith(2);
   });
 
-  it('create → create(dto)', async () => {
+  it('results → getResults(id)', async () => {
+    await controller.results(2);
+    expect(mockSvc.getResults).toHaveBeenCalledWith(2);
+  });
+
+  it('create → create(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.create(dto);
-    expect(mockSvc.create).toHaveBeenCalledWith(dto);
+    await controller.create(dto, mockUser as any);
+    expect(mockSvc.create).toHaveBeenCalledWith(dto, 1);
   });
 
-  it('update → update(id, dto)', async () => {
+  it('update → update(id, dto, user)', async () => {
     const dto = {} as any;
-    await controller.update(1, dto);
-    expect(mockSvc.update).toHaveBeenCalledWith(1, dto);
+    await controller.update(1, dto, mockUser as any);
+    expect(mockSvc.update).toHaveBeenCalledWith(1, dto, mockUser);
   });
 
-  it('publish → publish(id)', async () => {
-    await controller.publish(1);
-    expect(mockSvc.publish).toHaveBeenCalledWith(1);
+  it('publish → publish(id, user)', async () => {
+    await controller.publish(1, mockUser as any);
+    expect(mockSvc.publish).toHaveBeenCalledWith(1, mockUser);
   });
 
-  it('archive → archive(id)', async () => {
-    await controller.archive(1);
-    expect(mockSvc.archive).toHaveBeenCalledWith(1);
+  it('archive → archive(id, user)', async () => {
+    await controller.archive(1, mockUser as any);
+    expect(mockSvc.archive).toHaveBeenCalledWith(1, mockUser);
   });
 
-  it('remove → remove(id)', async () => {
-    await controller.remove(1);
-    expect(mockSvc.remove).toHaveBeenCalledWith(1);
+  it('remove → remove(id, user)', async () => {
+    await controller.remove(1, mockUser as any);
+    expect(mockSvc.remove).toHaveBeenCalledWith(1, mockUser);
   });
 
-  it('createSession → createSession(dto)', async () => {
+  it('notify → notifyParticipants(id, dto, user)', async () => {
     const dto = {} as any;
-    await controller.createSession(dto);
-    expect(mockSvc.createSession).toHaveBeenCalledWith(dto);
+    await controller.notify(1, dto, mockUser as any);
+    expect(mockSvc.notifyParticipants).toHaveBeenCalledWith(1, dto, mockUser);
   });
 
-  it('updateSession → updateSession(id, dto)', async () => {
+  it('addDocument → addDocument(id, dto, user)', async () => {
     const dto = {} as any;
-    await controller.updateSession(2, dto);
-    expect(mockSvc.updateSession).toHaveBeenCalledWith(2, dto);
+    await controller.addDocument(1, dto, mockUser as any);
+    expect(mockSvc.addDocument).toHaveBeenCalledWith(1, dto, mockUser);
   });
 
-  it('removeSession → removeSession(id)', async () => {
-    await controller.removeSession(3);
-    expect(mockSvc.removeSession).toHaveBeenCalledWith(3);
+  it('removeDocument → removeDocument(documentId, user)', async () => {
+    await controller.removeDocument(9, mockUser as any);
+    expect(mockSvc.removeDocument).toHaveBeenCalledWith(9, mockUser);
+  });
+
+  it('linkAssessment → linkAssessment(id, dto, user)', async () => {
+    const dto = {} as any;
+    await controller.linkAssessment(1, dto, mockUser as any);
+    expect(mockSvc.linkAssessment).toHaveBeenCalledWith(1, dto, mockUser);
+  });
+
+  it('unlinkAssessment → unlinkAssessment(id, role, user)', async () => {
+    await controller.unlinkAssessment(1, 'INITIAL' as any, mockUser as any);
+    expect(mockSvc.unlinkAssessment).toHaveBeenCalledWith(1, 'INITIAL', mockUser);
+  });
+
+  it('createSession → createSession(dto, user)', async () => {
+    const dto = {} as any;
+    await controller.createSession(dto, mockUser as any);
+    expect(mockSvc.createSession).toHaveBeenCalledWith(dto, mockUser);
+  });
+
+  it('updateSession → updateSession(id, dto, user)', async () => {
+    const dto = {} as any;
+    await controller.updateSession(2, dto, mockUser as any);
+    expect(mockSvc.updateSession).toHaveBeenCalledWith(2, dto, mockUser);
+  });
+
+  it('removeSession → removeSession(id, user)', async () => {
+    await controller.removeSession(3, mockUser as any);
+    expect(mockSvc.removeSession).toHaveBeenCalledWith(3, mockUser);
   });
 
   it('sessionParticipants → getSessionParticipants(id)', async () => {
@@ -144,6 +192,17 @@ describe('TrainingController', () => {
     const dto = {} as any;
     await controller.updateParticipantStatus(5, dto);
     expect(mockSvc.updateParticipantStatus).toHaveBeenCalledWith(5, dto);
+  });
+
+  it('approveParticipant → approveParticipant(id, user)', async () => {
+    await controller.approveParticipant(6, mockUser as any);
+    expect(mockSvc.approveParticipant).toHaveBeenCalledWith(6, mockUser);
+  });
+
+  it('rejectParticipant → rejectParticipant(id, dto, user)', async () => {
+    const dto = {} as any;
+    await controller.rejectParticipant(6, dto, mockUser as any);
+    expect(mockSvc.rejectParticipant).toHaveBeenCalledWith(6, dto, mockUser);
   });
 
   it('bulkAttendance → bulkAttendance(dto, userId)', async () => {

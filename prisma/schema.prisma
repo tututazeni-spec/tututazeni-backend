@@ -648,9 +648,12 @@ model User {
   microLearningsAuthored    MicroLearning[]
 
   // ─── Treinamentos ─────────────────────────────────────────────
-  instructedTrainings  Training[]
-  trainingParticipants TrainingParticipant[]
-  trainingRatings      TrainingRating[]
+  instructedTrainings    Training[]             @relation("TrainingInstructor")
+  createdTrainings       Training[]             @relation("TrainingCreatedBy")
+  trainingParticipants   TrainingParticipant[]
+  trainingRatings        TrainingRating[]
+  trainingCoInstructorOf TrainingCoInstructor[]
+  trainingDocsUploaded   TrainingDocument[]
 
   // ─── Onboarding ───────────────────────────────────────────────
   onboardingAsUser    OnboardingPlan[]         @relation("OnboardingPlanUser")
@@ -2305,35 +2308,36 @@ enum FeedbackMode {
 }
 
 model Assessment {
-  id                 Int                  @id @default(autoincrement())
-  title              String
-  description        String?
-  type               AssessmentType       @default(QUIZ)
-  status             AssessmentStatus     @default(DRAFT)
-  courseId           Int?
-  moduleId           Int?
-  learningPathId     Int?
-  passingScore       Int                  @default(70)
-  maxAttempts        Int                  @default(0)
-  cooldownHours      Int                  @default(0)
-  timeLimitMinutes   Int                  @default(0)
-  feedbackMode       FeedbackMode         @default(ON_SUBMIT)
-  randomizeQuestions Boolean              @default(false)
-  randomizeOptions   Boolean              @default(false)
-  allowReview        Boolean              @default(true)
-  targetDepartmentIds Int[]               @default([])
-  availableFrom      DateTime?
-  availableUntil     DateTime?
-  maxGrade           Float                @default(20)
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  course             Course?              @relation(fields: [courseId], references: [id])
-  module             CourseModule?        @relation(fields: [moduleId], references: [id])
-  questions          AssessmentQuestion[]
-  attempts           AssessmentAttempt[]
+  id                  Int                  @id @default(autoincrement())
+  title               String
+  description         String?
+  type                AssessmentType       @default(QUIZ)
+  status              AssessmentStatus     @default(DRAFT)
+  courseId            Int?
+  moduleId            Int?
+  learningPathId      Int?
+  passingScore        Int                  @default(70)
+  maxAttempts         Int                  @default(0)
+  cooldownHours       Int                  @default(0)
+  timeLimitMinutes    Int                  @default(0)
+  feedbackMode        FeedbackMode         @default(ON_SUBMIT)
+  randomizeQuestions  Boolean              @default(false)
+  randomizeOptions    Boolean              @default(false)
+  allowReview         Boolean              @default(true)
+  targetDepartmentIds Int[]                @default([])
+  availableFrom       DateTime?
+  availableUntil      DateTime?
+  maxGrade            Float                @default(20)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  course              Course?              @relation(fields: [courseId], references: [id])
+  module              CourseModule?        @relation(fields: [moduleId], references: [id])
+  questions           AssessmentQuestion[]
+  attempts            AssessmentAttempt[]
 
   leadershipContents               LeadershipProgramContent[]
   leadershipParticipantAssessments LeadershipParticipantAssessment[]
+  trainingLinks                    TrainingAssessment[]
 
   @@index([courseId])
   @@index([status])
@@ -2477,6 +2481,7 @@ model Competency {
 
   leadershipProgramCompetencies LeadershipProgramCompetency[]
   leadershipSelectionCriteria   LeadershipSelectionCriterion[]
+  trainingCompetencies          TrainingCompetency[]
 
   @@index([category])
   @@index([status])
@@ -2668,20 +2673,31 @@ enum PerformanceCategory {
 }
 
 model PerformanceReview {
-  id             Int                  @id @default(autoincrement())
-  userId         Int
-  cycleId        Int
-  reviewerId     Int?
-  type           ReviewType
-  status         ReviewStatus         @default(PENDING_SELF)
-  score          Float?
-  potentialScore Int?
-  feedback       String?
-  justification  String?
-  category       PerformanceCategory?
-  submittedAt    DateTime?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  id                           Int                  @id @default(autoincrement())
+  userId                       Int
+  cycleId                      Int
+  reviewerId                   Int?
+  type                         ReviewType
+  status                       ReviewStatus         @default(PENDING_SELF)
+  score                        Float?
+  potentialScore               Int?
+  // Sub-fatores do eixo Potencial da matriz 9-box (1-5, nota do gestor),
+  // consolidados a partir dos 9 itens pedidos p/ o 9-box — "Capacidade de
+  // aprendizagem"/"Agilidade de aprendizagem" e "Liderança"/"Potencial de
+  // liderança" foram unificados (decisão do utilizador); Liderança continua
+  // a vir de Competency.category = LEADERSHIP, não daqui.
+  learningAgilityScore         Int? // Capacidade/Agilidade de aprendizagem
+  adaptabilityScore            Int? // Adaptabilidade
+  ambitionScore                Int? // Ambição profissional
+  responsibilityReadinessScore Int? // Capacidade de assumir responsabilidades maiores
+  mobilityFlexibilityScore     Int? // Mobilidade/flexibilidade
+  futureRoleReadinessScore     Int? // Readiness para funções futuras
+  feedback                     String?
+  justification                String?
+  category                     PerformanceCategory?
+  submittedAt                  DateTime?
+  createdAt                    DateTime             @default(now())
+  updatedAt                    DateTime             @updatedAt
 
   user     User             @relation("ReviewedUser", fields: [userId], references: [id])
   reviewer User?            @relation("ReviewerUser", fields: [reviewerId], references: [id])
@@ -3837,6 +3853,9 @@ enum TaskCategory {
   BENEFITS
   ADMIN
   MEETING
+  POLICIES
+  EVALUATION
+  ONE_ON_ONE
 }
 
 enum TaskType {
@@ -3891,6 +3910,8 @@ model OnboardingTemplate {
   id              Int                      @id @default(autoincrement())
   name            String
   description     String?
+  company         String?
+  location        String?
   positionId      Int?
   departmentId    Int?
   durationDays    Int                      @default(30)
@@ -3916,6 +3937,7 @@ model OnboardingTemplateTask {
   type             TaskType
   phase            TaskPhase
   responsible      ResponsibleRole
+  isMandatory      Boolean                  @default(true)
   dueDayOffset     Int?
   dependsOn        Int[]
   courseId         Int?
@@ -4162,6 +4184,17 @@ enum TrainingType {
   PRESENTIAL
   ONLINE
   HYBRID
+  // Valores adicionados para cobrir a "Modalidade" pedida no módulo de
+  // formações (ver trainings.dto.ts) — deliberadamente o mesmo campo que
+  // "Tipo de formação": são o mesmo eixo conceptual (formato de entrega),
+  // por isso um único enum evita duas colunas que teriam de ser mantidas
+  // sincronizadas manualmente.
+  VIRTUAL_ROOM
+  ELEARNING
+  WORKSHOP
+  SEMINAR
+  COACHING
+  MENTORING
 }
 
 enum TrainingLevel {
@@ -4178,11 +4211,20 @@ enum TrainingStatus {
 
 enum TrainingParticipantStatus {
   WAITLIST
+  PENDING_APPROVAL
   REGISTERED
   ATTENDED
   ABSENT
   CANCELLED
+  REJECTED
   COMPLETED
+}
+
+enum TrainingAssessmentRole {
+  INITIAL
+  FINAL
+  SATISFACTION_SURVEY
+  INSTRUCTOR_EVALUATION
 }
 
 enum SessionModality {
@@ -4194,6 +4236,7 @@ enum SessionModality {
 model Training {
   id                     Int            @id @default(autoincrement())
   title                  String
+  code                   String?        @unique
   shortDescription       String?
   description            String?        @db.Text
   objectives             String?
@@ -4202,12 +4245,20 @@ model Training {
   level                  TrainingLevel
   status                 TrainingStatus @default(DRAFT)
   category               String?
+  thematicArea           String?
   tags                   String[]
   language               String         @default("pt")
   workloadHours          Float?
   thumbnailUrl           String?
   prerequisites          String?
   instructorId           Int?
+  trainingEntity         String?
+  // Descrição específica desta turma/edição (distinta da `description`
+  // genérica da formação, que se mantém entre edições).
+  classDescription       String?
+  // "Modalidade" — plataforma/link (ONLINE), info da sala (VIRTUAL_ROOM) ou
+  // instruções de acesso (HYBRID), consoante o `type` escolhido acima.
+  modalityDetails        String?
   mandatory              Boolean        @default(false)
   passingScore           Int            @default(70)
   issueCertificate       Boolean        @default(false)
@@ -4215,17 +4266,105 @@ model Training {
   completionDeadlineDays Int?
   startDate              DateTime?
   endDate                DateTime?
+  // Planeamento
+  schedule               String?
+  roomLocation           String?
+  capacity               Int?
+  plannedSessionsCount   Int?
+  // Participantes — inscrição passa a PENDING_APPROVAL em vez de
+  // REGISTERED/WAITLIST quando true (ver trainings.service.ts).
+  requiresApproval       Boolean        @default(false)
+  // Operação
+  requiredResources      String[]       @default([])
+  // Custos — `cost` acima mantém-se como valor legado/override; o total
+  // apresentado na UI é calculado (soma destes + `cost` se nenhum destes
+  // estiver preenchido) em vez de guardado, para nunca ficar desactualizado.
+  instructorCost         Float?
+  materialCost           Float?
+  transportCost          Float?
+  foodCost               Float?
+  lodgingCost            Float?
+  otherCosts             Float?
+  createdById            Int?
   publishedAt            DateTime?
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
 
-  instructor   User?                 @relation(fields: [instructorId], references: [id])
-  sessions     TrainingSession[]
-  participants TrainingParticipant[]
-  ratings      TrainingRating[]
+  instructor      User?                  @relation("TrainingInstructor", fields: [instructorId], references: [id])
+  createdBy       User?                  @relation("TrainingCreatedBy", fields: [createdById], references: [id])
+  sessions        TrainingSession[]
+  participants    TrainingParticipant[]
+  ratings         TrainingRating[]
+  competencies    TrainingCompetency[]
+  coInstructors   TrainingCoInstructor[]
+  documents       TrainingDocument[]
+  assessmentLinks TrainingAssessment[]
 
   @@index([status])
   @@index([type])
+  @@index([createdById])
+}
+
+// ─── Competências desenvolvidas (M2M) ────────────────────────────────────────
+// Mesmo padrão de CourseCompetency — join table simples, sem nível ganho
+// (a formação não atribui `levelGained` como o curso).
+model TrainingCompetency {
+  id           Int        @id @default(autoincrement())
+  trainingId   Int
+  competencyId Int
+  training     Training   @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@unique([trainingId, competencyId])
+  @@index([competencyId])
+}
+
+// ─── Instrutores adicionais (M2M) ────────────────────────────────────────────
+// Wire-up do campo `coInstructorIds` do DTO, aceite mas nunca persistido
+// até aqui.
+model TrainingCoInstructor {
+  id         Int      @id @default(autoincrement())
+  trainingId Int
+  userId     Int
+  training   Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@unique([trainingId, userId])
+  @@index([userId])
+}
+
+// ─── Documentos administrativos ──────────────────────────────────────────────
+// Mesmo padrão de OnboardingDocument/LeadershipProgramDocument — modelo
+// dedicado por módulo em vez de uma tabela polimórfica genérica.
+model TrainingDocument {
+  id           Int      @id @default(autoincrement())
+  trainingId   Int
+  name         String
+  fileUrl      String
+  category     String?
+  uploadedById Int?
+  createdAt    DateTime @default(now())
+  training     Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
+
+  @@index([trainingId])
+}
+
+// ─── Avaliação — associar avaliações existentes ──────────────────────────────
+// Liga um Assessment (já criado noutro módulo) a uma formação, com um papel
+// (inicial/final/questionário de satisfação/avaliação do formador). Não cria
+// um motor de avaliação novo — reutiliza o existente.
+model TrainingAssessment {
+  id           Int                    @id @default(autoincrement())
+  trainingId   Int
+  assessmentId Int
+  role         TrainingAssessmentRole
+  createdAt    DateTime               @default(now())
+  training     Training               @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  assessment   Assessment             @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@unique([trainingId, role])
+  @@index([assessmentId])
 }
 
 model TrainingSession {
@@ -9413,6 +9552,13 @@ model Eval360Cycle {
   createdBy         String
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+  // Soft delete: ADMIN/DIRECTOR podem eliminar um ciclo (evaluation360.service.ts#deleteCycle),
+  // mas a linha nunca é apagada da BD — fica escondida de listCycles/getCycleDetail
+  // e pode ser restaurada (restoreCycle) a partir do separador "Apagados" do módulo
+  // de auditoria. deletedById é um id de actor "solto" (String), tal como createdBy
+  // acima — não é uma relação FK.
+  deletedAt         DateTime?
+  deletedById       String?
 
   competencies Eval360CycleCompetency[]
   assignments  EvaluatorAssignment[]
@@ -9423,6 +9569,7 @@ model Eval360Cycle {
 
   @@index([status])
   @@index([tenantId])
+  @@index([deletedAt])
 }
 
 model Eval360CycleCompetency {
