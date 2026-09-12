@@ -66,23 +66,26 @@ export class PayslipsController {
   }
 
   @Get('my/annual-summary/export')
-  @ApiOperation({ summary: 'Exportar o meu resumo anual (CSV ou PDF)' })
+  @ApiOperation({ summary: 'Exportar o meu resumo anual ou mensal (CSV ou PDF)' })
   @ApiQuery({ name: 'year', required: false, example: '2026' })
+  @ApiQuery({ name: 'month', required: false, example: '04', description: 'Restringe a um único mês (MM); omitido = ano completo' })
   @ApiQuery({ name: 'format', required: false, enum: ['csv', 'pdf'] })
   async myAnnualSummaryExport(
     @CurrentUser() user: CurrentUserData,
     @Query('year') year: string | undefined,
+    @Query('month') month: string | undefined,
     @Query('format') format: string | undefined,
     @Res() res: Response,
   ) {
     const yr = year ?? new Date().getFullYear().toString();
-    const data = await this.svc.buildAnnualExport(user.id, yr);
+    const data = await this.svc.buildAnnualExport(user.id, yr, month);
+    const suffix = month ? `${yr}-${month.padStart(2, '0')}` : yr;
 
     if (format === 'pdf') {
       const buffer = await this.pdf.generateExecutiveReport(annualReportInput(data));
       res.set({
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="resumo-anual-${yr}.pdf"`,
+        'Content-Disposition': `attachment; filename="resumo-${suffix}.pdf"`,
         'Content-Length': buffer.length,
       });
       res.end(buffer);
@@ -91,7 +94,7 @@ export class PayslipsController {
 
     res.set({
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="resumo-anual-${yr}.csv"`,
+      'Content-Disposition': `attachment; filename="resumo-${suffix}.csv"`,
     });
     res.end(annualCsv(data));
   }
@@ -321,9 +324,14 @@ function annualReportInput(data: AnnualExport) {
   const kz = (n: number) =>
     `${n.toLocaleString('pt-AO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kz`;
   const t = data.totals;
+  const title = data.month
+    ? `Resumo de Recibos ${data.year}-${data.month.padStart(2, '0')}`
+    : `Resumo Anual de Recibos ${data.year}`;
   return {
-    title: `Resumo Anual de Recibos ${data.year}`,
-    period: `${data.year} — ${data.months} ${data.months === 1 ? 'mês' : 'meses'}`,
+    title,
+    period: data.month
+      ? `${data.year}-${data.month.padStart(2, '0')}`
+      : `${data.year} — ${data.months} ${data.months === 1 ? 'mês' : 'meses'}`,
     metrics: [
       { label: 'Total Bruto', value: kz(t.grossSalary) },
       { label: 'Total Líquido', value: kz(t.netSalary) },
