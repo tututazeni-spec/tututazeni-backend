@@ -62,10 +62,32 @@ export class TrainingController {
     return this.svc.getMyTrainings(user.id);
   }
 
+  @Get('manageable')
+  @Roles(Role.ADMIN, Role.RH, Role.DIRECTOR, Role.GESTOR, Role.LIDER, Role.INSTRUCTOR)
+  @ApiOperation({
+    summary:
+      'Passo 1 da "Gestão": formações que o utilizador pode escolher antes de ver ' +
+      'os matriculados (escopo por papel — ver TrainingService.getManageableTrainings)',
+  })
+  manageableTrainings(@CurrentUser() user: CurrentUserData) {
+    return this.svc.getManageableTrainings(user);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do treinamento (sessões, rating médio)' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOne(id);
+  }
+
+  @Get(':id/participants')
+  @Roles(Role.ADMIN, Role.RH, Role.DIRECTOR, Role.GESTOR, Role.LIDER, Role.INSTRUCTOR)
+  @ApiOperation({
+    summary:
+      'Passo 2 da "Gestão": lista de matriculados desta formação (GESTOR/LIDER só ' +
+      'do próprio departamento; INSTRUCTOR só se for o instrutor desta formação)',
+  })
+  participants(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getParticipants(id, user);
   }
 
   @Get(':id/attendance-report')

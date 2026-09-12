@@ -83,9 +83,41 @@ export class EnrollmentsService {
     return new Date() > deadline;
   }
 
+  // ─── ESCOPO POR PAPEL (Gestão/Admin) ──────────────────────────────────────
+  // GESTOR/LIDER só veem o próprio departamento; INSTRUCTOR só vê os cursos
+  // onde é instrutor de coorte (InstructorCohort → InstructorProfile.userId).
+  // ADMIN/RH/DIRECTOR não têm restrição. Ver [[project_innova_ownership_check_gaps]]
+  // — mantido aqui como scoping ao nível do dado, não só @Roles() do endpoint.
+
+  private async getOwnDepartmentId(userId: number): Promise<number | null> {
+    const me = await this.prisma.read.user.findUnique({
+      where: { id: userId },
+      select: { departmentId: true },
+    });
+    return me?.departmentId ?? null;
+  }
+
+  private async instructorOwnsCourse(userId: number, courseId: number): Promise<boolean> {
+    const cohort = await this.prisma.read.instructorCohort.findFirst({
+      where: { courseId, instructor: { userId } },
+      select: { id: true },
+    });
+    return !!cohort;
+  }
+
+  /** IDs de curso distintos onde `userId` é instrutor de coorte. */
+  private async instructorCourseIds(userId: number): Promise<number[]> {
+    const cohorts = await this.prisma.read.instructorCohort.findMany({
+      where: { instructor: { userId } },
+      select: { courseId: true },
+      distinct: ['courseId'],
+    });
+    return cohorts.map(c => c.courseId);
+  }
+
   // ─── LISTAGEM ADMIN ───────────────────────────────────────────────────────
 
-  async findAll(filters: EnrollmentFilterDto) {
+  async findAll(filters: EnrollmentFilterDto, requestingUser?: CurrentUserData) {
     const {
       page = 1,
       limit = 20,
@@ -111,6 +143,22 @@ export class EnrollmentsService {
     if (overdue) {
       where.deadline = { lt: new Date() };
       where.status = { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] };
+    }
+
+    const roleName = requestingUser?.role?.name;
+    if (roleName === Role.GESTOR || roleName === Role.LIDER) {
+      // Ignora qualquer departmentId vindo da query — o gestor/líder só pode
+      // ver o próprio departamento, nunca escolher outro.
+      const ownDeptId = await this.getOwnDepartmentId(requestingUser!.id);
+      where.user = { departmentId: ownDeptId ?? -1 };
+    } else if (roleName === Role.INSTRUCTOR) {
+      if (!courseId) {
+        throw new BadRequestException('Selecione primeiro um curso para ver os matriculados');
+      }
+      const owns = await this.instructorOwnsCourse(requestingUser!.id, courseId);
+      if (!owns) {
+        throw new ForbiddenException('Este curso não pertence a este instrutor');
+      }
     }
 
     const [data, total] = await Promise.all([
@@ -170,6 +218,78 @@ export class EnrollmentsService {
     });
 
     return buildPaginatedResponse(enriched, total, page, limit);
+  }
+
+  // ─── SELECÇÃO DE CURSO (passo 1 da "Gestão") ─────────────────────────────
+  // Lista de cursos que o utilizador pode escolher antes de ver os
+  // matriculados — o "ciclo" pedido é sempre: selecionar curso/formação →
+  // ver a lista de inscritos, nunca a lista de inscritos directamente.
+
+  async getManageableCourses(user: CurrentUserData) {
+    const roleName = user.role?.name;
+
+    if (roleName === Role.GESTOR || roleName === Role.LIDER) {
+      const ownDeptId = await this.getOwnDepartmentId(user.id);
+      const courseIds = (
+        await this.prisma.read.enrollment.findMany({
+          where: { user: { departmentId: ownDeptId ?? -1 } },
+          select: { courseId: true },
+          distinct: ['courseId'],
+        })
+      ).map(e => e.courseId);
+
+      return Promise.all(
+        courseIds.map(async courseId => {
+          const [course, enrollments] = await Promise.all([
+            this.prisma.read.course.findUnique({
+              where: { id: courseId },
+              select: { id: true, title: true, thumbnailUrl: true, category: true, status: true },
+            }),
+            this.prisma.read.enrollment.count({
+              where: { courseId, user: { departmentId: ownDeptId ?? -1 } },
+            }),
+          ]);
+          return { ...course, enrollments };
+        }),
+      );
+    }
+
+    if (roleName === Role.INSTRUCTOR) {
+      const courseIds = await this.instructorCourseIds(user.id);
+      return Promise.all(
+        courseIds.map(async courseId => {
+          const [course, enrollments] = await Promise.all([
+            this.prisma.read.course.findUnique({
+              where: { id: courseId },
+              select: { id: true, title: true, thumbnailUrl: true, category: true, status: true },
+            }),
+            this.prisma.read.enrollment.count({ where: { courseId } }),
+          ]);
+          return { ...course, enrollments };
+        }),
+      );
+    }
+
+    // ADMIN/RH/DIRECTOR — catálogo completo
+    const courses = await this.prisma.read.course.findMany({
+      select: {
+        id: true,
+        title: true,
+        thumbnailUrl: true,
+        category: true,
+        status: true,
+        _count: { select: { enrollments: true } },
+      },
+      orderBy: { title: 'asc' },
+    });
+    return courses.map(c => ({
+      id: c.id,
+      title: c.title,
+      thumbnailUrl: c.thumbnailUrl,
+      category: c.category,
+      status: c.status,
+      enrollments: c._count.enrollments,
+    }));
   }
 
   // ─── DETALHE ──────────────────────────────────────────────────────────────

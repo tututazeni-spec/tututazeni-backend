@@ -21,6 +21,8 @@ import {
   RateTrainingDto,
   ParticipantStatus,
 } from './trainings.dto';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/decorators';
 
 @Injectable()
 export class TrainingService {
@@ -82,6 +84,131 @@ export class TrainingService {
     ]);
 
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  // ─── ESCOPO POR PAPEL (Gestão — mesmo padrão de src/enrollments) ─────────
+
+  private async getOwnDepartmentId(userId: number): Promise<number | null> {
+    const me = await this.prisma.read.user.findUnique({
+      where: { id: userId },
+      select: { departmentId: true },
+    });
+    return me?.departmentId ?? null;
+  }
+
+  // ─── SELECÇÃO DE FORMAÇÃO (passo 1 da "Gestão") ──────────────────────────
+
+  async getManageableTrainings(user: CurrentUserData) {
+    const roleName = user.role?.name;
+    const baseSelect = {
+      id: true,
+      title: true,
+      thumbnailUrl: true,
+      category: true,
+      status: true,
+    } as const;
+
+    if (roleName === Role.GESTOR || roleName === Role.LIDER) {
+      const ownDeptId = await this.getOwnDepartmentId(user.id);
+      // TrainingParticipant.trainingId nunca é preenchido na inscrição (ver
+      // registerParticipant) — o vínculo real é sempre via session.trainingId,
+      // igual ao usado em getAttendanceReport.
+      const trainingIds = (
+        await this.prisma.read.trainingParticipant.findMany({
+          where: { user: { departmentId: ownDeptId ?? -1 } },
+          select: { session: { select: { trainingId: true } } },
+          distinct: ['sessionId'],
+        })
+      ).map(p => p.session.trainingId);
+      const uniqueIds = [...new Set(trainingIds)];
+
+      return Promise.all(
+        uniqueIds.map(async trainingId => {
+          const [training, participants] = await Promise.all([
+            this.prisma.read.training.findUnique({ where: { id: trainingId }, select: baseSelect }),
+            this.prisma.read.trainingParticipant.count({
+              where: {
+                session: { trainingId },
+                user: { departmentId: ownDeptId ?? -1 },
+              },
+            }),
+          ]);
+          return { ...training, participants };
+        }),
+      );
+    }
+
+    if (roleName === Role.INSTRUCTOR) {
+      const trainings = await this.prisma.read.training.findMany({
+        where: { instructorId: user.id },
+        select: { ...baseSelect, _count: { select: { participants: true } } },
+        orderBy: { title: 'asc' },
+      });
+      return trainings.map(t => ({
+        id: t.id,
+        title: t.title,
+        thumbnailUrl: t.thumbnailUrl,
+        category: t.category,
+        status: t.status,
+        participants: t._count.participants,
+      }));
+    }
+
+    // ADMIN/RH/DIRECTOR — catálogo completo
+    const trainings = await this.prisma.read.training.findMany({
+      select: { ...baseSelect, _count: { select: { participants: true } } },
+      orderBy: { title: 'asc' },
+    });
+    return trainings.map(t => ({
+      id: t.id,
+      title: t.title,
+      thumbnailUrl: t.thumbnailUrl,
+      category: t.category,
+      status: t.status,
+      participants: t._count.participants,
+    }));
+  }
+
+  // ─── LISTA DE MATRICULADOS (passo 2 da "Gestão") ─────────────────────────
+
+  async getParticipants(trainingId: number, user: CurrentUserData) {
+    const training = await this.prisma.read.training.findUnique({
+      where: { id: trainingId },
+      select: { id: true, title: true, instructorId: true },
+    });
+    if (!training) throw new NotFoundException('Treinamento não encontrado');
+
+    const roleName = user.role?.name;
+    const where: Prisma.TrainingParticipantWhereInput = { session: { trainingId } };
+
+    if (roleName === Role.GESTOR || roleName === Role.LIDER) {
+      const ownDeptId = await this.getOwnDepartmentId(user.id);
+      where.user = { departmentId: ownDeptId ?? -1 };
+    } else if (roleName === Role.INSTRUCTOR) {
+      if (training.instructorId !== user.id) {
+        throw new ForbiddenException('Esta formação não pertence a este instrutor');
+      }
+    }
+    // ADMIN/RH/DIRECTOR — sem restrição adicional
+
+    const participants = await this.prisma.read.trainingParticipant.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            avatarUrl: true,
+            department: { select: { name: true } },
+          },
+        },
+        session: { select: { id: true, sessionDate: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { training: { id: training.id, title: training.title }, participants };
   }
 
   async findOne(id: number) {

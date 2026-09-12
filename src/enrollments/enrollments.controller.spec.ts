@@ -10,6 +10,7 @@ const mockSvc = {
   cancel: jest.fn().mockResolvedValue({}),
   generateCertificate: jest.fn().mockResolvedValue({ url: 'cert.pdf' }),
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+  getManageableCourses: jest.fn().mockResolvedValue([]),
   getAdminDashboard: jest.fn().mockResolvedValue({}),
   getComplianceDashboard: jest.fn().mockResolvedValue({}),
   getTeamProgress: jest.fn().mockResolvedValue([]),
@@ -61,10 +62,15 @@ describe('EnrollmentsController', () => {
     expect(mockSvc.generateCertificate).toHaveBeenCalledWith(2, mockUser);
   });
 
-  it('findAll → findAll(filters)', async () => {
+  it('findAll → findAll(filters, user) — escopo por papel decidido no service', async () => {
     const filters = {} as any;
-    await controller.findAll(filters);
-    expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
+    await controller.findAll(filters, mockUser as any);
+    expect(mockSvc.findAll).toHaveBeenCalledWith(filters, mockUser);
+  });
+
+  it('manageableCourses → getManageableCourses(user)', async () => {
+    await controller.manageableCourses(mockUser as any);
+    expect(mockSvc.getManageableCourses).toHaveBeenCalledWith(mockUser);
   });
 
   it('adminDashboard → getAdminDashboard', async () => {
