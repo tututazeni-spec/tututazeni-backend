@@ -12,7 +12,10 @@ const mockSvc = {
   updateCycle: jest.fn().mockResolvedValue({}),
   publishCycle: jest.fn().mockResolvedValue({}),
   listCycles: jest.fn().mockResolvedValue([]),
+  listDeletedCycles: jest.fn().mockResolvedValue([]),
   getCycleDetail: jest.fn().mockResolvedValue({ id: 'cycle-1' }),
+  deleteCycle: jest.fn().mockResolvedValue({ id: 'cycle-1' }),
+  restoreCycle: jest.fn().mockResolvedValue({ id: 'cycle-1' }),
   calculateCycleResults: jest.fn().mockResolvedValue({}),
   createQuestion: jest.fn().mockResolvedValue({ id: 'q1' }),
   listQuestions: jest.fn().mockResolvedValue([]),
@@ -97,9 +100,24 @@ describe('Evaluation360Controller', () => {
     expect(mockSvc.listCycles).toHaveBeenCalledWith('t1', query);
   });
 
+  it('listDeletedCycles → listDeletedCycles(tenantId)', async () => {
+    await controller.listDeletedCycles('t1');
+    expect(mockSvc.listDeletedCycles).toHaveBeenCalledWith('t1');
+  });
+
   it('getCycleDetail → getCycleDetail(id)', async () => {
     await controller.getCycleDetail('cycle-1');
     expect(mockSvc.getCycleDetail).toHaveBeenCalledWith('cycle-1');
+  });
+
+  it('deleteCycle → deleteCycle(id, userId)', async () => {
+    await controller.deleteCycle('cycle-1', mockUser as any);
+    expect(mockSvc.deleteCycle).toHaveBeenCalledWith('cycle-1', '1');
+  });
+
+  it('restoreCycle → restoreCycle(id, userId)', async () => {
+    await controller.restoreCycle('cycle-1', mockUser as any);
+    expect(mockSvc.restoreCycle).toHaveBeenCalledWith('cycle-1', '1');
   });
 
   it('calculateResults → calculateCycleResults(id, userId)', async () => {
