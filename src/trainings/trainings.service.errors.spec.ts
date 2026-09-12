@@ -23,6 +23,8 @@ const mockPrisma = {
   certificate: { create: jest.fn().mockResolvedValue({}) },
 };
 
+const adminUser = { id: 1, email: 'admin@innova.com', role: { name: 'ADMIN' } } as any;
+
 describe('TrainingsService — registerParticipant (capacidade / lista de espera)', () => {
   let service: TrainingsService;
 
@@ -58,6 +60,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
       maxParticipants: 2,
       waitlistEnabled: false,
       _count: { participants: 2 },
+      training: { requiresApproval: false },
     });
     await expect(
       service.registerParticipant({ sessionId: 1, userId: 7 } as any),
@@ -72,6 +75,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
       maxParticipants: 2,
       waitlistEnabled: true,
       _count: { participants: 2 },
+      training: { requiresApproval: false },
     });
     mockPrisma.trainingParticipant.upsert.mockResolvedValue({ id: 5, status: 'WAITLIST' });
 
@@ -89,6 +93,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
       maxParticipants: 0,
       waitlistEnabled: false,
       _count: { participants: 500 },
+      training: { requiresApproval: false },
     });
     mockPrisma.trainingParticipant.upsert.mockResolvedValue({ id: 5, status: 'REGISTERED' });
 
@@ -96,6 +101,26 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
 
     expect(mockPrisma.trainingParticipant.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ create: expect.objectContaining({ status: 'REGISTERED' }) }),
+    );
+  });
+
+  it('formação com requiresApproval → inscrição fica PENDING_APPROVAL, ignora vagas', async () => {
+    mockPrisma.trainingParticipant.findFirst.mockResolvedValue(null);
+    mockPrisma.trainingSession.findUnique.mockResolvedValue({
+      id: 1,
+      maxParticipants: 0,
+      waitlistEnabled: false,
+      _count: { participants: 0 },
+      training: { requiresApproval: true },
+    });
+    mockPrisma.trainingParticipant.upsert.mockResolvedValue({ id: 5, status: 'PENDING_APPROVAL' });
+
+    await service.registerParticipant({ sessionId: 1, userId: 7 } as any);
+
+    expect(mockPrisma.trainingParticipant.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ status: 'PENDING_APPROVAL' }),
+      }),
     );
   });
 });
@@ -168,7 +193,7 @@ describe('TrainingsService — updateParticipantStatus (emissão automática de 
   it('participante inexistente → NotFoundException', async () => {
     mockPrisma.trainingParticipant.findUnique.mockResolvedValue(null);
     await expect(
-      service.updateParticipantStatus(1, { status: 'COMPLETED' } as any),
+      service.updateParticipantStatus(1, { status: 'COMPLETED' } as any, adminUser),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -180,10 +205,14 @@ describe('TrainingsService — updateParticipantStatus (emissão automática de 
     });
     mockPrisma.trainingSession.findUnique.mockResolvedValue({
       id: 10,
-      training: { issueCertificate: true, passingScore: 70 },
+      training: { issueCertificate: true, passingScore: 70, createdById: 1 },
     });
 
-    await service.updateParticipantStatus(1, { status: 'COMPLETED', finalScore: 50 } as any);
+    await service.updateParticipantStatus(
+      1,
+      { status: 'COMPLETED', finalScore: 50 } as any,
+      adminUser,
+    );
 
     expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
   });
@@ -196,10 +225,14 @@ describe('TrainingsService — updateParticipantStatus (emissão automática de 
     });
     mockPrisma.trainingSession.findUnique.mockResolvedValue({
       id: 10,
-      training: { issueCertificate: true, passingScore: 70 },
+      training: { issueCertificate: true, passingScore: 70, createdById: 1 },
     });
 
-    await service.updateParticipantStatus(1, { status: 'COMPLETED', finalScore: 85 } as any);
+    await service.updateParticipantStatus(
+      1,
+      { status: 'COMPLETED', finalScore: 85 } as any,
+      adminUser,
+    );
 
     expect(mockPrisma.certificate.create).toHaveBeenCalled();
   });
@@ -212,10 +245,14 @@ describe('TrainingsService — updateParticipantStatus (emissão automática de 
     });
     mockPrisma.trainingSession.findUnique.mockResolvedValue({
       id: 10,
-      training: { issueCertificate: false, passingScore: 70 },
+      training: { issueCertificate: false, passingScore: 70, createdById: 1 },
     });
 
-    await service.updateParticipantStatus(1, { status: 'COMPLETED', finalScore: 100 } as any);
+    await service.updateParticipantStatus(
+      1,
+      { status: 'COMPLETED', finalScore: 100 } as any,
+      adminUser,
+    );
 
     expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
   });
@@ -236,12 +273,15 @@ describe('TrainingsService — bulkAttendance', () => {
   it('sessão inexistente → NotFoundException', async () => {
     mockPrisma.trainingSession.findUnique.mockResolvedValue(null);
     await expect(
-      service.bulkAttendance({ sessionId: 1, presentUserIds: [] } as any, 1),
+      service.bulkAttendance({ sessionId: 1, presentUserIds: [] } as any, adminUser),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('marca presentes e ausentes correctamente', async () => {
-    mockPrisma.trainingSession.findUnique.mockResolvedValue({ id: 1 });
+    mockPrisma.trainingSession.findUnique.mockResolvedValue({
+      id: 1,
+      training: { createdById: 1 },
+    });
     mockPrisma.trainingParticipant.findMany.mockResolvedValue([
       { id: 1, userId: 10 },
       { id: 2, userId: 20 },
@@ -250,7 +290,7 @@ describe('TrainingsService — bulkAttendance', () => {
 
     const result = await service.bulkAttendance(
       { sessionId: 1, presentUserIds: [10, 30] } as any,
-      1,
+      adminUser,
     );
 
     expect(result).toEqual({ sessionId: 1, attended: 2, absent: 1, total: 3 });
