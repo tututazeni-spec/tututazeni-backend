@@ -683,6 +683,54 @@ describe('Evaluation360Service (additional)', () => {
     });
   });
 
+  // ─── listMyAssignments ────────────────────────────────────────────────────
+
+  describe('listMyAssignments', () => {
+    it('deve resolver nome, departamento e fotografia do avaliado', async () => {
+      mockPrisma.evaluatorAssignment = {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ id: 'a1', evaluateeId: '2', role: 'PEER', status: 'PENDING' }]),
+      };
+      mockPrisma.user.findMany.mockResolvedValue([
+        {
+          id: 2,
+          fullName: 'Ana Silva',
+          avatarUrl: 'data:image/png;base64,xyz',
+          department: { name: 'Comercial' },
+        },
+      ]);
+      const result = await service.listMyAssignments('cycle-1', 'user-1');
+      expect(result).toEqual([
+        expect.objectContaining({
+          id: 'a1',
+          evaluateeName: 'Ana Silva',
+          evaluateeDepartment: 'Comercial',
+          evaluateeAvatarUrl: 'data:image/png;base64,xyz',
+        }),
+      ]);
+    });
+
+    it('deve usar valores por omissão quando o utilizador avaliado já não existe', async () => {
+      mockPrisma.evaluatorAssignment = {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 'a1', evaluateeId: '99', role: 'SUBORDINATE', status: 'PENDING' },
+          ]),
+      };
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      const result = await service.listMyAssignments('cycle-1', 'user-1');
+      expect(result[0]).toEqual(
+        expect.objectContaining({
+          evaluateeName: 'Colaborador',
+          evaluateeDepartment: null,
+          evaluateeAvatarUrl: null,
+        }),
+      );
+    });
+  });
+
   // ─── calculateCycleResults ────────────────────────────────────────────────
 
   describe('calculateCycleResults', () => {
@@ -707,6 +755,52 @@ describe('Evaluation360Service (additional)', () => {
       const result = await service.calculateCycleResults('cycle-1', 'admin-1');
       expect(result.processed).toBe(0);
       expect(mockEvents.emit).toHaveBeenCalledWith('cycle.results.ready', expect.any(Object));
+    });
+
+    // Regressão: o peerScore agregado (cartão "Pares") já ficava null abaixo
+    // do quorumMinimum, mas o peerScore POR COMPETÊNCIA (usado no radar/
+    // heatmap) não tinha a mesma protecção — com 1 só par a responder,
+    // expunha directamente a resposta individual desse par por competência,
+    // quebrando o anonimato que o resto do módulo garante.
+    it('deve ocultar peerScore por competência quando os pares ficam abaixo do quorum', async () => {
+      const cycleWithCompetency = {
+        ...baseCycle,
+        quorumMinimum: 3,
+        competencies: [
+          {
+            competencyId: 'comp-1',
+            competency: {
+              id: 'comp-1',
+              name: 'Liderança',
+              category: 'LEADERSHIP',
+              type: 'LEADERSHIP',
+            },
+          },
+        ],
+      };
+      cycleMock.findUnique.mockResolvedValue(cycleWithCompetency);
+      cycleMock.update.mockResolvedValue({ ...cycleWithCompetency, status: 'COMPLETED' });
+      mockPrisma.cycleParticipant = {
+        findMany: jest.fn().mockResolvedValue([{ userId: 'user-1' }]),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      };
+      mockPrisma.evaluationAnswer = { findMany: jest.fn().mockResolvedValue([]) };
+      const upsert = jest.fn().mockResolvedValue({});
+      mockPrisma.evaluationResult = { upsert };
+      mockPrisma.evaluationResponse = {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            evaluatorRole: 'PEER',
+            answers: [{ numericValue: 5, question: { competencyId: 'comp-1' } }],
+          },
+        ]),
+      };
+
+      await service.calculateCycleResults('cycle-1', 'admin-1');
+
+      expect(upsert).toHaveBeenCalledTimes(1);
+      const scoresByCompetency = JSON.parse(upsert.mock.calls[0][0].create.scoresByCompetency);
+      expect(scoresByCompetency['comp-1'].peerScore).toBeNull();
     });
   });
 
@@ -736,9 +830,9 @@ describe('Evaluation360Service (additional)', () => {
         findMany: jest.fn().mockResolvedValue([]),
       };
       cycleMock.findUnique.mockResolvedValue(baseCycle);
-      await expect(
-        service.getParticipantResult('cycle-1', 'user-2', 'admin-1'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.getParticipantResult('cycle-1', 'user-2', 'admin-1')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('deve retornar resultado para o próprio utilizador, sem dados por avaliador', async () => {
@@ -782,9 +876,9 @@ describe('Evaluation360Service (additional)', () => {
         findMany: jest.fn().mockResolvedValue([]),
       };
       cycleMock.findUnique.mockResolvedValue(baseCycle);
-      await expect(
-        service.getParticipantResult('cycle-1', 'user-2', 'user-3'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.getParticipantResult('cycle-1', 'user-2', 'user-3')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 
@@ -904,7 +998,7 @@ describe('Evaluation360Service (additional)', () => {
   // ─── generateReport ───────────────────────────────────────────────────────
 
   describe('generateReport', () => {
-    it('deve gerar relatório individual', async () => {
+    it('deve gerar relatório individual para o próprio utilizador', async () => {
       cycleMock.findUnique.mockResolvedValue({ ...baseCycle, name: 'Ciclo Q1' });
       mockPrisma.evaluationResult = {
         findUnique: jest.fn().mockResolvedValue({
@@ -925,9 +1019,36 @@ describe('Evaluation360Service (additional)', () => {
           participantId: 'user-1',
           includeAiInsights: false,
         },
-        'admin-1',
+        'user-1',
       );
       expect(result).toHaveProperty('scope', 'INDIVIDUAL');
+    });
+
+    // Mesma regra de getParticipantResult: este endpoint tinha ficado de
+    // fora dessa auditoria e devolvia o resultado individual de qualquer
+    // participantId a quem tivesse role ADMIN/RH/GESTOR — encontrado ao
+    // rever a solicitação original, não fazia parte da série de fixes já
+    // aplicada (b9d087c e seguintes).
+    it('deve lançar ForbiddenException mesmo para ADMIN/GESTOR a gerar relatório individual de outro', async () => {
+      cycleMock.findUnique.mockResolvedValue({ ...baseCycle, name: 'Ciclo Q1' });
+      mockPrisma.evaluationResult = {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'r1',
+          scoresByCompetency: '{}',
+          gaps: '[]',
+          strengths: '[]',
+        }),
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        upsert: jest.fn().mockResolvedValue({}),
+        update: jest.fn().mockResolvedValue({}),
+      };
+      await expect(
+        service.generateReport(
+          { cycleId: 'cycle-1', scope: 'INDIVIDUAL', participantId: 'user-2' },
+          'admin-1',
+        ),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('deve gerar relatório organizacional por omissão', async () => {
@@ -955,7 +1076,7 @@ describe('Evaluation360Service (additional)', () => {
       await expect(
         service.generateReport(
           { cycleId: 'cycle-1', scope: 'INDIVIDUAL', participantId: 'ghost' },
-          'admin-1',
+          'ghost',
         ),
       ).rejects.toThrow(NotFoundException);
     });
@@ -981,7 +1102,7 @@ describe('Evaluation360Service (additional)', () => {
           participantId: 'user-1',
           includeAiInsights: true,
         },
-        'admin-1',
+        'user-1',
       );
       expect(result).toHaveProperty('aiInsights');
       expect(typeof (result as any).aiInsights).toBe('string');

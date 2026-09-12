@@ -102,9 +102,9 @@ const STANDARD_EVAL360_COMPETENCY_NAMES = [
 ] as const;
 
 const STANDARD_EVAL360_QUESTIONS: Record<string, string> = {
-  'Liderança':
+  Liderança:
     'Com que frequência este colaborador inspira a equipa, dá feedback, toma decisões e desenvolve pessoas?',
-  'Comunicação':
+  Comunicação:
     'Com que frequência este colaborador comunica de forma clara, escuta activamente e adapta a comunicação ao público?',
   'Foco em Resultados':
     'Com que frequência este colaborador cumpre objectivos, assume responsabilidade e procura melhoria contínua?',
@@ -112,9 +112,9 @@ const STANDARD_EVAL360_QUESTIONS: Record<string, string> = {
     'Com que frequência este colaborador colabora com os colegas, partilha informação e resolve conflitos?',
   'Pensamento Estratégico':
     'Com que frequência este colaborador demonstra visão a médio/longo prazo, capacidade de antecipação e alinhamento com os objectivos da organização?',
-  'Resiliência':
+  Resiliência:
     'Com que frequência este colaborador gere a pressão, se adapta a mudanças e mantém o foco?',
-  'Inovação':
+  Inovação:
     'Com que frequência este colaborador gera novas ideias, está aberto a novas abordagens e procura melhoria contínua?',
   'Bem-estar e Disciplina':
     'Com que frequência este colaborador gere o stress, mantém equilíbrio emocional, contribui para um ambiente positivo, cumpre prazos, é pontual e cumpre normas e procedimentos?',
@@ -261,9 +261,9 @@ export class Evaluation360Service {
     // Devolve no mesmo formato do `include: { competencies: { include: {
     // competency: true } } }` do create() do ciclo — evita um segundo
     // round-trip só para reler o ciclo com as competências acabadas de anexar.
-    const created: (Prisma.Eval360CycleCompetencyGetPayload<{
+    const created: Prisma.Eval360CycleCompetencyGetPayload<{
       include: { competency: true };
-    }>)[] = [];
+    }>[] = [];
     for (const [order, competency] of competencies.entries()) {
       const cycleCompetency = await this.prisma.eval360CycleCompetency.create({
         data: { cycleId, competencyId: competency.id, weight: 1, isRequired: true, order },
@@ -524,7 +524,12 @@ export class Evaluation360Service {
     const users = evaluateeIds.length
       ? await this.prisma.user.findMany({
           where: { id: { in: evaluateeIds } },
-          select: { id: true, fullName: true, department: { select: { name: true } } },
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            department: { select: { name: true } },
+          },
         })
       : [];
     const byId = new Map(users.map(u => [u.id, u]));
@@ -532,6 +537,9 @@ export class Evaluation360Service {
       ...a,
       evaluateeName: byId.get(+a.evaluateeId)?.fullName ?? 'Colaborador',
       evaluateeDepartment: byId.get(+a.evaluateeId)?.department?.name ?? null,
+      // Foto do avaliado — carregada por ele próprio (ver User.avatarUrl) —
+      // pedida explicitamente no card do separador "Avaliar".
+      evaluateeAvatarUrl: byId.get(+a.evaluateeId)?.avatarUrl ?? null,
     }));
   }
 
@@ -768,9 +776,7 @@ export class Evaluation360Service {
       where: { cycleId },
       select: { evaluateeId: true, evaluatorId: true, role: true },
     });
-    const existingKeys = new Set(
-      existing.map(a => `${a.evaluateeId}:${a.evaluatorId}:${a.role}`),
-    );
+    const existingKeys = new Set(existing.map(a => `${a.evaluateeId}:${a.evaluatorId}:${a.role}`));
 
     let created = 0;
     for (const participant of participants) {
@@ -803,7 +809,11 @@ export class Evaluation360Service {
       entityId: cycleId,
       action: 'DISTRIBUTE',
       userId: actorId,
-      details: { participants: participants.length, assignmentsCreated: created, invitesSent: sent },
+      details: {
+        participants: participants.length,
+        assignmentsCreated: created,
+        invitesSent: sent,
+      },
     });
 
     return { participants: participants.length, assignmentsCreated: created, invitesSent: sent };
@@ -1149,6 +1159,12 @@ export class Evaluation360Service {
       const othersCompScore = avg(otherVals);
       const gap =
         selfCompScore !== null && othersCompScore !== null ? selfCompScore - othersCompScore : null;
+      // Mesmo quorum aplicado ao peerScore agregado acima (linha ~1105): sem
+      // isto, um par abaixo do quorum ficava protegido no cartão "Pares" mas
+      // continuava exposto aqui, por competência — na prática destapando a
+      // resposta individual desse par (n=1 ou 2) no radar/heatmap. A
+      // anonimato é por definição do produto, não só no resumo.
+      const peerCompScore = peerResponses.length >= cycle.quorumMinimum ? avg(peerVals) : null;
 
       scoresByCompetency[comp.id] = {
         name: comp.name,
@@ -1158,7 +1174,7 @@ export class Evaluation360Service {
         selfScore: selfCompScore,
         othersScore: othersCompScore,
         managerScore: avg(managerVals),
-        peerScore: avg(peerVals),
+        peerScore: peerCompScore,
         gap,
         benchmark: benchmarks[comp.id] ?? null,
       };
@@ -1506,13 +1522,21 @@ export class Evaluation360Service {
     // — resolvem-se aqui para o frontend não ter de mostrar IDs em bruto.
     // (Feedback contínuo não é anónimo, ao contrário das respostas 360º.)
     const fromIds = [...new Set(data.map(f => +f.fromUserId))];
-    const competencyIds = [...new Set(data.map(f => f.competencyId).filter((id): id is number => id != null))];
+    const competencyIds = [
+      ...new Set(data.map(f => f.competencyId).filter((id): id is number => id != null)),
+    ];
     const [fromUsers, competencies] = await Promise.all([
       fromIds.length
-        ? this.prisma.user.findMany({ where: { id: { in: fromIds } }, select: { id: true, fullName: true } })
+        ? this.prisma.user.findMany({
+            where: { id: { in: fromIds } },
+            select: { id: true, fullName: true },
+          })
         : Promise.resolve([]),
       competencyIds.length
-        ? this.prisma.competency.findMany({ where: { id: { in: competencyIds } }, select: { id: true, name: true } })
+        ? this.prisma.competency.findMany({
+            where: { id: { in: competencyIds } },
+            select: { id: true, name: true },
+          })
         : Promise.resolve([]),
     ]);
     const nameById = new Map(fromUsers.map(u => [u.id, u.fullName]));
@@ -1552,9 +1576,18 @@ export class Evaluation360Service {
   // RELATÓRIOS
   // ============================================================
 
-  async generateReport(dto: GenerateReportDto, _requesterId: string) {
+  async generateReport(dto: GenerateReportDto, requesterId: string) {
     const cycle = await this.findCycleOrFail(dto.cycleId);
     if (dto.scope === 'INDIVIDUAL' && dto.participantId) {
+      // Mesma regra explícita de getParticipantResult: ninguém vê o
+      // resultado de outro utilizador, nem ADMIN nem RH nem o GESTOR sobre
+      // um subordinado — este endpoint tinha ficado de fora dessa auditoria
+      // e devolvia o resultado individual completo de qualquer participantId
+      // a quem tivesse role ADMIN/RH/GESTOR (ver @Roles em
+      // evaluation360.controller.ts#generateReport).
+      if (String(requesterId) !== String(dto.participantId)) {
+        throw new ForbiddenException('Sem permissão para ver este resultado.');
+      }
       const result = await this.prisma.evaluationResult.findUnique({
         where: {
           cycleId_participantId: { cycleId: dto.cycleId, participantId: dto.participantId },
