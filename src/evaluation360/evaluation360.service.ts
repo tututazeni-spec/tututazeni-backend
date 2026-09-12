@@ -1443,6 +1443,21 @@ export class Evaluation360Service {
       select: { participantId: true, weightedScore: true, selfScore: true },
     });
 
+    // `name`/`score` nunca foram devolvidos, apesar de NineBoxGrid.tsx (FE)
+    // sempre os ter esperado (`e.name.split(' ')[0]`, `e.score.toFixed(2)`)
+    // — só nunca tinha rebentado porque o separador nunca tinha dados reais
+    // até haver um ciclo com resultados calculados. Resolvido aqui, não no
+    // FE, seguindo o mesmo padrão de listMyAssignments/listFeedbackForUser
+    // (nomes resolvidos no service, sem FK/relation nessas colunas).
+    const participantIds = [...new Set(withSelf.map(r => +r.participantId))];
+    const users = participantIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: participantIds } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const nameById = new Map(users.map(u => [u.id, u.fullName]));
+
     const max = Math.max(...withSelf.map(r => r.weightedScore ?? 0), 5);
     const boxes = withSelf.map(r => {
       const perf = r.weightedScore / max;
@@ -1451,6 +1466,8 @@ export class Evaluation360Service {
       const potBox = potential >= 0.67 ? 'HIGH' : potential >= 0.33 ? 'MID' : 'LOW';
       return {
         participantId: r.participantId,
+        name: nameById.get(+r.participantId) ?? 'Colaborador',
+        score: r.weightedScore,
         performance: perfBox,
         potential: potBox,
         box: `${perfBox}_${potBox}`,
