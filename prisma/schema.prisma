@@ -3837,6 +3837,9 @@ enum TaskCategory {
   BENEFITS
   ADMIN
   MEETING
+  POLICIES
+  EVALUATION
+  ONE_ON_ONE
 }
 
 enum TaskType {
@@ -3891,6 +3894,8 @@ model OnboardingTemplate {
   id              Int                      @id @default(autoincrement())
   name            String
   description     String?
+  company         String?
+  location        String?
   positionId      Int?
   departmentId    Int?
   durationDays    Int                      @default(30)
@@ -3916,6 +3921,7 @@ model OnboardingTemplateTask {
   type             TaskType
   phase            TaskPhase
   responsible      ResponsibleRole
+  isMandatory      Boolean                  @default(true)
   dueDayOffset     Int?
   dependsOn        Int[]
   courseId         Int?
