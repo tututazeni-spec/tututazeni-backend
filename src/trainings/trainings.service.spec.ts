@@ -32,6 +32,8 @@ const mockPrisma = {
     upsert: jest.fn(),
     aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 0 } }),
   },
+  trainingCompetency: { deleteMany: jest.fn(), createMany: jest.fn() },
+  trainingCoInstructor: { deleteMany: jest.fn(), createMany: jest.fn() },
   certificate: { create: jest.fn() },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { update: jest.fn().mockResolvedValue({}) },
@@ -42,9 +44,12 @@ const baseTraining = {
   title: 'Formação NestJS',
   status: 'PUBLISHED',
   type: 'ONLINE',
+  createdById: 1,
   participants: [],
   _count: { participants: 0, sessions: 1 },
 };
+
+const adminUser = { id: 1, email: 'admin@innova.com', role: { name: 'ADMIN' } } as any;
 
 describe('TrainingsService', () => {
   let service: TrainingsService;
@@ -87,7 +92,7 @@ describe('TrainingsService', () => {
   describe('create', () => {
     it('deve criar formação', async () => {
       mockPrisma.training.create.mockResolvedValue(baseTraining);
-      const result = await service.create({ title: 'NestJS', type: 'ONLINE' } as any);
+      const result = await service.create({ title: 'NestJS', type: 'ONLINE' } as any, 1);
       expect(result).toBeDefined();
     });
   });
@@ -96,7 +101,7 @@ describe('TrainingsService', () => {
     it('deve publicar formação', async () => {
       mockPrisma.training.findUnique.mockResolvedValue(baseTraining);
       mockPrisma.training.update.mockResolvedValue({ ...baseTraining, status: 'PUBLISHED' });
-      const result = await service.publish(1);
+      const result = await service.publish(1, adminUser);
       expect(result).toBeDefined();
     });
   });

@@ -1522,6 +1522,9 @@ const TaskCategory = {
   BENEFITS: 'BENEFITS',
   ADMIN: 'ADMIN',
   MEETING: 'MEETING',
+  POLICIES: 'POLICIES',
+  EVALUATION: 'EVALUATION',
+  ONE_ON_ONE: 'ONE_ON_ONE',
 };
 
 const TaskType = {
@@ -1577,7 +1580,17 @@ const ContentStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHI
 
 const MicroLearningAction = { LIKE: 'LIKE', SAVE: 'SAVE', SKIP: 'SKIP' };
 
-const TrainingType = { PRESENTIAL: 'PRESENTIAL', ONLINE: 'ONLINE', HYBRID: 'HYBRID' };
+const TrainingType = {
+  PRESENTIAL: 'PRESENTIAL',
+  ONLINE: 'ONLINE',
+  HYBRID: 'HYBRID',
+  VIRTUAL_ROOM: 'VIRTUAL_ROOM',
+  ELEARNING: 'ELEARNING',
+  WORKSHOP: 'WORKSHOP',
+  SEMINAR: 'SEMINAR',
+  COACHING: 'COACHING',
+  MENTORING: 'MENTORING',
+};
 
 const TrainingLevel = { BEGINNER: 'BEGINNER', INTERMEDIATE: 'INTERMEDIATE', ADVANCED: 'ADVANCED' };
 
@@ -1585,11 +1598,20 @@ const TrainingStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCH
 
 const TrainingParticipantStatus = {
   WAITLIST: 'WAITLIST',
+  PENDING_APPROVAL: 'PENDING_APPROVAL',
   REGISTERED: 'REGISTERED',
   ATTENDED: 'ATTENDED',
   ABSENT: 'ABSENT',
   CANCELLED: 'CANCELLED',
+  REJECTED: 'REJECTED',
   COMPLETED: 'COMPLETED',
+};
+
+const TrainingAssessmentRole = {
+  INITIAL: 'INITIAL',
+  FINAL: 'FINAL',
+  SATISFACTION_SURVEY: 'SATISFACTION_SURVEY',
+  INSTRUCTOR_EVALUATION: 'INSTRUCTOR_EVALUATION',
 };
 
 const SessionModality = { PRESENTIAL: 'PRESENTIAL', ONLINE: 'ONLINE', HYBRID: 'HYBRID' };
@@ -2132,6 +2154,7 @@ module.exports = {
   TrainingLevel,
   TrainingStatus,
   TrainingParticipantStatus,
+  TrainingAssessmentRole,
   SessionModality,
   ArticleStatus,
   ArticleAccess,
