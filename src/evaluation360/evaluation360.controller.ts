@@ -8,6 +8,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -53,6 +54,12 @@ import { CurrentUserData } from '../common/types/current-user';
 // e frontend/lib/roles.ts. O banco de competências (createCompetency)
 // continua ADMIN/RH só — não é "criar questionário".
 const EVAL_CREATOR_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR, Role.LIDER] as const;
+
+// Quem pode eliminar/restaurar um ciclo — mais restrito que EVAL_CREATOR_ROLES:
+// eliminar é uma acção destrutiva (mesmo sendo soft delete e reversível via o
+// separador "Apagados" da auditoria), por isso fica só para ADMIN/DIRECTOR,
+// espelhado em frontend/lib/roles.ts (EVAL_CYCLE_DELETE_ROLES).
+const EVAL_CYCLE_DELETE_ROLES = [Role.ADMIN, Role.DIRECTOR] as const;
 
 @ApiTags('Avaliação 360°')
 @ApiBearerAuth()
@@ -144,10 +151,37 @@ export class Evaluation360Controller {
     return this.service.listCycles(tenantId, query);
   }
 
+  // Rota literal 'cycles/deleted' TEM de vir antes de 'cycles/:id' — caso
+  // contrário 'deleted' seria capturado pelo :id e esta rota ficaria
+  // inalcançável (mesma classe de bug de project_innova_route_shadowing).
+  @Get('cycles/deleted')
+  @Roles(...EVAL_CYCLE_DELETE_ROLES)
+  @ApiOperation({ summary: 'Listar ciclos eliminados (soft delete) — separador Apagados da auditoria' })
+  @ApiQuery({ name: 'tenantId', required: false })
+  async listDeletedCycles(@Query('tenantId') tenantId?: string) {
+    return this.service.listDeletedCycles(tenantId);
+  }
+
   @Get('cycles/:id')
   @ApiOperation({ summary: 'Detalhe completo do ciclo (competências, questões, stats)' })
   async getCycleDetail(@Param('id') id: string) {
     return this.service.getCycleDetail(id);
+  }
+
+  @Delete('cycles/:id')
+  @Roles(...EVAL_CYCLE_DELETE_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Eliminar ciclo (soft delete, auditável e restaurável)' })
+  async deleteCycle(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.deleteCycle(id, String(user.id));
+  }
+
+  @Post('cycles/:id/restore')
+  @Roles(...EVAL_CYCLE_DELETE_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Restaurar ciclo eliminado' })
+  async restoreCycle(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.restoreCycle(id, String(user.id));
   }
 
   @Post('cycles/:id/calculate')

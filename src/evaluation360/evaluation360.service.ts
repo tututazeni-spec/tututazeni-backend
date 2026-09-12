@@ -357,7 +357,10 @@ export class Evaluation360Service {
   }
 
   async listCycles(tenantId: string, query: Evaluation360PaginationDto) {
-    const where: Prisma.Eval360CycleWhereInput = { tenantId };
+    // deletedAt: null — ciclos eliminados (soft delete, ver deleteCycle) saem
+    // da listagem normal; continuam acessíveis só via listDeletedCycles
+    // (separador "Apagados" do módulo de auditoria).
+    const where: Prisma.Eval360CycleWhereInput = { tenantId, deletedAt: null };
     if (query.search) where.name = { contains: query.search };
     const [data, total] = await Promise.all([
       this.prisma.eval360Cycle.findMany({
@@ -397,8 +400,106 @@ export class Evaluation360Service {
         _count: { select: { participants: true, assignments: true, responses: true } },
       },
     });
-    if (!cycle) throw new NotFoundException('Ciclo não encontrado.');
+    // deletedAt — ciclo eliminado (soft delete) sai da vista normal, mesmo
+    // pelo detalhe directo; só listDeletedCycles/restoreCycle o veem.
+    if (!cycle || cycle.deletedAt) throw new NotFoundException('Ciclo não encontrado.');
     return cycle;
+  }
+
+  // ============================================================
+  // ELIMINAÇÃO E RESTAURO (soft delete, auditável)
+  // ============================================================
+  //
+  // ADMIN/DIRECTOR podem eliminar um ciclo (@Roles no controller) — a linha
+  // nunca sai da BD, só fica marcada com deletedAt e escondida de
+  // listCycles/getCycleDetail/findCycleOrFail. Um snapshot completo do ciclo
+  // (config, competências, contagens) fica gravado no AuditLog no momento da
+  // eliminação, e listDeletedCycles/restoreCycle dão ao separador "Apagados"
+  // do módulo de auditoria tudo o que precisa para mostrar e reverter a
+  // eliminação sem depender desse snapshot (a própria linha continua completa).
+
+  /** Ciclos eliminados (soft delete) — alimenta o separador "Apagados" da auditoria. */
+  async listDeletedCycles(tenantId?: string) {
+    const where: Prisma.Eval360CycleWhereInput = { deletedAt: { not: null } };
+    if (tenantId) where.tenantId = tenantId;
+    return this.prisma.eval360Cycle.findMany({
+      where,
+      orderBy: { deletedAt: 'desc' },
+      include: {
+        competencies: { include: { competency: true }, orderBy: { order: 'asc' } },
+        _count: { select: { participants: true, assignments: true, responses: true } },
+      },
+    });
+  }
+
+  async deleteCycle(id: string, actorId: string) {
+    const cycle = await this.prisma.eval360Cycle.findUnique({
+      where: { id },
+      include: {
+        competencies: { include: { competency: true }, orderBy: { order: 'asc' } },
+        _count: { select: { participants: true, assignments: true, responses: true } },
+      },
+    });
+    if (!cycle || cycle.deletedAt) throw new NotFoundException('Ciclo de avaliação não encontrado.');
+
+    await this.prisma.eval360Cycle.update({
+      where: { id },
+      data: { deletedAt: new Date(), deletedById: actorId },
+    });
+
+    // logEntity (não .log()) — Eval360Cycle.id é cuid (String); AuditLog.entityId
+    // é Int?, por isso o id real vai dentro do metadata, tal como o resto do
+    // snapshot "dados completos auditáveis" pedido para o separador Apagados.
+    await this.audit.logEntity(Number(actorId), 'DELETE', 'EvaluationCycle', id, {
+      snapshot: {
+        id: cycle.id,
+        tenantId: cycle.tenantId,
+        name: cycle.name,
+        description: cycle.description,
+        model: cycle.model,
+        type: cycle.type,
+        status: cycle.status,
+        startDate: cycle.startDate,
+        endDate: cycle.endDate,
+        anonymityMode: cycle.anonymityMode,
+        quorumMinimum: cycle.quorumMinimum,
+        weightSelf: cycle.weightSelf,
+        weightManager: cycle.weightManager,
+        weightPeer: cycle.weightPeer,
+        weightSubordinate: cycle.weightSubordinate,
+        weightExternal: cycle.weightExternal,
+        cutoffPromotion: cycle.cutoffPromotion,
+        cutoffBonus: cycle.cutoffBonus,
+        cutoffProgram: cycle.cutoffProgram,
+        linkedToPdi: cycle.linkedToPdi,
+        linkedToBonus: cycle.linkedToBonus,
+        linkedToOkrs: cycle.linkedToOkrs,
+        createdBy: cycle.createdBy,
+        createdAt: cycle.createdAt,
+        competencies: cycle.competencies.map(c => ({
+          id: c.competencyId,
+          name: c.competency.name,
+          category: c.competency.category,
+        })),
+        counts: cycle._count,
+      },
+    });
+    return { id, deletedAt: new Date() };
+  }
+
+  async restoreCycle(id: string, actorId: string) {
+    const cycle = await this.prisma.eval360Cycle.findUnique({ where: { id } });
+    if (!cycle) throw new NotFoundException('Ciclo de avaliação não encontrado.');
+    if (!cycle.deletedAt) throw new BadRequestException('Este ciclo não está eliminado.');
+
+    const restored = await this.prisma.eval360Cycle.update({
+      where: { id },
+      data: { deletedAt: null, deletedById: null },
+    });
+    await this.audit.logEntity(Number(actorId), 'RESTORE', 'EvaluationCycle', id, {
+      name: cycle.name,
+    });
+    return restored;
   }
 
   // ============================================================
@@ -992,7 +1093,7 @@ export class Evaluation360Service {
       where: { id: cycleId },
       include: { competencies: { include: { competency: true } } },
     });
-    if (!cycle) throw new NotFoundException('Ciclo não encontrado.');
+    if (!cycle || cycle.deletedAt) throw new NotFoundException('Ciclo não encontrado.');
 
     await this.prisma.eval360Cycle.update({
       where: { id: cycleId },
@@ -1652,7 +1753,12 @@ export class Evaluation360Service {
 
   private async findCycleOrFail(id: string) {
     const cycle = await this.prisma.eval360Cycle.findUnique({ where: { id } });
-    if (!cycle) throw new NotFoundException('Ciclo de avaliação não encontrado.');
+    // deletedAt !== null — um ciclo eliminado (soft delete) deixa de existir
+    // para qualquer operação normal (update, publish, participantes,
+    // avaliadores, resultados...); só listDeletedCycles/restoreCycle o veem.
+    // Continua a usar findUnique (não findFirst) — mantém intactos os ~30
+    // testes existentes que fazem mock de cycleMock.findUnique.
+    if (!cycle || cycle.deletedAt) throw new NotFoundException('Ciclo de avaliação não encontrado.');
     return cycle;
   }
 

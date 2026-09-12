@@ -8615,6 +8615,13 @@ model Eval360Cycle {
   createdBy         String
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+  // Soft delete: ADMIN/DIRECTOR podem eliminar um ciclo (evaluation360.service.ts#deleteCycle),
+  // mas a linha nunca é apagada da BD — fica escondida de listCycles/getCycleDetail
+  // e pode ser restaurada (restoreCycle) a partir do separador "Apagados" do módulo
+  // de auditoria. deletedById é um id de actor "solto" (String), tal como createdBy
+  // acima — não é uma relação FK.
+  deletedAt         DateTime?
+  deletedById       String?
 
   competencies Eval360CycleCompetency[]
   assignments  EvaluatorAssignment[]
@@ -8625,6 +8632,7 @@ model Eval360Cycle {
 
   @@index([status])
   @@index([tenantId])
+  @@index([deletedAt])
 }
 
 model Eval360CycleCompetency {
