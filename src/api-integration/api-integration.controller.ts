@@ -22,6 +22,7 @@ import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import {
   CreateIntegrationDto,
   UpdateIntegrationDto,
+  TestIntegrationConnectionDto,
   IntegrationLogFilterDto,
   CreateApiKeyDto,
   CreateWebhookDto,
@@ -69,6 +70,15 @@ export class ApiIntegrationController {
   @ApiOperation({ summary: 'Registar nova integração (HRIS, ERP, LMS, BI…)' })
   create(@Body() dto: CreateIntegrationDto) {
     return this.svc.createIntegration(dto);
+  }
+
+  // Rota estática ("test-connection") — sem conflito com `:id/test` (dois
+  // segmentos). Usada pelo botão "Testar conexão" do formulário de criação,
+  // antes de a integração existir.
+  @Post('test-connection')
+  @ApiOperation({ summary: 'Testar conectividade antes de criar a integração' })
+  testConnectionDraft(@Body() dto: TestIntegrationConnectionDto) {
+    return this.svc.testConnectionDraft(dto);
   }
 
   @Put(':id')

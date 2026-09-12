@@ -12,8 +12,19 @@ import {
   Min,
   IsNotEmpty,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IntegrationType, IntegrationStatus, AuthType, ApiCallStatus } from '@prisma/client';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import {
+  IntegrationType,
+  IntegrationStatus,
+  AuthType,
+  ApiCallStatus,
+  IntegrationCategory,
+  IntegrationEnvironment,
+  IntegrationDataFormat,
+  IntegrationCommunicationMethod,
+  IntegrationSyncDirection,
+  SyncFrequency,
+} from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────
@@ -26,7 +37,18 @@ import { BaseFilterDto } from '../common/dtos/pagination.dto';
 // só-do-DTO (ex. 'HRIS') passava a validação do DTO mas rebentava com 500 no
 // Prisma. Corrigido importando os enums reais.
 
-export { IntegrationType, IntegrationStatus, AuthType, ApiCallStatus };
+export {
+  IntegrationType,
+  IntegrationStatus,
+  AuthType,
+  ApiCallStatus,
+  IntegrationCategory,
+  IntegrationEnvironment,
+  IntegrationDataFormat,
+  IntegrationCommunicationMethod,
+  IntegrationSyncDirection,
+  SyncFrequency,
+};
 
 export enum ApiKeyScope {
   READ = 'read',
@@ -53,23 +75,86 @@ export enum WebhookEventType {
 export class CreateIntegrationDto {
   @ApiProperty() @IsString() @MaxLength(100) name!: string;
   @ApiProperty({ enum: IntegrationType }) @IsEnum(IntegrationType) type!: IntegrationType;
+  @ApiPropertyOptional({ enum: IntegrationCategory })
+  @IsOptional()
+  @IsEnum(IntegrationCategory)
+  category?: IntegrationCategory;
+  @ApiPropertyOptional({ description: 'Sistema/Plataforma — texto livre (SAP, Workday, Moodle...)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  platform?: string;
   @ApiProperty() @IsString() endpoint!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() baseUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() apiKey?: string;
   @ApiPropertyOptional({ enum: AuthType }) @IsOptional() @IsEnum(AuthType) authType?: AuthType;
+  // Combinados pelo service em credentialsJson (encriptado) — nunca
+  // persistidos em texto plano. Ver IntegrationConfig.credentialsJson.
+  @ApiPropertyOptional() @IsOptional() @IsString() clientId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() clientSecret?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() accessToken?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() authUrl?: string;
+  @ApiPropertyOptional({ enum: IntegrationEnvironment })
+  @IsOptional()
+  @IsEnum(IntegrationEnvironment)
+  environment?: IntegrationEnvironment;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) apiVersion?: string;
+  @ApiPropertyOptional({ enum: IntegrationDataFormat })
+  @IsOptional()
+  @IsEnum(IntegrationDataFormat)
+  dataFormat?: IntegrationDataFormat;
+  @ApiPropertyOptional({ enum: IntegrationCommunicationMethod })
+  @IsOptional()
+  @IsEnum(IntegrationCommunicationMethod)
+  communicationMethod?: IntegrationCommunicationMethod;
+  @ApiPropertyOptional({ enum: SyncFrequency })
+  @IsOptional()
+  @IsEnum(SyncFrequency)
+  syncFrequency?: SyncFrequency;
+  @ApiPropertyOptional({ enum: IntegrationSyncDirection })
+  @IsOptional()
+  @IsEnum(IntegrationSyncDirection)
+  syncDirection?: IntegrationSyncDirection;
+  @ApiPropertyOptional({ type: [String], description: 'Dados a sincronizar (ex.: users, courses, enrollments)' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  dataToSync?: string[];
+  @ApiPropertyOptional({ description: 'Mapeamento de campos origem→destino' })
+  @IsOptional()
+  fieldMapping?: Record<string, string>;
+  @ApiPropertyOptional() @IsOptional() @IsString() webhookUrl?: string;
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  webhookEvents?: string[];
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) timeoutMs?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) maxRetries?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) retryIntervalMs?: number;
+  @ApiPropertyOptional({ enum: IntegrationStatus })
+  @IsOptional()
+  @IsEnum(IntegrationStatus)
+  status?: IntegrationStatus;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() activatedAt?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() responsibleUserId?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
   @ApiPropertyOptional() @IsOptional() config?: Record<string, unknown>;
   @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() allowedIps?: string[];
 }
 
-export class UpdateIntegrationDto {
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) name?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() endpoint?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() baseUrl?: string;
+export class UpdateIntegrationDto extends PartialType(CreateIntegrationDto) {}
+
+export class TestIntegrationConnectionDto {
+  @ApiProperty() @IsString() @IsNotEmpty() baseUrl: string;
+  @ApiPropertyOptional({ enum: AuthType }) @IsOptional() @IsEnum(AuthType) authType?: AuthType;
   @ApiPropertyOptional() @IsOptional() @IsString() apiKey?: string;
-  @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
-  @ApiPropertyOptional() @IsOptional() config?: Record<string, unknown>;
+  @ApiPropertyOptional() @IsOptional() @IsString() accessToken?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() clientId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() clientSecret?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) timeoutMs?: number;
 }
 
 export class IntegrationLogFilterDto extends BaseFilterDto {
