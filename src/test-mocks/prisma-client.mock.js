@@ -1479,6 +1479,8 @@ const TaskCategory = {
   BENEFITS: 'BENEFITS',
   ADMIN: 'ADMIN',
   MEETING: 'MEETING',
+  POLICIES: 'POLICIES',
+  EVALUATION: 'EVALUATION',
 };
 
 const TaskType = {

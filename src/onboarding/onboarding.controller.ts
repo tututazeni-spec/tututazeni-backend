@@ -66,8 +66,8 @@ export class OnboardingController {
   }
 
   @Post('templates')
-  @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Criar template de onboarding' })
+  @Roles(Role.ADMIN, Role.GESTOR, Role.RH, Role.DIRECTOR, Role.LIDER)
+  @ApiOperation({ summary: 'Criar plano de integração (template de onboarding)' })
   createTemplate(@Body() dto: CreateOnboardingTemplateDto) {
     return this.svc.createTemplate(dto);
   }

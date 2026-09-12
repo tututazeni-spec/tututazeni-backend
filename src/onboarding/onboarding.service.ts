@@ -60,7 +60,19 @@ export class OnboardingService {
   }
 
   async createTemplate(dto: CreateOnboardingTemplateDto) {
-    return this.prisma.onboardingTemplate.create({ data: dto });
+    const { tasks, ...templateData } = dto;
+    return this.prisma.onboardingTemplate.create({
+      data: {
+        ...templateData,
+        // Estrutura (tarefas) criada atomicamente com o template quando
+        // enviada no mesmo pedido — permite a ADMIN/GESTOR/RH/DIRECTOR/LIDER
+        // criar o plano de integração já com Tarefas, Formação obrigatória,
+        // Documentos, etc., sem depender de POST /onboarding/templates/tasks
+        // (esse continua restrito a ADMIN/RH para edição posterior).
+        ...(tasks && tasks.length > 0 ? { tasks: { create: tasks } } : {}),
+      },
+      include: { tasks: { orderBy: { seq: 'asc' } } },
+    });
   }
 
   async updateTemplate(id: number, dto: UpdateOnboardingTemplateDto) {

@@ -113,6 +113,50 @@ describe('OnboardingService', () => {
       } as any);
       expect(result.name).toBe('Template Padrão');
     });
+
+    it('cria a Estrutura (tasks) atomicamente com o template, sem chamar templates/tasks à parte', async () => {
+      mockPrisma.onboardingTemplate.create.mockResolvedValue(baseTemplate);
+      const tasks = [
+        {
+          title: 'Assinar contrato',
+          category: 'ADMIN',
+          type: 'TASK',
+          phase: 'PRE_BOARDING',
+          responsible: 'HR',
+          dueDayOffset: 0,
+          xpReward: 10,
+          seq: 0,
+        },
+      ];
+      await service.createTemplate({
+        name: 'Template Comercial',
+        durationDays: 30,
+        company: 'INNOVA',
+        location: 'Lisboa',
+        tasks,
+      } as any);
+      expect(mockPrisma.onboardingTemplate.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            name: 'Template Comercial',
+            company: 'INNOVA',
+            location: 'Lisboa',
+            tasks: { create: tasks },
+          }),
+        }),
+      );
+      expect(mockPrisma.onboardingTemplateTask.create).not.toHaveBeenCalled();
+    });
+
+    it('não envia `tasks` na criação do template quando a estrutura não é fornecida', async () => {
+      mockPrisma.onboardingTemplate.create.mockResolvedValue(baseTemplate);
+      await service.createTemplate({
+        name: 'Template Padrão',
+        durationDays: 30,
+      } as any);
+      const call = mockPrisma.onboardingTemplate.create.mock.calls[0][0];
+      expect(call.data.tasks).toBeUndefined();
+    });
   });
 
   describe('findAll', () => {
