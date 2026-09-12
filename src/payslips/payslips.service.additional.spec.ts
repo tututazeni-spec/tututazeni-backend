@@ -402,6 +402,35 @@ describe('PayslipsService — resumo anual, comparação e disputa', () => {
     expect(out.totals.netSalary).toBe(0);
   });
 
+  it('buildAnnualExport: com month, filtra por período exacto (ano-mês) em vez do ano inteiro', async () => {
+    mockPrisma.payslip.findMany.mockResolvedValue([
+      {
+        period: '2026-04',
+        baseSalary: 100,
+        mealAllowance: 0,
+        vacationAllowance: 0,
+        christmasAllowance: 0,
+        bonuses: 0,
+        overtime: 0,
+        otherAllowances: 0,
+        grossSalary: 100,
+        incomeTax: 10,
+        socialSecurity: 3,
+        totalDeductions: 13,
+        netSalary: 87,
+      },
+    ]);
+    const out = await service.buildAnnualExport(7, '2026', '4');
+    expect(mockPrisma.payslip.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ period: '2026-04' }),
+      }),
+    );
+    expect(out.month).toBe('4');
+    expect(out.months).toBe(1);
+    expect(out.rows).toHaveLength(1);
+  });
+
   it('annualSummary: soma correctamente os totais do ano', async () => {
     mockPrisma.payslip.findMany.mockResolvedValue([
       {

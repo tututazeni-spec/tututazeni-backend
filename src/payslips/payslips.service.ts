@@ -97,6 +97,8 @@ export const ANNUAL_EXPORT_FIELDS = [
 export type AnnualExportField = (typeof ANNUAL_EXPORT_FIELDS)[number];
 export interface AnnualExport {
   year: string;
+  /** Mês (MM) quando o export foi filtrado a um único mês; ausente = ano completo. */
+  month?: string;
   userId: number;
   months: number;
   rows: Array<{ period: string } & Record<AnnualExportField, number>>;
@@ -525,11 +527,14 @@ export class PayslipsService {
 
   // ─── EXPORTAÇÃO DO RESUMO ANUAL (dados p/ CSV ou PDF) ─────────────────────
   // Devolve dados estruturados com todas as colunas monetárias; a serialização
-  // (CSV/PDF) fica no controlador. Um ano sem recibos devolve rows vazio +
-  // totais a zero, tal como annualSummary — nunca 404.
-  async buildAnnualExport(userId: number, year: string): Promise<AnnualExport> {
+  // (CSV/PDF) fica no controlador. Um ano (ou mês) sem recibos devolve rows
+  // vazio + totais a zero, tal como annualSummary — nunca 404.
+  // `month` (MM) é opcional — quando presente, restringe o export a esse único
+  // período (`${year}-${month}`) em vez do ano completo.
+  async buildAnnualExport(userId: number, year: string, month?: string): Promise<AnnualExport> {
+    const period = month ? `${year}-${month.padStart(2, '0')}` : { startsWith: year };
     const payslips = await this.prisma.read.payslip.findMany({
-      where: { userId, period: { startsWith: year }, status: { not: 'DRAFT' } },
+      where: { userId, period, status: { not: 'DRAFT' } },
       orderBy: { period: 'asc' },
     });
 
@@ -544,7 +549,7 @@ export class PayslipsService {
       totals[f] = payslips.reduce((acc, p) => acc + (p[f] ?? 0), 0);
     }
 
-    return { year, userId, months: payslips.length, rows, totals };
+    return { year, month, userId, months: payslips.length, rows, totals };
   }
 
   // ─── COMPARAÇÃO DE 2 MESES ─────────────────────────────────────────────────
