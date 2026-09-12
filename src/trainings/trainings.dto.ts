@@ -20,14 +20,23 @@ import {
   TrainingStatus,
   TrainingParticipantStatus as ParticipantStatus,
   SessionModality,
+  TrainingAssessmentRole,
 } from '@prisma/client';
+import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // NOTA: ParticipantStatus aqui é o `TrainingParticipantStatus` do Prisma —
 // nome local mantido por compatibilidade, distinto do `ParticipantStatus`
 // (LeadershipProgramParticipant) usado no módulo leadership.
 
-export { TrainingType, TrainingLevel, TrainingStatus, ParticipantStatus, SessionModality };
+export {
+  TrainingType,
+  TrainingLevel,
+  TrainingStatus,
+  ParticipantStatus,
+  SessionModality,
+  TrainingAssessmentRole,
+};
 
 // ─── Training ─────────────────────────────────────────────────────────────────
 
@@ -158,6 +167,121 @@ export class CreateTrainingDto {
   @IsInt()
   @Min(1)
   completionDeadlineDays?: number;
+
+  // ─── Informações adicionais ─────────────────────────────────────────────
+
+  @ApiPropertyOptional({ description: 'Código da formação (único)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  code?: string;
+
+  @ApiPropertyOptional({ description: 'Área temática' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  thematicArea?: string;
+
+  @ApiPropertyOptional({ description: 'Entidade formadora' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  trainingEntity?: string;
+
+  @ApiPropertyOptional({ description: 'Descrição específica desta turma/edição' })
+  @IsOptional()
+  @IsString()
+  classDescription?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Detalhes da modalidade: plataforma/link (ONLINE), sala virtual (VIRTUAL_ROOM) ou instruções de acesso (HYBRID)',
+  })
+  @IsOptional()
+  @IsString()
+  modalityDetails?: string;
+
+  // ─── Planeamento ─────────────────────────────────────────────────────────
+
+  @ApiPropertyOptional({ description: 'Horário (ex: 09h00-13h00)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  schedule?: string;
+
+  @ApiPropertyOptional({ description: 'Local/sala (default para as sessões)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  roomLocation?: string;
+
+  @ApiPropertyOptional({ description: 'Capacidade (default para as sessões)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  capacity?: number;
+
+  @ApiPropertyOptional({ description: 'Número de sessões planeadas' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  plannedSessionsCount?: number;
+
+  // ─── Participantes ───────────────────────────────────────────────────────
+
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Inscrição fica PENDING_APPROVAL até ser aprovada/rejeitada',
+  })
+  @IsOptional()
+  @IsBoolean()
+  requiresApproval?: boolean;
+
+  // ─── Operação ────────────────────────────────────────────────────────────
+
+  @ApiPropertyOptional({ type: [String], description: 'Recursos necessários' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  requiredResources?: string[];
+
+  // ─── Custos ──────────────────────────────────────────────────────────────
+
+  @ApiPropertyOptional({ description: 'Custo do formador (Kz)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  instructorCost?: number;
+
+  @ApiPropertyOptional({ description: 'Custo de material (Kz)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  materialCost?: number;
+
+  @ApiPropertyOptional({ description: 'Custo de transporte (Kz)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  transportCost?: number;
+
+  @ApiPropertyOptional({ description: 'Custo de alimentação (Kz)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  foodCost?: number;
+
+  @ApiPropertyOptional({ description: 'Custo de alojamento (Kz)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  lodgingCost?: number;
+
+  @ApiPropertyOptional({ description: 'Outros custos (Kz)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  otherCosts?: number;
 }
 
 export class UpdateTrainingDto extends PartialType(CreateTrainingDto) {}
@@ -270,6 +394,57 @@ export class BulkAttendanceDto {
   @IsArray()
   @IsInt({ each: true })
   presentUserIds!: number[];
+}
+
+// ─── Aprovações ───────────────────────────────────────────────────────────────
+
+export class RejectParticipantDto {
+  @ApiPropertyOptional({ description: 'Motivo da rejeição' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+// ─── Comunicação/notificações ─────────────────────────────────────────────────
+
+export class NotifyTrainingDto {
+  @ApiProperty({ description: 'Mensagem a enviar a todos os participantes activos' })
+  @IsString()
+  @MaxLength(1000)
+  message!: string;
+}
+
+// ─── Documentos administrativos ────────────────────────────────────────────────
+
+export class CreateTrainingDocumentDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  name!: string;
+
+  @ApiProperty({ description: 'URL do ficheiro (HTTPS, domínio autorizado)' })
+  @IsString()
+  @IsAllowedFileUrl()
+  fileUrl!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  category?: string;
+}
+
+// ─── Avaliação — associar avaliações existentes ────────────────────────────────
+
+export class LinkTrainingAssessmentDto {
+  @ApiProperty({ description: 'ID de um Assessment já existente' })
+  @IsInt()
+  assessmentId!: number;
+
+  @ApiProperty({ enum: TrainingAssessmentRole })
+  @IsEnum(TrainingAssessmentRole)
+  role!: TrainingAssessmentRole;
 }
 
 // ─── Rating do treinamento ────────────────────────────────────────────────────

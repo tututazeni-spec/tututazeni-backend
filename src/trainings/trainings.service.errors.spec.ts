@@ -58,6 +58,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
       maxParticipants: 2,
       waitlistEnabled: false,
       _count: { participants: 2 },
+      training: { requiresApproval: false },
     });
     await expect(
       service.registerParticipant({ sessionId: 1, userId: 7 } as any),
@@ -72,6 +73,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
       maxParticipants: 2,
       waitlistEnabled: true,
       _count: { participants: 2 },
+      training: { requiresApproval: false },
     });
     mockPrisma.trainingParticipant.upsert.mockResolvedValue({ id: 5, status: 'WAITLIST' });
 
@@ -89,6 +91,7 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
       maxParticipants: 0,
       waitlistEnabled: false,
       _count: { participants: 500 },
+      training: { requiresApproval: false },
     });
     mockPrisma.trainingParticipant.upsert.mockResolvedValue({ id: 5, status: 'REGISTERED' });
 
@@ -96,6 +99,26 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
 
     expect(mockPrisma.trainingParticipant.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ create: expect.objectContaining({ status: 'REGISTERED' }) }),
+    );
+  });
+
+  it('formação com requiresApproval → inscrição fica PENDING_APPROVAL, ignora vagas', async () => {
+    mockPrisma.trainingParticipant.findFirst.mockResolvedValue(null);
+    mockPrisma.trainingSession.findUnique.mockResolvedValue({
+      id: 1,
+      maxParticipants: 0,
+      waitlistEnabled: false,
+      _count: { participants: 0 },
+      training: { requiresApproval: true },
+    });
+    mockPrisma.trainingParticipant.upsert.mockResolvedValue({ id: 5, status: 'PENDING_APPROVAL' });
+
+    await service.registerParticipant({ sessionId: 1, userId: 7 } as any);
+
+    expect(mockPrisma.trainingParticipant.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ status: 'PENDING_APPROVAL' }),
+      }),
     );
   });
 });
