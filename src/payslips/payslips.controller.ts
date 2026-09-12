@@ -68,7 +68,12 @@ export class PayslipsController {
   @Get('my/annual-summary/export')
   @ApiOperation({ summary: 'Exportar o meu resumo anual ou mensal (CSV ou PDF)' })
   @ApiQuery({ name: 'year', required: false, example: '2026' })
-  @ApiQuery({ name: 'month', required: false, example: '04', description: 'Restringe a um único mês (MM); omitido = ano completo' })
+  @ApiQuery({
+    name: 'month',
+    required: false,
+    example: '04',
+    description: 'Restringe a um único mês (MM); omitido = ano completo',
+  })
   @ApiQuery({ name: 'format', required: false, enum: ['csv', 'pdf'] })
   async myAnnualSummaryExport(
     @CurrentUser() user: CurrentUserData,
