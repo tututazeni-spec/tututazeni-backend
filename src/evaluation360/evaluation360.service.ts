@@ -1432,49 +1432,44 @@ export class Evaluation360Service {
     }));
   }
 
+  // Nine-Box agregado — regra "ninguém vê o resultado de outro" (a mesma já
+  // aplicada a getTeamAnalytics/calibrateScore): a versão anterior devolvia
+  // nome+score reais por participante, isto é, exactamente o "cartão
+  // individual de outra pessoa" que a regra proíbe — incluindo a GESTOR
+  // sobre os seus próprios subordinados (por isso GESTOR perdeu o acesso a
+  // esta rota, ver controller). Devolve agora só a contagem de pessoas por
+  // quadrante, sempre os 9 quadrantes (mesmo a 0), para ADMIN/RH terem o
+  // retrato de distribuição de talento sem identificar ninguém.
   async getNineBox(query: NineBoxQueryDto) {
     // Nine-Box: X = Performance (weightedScore), Y = Potencial (a integrar com OKRs)
     // Por agora: usar selfScore como proxy de potencial (auto-percepção).
-    // FIX: havia uma 1ª query idêntica (sem `selfScore`) cujo resultado nunca
-    // era lido — `withSelf` já tem tudo o que essa continha, era uma
-    // segunda ida à BD redundante.
-    const withSelf = await this.prisma.evaluationResult.findMany({
+    const results = await this.prisma.evaluationResult.findMany({
       where: { cycleId: query.cycleId },
-      select: { participantId: true, weightedScore: true, selfScore: true },
+      select: { weightedScore: true, selfScore: true },
     });
 
-    // `name`/`score` nunca foram devolvidos, apesar de NineBoxGrid.tsx (FE)
-    // sempre os ter esperado (`e.name.split(' ')[0]`, `e.score.toFixed(2)`)
-    // — só nunca tinha rebentado porque o separador nunca tinha dados reais
-    // até haver um ciclo com resultados calculados. Resolvido aqui, não no
-    // FE, seguindo o mesmo padrão de listMyAssignments/listFeedbackForUser
-    // (nomes resolvidos no service, sem FK/relation nessas colunas).
-    const participantIds = [...new Set(withSelf.map(r => +r.participantId))];
-    const users = participantIds.length
-      ? await this.prisma.user.findMany({
-          where: { id: { in: participantIds } },
-          select: { id: true, fullName: true },
-        })
-      : [];
-    const nameById = new Map(users.map(u => [u.id, u.fullName]));
+    const levels = ['LOW', 'MID', 'HIGH'] as const;
+    const counts = new Map<string, number>();
+    for (const perf of levels) for (const pot of levels) counts.set(`${perf}_${pot}`, 0);
 
-    const max = Math.max(...withSelf.map(r => r.weightedScore ?? 0), 5);
-    const boxes = withSelf.map(r => {
+    const max = Math.max(...results.map(r => r.weightedScore ?? 0), 5);
+    for (const r of results) {
       const perf = r.weightedScore / max;
       const potential = (r.selfScore ?? r.weightedScore) / max;
       const perfBox = perf >= 0.67 ? 'HIGH' : perf >= 0.33 ? 'MID' : 'LOW';
       const potBox = potential >= 0.67 ? 'HIGH' : potential >= 0.33 ? 'MID' : 'LOW';
-      return {
-        participantId: r.participantId,
-        name: nameById.get(+r.participantId) ?? 'Colaborador',
-        score: r.weightedScore,
-        performance: perfBox,
-        potential: potBox,
-        box: `${perfBox}_${potBox}`,
-      };
-    });
+      const key = `${perfBox}_${potBox}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
 
-    return boxes;
+    return levels.flatMap(potential =>
+      levels.map(performance => ({
+        performance,
+        potential,
+        box: `${performance}_${potential}`,
+        count: counts.get(`${performance}_${potential}`) ?? 0,
+      })),
+    );
   }
 
   // ============================================================

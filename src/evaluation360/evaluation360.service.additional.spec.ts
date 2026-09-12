@@ -876,26 +876,24 @@ describe('Evaluation360Service (additional)', () => {
   // ─── getNineBox ───────────────────────────────────────────────────────────
 
   describe('getNineBox', () => {
-    it('deve classificar participantes no nine-box', async () => {
+    // Regra "ninguém vê o resultado de outro": devolve sempre os 9
+    // quadrantes com uma contagem, nunca participantId/name/score
+    // individuais — ver comentário em cima de getNineBox().
+    it('deve devolver contagens por quadrante, sem identificar ninguém', async () => {
       mockPrisma.evaluationResult = {
-        findMany: jest
-          .fn()
-          .mockResolvedValueOnce([
-            { participantId: 'u1', weightedScore: 4.5 },
-            { participantId: 'u2', weightedScore: 2.0 },
-          ])
-          .mockResolvedValueOnce([
-            { participantId: 'u1', weightedScore: 4.5, selfScore: 4.0 },
-            { participantId: 'u2', weightedScore: 2.0, selfScore: 2.5 },
-          ]),
+        findMany: jest.fn().mockResolvedValue([
+          { weightedScore: 4.5, selfScore: 4.0 },
+          { weightedScore: 2.0, selfScore: 2.5 },
+        ]),
         findUnique: jest.fn().mockResolvedValue(null),
         findFirst: jest.fn().mockResolvedValue(null),
         upsert: jest.fn().mockResolvedValue({}),
         update: jest.fn().mockResolvedValue({}),
       };
       const result = await service.getNineBox({ cycleId: 'cycle-1' } as any);
-      expect(result).toHaveLength(2);
-      expect(result[0]).toHaveProperty('box');
+      expect(result).toHaveLength(9);
+      expect(result.every((r: any) => !('participantId' in r) && !('name' in r))).toBe(true);
+      expect(result.reduce((s: number, r: any) => s + r.count, 0)).toBe(2);
     });
   });
 

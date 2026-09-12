@@ -361,9 +361,16 @@ export class Evaluation360Controller {
     return this.service.getOrganizationalAnalytics(query);
   }
 
+  // GESTOR removido: a matriz mostrava nome+score reais por pessoa a quem a
+  // pedisse, incluindo o gestor sobre os seus subordinados — a mesma
+  // violação de "ninguém vê o resultado de outro" já corrigida em
+  // getTeamAnalytics/calibrateScore. Ver getNineBox() para a versão
+  // agregada (contagens por box, sem identificar ninguém) que substituiu a
+  // anterior; ADMIN/RH continuam a poder vê-la para planeamento de sucessão
+  // ao nível organizacional, nunca ao nível de um indivíduo.
   @Get('analytics/nine-box')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Matriz Nine Box (Performance vs Potencial)' })
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Matriz Nine Box agregada (contagens por quadrante, sem identificar ninguém)' })
   async getNineBox(@Query() query: NineBoxQueryDto) {
     return this.service.getNineBox(query);
   }
