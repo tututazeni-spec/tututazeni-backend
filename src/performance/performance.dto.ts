@@ -206,6 +206,51 @@ export class SubmitReviewDto {
   @Min(1)
   @Max(5)
   potentialScore?: number;
+
+  // Sub-fatores do eixo Potencial (9-box), 1-5. Liderança/Potencial de
+  // liderança não tem campo aqui — vem de CompetencyEvaluation com
+  // Competency.category = LEADERSHIP.
+  @ApiPropertyOptional({ description: 'Capacidade/agilidade de aprendizagem (1-5)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  learningAgilityScore?: number;
+
+  @ApiPropertyOptional({ description: 'Adaptabilidade (1-5)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  adaptabilityScore?: number;
+
+  @ApiPropertyOptional({ description: 'Ambição profissional (1-5)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  ambitionScore?: number;
+
+  @ApiPropertyOptional({ description: 'Capacidade de assumir responsabilidades maiores (1-5)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  responsibilityReadinessScore?: number;
+
+  @ApiPropertyOptional({ description: 'Mobilidade/flexibilidade (1-5)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  mobilityFlexibilityScore?: number;
+
+  @ApiPropertyOptional({ description: 'Readiness para funções futuras (1-5)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  futureRoleReadinessScore?: number;
 }
 
 // ─── Goal ─────────────────────────────────────────────────────────────────────

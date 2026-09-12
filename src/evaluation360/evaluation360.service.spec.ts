@@ -505,6 +505,34 @@ describe('Evaluation360Service', () => {
       expect(result.every(e => typeof e.count === 'number')).toBe(true);
     });
 
+    it('usa a média dos 6 sub-fatores de potencial (learningAgility, adaptability, ambition, responsibilityReadiness, mobilityFlexibility, futureRoleReadiness) quando não há potentialScore nem competência de liderança', async () => {
+      evaluationResultMock.findMany.mockResolvedValueOnce([
+        { participantId: '30', weightedScore: null, selfScore: null, scoresByCompetency: '{}' },
+      ]);
+      performanceReviewMock.findMany.mockResolvedValueOnce([
+        {
+          id: 700,
+          userId: 30,
+          score: null,
+          potentialScore: null,
+          learningAgilityScore: 5,
+          adaptabilityScore: 5,
+          ambitionScore: 5,
+          responsibilityReadinessScore: 5,
+          mobilityFlexibilityScore: 5,
+          futureRoleReadinessScore: 5,
+          cycle: { scoreScale: 5 },
+        },
+      ]);
+
+      const result = await service.getNineBox({ cycleId: 'cycle-9box' } as any);
+
+      // Sem performance nenhuma fonte (perf cai para 0 = LOW) mas potencial
+      // máximo pelos 6 sub-fatores (5/5 cada) → LOW_HIGH.
+      expect(result.find(e => e.box === 'LOW_HIGH')?.count).toBe(1);
+      expect(result.reduce((s, e) => s + e.count, 0)).toBe(1);
+    });
+
     it('filtra por departmentId através de user.findMany', async () => {
       userMock.findMany.mockResolvedValueOnce([{ id: 10 }]);
       evaluationResultMock.findMany.mockResolvedValueOnce([]);

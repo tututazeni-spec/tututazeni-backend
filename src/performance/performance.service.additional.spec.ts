@@ -315,6 +315,46 @@ describe('PerformanceService (additional)', () => {
       } as any);
       expect(result).toBeDefined();
     });
+
+    // Eixo Potencial da matriz 9-box: os 6 sub-fatores (além de
+    // potentialScore, já existente) têm de chegar ao update() do Prisma —
+    // é a única forma de os dados alimentarem getNineBox.
+    it('grava potentialScore e os 6 sub-fatores de potencial no update da review', async () => {
+      mockPrisma.performanceReview.findUnique.mockResolvedValue({
+        ...baseReview,
+        managerId: 1,
+        reviewerId: 1,
+        type: 'MANAGER',
+        cycle: { scoreScale: 5, goalsWeight: 40, competenciesWeight: 40, behaviorsWeight: 20 },
+      });
+      mockPrisma.performanceReview.update.mockResolvedValue({ ...baseReview, status: 'SUBMITTED' });
+
+      await service.submitReview(1, {
+        reviewId: 1,
+        score: 4.0,
+        potentialScore: 4,
+        learningAgilityScore: 5,
+        adaptabilityScore: 3,
+        ambitionScore: 4,
+        responsibilityReadinessScore: 5,
+        mobilityFlexibilityScore: 2,
+        futureRoleReadinessScore: 4,
+      } as any);
+
+      expect(mockPrisma.performanceReview.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            potentialScore: 4,
+            learningAgilityScore: 5,
+            adaptabilityScore: 3,
+            ambitionScore: 4,
+            responsibilityReadinessScore: 5,
+            mobilityFlexibilityScore: 2,
+            futureRoleReadinessScore: 4,
+          }),
+        }),
+      );
+    });
   });
 
   // ─── createGoal ───────────────────────────────────────────────

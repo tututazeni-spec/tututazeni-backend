@@ -376,6 +376,12 @@ export class PerformanceService {
       data: {
         score: finalScore,
         potentialScore: dto.potentialScore,
+        learningAgilityScore: dto.learningAgilityScore,
+        adaptabilityScore: dto.adaptabilityScore,
+        ambitionScore: dto.ambitionScore,
+        responsibilityReadinessScore: dto.responsibilityReadinessScore,
+        mobilityFlexibilityScore: dto.mobilityFlexibilityScore,
+        futureRoleReadinessScore: dto.futureRoleReadinessScore,
         feedback: dto.feedback,
         justification: dto.justification,
         category,

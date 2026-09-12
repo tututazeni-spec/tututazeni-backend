@@ -1568,17 +1568,25 @@ export class Evaluation360Service {
   //   • Resultados individuais → EvaluationResult.weightedScore (o resultado
   //     global desta avaliação 360º)
   //
-  // Eixo Potencial (Y) — v1 pragmático (decisão registada em memória): dos 9
-  // sub-fatores pedidos (agilidade de aprendizagem, adaptabilidade, ambição,
-  // mobilidade, readiness, capacidade de assumir responsabilidade, etc.) só
-  // dois têm fonte de dados real no schema hoje:
-  //   • PerformanceReview.potentialScore — nota de potencial dada pelo gestor
+  // Eixo Potencial (Y) — cobre os 9 sub-fatores pedidos, consolidados em 7
+  // conceitos distintos (decisão do utilizador: "Capacidade de aprendizagem"
+  // e "Agilidade de aprendizagem" unificadas; idem "Liderança" e "Potencial
+  // de liderança"):
+  //   • PerformanceReview.potentialScore — nota geral de potencial do gestor
   //   • Competências de categoria LEADERSHIP (cobre Liderança/Potencial de
   //     liderança), tanto da review de performance como da própria 360º
-  // Os restantes 7 sub-fatores não têm campo próprio na BD — ficam por
-  // implementar (precisam de um novo modelo/formulário de captura). Sem
-  // nenhuma das duas fontes acima, cai-se de volta no proxy antigo
-  // (selfScore) para não deixar o participante fora da matriz.
+  //   • PerformanceReview.{learningAgilityScore, adaptabilityScore,
+  //     ambitionScore, responsibilityReadinessScore, mobilityFlexibilityScore,
+  //     futureRoleReadinessScore} — os 6 sub-fatores restantes, capturados
+  //     pelo gestor no submitReview (1-5 cada), tratados como um único bloco
+  //     médio para não afogar potentialScore/liderança quando só alguns estão
+  //     preenchidos
+  // Sem nenhuma das fontes acima, cai-se de volta no proxy antigo (selfScore)
+  // para não deixar o participante fora da matriz.
+  //
+  // NOTA: a UI de submissão de review (onde o gestor preencheria estes
+  // campos) ainda não existe no frontend — gap pré-existente, também para o
+  // potentialScore que já cá estava. Fica registado, não construído aqui.
   async getNineBox(query: NineBoxQueryDto) {
     const where: Prisma.EvaluationResultWhereInput = { cycleId: query.cycleId };
     if (query.departmentId) {
@@ -1616,11 +1624,18 @@ export class Evaluation360Service {
         userId: true,
         score: true,
         potentialScore: true,
+        learningAgilityScore: true,
+        adaptabilityScore: true,
+        ambitionScore: true,
+        responsibilityReadinessScore: true,
+        mobilityFlexibilityScore: true,
+        futureRoleReadinessScore: true,
         cycle: { select: { scoreScale: true } },
       },
     });
     const latestReviewByUser = new Map<number, (typeof reviews)[number]>();
-    for (const r of reviews) if (!latestReviewByUser.has(r.userId)) latestReviewByUser.set(r.userId, r);
+    for (const r of reviews)
+      if (!latestReviewByUser.has(r.userId)) latestReviewByUser.set(r.userId, r);
     const latestReviewIds = [...latestReviewByUser.values()].map(r => r.id);
 
     // CompetencyEvaluation não tem relation Prisma para Competency (só
@@ -1707,10 +1722,22 @@ export class Evaluation360Service {
         ...leadershipLevels.map(v => v / 5),
         ...compLeadershipScores.map(v => v / 5),
       ];
-      const potSources = [pct(review?.potentialScore ?? null, 5), leadershipRatio.length ? avg(leadershipRatio) : null].filter(
-        (v): v is number => v !== null,
-      );
-      const potential = potSources.length ? avg(potSources) : (pct(r.selfScore ?? r.weightedScore, 5) ?? 0);
+      const subFactorScores = [
+        review?.learningAgilityScore,
+        review?.adaptabilityScore,
+        review?.ambitionScore,
+        review?.responsibilityReadinessScore,
+        review?.mobilityFlexibilityScore,
+        review?.futureRoleReadinessScore,
+      ].filter((v): v is number => v !== null && v !== undefined);
+      const potSources = [
+        pct(review?.potentialScore ?? null, 5),
+        leadershipRatio.length ? avg(leadershipRatio) : null,
+        subFactorScores.length ? avg(subFactorScores.map(v => v / 5)) : null,
+      ].filter((v): v is number => v !== null);
+      const potential = potSources.length
+        ? avg(potSources)
+        : (pct(r.selfScore ?? r.weightedScore, 5) ?? 0);
 
       const perfBox = perf >= 0.67 ? 'HIGH' : perf >= 0.33 ? 'MID' : 'LOW';
       const potBox = potential >= 0.67 ? 'HIGH' : potential >= 0.33 ? 'MID' : 'LOW';
