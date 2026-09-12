@@ -96,11 +96,17 @@ export class Evaluation360Controller {
   @Get('competencies')
   @ApiOperation({ summary: 'Listar banco de competências' })
   @ApiQuery({ name: 'tenantId', required: false })
+  @ApiQuery({
+    name: 'tag',
+    required: false,
+    description: 'Filtra pelo array `tags` (ex.: FEEDBACK — banco curado do feedback contínuo)',
+  })
   async listCompetencies(
     @Query('tenantId') tenantId?: string,
     @Query() query?: Evaluation360PaginationDto,
+    @Query('tag') tag?: string,
   ) {
-    return this.service.listCompetencies(tenantId, query);
+    return this.service.listCompetencies(tenantId, query, tag);
   }
 
   // ============================================================
@@ -156,7 +162,9 @@ export class Evaluation360Controller {
   // inalcançável (mesma classe de bug de project_innova_route_shadowing).
   @Get('cycles/deleted')
   @Roles(...EVAL_CYCLE_DELETE_ROLES)
-  @ApiOperation({ summary: 'Listar ciclos eliminados (soft delete) — separador Apagados da auditoria' })
+  @ApiOperation({
+    summary: 'Listar ciclos eliminados (soft delete) — separador Apagados da auditoria',
+  })
   @ApiQuery({ name: 'tenantId', required: false })
   async listDeletedCycles(@Query('tenantId') tenantId?: string) {
     return this.service.listDeletedCycles(tenantId);
@@ -234,7 +242,9 @@ export class Evaluation360Controller {
 
   @Post('cycles/:id/participants/by-department')
   @Roles(...EVAL_CREATOR_ROLES)
-  @ApiOperation({ summary: 'Adicionar todos os utilizadores activos de departamentos como participantes' })
+  @ApiOperation({
+    summary: 'Adicionar todos os utilizadores activos de departamentos como participantes',
+  })
   async addParticipantsByDepartment(
     @Param('id') id: string,
     @Body() dto: AddParticipantsByDepartmentDto,
@@ -259,11 +269,10 @@ export class Evaluation360Controller {
   }
 
   @Get('cycles/:cycleId/my-assignments')
-  @ApiOperation({ summary: 'As minhas atribuições de avaliador neste ciclo (quem tenho de avaliar)' })
-  async getMyAssignments(
-    @Param('cycleId') cycleId: string,
-    @CurrentUser() user: CurrentUserData,
-  ) {
+  @ApiOperation({
+    summary: 'As minhas atribuições de avaliador neste ciclo (quem tenho de avaliar)',
+  })
+  async getMyAssignments(@Param('cycleId') cycleId: string, @CurrentUser() user: CurrentUserData) {
     return this.service.listMyAssignments(cycleId, String(user.id));
   }
 
@@ -404,7 +413,9 @@ export class Evaluation360Controller {
   // ao nível organizacional, nunca ao nível de um indivíduo.
   @Get('analytics/nine-box')
   @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Matriz Nine Box agregada (contagens por quadrante, sem identificar ninguém)' })
+  @ApiOperation({
+    summary: 'Matriz Nine Box agregada (contagens por quadrante, sem identificar ninguém)',
+  })
   async getNineBox(@Query() query: NineBoxQueryDto) {
     return this.service.getNineBox(query);
   }

@@ -285,6 +285,45 @@ async function seedEvaluation360Competencies(prisma: PrismaClient) {
   console.log('✅ Competências de Avaliação 360º criadas:', competencies.map(c => c.name).join(', '));
 }
 
+// Banco curado de competências para o selector "Competência" do modal
+// "Dar Feedback" (Feedback Contínuo, separador Feedback da Avaliação 360º —
+// ver GiveFeedbackModal.tsx). É um subconjunto diferente do banco formal de
+// avaliação 360º (seedEvaluation360Competencies): reutiliza pelo nome as 3
+// competências que já existem nos dois (Comunicação, Trabalho em Equipa,
+// Liderança) e adiciona as restantes 6, todas marcadas com tags: ['FEEDBACK']
+// para GET /evaluation360/competencies?tag=FEEDBACK as devolver sem misturar
+// com o banco inteiro usado pelos ciclos formais.
+async function seedFeedbackTagCompetencies(prisma: PrismaClient) {
+  const names = [
+    'Comunicação',
+    'Trabalho em Equipa',
+    'Liderança',
+    'Orientação para resultados',
+    'Orientação para o cliente',
+    'Pensamento e resolução de problemas',
+    'Adaptabilidade',
+    'Profissionalismo',
+    'Competências digitais',
+  ];
+
+  for (const name of names) {
+    await prisma.competency.upsert({
+      where: { name },
+      update: { tags: { set: ['FEEDBACK'] } },
+      create: {
+        name,
+        category: 'SOFT_SKILL',
+        type: 'BEHAVIORAL',
+        isGlobal: true,
+        scaleMin: 1,
+        scaleMax: 5,
+        tags: ['FEEDBACK'],
+      },
+    });
+  }
+  console.log('✅ Banco de competências do Feedback Contínuo marcado:', names.join(', '));
+}
+
 async function main() {
   console.log('🌱 A iniciar seed...');
 
@@ -488,6 +527,8 @@ async function main() {
   await seedPayroll(prisma);
 
   await seedEvaluation360Competencies(prisma);
+
+  await seedFeedbackTagCompetencies(prisma);
 
   console.log('🎉 Seed concluído!');
 }

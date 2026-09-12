@@ -159,7 +159,11 @@ export class AddParticipantsDto {
 }
 
 export class AddParticipantsByDepartmentDto {
-  @ApiProperty({ type: [String], description: 'IDs de Department (todos os utilizadores activos destes departamentos entram como participantes)' })
+  @ApiProperty({
+    type: [String],
+    description:
+      'IDs de Department (todos os utilizadores activos destes departamentos entram como participantes)',
+  })
   @IsArray()
   @IsString({ each: true })
   departmentIds: string[];
@@ -296,6 +300,9 @@ export class Evaluation360PaginationDto {
   // ver hooks/useEvaluation360.ts) nunca respondia — o módulo inteiro
   // ficava sem dados de ciclo.
   @ApiPropertyOptional() @IsOptional() @IsString() tenantId?: string;
+  // GET /evaluation360/competencies?tag=... (mesma armadilha do tenantId
+  // acima) — banco curado do modal "Dar Feedback" contínuo.
+  @ApiPropertyOptional() @IsOptional() @IsString() tag?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(200) limit?: number = 20;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) offset?: number = 0;
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;

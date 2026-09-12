@@ -71,9 +71,9 @@ describe('Evaluation360Controller', () => {
     expect(mockSvc.updateCompetency).toHaveBeenCalledWith('c1', dto, '1');
   });
 
-  it('listCompetencies → listCompetencies(tenantId, query)', async () => {
-    await controller.listCompetencies('t1', undefined);
-    expect(mockSvc.listCompetencies).toHaveBeenCalledWith('t1', undefined);
+  it('listCompetencies → listCompetencies(tenantId, query, tag)', async () => {
+    await controller.listCompetencies('t1', undefined, 'FEEDBACK');
+    expect(mockSvc.listCompetencies).toHaveBeenCalledWith('t1', undefined, 'FEEDBACK');
   });
 
   it('createCycle → createCycle(dto, userId)', async () => {

@@ -174,12 +174,13 @@ export class Evaluation360Service {
     return updated;
   }
 
-  async listCompetencies(tenantId?: string, query?: Evaluation360PaginationDto) {
+  async listCompetencies(tenantId?: string, query?: Evaluation360PaginationDto, tag?: string) {
     return this.competencies.listCatalogue({
       tenantId,
       search: query?.search,
       offset: query?.offset,
       limit: query?.limit,
+      tag,
     });
   }
 
@@ -440,7 +441,8 @@ export class Evaluation360Service {
         _count: { select: { participants: true, assignments: true, responses: true } },
       },
     });
-    if (!cycle || cycle.deletedAt) throw new NotFoundException('Ciclo de avaliação não encontrado.');
+    if (!cycle || cycle.deletedAt)
+      throw new NotFoundException('Ciclo de avaliação não encontrado.');
 
     await this.prisma.eval360Cycle.update({
       where: { id },
@@ -1758,7 +1760,8 @@ export class Evaluation360Service {
     // avaliadores, resultados...); só listDeletedCycles/restoreCycle o veem.
     // Continua a usar findUnique (não findFirst) — mantém intactos os ~30
     // testes existentes que fazem mock de cycleMock.findUnique.
-    if (!cycle || cycle.deletedAt) throw new NotFoundException('Ciclo de avaliação não encontrado.');
+    if (!cycle || cycle.deletedAt)
+      throw new NotFoundException('Ciclo de avaliação não encontrado.');
     return cycle;
   }
 
