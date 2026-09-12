@@ -340,13 +340,9 @@ describe('Evaluation360Service', () => {
         where: { id: 'cycle-1' },
         data: { deletedAt: null, deletedById: null },
       });
-      expect(mockAudit.logEntity).toHaveBeenCalledWith(
-        2,
-        'RESTORE',
-        'EvaluationCycle',
-        'cycle-1',
-        { name: 'Ciclo 360 2024' },
-      );
+      expect(mockAudit.logEntity).toHaveBeenCalledWith(2, 'RESTORE', 'EvaluationCycle', 'cycle-1', {
+        name: 'Ciclo 360 2024',
+      });
       expect(result.deletedAt).toBeNull();
     });
 
