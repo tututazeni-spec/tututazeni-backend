@@ -6,6 +6,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUserData } from '../common/types/current-user';
 
 const mockSvc = {
+  resolveTenantId: jest.fn().mockResolvedValue('tenant-1'),
   getDashboard: jest.fn().mockResolvedValue({}),
   createTenant: jest.fn().mockResolvedValue({ id: 'tenant-1' }),
   updateTenant: jest.fn().mockResolvedValue({}),
@@ -59,6 +60,36 @@ describe('ScalabilityController', () => {
   it('getDashboard → getDashboard(tenantId)', async () => {
     await controller.getDashboard('tenant-1');
     expect(mockSvc.getDashboard).toHaveBeenCalledWith('tenant-1');
+  });
+
+  // Rotas sem :tenantId (plataforma single-tenant) — resolvem o tenant único
+  // via resolveTenantId() antes de delegar no método já testado acima.
+  it('getDefaultDashboard → resolveTenantId() + getDashboard(tenantId)', async () => {
+    await controller.getDefaultDashboard();
+    expect(mockSvc.resolveTenantId).toHaveBeenCalledWith();
+    expect(mockSvc.getDashboard).toHaveBeenCalledWith('tenant-1');
+  });
+
+  it('listDefaultIntegrations → resolveTenantId() + listIntegrations(tenantId, query)', async () => {
+    const query = {} as any;
+    await controller.listDefaultIntegrations(query);
+    expect(mockSvc.listIntegrations).toHaveBeenCalledWith('tenant-1', query);
+  });
+
+  it('listDefaultAutomationRules → resolveTenantId() + listAutomationRules(tenantId, query)', async () => {
+    const query = {} as any;
+    await controller.listDefaultAutomationRules(query);
+    expect(mockSvc.listAutomationRules).toHaveBeenCalledWith('tenant-1', query);
+  });
+
+  it('listDefaultSlas → resolveTenantId() + listSlaConfigs(tenantId)', async () => {
+    await controller.listDefaultSlas();
+    expect(mockSvc.listSlaConfigs).toHaveBeenCalledWith('tenant-1');
+  });
+
+  it('getDefaultContentDelivery → resolveTenantId() + getContentDeliveryConfig(tenantId)', async () => {
+    await controller.getDefaultContentDelivery();
+    expect(mockSvc.getContentDeliveryConfig).toHaveBeenCalledWith('tenant-1');
   });
 
   it('createTenant → createTenant(dto, userId)', async () => {

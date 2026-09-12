@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../common/services/audit.service';
 import { ApiIntegrationService } from '../api-integration/api-integration.service';
+import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import {
   CreateTenantConfigDto,
   UpdateTenantConfigDto,
@@ -112,6 +113,18 @@ export class ScalabilityService {
   // ============================================================
   // TENANT CONFIG
   // ============================================================
+
+  /**
+   * Resolve o tenant a usar quando o chamador (frontend) não tem forma de
+   * escolher um tenantId explícito — a plataforma é single-tenant na prática
+   * (ver [[project_innova_arquitetura_modular_roadmap]], Fase I), por isso as
+   * rotas sem :tenantId do controller usam sempre o primeiro TenantConfig,
+   * criando-o com defaults na primeira chamada. Mesmo helper partilhado já
+   * usado por api-integration/automation/notifications/work-declaration.
+   */
+  async resolveTenantId(tenantId?: string): Promise<string> {
+    return resolveDefaultTenantId(this.prisma, tenantId);
+  }
 
   async createTenant(dto: CreateTenantConfigDto, actorId: string) {
     const existing = await this.prisma.tenantConfig.findUnique({
@@ -647,12 +660,14 @@ export class ScalabilityService {
   // CONTENT DELIVERY CONFIG
   // ============================================================
 
+  // Devolve `null` (em vez de 404) quando o tenant ainda não tem configuração
+  // de entrega de conteúdo — é um estado legítimo (config opcional, só criada
+  // em createTenant() ou explicitamente via PATCH), não um erro. O frontend
+  // mostra um estado vazio real em vez de fabricar valores.
   async getContentDeliveryConfig(tenantId: string) {
-    const config = await this.prisma.contentDeliveryConfig.findUnique({
+    return this.prisma.contentDeliveryConfig.findUnique({
       where: { tenantId },
     });
-    if (!config) throw new NotFoundException('Configuração de entrega de conteúdo não encontrada.');
-    return config;
   }
 
   async updateContentDeliveryConfig(
@@ -876,7 +891,21 @@ export class ScalabilityService {
     try {
       const decoded = Buffer.from(dto.payload, 'base64').toString('utf-8');
       if (dto.format === 'CSV') {
-        rows = this.parseCSV(decoded);
+        // Achado real: parseCSV() normaliza os cabeçalhos para minúsculas
+        // ("fullname", "departmentid", "positionid"), mas BulkImportRow (e
+        // validateUserRow/o create() abaixo) lêem os campos em camelCase
+        // ("fullName", "departmentId", "positionId"). Sem este mapeamento
+        // explícito, `row.fullName` era sempre `undefined` para QUALQUER
+        // importação CSV — cada linha rebentava em validateUserRow() com
+        // "Nome completo inválido", mesmo com um CSV perfeitamente válido.
+        // TypeScript não apanhava isto porque Record<string,string> é
+        // estruturalmente compatível com BulkImportRow (índice livre).
+        rows = this.parseCSV(decoded).map(row => ({
+          email: row.email,
+          fullName: row.fullname,
+          departmentId: row.departmentid,
+          positionId: row.positionid,
+        }));
       } else {
         rows = JSON.parse(decoded);
       }
