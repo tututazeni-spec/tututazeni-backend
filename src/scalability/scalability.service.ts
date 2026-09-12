@@ -21,6 +21,7 @@ import {
   UpdateTenantConfigDto,
   CreateIntegrationConfigDto,
   UpdateIntegrationConfigDto,
+  TestIntegrationConnectionDto,
   CreateAutomationRuleDto,
   UpdateAutomationRuleDto,
   ExecuteAutomationRuleDto,
@@ -223,13 +224,29 @@ export class ScalabilityService {
   // INTEGRATION CONFIG
   // ============================================================
 
+  // clientId/clientSecret/accessToken não têm coluna própria — combinados
+  // num único blob e encriptados antes de persistir na mesma coluna
+  // credentialsJson usada quando o `configJson`/`credentialsJson` em bruto é
+  // enviado directamente (compatibilidade com api-integration). Nunca
+  // persistidos em texto plano.
+  private buildCredentialsJson(dto: {
+    clientId?: string;
+    clientSecret?: string;
+    accessToken?: string;
+    credentialsJson?: string;
+  }): string | undefined {
+    if (dto.clientId || dto.clientSecret || dto.accessToken) {
+      return JSON.stringify({
+        clientId: dto.clientId,
+        clientSecret: dto.clientSecret,
+        accessToken: dto.accessToken,
+      });
+    }
+    return dto.credentialsJson;
+  }
+
   async createIntegration(dto: CreateIntegrationConfigDto, actorId: string) {
     await this.findTenantOrFail(dto.tenantId);
-
-    // Criptografar credenciais antes de persistir
-    const safeCredentials = dto.credentialsJson
-      ? this.encryptSensitiveData(dto.credentialsJson)
-      : undefined;
 
     if (dto.configJson) this.validateJsonField(dto.configJson, 'configJson');
 
@@ -240,12 +257,12 @@ export class ScalabilityService {
     // nunca esteve registado em app.module.ts).
     // FIX: `as any` desnecessário — os enums espelhados do DTO (ver topo de
     // scalability.dto.ts) são literal unions estruturalmente compatíveis com
-    // os enums reais do Prisma, por isso `type`/`syncFrequency` não
-    // precisam de nenhum cast.
+    // os enums reais do Prisma, por isso `type`/`syncFrequency`/`status`/
+    // `category`/etc. não precisam de nenhum cast.
     //
     // Achado real: `authType` chega como `@IsString()` livre no DTO (nunca
     // `@IsEnum`), mas a coluna Prisma é o enum `AuthType` (OAUTH2/API_KEY/
-    // BASIC/BEARER) — um valor fora dessas 4 opções não era rejeitado pelo
+    // BASIC/BEARER/NONE) — um valor fora dessas opções não era rejeitado pelo
     // ValidationPipe e só rebentava mais tarde como 500 em bruto do Prisma
     // ("Invalid value provided"). Validado aqui explicitamente.
     if (dto.authType && !(Object.values(AuthType) as string[]).includes(dto.authType)) {
@@ -253,12 +270,30 @@ export class ScalabilityService {
         `authType inválido. Valores aceites: ${Object.values(AuthType).join(', ')}`,
       );
     }
+
+    // clientId/clientSecret/accessToken/credentialsJson(bruto) são
+    // consumidos aqui e nunca passados directamente ao Prisma — a coluna
+    // real (`credentialsJson`) recebe sempre a versão combinada+encriptada.
+    const { clientId, clientSecret, accessToken, credentialsJson: rawCredentialsJson, ...rest } =
+      dto;
+    const combinedCredentials = this.buildCredentialsJson({
+      clientId,
+      clientSecret,
+      accessToken,
+      credentialsJson: rawCredentialsJson,
+    });
+    const safeCredentials = combinedCredentials
+      ? this.encryptSensitiveData(combinedCredentials)
+      : undefined;
+
     const data: Prisma.IntegrationConfigUncheckedCreateInput = {
-      ...dto,
+      ...rest,
       authType: dto.authType as AuthType | undefined,
       credentialsJson: safeCredentials,
       endpoint: dto.baseUrl ?? '',
       config: dto.configJson ? JSON.parse(dto.configJson) : {},
+      activatedAt: dto.activatedAt ? new Date(dto.activatedAt) : undefined,
+      fieldMapping: dto.fieldMapping,
     };
     const integration = await this.prisma.integrationConfig.create({ data });
     await this.audit.log({
@@ -266,7 +301,7 @@ export class ScalabilityService {
       entityId: integration.id,
       action: 'CREATE',
       userId: actorId,
-      details: { type: dto.type, name: dto.name },
+      details: { type: dto.type, name: dto.name, category: dto.category },
     });
     return integration;
   }
@@ -275,9 +310,6 @@ export class ScalabilityService {
     const existing = await this.prisma.integrationConfig.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Integração '${id}' não encontrada.`);
 
-    const safeCredentials = dto.credentialsJson
-      ? this.encryptSensitiveData(dto.credentialsJson)
-      : undefined;
     if (dto.configJson) this.validateJsonField(dto.configJson, 'configJson');
     if (dto.authType && !(Object.values(AuthType) as string[]).includes(dto.authType)) {
       throw new BadRequestException(
@@ -285,14 +317,28 @@ export class ScalabilityService {
       );
     }
 
+    const { clientId, clientSecret, accessToken, credentialsJson: rawCredentialsJson, ...rest } =
+      dto;
+    const combinedCredentials = this.buildCredentialsJson({
+      clientId,
+      clientSecret,
+      accessToken,
+      credentialsJson: rawCredentialsJson,
+    });
+    const safeCredentials = combinedCredentials
+      ? this.encryptSensitiveData(combinedCredentials)
+      : undefined;
+
     // FIX: mesmo padrão de createIntegration() acima — `as any` desnecessário;
     // só `authType` precisa de cast pontual (ver nota acima).
     const data: Prisma.IntegrationConfigUncheckedUpdateInput = {
-      ...dto,
+      ...rest,
       authType: dto.authType as AuthType | undefined,
       credentialsJson: safeCredentials ?? existing.credentialsJson,
       ...(dto.baseUrl !== undefined && { endpoint: dto.baseUrl }),
       ...(dto.configJson !== undefined && { config: JSON.parse(dto.configJson) }),
+      ...(dto.activatedAt !== undefined && { activatedAt: new Date(dto.activatedAt) }),
+      ...(dto.fieldMapping !== undefined && { fieldMapping: dto.fieldMapping }),
     };
     const updated = await this.prisma.integrationConfig.update({ where: { id }, data });
     await this.audit.log({
@@ -303,6 +349,46 @@ export class ScalabilityService {
       details: dto,
     });
     return updated;
+  }
+
+  /**
+   * Testa conectividade/credenciais ANTES de a integração existir — usado
+   * pelo botão "Testar conexão" do formulário de criação (não tem ainda um
+   * `integrationId`, por isso não escreve em `ApiIntegrationLog`; para testar
+   * uma integração já criada, ver ApiIntegrationService.testIntegration()).
+   */
+  async testConnectionDraft(dto: TestIntegrationConnectionDto) {
+    const start = Date.now();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (dto.apiKey) headers['Authorization'] = `Bearer ${dto.apiKey}`;
+    else if (dto.accessToken) headers['Authorization'] = `Bearer ${dto.accessToken}`;
+    else if (dto.clientId && dto.clientSecret) {
+      headers['Authorization'] =
+        `Basic ${Buffer.from(`${dto.clientId}:${dto.clientSecret}`).toString('base64')}`;
+    }
+
+    try {
+      const res = await fetch(dto.baseUrl, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(dto.timeoutMs && dto.timeoutMs > 0 ? dto.timeoutMs : 5000),
+        headers,
+      });
+      const latencyMs = Date.now() - start;
+      const success = res.status < 500;
+      return {
+        success,
+        statusCode: res.status,
+        latencyMs,
+        message: success ? `Conexão estabelecida (${latencyMs}ms)` : `Erro HTTP ${res.status}`,
+      };
+    } catch (err: unknown) {
+      const latencyMs = Date.now() - start;
+      return {
+        success: false,
+        latencyMs,
+        message: err instanceof Error ? err.message : 'Falha ao testar conectividade',
+      };
+    }
   }
 
   async listIntegrations(tenantId: string, query: PaginationDto) {

@@ -24,6 +24,7 @@ import {
   UpdateTenantConfigDto,
   CreateIntegrationConfigDto,
   UpdateIntegrationConfigDto,
+  TestIntegrationConnectionDto,
   TriggerSyncDto,
   CreateAutomationRuleDto,
   UpdateAutomationRuleDto,
@@ -159,6 +160,16 @@ export class ScalabilityController {
   @ApiOperation({ summary: 'Disparar sincronização manual de integração' })
   async triggerSync(@Body() dto: TriggerSyncDto, @CurrentUser() user: CurrentUserData) {
     return this.service.triggerSync(dto.integrationId, String(user.id));
+  }
+
+  // Rota estática ("test-connection") — sem conflito com `integrations/:id`
+  // (que só existe via PATCH). Usada pelo botão "Testar conexão" do
+  // formulário de criação, antes de a integração existir.
+  @Post('integrations/test-connection')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Testar conectividade antes de criar a integração' })
+  async testConnectionDraft(@Body() dto: TestIntegrationConnectionDto) {
+    return this.service.testConnectionDraft(dto);
   }
 
   @Get('integrations/:integrationId/sync-logs')

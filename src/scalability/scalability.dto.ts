@@ -50,6 +50,21 @@ export enum IntegrationType {
   XAPI_LRS = 'XAPI_LRS',
   BI_TOOL = 'BI_TOOL',
   CUSTOM_WEBHOOK = 'CUSTOM_WEBHOOK',
+  // Valores técnicos (mecanismo/protocolo) — campo "Tipo de integração" do
+  // formulário de criação; ver prisma/schema.prisma (aditivos, os valores
+  // acima continuam válidos para dados/consumidores existentes).
+  REST_API = 'REST_API',
+  SOAP_API = 'SOAP_API',
+  WEBHOOK = 'WEBHOOK',
+  SFTP = 'SFTP',
+  OAUTH2 = 'OAUTH2',
+  LDAP = 'LDAP',
+  SAML2 = 'SAML2',
+  OPENID_CONNECT = 'OPENID_CONNECT',
+  DATABASE = 'DATABASE',
+  CSV_FILE = 'CSV_FILE',
+  EXCEL_FILE = 'EXCEL_FILE',
+  OTHER = 'OTHER',
 }
 export enum IntegrationStatus {
   ACTIVE = 'ACTIVE',
@@ -57,6 +72,49 @@ export enum IntegrationStatus {
   ERROR = 'ERROR',
   PENDING_AUTH = 'PENDING_AUTH',
   RATE_LIMITED = 'RATE_LIMITED',
+  CONFIGURING = 'CONFIGURING',
+  SUSPENDED = 'SUSPENDED',
+}
+export enum IntegrationCategory {
+  ERP = 'ERP',
+  SSO = 'SSO',
+  LMS = 'LMS',
+  COMMUNICATION = 'COMMUNICATION',
+  HR = 'HR',
+  FINANCE = 'FINANCE',
+  PAYROLL = 'PAYROLL',
+  IDENTITY_ACCESS = 'IDENTITY_ACCESS',
+  OTHER = 'OTHER',
+}
+export enum IntegrationEnvironment {
+  PRODUCTION = 'PRODUCTION',
+  STAGING = 'STAGING',
+  DEVELOPMENT = 'DEVELOPMENT',
+  SANDBOX = 'SANDBOX',
+}
+export enum IntegrationDataFormat {
+  JSON = 'JSON',
+  XML = 'XML',
+  CSV = 'CSV',
+  EXCEL = 'EXCEL',
+}
+export enum IntegrationCommunicationMethod {
+  PULL = 'PULL',
+  PUSH = 'PUSH',
+  POLLING = 'POLLING',
+  STREAMING = 'STREAMING',
+}
+export enum IntegrationSyncDirection {
+  INBOUND = 'INBOUND',
+  OUTBOUND = 'OUTBOUND',
+  BIDIRECTIONAL = 'BIDIRECTIONAL',
+}
+export enum IntegrationAuthType {
+  OAUTH2 = 'OAUTH2',
+  API_KEY = 'API_KEY',
+  BASIC = 'BASIC',
+  BEARER = 'BEARER',
+  NONE = 'NONE',
 }
 export enum SyncFrequency {
   REALTIME = 'REALTIME',
@@ -129,25 +187,94 @@ export class UpdateTenantConfigDto extends PartialType(CreateTenantConfigDto) {}
 // -------------------------------------------------------
 export class CreateIntegrationConfigDto {
   @ApiProperty() @IsString() @IsNotEmpty() tenantId: string;
-  @ApiProperty() @IsString() @IsNotEmpty() name: string;
+  @ApiProperty() @IsString() @IsNotEmpty() @MaxLength(100) name: string;
   @ApiProperty({ enum: IntegrationType }) @IsEnum(IntegrationType) type: IntegrationType;
+  @ApiPropertyOptional({ enum: IntegrationCategory })
+  @IsOptional()
+  @IsEnum(IntegrationCategory)
+  category?: IntegrationCategory;
+  @ApiPropertyOptional({ description: 'Sistema/Plataforma — texto livre (SAP, Workday, Moodle...)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  platform?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional() @IsOptional() @IsUrl() baseUrl?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() authType?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() credentialsJson?: string;
+  @ApiPropertyOptional({ enum: IntegrationAuthType })
+  @IsOptional()
+  @IsEnum(IntegrationAuthType)
+  authType?: IntegrationAuthType;
+  // Combinados pelo service em credentialsJson (encriptado) — nunca
+  // persistidos em texto plano. Ver IntegrationConfig.credentialsJson.
+  @ApiPropertyOptional() @IsOptional() @IsString() clientId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() clientSecret?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() accessToken?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() apiKey?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUrl() authUrl?: string;
+  @ApiPropertyOptional({ enum: IntegrationEnvironment })
+  @IsOptional()
+  @IsEnum(IntegrationEnvironment)
+  environment?: IntegrationEnvironment;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(30) apiVersion?: string;
+  @ApiPropertyOptional({ enum: IntegrationDataFormat })
+  @IsOptional()
+  @IsEnum(IntegrationDataFormat)
+  dataFormat?: IntegrationDataFormat;
+  @ApiPropertyOptional({ enum: IntegrationCommunicationMethod })
+  @IsOptional()
+  @IsEnum(IntegrationCommunicationMethod)
+  communicationMethod?: IntegrationCommunicationMethod;
   @ApiPropertyOptional({ enum: SyncFrequency })
   @IsOptional()
   @IsEnum(SyncFrequency)
   syncFrequency?: SyncFrequency;
+  @ApiPropertyOptional({ enum: IntegrationSyncDirection })
+  @IsOptional()
+  @IsEnum(IntegrationSyncDirection)
+  syncDirection?: IntegrationSyncDirection;
+  @ApiPropertyOptional({ type: [String], description: 'Dados a sincronizar (ex.: users, courses, enrollments)' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  dataToSync?: string[];
+  @ApiPropertyOptional({ description: 'Mapeamento de campos origem→destino' })
+  @IsOptional()
+  fieldMapping?: Record<string, string>;
   @ApiPropertyOptional() @IsOptional() @IsUrl() webhookUrl?: string;
   @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   webhookEvents?: string[];
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) timeoutMs?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) maxRetries?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) retryIntervalMs?: number;
+  @ApiPropertyOptional({ enum: IntegrationStatus })
+  @IsOptional()
+  @IsEnum(IntegrationStatus)
+  status?: IntegrationStatus;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() activatedAt?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() responsibleUserId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() active?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() credentialsJson?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() configJson?: string;
 }
 
 export class UpdateIntegrationConfigDto extends PartialType(CreateIntegrationConfigDto) {}
+
+export class TestIntegrationConnectionDto {
+  @ApiProperty() @IsString() @IsNotEmpty() baseUrl: string;
+  @ApiPropertyOptional({ enum: IntegrationAuthType })
+  @IsOptional()
+  @IsEnum(IntegrationAuthType)
+  authType?: IntegrationAuthType;
+  @ApiPropertyOptional() @IsOptional() @IsString() apiKey?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() accessToken?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() clientId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() clientSecret?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) timeoutMs?: number;
+}
 
 export class TriggerSyncDto {
   // IntegrationConfig.id é Int (autoincrement), não String — ver

@@ -482,6 +482,22 @@ enum IntegrationType {
   XAPI_LRS
   BI_TOOL
   CUSTOM_WEBHOOK
+  // Valores técnicos (mecanismo/protocolo) — campo "Tipo de integração" do
+  // formulário de criação em Escalabilidade > Integrações. Os valores acima
+  // (ERP_HR, PAYROLL, ...) continuam válidos para dados/consumidores
+  // existentes (módulo api-integration); estes são aditivos.
+  REST_API
+  SOAP_API
+  WEBHOOK
+  SFTP
+  OAUTH2
+  LDAP
+  SAML2
+  OPENID_CONNECT
+  DATABASE
+  CSV_FILE
+  EXCEL_FILE
+  OTHER
 }
 
 enum IntegrationStatus {
@@ -490,6 +506,49 @@ enum IntegrationStatus {
   ERROR
   PENDING_AUTH
   RATE_LIMITED
+  // "Em configuração" / "Suspensa" — campo "Estado" do formulário de criação
+  // em Escalabilidade > Integrações.
+  CONFIGURING
+  SUSPENDED
+}
+
+enum IntegrationCategory {
+  ERP
+  SSO
+  LMS
+  COMMUNICATION
+  HR
+  FINANCE
+  PAYROLL
+  IDENTITY_ACCESS
+  OTHER
+}
+
+enum IntegrationEnvironment {
+  PRODUCTION
+  STAGING
+  DEVELOPMENT
+  SANDBOX
+}
+
+enum IntegrationDataFormat {
+  JSON
+  XML
+  CSV
+  EXCEL
+}
+
+enum IntegrationCommunicationMethod {
+  PULL
+  PUSH
+  POLLING
+  STREAMING
+}
+
+enum IntegrationSyncDirection {
+  INBOUND
+  OUTBOUND
+  BIDIRECTIONAL
 }
 
 enum SyncFrequency {
@@ -2305,32 +2364,32 @@ enum FeedbackMode {
 }
 
 model Assessment {
-  id                 Int                  @id @default(autoincrement())
-  title              String
-  description        String?
-  type               AssessmentType       @default(QUIZ)
-  status             AssessmentStatus     @default(DRAFT)
-  courseId           Int?
-  moduleId           Int?
-  learningPathId     Int?
-  passingScore       Int                  @default(70)
-  maxAttempts        Int                  @default(0)
-  cooldownHours      Int                  @default(0)
-  timeLimitMinutes   Int                  @default(0)
-  feedbackMode       FeedbackMode         @default(ON_SUBMIT)
-  randomizeQuestions Boolean              @default(false)
-  randomizeOptions   Boolean              @default(false)
-  allowReview        Boolean              @default(true)
-  targetDepartmentIds Int[]               @default([])
-  availableFrom      DateTime?
-  availableUntil     DateTime?
-  maxGrade           Float                @default(20)
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  course             Course?              @relation(fields: [courseId], references: [id])
-  module             CourseModule?        @relation(fields: [moduleId], references: [id])
-  questions          AssessmentQuestion[]
-  attempts           AssessmentAttempt[]
+  id                  Int                  @id @default(autoincrement())
+  title               String
+  description         String?
+  type                AssessmentType       @default(QUIZ)
+  status              AssessmentStatus     @default(DRAFT)
+  courseId            Int?
+  moduleId            Int?
+  learningPathId      Int?
+  passingScore        Int                  @default(70)
+  maxAttempts         Int                  @default(0)
+  cooldownHours       Int                  @default(0)
+  timeLimitMinutes    Int                  @default(0)
+  feedbackMode        FeedbackMode         @default(ON_SUBMIT)
+  randomizeQuestions  Boolean              @default(false)
+  randomizeOptions    Boolean              @default(false)
+  allowReview         Boolean              @default(true)
+  targetDepartmentIds Int[]                @default([])
+  availableFrom       DateTime?
+  availableUntil      DateTime?
+  maxGrade            Float                @default(20)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  course              Course?              @relation(fields: [courseId], references: [id])
+  module              CourseModule?        @relation(fields: [moduleId], references: [id])
+  questions           AssessmentQuestion[]
+  attempts            AssessmentAttempt[]
 
   leadershipContents               LeadershipProgramContent[]
   leadershipParticipantAssessments LeadershipParticipantAssessment[]
@@ -2682,6 +2741,17 @@ model PerformanceReview {
   submittedAt    DateTime?
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
+
+  // Sub-fatores do eixo Potencial da matriz 9-box (1-5, nota do gestor) —
+  // ver [[project_innova_evaluation360_ninebox_calculated]]. Liderança
+  // continua a vir de Competency.category = LEADERSHIP (sem coluna própria);
+  // Capacidade/Agilidade de aprendizagem unificadas em learningAgilityScore.
+  learningAgilityScore         Int?
+  adaptabilityScore            Int?
+  ambitionScore                Int?
+  responsibilityReadinessScore Int?
+  mobilityFlexibilityScore     Int?
+  futureRoleReadinessScore     Int?
 
   user     User             @relation("ReviewedUser", fields: [userId], references: [id])
   reviewer User?            @relation("ReviewerUser", fields: [reviewerId], references: [id])
@@ -3837,6 +3907,11 @@ enum TaskCategory {
   BENEFITS
   ADMIN
   MEETING
+  // "Estrutura" do plano de integração — ver
+  // [[project_innova_onboarding_plan_creation_roles_structure]].
+  POLICIES
+  EVALUATION
+  ONE_ON_ONE
 }
 
 enum TaskType {
@@ -3897,6 +3972,10 @@ model OnboardingTemplate {
   learningPathId  Int?
   welcomeVideoUrl String?
   active          Boolean                  @default(true)
+  // "Informações gerais" do plano — texto livre, não FK (single-tenant, ver
+  // [[project_innova_onboarding_plan_creation_roles_structure]]).
+  company         String?
+  location        String?
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
   position        Position?                @relation(fields: [positionId], references: [id])
@@ -3923,6 +4002,9 @@ model OnboardingTemplateTask {
   xpReward         Int                      @default(10)
   requiresApproval Boolean                  @default(false)
   requiresEvidence Boolean                  @default(false)
+  // Default true — maioria das tarefas de onboarding é obrigatória; ver
+  // [[project_innova_onboarding_plan_creation_roles_structure]].
+  isMandatory      Boolean                  @default(true)
   seq              Int
   template         OnboardingTemplate       @relation(fields: [templateId], references: [id], onDelete: Cascade)
   instances        OnboardingTaskInstance[]
@@ -5958,6 +6040,7 @@ enum AuthType {
   API_KEY
   BASIC
   BEARER
+  NONE
 }
 
 // SUCCESS | FAILED — usado por IntegrationConfig.lastSyncStatus (resumo do
@@ -5982,7 +6065,10 @@ model IntegrationConfig {
   status          IntegrationStatus    @default(INACTIVE)
   baseUrl         String?
   authType        AuthType?
-  credentialsJson String? // criptografado — client_id, secret, token
+  credentialsJson String? // criptografado — client_id, secret, token (ver
+  // CreateIntegrationConfigDto: clientId/clientSecret/accessToken são
+  // combinados aqui pelo service antes de encriptar, nunca persistidos em
+  // texto plano)
   syncFrequency   SyncFrequency        @default(DAILY)
   lastSyncAt      DateTime?
   lastSyncStatus  SyncLogStatus?
@@ -5995,6 +6081,26 @@ model IntegrationConfig {
   updatedAt       DateTime             @updatedAt
   tenant          TenantConfig         @relation(fields: [tenantId], references: [id])
   syncLogs        IntegrationSyncLog[]
+
+  // Campos do formulário completo de criação (Escalabilidade > Integrações)
+  description         String?                         @db.Text
+  category            IntegrationCategory?
+  platform            String? // "Sistema/Plataforma" — texto livre (SAP, Workday, Moodle...)
+  authUrl             String?
+  environment         IntegrationEnvironment?         @default(PRODUCTION)
+  apiVersion          String?
+  dataFormat          IntegrationDataFormat?
+  communicationMethod IntegrationCommunicationMethod?
+  syncDirection       IntegrationSyncDirection?
+  dataToSync          String[]                        @default([])
+  fieldMapping        Json?
+  timeoutMs           Int?
+  maxRetries          Int?
+  retryIntervalMs     Int?
+  activatedAt         DateTime?
+  responsibleUserId   String? // guarda o id como texto (não é FK) — mesmo
+  // padrão de AutomationRule.createdBy, evita tocar no modelo User
+  notes               String?                         @db.Text
 
   @@map("integration_configs")
 }
@@ -6352,6 +6458,8 @@ model Event {
   tags                 String[]           @default([])
   mandatory            Boolean            @default(false)
   bannerUrl            String?
+  // Vazio = visível a todos os departamentos — ver EventsService#applyDeptVisibility.
+  restrictedDeptIds    Int[]              @default([])
   courseId             Int?
   organizerId          Int
   createdAt            DateTime           @default(now())
@@ -9413,6 +9521,10 @@ model Eval360Cycle {
   createdBy         String
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+  // Soft delete — ver [[project_innova_evaluation360_cycle_soft_delete]]:
+  // ADMIN/DIRECTOR eliminam sem perder o registo (separador "Apagados").
+  deletedAt         DateTime?
+  deletedById       String?
 
   competencies Eval360CycleCompetency[]
   assignments  EvaluatorAssignment[]
@@ -9423,6 +9535,7 @@ model Eval360Cycle {
 
   @@index([status])
   @@index([tenantId])
+  @@index([deletedAt])
 }
 
 model Eval360CycleCompetency {
