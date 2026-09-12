@@ -9,8 +9,9 @@ import {
   Min,
   Max,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType, OmitType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
@@ -38,59 +39,16 @@ export {
   SurveyMilestone,
 };
 
-// ─── Template ─────────────────────────────────────────────────────────────────
-
-export class CreateOnboardingTemplateDto {
-  @ApiProperty({ example: 'Onboarding Colaborador TI' })
-  @IsString()
-  @MaxLength(200)
-  name!: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  description?: string;
-
-  @ApiPropertyOptional({ description: 'ID do cargo alvo' })
-  @IsOptional()
-  @IsInt()
-  positionId?: number;
-
-  @ApiPropertyOptional({ description: 'ID do departamento alvo' })
-  @IsOptional()
-  @IsInt()
-  departmentId?: number;
-
-  @ApiProperty({ description: 'Duração em dias (7, 15, 30, 60, 90)' })
-  @IsInt()
-  @Min(1)
-  durationDays!: number;
-
-  @ApiPropertyOptional({ description: 'ID da Learning Path associada' })
-  @IsOptional()
-  @IsInt()
-  learningPathId?: number;
-
-  @ApiPropertyOptional({ description: 'URL do vídeo de boas-vindas' })
-  @IsOptional()
-  @IsString()
-  welcomeVideoUrl?: string;
-
-  @ApiPropertyOptional({ default: true })
-  @IsOptional()
-  @IsBoolean()
-  active?: boolean;
-}
-
-export class UpdateOnboardingTemplateDto extends PartialType(CreateOnboardingTemplateDto) {}
-
 // ─── Template Task ────────────────────────────────────────────────────────────
+// Definida antes de CreateOnboardingTemplateDto porque este último referencia
+// OnboardingTemplateTaskInputDto (Estrutura aninhada, criada junto do plano).
 
-export class CreateTemplateTaskDto {
-  @ApiProperty()
-  @IsInt()
-  templateId!: number;
-
+// Campos de uma tarefa da Estrutura, comuns à criação aninhada (dentro de
+// CreateOnboardingTemplateDto.tasks) e à criação avulsa via
+// POST /onboarding/templates/tasks (CreateTemplateTaskDto, que acrescenta
+// templateId). dueDayOffset e responsible são obrigatórios — "Responsáveis"
+// e "Prazos" fazem parte da Estrutura pedida, não são metadados opcionais.
+export class OnboardingTemplateTaskInputDto {
   @ApiProperty()
   @IsString()
   @MaxLength(200)
@@ -113,15 +71,22 @@ export class CreateTemplateTaskDto {
   @IsEnum(TaskPhase)
   phase!: TaskPhase;
 
-  @ApiProperty({ enum: ResponsibleRole })
+  @ApiProperty({ enum: ResponsibleRole, description: 'Responsável pela tarefa' })
   @IsEnum(ResponsibleRole)
   responsible!: ResponsibleRole;
 
-  @ApiPropertyOptional({ description: 'Dia limite (ex: 5 = até ao dia 5)' })
+  @ApiPropertyOptional({
+    description: 'Se a tarefa é obrigatória (ex: Formação obrigatória) ou opcional. Default true.',
+    default: true,
+  })
   @IsOptional()
+  @IsBoolean()
+  isMandatory?: boolean;
+
+  @ApiProperty({ description: 'Prazo — dia limite a partir do início (ex: 5 = até ao dia 5)' })
   @IsInt()
   @Min(0)
-  dueDayOffset?: number;
+  dueDayOffset!: number;
 
   @ApiPropertyOptional({ description: 'IDs de tarefas que bloqueiam esta' })
   @IsOptional()
@@ -160,7 +125,94 @@ export class CreateTemplateTaskDto {
   seq!: number;
 }
 
+export class CreateTemplateTaskDto extends OnboardingTemplateTaskInputDto {
+  @ApiProperty()
+  @IsInt()
+  templateId!: number;
+}
+
 export class UpdateTemplateTaskDto extends PartialType(CreateTemplateTaskDto) {}
+
+// ─── Template ─────────────────────────────────────────────────────────────────
+
+export class CreateOnboardingTemplateDto {
+  @ApiProperty({ example: 'Onboarding Colaborador TI' })
+  @IsString()
+  @MaxLength(200)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ description: 'Empresa a que o plano se aplica' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  company?: string;
+
+  @ApiPropertyOptional({ description: 'Localização (ex: escritório, cidade)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  location?: string;
+
+  @ApiPropertyOptional({ description: 'ID do cargo/função alvo' })
+  @IsOptional()
+  @IsInt()
+  positionId?: number;
+
+  @ApiPropertyOptional({ description: 'ID do departamento alvo' })
+  @IsOptional()
+  @IsInt()
+  departmentId?: number;
+
+  @ApiProperty({ description: 'Duração em dias (7, 15, 30, 60, 90)' })
+  @IsInt()
+  @Min(1)
+  durationDays!: number;
+
+  @ApiPropertyOptional({ description: 'ID da Learning Path associada' })
+  @IsOptional()
+  @IsInt()
+  learningPathId?: number;
+
+  @ApiPropertyOptional({ description: 'URL do vídeo de boas-vindas' })
+  @IsOptional()
+  @IsString()
+  welcomeVideoUrl?: string;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+
+  @ApiPropertyOptional({
+    type: [OnboardingTemplateTaskInputDto],
+    description:
+      'Estrutura do plano: Tarefas, Formação obrigatória, Documentos, ' +
+      'Apresentações/equipa, Acessos e equipamentos, Políticas e ' +
+      'procedimentos, Reuniões 1:1 (categoria ONE_ON_ONE, distinta de ' +
+      'MEETING para reuniões de equipa), Avaliações — criadas junto com o ' +
+      'template, cada uma já com Responsáveis, Prazos e isMandatory.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OnboardingTemplateTaskInputDto)
+  tasks?: OnboardingTemplateTaskInputDto[];
+}
+
+// `tasks` fica fora do update — é só para a criação nascer já com Estrutura;
+// editar/adicionar/remover tarefas de um template existente continua a ser
+// só via POST/PUT/DELETE /onboarding/templates/tasks. Sem este OmitType, o
+// `tasks` (array simples) não bate certo com o shape de
+// Prisma.OnboardingTemplateUpdateInput (que espera { create/update/... }) e
+// o `this.prisma.onboardingTemplate.update({ data: dto })` deixa de compilar.
+export class UpdateOnboardingTemplateDto extends PartialType(
+  OmitType(CreateOnboardingTemplateDto, ['tasks'] as const),
+) {}
 
 // ─── Plan (Instância por colaborador) ────────────────────────────────────────
 

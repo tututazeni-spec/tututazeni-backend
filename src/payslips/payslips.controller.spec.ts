@@ -128,8 +128,8 @@ describe('PayslipsController', () => {
 
   it('myAnnualSummaryExport (csv por omissão) → buildAnnualExport + text/csv', async () => {
     const res = mockRes();
-    await controller.myAnnualSummaryExport(mockUser as any, '2026', undefined, res);
-    expect(mockSvc.buildAnnualExport).toHaveBeenCalledWith(1, '2026');
+    await controller.myAnnualSummaryExport(mockUser as any, '2026', undefined, undefined, res);
+    expect(mockSvc.buildAnnualExport).toHaveBeenCalledWith(1, '2026', undefined);
     expect(res.set).toHaveBeenCalledWith(
       expect.objectContaining({ 'Content-Type': expect.stringContaining('text/csv') }),
     );
@@ -142,7 +142,7 @@ describe('PayslipsController', () => {
 
   it('myAnnualSummaryExport (format=pdf) → PdfService.generateExecutiveReport + application/pdf', async () => {
     const res = mockRes();
-    await controller.myAnnualSummaryExport(mockUser as any, '2026', 'pdf', res);
+    await controller.myAnnualSummaryExport(mockUser as any, '2026', undefined, 'pdf', res);
     expect(mockPdf.generateExecutiveReport).toHaveBeenCalled();
     expect(res.set).toHaveBeenCalledWith(
       expect.objectContaining({ 'Content-Type': 'application/pdf' }),
@@ -152,8 +152,23 @@ describe('PayslipsController', () => {
 
   it('myAnnualSummaryExport sem year → usa o ano corrente', async () => {
     const res = mockRes();
-    await controller.myAnnualSummaryExport(mockUser as any, undefined, undefined, res);
-    expect(mockSvc.buildAnnualExport).toHaveBeenCalledWith(1, String(new Date().getFullYear()));
+    await controller.myAnnualSummaryExport(mockUser as any, undefined, undefined, undefined, res);
+    expect(mockSvc.buildAnnualExport).toHaveBeenCalledWith(
+      1,
+      String(new Date().getFullYear()),
+      undefined,
+    );
+  });
+
+  it('myAnnualSummaryExport com month → buildAnnualExport(userId, year, month) + filename mensal', async () => {
+    const res = mockRes();
+    await controller.myAnnualSummaryExport(mockUser as any, '2026', '04', undefined, res);
+    expect(mockSvc.buildAnnualExport).toHaveBeenCalledWith(1, '2026', '04');
+    expect(res.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'Content-Disposition': expect.stringContaining('resumo-2026-04.csv'),
+      }),
+    );
   });
 
   it('myPayslipPdf → findOne (ownership) + PayslipPdfService.render(id) + stream + logAccess(DOWNLOAD)', async () => {

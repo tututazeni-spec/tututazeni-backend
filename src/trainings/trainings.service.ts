@@ -7,8 +7,11 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, TrainingAssessmentRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
+import { Role } from '../auth/enums/role.enum';
+import { CurrentUserData } from '../common/types/current-user';
 import {
   CreateTrainingDto,
   UpdateTrainingDto,
@@ -19,14 +22,47 @@ import {
   TrainingsUpdateParticipantStatusDto,
   BulkAttendanceDto,
   RateTrainingDto,
+  RejectParticipantDto,
+  NotifyTrainingDto,
+  CreateTrainingDocumentDto,
+  LinkTrainingAssessmentDto,
   ParticipantStatus,
 } from './trainings.dto';
+
+// Papéis com acesso total de gestão a QUALQUER formação. Os restantes
+// papéis autorizados a criar formações (GESTOR, INSTRUCTOR, DIRECTOR,
+// LIDER — ver TrainingController) só gerem as que criaram (createdById),
+// mesmo padrão de src/common/authz/ownership.ts usado noutros módulos.
+const PRIVILEGED_ROLES = [Role.ADMIN, Role.RH];
 
 @Injectable()
 export class TrainingService {
   private readonly logger = new Logger(TrainingService.name);
 
   constructor(private prisma: PrismaService) {}
+
+  // ─── OWNERSHIP ────────────────────────────────────────────────────────────
+
+  private async assertCanManage(trainingId: number, user: CurrentUserData) {
+    const training = await this.prisma.read.training.findUnique({
+      where: { id: trainingId },
+      select: { id: true, createdById: true },
+    });
+    if (!training) throw new NotFoundException('Treinamento não encontrado');
+    assertCanAccess(training, training.createdById ?? -1, user, PRIVILEGED_ROLES);
+    return training;
+  }
+
+  /** Ownership a partir de uma sessão (para gerir sessões/participantes). */
+  private async assertCanManageSession(sessionId: number, user: CurrentUserData) {
+    const session = await this.prisma.read.trainingSession.findUnique({
+      where: { id: sessionId },
+      select: { id: true, trainingId: true, training: { select: { createdById: true } } },
+    });
+    if (!session) throw new NotFoundException('Sessão não encontrada');
+    assertCanAccess(session, session.training.createdById ?? -1, user, PRIVILEGED_ROLES);
+    return session;
+  }
 
   // ─── CATÁLOGO ─────────────────────────────────────────────────────────────
 
@@ -84,7 +120,40 @@ export class TrainingService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOne(id: number) {
+  // ─── GESTÃO (separador "Gestão") ────────────────────────────────────────────
+  // Ao contrário de findAll() (catálogo público, default status=PUBLISHED),
+  // aqui não há default de estado e o resultado é sempre scoped por
+  // ownership: ADMIN/RH vêem tudo, os restantes papéis que podem criar
+  // formações (GESTOR/INSTRUCTOR/DIRECTOR/LIDER) só vêem as suas.
+  async findForManagement(filters: TrainingFilterDto, user: CurrentUserData) {
+    const { page = 1, limit = 20, status, type, category } = filters;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.TrainingWhereInput = {};
+    if (status) where.status = status;
+    if (type) where.type = type;
+    if (category) where.category = category;
+    if (!isPrivileged(user, PRIVILEGED_ROLES)) where.createdById = user.id;
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.training.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          instructor: { select: { id: true, fullName: true } },
+          createdBy: { select: { id: true, fullName: true } },
+          _count: { select: { sessions: true, participants: true, ratings: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.read.training.count({ where }),
+    ]);
+
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async findOne(id: number, user?: CurrentUserData) {
     const t = await this.prisma.read.training.findUnique({
       where: { id },
       include: {
@@ -96,6 +165,18 @@ export class TrainingService {
             avatarUrl: true,
             position: { select: { name: true } },
           },
+        },
+        createdBy: { select: { id: true, fullName: true } },
+        coInstructors: {
+          include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
+        },
+        competencies: { include: { competency: { select: { id: true, name: true } } } },
+        documents: {
+          include: { uploadedBy: { select: { id: true, fullName: true } } },
+          orderBy: { createdAt: 'desc' },
+        },
+        assessmentLinks: {
+          include: { assessment: { select: { id: true, title: true, type: true, status: true } } },
         },
         sessions: {
           include: {
@@ -119,15 +200,51 @@ export class TrainingService {
       _avg: { rating: true },
     });
 
-    return { ...t, avgRating: Math.round((avgRating._avg.rating ?? 0) * 10) / 10 };
+    const totalCost = this.computeTotalCost(t);
+    // canManage: calculado no servidor (em vez de reimplementado no
+    // frontend) para o botão "Gerir" da UI — nunca confiar num cálculo de
+    // autorização feito no cliente.
+    const canManage = user
+      ? String(user.id) === String(t.createdById ?? -1) || isPrivileged(user, PRIVILEGED_ROLES)
+      : false;
+
+    return {
+      ...t,
+      avgRating: Math.round((avgRating._avg.rating ?? 0) * 10) / 10,
+      totalCost,
+      canManage,
+    };
   }
 
-  async create(dto: CreateTrainingDto) {
+  private computeTotalCost(t: {
+    instructorCost: number | null;
+    materialCost: number | null;
+    transportCost: number | null;
+    foodCost: number | null;
+    lodgingCost: number | null;
+    otherCosts: number | null;
+    cost: number | null;
+  }): number {
+    const parts = [
+      t.instructorCost,
+      t.materialCost,
+      t.transportCost,
+      t.foodCost,
+      t.lodgingCost,
+      t.otherCosts,
+    ];
+    const anySet = parts.some(p => p != null);
+    if (!anySet) return t.cost ?? 0;
+    return parts.reduce((sum: number, p) => sum + (p ?? 0), 0);
+  }
+
+  async create(dto: CreateTrainingDto, creatorId: number) {
     const { competencyIds, coInstructorIds, ...data } = dto;
 
-    return this.prisma.training.create({
+    const training = await this.prisma.training.create({
       data: {
         title: data.title,
+        code: data.code,
         shortDescription: data.shortDescription,
         description: data.description,
         objectives: data.objectives,
@@ -136,12 +253,16 @@ export class TrainingService {
         level: data.level,
         status: data.status ?? 'DRAFT',
         category: data.category,
+        thematicArea: data.thematicArea,
         tags: data.tags ?? [],
         language: data.language ?? 'pt',
         workloadHours: data.workloadHours,
         thumbnailUrl: data.thumbnailUrl,
         prerequisites: data.prerequisites,
         instructorId: data.instructorId,
+        trainingEntity: data.trainingEntity,
+        classDescription: data.classDescription,
+        modalityDetails: data.modalityDetails,
         mandatory: data.mandatory ?? false,
         passingScore: data.passingScore ?? 70,
         issueCertificate: data.issueCertificate ?? false,
@@ -149,40 +270,85 @@ export class TrainingService {
         startDate: data.startDate ? new Date(data.startDate) : null,
         endDate: data.endDate ? new Date(data.endDate) : null,
         completionDeadlineDays: data.completionDeadlineDays,
+        schedule: data.schedule,
+        roomLocation: data.roomLocation,
+        capacity: data.capacity,
+        plannedSessionsCount: data.plannedSessionsCount,
+        requiresApproval: data.requiresApproval ?? false,
+        requiredResources: data.requiredResources ?? [],
+        instructorCost: data.instructorCost,
+        materialCost: data.materialCost,
+        transportCost: data.transportCost,
+        foodCost: data.foodCost,
+        lodgingCost: data.lodgingCost,
+        otherCosts: data.otherCosts,
+        createdById: creatorId,
       },
       include: { instructor: { select: { id: true, fullName: true } } },
     });
+
+    await this.syncCompetencies(training.id, competencyIds);
+    await this.syncCoInstructors(training.id, coInstructorIds);
+
+    return training;
   }
 
-  async update(id: number, dto: UpdateTrainingDto) {
-    await this.findOne(id);
+  async update(id: number, dto: UpdateTrainingDto, user: CurrentUserData) {
+    await this.assertCanManage(id, user);
     const { competencyIds, coInstructorIds, ...data } = dto;
 
-    return this.prisma.training.update({
+    const training = await this.prisma.training.update({
       where: { id },
       data: {
         ...data,
         tags: data.tags ?? undefined,
+        requiredResources: data.requiredResources ?? undefined,
         startDate: data.startDate ? new Date(data.startDate) : undefined,
         endDate: data.endDate ? new Date(data.endDate) : undefined,
       },
     });
+
+    if (competencyIds !== undefined) await this.syncCompetencies(id, competencyIds);
+    if (coInstructorIds !== undefined) await this.syncCoInstructors(id, coInstructorIds);
+
+    return training;
   }
 
-  async publish(id: number) {
-    await this.findOne(id);
+  private async syncCompetencies(trainingId: number, competencyIds?: number[]) {
+    if (competencyIds === undefined) return;
+    await this.prisma.trainingCompetency.deleteMany({ where: { trainingId } });
+    if (competencyIds.length === 0) return;
+    await this.prisma.trainingCompetency.createMany({
+      data: competencyIds.map(competencyId => ({ trainingId, competencyId })),
+      skipDuplicates: true,
+    });
+  }
+
+  private async syncCoInstructors(trainingId: number, coInstructorIds?: number[]) {
+    if (coInstructorIds === undefined) return;
+    await this.prisma.trainingCoInstructor.deleteMany({ where: { trainingId } });
+    if (coInstructorIds.length === 0) return;
+    await this.prisma.trainingCoInstructor.createMany({
+      data: coInstructorIds.map(userId => ({ trainingId, userId })),
+      skipDuplicates: true,
+    });
+  }
+
+  async publish(id: number, user: CurrentUserData) {
+    await this.assertCanManage(id, user);
     return this.prisma.training.update({
       where: { id },
       data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
   }
 
-  async archive(id: number) {
-    await this.findOne(id);
+  async archive(id: number, user: CurrentUserData) {
+    await this.assertCanManage(id, user);
     return this.prisma.training.update({ where: { id }, data: { status: 'ARCHIVED' } });
   }
 
-  async remove(id: number) {
+  async remove(id: number, user: CurrentUserData) {
+    await this.assertCanManage(id, user);
     // FIX: `as any` desnecessário — findOne() já devolve `_count`/`status`
     // totalmente tipados via o `include` da própria query.
     const t = await this.findOne(id);
@@ -204,8 +370,8 @@ export class TrainingService {
 
   // ─── SESSÕES ──────────────────────────────────────────────────────────────
 
-  async createSession(dto: CreateTrainingSessionDto) {
-    await this.findOne(dto.trainingId);
+  async createSession(dto: CreateTrainingSessionDto, user: CurrentUserData) {
+    await this.assertCanManage(dto.trainingId, user);
     return this.prisma.trainingSession.create({
       data: {
         trainingId: dto.trainingId,
@@ -222,20 +388,19 @@ export class TrainingService {
     });
   }
 
-  async updateSession(id: number, dto: UpdateTrainingSessionDto) {
-    const session = await this.prisma.read.trainingSession.findUnique({ where: { id } });
-    if (!session) throw new NotFoundException('Sessão não encontrada');
+  async updateSession(id: number, dto: UpdateTrainingSessionDto, user: CurrentUserData) {
+    await this.assertCanManageSession(id, user);
     return this.prisma.trainingSession.update({ where: { id }, data: dto });
   }
 
-  async removeSession(id: number) {
-    const session = await this.prisma.read.trainingSession.findUnique({
-      where: { id },
+  async removeSession(id: number, user: CurrentUserData) {
+    const session = await this.assertCanManageSession(id, user);
+    const withCount = await this.prisma.read.trainingSession.findUnique({
+      where: { id: session.id },
       include: { _count: { select: { participants: true } } },
     });
-    if (!session) throw new NotFoundException('Sessão não encontrada');
     // FIX: `as any` desnecessário — `_count` já vem tipado do `include` acima.
-    if (session._count.participants > 0) {
+    if (withCount && withCount._count.participants > 0) {
       throw new BadRequestException('Sessão com participantes não pode ser eliminada');
     }
     await this.prisma.trainingSession.delete({ where: { id } });
@@ -244,6 +409,11 @@ export class TrainingService {
 
   // ─── INSCRIÇÕES ───────────────────────────────────────────────────────────
 
+  // NOTA: inscrever outra pessoa (POST /trainings/sessions/register) é
+  // operacional — não scoped por ownership da formação — mesmo padrão
+  // (deliberadamente amplo) de getSessionParticipants/getAttendanceReport
+  // abaixo: um GESTOR pode gerir inscrições de sessões de formações que
+  // não criou, tal como já podia antes de este módulo ganhar mais criadores.
   async registerParticipant(dto: RegisterParticipantDto) {
     // Verificar se já está inscrito
     const existing = await this.prisma.trainingParticipant.findFirst({
@@ -258,9 +428,30 @@ export class TrainingService {
       // permanentemente a sessão para futuras inscrições.
       include: {
         _count: { select: { participants: { where: { status: { not: 'CANCELLED' } } } } },
+        training: { select: { requiresApproval: true } },
       },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
+
+    // Formação com aprovação obrigatória: a inscrição fica PENDING_APPROVAL
+    // sem reservar vaga (a vaga só é verificada quando um gestor aprova, ver
+    // approveParticipant()) — não faz sentido decidir vaga/lista de espera
+    // para um pedido que ainda pode ser rejeitado.
+    if (session.training.requiresApproval) {
+      const participant = await this.prisma.trainingParticipant.upsert({
+        where: { sessionId_userId: { sessionId: dto.sessionId, userId: dto.userId } },
+        create: { sessionId: dto.sessionId, userId: dto.userId, status: 'PENDING_APPROVAL' },
+        update: {
+          status: 'PENDING_APPROVAL',
+          cancellationReason: null,
+          completedAt: null,
+          finalScore: null,
+          attendedHours: null,
+        },
+        include: { user: { select: { id: true, fullName: true } } },
+      });
+      return participant;
+    }
 
     // FIX: casts `as any` desnecessários — `session` já vem tipado do
     // findUnique() acima (maxParticipants/waitlistEnabled são colunas
@@ -368,6 +559,7 @@ export class TrainingService {
     return { message: 'Inscrição cancelada', waitlistPromoted: !!nextWaitlist };
   }
 
+  // NOTA: sem ownership — mesmo motivo de getSessionParticipants acima.
   async updateParticipantStatus(id: number, dto: TrainingsUpdateParticipantStatusDto) {
     const p = await this.prisma.read.trainingParticipant.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('Participante não encontrado');
@@ -423,6 +615,7 @@ export class TrainingService {
 
   // ─── PRESENÇA EM MASSA ────────────────────────────────────────────────────
 
+  // NOTA: sem ownership — mesmo motivo de getSessionParticipants acima.
   async bulkAttendance(dto: BulkAttendanceDto, registrarId: number) {
     const session = await this.prisma.read.trainingSession.findUnique({
       where: { id: dto.sessionId },
@@ -467,6 +660,259 @@ export class TrainingService {
       );
 
     return { sessionId: dto.sessionId, attended, absent, total: participants.length };
+  }
+
+  // ─── APROVAÇÕES ───────────────────────────────────────────────────────────
+
+  async approveParticipant(participantId: number, user: CurrentUserData) {
+    const p = await this.prisma.read.trainingParticipant.findUnique({
+      where: { id: participantId },
+      include: {
+        session: {
+          include: {
+            _count: { select: { participants: { where: { status: { not: 'CANCELLED' } } } } },
+          },
+        },
+      },
+    });
+    if (!p) throw new NotFoundException('Participante não encontrado');
+    await this.assertCanManageSession(p.sessionId, user);
+    if (p.status !== 'PENDING_APPROVAL') {
+      throw new BadRequestException('Inscrição não está pendente de aprovação');
+    }
+
+    const session = p.session;
+    const hasVacancy =
+      session.maxParticipants === 0 || session._count.participants < session.maxParticipants;
+    const status = hasVacancy
+      ? ParticipantStatus.REGISTERED
+      : session.waitlistEnabled
+        ? ParticipantStatus.WAITLIST
+        : (() => {
+            throw new BadRequestException('Sessão sem vagas disponíveis');
+          })();
+
+    const updated = await this.prisma.trainingParticipant.update({
+      where: { id: participantId },
+      data: { status },
+      include: { user: { select: { id: true, fullName: true } } },
+    });
+
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: p.userId,
+          type: 'TRAINING_REGISTRATION_APPROVED',
+          message:
+            status === 'WAITLIST'
+              ? 'Inscrição aprovada — ficaste na lista de espera'
+              : 'Inscrição aprovada! Já estás inscrito no treinamento.',
+          metadata: JSON.stringify({}),
+        },
+      })
+      .catch(e =>
+        this.logger.warn({
+          userId: p.userId,
+          participantId,
+          action: 'TRAINING_REGISTRATION_APPROVED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar aprovação de inscrição',
+        }),
+      );
+
+    return updated;
+  }
+
+  async rejectParticipant(participantId: number, dto: RejectParticipantDto, user: CurrentUserData) {
+    const p = await this.prisma.read.trainingParticipant.findUnique({
+      where: { id: participantId },
+    });
+    if (!p) throw new NotFoundException('Participante não encontrado');
+    await this.assertCanManageSession(p.sessionId, user);
+    if (p.status !== 'PENDING_APPROVAL') {
+      throw new BadRequestException('Inscrição não está pendente de aprovação');
+    }
+
+    const updated = await this.prisma.trainingParticipant.update({
+      where: { id: participantId },
+      data: { status: 'REJECTED', cancellationReason: dto.reason },
+    });
+
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: p.userId,
+          type: 'TRAINING_REGISTRATION_REJECTED',
+          message: 'Inscrição num treinamento foi rejeitada',
+          metadata: JSON.stringify({ reason: dto.reason ?? null }),
+        },
+      })
+      .catch(e =>
+        this.logger.warn({
+          userId: p.userId,
+          participantId,
+          action: 'TRAINING_REGISTRATION_REJECTED',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao notificar rejeição de inscrição',
+        }),
+      );
+
+    return updated;
+  }
+
+  // ─── COMUNICAÇÃO / NOTIFICAÇÕES ───────────────────────────────────────────
+
+  async notifyParticipants(trainingId: number, dto: NotifyTrainingDto, user: CurrentUserData) {
+    await this.assertCanManage(trainingId, user);
+
+    const participants = await this.prisma.read.trainingParticipant.findMany({
+      where: {
+        session: { trainingId },
+        status: { notIn: ['CANCELLED', 'REJECTED'] },
+      },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+
+    let sent = 0;
+    for (const p of participants) {
+      await this.prisma.notificationLog
+        .create({
+          data: {
+            userId: p.userId,
+            type: 'TRAINING_ANNOUNCEMENT',
+            message: dto.message,
+            metadata: JSON.stringify({ trainingId }),
+          },
+        })
+        .then(() => sent++)
+        .catch(e =>
+          this.logger.warn({
+            userId: p.userId,
+            trainingId,
+            action: 'TRAINING_ANNOUNCEMENT',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao notificar participante (comunicação da formação)',
+          }),
+        );
+    }
+
+    return { message: 'Notificações enviadas', sent, total: participants.length };
+  }
+
+  // ─── DOCUMENTOS ADMINISTRATIVOS ────────────────────────────────────────────
+
+  async addDocument(trainingId: number, dto: CreateTrainingDocumentDto, user: CurrentUserData) {
+    await this.assertCanManage(trainingId, user);
+    return this.prisma.trainingDocument.create({
+      data: {
+        trainingId,
+        name: dto.name,
+        fileUrl: dto.fileUrl,
+        category: dto.category,
+        uploadedById: user.id,
+      },
+    });
+  }
+
+  async removeDocument(documentId: number, user: CurrentUserData) {
+    const doc = await this.prisma.read.trainingDocument.findUnique({ where: { id: documentId } });
+    if (!doc) throw new NotFoundException('Documento não encontrado');
+    await this.assertCanManage(doc.trainingId, user);
+    await this.prisma.trainingDocument.delete({ where: { id: documentId } });
+    return { message: 'Documento eliminado' };
+  }
+
+  // ─── AVALIAÇÃO — associar avaliações existentes ───────────────────────────
+
+  async linkAssessment(trainingId: number, dto: LinkTrainingAssessmentDto, user: CurrentUserData) {
+    await this.assertCanManage(trainingId, user);
+    const assessment = await this.prisma.read.assessment.findUnique({
+      where: { id: dto.assessmentId },
+    });
+    if (!assessment) throw new NotFoundException('Avaliação (Assessment) não encontrada');
+
+    // upsert por [trainingId, role] — @@unique garante no máximo uma
+    // avaliação associada por papel (inicial/final/satisfação/formador).
+    return this.prisma.trainingAssessment.upsert({
+      where: { trainingId_role: { trainingId, role: dto.role } },
+      create: { trainingId, assessmentId: dto.assessmentId, role: dto.role },
+      update: { assessmentId: dto.assessmentId },
+      include: { assessment: { select: { id: true, title: true, type: true, status: true } } },
+    });
+  }
+
+  async unlinkAssessment(trainingId: number, role: TrainingAssessmentRole, user: CurrentUserData) {
+    await this.assertCanManage(trainingId, user);
+    const existing = await this.prisma.read.trainingAssessment.findUnique({
+      where: { trainingId_role: { trainingId, role } },
+    });
+    if (!existing) throw new NotFoundException('Associação não encontrada');
+    await this.prisma.trainingAssessment.delete({ where: { id: existing.id } });
+    return { message: 'Avaliação desassociada' };
+  }
+
+  // ─── RESULTADOS ────────────────────────────────────────────────────────────
+
+  // NOTA: sem ownership — mesmo motivo de getSessionParticipants acima
+  // (leitura agregada, não uma acção de gestão da formação).
+  async getResults(trainingId: number) {
+    const training = await this.prisma.read.training.findUnique({
+      where: { id: trainingId },
+      select: {
+        id: true,
+        title: true,
+        cost: true,
+        instructorCost: true,
+        materialCost: true,
+        transportCost: true,
+        foodCost: true,
+        lodgingCost: true,
+        otherCosts: true,
+      },
+    });
+    if (!training) throw new NotFoundException('Treinamento não encontrado');
+
+    const participants = await this.prisma.read.trainingParticipant.findMany({
+      where: { training: { id: trainingId } },
+      select: { status: true, finalScore: true },
+    });
+
+    // "Inscritos"/"Participantes": qualquer inscrição activa (exclui
+    // cancelados/rejeitados/lista de espera/pendentes de aprovação).
+    const active = participants.filter(p =>
+      ['REGISTERED', 'ATTENDED', 'ABSENT', 'COMPLETED'].includes(p.status),
+    );
+    const enrolled = active.length;
+    const attended = active.filter(p => p.status === 'ATTENDED' || p.status === 'COMPLETED').length;
+    const completed = active.filter(p => p.status === 'COMPLETED').length;
+    const scored = active.filter(p => p.finalScore != null);
+    const avgScore =
+      scored.length > 0
+        ? Math.round((scored.reduce((s, p) => s + (p.finalScore ?? 0), 0) / scored.length) * 10) /
+          10
+        : null;
+
+    const avgRating = await this.prisma.read.trainingRating.aggregate({
+      where: { trainingId },
+      _avg: { rating: true },
+    });
+
+    const totalCost = this.computeTotalCost(training);
+
+    return {
+      trainingId,
+      title: training.title,
+      enrolled,
+      participants: attended,
+      completed,
+      completionRate: enrolled > 0 ? Math.round((completed / enrolled) * 100) : 0,
+      attendanceRate: enrolled > 0 ? Math.round((attended / enrolled) * 100) : 0,
+      avgScore,
+      satisfaction: Math.round((avgRating._avg.rating ?? 0) * 10) / 10,
+      totalCost,
+      costPerParticipant: enrolled > 0 ? Math.round((totalCost / enrolled) * 100) / 100 : totalCost,
+    };
   }
 
   // ─── CERTIFICADO ──────────────────────────────────────────────────────────
@@ -553,6 +999,11 @@ export class TrainingService {
 
   // ─── PARTICIPANTES DE UMA SESSÃO ──────────────────────────────────────────
 
+  // NOTA: deliberadamente sem ownership — participantes/presenças são geridos
+  // por qualquer um dos papéis abaixo (ADMIN/RH/GESTOR/INSTRUCTOR/DIRECTOR/
+  // LIDER), mesmo em sessões de formações que não criaram. Restringir aqui
+  // partia o fluxo já existente de um GESTOR gerir presenças de formações
+  // criadas por RH (ver test/integration/trainings).
   async getSessionParticipants(sessionId: number) {
     return this.prisma.read.trainingParticipant.findMany({
       where: { sessionId },
@@ -574,6 +1025,7 @@ export class TrainingService {
 
   // ─── RELATÓRIO DE PRESENÇA ────────────────────────────────────────────────
 
+  // NOTA: sem ownership — mesmo motivo de getSessionParticipants acima.
   async getAttendanceReport(trainingId: number) {
     // FIX: `as any` desnecessário — findOne() já devolve title/type/
     // workloadHours totalmente tipados.
