@@ -15,6 +15,7 @@ describe('Scalability Integration', () => {
   let managerToken: string;
   let rhToken: string;
   let adminToken: string;
+  let auditorToken: string;
 
   const pool = new Pool({ connectionString: TEST_DB_URL });
   const adapter = new PrismaPg(pool);
@@ -45,6 +46,7 @@ describe('Scalability Integration', () => {
     managerToken = await getToken(app.getHttpServer(), 'manager');
     rhToken = await getToken(app.getHttpServer(), 'rh');
     adminToken = await getToken(app.getHttpServer(), 'admin');
+    auditorToken = await getToken(app.getHttpServer(), 'auditor');
   });
 
   afterAll(async () => {
@@ -77,21 +79,24 @@ describe('Scalability Integration', () => {
       await request(app.getHttpServer()).get('/scalability/tenants').expect(401);
     });
 
-    it('colaborador não acede (tier ADMIN/RH)', async () => {
+    it('colaborador não acede (tier ADMIN/AUDITOR)', async () => {
       await request(app.getHttpServer())
         .get('/scalability/tenants')
         .set('Authorization', `Bearer ${employeeToken}`)
         .expect(403);
     });
 
-    it('gestor não acede (tier ADMIN/RH)', async () => {
+    it('gestor não acede (tier ADMIN/AUDITOR)', async () => {
       await request(app.getHttpServer())
         .get('/scalability/tenants')
         .set('Authorization', `Bearer ${managerToken}`)
         .expect(403);
     });
 
-    it('RH não lista todos os tenants (listTenants é ADMIN-only, ao contrário de getTenant)', async () => {
+    // RH deixou de ter acesso ao módulo (era ADMIN/RH; passou a ADMIN/AUDITOR
+    // em leitura e ADMIN-only em escrita, para alinhar com a restrição de
+    // sidebar "só ADMIN/AUDITOR veem Escalabilidade").
+    it('RH já não acede a nada no módulo (perdeu o acesso)', async () => {
       await request(app.getHttpServer())
         .get('/scalability/tenants')
         .set('Authorization', `Bearer ${rhToken}`)
@@ -103,6 +108,19 @@ describe('Scalability Integration', () => {
         .get('/scalability/tenants')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
+    });
+
+    it('AUDITOR acede em leitura à listagem de tenants, mas não pode criar um', async () => {
+      await request(app.getHttpServer())
+        .get('/scalability/tenants')
+        .set('Authorization', `Bearer ${auditorToken}`)
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post('/scalability/tenants')
+        .set('Authorization', `Bearer ${auditorToken}`)
+        .send({ tenantCode: 'INT-TEST-SCAL-AUDITOR', tenantName: 'Auditor não pode criar' })
+        .expect(403);
     });
   });
 
@@ -125,12 +143,19 @@ describe('Scalability Integration', () => {
         .expect(409);
     });
 
-    it('GET /tenants/:id devolve o tenant', async () => {
+    it('GET /tenants/:id devolve o tenant (AUDITOR)', async () => {
       const res = await request(app.getHttpServer())
         .get(`/scalability/tenants/${tenantId}`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${auditorToken}`)
         .expect(200);
       expect(res.body.id).toBe(tenantId);
+    });
+
+    it('RH já não acede a GET /tenants/:id', async () => {
+      await request(app.getHttpServer())
+        .get(`/scalability/tenants/${tenantId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(403);
     });
 
     it('PATCH actualiza o tenant', async () => {
@@ -145,23 +170,31 @@ describe('Scalability Integration', () => {
     it('SLA e content-delivery padrão foram criados automaticamente', async () => {
       const slas = await request(app.getHttpServer())
         .get(`/scalability/sla/tenant/${tenantId}`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${auditorToken}`)
         .expect(200);
       expect(slas.body.length).toBeGreaterThanOrEqual(1);
 
       const cdn = await request(app.getHttpServer())
         .get(`/scalability/content-delivery/${tenantId}`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${auditorToken}`)
         .expect(200);
       expect(cdn.body.tenantId).toBe(tenantId);
     });
   });
 
   describe('Integrations (bug: endpoint/config obrigatórios em falta + Int-vs-String id)', () => {
-    it('RH cria integração sem rebentar (endpoint/config eram obrigatórios e não preenchidos)', async () => {
+    it('AUDITOR não pode criar integração (leitura apenas)', async () => {
+      await request(app.getHttpServer())
+        .post('/scalability/integrations')
+        .set('Authorization', `Bearer ${auditorToken}`)
+        .send({ tenantId, name: 'x', type: 'SLACK' })
+        .expect(403);
+    });
+
+    it('ADMIN cria integração sem rebentar (endpoint/config eram obrigatórios e não preenchidos)', async () => {
       const res = await request(app.getHttpServer())
         .post('/scalability/integrations')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({
           tenantId,
           name: 'Int Test Slack',
@@ -177,7 +210,7 @@ describe('Scalability Integration', () => {
     it('PATCH /integrations/:id (Int id) — antes rebentava por comparar string com coluna Int', async () => {
       const res = await request(app.getHttpServer())
         .patch(`/scalability/integrations/${integrationId}`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'Int Test Slack Renamed' })
         .expect(200);
       expect(res.body.name).toBe('Int Test Slack Renamed');
@@ -186,15 +219,15 @@ describe('Scalability Integration', () => {
     it('PATCH /integrations/:id com id não-numérico → 400 (ParseIntPipe)', async () => {
       await request(app.getHttpServer())
         .patch('/scalability/integrations/not-a-number')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'x' })
         .expect(400);
     });
 
-    it('listar integrações do tenant', async () => {
+    it('listar integrações do tenant (AUDITOR)', async () => {
       const res = await request(app.getHttpServer())
         .get(`/scalability/integrations/tenant/${tenantId}`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${auditorToken}`)
         .expect(200);
       expect(res.body.data.some((i: any) => i.id === integrationId)).toBe(true);
     });
@@ -202,24 +235,24 @@ describe('Scalability Integration', () => {
     it('trigger sync (integrationId numérico) cria log de sincronização', async () => {
       const res = await request(app.getHttpServer())
         .post('/scalability/integrations/sync')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ integrationId })
         .expect(202);
       expect(res.body.syncLogId).toBeDefined();
 
       const logs = await request(app.getHttpServer())
         .get(`/scalability/integrations/${integrationId}/sync-logs`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${auditorToken}`)
         .expect(200);
       expect(logs.body.length).toBeGreaterThanOrEqual(1);
     });
   });
 
   describe('Automation Rules (bug: trigger/action/condition legados obrigatórios em falta + Int id)', () => {
-    it('RH cria regra de automação sem rebentar (trigger/action/condition eram obrigatórios)', async () => {
+    it('ADMIN cria regra de automação sem rebentar (trigger/action/condition eram obrigatórios)', async () => {
       const res = await request(app.getHttpServer())
         .post('/scalability/automations')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({
           tenantId,
           name: 'Int Test Auto-Enroll',
@@ -235,7 +268,7 @@ describe('Scalability Integration', () => {
     it('triggerConfigJson inválido → 400', async () => {
       await request(app.getHttpServer())
         .post('/scalability/automations')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({
           tenantId,
           name: 'Int Test Invalid JSON',
@@ -249,24 +282,32 @@ describe('Scalability Integration', () => {
     it('PATCH /automations/:id (Int id)', async () => {
       const res = await request(app.getHttpServer())
         .patch(`/scalability/automations/${ruleId}`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ priority: 5 })
         .expect(200);
       expect(res.body.priority).toBe(5);
     });
 
-    it('listar regras do tenant', async () => {
+    it('listar regras do tenant (AUDITOR)', async () => {
       const res = await request(app.getHttpServer())
         .get(`/scalability/automations/tenant/${tenantId}`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${auditorToken}`)
         .expect(200);
       expect(res.body.data.some((r: any) => r.id === ruleId)).toBe(true);
+    });
+
+    it('AUDITOR não pode executar regra (leitura apenas)', async () => {
+      await request(app.getHttpServer())
+        .post('/scalability/automations/execute')
+        .set('Authorization', `Bearer ${auditorToken}`)
+        .send({ ruleId })
+        .expect(403);
     });
 
     it('executar regra (ruleId numérico) cria execução', async () => {
       const res = await request(app.getHttpServer())
         .post('/scalability/automations/execute')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ ruleId })
         .expect(202);
       expect(res.body.executionId).toBeDefined();
@@ -293,7 +334,7 @@ describe('Scalability Integration', () => {
     it('?isResolved=false devolve o alerta ainda aberto (não coage para true)', async () => {
       const res = await request(app.getHttpServer())
         .get('/scalability/alerts')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${auditorToken}`)
         .query({ tenantId, isResolved: 'false' })
         .expect(200);
       expect(res.body.data.some((a: any) => a.id === alertId)).toBe(true);
@@ -302,16 +343,24 @@ describe('Scalability Integration', () => {
     it('?isResolved=true NÃO deve incluir o alerta ainda aberto', async () => {
       const res = await request(app.getHttpServer())
         .get('/scalability/alerts')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${auditorToken}`)
         .query({ tenantId, isResolved: 'true' })
         .expect(200);
       expect(res.body.data.some((a: any) => a.id === alertId)).toBe(false);
     });
 
-    it('resolver o alerta', async () => {
+    it('AUDITOR não pode resolver alerta (leitura apenas)', async () => {
+      await request(app.getHttpServer())
+        .patch(`/scalability/alerts/${alertId}/resolve`)
+        .set('Authorization', `Bearer ${auditorToken}`)
+        .send({ resolvedBy: String(1) })
+        .expect(403);
+    });
+
+    it('resolver o alerta (ADMIN)', async () => {
       const res = await request(app.getHttpServer())
         .patch(`/scalability/alerts/${alertId}/resolve`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ resolvedBy: String(1) })
         .expect(200);
       expect(res.body.isResolved).toBe(true);
@@ -320,7 +369,7 @@ describe('Scalability Integration', () => {
     it('resolver o mesmo alerta outra vez → 400', async () => {
       await request(app.getHttpServer())
         .patch(`/scalability/alerts/${alertId}/resolve`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ resolvedBy: String(1) })
         .expect(400);
     });
@@ -328,7 +377,7 @@ describe('Scalability Integration', () => {
     it('agora ?isResolved=true inclui o alerta', async () => {
       const res = await request(app.getHttpServer())
         .get('/scalability/alerts')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${auditorToken}`)
         .query({ tenantId, isResolved: 'true' })
         .expect(200);
       expect(res.body.data.some((a: any) => a.id === alertId)).toBe(true);
@@ -336,10 +385,10 @@ describe('Scalability Integration', () => {
   });
 
   describe('Dashboard, métricas, bulk import e load test', () => {
-    it('dashboard do tenant não rebenta e devolve estrutura completa', async () => {
+    it('dashboard do tenant não rebenta e devolve estrutura completa (AUDITOR)', async () => {
       const res = await request(app.getHttpServer())
         .get(`/scalability/dashboard/${tenantId}`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${auditorToken}`)
         .expect(200);
       expect(res.body.tenantInfo.id).toBe(tenantId);
       expect(res.body.integrations).toBeDefined();
@@ -348,15 +397,35 @@ describe('Scalability Integration', () => {
       expect(res.body.slaCompliance).toBeDefined();
     });
 
+    it('GET /scalability/dashboard (sem :tenantId) resolve sozinho o tenant único', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/scalability/dashboard')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(res.body.tenantInfo.id).toBeDefined();
+      expect(res.body.integrations).toBeDefined();
+    });
+
     it('métricas em tempo real não rebentam mesmo sem snapshot', async () => {
       await request(app.getHttpServer())
         .get('/scalability/metrics/realtime')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${auditorToken}`)
         .query({ tenantId })
         .expect(200);
     });
 
-    it('bulk import de utilizadores via JSON base64', async () => {
+    it('AUDITOR não pode fazer bulk import (leitura apenas)', async () => {
+      const payload = Buffer.from(
+        JSON.stringify([{ email: 'int.test.bulk.auditor@innova-test.com', fullName: 'x' }]),
+      ).toString('base64');
+      await request(app.getHttpServer())
+        .post('/scalability/users/bulk-import')
+        .set('Authorization', `Bearer ${auditorToken}`)
+        .send({ tenantId, payload, format: 'JSON' })
+        .expect(403);
+    });
+
+    it('bulk import de utilizadores via JSON base64 (ADMIN)', async () => {
       const payload = Buffer.from(
         JSON.stringify([
           { email: `int.test.bulk.${Date.now()}@innova-test.com`, fullName: 'Bulk User' },
@@ -365,7 +434,7 @@ describe('Scalability Integration', () => {
 
       const res = await request(app.getHttpServer())
         .post('/scalability/users/bulk-import')
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ tenantId, payload, format: 'JSON' })
         .expect(200);
       expect(res.body.created).toBe(1);
