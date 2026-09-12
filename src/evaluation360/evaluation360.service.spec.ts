@@ -41,6 +41,16 @@ const requestMock = {
   count: jest.fn().mockResolvedValue(0),
 };
 
+// Fontes reais do Nine-Box calculado (getNineBox) — mocks dedicados para os
+// testes poderem controlar o retorno em vez de depender do crud() genérico.
+const userMock = {
+  findMany: jest.fn().mockResolvedValue([]),
+  findUnique: jest.fn().mockResolvedValue(null),
+};
+const performanceReviewMock = { findMany: jest.fn().mockResolvedValue([]) };
+const objectiveMock = { findMany: jest.fn().mockResolvedValue([]) };
+const competencyEvaluationMock = { findMany: jest.fn().mockResolvedValue([]) };
+
 const crud = () => ({
   create: jest.fn().mockResolvedValue({ id: 'id-1' }),
   findMany: jest.fn().mockResolvedValue([]),
@@ -53,6 +63,11 @@ const crud = () => ({
   delete: jest.fn().mockResolvedValue({ id: 'id-1' }),
 });
 
+// evaluationResult precisa do CRUD completo (findUnique/upsert/updateMany já
+// usados por outros métodos deste serviço), não só findMany — por isso é um
+// crud() estável, não um objecto findMany-only como os outros mocks acima.
+const evaluationResultMock = crud();
+
 const mockPrisma = new Proxy(
   {},
   {
@@ -61,18 +76,17 @@ const mockPrisma = new Proxy(
       if (prop === 'eval360Cycle') return cycleMock;
       if (prop === 'eval360Question') return questionMock;
       if (prop === 'evaluationRequest') return requestMock;
-      if (prop === 'user')
-        return {
-          findMany: jest.fn().mockResolvedValue([]),
-          findUnique: jest.fn().mockResolvedValue(null),
-        };
+      if (prop === 'user') return userMock;
+      if (prop === 'performanceReview') return performanceReviewMock;
+      if (prop === 'objective') return objectiveMock;
+      if (prop === 'competencyEvaluation') return competencyEvaluationMock;
       // New models from Grupo D
       if (prop === 'eval360Feedback') return crud();
       if (prop === 'evaluatorAssignment') return crud();
       if (prop === 'cycleParticipant') return crud();
       if (prop === 'evaluationResponse') return crud();
       if (prop === 'evaluationAnswer') return crud();
-      if (prop === 'evaluationResult') return crud();
+      if (prop === 'evaluationResult') return evaluationResultMock;
       if (prop === 'pulseSurvey') return crud();
       if (prop === 'pulseSurveyResponse') return crud();
       if (prop === 'competencyIndicator') return crud();
@@ -450,6 +464,60 @@ describe('Evaluation360Service', () => {
       cycleMock.findMany.mockResolvedValue([]);
       const result = await service.getNineBox({ tenantId: 'tenant-1' } as any);
       expect(result).toBeDefined();
+    });
+
+    it('calcula performance/potencial a partir das fontes reais (review, objectivos, competências) e cai no proxy antigo quando não há review', async () => {
+      evaluationResultMock.findMany.mockResolvedValueOnce([
+        {
+          participantId: '10',
+          weightedScore: 4.5,
+          selfScore: null,
+          scoresByCompetency: JSON.stringify({
+            '1': { name: 'Trabalho em Equipa', category: 'HARD_SKILL', score: 4 },
+            '2': { name: 'Liderança', category: 'LEADERSHIP', score: 5 },
+          }),
+        },
+        {
+          // Sem review de performance, sem objectivos, sem competências —
+          // deve cair no proxy antigo (selfScore ?? weightedScore) e não rebentar.
+          participantId: '20',
+          weightedScore: 1.5,
+          selfScore: 1.0,
+          scoresByCompetency: '{}',
+        },
+      ]);
+      performanceReviewMock.findMany.mockResolvedValueOnce([
+        { id: 500, userId: 10, score: 4.5, potentialScore: 5, cycle: { scoreScale: 5 } },
+      ]);
+      objectiveMock.findMany.mockResolvedValueOnce([{ ownerId: 10, progress: 90, weight: 1 }]);
+      competencyEvaluationMock.findMany.mockResolvedValueOnce([
+        { reviewId: 500, competencyId: 100, evaluatedLevel: 5 },
+      ]);
+      competencyMock.findMany.mockResolvedValueOnce([{ id: 100 }]); // 100 = competência de categoria LEADERSHIP
+
+      const result = await service.getNineBox({ cycleId: 'cycle-9box' } as any);
+
+      expect(result.find(e => e.box === 'HIGH_HIGH')?.count).toBe(1); // participante 10
+      expect(result.find(e => e.box === 'LOW_LOW')?.count).toBe(1); // participante 20
+      const totalCount = result.reduce((s, e) => s + e.count, 0);
+      expect(totalCount).toBe(2);
+      // nunca identifica ninguém — só contagens por quadrante
+      expect(result.every(e => typeof e.count === 'number')).toBe(true);
+    });
+
+    it('filtra por departmentId através de user.findMany', async () => {
+      userMock.findMany.mockResolvedValueOnce([{ id: 10 }]);
+      evaluationResultMock.findMany.mockResolvedValueOnce([]);
+      await service.getNineBox({ cycleId: 'cycle-9box', departmentId: '3' } as any);
+      expect(userMock.findMany).toHaveBeenCalledWith({
+        where: { departmentId: 3 },
+        select: { id: true },
+      });
+      expect(evaluationResultMock.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ participantId: { in: ['10'] } }),
+        }),
+      );
     });
   });
 

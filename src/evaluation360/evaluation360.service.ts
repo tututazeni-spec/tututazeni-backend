@@ -1559,22 +1559,159 @@ export class Evaluation360Service {
   // esta rota, ver controller). Devolve agora só a contagem de pessoas por
   // quadrante, sempre os 9 quadrantes (mesmo a 0), para ADMIN/RH terem o
   // retrato de distribuição de talento sem identificar ninguém.
+  // Eixo Performance (X) — média das fontes reais disponíveis por
+  // participante (ignora as que não têm dado ainda, nunca inventa um valor):
+  //   • Avaliação de desempenho → PerformanceReview.score (última review
+  //     submetida), normalizado pela escala do próprio ciclo (cycle.scoreScale)
+  //   • Objetivos/KPIs → Objective.progress, média ponderada por Objective.weight
+  //   • Competências → média de scoresByCompetency desta própria avaliação 360º
+  //   • Resultados individuais → EvaluationResult.weightedScore (o resultado
+  //     global desta avaliação 360º)
+  //
+  // Eixo Potencial (Y) — v1 pragmático (decisão registada em memória): dos 9
+  // sub-fatores pedidos (agilidade de aprendizagem, adaptabilidade, ambição,
+  // mobilidade, readiness, capacidade de assumir responsabilidade, etc.) só
+  // dois têm fonte de dados real no schema hoje:
+  //   • PerformanceReview.potentialScore — nota de potencial dada pelo gestor
+  //   • Competências de categoria LEADERSHIP (cobre Liderança/Potencial de
+  //     liderança), tanto da review de performance como da própria 360º
+  // Os restantes 7 sub-fatores não têm campo próprio na BD — ficam por
+  // implementar (precisam de um novo modelo/formulário de captura). Sem
+  // nenhuma das duas fontes acima, cai-se de volta no proxy antigo
+  // (selfScore) para não deixar o participante fora da matriz.
   async getNineBox(query: NineBoxQueryDto) {
-    // Nine-Box: X = Performance (weightedScore), Y = Potencial (a integrar com OKRs)
-    // Por agora: usar selfScore como proxy de potencial (auto-percepção).
+    const where: Prisma.EvaluationResultWhereInput = { cycleId: query.cycleId };
+    if (query.departmentId) {
+      const deptUsers = await this.prisma.user.findMany({
+        where: { departmentId: Number(query.departmentId) },
+        select: { id: true },
+      });
+      where.participantId = { in: deptUsers.map(u => String(u.id)) };
+    }
+
     const results = await this.prisma.evaluationResult.findMany({
-      where: { cycleId: query.cycleId },
-      select: { weightedScore: true, selfScore: true },
+      where,
+      select: {
+        participantId: true,
+        weightedScore: true,
+        selfScore: true,
+        scoresByCompetency: true,
+      },
     });
+
+    const numericIds = [
+      ...new Set(results.map(r => Number(r.participantId)).filter(id => !Number.isNaN(id))),
+    ];
+
+    // Última review submetida (com score ou potentialScore) por utilizador —
+    // findMany já vem ordenada desc, por isso o primeiro encontro por userId é o mais recente.
+    const reviews = await this.prisma.performanceReview.findMany({
+      where: {
+        userId: { in: numericIds },
+        OR: [{ score: { not: null } }, { potentialScore: { not: null } }],
+      },
+      orderBy: { submittedAt: 'desc' },
+      select: {
+        id: true,
+        userId: true,
+        score: true,
+        potentialScore: true,
+        cycle: { select: { scoreScale: true } },
+      },
+    });
+    const latestReviewByUser = new Map<number, (typeof reviews)[number]>();
+    for (const r of reviews) if (!latestReviewByUser.has(r.userId)) latestReviewByUser.set(r.userId, r);
+    const latestReviewIds = [...latestReviewByUser.values()].map(r => r.id);
+
+    // CompetencyEvaluation não tem relation Prisma para Competency (só
+    // competencyId escalar) — resolve-se a categoria com uma 2ª query, nunca
+    // com um `where: { competency: {...} }` aninhado (essa relation não existe).
+    const reviewCompetencyEvals = latestReviewIds.length
+      ? await this.prisma.competencyEvaluation.findMany({
+          where: { reviewId: { in: latestReviewIds } },
+          select: { reviewId: true, competencyId: true, evaluatedLevel: true },
+        })
+      : [];
+    const evaluatedCompIds = [...new Set(reviewCompetencyEvals.map(e => e.competencyId))];
+    const leadershipCompIds = evaluatedCompIds.length
+      ? new Set(
+          (
+            await this.prisma.competency.findMany({
+              where: { id: { in: evaluatedCompIds }, category: 'LEADERSHIP' },
+              select: { id: true },
+            })
+          ).map(c => c.id),
+        )
+      : new Set<number>();
+    const reviewIdToUserId = new Map([...latestReviewByUser.values()].map(r => [r.id, r.userId]));
+    const leadershipLevelsByUser = new Map<number, number[]>();
+    for (const ev of reviewCompetencyEvals) {
+      if (!leadershipCompIds.has(ev.competencyId)) continue;
+      const userId = reviewIdToUserId.get(ev.reviewId);
+      if (userId === undefined) continue;
+      if (!leadershipLevelsByUser.has(userId)) leadershipLevelsByUser.set(userId, []);
+      leadershipLevelsByUser.get(userId)!.push(ev.evaluatedLevel);
+    }
+
+    // Objectivos/KPIs — progresso médio ponderado por objectivo, ignora rascunhos.
+    const objectives = numericIds.length
+      ? await this.prisma.objective.findMany({
+          where: { ownerId: { in: numericIds }, status: { not: 'DRAFT' }, deletedAt: null },
+          select: { ownerId: true, progress: true, weight: true },
+        })
+      : [];
+    const objectivesByUser = new Map<number, { total: number; weight: number }>();
+    for (const o of objectives) {
+      const acc = objectivesByUser.get(o.ownerId) ?? { total: 0, weight: 0 };
+      acc.total += o.progress * o.weight;
+      acc.weight += o.weight;
+      objectivesByUser.set(o.ownerId, acc);
+    }
+
+    const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
+    const pct = (value: number | null | undefined, max: number): number | null =>
+      value === null || value === undefined || max <= 0
+        ? null
+        : Math.min(1, Math.max(0, value / max));
 
     const levels = ['LOW', 'MID', 'HIGH'] as const;
     const counts = new Map<string, number>();
     for (const perf of levels) for (const pot of levels) counts.set(`${perf}_${pot}`, 0);
 
-    const max = Math.max(...results.map(r => r.weightedScore ?? 0), 5);
     for (const r of results) {
-      const perf = r.weightedScore / max;
-      const potential = (r.selfScore ?? r.weightedScore) / max;
+      const userId = Number(r.participantId);
+      const review = latestReviewByUser.get(userId);
+      const leadershipLevels = leadershipLevelsByUser.get(userId) ?? [];
+
+      const scoresByCompetency: Record<string, CompetencyScoreEntry> = JSON.parse(
+        r.scoresByCompetency ?? '{}',
+      );
+      const compEntries = Object.values(scoresByCompetency).filter(
+        (v): v is CompetencyScoreEntry & { score: number } => v.score !== null,
+      );
+      const compLeadershipScores = compEntries
+        .filter(v => v.category === 'LEADERSHIP')
+        .map(v => v.score);
+
+      const objAgg = objectivesByUser.get(userId);
+
+      const perfSources = [
+        pct(review?.score ?? null, review?.cycle.scoreScale ?? 5),
+        objAgg && objAgg.weight > 0 ? pct(objAgg.total / objAgg.weight, 100) : null,
+        compEntries.length ? pct(avg(compEntries.map(v => v.score)), 5) : null,
+        pct(r.weightedScore, 5),
+      ].filter((v): v is number => v !== null);
+      const perf = perfSources.length ? avg(perfSources) : 0;
+
+      const leadershipRatio = [
+        ...leadershipLevels.map(v => v / 5),
+        ...compLeadershipScores.map(v => v / 5),
+      ];
+      const potSources = [pct(review?.potentialScore ?? null, 5), leadershipRatio.length ? avg(leadershipRatio) : null].filter(
+        (v): v is number => v !== null,
+      );
+      const potential = potSources.length ? avg(potSources) : (pct(r.selfScore ?? r.weightedScore, 5) ?? 0);
+
       const perfBox = perf >= 0.67 ? 'HIGH' : perf >= 0.33 ? 'MID' : 'LOW';
       const potBox = potential >= 0.67 ? 'HIGH' : potential >= 0.33 ? 'MID' : 'LOW';
       const key = `${perfBox}_${potBox}`;
