@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ConflictException } from '@nestjs/common';
 import { OnboardingService } from './onboarding.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -200,6 +200,36 @@ describe('OnboardingService', () => {
       mockPrisma.onboardingPlan.findFirst.mockResolvedValue(basePlan);
       const result = await service.findByUser(1);
       expect(result).toBeDefined();
+    });
+  });
+
+  describe('startPlan', () => {
+    it('transiciona NOT_STARTED → IN_PROGRESS quando o plano é do próprio utilizador', async () => {
+      mockPrisma.onboardingPlan.findFirst.mockResolvedValue({ ...basePlan, status: 'NOT_STARTED' });
+      mockPrisma.onboardingPlan.update.mockResolvedValue({ ...basePlan, status: 'IN_PROGRESS' });
+
+      const result = await service.startPlan(1, 1);
+
+      expect(mockPrisma.onboardingPlan.findFirst).toHaveBeenCalledWith({
+        where: { id: 1, userId: 1 },
+      });
+      expect(mockPrisma.onboardingPlan.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { status: 'IN_PROGRESS' },
+      });
+      expect((result as any).status).toBe('IN_PROGRESS');
+    });
+
+    it('404 quando o plano não existe ou não pertence ao utilizador (IDOR)', async () => {
+      mockPrisma.onboardingPlan.findFirst.mockResolvedValue(null);
+      await expect(service.startPlan(1, 999)).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.onboardingPlan.update).not.toHaveBeenCalled();
+    });
+
+    it('409 quando o plano já não está NOT_STARTED', async () => {
+      mockPrisma.onboardingPlan.findFirst.mockResolvedValue({ ...basePlan, status: 'IN_PROGRESS' });
+      await expect(service.startPlan(1, 1)).rejects.toThrow(ConflictException);
+      expect(mockPrisma.onboardingPlan.update).not.toHaveBeenCalled();
     });
   });
 });

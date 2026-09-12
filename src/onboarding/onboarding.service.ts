@@ -189,6 +189,27 @@ export class OnboardingService {
     });
   }
 
+  // "Começar integração" — acção explícita do colaborador no seu próprio
+  // plano (ownership por findFirst com userId, mesmo padrão de
+  // uploadDocument). Só transiciona NOT_STARTED → IN_PROGRESS; o plano
+  // também transiciona sozinho ao completar a 1ª tarefa
+  // (checkPlanCompletion) — este endpoint é um atalho explícito adicional,
+  // não substitui esse fluxo.
+  async startPlan(planId: number, userId: number) {
+    const plan = await this.prisma.read.onboardingPlan.findFirst({
+      where: { id: planId, userId },
+    });
+    if (!plan) throw new NotFoundException('Plano de onboarding não encontrado');
+    if (plan.status !== 'NOT_STARTED') {
+      throw new ConflictException('O plano de onboarding já foi iniciado');
+    }
+
+    return this.prisma.onboardingPlan.update({
+      where: { id: planId },
+      data: { status: 'IN_PROGRESS' },
+    });
+  }
+
   async findOne(id: number, user?: CurrentUserData) {
     const plan = await this.prisma.read.onboardingPlan.findUnique({
       where: { id },

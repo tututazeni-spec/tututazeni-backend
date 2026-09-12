@@ -32,7 +32,28 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
-import { Role } from '../auth/enums/role.enum';
+import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
+
+// Quem pode criar planos de integração (POST /onboarding/templates) e
+// atribuí-los a colaboradores (POST /onboarding, POST
+// /onboarding/auto-assign/:userId), e ver a lista para os atribuir (GET
+// /onboarding, aba "Planos"). Mesmo conjunto de 5 papéis usado por
+// EVAL_CREATOR_ROLES/PERFORMANCE_MGMT_ROLES no frontend (lib/roles.ts).
+// Editar/remover template ou plano e gerir tarefas individuais continuam
+// ADMIN/RH (resp. ADMIN/RH/GESTOR) — inalterado.
+const ONBOARDING_ASSIGN_ROLES = [
+  Role.ADMIN,
+  Role.GESTOR,
+  Role.RH,
+  Role.DIRECTOR,
+  Role.LIDER,
+];
+
+// GET /onboarding/my — qualquer autenticado excepto INSTRUCTOR (o
+// instrutor não passa por integração de colaborador). Segue o padrão
+// DEPARTMENTS_VIEW_ROLES de src/departments/departments.controller.ts:
+// listar explicitamente em vez de omitir @Roles (que é fail-open).
+const ONBOARDING_MY_ROLES = AUTHENTICATED_ROLES.filter(r => r !== Role.INSTRUCTOR);
 
 @ApiTags('Onboarding')
 @ApiBearerAuth()
@@ -66,7 +87,7 @@ export class OnboardingController {
   }
 
   @Post('templates')
-  @Roles(Role.ADMIN, Role.GESTOR, Role.RH, Role.DIRECTOR, Role.LIDER)
+  @Roles(...ONBOARDING_ASSIGN_ROLES)
   @ApiOperation({ summary: 'Criar plano de integração (template de onboarding)' })
   createTemplate(@Body() dto: CreateOnboardingTemplateDto) {
     return this.svc.createTemplate(dto);
@@ -113,16 +134,25 @@ export class OnboardingController {
   // ── Planos ────────────────────────────────────────────────────────────────
 
   @Get()
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...ONBOARDING_ASSIGN_ROLES)
   @ApiOperation({ summary: 'Listar planos de onboarding com filtros' })
   findAll(@Query() filters: OnboardingFilterDto) {
     return this.svc.findAll(filters);
   }
 
   @Get('my')
+  @Roles(...ONBOARDING_MY_ROLES)
   @ApiOperation({ summary: 'O meu plano de onboarding' })
   my(@CurrentUser() user: CurrentUserData) {
     return this.svc.findByUser(user.id);
+  }
+
+  @Post(':id/start')
+  @Roles(...ONBOARDING_MY_ROLES)
+  @ApiOperation({ summary: 'Começar a integração (NOT_STARTED → IN_PROGRESS)' })
+  @HttpCode(HttpStatus.OK)
+  startPlan(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.startPlan(id, user.id);
   }
 
   @Get('user/:userId')
@@ -139,14 +169,14 @@ export class OnboardingController {
   }
 
   @Post()
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...ONBOARDING_ASSIGN_ROLES)
   @ApiOperation({ summary: 'Criar plano de onboarding para colaborador' })
   create(@Body() dto: CreateOnboardingPlanDto) {
     return this.svc.create(dto);
   }
 
   @Post('auto-assign/:userId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...ONBOARDING_ASSIGN_ROLES)
   @ApiOperation({ summary: 'Atribuir automaticamente o template mais adequado' })
   @ApiQuery({ name: 'positionId', required: false })
   @ApiQuery({ name: 'departmentId', required: false })

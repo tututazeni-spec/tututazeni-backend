@@ -21,6 +21,7 @@ const mockSvc = {
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
   create: jest.fn().mockResolvedValue({ id: 2 }),
   createFromTemplate: jest.fn().mockResolvedValue({ id: 1 }),
+  startPlan: jest.fn().mockResolvedValue({ id: 1, status: 'IN_PROGRESS' }),
   remove: jest.fn().mockResolvedValue({}),
   completeTask: jest.fn().mockResolvedValue({}),
   skipTask: jest.fn().mockResolvedValue({}),
@@ -140,6 +141,11 @@ describe('OnboardingController', () => {
     expect(mockSvc.createFromTemplate).toHaveBeenCalledWith(5, 3, 7);
   });
 
+  it('startPlan → startPlan(id, userId)', async () => {
+    await controller.startPlan(7, mockUser as any);
+    expect(mockSvc.startPlan).toHaveBeenCalledWith(7, 1);
+  });
+
   it('remove → remove(id)', async () => {
     await controller.remove(1);
     expect(mockSvc.remove).toHaveBeenCalledWith(1);
@@ -183,14 +189,16 @@ describe('OnboardingController', () => {
 });
 
 // Só ADMIN, GESTOR, RH, DIRECTOR, LIDER podem criar planos de integração
-// (templates). Regressão: não pode voltar a ficar restrito só a ADMIN/RH,
-// nem abrir para COLABORADOR/INSTRUCTOR/AUDITOR.
-describe('OnboardingController#createTemplate — @Roles', () => {
+// (templates) e atribuí-los a colaboradores. Regressão: não pode voltar a
+// ficar restrito só a ADMIN/RH, nem abrir para COLABORADOR/INSTRUCTOR/AUDITOR.
+describe.each([
+  ['createTemplate', OnboardingController.prototype.createTemplate],
+  ['findAll', OnboardingController.prototype.findAll],
+  ['create', OnboardingController.prototype.create],
+  ['autoAssign', OnboardingController.prototype.autoAssign],
+])('OnboardingController#%s — @Roles', (_name, handler) => {
   it('exige ADMIN, GESTOR, RH, DIRECTOR ou LIDER, e mais nenhum', () => {
-    const meta: string[] | undefined = Reflect.getMetadata(
-      ROLES_KEY,
-      OnboardingController.prototype.createTemplate,
-    );
+    const meta: string[] | undefined = Reflect.getMetadata(ROLES_KEY, handler);
     expect(meta).toBeDefined();
     expect(meta).toEqual(
       expect.arrayContaining([Role.ADMIN, Role.GESTOR, Role.RH, Role.DIRECTOR, Role.LIDER]),
@@ -198,6 +206,32 @@ describe('OnboardingController#createTemplate — @Roles', () => {
     expect(meta).toHaveLength(5);
     expect(meta).not.toContain(Role.COLABORADOR);
     expect(meta).not.toContain(Role.AUDITOR);
+    expect(meta).not.toContain(Role.INSTRUCTOR);
+  });
+});
+
+// GET /onboarding/my e POST /onboarding/:id/start — qualquer autenticado
+// excepto INSTRUCTOR. Regressão: não pode voltar a ficar aberto a todos
+// (fail-open, sem @Roles) nem esquecer de excluir INSTRUCTOR.
+describe.each([
+  ['my', OnboardingController.prototype.my],
+  ['startPlan', OnboardingController.prototype.startPlan],
+])('OnboardingController#%s — @Roles', (_name, handler) => {
+  it('exige um papel autenticado, excepto INSTRUCTOR', () => {
+    const meta: string[] | undefined = Reflect.getMetadata(ROLES_KEY, handler);
+    expect(meta).toBeDefined();
+    expect(meta).toEqual(
+      expect.arrayContaining([
+        Role.COLABORADOR,
+        Role.LIDER,
+        Role.GESTOR,
+        Role.RH,
+        Role.ADMIN,
+        Role.DIRECTOR,
+        Role.AUDITOR,
+      ]),
+    );
+    expect(meta).toHaveLength(7);
     expect(meta).not.toContain(Role.INSTRUCTOR);
   });
 });
