@@ -5,7 +5,7 @@
 // scoping por ownership (GESTOR/INSTRUCTOR/DIRECTOR/LIDER só gerem as
 // formações que criaram; ADMIN/RH gerem todas).
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TrainingService as TrainingsService } from './trainings.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -260,7 +260,11 @@ describe('TrainingsService — aprovações, comunicação, documentos, avaliaç
       mockPrisma.assessment.findUnique.mockResolvedValue({ id: 3, title: 'Quiz inicial' });
       mockPrisma.trainingAssessment.upsert.mockResolvedValue({ id: 1, role: 'INITIAL' });
 
-      const result = await service.linkAssessment(5, { assessmentId: 3, role: 'INITIAL' as any }, adminUser);
+      const result = await service.linkAssessment(
+        5,
+        { assessmentId: 3, role: 'INITIAL' as any },
+        adminUser,
+      );
       expect(result).toBeDefined();
     });
 
@@ -285,9 +289,9 @@ describe('TrainingsService — aprovações, comunicação, documentos, avaliaç
       mockPrisma.training.findUnique.mockResolvedValue({ id: 5, createdById: 1 });
       mockPrisma.trainingAssessment.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.unlinkAssessment(5, 'FINAL' as any, adminUser),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.unlinkAssessment(5, 'FINAL' as any, adminUser)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
   });
 
@@ -316,7 +320,7 @@ describe('TrainingsService — aprovações, comunicação, documentos, avaliaç
         { status: 'WAITLIST', finalScore: null },
       ]);
 
-      const result = await service.getResults(5, adminUser);
+      const result = await service.getResults(5);
 
       expect(result.enrolled).toBe(4); // COMPLETED×2 + ATTENDED + REGISTERED
       expect(result.completed).toBe(2);

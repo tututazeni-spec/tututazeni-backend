@@ -69,8 +69,7 @@ export class TrainingController {
   @Get('manage')
   @Roles(...CAN_CREATE_TRAININGS)
   @ApiOperation({
-    summary:
-      'Formações geríveis pelo utilizador (ADMIN/RH vêem todas; os restantes só as suas)',
+    summary: 'Formações geríveis pelo utilizador (ADMIN/RH vêem todas; os restantes só as suas)',
   })
   manage(@Query() filters: TrainingFilterDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.findForManagement(filters, user);
@@ -99,17 +98,18 @@ export class TrainingController {
   @Get(':id/attendance-report')
   @Roles(...CAN_CREATE_TRAININGS)
   @ApiOperation({ summary: 'Relatório de presença e conclusão' })
-  attendanceReport(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
-    return this.svc.getAttendanceReport(id, user);
+  attendanceReport(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getAttendanceReport(id);
   }
 
   @Get(':id/results')
   @Roles(...CAN_CREATE_TRAININGS)
   @ApiOperation({
-    summary: 'Resultados: inscritos, participantes, concluíram, taxa, presença, nota, satisfação, custo/participante',
+    summary:
+      'Resultados: inscritos, participantes, concluíram, taxa, presença, nota, satisfação, custo/participante',
   })
-  results(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
-    return this.svc.getResults(id, user);
+  results(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getResults(id);
   }
 
   // ── Gestão da formação (Admin/RH/Gestor/Instrutor/Director/Líder) ─────────
@@ -248,11 +248,8 @@ export class TrainingController {
   @Get('sessions/:sessionId/participants')
   @Roles(...CAN_CREATE_TRAININGS)
   @ApiOperation({ summary: 'Lista de participantes de uma sessão' })
-  sessionParticipants(
-    @Param('sessionId', ParseIntPipe) id: number,
-    @CurrentUser() user: CurrentUserData,
-  ) {
-    return this.svc.getSessionParticipants(id, user);
+  sessionParticipants(@Param('sessionId', ParseIntPipe) id: number) {
+    return this.svc.getSessionParticipants(id);
   }
 
   // ── Inscrições ────────────────────────────────────────────────────────────
@@ -260,8 +257,8 @@ export class TrainingController {
   @Post('sessions/register')
   @Roles(...CAN_CREATE_TRAININGS)
   @ApiOperation({ summary: 'Inscrever colaborador numa sessão (com controlo de vagas)' })
-  register(@Body() dto: RegisterParticipantDto, @CurrentUser() user: CurrentUserData) {
-    return this.svc.registerParticipant(dto, user);
+  register(@Body() dto: RegisterParticipantDto) {
+    return this.svc.registerParticipant(dto);
   }
 
   @Post('sessions/:sessionId/self-register')
@@ -291,9 +288,8 @@ export class TrainingController {
   updateParticipantStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: TrainingsUpdateParticipantStatusDto,
-    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.updateParticipantStatus(id, dto, user);
+    return this.svc.updateParticipantStatus(id, dto);
   }
 
   @Patch('participants/:id/approve')
@@ -321,7 +317,7 @@ export class TrainingController {
   @ApiOperation({ summary: 'Registar presença em massa (lista de presentes)' })
   @HttpCode(HttpStatus.OK)
   bulkAttendance(@CurrentUser() user: CurrentUserData, @Body() dto: BulkAttendanceDto) {
-    return this.svc.bulkAttendance(dto, user);
+    return this.svc.bulkAttendance(dto, user.id);
   }
 
   // ── Rating ────────────────────────────────────────────────────────────────

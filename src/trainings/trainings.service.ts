@@ -409,17 +409,12 @@ export class TrainingService {
 
   // ─── INSCRIÇÕES ───────────────────────────────────────────────────────────
 
-  async registerParticipant(dto: RegisterParticipantDto, actor?: CurrentUserData) {
-    // `actor` só é passado no fluxo administrativo (POST /trainings/sessions/register)
-    // — a auto-inscrição (selfRegister) não passa actor, e nunca deve ser
-    // bloqueada por ownership (qualquer utilizador pode inscrever-se a
-    // si próprio numa formação publicada). Um GESTOR/INSTRUCTOR/DIRECTOR/
-    // LIDER só pode inscrever OUTRA pessoa numa sessão de uma formação que
-    // ele próprio criou; ADMIN/RH inscrevem em qualquer uma.
-    if (actor && actor.id !== dto.userId) {
-      await this.assertCanManageSession(dto.sessionId, actor);
-    }
-
+  // NOTA: inscrever outra pessoa (POST /trainings/sessions/register) é
+  // operacional — não scoped por ownership da formação — mesmo padrão
+  // (deliberadamente amplo) de getSessionParticipants/getAttendanceReport
+  // abaixo: um GESTOR pode gerir inscrições de sessões de formações que
+  // não criou, tal como já podia antes de este módulo ganhar mais criadores.
+  async registerParticipant(dto: RegisterParticipantDto) {
     // Verificar se já está inscrito
     const existing = await this.prisma.trainingParticipant.findFirst({
       where: { sessionId: dto.sessionId, userId: dto.userId, status: { not: 'CANCELLED' } },
@@ -564,14 +559,10 @@ export class TrainingService {
     return { message: 'Inscrição cancelada', waitlistPromoted: !!nextWaitlist };
   }
 
-  async updateParticipantStatus(
-    id: number,
-    dto: TrainingsUpdateParticipantStatusDto,
-    user: CurrentUserData,
-  ) {
+  // NOTA: sem ownership — mesmo motivo de getSessionParticipants acima.
+  async updateParticipantStatus(id: number, dto: TrainingsUpdateParticipantStatusDto) {
     const p = await this.prisma.read.trainingParticipant.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('Participante não encontrado');
-    await this.assertCanManageSession(p.sessionId, user);
 
     const updated = await this.prisma.trainingParticipant.update({
       where: { id },
@@ -624,9 +615,12 @@ export class TrainingService {
 
   // ─── PRESENÇA EM MASSA ────────────────────────────────────────────────────
 
-  async bulkAttendance(dto: BulkAttendanceDto, registrar: CurrentUserData) {
-    const registrarId = registrar.id;
-    await this.assertCanManageSession(dto.sessionId, registrar);
+  // NOTA: sem ownership — mesmo motivo de getSessionParticipants acima.
+  async bulkAttendance(dto: BulkAttendanceDto, registrarId: number) {
+    const session = await this.prisma.read.trainingSession.findUnique({
+      where: { id: dto.sessionId },
+    });
+    if (!session) throw new NotFoundException('Sessão não encontrada');
 
     const participants = await this.prisma.read.trainingParticipant.findMany({
       where: { sessionId: dto.sessionId, status: 'REGISTERED' },
@@ -848,11 +842,7 @@ export class TrainingService {
     });
   }
 
-  async unlinkAssessment(
-    trainingId: number,
-    role: TrainingAssessmentRole,
-    user: CurrentUserData,
-  ) {
+  async unlinkAssessment(trainingId: number, role: TrainingAssessmentRole, user: CurrentUserData) {
     await this.assertCanManage(trainingId, user);
     const existing = await this.prisma.read.trainingAssessment.findUnique({
       where: { trainingId_role: { trainingId, role } },
@@ -864,8 +854,9 @@ export class TrainingService {
 
   // ─── RESULTADOS ────────────────────────────────────────────────────────────
 
-  async getResults(trainingId: number, user: CurrentUserData) {
-    await this.assertCanManage(trainingId, user);
+  // NOTA: sem ownership — mesmo motivo de getSessionParticipants acima
+  // (leitura agregada, não uma acção de gestão da formação).
+  async getResults(trainingId: number) {
     const training = await this.prisma.read.training.findUnique({
       where: { id: trainingId },
       select: {
@@ -1008,8 +999,12 @@ export class TrainingService {
 
   // ─── PARTICIPANTES DE UMA SESSÃO ──────────────────────────────────────────
 
-  async getSessionParticipants(sessionId: number, user: CurrentUserData) {
-    await this.assertCanManageSession(sessionId, user);
+  // NOTA: deliberadamente sem ownership — participantes/presenças são geridos
+  // por qualquer um dos papéis abaixo (ADMIN/RH/GESTOR/INSTRUCTOR/DIRECTOR/
+  // LIDER), mesmo em sessões de formações que não criaram. Restringir aqui
+  // partia o fluxo já existente de um GESTOR gerir presenças de formações
+  // criadas por RH (ver test/integration/trainings).
+  async getSessionParticipants(sessionId: number) {
     return this.prisma.read.trainingParticipant.findMany({
       where: { sessionId },
       include: {
@@ -1030,8 +1025,8 @@ export class TrainingService {
 
   // ─── RELATÓRIO DE PRESENÇA ────────────────────────────────────────────────
 
-  async getAttendanceReport(trainingId: number, user: CurrentUserData) {
-    await this.assertCanManage(trainingId, user);
+  // NOTA: sem ownership — mesmo motivo de getSessionParticipants acima.
+  async getAttendanceReport(trainingId: number) {
     // FIX: `as any` desnecessário — findOne() já devolve title/type/
     // workloadHours totalmente tipados.
     const training = await this.findOne(trainingId);
