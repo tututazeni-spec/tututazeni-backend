@@ -77,9 +77,9 @@ describe('PerformanceController', () => {
     expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
   });
 
-  it('myHistory → getUserHistory(userId)', async () => {
+  it('myHistory → getUserHistory(userId, userId)', async () => {
     await controller.myHistory(mockUser as any);
-    expect(mockSvc.getUserHistory).toHaveBeenCalledWith(1);
+    expect(mockSvc.getUserHistory).toHaveBeenCalledWith(1, 1);
   });
 
   it('myGoals sem cycleId → getUserGoals(userId, undefined)', async () => {
@@ -112,14 +112,14 @@ describe('PerformanceController', () => {
     expect(mockSvc.getPerformanceAnalytics).toHaveBeenCalledWith(2);
   });
 
-  it('get9Box sem params → get9Box(undefined, undefined)', async () => {
-    await controller.get9Box();
-    expect(mockSvc.get9Box).toHaveBeenCalledWith(undefined, undefined);
+  it('get9Box sem params → get9Box(userId, undefined, undefined)', async () => {
+    await controller.get9Box(mockUser as any);
+    expect(mockSvc.get9Box).toHaveBeenCalledWith(1, undefined, undefined);
   });
 
-  it('get9Box com params → get9Box(parsed, parsed)', async () => {
-    await controller.get9Box('1', '5');
-    expect(mockSvc.get9Box).toHaveBeenCalledWith(1, 5);
+  it('get9Box com params → get9Box(userId, parsed, parsed)', async () => {
+    await controller.get9Box(mockUser as any, '1', '5');
+    expect(mockSvc.get9Box).toHaveBeenCalledWith(1, 1, 5);
   });
 
   it('teamPerformance sem cycleId → getTeamPerformance(userId, undefined)', async () => {
@@ -147,9 +147,9 @@ describe('PerformanceController', () => {
     expect(mockSvc.getDepartmentStats).toHaveBeenCalledWith(2, 5);
   });
 
-  it('userHistory → getUserHistory(userId)', async () => {
-    await controller.userHistory(3);
-    expect(mockSvc.getUserHistory).toHaveBeenCalledWith(3);
+  it('userHistory → getUserHistory(userId, requesterId)', async () => {
+    await controller.userHistory(3, mockUser as any);
+    expect(mockSvc.getUserHistory).toHaveBeenCalledWith(3, 1);
   });
 
   it('findOne → findOne(id, user)', async () => {

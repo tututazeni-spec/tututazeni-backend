@@ -390,11 +390,11 @@ describe('PerformanceService (progress)', () => {
   // ─── getUserHistory ───────────────────────────────────────────────────────────
 
   describe('getUserHistory', () => {
-    it('deve retornar histórico vazio', async () => {
+    it('deve retornar histórico vazio (o próprio a ver o seu)', async () => {
       mockPrisma.performanceReview.findMany.mockResolvedValue([]);
       mockPrisma.performanceGoal.findMany.mockResolvedValue([]);
       mockPrisma.continuousFeedback.findMany.mockResolvedValue([]);
-      const result = (await service.getUserHistory(1)) as any;
+      const result = (await service.getUserHistory(1, 1)) as any;
       expect(result.reviews).toHaveLength(0);
       expect(result.goals).toHaveLength(0);
       expect(result.avgScore).toBe(0);
@@ -407,8 +407,30 @@ describe('PerformanceService (progress)', () => {
       ]);
       mockPrisma.performanceGoal.findMany.mockResolvedValue([]);
       mockPrisma.continuousFeedback.findMany.mockResolvedValue([]);
-      const result = (await service.getUserHistory(1)) as any;
+      const result = (await service.getUserHistory(1, 1)) as any;
       expect(result.avgScore).toBe(3.5);
+    });
+
+    // Regressão: mesmo scoping de getTeamPerformance() — só o gestor directo
+    // pode pedir o histórico de outra pessoa; antes qualquer ADMIN/RH/GESTOR
+    // via a história de qualquer utilizador da empresa.
+    it('deve permitir ao gestor directo ver o histórico do subordinado', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ managerId: 9 });
+      mockPrisma.performanceReview.findMany.mockResolvedValue([]);
+      mockPrisma.performanceGoal.findMany.mockResolvedValue([]);
+      mockPrisma.continuousFeedback.findMany.mockResolvedValue([]);
+      const result = (await service.getUserHistory(1, 9)) as any;
+      expect(result.reviews).toHaveLength(0);
+    });
+
+    it('deve lançar ForbiddenException se não for o gestor directo nem o próprio', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ managerId: 9 });
+      await expect(service.getUserHistory(1, 42)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('deve lançar ForbiddenException se o utilizador alvo não existir', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.getUserHistory(999, 9)).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -490,7 +512,7 @@ describe('PerformanceService (progress)', () => {
   describe('get9Box', () => {
     it('deve retornar grid 9-box vazio (sem placements)', async () => {
       mockPrisma.nineBoxPlacement.findMany.mockResolvedValue([]);
-      const result = (await service.get9Box()) as any;
+      const result = (await service.get9Box(7)) as any;
       expect(result.grid).toBeDefined();
       // Grid 3x3 deve ter 9 células
       expect(Object.keys(result.grid)).toHaveLength(9);
@@ -507,7 +529,7 @@ describe('PerformanceService (progress)', () => {
           user: { id: 2, fullName: 'Ana', avatarUrl: null, position: null, department: null },
         },
       ]);
-      const result = (await service.get9Box(1)) as any;
+      const result = (await service.get9Box(7, 1)) as any;
       expect(result.grid['2-3']).toHaveLength(1);
       expect(result.grid['2-3'][0].user.fullName).toBe('Ana');
     });
@@ -517,19 +539,23 @@ describe('PerformanceService (progress)', () => {
     // matriz de um departamento devolvia sempre a organização inteira.
     it('deve filtrar por departmentId quando fornecido', async () => {
       mockPrisma.nineBoxPlacement.findMany.mockResolvedValue([]);
-      await service.get9Box(1, 5);
+      await service.get9Box(7, 1, 5);
       expect(mockPrisma.nineBoxPlacement.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ cycleId: 1, user: { departmentId: 5 } }),
+          where: expect.objectContaining({ cycleId: 1, user: { managerId: 7, departmentId: 5 } }),
         }),
       );
     });
 
-    it('não filtra por departamento quando departmentId não é fornecido', async () => {
+    // Regressão: mesmo scoping de getTeamPerformance() — managerId vem
+    // sempre do requester autenticado; antes o 9-box devolvia a organização
+    // inteira a qualquer ADMIN/RH/GESTOR, sem nenhum filtro por equipa.
+    it('deve restringir sempre à equipa directa do requester (managerId)', async () => {
       mockPrisma.nineBoxPlacement.findMany.mockResolvedValue([]);
-      await service.get9Box();
+      await service.get9Box(7);
       const { where } = mockPrisma.nineBoxPlacement.findMany.mock.calls[0][0];
-      expect(where).not.toHaveProperty('user');
+      expect(where).not.toHaveProperty('cycleId');
+      expect(where.user).toEqual({ managerId: 7 });
     });
   });
 

@@ -626,7 +626,23 @@ export class PerformanceService {
 
   // ─── HISTÓRICO E VISTAS DO UTILIZADOR ────────────────────────────────────
 
-  async getUserHistory(userId: number) {
+  // Chamado tanto por GET /performance/my (requesterId === userId, sempre o
+  // próprio) como por GET /performance/user/:userId (rota de gestão — mesmo
+  // scoping de getTeamPerformance(): só o gestor directo deste colaborador
+  // pode pedir o histórico). Antes desta rota qualquer ADMIN/RH/GESTOR via a
+  // história de qualquer utilizador da empresa, mesmo sem nenhuma relação de
+  // gestão com ele (ver performance.controller.ts#userHistory).
+  async getUserHistory(userId: number, requesterId: number) {
+    if (userId !== requesterId) {
+      const target = await this.prisma.read.user.findUnique({
+        where: { id: userId },
+        select: { managerId: true },
+      });
+      if (!target || target.managerId !== requesterId) {
+        throw new ForbiddenException('Sem permissão');
+      }
+    }
+
     const [reviews, goals, feedback] = await Promise.all([
       this.prisma.read.performanceReview.findMany({
         where: { userId },
@@ -766,14 +782,19 @@ export class PerformanceService {
     });
   }
 
-  async get9Box(cycleId?: number, departmentId?: number) {
-    // departmentId era aceite pelo controller (@ApiQuery) e devolvido na
-    // resposta, mas nunca chegava a filtrar a query — pedir a matriz de um
-    // departamento devolvia sempre a organização inteira.
+  // Mesmo scoping de getTeamPerformance(): managerId vem sempre do
+  // requester autenticado (ver performance.controller.ts#get9Box), nunca de
+  // um parâmetro escolhido por quem chama — devolvia antes a organização
+  // inteira a qualquer ADMIN/RH/GESTOR. departmentId continua opcional, mas
+  // só filtra dentro da própria equipa directa.
+  async get9Box(managerId: number, cycleId?: number, departmentId?: number) {
     const placements = await this.prisma.read.nineBoxPlacement.findMany({
       where: {
         ...(cycleId ? { cycleId } : {}),
-        ...(departmentId ? { user: { departmentId } } : {}),
+        user: {
+          managerId,
+          ...(departmentId ? { departmentId } : {}),
+        },
       },
       include: {
         user: {

@@ -82,7 +82,7 @@ export class PerformanceController {
   @Get('my')
   @ApiOperation({ summary: 'O meu histórico de performance (reviews, goals, feedback)' })
   myHistory(@CurrentUser() user: CurrentUserData) {
-    return this.svc.getUserHistory(user.id);
+    return this.svc.getUserHistory(user.id, user.id);
   }
 
   @Get('my/goals')
@@ -107,13 +107,25 @@ export class PerformanceController {
     return this.svc.getPerformanceAnalytics(cycleId ? parseInt(cycleId) : undefined);
   }
 
+  // Mesmo scoping de teamPerformance() logo abaixo: managerId vem sempre do
+  // requester autenticado, nunca de um parâmetro escolhido por quem chama —
+  // via /9box devolvia antes a organização inteira a qualquer ADMIN/RH/
+  // GESTOR, ignorando por completo quem pediu. departmentId continua
+  // opcional, mas só filtra dentro da própria equipa direta.
   @Get('9box')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: '9-Box Matrix (Performance vs Potencial)' })
+  @ApiOperation({
+    summary: '9-Box Matrix (Performance vs Potencial) — apenas a minha equipa directa',
+  })
   @ApiQuery({ name: 'cycleId', required: false })
   @ApiQuery({ name: 'departmentId', required: false })
-  get9Box(@Query('cycleId') cycleId?: string, @Query('departmentId') departmentId?: string) {
+  get9Box(
+    @CurrentUser() user: CurrentUserData,
+    @Query('cycleId') cycleId?: string,
+    @Query('departmentId') departmentId?: string,
+  ) {
     return this.svc.get9Box(
+      user.id,
       cycleId ? parseInt(cycleId) : undefined,
       departmentId ? parseInt(departmentId) : undefined,
     );
@@ -144,11 +156,15 @@ export class PerformanceController {
     return this.svc.getDepartmentStats(id, cycleId ? parseInt(cycleId) : undefined);
   }
 
+  // Mesmo scoping de teamPerformance(): só o gestor directo desse
+  // colaborador (ver getUserHistory) pode pedir o histórico — antes
+  // qualquer ADMIN/RH/GESTOR via a história de qualquer utilizador da
+  // empresa, mesmo sem nenhuma relação de gestão com ele.
   @Get('user/:userId')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Histórico de performance de um colaborador' })
-  userHistory(@Param('userId', ParseIntPipe) userId: number) {
-    return this.svc.getUserHistory(userId);
+  @ApiOperation({ summary: 'Histórico de performance de um colaborador da minha equipa directa' })
+  userHistory(@Param('userId', ParseIntPipe) userId: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.getUserHistory(userId, user.id);
   }
 
   @Get(':id')

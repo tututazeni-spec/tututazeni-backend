@@ -232,7 +232,7 @@ describe('PerformanceService (additional)', () => {
       mockPrisma.performanceGoal.findMany.mockResolvedValue([]);
       mockPrisma.performanceFeedback.findMany.mockResolvedValue([]);
       mockPrisma.performanceReview.aggregate.mockResolvedValue({ _avg: { score: null } });
-      const result = await service.getUserHistory(1);
+      const result = await service.getUserHistory(1, 1);
       expect(result).toBeDefined();
     });
   });
