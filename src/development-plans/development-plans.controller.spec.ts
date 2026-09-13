@@ -25,6 +25,11 @@ const mockSvc = {
   updateGoalProgress: jest.fn().mockResolvedValue({}),
   addCheckpoint: jest.fn().mockResolvedValue({ id: 1 }),
   completeCheckpoint: jest.fn().mockResolvedValue({}),
+  addCompetencyGap: jest.fn().mockResolvedValue({ id: 1 }),
+  removeCompetencyGap: jest.fn().mockResolvedValue({}),
+  markAtRisk: jest.fn().mockResolvedValue({}),
+  resume: jest.fn().mockResolvedValue({}),
+  acceptPlan: jest.fn().mockResolvedValue({}),
 };
 
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
@@ -95,9 +100,15 @@ describe('DevelopmentPlansController', () => {
     expect(mockSvc.approvePlan).toHaveBeenCalledWith(dto, mockUser);
   });
 
-  it('complete → complete(id)', async () => {
+  it('complete sem dto → complete(id, undefined)', async () => {
     await controller.complete(4);
-    expect(mockSvc.complete).toHaveBeenCalledWith(4);
+    expect(mockSvc.complete).toHaveBeenCalledWith(4, undefined);
+  });
+
+  it('complete com dto → complete(id, dto)', async () => {
+    const dto = { finalResult: 'GOAL_ACHIEVED', partial: false } as any;
+    await controller.complete(4, dto);
+    expect(mockSvc.complete).toHaveBeenCalledWith(4, dto);
   });
 
   it('cancel sem reason → cancel(id, undefined)', async () => {
@@ -160,5 +171,33 @@ describe('DevelopmentPlansController', () => {
     const dto = {} as any;
     await controller.completeCheckpoint(dto, mockUser as any);
     expect(mockSvc.completeCheckpoint).toHaveBeenCalledWith(dto, mockUser);
+  });
+
+  it('addCompetencyGap → addCompetencyGap(dto, user)', async () => {
+    const dto = {} as any;
+    await controller.addCompetencyGap(dto, mockUser as any);
+    expect(mockSvc.addCompetencyGap).toHaveBeenCalledWith(dto, mockUser);
+  });
+
+  it('removeCompetencyGap → removeCompetencyGap(gapId, user)', async () => {
+    await controller.removeCompetencyGap(9, mockUser as any);
+    expect(mockSvc.removeCompetencyGap).toHaveBeenCalledWith(9, mockUser);
+  });
+
+  it('markAtRisk → markAtRisk(id, dto, user)', async () => {
+    const dto = {} as any;
+    await controller.markAtRisk(4, dto, mockUser as any);
+    expect(mockSvc.markAtRisk).toHaveBeenCalledWith(4, dto, mockUser);
+  });
+
+  it('resume → resume(id, user)', async () => {
+    await controller.resume(4, mockUser as any);
+    expect(mockSvc.resume).toHaveBeenCalledWith(4, mockUser);
+  });
+
+  it('acceptPlan → acceptPlan(id, dto, user)', async () => {
+    const dto = {} as any;
+    await controller.acceptPlan(4, dto, mockUser as any);
+    expect(mockSvc.acceptPlan).toHaveBeenCalledWith(4, dto, mockUser);
   });
 });

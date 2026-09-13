@@ -5,6 +5,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PlanStatus } from './development-plans.dto';
 
 const mockPrisma = {
+  // create() agora corre plano+gaps de competência dentro de uma transacção;
+  // o mock simplesmente invoca o callback com o próprio mockPrisma como `tx`.
+  $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(mockPrisma)),
   developmentPlan: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
@@ -12,6 +15,13 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
+  },
+  pdiCompetencyGap: {
+    createMany: jest.fn().mockResolvedValue({}),
+    deleteMany: jest.fn().mockResolvedValue({}),
+    create: jest.fn(),
+    delete: jest.fn(),
+    findUnique: jest.fn(),
   },
   developmentPlanAction: {
     create: jest.fn(),
@@ -199,6 +209,9 @@ describe('DevelopmentPlansService', () => {
   describe('create', () => {
     it('deve criar plano e enviar notificação', async () => {
       mockPrisma.developmentPlan.create.mockResolvedValue(basePlan);
+      // create() lê de novo (com relations) depois da transacção — sem isto
+      // o service devolveria undefined e a asserção abaixo rebentava.
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
 
       const result = await service.create({
         name: 'PDI 2024',
@@ -217,6 +230,17 @@ describe('DevelopmentPlansService', () => {
           }),
         }),
       );
+    });
+
+    // Antes disto, um `!` escondia silenciosamente um null aqui em vez de
+    // sinalizar claramente que o re-fetch pós-transacção falhou.
+    it('lança erro claro se o re-fetch pós-criação não encontrar o plano', async () => {
+      mockPrisma.developmentPlan.create.mockResolvedValue(basePlan);
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.create({ name: 'PDI 2024', goal: 'Melhorar skills', userId: 1 }),
+      ).rejects.toThrow();
     });
   });
 
