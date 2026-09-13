@@ -1831,6 +1831,10 @@ model DevelopmentPlanAction {
   dueDate       DateTime?
   completedAt   DateTime?
   resources     String[]
+  // Competências relacionadas com esta acção (secção 5/9 do doc) — recebido
+  // pelo DTO desde sempre mas nunca tinha coluna para gravar; ver
+  // development-plans.service.ts#addAction.
+  competencyIds Int[]           @default([])
   xpReward      Int             @default(20)
   seq           Int             @default(0)
   mandatory     Boolean         @default(false)

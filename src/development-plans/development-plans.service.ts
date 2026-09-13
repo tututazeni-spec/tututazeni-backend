@@ -336,7 +336,12 @@ export class DevelopmentPlansService {
   // foi cumprido na íntegra.
   async complete(id: number, dto?: CompletePlanDto) {
     const plan = await this.findOne(id);
-    if (!['ACTIVE', 'PENDING_APPROVAL'].includes(plan.status)) {
+    // PENDING_APPROVAL estava na lista de estados permitidos, contradizendo a
+    // própria mensagem de erro ("apenas planos activos") — permitia concluir
+    // (com certificado + XP) um PDI que ainda nem tinha sido aprovado pelo
+    // gestor/RH, saltando approvePlan() por completo. AT_RISK é um PDI activo
+    // sob acompanhamento apertado, continua concluível.
+    if (!['ACTIVE', 'AT_RISK'].includes(plan.status)) {
       throw new BadRequestException('Apenas planos activos podem ser concluídos');
     }
 
@@ -519,22 +524,23 @@ export class DevelopmentPlansService {
       );
     }
 
-    const { competencyIds, ...data } = dto;
-
     return this.prisma.developmentPlanAction.create({
       data: {
-        planId: data.planId,
-        title: data.title,
-        description: data.description,
-        type: data.type,
-        status: data.status ?? 'TODO',
-        courseId: data.courseId,
-        workloadHours: data.workloadHours,
-        dueDate: data.dueDate ? new Date(data.dueDate) : null,
-        resources: data.resources ?? [],
-        xpReward: data.xpReward ?? 20,
-        seq: data.seq ?? 0,
-        mandatory: data.mandatory ?? false,
+        planId: dto.planId,
+        title: dto.title,
+        description: dto.description,
+        type: dto.type,
+        status: dto.status ?? 'TODO',
+        courseId: dto.courseId,
+        workloadHours: dto.workloadHours,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+        resources: dto.resources ?? [],
+        // Antes era destructurado e descartado — igual ao bug já corrigido
+        // em focusCompetencyIds, mas ao nível da acção em vez do plano.
+        competencyIds: dto.competencyIds ?? [],
+        xpReward: dto.xpReward ?? 20,
+        seq: dto.seq ?? 0,
+        mandatory: dto.mandatory ?? false,
         progress: 0,
       },
     });

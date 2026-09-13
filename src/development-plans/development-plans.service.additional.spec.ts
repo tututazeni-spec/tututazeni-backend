@@ -288,6 +288,27 @@ describe('DevelopmentPlansService (additional)', () => {
       expect(mockPrisma.certificate.create).toHaveBeenCalled();
       expect(mockPrisma.userPoints.upsert).toHaveBeenCalled();
     });
+
+    // A mensagem de erro sempre disse "apenas planos activos", mas o código
+    // aceitava PENDING_APPROVAL — permitindo concluir (com certificado + XP)
+    // um PDI que ainda nem tinha sido aprovado pelo gestor/RH.
+    it('rejeita concluir um plano ainda PENDING_APPROVAL', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        status: 'PENDING_APPROVAL',
+      });
+      await expect(service.complete(1)).rejects.toThrow();
+      expect(mockPrisma.certificate.create).not.toHaveBeenCalled();
+    });
+
+    it('AT_RISK também pode ser concluído', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue({
+        ...basePlan,
+        status: 'AT_RISK',
+      });
+      mockPrisma.developmentPlan.update.mockResolvedValue({ ...basePlan, status: 'COMPLETED' });
+      await expect(service.complete(1)).resolves.toBeDefined();
+    });
   });
 
   // ─── complete (parcial, secção 19) ─────────────────────────────
@@ -447,6 +468,20 @@ describe('DevelopmentPlansService (additional)', () => {
         mockAdmin as any,
       );
       expect(result).toBeDefined();
+    });
+
+    // Antes era destructurado do DTO e nunca gravado (mesma classe do bug
+    // já corrigido em focusCompetencyIds, ao nível do plano).
+    it('grava competencyIds da acção', async () => {
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue(basePlan);
+      mockPrisma.developmentPlanAction.create.mockResolvedValue({ id: 1 });
+      await service.addAction(
+        { planId: 1, title: 'Acção 1', type: 'COURSE' as any, competencyIds: [5, 6] } as any,
+        mockAdmin as any,
+      );
+      expect(mockPrisma.developmentPlanAction.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ competencyIds: [5, 6] }) }),
+      );
     });
   });
 
