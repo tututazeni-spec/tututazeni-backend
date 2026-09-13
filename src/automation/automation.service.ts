@@ -19,6 +19,9 @@ import {
   TriggerType,
   ActionType,
   AutomationCategory,
+  ConditionRuleDto,
+  ConditionsLogic,
+  CommunicationChannel,
 } from './automation.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
@@ -46,6 +49,12 @@ interface AutomationActionParams {
   url?: string;
   method?: string;
   headers?: Record<string, string>;
+  recipient?: string;
+  channel?: string;
+  messageTemplate?: string;
+  subject?: string;
+  dynamicData?: Record<string, unknown>;
+  deadlineMinutes?: number;
 }
 
 interface ActionResult {
@@ -72,6 +81,69 @@ function parseCondition(condition?: string | null): Record<string, unknown> {
     });
     return {};
   }
+}
+
+// Formato estruturado gravado em AutomationRule.conditionsJson pelo condition
+// builder do form (linhas field/operator/value + lógica E/OU entre elas).
+// Ver ConditionRuleDto/ConditionsLogic em automation.dto.ts.
+interface StructuredConditions {
+  logic: ConditionsLogic;
+  rows: ConditionRuleDto[];
+}
+
+function parseConditionsList(conditionsJson?: string | null): StructuredConditions | null {
+  if (!conditionsJson) return null;
+  try {
+    const parsed = JSON.parse(conditionsJson) as Partial<StructuredConditions>;
+    if (!Array.isArray(parsed.rows) || !parsed.rows.length) return null;
+    return { logic: parsed.logic === ConditionsLogic.OR ? ConditionsLogic.OR : ConditionsLogic.AND, rows: parsed.rows };
+  } catch (e: unknown) {
+    helpersLogger.warn({
+      conditionsJson,
+      action: 'PARSE_AUTOMATION_CONDITIONS_JSON',
+      err: { message: e instanceof Error ? e.message : String(e) },
+      msg: 'Falha ao fazer parse de conditionsJson — JSON inválido',
+    });
+    return null;
+  }
+}
+
+function evaluateConditionRow(row: ConditionRuleDto, payload: Record<string, unknown>): boolean {
+  const actual = payload[row.field];
+  const expected = row.value;
+  switch (row.operator) {
+    case 'not_equals':
+      return String(actual ?? '') !== String(expected ?? '');
+    case 'greater_than':
+      return Number(actual) > Number(expected);
+    case 'less_than':
+      return Number(actual) < Number(expected);
+    case 'contains':
+      return typeof actual === 'string' && actual.includes(String(expected ?? ''));
+    case 'not_contains':
+      return !(typeof actual === 'string' && actual.includes(String(expected ?? '')));
+    case 'is_empty':
+      return actual === undefined || actual === null || actual === '';
+    case 'is_not_empty':
+      return !(actual === undefined || actual === null || actual === '');
+    case 'equals':
+    default:
+      return String(actual ?? '') === String(expected ?? '');
+  }
+}
+
+// Substitui placeholders {{campo}} pelo valor em dynamicData, com fallback
+// para o payload do evento — usado em messageTemplate/subject.
+function interpolate(
+  template: string | undefined,
+  dynamicData: Record<string, unknown> | undefined,
+  payload: Record<string, unknown>,
+): string | undefined {
+  if (!template) return template;
+  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
+    const value = dynamicData?.[key] ?? payload[key];
+    return value === undefined || value === null ? '' : String(value);
+  });
 }
 
 function parseParams(params?: string | null): Record<string, unknown> {
@@ -256,13 +328,41 @@ export class AutomationService {
       'WEBHOOK_EVENT',
       'MANUAL',
     ];
-    const upper = trigger?.toUpperCase().replace(/\./g, '_');
+    // Alguns dos novos gatilhos do form (automation.dto.ts#TriggerType) têm
+    // um equivalente semântico óbvio no enum Prisma mas com grafia diferente
+    // — mapeados aqui explicitamente; os restantes (ex: pdi.at_risk,
+    // objective.overdue) não têm equivalente e caem em MANUAL, tal como já
+    // acontecia com a maioria dos gatilhos "dotted" antes desta alteração.
+    const explicit: Record<string, AutomationTrigger> = {
+      'CERTIFICATION.EXPIRING': 'CERTIFICATE_EXPIRED',
+      'HIRE_DATE.REACHED': 'USER_HIRED',
+    };
+    const upperTrigger = trigger.toUpperCase();
+    if (upperTrigger in explicit) return explicit[upperTrigger];
+    const upper = upperTrigger.replace(/\./g, '_');
     return (known.includes(upper) ? upper : 'MANUAL') as AutomationTrigger;
   }
 
   async createRule(dto: CreateRuleDto, createdById = 0) {
     // AutomationRule.tenantId é FK obrigatória (multi-tenant) nunca populada aqui.
     const tenantId = await resolveDefaultTenantId(this.prisma);
+
+    // actionParams é a única coluna que executeAction() de facto lê em tempo
+    // de execução (ver AutomationActionParams) — os campos ricos do form
+    // (destinatário/canal/modelo/assunto/dados dinâmicos/prazo) entram aqui,
+    // não só em actionsJson (que fica só como metadado auxiliar/legado).
+    const mergedActionParams = {
+      ...(dto.actionParams ? parseParams(dto.actionParams) : {}),
+      ...(dto.recipient ? { recipient: dto.recipient } : {}),
+      ...(dto.channel ? { channel: dto.channel } : {}),
+      ...(dto.messageTemplate ? { messageTemplate: dto.messageTemplate } : {}),
+      ...(dto.subject ? { subject: dto.subject } : {}),
+      ...(dto.dynamicData ? { dynamicData: parseParams(dto.dynamicData) } : {}),
+      ...(dto.deadlineMinutes !== undefined ? { deadlineMinutes: dto.deadlineMinutes } : {}),
+    };
+    const actionParamsJson = Object.keys(mergedActionParams).length
+      ? JSON.stringify(mergedActionParams)
+      : dto.actionParams;
 
     const rule = await this.prisma.automationRule.create({
       data: {
@@ -273,16 +373,37 @@ export class AutomationService {
         active: dto.active ?? true,
         tenantId,
         triggerType: this.mapTriggerType(dto.trigger),
-        triggerConfigJson: JSON.stringify({ cronExpression: dto.cronExpression ?? null }),
-        actionsJson: JSON.stringify([
-          { type: dto.action, params: dto.actionParams ? parseParams(dto.actionParams) : {} },
-        ]),
+        // Frequência/horário/dias da semana/datas/nº máx. execuções ficam
+        // guardados aqui para o form os poder reler, mas NÃO há (ainda) um
+        // scheduler que os consuma — regras "cron.*" só correm via
+        // runAllActiveRules() (botão "Executar Todas" / POST /automation/run
+        // chamado externamente por um cron do SO), não por um timer interno.
+        triggerConfigJson: JSON.stringify({
+          cronExpression: dto.cronExpression ?? null,
+          frequency: dto.frequency ?? null,
+          executionTime: dto.executionTime ?? null,
+          daysOfWeek: dto.daysOfWeek ?? null,
+          startDate: dto.startDate ?? null,
+          endDate: dto.endDate ?? null,
+          maxExecutions: dto.maxExecutions ?? null,
+        }),
+        // Condições estruturadas do builder (field/operator/value + lógica
+        // E/OU) — lidas por evaluateRuleConditions() em triggerEvent().
+        conditionsJson: dto.conditions?.length
+          ? JSON.stringify({ logic: dto.conditionsLogic ?? ConditionsLogic.AND, rows: dto.conditions })
+          : null,
+        actionsJson: JSON.stringify([{ type: dto.action, params: mergedActionParams }]),
         createdBy: String(createdById),
         description: dto.description,
         category: dto.category,
         priority: dto.priority,
-        actionParams: dto.actionParams,
+        actionParams: actionParamsJson,
         maxRetries: dto.maxRetries,
+        entity: dto.entity,
+        ownerId: dto.ownerId ?? String(createdById),
+        environment: dto.environment,
+        notifyOnError: dto.notifyOnError ?? true,
+        notes: dto.notes,
       },
     });
 
@@ -347,8 +468,7 @@ export class AutomationService {
 
     const results = [];
     for (const rule of rules) {
-      const cond = parseCondition(rule.condition);
-      if (!this.evaluateCondition(cond, dto.payload ?? {})) {
+      if (!this.evaluateRuleConditions(rule, dto.payload ?? {})) {
         results.push({
           ruleId: rule.id,
           name: rule.name,
@@ -457,19 +577,54 @@ export class AutomationService {
       let actionError: string | undefined;
 
       switch (rule.action) {
+        // CREATE_ALERT partilha a mesma mecânica de SEND_NOTIFICATION — é
+        // "criar um alerta" no sentido em que o único canal com entrega real
+        // nesta app é a notificação interna.
+        case ActionType.CREATE_ALERT:
         case ActionType.SEND_NOTIFICATION: {
-          if (targetUserId) {
+          // `recipient` (do form: userId, ou string livre não resolvida —
+          // roleCode/departmentId não são suportados aqui) tem prioridade
+          // sobre o utilizador que despoletou o evento.
+          const recipientUserId = params.recipient && /^\d+$/.test(params.recipient)
+            ? Number(params.recipient)
+            : targetUserId;
+          const message =
+            interpolate(params.messageTemplate, params.dynamicData, payload) ??
+            params.message ??
+            `Automação: ${rule.name}`;
+          // Só o canal "internal" tem entrega real (NotificationLog) — não
+          // há integração de email/SMS/WhatsApp/push nesta app (ver grep por
+          // EmailService/Twilio em automation.service.ts). Os outros canais
+          // ficam registados em metadata para o responsável poder auditar o
+          // que a regra *tentaria* enviar, sem fingir que foi entregue.
+          if (recipientUserId) {
             await createNotificationSafe(this.prisma, this.logger, {
-              userId: targetUserId,
+              userId: recipientUserId,
               type: params.type ?? 'AUTOMATION',
-              message: params.message ?? `Automação: ${rule.name}`,
-              metadata: { ruleId: rule.id, ...params },
+              message,
+              metadata: {
+                ruleId: rule.id,
+                ...params,
+                channel: params.channel ?? CommunicationChannel.INTERNAL,
+                subject: interpolate(params.subject, params.dynamicData, payload),
+              },
             });
+            if (params.channel && params.channel !== CommunicationChannel.INTERNAL) {
+              this.logger.warn({
+                ruleId: rule.id,
+                channel: params.channel,
+                action: 'AUTOMATION_CHANNEL_NOT_INTEGRATED',
+                msg: 'Canal pedido sem integração de entrega real — registada apenas notificação interna',
+              });
+            }
           }
-          result = { affected: targetUserId ? 1 : 0 };
+          result = { affected: recipientUserId ? 1 : 0 };
           break;
         }
 
+        // ENROLL_TRAINING é o mesmo fluxo de negócio que ASSIGN_COURSE
+        // (inscrição via EnrollmentsService) — só o rótulo no form difere.
+        case ActionType.ENROLL_TRAINING:
         case ActionType.ASSIGN_COURSE: {
           if (targetUserId && params.courseId) {
             try {
@@ -548,6 +703,9 @@ export class AutomationService {
           break;
         }
 
+        // INTEGRATE_EXTERNAL é o mesmo mecanismo de pedido HTTP — só o
+        // rótulo no form é mais genérico ("integrar com sistema externo").
+        case ActionType.INTEGRATE_EXTERNAL:
         case ActionType.WEBHOOK:
         case ActionType.HTTP_REQUEST: {
           if (params.url) {
@@ -807,6 +965,18 @@ export class AutomationService {
       if (key === 'equals' && payloadVal !== value) return false;
     }
     return true;
+  }
+
+  // Prefere o condition builder estruturado (conditionsJson, com lógica E/OU
+  // entre linhas field/operator/value); cai para o campo `condition` legado
+  // (JSON simples chave→valor, só AND) quando não há linhas estruturadas.
+  private evaluateRuleConditions(rule: AutomationRuleRecord, payload: Record<string, unknown>): boolean {
+    const structured = parseConditionsList(rule.conditionsJson);
+    if (structured) {
+      const results = structured.rows.map(row => evaluateConditionRow(row, payload));
+      return structured.logic === ConditionsLogic.OR ? results.some(Boolean) : results.every(Boolean);
+    }
+    return this.evaluateCondition(parseCondition(rule.condition), payload);
   }
 
   // ══════════════════════════════════════════════════════
