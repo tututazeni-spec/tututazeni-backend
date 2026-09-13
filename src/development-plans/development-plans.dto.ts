@@ -10,14 +10,37 @@ import {
   MaxLength,
   Min,
   Max,
+  ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
-import { PlanStatus, ActionType, ActionStatus, PlanPriority, CheckinType } from '@prisma/client';
+import {
+  PlanStatus,
+  ActionType,
+  ActionStatus,
+  PlanPriority,
+  CheckinType,
+  PdiOrigin,
+  PdiCompetencyPriority,
+  PdiFinalResult,
+  PdiOverallResult,
+  PdiNextSteps,
+} from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export { PlanStatus, ActionType, ActionStatus, PlanPriority, CheckinType };
+export {
+  PlanStatus,
+  ActionType,
+  ActionStatus,
+  PlanPriority,
+  CheckinType,
+  PdiOrigin,
+  PdiCompetencyPriority,
+  PdiFinalResult,
+  PdiOverallResult,
+  PdiNextSteps,
+};
 
 // ApprovalDecision (input do pedido, minúsculas 'approve'/'reject') é distinto do
 // enum Prisma ApprovalDecision (coluna PdiApproval.decision, maiúsculas APPROVE/
@@ -26,6 +49,38 @@ export { PlanStatus, ActionType, ActionStatus, PlanPriority, CheckinType };
 export enum ApprovalDecision {
   APPROVE = 'approve',
   REJECT = 'reject',
+}
+
+// ─── Gap de competência (secção 5 do doc) ──────────────────────────────────────
+// Substitui o antigo `focusCompetencyIds` (recebido e nunca persistido).
+
+export class CompetencyGapInputDto {
+  @ApiProperty({ description: 'ID da competência' })
+  @IsInt()
+  competencyId!: number;
+
+  @ApiPropertyOptional({ description: 'Nível actual (escala da competência)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  currentLevel?: number;
+
+  @ApiPropertyOptional({ description: 'Nível desejado (escala da competência)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  targetLevel?: number;
+
+  @ApiPropertyOptional({ enum: PdiCompetencyPriority, default: PdiCompetencyPriority.MEDIUM })
+  @IsOptional()
+  @IsEnum(PdiCompetencyPriority)
+  priority?: PdiCompetencyPriority;
+}
+
+export class AddCompetencyGapDto extends CompetencyGapInputDto {
+  @ApiProperty()
+  @IsInt()
+  planId!: number;
 }
 
 // ─── Plan ─────────────────────────────────────────────────────────────────────
@@ -74,11 +129,12 @@ export class CreateDevelopmentPlanDto {
   @IsInt()
   performanceCycleId?: number;
 
-  @ApiPropertyOptional({ description: 'IDs de competências foco' })
+  @ApiPropertyOptional({ description: 'Competências a desenvolver, com gap actual→desejado' })
   @IsOptional()
   @IsArray()
-  @IsInt({ each: true })
-  focusCompetencyIds?: number[];
+  @ValidateNested({ each: true })
+  @Type(() => CompetencyGapInputDto)
+  competencyGaps?: CompetencyGapInputDto[];
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
@@ -89,6 +145,46 @@ export class CreateDevelopmentPlanDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  // ─── Origem e diagnóstico (secções 2-3) ──────────────────────────────────
+  @ApiPropertyOptional({ enum: PdiOrigin, description: 'Porque foi este PDI criado' })
+  @IsOptional()
+  @IsEnum(PdiOrigin)
+  origin?: PdiOrigin;
+
+  @ApiPropertyOptional({ description: 'Justificação para a criação do PDI' })
+  @IsOptional()
+  @IsString()
+  originJustification?: string;
+
+  @ApiPropertyOptional({ description: 'Principais pontos fortes do colaborador' })
+  @IsOptional()
+  @IsString()
+  strengths?: string;
+
+  @ApiPropertyOptional({ description: 'Principais necessidades de desenvolvimento' })
+  @IsOptional()
+  @IsString()
+  developmentNeeds?: string;
+
+  // ─── Ligação à avaliação de origem (secção 4) ────────────────────────────
+  @ApiPropertyOptional({ description: 'ID da avaliação de desempenho que originou este PDI' })
+  @IsOptional()
+  @IsInt()
+  sourceReviewId?: number;
+
+  // ─── Ligação a objectivo de carreira (secção 8) ──────────────────────────
+  @ApiPropertyOptional({ description: 'ID do plano de carreira associado' })
+  @IsOptional()
+  @IsInt()
+  careerPlanId?: number;
+
+  @ApiPropertyOptional({ description: 'Prontidão actual para o cargo-alvo (0-100)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  careerReadinessPercent?: number;
 }
 
 export class UpdateDevelopmentPlanDto extends PartialType(CreateDevelopmentPlanDto) {
@@ -316,6 +412,59 @@ export class ApprovePlanDto {
   decision!: ApprovalDecision;
 
   @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  comment?: string;
+}
+
+// ─── Avaliação final e próximos passos (secções 19-20) ─────────────────────────
+
+export class CompletePlanDto {
+  @ApiPropertyOptional({ enum: PdiFinalResult })
+  @IsOptional()
+  @IsEnum(PdiFinalResult)
+  finalResult?: PdiFinalResult;
+
+  @ApiPropertyOptional({ enum: PdiOverallResult })
+  @IsOptional()
+  @IsEnum(PdiOverallResult)
+  overallResult?: PdiOverallResult;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  employeeComment?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  managerComment?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  rhComment?: string;
+
+  @ApiPropertyOptional({ enum: PdiNextSteps })
+  @IsOptional()
+  @IsEnum(PdiNextSteps)
+  nextSteps?: PdiNextSteps;
+
+  @ApiPropertyOptional({ description: 'Marca conclusão parcial em vez de total' })
+  @IsOptional()
+  @IsBoolean()
+  partial?: boolean;
+}
+
+export class MarkAtRiskDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+
+export class AcceptPlanDto {
+  @ApiPropertyOptional({ description: 'Comentário do colaborador ao aceitar o PDI' })
   @IsOptional()
   @IsString()
   comment?: string;
