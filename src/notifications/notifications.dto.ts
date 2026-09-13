@@ -193,6 +193,11 @@ export class UpdatePreferencesDto {
   @IsBoolean()
   sms?: boolean;
 
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  whatsapp?: boolean;
+
   @ApiPropertyOptional({ description: 'Hora início do período silencioso (0-23)', default: 22 })
   @IsOptional()
   @IsInt()

@@ -5862,6 +5862,7 @@ model NotificationPreference {
   push               Boolean         @default(false)
   slack              Boolean         @default(false)
   sms                Boolean         @default(false)
+  whatsapp           Boolean         @default(false)
   quietHourStart     Int             @default(22)
   quietHourEnd       Int             @default(8)
   digestFrequency    DigestFrequency @default(NONE)

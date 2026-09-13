@@ -11,6 +11,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { DevelopmentPlansService } from '../development-plans/development-plans.service';
 import { GamificationService } from '../gamification/gamification.service';
+import { MailService } from '../mail/mail.service';
+import { SmsService } from '../sms/sms.service';
 import {
   CreateRuleDto,
   UpdateRuleDto,
@@ -262,7 +264,70 @@ export class AutomationService {
     private readonly enrollments: EnrollmentsService,
     private readonly developmentPlans: DevelopmentPlansService,
     private readonly gamification: GamificationService,
+    private readonly mail: MailService,
+    private readonly sms: SmsService,
   ) {}
+
+  // Carrega email/telemóvel do destinatário — só chamado quando o canal
+  // pedido precisa mesmo deles (evita uma query extra no caminho comum,
+  // canal "internal").
+  private async resolveRecipientContact(
+    userId: number,
+  ): Promise<{ email: string; phone: string | null } | null> {
+    return this.prisma.read.user.findUnique({
+      where: { id: userId },
+      select: { email: true, phone: true },
+    });
+  }
+
+  // Entrega best-effort por email/SMS/WhatsApp para o canal pedido no
+  // SEND_NOTIFICATION/CREATE_ALERT — nunca lança: a notificação interna
+  // (createNotificationSafe, já criada por quem chama) é o registo oficial;
+  // isto é só o canal externo a melhor esforço. Push/Webhook continuam sem
+  // integração nesta app (sem tokens de dispositivo / URL associado aqui).
+  private async deliverViaChannel(opts: {
+    channel?: string;
+    userId: number;
+    subject: string;
+    message: string;
+    ruleId: number;
+  }): Promise<void> {
+    const { channel, userId, subject, message, ruleId } = opts;
+    if (!channel || channel === CommunicationChannel.INTERNAL) return;
+
+    if (channel !== CommunicationChannel.EMAIL && channel !== CommunicationChannel.SMS && channel !== CommunicationChannel.WHATSAPP) {
+      this.logger.warn({
+        ruleId,
+        channel,
+        action: 'AUTOMATION_CHANNEL_NOT_INTEGRATED',
+        msg: 'Canal pedido sem integração de entrega real nesta app — registada apenas notificação interna',
+      });
+      return;
+    }
+
+    const contact = await this.resolveRecipientContact(userId);
+    try {
+      if (channel === CommunicationChannel.EMAIL) {
+        if (!contact?.email) throw new Error('utilizador sem email registado');
+        await this.mail.sendNotification(contact.email, subject, message);
+      } else if (channel === CommunicationChannel.SMS) {
+        if (!contact?.phone) throw new Error('utilizador sem telemóvel registado');
+        await this.sms.sendSms(contact.phone, message);
+      } else {
+        if (!contact?.phone) throw new Error('utilizador sem telemóvel registado');
+        await this.sms.sendWhatsApp(contact.phone, message);
+      }
+    } catch (e: unknown) {
+      this.logger.warn({
+        ruleId,
+        userId,
+        channel,
+        action: 'AUTOMATION_CHANNEL_DELIVERY_FAILED',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao entregar pelo canal pedido — notificação interna já registada',
+      });
+    }
+  }
 
   // ══════════════════════════════════════════════════════
   // RULES — CRUD
@@ -592,11 +657,12 @@ export class AutomationService {
             interpolate(params.messageTemplate, params.dynamicData, payload) ??
             params.message ??
             `Automação: ${rule.name}`;
-          // Só o canal "internal" tem entrega real (NotificationLog) — não
-          // há integração de email/SMS/WhatsApp/push nesta app (ver grep por
-          // EmailService/Twilio em automation.service.ts). Os outros canais
-          // ficam registados em metadata para o responsável poder auditar o
-          // que a regra *tentaria* enviar, sem fingir que foi entregue.
+          const subject =
+            interpolate(params.subject, params.dynamicData, payload) ?? `Automação: ${rule.name}`;
+          // A notificação interna (NotificationLog) é sempre criada — é o
+          // registo oficial da execução. Email/SMS/WhatsApp são despachados
+          // a seguir, a melhor esforço, via deliverViaChannel(); push/webhook
+          // continuam sem integração real nesta app.
           if (recipientUserId) {
             await createNotificationSafe(this.prisma, this.logger, {
               userId: recipientUserId,
@@ -606,19 +672,66 @@ export class AutomationService {
                 ruleId: rule.id,
                 ...params,
                 channel: params.channel ?? CommunicationChannel.INTERNAL,
-                subject: interpolate(params.subject, params.dynamicData, payload),
+                subject,
               },
             });
-            if (params.channel && params.channel !== CommunicationChannel.INTERNAL) {
-              this.logger.warn({
-                ruleId: rule.id,
-                channel: params.channel,
-                action: 'AUTOMATION_CHANNEL_NOT_INTEGRATED',
-                msg: 'Canal pedido sem integração de entrega real — registada apenas notificação interna',
-              });
-            }
+            await this.deliverViaChannel({
+              channel: params.channel,
+              userId: recipientUserId,
+              subject,
+              message,
+              ruleId: rule.id,
+            });
           }
           result = { affected: recipientUserId ? 1 : 0 };
+          break;
+        }
+
+        // Ao contrário de SEND_NOTIFICATION (que cria sempre o registo
+        // interno e despacha o canal como efeito secundário best-effort),
+        // aqui o email/SMS/WhatsApp É a acção — uma falha real de entrega
+        // marca a execução como FAILED (actionError), como as outras acções
+        // delegadas abaixo (ASSIGN_COURSE, CREATE_PDI).
+        case ActionType.SEND_EMAIL: {
+          const contact = targetUserId ? await this.resolveRecipientContact(targetUserId) : null;
+          if (contact?.email) {
+            try {
+              await this.mail.sendNotification(
+                contact.email,
+                interpolate(params.subject, params.dynamicData, payload) ?? `Automação: ${rule.name}`,
+                interpolate(params.messageTemplate, params.dynamicData, payload) ??
+                  params.message ??
+                  `Automação: ${rule.name}`,
+              );
+              result = { affected: 1 };
+            } catch (e: unknown) {
+              actionError = e instanceof Error ? e.message : String(e);
+              result = { affected: 0, error: actionError };
+            }
+          } else result = { affected: 0, message: 'Email do destinatário indisponível' };
+          break;
+        }
+
+        case ActionType.SEND_SMS:
+        case ActionType.SEND_WHATSAPP: {
+          const contact = targetUserId ? await this.resolveRecipientContact(targetUserId) : null;
+          const message =
+            interpolate(params.messageTemplate, params.dynamicData, payload) ??
+            params.message ??
+            `Automação: ${rule.name}`;
+          if (contact?.phone) {
+            try {
+              if (rule.action === ActionType.SEND_WHATSAPP) {
+                await this.sms.sendWhatsApp(contact.phone, message);
+              } else {
+                await this.sms.sendSms(contact.phone, message);
+              }
+              result = { affected: 1 };
+            } catch (e: unknown) {
+              actionError = e instanceof Error ? e.message : String(e);
+              result = { affected: 0, error: actionError };
+            }
+          } else result = { affected: 0, message: 'Telemóvel do destinatário indisponível' };
           break;
         }
 
