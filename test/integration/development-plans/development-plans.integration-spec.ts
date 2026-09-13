@@ -133,6 +133,15 @@ describe('Development Plans (PDI) Integration', () => {
       expect(res.body.status).toBe('PENDING_APPROVAL');
     });
 
+    it('gestor designado aprova o plano principal → ACTIVE (usado pelas secções de metas/checkpoints/conclusão abaixo)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/development-plans/approve')
+        .set('Authorization', `Bearer ${managerToken}`)
+        .send({ planId, decision: 'approve' })
+        .expect(200);
+      expect(res.body.status).toBe('ACTIVE');
+    });
+
     it('outro colaborador não pode submeter o plano alheio → 404 (verifica correcção do IDOR)', async () => {
       // recriar um novo plano DRAFT para este teste, já que o anterior já não está em DRAFT
       const created = await request(app.getHttpServer())
