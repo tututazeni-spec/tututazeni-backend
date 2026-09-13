@@ -5,6 +5,7 @@ export const INT_CREDENTIALS = {
   manager: { email: 'int.manager@innova-test.com', password: 'Test@1234' },
   rh: { email: 'int.rh@innova-test.com', password: 'Test@1234' },
   admin: { email: 'int.admin@innova-test.com', password: 'Test@1234' },
+  auditor: { email: 'int.auditor@innova-test.com', password: 'Test@1234' },
 };
 
 export async function getToken(

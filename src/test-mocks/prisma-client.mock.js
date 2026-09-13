@@ -1144,6 +1144,49 @@ const IntegrationStatus = {
   INACTIVE: 'INACTIVE',
   ERROR: 'ERROR',
   PENDING: 'PENDING',
+  PENDING_AUTH: 'PENDING_AUTH',
+  RATE_LIMITED: 'RATE_LIMITED',
+  CONFIGURING: 'CONFIGURING',
+  SUSPENDED: 'SUSPENDED',
+};
+
+const IntegrationCategory = {
+  ERP: 'ERP',
+  SSO: 'SSO',
+  LMS: 'LMS',
+  COMMUNICATION: 'COMMUNICATION',
+  HR: 'HR',
+  FINANCE: 'FINANCE',
+  PAYROLL: 'PAYROLL',
+  IDENTITY_ACCESS: 'IDENTITY_ACCESS',
+  OTHER: 'OTHER',
+};
+
+const IntegrationEnvironment = {
+  PRODUCTION: 'PRODUCTION',
+  STAGING: 'STAGING',
+  DEVELOPMENT: 'DEVELOPMENT',
+  SANDBOX: 'SANDBOX',
+};
+
+const IntegrationDataFormat = {
+  JSON: 'JSON',
+  XML: 'XML',
+  CSV: 'CSV',
+  EXCEL: 'EXCEL',
+};
+
+const IntegrationCommunicationMethod = {
+  PULL: 'PULL',
+  PUSH: 'PUSH',
+  POLLING: 'POLLING',
+  STREAMING: 'STREAMING',
+};
+
+const IntegrationSyncDirection = {
+  INBOUND: 'INBOUND',
+  OUTBOUND: 'OUTBOUND',
+  BIDIRECTIONAL: 'BIDIRECTIONAL',
 };
 
 const SyncFrequency = {
@@ -1663,7 +1706,13 @@ const ExecutionStatus = {
   SKIPPED: 'SKIPPED',
 };
 
-const AuthType = { OAUTH2: 'OAUTH2', API_KEY: 'API_KEY', BASIC: 'BASIC', BEARER: 'BEARER' };
+const AuthType = {
+  OAUTH2: 'OAUTH2',
+  API_KEY: 'API_KEY',
+  BASIC: 'BASIC',
+  BEARER: 'BEARER',
+  NONE: 'NONE',
+};
 
 const SyncLogStatus = {
   RUNNING: 'RUNNING',
@@ -2038,6 +2087,11 @@ module.exports = {
   SsoProvider,
   IntegrationType,
   IntegrationStatus,
+  IntegrationCategory,
+  IntegrationEnvironment,
+  IntegrationDataFormat,
+  IntegrationCommunicationMethod,
+  IntegrationSyncDirection,
   SyncFrequency,
   AutomationTrigger,
   AlertSeverity,

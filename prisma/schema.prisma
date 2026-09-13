@@ -482,6 +482,22 @@ enum IntegrationType {
   XAPI_LRS
   BI_TOOL
   CUSTOM_WEBHOOK
+  // Valores técnicos (mecanismo/protocolo) — campo "Tipo de integração" do
+  // formulário de criação em Escalabilidade > Integrações. Os valores acima
+  // (ERP_HR, PAYROLL, ...) continuam válidos para dados/consumidores
+  // existentes (módulo api-integration); estes são aditivos.
+  REST_API
+  SOAP_API
+  WEBHOOK
+  SFTP
+  OAUTH2
+  LDAP
+  SAML2
+  OPENID_CONNECT
+  DATABASE
+  CSV_FILE
+  EXCEL_FILE
+  OTHER
 }
 
 enum IntegrationStatus {
@@ -490,6 +506,49 @@ enum IntegrationStatus {
   ERROR
   PENDING_AUTH
   RATE_LIMITED
+  // "Em configuração" / "Suspensa" — campo "Estado" do formulário de criação
+  // em Escalabilidade > Integrações.
+  CONFIGURING
+  SUSPENDED
+}
+
+enum IntegrationCategory {
+  ERP
+  SSO
+  LMS
+  COMMUNICATION
+  HR
+  FINANCE
+  PAYROLL
+  IDENTITY_ACCESS
+  OTHER
+}
+
+enum IntegrationEnvironment {
+  PRODUCTION
+  STAGING
+  DEVELOPMENT
+  SANDBOX
+}
+
+enum IntegrationDataFormat {
+  JSON
+  XML
+  CSV
+  EXCEL
+}
+
+enum IntegrationCommunicationMethod {
+  PULL
+  PUSH
+  POLLING
+  STREAMING
+}
+
+enum IntegrationSyncDirection {
+  INBOUND
+  OUTBOUND
+  BIDIRECTIONAL
 }
 
 enum SyncFrequency {
@@ -3853,6 +3912,8 @@ enum TaskCategory {
   BENEFITS
   ADMIN
   MEETING
+  // "Estrutura" do plano de integração — ver
+  // [[project_innova_onboarding_plan_creation_roles_structure]].
   POLICIES
   EVALUATION
   ONE_ON_ONE
@@ -6097,6 +6158,7 @@ enum AuthType {
   API_KEY
   BASIC
   BEARER
+  NONE
 }
 
 // SUCCESS | FAILED — usado por IntegrationConfig.lastSyncStatus (resumo do
@@ -6121,7 +6183,10 @@ model IntegrationConfig {
   status          IntegrationStatus    @default(INACTIVE)
   baseUrl         String?
   authType        AuthType?
-  credentialsJson String? // criptografado — client_id, secret, token
+  credentialsJson String? // criptografado — client_id, secret, token (ver
+  // CreateIntegrationConfigDto: clientId/clientSecret/accessToken são
+  // combinados aqui pelo service antes de encriptar, nunca persistidos em
+  // texto plano)
   syncFrequency   SyncFrequency        @default(DAILY)
   lastSyncAt      DateTime?
   lastSyncStatus  SyncLogStatus?
@@ -6134,6 +6199,26 @@ model IntegrationConfig {
   updatedAt       DateTime             @updatedAt
   tenant          TenantConfig         @relation(fields: [tenantId], references: [id])
   syncLogs        IntegrationSyncLog[]
+
+  // Campos do formulário completo de criação (Escalabilidade > Integrações)
+  description         String?                         @db.Text
+  category            IntegrationCategory?
+  platform            String? // "Sistema/Plataforma" — texto livre (SAP, Workday, Moodle...)
+  authUrl             String?
+  environment         IntegrationEnvironment?         @default(PRODUCTION)
+  apiVersion          String?
+  dataFormat          IntegrationDataFormat?
+  communicationMethod IntegrationCommunicationMethod?
+  syncDirection       IntegrationSyncDirection?
+  dataToSync          String[]                        @default([])
+  fieldMapping        Json?
+  timeoutMs           Int?
+  maxRetries          Int?
+  retryIntervalMs     Int?
+  activatedAt         DateTime?
+  responsibleUserId   String? // guarda o id como texto (não é FK) — mesmo
+  // padrão de AutomationRule.createdBy, evita tocar no modelo User
+  notes               String?                         @db.Text
 
   @@map("integration_configs")
 }
@@ -6491,6 +6576,8 @@ model Event {
   tags                 String[]           @default([])
   mandatory            Boolean            @default(false)
   bannerUrl            String?
+  // Vazio = visível a todos os departamentos — ver EventsService#applyDeptVisibility.
+  restrictedDeptIds    Int[]              @default([])
   courseId             Int?
   organizerId          Int
   createdAt            DateTime           @default(now())

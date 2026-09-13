@@ -24,6 +24,7 @@ import {
   UpdateTenantConfigDto,
   CreateIntegrationConfigDto,
   UpdateIntegrationConfigDto,
+  TestIntegrationConnectionDto,
   TriggerSyncDto,
   CreateAutomationRuleDto,
   UpdateAutomationRuleDto,
@@ -57,8 +58,19 @@ export class ScalabilityController {
   // DASHBOARD
   // ============================================================
 
+  // Sem :tenantId — a plataforma é single-tenant na prática (ver
+  // resolveTenantId() no service); é a rota que o frontend usa, já que a
+  // sessão actual não expõe um "meu tenant".
+  @Get('dashboard')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Dashboard de escalabilidade do tenant único da plataforma' })
+  async getDefaultDashboard() {
+    const tenantId = await this.service.resolveTenantId();
+    return this.service.getDashboard(tenantId);
+  }
+
   @Get('dashboard/:tenantId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Dashboard de escalabilidade do tenant' })
   async getDashboard(@Param('tenantId') tenantId: string) {
     return this.service.getDashboard(tenantId);
@@ -88,14 +100,14 @@ export class ScalabilityController {
   }
 
   @Get('tenants')
-  @Roles(Role.ADMIN)
+  @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Listar todos os tenants' })
   async listTenants(@Query() query: PaginationDto) {
     return this.service.listTenants(query);
   }
 
   @Get('tenants/:id')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Obter tenant por ID' })
   async getTenant(@Param('id') id: string) {
     return this.service.findTenantOrFail(id);
@@ -106,7 +118,7 @@ export class ScalabilityController {
   // ============================================================
 
   @Post('integrations')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Adicionar nova integração (ERP, Slack, Teams...)' })
   async createIntegration(
     @Body() dto: CreateIntegrationConfigDto,
@@ -116,7 +128,7 @@ export class ScalabilityController {
   }
 
   @Patch('integrations/:id')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Actualizar configuração de integração' })
   async updateIntegration(
     @Param('id', ParseIntPipe) id: number,
@@ -126,23 +138,42 @@ export class ScalabilityController {
     return this.service.updateIntegration(id, dto, String(user.id));
   }
 
+  // Sem :tenantId — ver getDefaultDashboard() acima.
+  @Get('integrations')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Listar integrações do tenant único da plataforma' })
+  async listDefaultIntegrations(@Query() query: PaginationDto) {
+    const tenantId = await this.service.resolveTenantId();
+    return this.service.listIntegrations(tenantId, query);
+  }
+
   @Get('integrations/tenant/:tenantId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Listar integrações de um tenant' })
   async listIntegrations(@Param('tenantId') tenantId: string, @Query() query: PaginationDto) {
     return this.service.listIntegrations(tenantId, query);
   }
 
   @Post('integrations/sync')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Disparar sincronização manual de integração' })
   async triggerSync(@Body() dto: TriggerSyncDto, @CurrentUser() user: CurrentUserData) {
     return this.service.triggerSync(dto.integrationId, String(user.id));
   }
 
+  // Rota estática ("test-connection") — sem conflito com `integrations/:id`
+  // (que só existe via PATCH). Usada pelo botão "Testar conexão" do
+  // formulário de criação, antes de a integração existir.
+  @Post('integrations/test-connection')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Testar conectividade antes de criar a integração' })
+  async testConnectionDraft(@Body() dto: TestIntegrationConnectionDto) {
+    return this.service.testConnectionDraft(dto);
+  }
+
   @Get('integrations/:integrationId/sync-logs')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Histórico de sincronizações de uma integração' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getSyncLogs(
@@ -157,7 +188,7 @@ export class ScalabilityController {
   // ============================================================
 
   @Post('automations')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Criar regra de automação' })
   async createAutomationRule(
     @Body() dto: CreateAutomationRuleDto,
@@ -167,7 +198,7 @@ export class ScalabilityController {
   }
 
   @Patch('automations/:id')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Actualizar regra de automação' })
   async updateAutomationRule(
     @Param('id', ParseIntPipe) id: number,
@@ -177,15 +208,24 @@ export class ScalabilityController {
     return this.service.updateAutomationRule(id, dto, String(user.id));
   }
 
+  // Sem :tenantId — ver getDefaultDashboard() acima.
+  @Get('automations')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Listar regras de automação do tenant único da plataforma' })
+  async listDefaultAutomationRules(@Query() query: PaginationDto) {
+    const tenantId = await this.service.resolveTenantId();
+    return this.service.listAutomationRules(tenantId, query);
+  }
+
   @Get('automations/tenant/:tenantId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Listar regras de automação de um tenant' })
   async listAutomationRules(@Param('tenantId') tenantId: string, @Query() query: PaginationDto) {
     return this.service.listAutomationRules(tenantId, query);
   }
 
   @Post('automations/execute')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Executar uma regra de automação manualmente' })
   async executeAutomationRule(
@@ -217,8 +257,17 @@ export class ScalabilityController {
     return this.service.updateSlaConfig(id, dto, String(user.id));
   }
 
+  // Sem :tenantId — ver getDefaultDashboard() acima.
+  @Get('sla')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Listar SLAs do tenant único da plataforma' })
+  async listDefaultSlas() {
+    const tenantId = await this.service.resolveTenantId();
+    return this.service.listSlaConfigs(tenantId);
+  }
+
   @Get('sla/tenant/:tenantId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Listar SLAs de um tenant' })
   async listSlas(@Param('tenantId') tenantId: string) {
     return this.service.listSlaConfigs(tenantId);
@@ -228,8 +277,17 @@ export class ScalabilityController {
   // CONTENT DELIVERY
   // ============================================================
 
+  // Sem :tenantId — ver getDefaultDashboard() acima.
+  @Get('content-delivery')
+  @Roles(Role.ADMIN, Role.AUDITOR)
+  @ApiOperation({ summary: 'Obter configuração de entrega de conteúdo do tenant único' })
+  async getDefaultContentDelivery() {
+    const tenantId = await this.service.resolveTenantId();
+    return this.service.getContentDeliveryConfig(tenantId);
+  }
+
   @Get('content-delivery/:tenantId')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Obter configuração de entrega de conteúdo' })
   async getContentDelivery(@Param('tenantId') tenantId: string) {
     return this.service.getContentDeliveryConfig(tenantId);
@@ -251,14 +309,14 @@ export class ScalabilityController {
   // ============================================================
 
   @Get('metrics')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Obter métricas de performance do sistema' })
   async getMetrics(@Query() query: MetricsQueryDto) {
     return this.service.getMetrics(query);
   }
 
   @Get('metrics/realtime')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Métricas em tempo real (último snapshot)' })
   @ApiQuery({ name: 'tenantId', required: false })
   async getRealtimeMetrics(@Query('tenantId') tenantId?: string) {
@@ -277,14 +335,14 @@ export class ScalabilityController {
   }
 
   @Patch('alerts/:id/resolve')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Resolver alerta de sistema' })
   async resolveAlert(@Param('id') id: string, @Body() dto: ResolveAlertDto) {
     return this.service.resolveAlert(id, dto);
   }
 
   @Get('alerts')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN, Role.AUDITOR)
   @ApiOperation({ summary: 'Listar alertas de sistema' })
   async listAlerts(@Query() query: AlertsQueryDto) {
     return this.service.listAlerts(query);
@@ -295,7 +353,7 @@ export class ScalabilityController {
   // ============================================================
 
   @Post('users/bulk-import')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(Role.ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Importação em massa de utilizadores (CSV ou JSON base64)' })
   async bulkImport(@Body() dto: BulkUserImportDto, @CurrentUser() user: CurrentUserData) {
