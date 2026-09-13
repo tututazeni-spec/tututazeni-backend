@@ -274,8 +274,13 @@ export class ScalabilityService {
     // clientId/clientSecret/accessToken/credentialsJson(bruto) são
     // consumidos aqui e nunca passados directamente ao Prisma — a coluna
     // real (`credentialsJson`) recebe sempre a versão combinada+encriptada.
-    const { clientId, clientSecret, accessToken, credentialsJson: rawCredentialsJson, ...rest } =
-      dto;
+    const {
+      clientId,
+      clientSecret,
+      accessToken,
+      credentialsJson: rawCredentialsJson,
+      ...rest
+    } = dto;
     const combinedCredentials = this.buildCredentialsJson({
       clientId,
       clientSecret,
@@ -317,8 +322,13 @@ export class ScalabilityService {
       );
     }
 
-    const { clientId, clientSecret, accessToken, credentialsJson: rawCredentialsJson, ...rest } =
-      dto;
+    const {
+      clientId,
+      clientSecret,
+      accessToken,
+      credentialsJson: rawCredentialsJson,
+      ...rest
+    } = dto;
     const combinedCredentials = this.buildCredentialsJson({
       clientId,
       clientSecret,

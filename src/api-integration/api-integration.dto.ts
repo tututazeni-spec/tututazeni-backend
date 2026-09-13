@@ -79,7 +79,9 @@ export class CreateIntegrationDto {
   @IsOptional()
   @IsEnum(IntegrationCategory)
   category?: IntegrationCategory;
-  @ApiPropertyOptional({ description: 'Sistema/Plataforma — texto livre (SAP, Workday, Moodle...)' })
+  @ApiPropertyOptional({
+    description: 'Sistema/Plataforma — texto livre (SAP, Workday, Moodle...)',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -116,7 +118,10 @@ export class CreateIntegrationDto {
   @IsOptional()
   @IsEnum(IntegrationSyncDirection)
   syncDirection?: IntegrationSyncDirection;
-  @ApiPropertyOptional({ type: [String], description: 'Dados a sincronizar (ex.: users, courses, enrollments)' })
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Dados a sincronizar (ex.: users, courses, enrollments)',
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
