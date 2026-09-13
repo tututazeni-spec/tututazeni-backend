@@ -59,6 +59,12 @@ export class MailService implements OnModuleInit {
     });
   }
 
+  /** Envio genérico (ex: canal "email" de notificações/automação) — as duas
+   *  acima ficam com o template próprio por já terem consumidores fixos. */
+  async sendNotification(to: string, subject: string, text: string): Promise<void> {
+    await this.send({ to, subject, text });
+  }
+
   private async send(options: Mail.Options): Promise<void> {
     if (!this.transporter) {
       this.logger.warn({

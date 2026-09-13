@@ -40,6 +40,16 @@ describe('MailService', () => {
       const logged = spy.mock.calls.map(c => JSON.stringify(c[0])).join(' ');
       expect(logged).not.toContain('segredo-do-token');
     });
+
+    it('sendNotification resolve sem lançar e regista warn', async () => {
+      const spy = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => undefined);
+      await expect(
+        service.sendNotification('user@innova.com', 'Assunto', 'Mensagem'),
+      ).resolves.toBeUndefined();
+      expect(spy).toHaveBeenCalledWith(
+        expect.objectContaining({ msg: expect.stringContaining('SMTP não configurado') }),
+      );
+    });
   });
 
   describe('com SMTP configurado', () => {
@@ -89,6 +99,18 @@ describe('MailService', () => {
     it('sendPasswordReset lança se o transporter rejeitar', async () => {
       sendMailMock.mockRejectedValue(new Error('auth failed'));
       await expect(service.sendPasswordReset('x@y.com', 'token')).rejects.toThrow('auth failed');
+    });
+
+    it('sendNotification envia para o destinatário com o assunto e texto dados', async () => {
+      await service.sendNotification('x@y.com', 'Assunto', 'Corpo da mensagem');
+      expect(sendMailMock).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'x@y.com', subject: 'Assunto', text: 'Corpo da mensagem' }),
+      );
+    });
+
+    it('sendNotification lança se o transporter rejeitar', async () => {
+      sendMailMock.mockRejectedValue(new Error('boom'));
+      await expect(service.sendNotification('x@y.com', 'S', 'M')).rejects.toThrow('boom');
     });
   });
 });

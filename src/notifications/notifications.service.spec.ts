@@ -5,6 +5,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationCategory } from './notifications.dto';
 import { getQueueToken } from '@nestjs/bull';
 import { ConfigService } from '@nestjs/config';
+import { MailService } from '../mail/mail.service';
+import { SmsService } from '../sms/sms.service';
+
+const mockMail = { sendNotification: jest.fn().mockResolvedValue(undefined) };
+const mockSms = {
+  sendSms: jest.fn().mockResolvedValue(undefined),
+  sendWhatsApp: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockPrisma = {
   notificationLog: {
@@ -76,6 +84,8 @@ describe('NotificationsService', () => {
           provide: ConfigService,
           useValue: mockConfig,
         },
+        { provide: MailService, useValue: mockMail },
+        { provide: SmsService, useValue: mockSms },
       ],
     }).compile();
     service = module.get<NotificationsService>(NotificationsService);
@@ -135,6 +145,102 @@ describe('NotificationsService', () => {
 
       expect((result as any).skipped).toBe(true);
       expect(mockPrisma.notificationLog.create).not.toHaveBeenCalled();
+    });
+
+    // ─── despacho por canais externos (MailService/SmsService) ──────────────
+
+    it('sem preferências guardadas, usa os defaults do schema — email ligado, sms/whatsapp desligados', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        email: 'user@innova.com',
+        phone: '+244900000000',
+      });
+      mockPrisma.notificationPreference.findUnique.mockResolvedValue(null);
+      mockPrisma.notificationLog.create.mockResolvedValue(baseNotification);
+
+      await service.send(dto);
+
+      expect(mockMail.sendNotification).toHaveBeenCalledWith('user@innova.com', 'Title', 'Test');
+      expect(mockSms.sendSms).not.toHaveBeenCalled();
+      expect(mockSms.sendWhatsApp).not.toHaveBeenCalled();
+    });
+
+    it('com email/sms/whatsapp ligados nas preferências, despacha os três', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        email: 'user@innova.com',
+        phone: '+244900000000',
+      });
+      mockPrisma.notificationPreference.findUnique.mockResolvedValue({
+        userId: 1,
+        email: true,
+        sms: true,
+        whatsapp: true,
+        disabledCategories: [],
+      });
+      mockPrisma.notificationLog.create.mockResolvedValue(baseNotification);
+
+      await service.send(dto);
+
+      expect(mockMail.sendNotification).toHaveBeenCalledWith('user@innova.com', 'Title', 'Test');
+      expect(mockSms.sendSms).toHaveBeenCalledWith('+244900000000', 'Test');
+      expect(mockSms.sendWhatsApp).toHaveBeenCalledWith('+244900000000', 'Test');
+    });
+
+    it('com email desligado nas preferências, não envia email', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        email: 'user@innova.com',
+        phone: null,
+      });
+      mockPrisma.notificationPreference.findUnique.mockResolvedValue({
+        userId: 1,
+        email: false,
+        sms: false,
+        whatsapp: false,
+        disabledCategories: [],
+      });
+      mockPrisma.notificationLog.create.mockResolvedValue(baseNotification);
+
+      await service.send(dto);
+
+      expect(mockMail.sendNotification).not.toHaveBeenCalled();
+    });
+
+    it('sms/whatsapp ligados mas sem telemóvel — não chama a Twilio', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        email: 'user@innova.com',
+        phone: null,
+      });
+      mockPrisma.notificationPreference.findUnique.mockResolvedValue({
+        userId: 1,
+        email: false,
+        sms: true,
+        whatsapp: true,
+        disabledCategories: [],
+      });
+      mockPrisma.notificationLog.create.mockResolvedValue(baseNotification);
+
+      await service.send(dto);
+
+      expect(mockSms.sendSms).not.toHaveBeenCalled();
+      expect(mockSms.sendWhatsApp).not.toHaveBeenCalled();
+    });
+
+    it('uma falha de entrega externa não impede o retorno da notificação criada', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        email: 'user@innova.com',
+        phone: null,
+      });
+      mockPrisma.notificationPreference.findUnique.mockResolvedValue(null);
+      mockPrisma.notificationLog.create.mockResolvedValue(baseNotification);
+      mockMail.sendNotification.mockRejectedValueOnce(new Error('SMTP down'));
+
+      const result = await service.send(dto);
+
+      expect(result).toHaveProperty('id');
     });
   });
 

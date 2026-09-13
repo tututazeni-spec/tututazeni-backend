@@ -5,6 +5,8 @@ import { Queue } from 'bull';
 import { ConfigService } from '@nestjs/config';
 import { AutomationTrigger, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
+import { SmsService } from '../sms/sms.service';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { resolveDefaultTenantId } from '../common/helpers/tenant.helper';
 import {
@@ -25,6 +27,8 @@ export class NotificationsService {
     private prisma: PrismaService,
     @InjectQueue('notifications') private readonly notificationsQueue: Queue,
     private readonly config: ConfigService,
+    private readonly mail: MailService,
+    private readonly sms: SmsService,
   ) {}
 
   private get queueEnabled(): boolean {
@@ -75,10 +79,11 @@ export class NotificationsService {
   // ─── ENVIO ────────────────────────────────────────────────────────────────
 
   async send(dto: CreateNotificationDto) {
-    // Validar destinatário — evita 500 por violação de FK no create
+    // Validar destinatário — evita 500 por violação de FK no create. email/phone
+    // são necessários já aqui para o despacho por canais externos mais abaixo.
     const target = await this.prisma.user.findUnique({
       where: { id: dto.userId },
-      select: { id: true },
+      select: { id: true, email: true, phone: true },
     });
     if (!target) {
       throw new NotFoundException(`Utilizador ${dto.userId} não encontrado`);
@@ -117,16 +122,51 @@ export class NotificationsService {
       },
     });
 
-    // Log para canais externos (estrutura para integração futura)
     if (dto.priority === NotificationPriority.CRITICAL) {
       this.logger.warn(
         `[CRITICAL] Notificação crítica enviada para user ${dto.userId}: ${dto.type}`,
       );
     }
 
+    // Canais externos — melhor esforço, nunca lança nem atrasa a resposta por
+    // uma falha de entrega: o NotificationLog acima já é o registo oficial
+    // desta notificação. Honra os toggles de NotificationPreference (email
+    // por omissão ligado no schema, sms/whatsapp por omissão desligados —
+    // sem preferências guardadas ainda, usa esses mesmos defaults).
+    await this.deliverExternalChannels(target, dto, prefs);
+
     return notification;
   }
 
+  private async deliverExternalChannels(
+    target: { email: string; phone: string | null },
+    dto: CreateNotificationDto,
+    prefs: { email: boolean; sms: boolean; whatsapp: boolean } | null,
+  ): Promise<void> {
+    const subject = dto.title ?? dto.type;
+    const onFail = (channel: string) => (e: unknown) =>
+      this.logger.warn({
+        userId: dto.userId,
+        channel,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: `Falha ao entregar notificação por ${channel} — registo interno já criado`,
+      });
+
+    if (prefs ? prefs.email : true) {
+      await this.mail.sendNotification(target.email, subject, dto.message).catch(onFail('email'));
+    }
+    if ((prefs?.sms ?? false) && target.phone) {
+      await this.sms.sendSms(target.phone, dto.message).catch(onFail('sms'));
+    }
+    if ((prefs?.whatsapp ?? false) && target.phone) {
+      await this.sms.sendWhatsApp(target.phone, dto.message).catch(onFail('whatsapp'));
+    }
+  }
+
+  // NOTA: ao contrário de send(), sendBulk() não despacha canais externos —
+  // usa createMany (sem voltar a buscar cada linha criada) e um envio em
+  // massa de SMS/WhatsApp reais tem implicações de custo/rate-limit que
+  // merecem decisão explícita em separado, não activação silenciosa aqui.
   async sendBulk(dto: BulkNotificationDto) {
     // Filtrar utilizadores com categorias desactivadas
     let targetIds = dto.userIds;
@@ -353,6 +393,7 @@ export class NotificationsService {
         push: false,
         slack: false,
         sms: false,
+        whatsapp: false,
         quietHourStart: 22,
         quietHourEnd: 8,
         digestFrequency: 'NONE',
