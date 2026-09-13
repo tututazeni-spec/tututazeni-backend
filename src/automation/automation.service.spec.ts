@@ -20,7 +20,6 @@ const mockSms = {
   sendWhatsApp: jest.fn().mockResolvedValue(undefined),
 };
 
-
 const automationRuleMock = {
   findMany: jest.fn().mockResolvedValue([]),
   findFirst: jest.fn().mockResolvedValue(null),

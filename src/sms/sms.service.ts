@@ -28,7 +28,9 @@ export class SmsService implements OnModuleInit {
     const sid = process.env.TWILIO_ACCOUNT_SID;
     const token = process.env.TWILIO_AUTH_TOKEN;
     if (!sid || !token) {
-      this.logger.warn('TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN não definidos — SMS/WhatsApp não serão enviados');
+      this.logger.warn(
+        'TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN não definidos — SMS/WhatsApp não serão enviados',
+      );
       return;
     }
     this.client = new Twilio(sid, token);

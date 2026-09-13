@@ -20,7 +20,6 @@ const mockSms = {
   sendWhatsApp: jest.fn().mockResolvedValue(undefined),
 };
 
-
 const makeExec = () => ({
   findMany: jest.fn().mockResolvedValue([]),
   count: jest.fn().mockResolvedValue(0),

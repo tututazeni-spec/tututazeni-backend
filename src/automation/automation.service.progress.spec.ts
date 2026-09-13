@@ -24,7 +24,6 @@ const mockSms = {
   sendWhatsApp: jest.fn().mockResolvedValue(undefined),
 };
 
-
 const baseRule = {
   id: 1,
   name: 'Badge por curso',

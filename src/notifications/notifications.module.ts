@@ -9,7 +9,12 @@ import { SmsModule } from '../sms/sms.module';
 import { NotificationsProcessor } from '../queue/processors/notifications.processor';
 
 @Module({
-  imports: [PrismaModule, MailModule, SmsModule, BullModule.registerQueue({ name: 'notifications' })],
+  imports: [
+    PrismaModule,
+    MailModule,
+    SmsModule,
+    BullModule.registerQueue({ name: 'notifications' }),
+  ],
   providers: [NotificationsService, NotificationsProcessor],
   controllers: [NotificationsController],
   exports: [NotificationsService],

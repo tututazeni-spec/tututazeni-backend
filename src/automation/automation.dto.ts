@@ -208,20 +208,29 @@ export class CreateRuleDto {
   maxRetries?: number;
 
   // ── Entidade / condições avançadas ────────────────────────────
-  @ApiPropertyOptional({ description: 'Entidade alvo do gatilho — ex: "User", "Course", "Enrollment"' })
+  @ApiPropertyOptional({
+    description: 'Entidade alvo do gatilho — ex: "User", "Course", "Enrollment"',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   entity?: string;
 
-  @ApiPropertyOptional({ type: [ConditionRuleDto], description: 'Condições adicionais (campo/operador/valor)' })
+  @ApiPropertyOptional({
+    type: [ConditionRuleDto],
+    description: 'Condições adicionais (campo/operador/valor)',
+  })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ConditionRuleDto)
   conditions?: ConditionRuleDto[];
 
-  @ApiPropertyOptional({ enum: ConditionsLogic, default: ConditionsLogic.AND, description: 'Como combinar as linhas de `conditions` entre si' })
+  @ApiPropertyOptional({
+    enum: ConditionsLogic,
+    default: ConditionsLogic.AND,
+    description: 'Como combinar as linhas de `conditions` entre si',
+  })
   @IsOptional()
   @IsEnum(ConditionsLogic)
   conditionsLogic?: ConditionsLogic;
@@ -238,7 +247,10 @@ export class CreateRuleDto {
   @IsEnum(CommunicationChannel)
   channel?: CommunicationChannel;
 
-  @ApiPropertyOptional({ description: 'Corpo da mensagem/notificação — suporta placeholders {{campo}} resolvidos a partir de dynamicData' })
+  @ApiPropertyOptional({
+    description:
+      'Corpo da mensagem/notificação — suporta placeholders {{campo}} resolvidos a partir de dynamicData',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
@@ -250,7 +262,10 @@ export class CreateRuleDto {
   @MaxLength(200)
   subject?: string;
 
-  @ApiPropertyOptional({ description: 'JSON com dados dinâmicos para interpolar no messageTemplate — ex: {"nomeCurso": "..."}' })
+  @ApiPropertyOptional({
+    description:
+      'JSON com dados dinâmicos para interpolar no messageTemplate — ex: {"nomeCurso": "..."}',
+  })
   @IsOptional()
   @IsString()
   dynamicData?: string;
@@ -282,7 +297,9 @@ export class CreateRuleDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() startDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() endDate?: string;
 
-  @ApiPropertyOptional({ description: 'Nº máximo de execuções — a regra não corre mais além deste limite' })
+  @ApiPropertyOptional({
+    description: 'Nº máximo de execuções — a regra não corre mais além deste limite',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -299,7 +316,10 @@ export class CreateRuleDto {
   @IsEnum(RuleEnvironment)
   environment?: RuleEnvironment;
 
-  @ApiPropertyOptional({ default: true, description: 'Notificar o responsável quando uma execução falha' })
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Notificar o responsável quando uma execução falha',
+  })
   @IsOptional()
   @IsBoolean()
   notifyOnError?: boolean;

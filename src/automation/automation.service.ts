@@ -98,7 +98,10 @@ function parseConditionsList(conditionsJson?: string | null): StructuredConditio
   try {
     const parsed = JSON.parse(conditionsJson) as Partial<StructuredConditions>;
     if (!Array.isArray(parsed.rows) || !parsed.rows.length) return null;
-    return { logic: parsed.logic === ConditionsLogic.OR ? ConditionsLogic.OR : ConditionsLogic.AND, rows: parsed.rows };
+    return {
+      logic: parsed.logic === ConditionsLogic.OR ? ConditionsLogic.OR : ConditionsLogic.AND,
+      rows: parsed.rows,
+    };
   } catch (e: unknown) {
     helpersLogger.warn({
       conditionsJson,
@@ -295,7 +298,11 @@ export class AutomationService {
     const { channel, userId, subject, message, ruleId } = opts;
     if (!channel || channel === CommunicationChannel.INTERNAL) return;
 
-    if (channel !== CommunicationChannel.EMAIL && channel !== CommunicationChannel.SMS && channel !== CommunicationChannel.WHATSAPP) {
+    if (
+      channel !== CommunicationChannel.EMAIL &&
+      channel !== CommunicationChannel.SMS &&
+      channel !== CommunicationChannel.WHATSAPP
+    ) {
       this.logger.warn({
         ruleId,
         channel,
@@ -455,7 +462,10 @@ export class AutomationService {
         // Condições estruturadas do builder (field/operator/value + lógica
         // E/OU) — lidas por evaluateRuleConditions() em triggerEvent().
         conditionsJson: dto.conditions?.length
-          ? JSON.stringify({ logic: dto.conditionsLogic ?? ConditionsLogic.AND, rows: dto.conditions })
+          ? JSON.stringify({
+              logic: dto.conditionsLogic ?? ConditionsLogic.AND,
+              rows: dto.conditions,
+            })
           : null,
         actionsJson: JSON.stringify([{ type: dto.action, params: mergedActionParams }]),
         createdBy: String(createdById),
@@ -650,9 +660,10 @@ export class AutomationService {
           // `recipient` (do form: userId, ou string livre não resolvida —
           // roleCode/departmentId não são suportados aqui) tem prioridade
           // sobre o utilizador que despoletou o evento.
-          const recipientUserId = params.recipient && /^\d+$/.test(params.recipient)
-            ? Number(params.recipient)
-            : targetUserId;
+          const recipientUserId =
+            params.recipient && /^\d+$/.test(params.recipient)
+              ? Number(params.recipient)
+              : targetUserId;
           const message =
             interpolate(params.messageTemplate, params.dynamicData, payload) ??
             params.message ??
@@ -698,7 +709,8 @@ export class AutomationService {
             try {
               await this.mail.sendNotification(
                 contact.email,
-                interpolate(params.subject, params.dynamicData, payload) ?? `Automação: ${rule.name}`,
+                interpolate(params.subject, params.dynamicData, payload) ??
+                  `Automação: ${rule.name}`,
                 interpolate(params.messageTemplate, params.dynamicData, payload) ??
                   params.message ??
                   `Automação: ${rule.name}`,
@@ -1083,11 +1095,16 @@ export class AutomationService {
   // Prefere o condition builder estruturado (conditionsJson, com lógica E/OU
   // entre linhas field/operator/value); cai para o campo `condition` legado
   // (JSON simples chave→valor, só AND) quando não há linhas estruturadas.
-  private evaluateRuleConditions(rule: AutomationRuleRecord, payload: Record<string, unknown>): boolean {
+  private evaluateRuleConditions(
+    rule: AutomationRuleRecord,
+    payload: Record<string, unknown>,
+  ): boolean {
     const structured = parseConditionsList(rule.conditionsJson);
     if (structured) {
       const results = structured.rows.map(row => evaluateConditionRow(row, payload));
-      return structured.logic === ConditionsLogic.OR ? results.some(Boolean) : results.every(Boolean);
+      return structured.logic === ConditionsLogic.OR
+        ? results.some(Boolean)
+        : results.every(Boolean);
     }
     return this.evaluateCondition(parseCondition(rule.condition), payload);
   }

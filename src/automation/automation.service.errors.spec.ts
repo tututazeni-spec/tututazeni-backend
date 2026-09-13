@@ -30,7 +30,6 @@ const mockSms = {
   sendWhatsApp: jest.fn().mockResolvedValue(undefined),
 };
 
-
 describe('AutomationService — toggleRule / cloneRule / rerunExecution', () => {
   let service: AutomationService;
 
