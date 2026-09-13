@@ -94,9 +94,13 @@ describe('User invite email → fila `email` — Integration', () => {
     const created = await prisma.user.findUnique({ where: { email: INVITE_EMAIL } });
     expect(created).not.toBeNull();
 
+    // 15s aqui já foi visto a falhar de forma intermitente num runner/máquina
+    // ocupado (o EmailProcessor não é síncrono com o pedido HTTP — só
+    // corre quando o Bull o entrega). 45s dá muito mais margem sem
+    // comprometer o testTimeout de 60s configurado em jest-integration.json.
     const job = await Promise.race([
       picked,
-      new Promise<null>(r => setTimeout(() => r(null), 15000)),
+      new Promise<null>(r => setTimeout(() => r(null), 45000)),
     ]);
     expect(job).not.toBeNull();
     expect(job!.email).toBe(INVITE_EMAIL);
