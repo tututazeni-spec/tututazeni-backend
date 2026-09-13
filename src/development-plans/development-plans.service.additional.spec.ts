@@ -392,9 +392,7 @@ describe('DevelopmentPlansService (additional)', () => {
 
     it('rejeita aceite por quem não é o dono do plano', async () => {
       mockPrisma.developmentPlan.findUnique.mockResolvedValue({ ...basePlan, userId: 2 });
-      await expect(service.acceptPlan(1, {}, mockAdmin as any)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.acceptPlan(1, {}, mockAdmin as any)).rejects.toThrow(ForbiddenException);
     });
   });
 

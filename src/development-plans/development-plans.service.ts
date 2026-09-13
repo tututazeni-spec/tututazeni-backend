@@ -114,7 +114,9 @@ export class DevelopmentPlansService {
         checkpoints: { orderBy: { scheduledAt: 'asc' } },
         approvals: { orderBy: { createdAt: 'desc' }, take: 5 },
         certificates: { select: { id: true, validationCode: true, issuedAt: true } },
-        competencyGaps: { include: { competency: { select: { id: true, name: true, category: true } } } },
+        competencyGaps: {
+          include: { competency: { select: { id: true, name: true, category: true } } },
+        },
         sourceReview: { select: { id: true, score: true, category: true, cycleId: true } },
         careerPlan: {
           select: {
