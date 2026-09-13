@@ -20,6 +20,10 @@ import {
   CreateCheckpointDto,
   CompleteCheckpointDto,
   ApprovePlanDto,
+  CompletePlanDto,
+  MarkAtRiskDto,
+  AcceptPlanDto,
+  AddCompetencyGapDto,
 } from './development-plans.dto';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -109,6 +113,17 @@ export class DevelopmentPlansService {
         checkpoints: { orderBy: { scheduledAt: 'asc' } },
         approvals: { orderBy: { createdAt: 'desc' }, take: 5 },
         certificates: { select: { id: true, validationCode: true, issuedAt: true } },
+        competencyGaps: { include: { competency: { select: { id: true, name: true, category: true } } } },
+        sourceReview: { select: { id: true, score: true, category: true, cycleId: true } },
+        careerPlan: {
+          select: {
+            id: true,
+            title: true,
+            targetDate: true,
+            currentRole: { select: { id: true, name: true } },
+            targetRole: { select: { id: true, name: true } },
+          },
+        },
         _count: { select: { actions: true, goals: true, checkpoints: true } },
       },
     });
@@ -135,26 +150,57 @@ export class DevelopmentPlansService {
   }
 
   async create(dto: CreateDevelopmentPlanDto) {
-    const { focusCompetencyIds, ...data } = dto;
+    const { competencyGaps, ...data } = dto;
 
-    const plan = await this.prisma.developmentPlan.create({
-      data: {
-        name: data.name,
-        goal: data.goal,
-        userId: data.userId,
-        managerId: data.managerId,
-        priority: data.priority ?? 'MEDIUM',
-        period: data.period,
-        startDate: data.startDate ? new Date(data.startDate) : null,
-        endDate: data.endDate ? new Date(data.endDate) : null,
-        performanceCycleId: data.performanceCycleId,
-        isTemplate: data.isTemplate ?? false,
-        notes: data.notes,
-        status: 'DRAFT',
-      },
+    // Transacção: o plano e os gaps de competência iniciais (secção 5 do doc)
+    // nascem juntos — sem isto um gap podia ficar "meio-criado" se a segunda
+    // escrita falhasse (ex.: competencyId inexistente).
+    const plan = await this.prisma.$transaction(async tx => {
+      const created = await tx.developmentPlan.create({
+        data: {
+          name: data.name,
+          goal: data.goal,
+          userId: data.userId,
+          managerId: data.managerId,
+          priority: data.priority ?? 'MEDIUM',
+          period: data.period,
+          startDate: data.startDate ? new Date(data.startDate) : null,
+          endDate: data.endDate ? new Date(data.endDate) : null,
+          performanceCycleId: data.performanceCycleId,
+          isTemplate: data.isTemplate ?? false,
+          notes: data.notes,
+          status: 'DRAFT',
+          origin: data.origin,
+          originJustification: data.originJustification,
+          strengths: data.strengths,
+          developmentNeeds: data.developmentNeeds,
+          sourceReviewId: data.sourceReviewId,
+          careerPlanId: data.careerPlanId,
+          careerReadinessPercent: data.careerReadinessPercent,
+        },
+      });
+
+      if (competencyGaps?.length) {
+        await tx.pdiCompetencyGap.createMany({
+          data: competencyGaps.map(g => ({
+            planId: created.id,
+            competencyId: g.competencyId,
+            currentLevel: g.currentLevel,
+            targetLevel: g.targetLevel,
+            priority: g.priority ?? 'MEDIUM',
+          })),
+        });
+      }
+
+      return created;
+    });
+
+    const withRelations = await this.prisma.developmentPlan.findUnique({
+      where: { id: plan.id },
       include: {
         user: { select: { id: true, fullName: true } },
         manager: { select: { id: true, fullName: true } },
+        competencyGaps: { include: { competency: { select: { id: true, name: true } } } },
       },
     });
 
@@ -178,12 +224,32 @@ export class DevelopmentPlansService {
         });
       });
 
-    return plan;
+    return withRelations!;
   }
 
   async update(id: number, dto: UpdateDevelopmentPlanDto) {
     await this.findOne(id);
-    const { focusCompetencyIds, ...data } = dto;
+    const { competencyGaps, ...data } = dto;
+
+    if (competencyGaps) {
+      // Substituição total da lista — mesmo padrão de "replace" usado no
+      // resto do módulo para colecções pequenas e sem histórico próprio
+      // (ao contrário de goals/actions/checkpoints, que têm o seu próprio
+      // ciclo de vida e por isso têm endpoints dedicados de add/remove).
+      await this.prisma.pdiCompetencyGap.deleteMany({ where: { planId: id } });
+      if (competencyGaps.length) {
+        await this.prisma.pdiCompetencyGap.createMany({
+          data: competencyGaps.map(g => ({
+            planId: id,
+            competencyId: g.competencyId,
+            currentLevel: g.currentLevel,
+            targetLevel: g.targetLevel,
+            priority: g.priority ?? 'MEDIUM',
+          })),
+        });
+      }
+    }
+
     return this.prisma.developmentPlan.update({
       where: { id },
       data: {
@@ -264,45 +330,64 @@ export class DevelopmentPlansService {
     return updated;
   }
 
-  async complete(id: number) {
+  // Secção 19-20 do doc: avaliação final (resultado, comentários) e próximos
+  // passos ficam gravados no encerramento; `partial` cobre "Concluído
+  // parcialmente" — sem certificado e com metade do XP, já que o plano não
+  // foi cumprido na íntegra.
+  async complete(id: number, dto?: CompletePlanDto) {
     const plan = await this.findOne(id);
     if (!['ACTIVE', 'PENDING_APPROVAL'].includes(plan.status)) {
       throw new BadRequestException('Apenas planos activos podem ser concluídos');
     }
 
+    const partial = dto?.partial ?? false;
+    const xp = partial ? 150 : 300;
+
     const updated = await this.prisma.developmentPlan.update({
       where: { id },
-      data: { status: 'COMPLETED', completedAt: new Date(), overallProgress: 100 },
+      data: {
+        status: partial ? 'PARTIALLY_COMPLETED' : 'COMPLETED',
+        completedAt: new Date(),
+        overallProgress: partial ? plan.overallProgress : 100,
+        finalResult: dto?.finalResult,
+        overallResult: dto?.overallResult,
+        employeeComment: dto?.employeeComment,
+        managerComment: dto?.managerComment,
+        rhComment: dto?.rhComment,
+        nextSteps: dto?.nextSteps,
+      },
     });
 
-    // Certificado
-    const code = `PDI-${Date.now()}-${id}`;
-    await this.prisma.certificate
-      .create({
-        data: {
-          type: 'DEVELOPMENT',
-          userId: plan.userId,
-          developmentPlanId: id,
-          validationCode: code,
-          fileUrl: `/certificates/${code}.pdf`,
-        },
-      })
-      .catch(e => {
-        this.logger.warn({
-          userId: plan.userId,
-          planId: id,
-          action: 'complete.issueCertificate',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao emitir certificado de conclusão de PDI',
+    // Certificado — só em conclusão total
+    if (!partial) {
+      const code = `PDI-${Date.now()}-${id}`;
+      await this.prisma.certificate
+        .create({
+          data: {
+            type: 'DEVELOPMENT',
+            userId: plan.userId,
+            developmentPlanId: id,
+            validationCode: code,
+            fileUrl: `/certificates/${code}.pdf`,
+          },
+        })
+        .catch(e => {
+          this.logger.warn({
+            userId: plan.userId,
+            planId: id,
+            action: 'complete.issueCertificate',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao emitir certificado de conclusão de PDI',
+          });
         });
-      });
+    }
 
     // XP
     await this.prisma.userPoints
       .upsert({
         where: { userId: plan.userId },
-        create: { userId: plan.userId, points: 300 },
-        update: { points: { increment: 300 } },
+        create: { userId: plan.userId, points: xp },
+        update: { points: { increment: xp } },
       })
       .catch(e => {
         this.logger.warn({
@@ -320,7 +405,9 @@ export class DevelopmentPlansService {
         data: {
           userId: plan.userId,
           type: 'PDI_COMPLETED',
-          message: `🎉 PDI "${plan.name}" concluído! +300 XP e certificado emitido.`,
+          message: partial
+            ? `PDI "${plan.name}" concluído parcialmente. +${xp} XP.`
+            : `🎉 PDI "${plan.name}" concluído! +${xp} XP e certificado emitido.`,
           metadata: JSON.stringify({}),
         },
       })
@@ -335,6 +422,54 @@ export class DevelopmentPlansService {
       });
 
     return updated;
+  }
+
+  // Secção 1 (estados) — transição ACTIVE → AT_RISK, sinalizada pelo gestor/RH
+  // quando o acompanhamento detecta desvio ao plano.
+  async markAtRisk(id: number, dto: MarkAtRiskDto, user: CurrentUserData) {
+    const plan = await this.findOne(id, user);
+    if (plan.status !== 'ACTIVE') {
+      throw new BadRequestException('Apenas planos activos podem ser marcados como em risco');
+    }
+    return this.prisma.developmentPlan.update({
+      where: { id },
+      data: {
+        status: 'AT_RISK',
+        notes: dto.reason
+          ? `${plan.notes ? plan.notes + '\n' : ''}[EM RISCO ${new Date().toLocaleDateString('pt')}] ${dto.reason}`
+          : plan.notes,
+      },
+    });
+  }
+
+  // Volta a ACTIVE a partir de AT_RISK ou PAUSED — acompanhamento normalizou.
+  async resume(id: number, user: CurrentUserData) {
+    const plan = await this.findOne(id, user);
+    if (!['AT_RISK', 'PAUSED'].includes(plan.status)) {
+      throw new BadRequestException('Só planos em risco ou pausados podem retomar');
+    }
+    return this.prisma.developmentPlan.update({
+      where: { id },
+      data: { status: 'ACTIVE' },
+    });
+  }
+
+  // Secção 22 — aceite do colaborador. Só o próprio dono do plano aceita;
+  // não é uma decisão de aprovação (essa é do gestor/RH via approvePlan).
+  async acceptPlan(id: number, dto: AcceptPlanDto, user: CurrentUserData) {
+    const plan = await this.findOne(id, user);
+    if (plan.userId !== user.id) {
+      throw new ForbiddenException('Só o colaborador dono do PDI pode dar o seu aceite');
+    }
+    return this.prisma.developmentPlan.update({
+      where: { id },
+      data: {
+        employeeAcceptedAt: new Date(),
+        notes: dto.comment
+          ? `${plan.notes ? plan.notes + '\n' : ''}[ACEITE ${new Date().toLocaleDateString('pt')}] ${dto.comment}`
+          : plan.notes,
+      },
+    });
   }
 
   async cancel(id: number, reason?: string) {
@@ -535,6 +670,32 @@ export class DevelopmentPlansService {
 
     await this.recalcPlanProgress(goal.planId);
     return updated;
+  }
+
+  // ─── COMPETÊNCIAS (gap secção 5) ───────────────────────────────────────────
+
+  async addCompetencyGap(dto: AddCompetencyGapDto, user: CurrentUserData) {
+    await this.findOne(dto.planId, user);
+    return this.prisma.pdiCompetencyGap.create({
+      data: {
+        planId: dto.planId,
+        competencyId: dto.competencyId,
+        currentLevel: dto.currentLevel,
+        targetLevel: dto.targetLevel,
+        priority: dto.priority ?? 'MEDIUM',
+      },
+    });
+  }
+
+  async removeCompetencyGap(gapId: number, user: CurrentUserData) {
+    const gap = await this.prisma.pdiCompetencyGap.findUnique({
+      where: { id: gapId },
+      include: { plan: true },
+    });
+    if (!gap) throw new NotFoundException('Gap de competência não encontrado');
+    assertCanAccess(gap, gap.plan.userId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+    await this.prisma.pdiCompetencyGap.delete({ where: { id: gapId } });
+    return { message: 'Gap de competência removido' };
   }
 
   // ─── CHECKPOINTS ──────────────────────────────────────────────────────────

@@ -1299,6 +1299,7 @@ model UserCareerPlan {
   activatedAt   DateTime?
   goals         CareerGoal[]
   promotions    PromotionRequest[]
+  developmentPlans DevelopmentPlan[]
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 
@@ -1649,9 +1650,62 @@ enum PlanStatus {
   PENDING_APPROVAL
   ACTIVE
   PAUSED
+  AT_RISK
   COMPLETED
+  PARTIALLY_COMPLETED
   CANCELLED
   OVERDUE
+}
+
+// Secção 2 do documento "Criar Novo PDI" — porque é que este PDI foi criado.
+enum PdiOrigin {
+  PERFORMANCE_REVIEW
+  EVALUATION_360
+  COMPETENCY_MAP
+  COMPETENCY_GAP
+  CAREER_PLAN
+  SUCCESSION
+  LEADERSHIP_PROGRAM
+  MANAGER_REQUEST
+  EMPLOYEE_REQUEST
+  ONBOARDING
+  ROLE_CHANGE
+  PROMOTION
+  OPERATIONAL_NEED
+  STRATEGIC_NEED
+  OTHER
+}
+
+enum PdiCompetencyPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// Secção 19 — avaliação final do PDI no encerramento.
+enum PdiFinalResult {
+  GOAL_ACHIEVED
+  PARTIALLY_ACHIEVED
+  NOT_ACHIEVED
+}
+
+enum PdiOverallResult {
+  EXCEEDED
+  MET
+  PARTIALLY_MET
+  NOT_MET
+}
+
+// Secção 20 — o que acontece depois de o PDI terminar.
+enum PdiNextSteps {
+  NEW_PDI
+  CONTINUE_PDI
+  NEW_COMPETENCY_ASSESSMENT
+  LEARNING_PATH
+  LEADERSHIP_PROGRAM
+  ROLE_PREPARATION
+  SUCCESSION_PLAN
+  NONE
 }
 
 model DevelopmentPlan {
@@ -1674,6 +1728,34 @@ model DevelopmentPlan {
   notes              String?                 @db.Text
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
+
+  // ── Origem e diagnóstico (secções 2-3 do doc) ──────────────────────────
+  origin               PdiOrigin?
+  originJustification  String?  @db.Text
+  strengths            String?  @db.Text // Principais pontos fortes
+  developmentNeeds     String?  @db.Text // Principais necessidades de desenvolvimento
+
+  // ── Ligação à avaliação de desempenho de origem (secção 4) ─────────────
+  // performanceCycleId (acima) já referencia o ciclo; sourceReviewId aponta
+  // para a avaliação individual concreta que originou este PDI — resultado,
+  // classificação e comentários lêem-se dessa review, não se duplicam aqui.
+  sourceReviewId Int?
+  sourceReview   PerformanceReview? @relation(fields: [sourceReviewId], references: [id])
+
+  // ── Ligação a objectivo de carreira (secção 8) ──────────────────────────
+  careerPlanId           Int?
+  careerPlan             UserCareerPlan? @relation(fields: [careerPlanId], references: [id])
+  careerReadinessPercent Int?
+
+  // ── Avaliação final e próximos passos (secções 19-20) ───────────────────
+  finalResult      PdiFinalResult?
+  overallResult    PdiOverallResult?
+  employeeComment  String?   @db.Text
+  managerComment   String?   @db.Text
+  rhComment        String?   @db.Text
+  employeeAcceptedAt DateTime?
+  nextSteps        PdiNextSteps?
+
   user               User                    @relation(fields: [userId], references: [id])
   manager            User?                   @relation("PDIManager", fields: [managerId], references: [id])
   actions            DevelopmentPlanAction[]
@@ -1682,12 +1764,33 @@ model DevelopmentPlan {
   approvals          PdiApproval[]
   pdiActions         PdiAction[]
   certificates       Certificate[]
+  competencyGaps     PdiCompetencyGap[]
 
   leadershipParticipantPlans LeadershipParticipantPlan[]
 
   @@index([userId])
   @@index([status])
   @@index([managerId])
+  @@index([sourceReviewId])
+  @@index([careerPlanId])
+}
+
+// Secção 5 do doc — substitui o `focusCompetencyIds` que o DTO aceitava e o
+// service descartava sem nunca gravar (ver memory computed_then_discarded).
+model PdiCompetencyGap {
+  id           Int                    @id @default(autoincrement())
+  planId       Int
+  plan         DevelopmentPlan        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  competencyId Int
+  competency   Competency             @relation(fields: [competencyId], references: [id])
+  currentLevel Int?
+  targetLevel  Int?
+  priority     PdiCompetencyPriority  @default(MEDIUM)
+  createdAt    DateTime               @default(now())
+
+  @@unique([planId, competencyId])
+  @@index([planId])
+  @@index([competencyId])
 }
 
 enum ActionType {
@@ -2541,6 +2644,7 @@ model Competency {
   leadershipProgramCompetencies LeadershipProgramCompetency[]
   leadershipSelectionCriteria   LeadershipSelectionCriterion[]
   trainingCompetencies          TrainingCompetency[]
+  pdiCompetencyGaps             PdiCompetencyGap[]
 
   @@index([category])
   @@index([status])
@@ -2766,6 +2870,7 @@ model PerformanceReview {
   competencyEvals CompetencyEvaluation[]
   calibrationLogs CalibrationLog[]
   disputes        PerformanceDispute[]
+  developmentPlans DevelopmentPlan[]
 
   @@unique([userId, cycleId, type])
   @@index([userId])
