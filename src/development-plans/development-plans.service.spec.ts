@@ -231,6 +231,17 @@ describe('DevelopmentPlansService', () => {
         }),
       );
     });
+
+    // Antes disto, um `!` escondia silenciosamente um null aqui em vez de
+    // sinalizar claramente que o re-fetch pós-transacção falhou.
+    it('lança erro claro se o re-fetch pós-criação não encontrar o plano', async () => {
+      mockPrisma.developmentPlan.create.mockResolvedValue(basePlan);
+      mockPrisma.developmentPlan.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.create({ name: 'PDI 2024', goal: 'Melhorar skills', userId: 1 }),
+      ).rejects.toThrow();
+    });
   });
 
   // ─── update ───────────────────────────────────────────────────────────────

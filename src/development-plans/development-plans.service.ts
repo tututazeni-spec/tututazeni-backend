@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -203,6 +204,15 @@ export class DevelopmentPlansService {
         competencyGaps: { include: { competency: { select: { id: true, name: true } } } },
       },
     });
+    // Não deveria acontecer (mesma ligação primary, sem lag de réplica, a
+    // seguir à própria transacção que criou a linha) — mas um `!` aqui
+    // escondia silenciosamente um null em vez de sinalizar claramente que
+    // algo de anormal se passou.
+    if (!withRelations) {
+      throw new InternalServerErrorException(
+        `Plano de desenvolvimento ${plan.id} criado mas não encontrado no re-fetch subsequente`,
+      );
+    }
 
     // Notificar colaborador
     await this.prisma.notificationLog
@@ -224,7 +234,7 @@ export class DevelopmentPlansService {
         });
       });
 
-    return withRelations!;
+    return withRelations;
   }
 
   async update(id: number, dto: UpdateDevelopmentPlanDto) {
