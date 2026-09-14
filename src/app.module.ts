@@ -69,7 +69,6 @@ import { HistoryModule } from './history/history.module';
 import { OrganizationModule } from './organization/organization.module';
 import { AclModule } from './acl/acl.module';
 import { RolesPermissionsModule } from './roles-permissions/roles-permissions.module';
-import { LeaderModule } from './leader/leader.module';
 
 // MÓDULOS NOVOS — PROCESSOS E INTEGRAÇÃO
 import { ProcessStandardModule } from './process-standard/process-standard.module';
@@ -200,7 +199,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     OrganizationModule,
     AclModule,
     RolesPermissionsModule,
-    LeaderModule,
     ProcessStandardModule,
     ApiIntegrationModule,
     AutomationModule,
