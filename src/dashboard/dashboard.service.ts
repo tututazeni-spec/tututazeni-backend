@@ -338,10 +338,12 @@ export class DashboardService {
     // Fase H: os números e o enriquecimento da equipa vêm da camada canónica
     // (`MetricsAggregationService.managerDashboard`). A forma do payload de
     // `GET /dashboard/manager` é preservada — os KPIs são projectados de volta
-    // aos 11 campos históricos (o superset canónico — enrollmentsTotal,
-    // completions, completionRate, overdueActions — e competencyGaps/nineBox
-    // ficam para o `analytics`, Task 8) e `atRisk` volta a chamar-se `alert`
-    // em cada membro.
+    // aos 12 campos históricos + `overdueActions` (auditoria do módulo
+    // dashboard/ — antes ficava calculado mas nunca saía daqui; passou a
+    // sair porque é accionável para o gestor). `enrollmentsTotal`,
+    // `completions`, `completionRate` e `competencyGaps`/`nineBox` continuam
+    // a ficar só no `analytics` (Task 8, análises aprofundadas — ver
+    // ManagerView.tsx) e `atRisk` volta a chamar-se `alert` em cada membro.
     //
     // Degradação: a camada canónica propaga falhas de leitura; este consumidor
     // nunca pode 500 — em falha devolve a forma histórica de "equipa vazia".
@@ -381,6 +383,7 @@ export class DashboardService {
         engagementResponses: r.kpis.engagementResponses,
         avatarSessions: r.kpis.avatarSessions,
         pendingEvals: r.kpis.pendingEvals,
+        overdueActions: r.kpis.overdueActions,
       },
       team: r.team.map(m => ({
         user: {
@@ -388,6 +391,7 @@ export class DashboardService {
           fullName: m.user.fullName,
           avatarUrl: m.user.avatarUrl,
           position: m.user.position,
+          department: m.user.department,
         },
         xp: m.xp,
         enrollment: m.enrollment,
