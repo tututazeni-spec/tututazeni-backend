@@ -265,14 +265,20 @@ describe('DashboardService (additional)', () => {
       const result: any = await service.getManagerDashboard(1, {});
       expect(result.teamSize).toBe(1);
       expect(result.team[0]).toEqual({
-        user: { id: 2, fullName: 'Bea', avatarUrl: null, position: null },
+        user: {
+          id: 2,
+          fullName: 'Bea',
+          avatarUrl: null,
+          position: null,
+          department: { name: 'TI' },
+        },
         xp: 0,
         enrollment: { completed: 0, inProgress: 0 },
         plan: null,
         lastScore: null,
         alert: false,
       });
-      expect(result.kpis).not.toHaveProperty('overdueActions');
+      expect(result.kpis.overdueActions).toBe(0);
       expect(result.alerts).toEqual([]);
     });
   });
