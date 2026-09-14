@@ -23,7 +23,6 @@ import { PerformanceModule } from './performance/performance.module';
 import { SuccessionModule } from './succession/succession.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { LeadershipModule } from './leadership/leadership.module';
-import { KnowledgeModule } from './knowledge/knowledge.module';
 import { MicroLearningModule } from './micro-learning/micro-learning.module';
 import { LiveClassesModule } from './live-classes/live-classes.module';
 import { MobileModule } from './mobile/mobile.module';
@@ -53,7 +52,6 @@ import { CareerModule } from './career/career.module';
 import { CompetencyMapModule } from './competency-map/competency-map.module';
 import { TalentDevelopmentModule } from './talent-development/talent-development.module';
 import { EngagementModule } from './engagement/engagement.module';
-import { ContentLibraryModule } from './content-library/content-library.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { Evaluation360Module } from './evaluation360/evaluation360.module';
 import { AvatarTrainingModule } from './avatar-training/avatar-training.module';
@@ -79,6 +77,10 @@ import { PdfModule } from './pdf/pdf.module';
 import { CrmBeneficiariesModule } from './crm-beneficiaries/crm-beneficiaries.module';
 import { CrmPartnersModule } from './crm-partners/crm-partners.module';
 import { CrmFundersModule } from './crm-funders/crm-funders.module';
+// LibraryModule único junta LibraryController (/library — repositório
+// documental), ContentLibraryController (/content-library — catálogo
+// multimédia) e KnowledgeController (/knowledge — base de conhecimento) —
+// ex-ContentLibraryModule e ex-KnowledgeModule, fundidos aqui.
 import { LibraryModule } from './library/library.module';
 import { CertificationModule } from './certification/certification.module';
 import { DashboardInstitutionalModule } from './dashboard-institutional/dashboard-institutional.module';
@@ -162,7 +164,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     SuccessionModule,
     OnboardingModule,
     LeadershipModule,
-    KnowledgeModule,
     MicroLearningModule,
     LiveClassesModule,
     MobileModule,
@@ -187,7 +188,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     CompetencyMapModule,
     TalentDevelopmentModule,
     EngagementModule,
-    ContentLibraryModule,
     EvaluationModule,
     Evaluation360Module,
     AvatarTrainingModule,
