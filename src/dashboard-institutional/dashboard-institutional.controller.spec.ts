@@ -9,6 +9,7 @@ const mockSvc = {
   getGrowthTrend: jest.fn().mockResolvedValue([]),
   getGeographicDistribution: jest.fn().mockResolvedValue([]),
   getAlerts: jest.fn().mockResolvedValue([]),
+  getModulesOverview: jest.fn().mockResolvedValue({}),
   createSnapshot: jest.fn().mockResolvedValue({ id: 1 }),
   findAllSnapshots: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   compareSnapshots: jest.fn().mockResolvedValue({}),
@@ -55,6 +56,11 @@ describe('DashboardInstitutionalController', () => {
   it('getAlerts → getAlerts()', async () => {
     await controller.getAlerts();
     expect(mockSvc.getAlerts).toHaveBeenCalled();
+  });
+
+  it('getModulesOverview → getModulesOverview()', async () => {
+    await controller.getModulesOverview();
+    expect(mockSvc.getModulesOverview).toHaveBeenCalled();
   });
 
   it('createSnapshot → createSnapshot(dto, userId)', async () => {

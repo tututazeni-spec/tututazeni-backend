@@ -2,9 +2,36 @@ import { Module } from '@nestjs/common';
 import { DashboardInstitutionalController } from './dashboard-institutional.controller';
 import { DashboardInstitutionalService } from './dashboard-institutional.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { EngagementModule } from '../engagement/engagement.module';
+import { OnboardingModule } from '../onboarding/onboarding.module';
+import { SuccessionModule } from '../succession/succession.module';
+import { EventsModule } from '../events/events.module';
+import { ProcessStandardModule } from '../process-standard/process-standard.module';
+import { WorkDeclarationModule } from '../work-declaration/work-declaration.module';
+import { AuditModule } from '../audit/audit.module';
+import { AutomationModule } from '../automation/automation.module';
+import { ScalabilityModule } from '../scalability/scalability.module';
+import { MonitoringModule } from '../monitoring/monitoring.module';
 
+// ─── VISÃO CRUZADA DE MÓDULOS ──────────────────────────
+// dashboard-institutional/modules agrega, por leitura directa dos serviços
+// (não HTTP), painéis já existentes de outros módulos — em vez de duplicar
+// as suas queries. Cada módulo importado abaixo só entra por causa disto;
+// nenhuma destas dependências existia antes.
 @Module({
-  imports: [PrismaModule],
+  imports: [
+    PrismaModule,
+    EngagementModule,
+    OnboardingModule,
+    SuccessionModule,
+    EventsModule,
+    ProcessStandardModule,
+    WorkDeclarationModule,
+    AuditModule,
+    AutomationModule,
+    ScalabilityModule,
+    MonitoringModule,
+  ],
   controllers: [DashboardInstitutionalController],
   providers: [DashboardInstitutionalService],
   exports: [DashboardInstitutionalService],

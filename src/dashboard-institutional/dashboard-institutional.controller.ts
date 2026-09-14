@@ -58,6 +58,17 @@ export class DashboardInstitutionalController {
     return this.service.getAlerts();
   }
 
+  @Get('modules')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary:
+      'Visão cruzada de módulos (engagement, sucessão, onboarding, eventos, processos, ' +
+      'declarações, auditoria, automação, plataforma, OKRs/avaliação)',
+  })
+  getModulesOverview() {
+    return this.service.getModulesOverview();
+  }
+
   // ─── SNAPSHOTS ───────────────────────────────────────
 
   @Post('snapshots')
