@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
 import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+import { AttendanceService } from '../attendance/attendance.service';
 
 // ─── Alertas: mapeamento p/ a forma histórica de GET /dashboard-rh/alerts ──
 // A camada canónica (`metrics.alerts`) devolve TODAS as regras de organização;
@@ -71,6 +72,7 @@ export class DashboardRhService {
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
     private readonly metrics: MetricsAggregationService,
+    private readonly attendanceSvc: AttendanceService,
   ) {}
 
   // ══════════════════════════════════════════════════════
@@ -812,32 +814,18 @@ export class DashboardRhService {
   }
 
   // ══════════════════════════════════════════════════════
-  // ATTENDANCE (legacy-compatible)
+  // ATTENDANCE
   // ══════════════════════════════════════════════════════
 
-  async getAttendancePanel(from?: string, to?: string) {
-    const dateFrom = from ? new Date(from) : monthStart();
-    const dateTo = to ? new Date(to) : new Date();
-    const records = await this.prisma.read.attendance.findMany({
-      where: { date: { gte: dateFrom, lte: dateTo } },
-      include: { employee: { select: { id: true, name: true } } },
-    });
-
-    const summary = { present: 0, absent: 0, late: 0, remote: 0, justified: 0 };
-    for (const r of records) {
-      const s = (r.status?.toLowerCase() ?? 'absent') as keyof typeof summary;
-      if (s in summary) summary[s]++;
-    }
-    const total = records.length;
-    const attended = summary.present + summary.remote + summary.late;
-    return {
-      period: { from: dateFrom, to: dateTo },
-      total,
-      ...summary,
-      presenceRate: pct(attended, total),
-      absenteeismRate: pct(summary.absent + summary.justified, total),
-      status: healthStatusInverse(pct(summary.absent, total), 5, 10),
-    };
+  // FIX: lia directamente o modelo `Attendance` (ligado a `Employee`, campo
+  // `name`) — um sistema de clocking paralelo e legado, desligado do fluxo
+  // real de presenças/férias (`AttendanceRecord`/`LeaveRequest`, ligados a
+  // `User`) que o próprio módulo `attendance` já expõe em
+  // `AttendanceService.getDashboard()`. Delega agora nessa fonte canónica em
+  // vez de duplicar a query (mesmo padrão de `getHeadcountPanel` a delegar em
+  // `MetricsAggregationService`).
+  async getAttendancePanel(department?: string) {
+    return this.attendanceSvc.getDashboard(department);
   }
 
   // ══════════════════════════════════════════════════════

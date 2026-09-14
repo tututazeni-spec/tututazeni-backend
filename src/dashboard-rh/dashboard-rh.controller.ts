@@ -99,10 +99,10 @@ export class DashboardRhController {
   // ─── Attendance ──────────────────────────────────────────────
 
   @Get('attendance')
-  @Roles(...ADMIN)
-  @ApiOperation({ summary: 'Presenças — taxa de absentismo, por departamento' })
-  attendance(@Query('from') from?: string, @Query('to') to?: string) {
-    return this.svc.getAttendancePanel(from, to);
+  @Roles(...MGMT)
+  @ApiOperation({ summary: 'Presenças de hoje — checked-in, ausências, pendentes de aprovação' })
+  attendance(@Query('department') department?: string) {
+    return this.svc.getAttendancePanel(department);
   }
 
   // ─── Talent Pipeline ─────────────────────────────────────────

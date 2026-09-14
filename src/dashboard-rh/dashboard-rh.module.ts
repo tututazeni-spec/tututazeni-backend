@@ -2,11 +2,12 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggregation.module';
+import { AttendanceModule } from '../attendance/attendance.module';
 import { DashboardRhService } from './dashboard-rh.service';
 import { DashboardRhController } from './dashboard-rh.controller';
 
 @Module({
-  imports: [PrismaModule, MetricsAggregationModule],
+  imports: [PrismaModule, MetricsAggregationModule, AttendanceModule],
   providers: [DashboardRhService],
   controllers: [DashboardRhController],
   exports: [DashboardRhService],

@@ -200,8 +200,13 @@ describe('Dashboard RH Integration', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
 
-      expect(res.body.total).toBeDefined();
-      expect(res.body.presenceRate).toBeDefined();
+      // FIX: painel delega agora no AttendanceService canónico
+      // (getDashboard) — shape mudou de { total, presenceRate, ... } para
+      // { date, kpis: { attendanceRate, ... }, presentList, absentList,
+      // lateList }. Ver memory project_innova_attendance_leave_consolidation_faseB.
+      expect(res.body.date).toBeDefined();
+      expect(res.body.kpis).toBeDefined();
+      expect(res.body.kpis.attendanceRate).toBeDefined();
     });
   });
 
