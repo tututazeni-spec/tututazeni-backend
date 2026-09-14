@@ -5,10 +5,12 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
 const mockSvc = {
+  getExecutive: jest.fn().mockResolvedValue({}),
   getExecutiveSummary: jest.fn().mockResolvedValue({}),
   getGrowthTrend: jest.fn().mockResolvedValue([]),
   getGeographicDistribution: jest.fn().mockResolvedValue([]),
   getAlerts: jest.fn().mockResolvedValue([]),
+  getModulesOverview: jest.fn().mockResolvedValue({}),
   createSnapshot: jest.fn().mockResolvedValue({ id: 1 }),
   findAllSnapshots: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   compareSnapshots: jest.fn().mockResolvedValue({}),
@@ -37,6 +39,11 @@ describe('DashboardInstitutionalController', () => {
     controller = module.get<DashboardInstitutionalController>(DashboardInstitutionalController);
   });
 
+  it('getExecutive → getExecutive(period)', async () => {
+    await controller.getExecutive('QUARTER' as any);
+    expect(mockSvc.getExecutive).toHaveBeenCalledWith('QUARTER');
+  });
+
   it('getExecutiveSummary → getExecutiveSummary()', async () => {
     await controller.getExecutiveSummary();
     expect(mockSvc.getExecutiveSummary).toHaveBeenCalled();
@@ -55,6 +62,11 @@ describe('DashboardInstitutionalController', () => {
   it('getAlerts → getAlerts()', async () => {
     await controller.getAlerts();
     expect(mockSvc.getAlerts).toHaveBeenCalled();
+  });
+
+  it('getModulesOverview → getModulesOverview()', async () => {
+    await controller.getModulesOverview();
+    expect(mockSvc.getModulesOverview).toHaveBeenCalled();
   });
 
   it('createSnapshot → createSnapshot(dto, userId)', async () => {
