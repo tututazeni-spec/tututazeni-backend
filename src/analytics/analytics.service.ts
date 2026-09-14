@@ -821,7 +821,11 @@ export class AnalyticsService {
 
   async getTrainingROI() {
     const [impacts, courseAnalytics, totalCerts] = await Promise.all([
-      this.prisma.read.trainingImpact.findMany({ orderBy: { calculatedAt: 'desc' }, take: 20 }),
+      this.prisma.read.trainingImpact.findMany({
+        orderBy: { calculatedAt: 'desc' },
+        take: 20,
+        include: { course: { select: { id: true, title: true } } },
+      }),
       this.prisma.read.courseAnalytics.findMany({
         include: { course: { select: { id: true, title: true, workloadHours: true } } },
       }),
