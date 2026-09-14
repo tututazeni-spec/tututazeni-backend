@@ -1,4 +1,4 @@
-// src/leader/leader.dto.ts
+// src/leadership/leader.dto.ts
 import {
   IsString,
   IsOptional,

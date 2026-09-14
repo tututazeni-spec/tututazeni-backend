@@ -1,4 +1,4 @@
-// src/leader/leader.controller.ts
+// src/leadership/leader.controller.ts
 import {
   Controller,
   Get,
