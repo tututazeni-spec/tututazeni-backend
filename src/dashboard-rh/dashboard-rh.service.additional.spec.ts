@@ -3,6 +3,7 @@ import { DashboardRhService } from './dashboard-rh.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+import { AttendanceService } from '../attendance/attendance.service';
 
 // Fase H — Task 6: dashboard-rh delega headcount/headcountTrend/turnover/alerts.
 const mockMetrics = {
@@ -125,6 +126,10 @@ describe('DashboardRhService (additional)', () => {
           useValue: { getOrSet: jest.fn((_k: string, _ttl: number, fn: () => any) => fn()) },
         },
         { provide: MetricsAggregationService, useValue: mockMetrics },
+        {
+          provide: AttendanceService,
+          useValue: { getDashboard: jest.fn().mockResolvedValue({ date: '2026-01-01', kpis: {} }) },
+        },
       ],
     }).compile();
     service = module.get<DashboardRhService>(DashboardRhService);
@@ -191,8 +196,7 @@ describe('DashboardRhService (additional)', () => {
   // ─── getAttendancePanel ────────────────────────────────────────
 
   describe('getAttendancePanel', () => {
-    it('deve retornar painel de presenças', async () => {
-      mockPrismaBase.attendanceRecord.count.mockResolvedValue(1200);
+    it('deve retornar painel de presenças (delega em AttendanceService)', async () => {
       const result = await service.getAttendancePanel();
       expect(result).toBeDefined();
     });

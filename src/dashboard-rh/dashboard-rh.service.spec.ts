@@ -3,6 +3,7 @@ import { DashboardRhService } from './dashboard-rh.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+import { AttendanceService } from '../attendance/attendance.service';
 
 // ─── MetricsAggregationService mock (Fase H — Task 6) ─────────────────────
 // dashboard-rh delega headcount/headcountTrend/turnover/alerts a esta camada
@@ -40,6 +41,9 @@ const mockMetrics = {
   headcountTrend: jest.fn(),
   turnover: jest.fn(),
   alerts: jest.fn(),
+};
+const mockAttendanceSvc = {
+  getDashboard: jest.fn().mockResolvedValue({ date: '2026-01-01', kpis: {} }),
 };
 
 const makeCount = (n = 0) => jest.fn().mockResolvedValue(n);
@@ -130,6 +134,7 @@ describe('DashboardRhService', () => {
         { provide: PrismaService, useValue: mockPrismaProxy },
         { provide: CacheService, useValue: { getOrSet: cacheGetOrSet } },
         { provide: MetricsAggregationService, useValue: mockMetrics },
+        { provide: AttendanceService, useValue: mockAttendanceSvc },
       ],
     }).compile();
     service = module.get<DashboardRhService>(DashboardRhService);
@@ -476,8 +481,9 @@ describe('DashboardRhService', () => {
   // ─── getAttendancePanel ───────────────────────────────────────────────────
 
   describe('getAttendancePanel', () => {
-    it('deve retornar painel de presenças', async () => {
-      const result = await service.getAttendancePanel();
+    it('delega no AttendanceService.getDashboard()', async () => {
+      const result = await service.getAttendancePanel('Comercial');
+      expect(mockAttendanceSvc.getDashboard).toHaveBeenCalledWith('Comercial');
       expect(result).toBeDefined();
     });
   });

@@ -10,6 +10,7 @@ import { DashboardRhService } from './dashboard-rh.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+import { AttendanceService } from '../attendance/attendance.service';
 
 // Fase H — Task 6: headcount/headcountTrend/turnover/alerts delegam a esta camada.
 function buildMockMetrics() {
@@ -93,10 +94,14 @@ describe('DashboardRhService (progress)', () => {
   let service: DashboardRhService;
   let mockPrisma: ReturnType<typeof buildMockPrisma>;
   let mockMetrics: ReturnType<typeof buildMockMetrics>;
+  let mockAttendanceSvc: { getDashboard: jest.Mock };
 
   beforeEach(async () => {
     mockPrisma = buildMockPrisma();
     mockMetrics = buildMockMetrics();
+    mockAttendanceSvc = {
+      getDashboard: jest.fn().mockResolvedValue({ date: '2026-01-01', kpis: {} }),
+    };
 
     Object.defineProperty(mockPrisma, 'read', {
       get() {
@@ -113,6 +118,7 @@ describe('DashboardRhService (progress)', () => {
           useValue: { getOrSet: jest.fn((_k: string, _ttl: number, fn: () => any) => fn()) },
         },
         { provide: MetricsAggregationService, useValue: mockMetrics },
+        { provide: AttendanceService, useValue: mockAttendanceSvc },
       ],
     }).compile();
 
@@ -320,24 +326,15 @@ describe('DashboardRhService (progress)', () => {
   // ─── getAttendancePanel ─────────────────────────────────────────
 
   describe('getAttendancePanel', () => {
-    it('deve retornar painel de presenças vazio', async () => {
-      mockPrisma.attendance.findMany.mockResolvedValue([]);
+    it('delega no AttendanceService.getDashboard() sem departamento', async () => {
       const result = (await service.getAttendancePanel()) as any;
-      expect(result.total).toBe(0);
-      expect(result.presenceRate).toBe(0);
+      expect(mockAttendanceSvc.getDashboard).toHaveBeenCalledWith(undefined);
+      expect(result).toEqual({ date: '2026-01-01', kpis: {} });
     });
 
-    it('deve contar estatísticas de presença', async () => {
-      mockPrisma.attendance.findMany.mockResolvedValue([
-        { status: 'present', employee: { id: 1, name: 'Ana' } },
-        { status: 'absent', employee: { id: 2, name: 'João' } },
-        { status: 'late', employee: { id: 3, name: 'Maria' } },
-      ]);
-      const result = (await service.getAttendancePanel('2026-01-01', '2026-01-31')) as any;
-      expect(result.total).toBe(3);
-      expect(result.present).toBe(1);
-      expect(result.absent).toBe(1);
-      expect(result.late).toBe(1);
+    it('propaga o filtro de departamento', async () => {
+      await service.getAttendancePanel('Comercial');
+      expect(mockAttendanceSvc.getDashboard).toHaveBeenCalledWith('Comercial');
     });
   });
 
