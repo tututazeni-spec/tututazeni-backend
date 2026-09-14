@@ -1,4 +1,4 @@
-﻿// src/leader/leader.service.ts
+﻿// src/leadership/leader.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EnrollmentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
