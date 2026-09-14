@@ -20,6 +20,7 @@ import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { DashboardInstitutionalService } from './dashboard-institutional.service';
 import { CreateSnapshotDto, CreateWidgetDto, UpdateWidgetDto, FilterSnapshotDto } from './dto';
 import { Role } from '../auth/enums/role.enum';
+import { DashboardPeriod } from '../dashboard/dashboard.dto';
 
 @ApiTags('Dashboard Institucional')
 @ApiBearerAuth()
@@ -27,6 +28,19 @@ import { Role } from '../auth/enums/role.enum';
 @Controller('dashboard-institutional')
 export class DashboardInstitutionalController {
   constructor(private readonly service: DashboardInstitutionalService) {}
+
+  // ─── EXECUTIVO (ponto único) ─────────────────────────
+
+  @Get('executive')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary:
+      'Dashboard executivo único — organização (headcount, talent health, eNPS, riscos) + ' +
+      'CRM/conhecimento + alertas + tendência + geografia + visão por módulo',
+  })
+  getExecutive(@Query('period') period?: DashboardPeriod) {
+    return this.service.getExecutive(period);
+  }
 
   // ─── LEITURA / AGREGAÇÃO ─────────────────────────────
 

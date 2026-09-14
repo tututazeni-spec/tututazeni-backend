@@ -3,6 +3,7 @@ import { DashboardService } from './dashboard.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CacheService } from '../cache/cache.service';
 import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+import { DashboardPeriod } from './dashboard.dto';
 
 // ─── MetricsAggregationService mock (Fase H — Task 7) ─────────────────────
 // getAlerts / getManagerDashboard delegam nesta camada canónica; os testes
@@ -311,9 +312,22 @@ describe('DashboardService', () => {
   });
 
   describe('getExecutiveDashboard (cache)', () => {
-    it('getExecutiveDashboard usa cache com chave e TTL certos', async () => {
+    it('getExecutiveDashboard usa cache com chave e TTL certos (default MONTH)', async () => {
       await service.getExecutiveDashboard();
-      expect(cacheGetOrSet).toHaveBeenCalledWith('dashboard:executive', 90, expect.any(Function));
+      expect(cacheGetOrSet).toHaveBeenCalledWith(
+        'dashboard:executive:MONTH',
+        90,
+        expect.any(Function),
+      );
+    });
+
+    it('getExecutiveDashboard chaveia a cache pelo período pedido', async () => {
+      await service.getExecutiveDashboard(DashboardPeriod.QUARTER);
+      expect(cacheGetOrSet).toHaveBeenCalledWith(
+        'dashboard:executive:QUARTER',
+        90,
+        expect.any(Function),
+      );
     });
   });
 });

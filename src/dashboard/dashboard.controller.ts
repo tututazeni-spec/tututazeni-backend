@@ -45,8 +45,8 @@ export class DashboardController {
   @Get('executive')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Dashboard executivo — ROI, talent health, riscos, top talento' })
-  executive() {
-    return this.svc.getExecutiveDashboard();
+  executive(@Query('period') period?: DashboardPeriod) {
+    return this.svc.getExecutiveDashboard(period);
   }
 
   // ─── Department drill-down ────────────────────────────────────

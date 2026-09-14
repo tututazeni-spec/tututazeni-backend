@@ -25,6 +25,8 @@ import { LegacyDocumentDeclarationsService } from '../work-declaration/legacy-do
 import { AutomationService } from '../automation/automation.service';
 import { ScalabilityService } from '../scalability/scalability.service';
 import { MonitoringService } from '../monitoring/monitoring.service';
+import { DashboardService } from '../dashboard/dashboard.service';
+import { DashboardPeriod } from '../dashboard/dashboard.dto';
 
 @Injectable()
 export class DashboardInstitutionalService {
@@ -44,6 +46,7 @@ export class DashboardInstitutionalService {
     private readonly automationService: AutomationService,
     private readonly scalabilityService: ScalabilityService,
     private readonly monitoringService: MonitoringService,
+    private readonly dashboardService: DashboardService,
   ) {}
 
   // ─── RESUMO EXECUTIVO ────────────────────────────────
@@ -369,6 +372,41 @@ export class DashboardInstitutionalService {
       data: { deletedAt: new Date() },
     });
     return { message: 'Widget removido com sucesso' };
+  }
+
+  // ─── EXECUTIVO (ponto único) ──────────────────────────
+  // Página "Organização" do /dashboard passa a chamar só isto. Compõe, sem
+  // duplicar, o que já existia em dois módulos separados:
+  //  - DashboardService.getExecutiveDashboard(): headcount/learning/
+  //    performance/engagement/development/talent/pending + departamentos +
+  //    top conteúdos + insights + talentHealth + eNPS + topTalent + riscos
+  //    (org-wide, RH/academia)
+  //  - este serviço: people/learning/crm/knowledge (CRM+conhecimento,
+  //    ausentes do lado RH), alertas institucionais, tendência de
+  //    crescimento, distribuição geográfica e a visão cruzada de módulos
+  //    (getModulesOverview) já acrescentada acima.
+  // Nenhum dos dois lados foi apagado — continuam acessíveis directamente
+  // (/dashboard/organization, /dashboard/executive, etc.) para quem já os
+  // chamava; isto é só a composição que o frontend consome de um único sítio.
+
+  async getExecutive(period?: DashboardPeriod) {
+    const [organization, summary, growthTrend, geographic, alerts, modules] = await Promise.all([
+      this.dashboardService.getExecutiveDashboard(period),
+      this.getExecutiveSummary(),
+      this.getGrowthTrend(6),
+      this.getGeographicDistribution(),
+      this.getAlerts(),
+      this.getModulesOverview(),
+    ]);
+
+    return {
+      organization,
+      summary,
+      growthTrend,
+      geographic,
+      alerts,
+      modules,
+    };
   }
 
   // ─── VISÃO CRUZADA DE MÓDULOS ────────────────────────
