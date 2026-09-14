@@ -23,7 +23,6 @@ import { PerformanceModule } from './performance/performance.module';
 import { SuccessionModule } from './succession/succession.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { LeadershipModule } from './leadership/leadership.module';
-import { KnowledgeModule } from './knowledge/knowledge.module';
 import { MicroLearningModule } from './micro-learning/micro-learning.module';
 import { LiveClassesModule } from './live-classes/live-classes.module';
 import { MobileModule } from './mobile/mobile.module';
@@ -79,8 +78,9 @@ import { CrmBeneficiariesModule } from './crm-beneficiaries/crm-beneficiaries.mo
 import { CrmPartnersModule } from './crm-partners/crm-partners.module';
 import { CrmFundersModule } from './crm-funders/crm-funders.module';
 // LibraryModule único junta LibraryController (/library — repositório
-// documental) e ContentLibraryController (/content-library — catálogo
-// multimédia) — ex-ContentLibraryModule, fundido aqui.
+// documental), ContentLibraryController (/content-library — catálogo
+// multimédia) e KnowledgeController (/knowledge — base de conhecimento) —
+// ex-ContentLibraryModule e ex-KnowledgeModule, fundidos aqui.
 import { LibraryModule } from './library/library.module';
 import { CertificationModule } from './certification/certification.module';
 import { DashboardInstitutionalModule } from './dashboard-institutional/dashboard-institutional.module';
@@ -165,7 +165,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     SuccessionModule,
     OnboardingModule,
     LeadershipModule,
-    KnowledgeModule,
     MicroLearningModule,
     LiveClassesModule,
     MobileModule,
