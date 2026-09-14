@@ -1,7 +1,7 @@
 // src/ai-tutor/ai-providers.service.ts
 //
 // Suporte a 3 fornecedores gratuitos:
-//   - Groq     → GRATUITO, rápido, Llama 3.3 70B / Mixtral  (console.groq.com)
+//   - Groq     → GRATUITO, rápido, GPT-OSS 120B / Qwen3 (console.groq.com)
 //   - Gemini   → GRATUITO, Google, gemini-1.5-flash          (aistudio.google.com)
 //   - Ollama   → GRATUITO, auto-hospedado, corre no servidor  (ollama.com)
 //
@@ -66,7 +66,7 @@ export class AiProvidersService {
   constructor() {
     this.provider = (process.env.AI_PROVIDER ?? 'groq').toLowerCase();
     this.groqApiKey = process.env.GROQ_API_KEY ?? '';
-    this.groqModel = process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile';
+    this.groqModel = process.env.GROQ_MODEL ?? 'openai/gpt-oss-120b';
     this.geminiApiKey = process.env.GEMINI_API_KEY ?? '';
     this.geminiModel = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash';
     this.ollamaUrl = process.env.OLLAMA_URL ?? 'http://localhost:11434';
