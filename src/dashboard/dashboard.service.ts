@@ -643,10 +643,10 @@ export class DashboardService {
   // EXECUTIVE (C-Level)
   // ══════════════════════════════════════════════════════
 
-  async getExecutiveDashboard() {
-    return this.cache.getOrSet('dashboard:executive', DASHBOARD_CACHE_TTL, async () => {
+  async getExecutiveDashboard(period: DashboardPeriod = DashboardPeriod.MONTH) {
+    return this.cache.getOrSet(`dashboard:executive:${period}`, DASHBOARD_CACHE_TTL, async () => {
       const [org, talentHealth, enps, topTalent] = await Promise.all([
-        this.getOrganizationSummary({ period: DashboardPeriod.MONTH }),
+        this.getOrganizationSummary({ period }),
         this.getTalentHealthScore(),
         this.getENPS(),
         this.getTopTalent(5),

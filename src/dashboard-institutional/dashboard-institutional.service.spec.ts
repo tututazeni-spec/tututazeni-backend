@@ -14,6 +14,7 @@ import { LegacyDocumentDeclarationsService } from '../work-declaration/legacy-do
 import { AutomationService } from '../automation/automation.service';
 import { ScalabilityService } from '../scalability/scalability.service';
 import { MonitoringService } from '../monitoring/monitoring.service';
+import { DashboardService } from '../dashboard/dashboard.service';
 
 const mockPrisma = {
   user: { count: jest.fn() },
@@ -123,6 +124,15 @@ const mockMonitoring = {
     },
   }),
 };
+const mockDashboard = {
+  getExecutiveDashboard: jest.fn().mockResolvedValue({
+    kpis: { headcount: { total: 200, active: 190 } },
+    talentHealth: { healthScore: 72, grade: 'B' },
+    enps: { enps: 30, promoterPct: 50, total: 20 },
+    topTalent: [{ id: 1, fullName: 'Fulano' }],
+    risks: [],
+  }),
+};
 
 describe('DashboardInstitutionalService', () => {
   let service: DashboardInstitutionalService;
@@ -150,6 +160,7 @@ describe('DashboardInstitutionalService', () => {
         { provide: AutomationService, useValue: mockAutomation },
         { provide: ScalabilityService, useValue: mockScalability },
         { provide: MonitoringService, useValue: mockMonitoring },
+        { provide: DashboardService, useValue: mockDashboard },
       ],
     }).compile();
     service = module.get<DashboardInstitutionalService>(DashboardInstitutionalService);
@@ -350,6 +361,28 @@ describe('DashboardInstitutionalService', () => {
       mockPrisma.dashboardWidget.update.mockResolvedValue({});
       const result = await service.deleteWidget('w-1', 1);
       expect(result.message).toContain('sucesso');
+    });
+  });
+
+  describe('getExecutive', () => {
+    it('deve compor organização (DashboardService) + resumo institucional num único payload', async () => {
+      jest.spyOn(service, 'getExecutiveSummary').mockResolvedValue({ mock: 'summary' } as any);
+      jest.spyOn(service, 'getGrowthTrend').mockResolvedValue([{ month: 'Jan' }] as any);
+      jest
+        .spyOn(service, 'getGeographicDistribution')
+        .mockResolvedValue({ beneficiariesByProvince: [] } as any);
+      jest.spyOn(service, 'getAlerts').mockResolvedValue({ critical: 0 } as any);
+      jest.spyOn(service, 'getModulesOverview').mockResolvedValue({ engagement: null } as any);
+
+      const result = await service.getExecutive('QUARTER' as any);
+
+      expect(mockDashboard.getExecutiveDashboard).toHaveBeenCalledWith('QUARTER');
+      expect(result.organization.talentHealth).toEqual({ healthScore: 72, grade: 'B' });
+      expect(result.summary).toEqual({ mock: 'summary' });
+      expect(result.growthTrend).toEqual([{ month: 'Jan' }]);
+      expect(result.geographic).toEqual({ beneficiariesByProvince: [] });
+      expect(result.alerts).toEqual({ critical: 0 });
+      expect(result.modules).toEqual({ engagement: null });
     });
   });
 

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DashboardInstitutionalController } from './dashboard-institutional.controller';
 import { DashboardInstitutionalService } from './dashboard-institutional.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { DashboardModule } from '../dashboard/dashboard.module';
 import { EngagementModule } from '../engagement/engagement.module';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { SuccessionModule } from '../succession/succession.module';
@@ -18,9 +19,17 @@ import { MonitoringModule } from '../monitoring/monitoring.module';
 // (não HTTP), painéis já existentes de outros módulos — em vez de duplicar
 // as suas queries. Cada módulo importado abaixo só entra por causa disto;
 // nenhuma destas dependências existia antes.
+//
+// DashboardModule entra por GET /dashboard-institutional/executive: em vez
+// de duplicar getOrganizationSummary/getTalentHealthScore/getENPS/
+// getTopTalent (já existem, testados, em src/dashboard/dashboard.service.ts),
+// este módulo compõe-os com o resumo/alertas/tendência/geografia/módulos
+// institucionais já existentes aqui — um único endpoint para o frontend
+// consumir, sem duplicar lógica de nenhum dos dois lados.
 @Module({
   imports: [
     PrismaModule,
+    DashboardModule,
     EngagementModule,
     OnboardingModule,
     SuccessionModule,

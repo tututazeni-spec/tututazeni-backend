@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 
 const mockSvc = {
+  getExecutive: jest.fn().mockResolvedValue({}),
   getExecutiveSummary: jest.fn().mockResolvedValue({}),
   getGrowthTrend: jest.fn().mockResolvedValue([]),
   getGeographicDistribution: jest.fn().mockResolvedValue([]),
@@ -36,6 +37,11 @@ describe('DashboardInstitutionalController', () => {
       .useValue({ canActivate: () => true })
       .compile();
     controller = module.get<DashboardInstitutionalController>(DashboardInstitutionalController);
+  });
+
+  it('getExecutive → getExecutive(period)', async () => {
+    await controller.getExecutive('QUARTER' as any);
+    expect(mockSvc.getExecutive).toHaveBeenCalledWith('QUARTER');
   });
 
   it('getExecutiveSummary → getExecutiveSummary()', async () => {
