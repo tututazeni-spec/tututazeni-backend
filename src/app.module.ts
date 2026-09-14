@@ -47,7 +47,8 @@ import { DeclarationsModule } from './declarations/declarations.module';
 import { DocumentRepositoryModule } from './document-repository/document-repository.module';
 
 // MÓDULOS NOVOS — TALENTO E CARREIRA
-import { CareerPlansModule } from './career-plans/career-plans.module';
+// CareerModule único junta CareerController (/career) e CareerPlansController
+// (/career-plans) — ex-CareerPlansModule, fundido aqui.
 import { CareerModule } from './career/career.module';
 import { CompetencyMapModule } from './competency-map/competency-map.module';
 import { TalentDevelopmentModule } from './talent-development/talent-development.module';
@@ -184,7 +185,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     WorkDeclarationModule,
     DeclarationsModule,
     DocumentRepositoryModule,
-    CareerPlansModule,
     CareerModule,
     CompetencyMapModule,
     TalentDevelopmentModule,
