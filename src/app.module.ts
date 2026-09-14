@@ -82,7 +82,6 @@ import { CrmFundersModule } from './crm-funders/crm-funders.module';
 import { LibraryModule } from './library/library.module';
 import { CertificationModule } from './certification/certification.module';
 import { DashboardInstitutionalModule } from './dashboard-institutional/dashboard-institutional.module';
-import { AcademicModule } from './academic/academic.module';
 import { LmsModule } from './lms/lms.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { HealthModule } from './health/health.module';
@@ -210,7 +209,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     LibraryModule,
     CertificationModule,
     DashboardInstitutionalModule,
-    AcademicModule,
     LmsModule,
     MonitoringModule,
     HealthModule,
