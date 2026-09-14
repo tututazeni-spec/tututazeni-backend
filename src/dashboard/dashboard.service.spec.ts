@@ -153,7 +153,7 @@ describe('DashboardService', () => {
       });
     });
 
-    it('embrulha o retorno canónico: KPIs projectados aos 11 campos, atRisk→alert, alerts adaptados', async () => {
+    it('embrulha o retorno canónico: KPIs projectados aos 12 campos, atRisk→alert, alerts adaptados', async () => {
       mockMetrics.managerDashboard.mockResolvedValue({
         teamSize: 2,
         team: [
@@ -248,6 +248,7 @@ describe('DashboardService', () => {
           'engagementResponses',
           'inProgress',
           'mandatoryRate',
+          'overdueActions',
           'pdpCoverage',
           'pendingEvals',
           'scoreTrend',
@@ -256,18 +257,23 @@ describe('DashboardService', () => {
       expect(result.kpis).not.toHaveProperty('enrollmentsTotal');
       expect(result.kpis).not.toHaveProperty('completions');
       expect(result.kpis).not.toHaveProperty('completionRate');
-      expect(result.kpis).not.toHaveProperty('overdueActions');
+      expect(result.kpis.overdueActions).toBe(9);
       expect(result.kpis.avgScore).toBe(3.2);
 
       expect(result.team[0]).toEqual({
-        user: { id: 2, fullName: 'Bea', avatarUrl: null, position: { name: 'Dev' } },
+        user: {
+          id: 2,
+          fullName: 'Bea',
+          avatarUrl: null,
+          position: { name: 'Dev' },
+          department: { name: 'TI' },
+        },
         xp: 120,
         enrollment: { completed: 3, inProgress: 1 },
         plan: { progress: 40, status: 'ACTIVE' },
         lastScore: 2.1,
         alert: true,
       });
-      expect(result.team[0].user).not.toHaveProperty('department');
 
       // adaptManagerAlerts: só as 4 keys do subconjunto; EVAL_360_PENDING → URGENT
       expect(result.alerts).toEqual([
