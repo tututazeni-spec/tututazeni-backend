@@ -53,7 +53,6 @@ import { CareerModule } from './career/career.module';
 import { CompetencyMapModule } from './competency-map/competency-map.module';
 import { TalentDevelopmentModule } from './talent-development/talent-development.module';
 import { EngagementModule } from './engagement/engagement.module';
-import { ContentLibraryModule } from './content-library/content-library.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { Evaluation360Module } from './evaluation360/evaluation360.module';
 import { AvatarTrainingModule } from './avatar-training/avatar-training.module';
@@ -79,6 +78,9 @@ import { PdfModule } from './pdf/pdf.module';
 import { CrmBeneficiariesModule } from './crm-beneficiaries/crm-beneficiaries.module';
 import { CrmPartnersModule } from './crm-partners/crm-partners.module';
 import { CrmFundersModule } from './crm-funders/crm-funders.module';
+// LibraryModule único junta LibraryController (/library — repositório
+// documental) e ContentLibraryController (/content-library — catálogo
+// multimédia) — ex-ContentLibraryModule, fundido aqui.
 import { LibraryModule } from './library/library.module';
 import { CertificationModule } from './certification/certification.module';
 import { DashboardInstitutionalModule } from './dashboard-institutional/dashboard-institutional.module';
@@ -188,7 +190,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     CompetencyMapModule,
     TalentDevelopmentModule,
     EngagementModule,
-    ContentLibraryModule,
     EvaluationModule,
     Evaluation360Module,
     AvatarTrainingModule,
