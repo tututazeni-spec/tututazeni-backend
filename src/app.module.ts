@@ -35,7 +35,9 @@ import { AuditModule } from './audit/audit.module';
 import { AiTutorModule } from './ai-tutor/ai-tutor.module';
 import { InstructorModule } from './instructor/instructor.module';
 import { EventsModule } from './events/events.module';
-import { EmployeesModule } from './employees/employees.module';
+// UsersModule único junta UsersController (/users), EmployeesController
+// (/employees) e RolesPermissionsController (/roles-permissions) — ex-
+// EmployeesModule e ex-RolesPermissionsModule, fundidos lá como "Utilizadores".
 
 // MÓDULOS NOVOS — RH
 import { AttendanceModule } from './attendance/attendance.module';
@@ -66,7 +68,6 @@ import { HistoryModule } from './history/history.module';
 // MÓDULOS NOVOS — ORGANIZAÇÃO E ACESSOS
 import { OrganizationModule } from './organization/organization.module';
 import { AclModule } from './acl/acl.module';
-import { RolesPermissionsModule } from './roles-permissions/roles-permissions.module';
 
 // MÓDULOS NOVOS — PROCESSOS E INTEGRAÇÃO
 import { ProcessStandardModule } from './process-standard/process-standard.module';
@@ -176,7 +177,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     AiTutorModule,
     InstructorModule,
     EventsModule,
-    EmployeesModule,
     AttendanceModule,
     LeaveManagementModule,
     PayslipsModule,
@@ -198,7 +198,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     HistoryModule,
     OrganizationModule,
     AclModule,
-    RolesPermissionsModule,
     ProcessStandardModule,
     ApiIntegrationModule,
     AutomationModule,
