@@ -17,6 +17,9 @@ import { CoursesModule } from './courses/courses.module';
 import { CourseModulesModule } from './course-modules/course-modules.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { AssessmentsModule } from './assessments/assessments.module';
+// CompetenciesModule único junta CompetenciesController (/competencies) e
+// CompetencyMapController (/competency-map) — ex-CompetencyMapModule,
+// fundido lá como "Competências".
 import { CompetenciesModule } from './competencies/competencies.module';
 import { DevelopmentPlansModule } from './development-plans/development-plans.module';
 import { PerformanceModule } from './performance/performance.module';
@@ -51,7 +54,6 @@ import { DocumentRepositoryModule } from './document-repository/document-reposit
 // CareerModule único junta CareerController (/career) e CareerPlansController
 // (/career-plans) — ex-CareerPlansModule, fundido aqui.
 import { CareerModule } from './career/career.module';
-import { CompetencyMapModule } from './competency-map/competency-map.module';
 import { TalentDevelopmentModule } from './talent-development/talent-development.module';
 import { EngagementModule } from './engagement/engagement.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
@@ -185,7 +187,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     DeclarationsModule,
     DocumentRepositoryModule,
     CareerModule,
-    CompetencyMapModule,
     TalentDevelopmentModule,
     EngagementModule,
     EvaluationModule,
