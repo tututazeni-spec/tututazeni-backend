@@ -9,6 +9,7 @@ import {
   Min,
   MaxLength,
   IsDateString,
+  IsEmail,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
@@ -71,6 +72,70 @@ export class CreateOrgDepartmentDto {
   @IsOptional()
   @IsString()
   color?: string;
+
+  @ApiPropertyOptional({ description: 'ID do gestor directo do departamento' })
+  @IsOptional()
+  @IsInt()
+  directManagerId?: number;
+
+  @ApiPropertyOptional({ description: 'Número máximo de colaboradores' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  maxEmployees?: number;
+
+  @ApiPropertyOptional({ description: 'Data de início de funcionamento' })
+  @IsOptional()
+  @IsDateString()
+  operationalStartDate?: string;
+
+  @ApiPropertyOptional({ description: 'E-mail institucional do departamento' })
+  @IsOptional()
+  @IsEmail()
+  institutionalEmail?: string;
+
+  @ApiPropertyOptional({ description: 'Telefone/ramal do departamento' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phoneExtension?: string;
+
+  @ApiPropertyOptional({ description: 'Localização (ex.: edifício/site)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  location?: string;
+
+  @ApiPropertyOptional({ description: 'Localização física detalhada (piso, sala, morada)' })
+  @IsOptional()
+  @IsString()
+  physicalLocation?: string;
+
+  @ApiPropertyOptional({ description: 'Objectivo do departamento' })
+  @IsOptional()
+  @IsString()
+  objective?: string;
+
+  @ApiPropertyOptional({ description: 'Principais responsabilidades' })
+  @IsOptional()
+  @IsString()
+  mainResponsibilities?: string;
+
+  @ApiPropertyOptional({ description: 'Área funcional' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  functionalArea?: string;
+
+  @ApiPropertyOptional({ description: 'Departamento estratégico', default: false })
+  @IsOptional()
+  @IsBoolean()
+  isStrategic?: boolean;
+
+  @ApiPropertyOptional({ description: 'Observações' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }
 
 export class UpdateOrgDepartmentDto extends PartialType(CreateOrgDepartmentDto) {}
