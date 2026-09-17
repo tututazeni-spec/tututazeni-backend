@@ -3,6 +3,7 @@ import { NotFoundException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { SuccessionService } from './succession.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
 
 const mockPrisma = {
   criticalPosition: {
@@ -74,7 +75,14 @@ describe('SuccessionService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [SuccessionService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        SuccessionService,
+        { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: DevelopmentPlansService,
+          useValue: { create: jest.fn().mockResolvedValue({ id: 1 }), update: jest.fn(), addAction: jest.fn() },
+        },
+      ],
     }).compile();
     service = module.get<SuccessionService>(SuccessionService);
   });

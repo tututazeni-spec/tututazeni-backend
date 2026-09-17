@@ -41,9 +41,14 @@ export class CreateCriticalPositionDto {
   @IsEnum(ReplacementTime)
   replacementTime!: ReplacementTime;
 
-  @ApiProperty({ enum: RiskLevel })
+  // Opcional: quando ausente, o serviço calcula o risco a partir de
+  // businessImpact + replacementTime + cobertura de sucessores (ver
+  // computeExitRisk() em succession.service.ts). CRITICAL só é atribuível
+  // manualmente aqui — o cálculo automático nunca o emite.
+  @ApiPropertyOptional({ enum: RiskLevel })
+  @IsOptional()
   @IsEnum(RiskLevel)
-  exitRisk!: RiskLevel;
+  exitRisk?: RiskLevel;
 
   @ApiPropertyOptional({ description: 'Data prevista de saída (aposentadoria, mandato)' })
   @IsOptional()
@@ -230,6 +235,19 @@ export class SuccessionFilterDto {
   @Min(1)
   @Type(() => Number)
   limit?: number;
+}
+
+export class GetSuccessionMatrixFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional({ enum: BusinessImpact })
+  @IsOptional()
+  @IsEnum(BusinessImpact)
+  businessImpact?: BusinessImpact;
 }
 
 export class CriticalPositionFilterDto {
