@@ -16,7 +16,6 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CareerService } from './career.service';
-import { ReadinessLevel } from '@prisma/client';
 import {
   CreateCareerPathDto,
   UpdateCareerPathDto,
@@ -27,7 +26,6 @@ import {
   CreateInternalVacancyDto,
   ApplyToVacancyDto,
   UpdateApplicationStatusDto,
-  CreateSuccessionPlanDto,
   CareerInterestDto,
   VacancyFilterDto,
   CareerAnalyticsFilterDto,
@@ -280,35 +278,6 @@ export class CareerController {
     @Body() dto: UpdateApplicationStatusDto,
   ) {
     return this.svc.updateApplicationStatus(appId, dto);
-  }
-
-  // ── Planeamento de Sucessão ───────────────────────────────────────────────
-
-  @Get('succession')
-  @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Listar planos de sucessão' })
-  @ApiQuery({ name: 'positionId', required: false })
-  getSuccession(@Query('positionId') posId?: string) {
-    return this.svc.getSuccessionPlans(posId ? parseInt(posId) : undefined);
-  }
-
-  @Post('succession')
-  @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Criar plano de sucessão' })
-  createSuccession(@Body() dto: CreateSuccessionPlanDto) {
-    return this.svc.createSuccessionPlan(dto);
-  }
-
-  @Patch('succession/:id/readiness')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Actualizar nível de prontidão de um sucessor' })
-  @HttpCode(HttpStatus.OK)
-  updateReadiness(
-    @Param('id', ParseIntPipe) id: number,
-    @Body('readiness') readiness: ReadinessLevel,
-    @Body('justification') justification?: string,
-  ) {
-    return this.svc.updateSuccessionReadiness(id, readiness, justification);
   }
 
   // ── Histórico ─────────────────────────────────────────────────────────────

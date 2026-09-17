@@ -2,10 +2,6 @@ import { Injectable, Logger, NotFoundException, ConflictException } from '@nestj
 import { MonitoringEvalType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  CreateOkrCycleDto,
-  CreateObjectiveDto,
-  CreateKeyResultDto,
-  UpdateKeyResultDto,
   CreateIndicatorDto,
   CreateRecordDto,
   CreateEvalCycleDto,
@@ -27,137 +23,6 @@ export class MonitoringService {
     private prisma: PrismaService,
     private readonly audit: AuditService,
   ) {}
-
-  // ════════════════════════════════════════════════════
-  // OKRs
-  // ════════════════════════════════════════════════════
-
-  async createOkrCycle(dto: CreateOkrCycleDto, userId: number) {
-    const { startDate, endDate, ...rest } = dto;
-    const cycle = await this.prisma.okrCycle.create({
-      data: {
-        ...rest,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        createdById: userId,
-      },
-    });
-    await this.audit.logEntity(userId, 'CREATE', 'OkrCycle', cycle.id, { name: dto.name });
-    return cycle;
-  }
-
-  async findAllCycles() {
-    return this.prisma.read.okrCycle.findMany({
-      where: { deletedAt: null },
-      orderBy: { startDate: 'desc' },
-      include: { _count: { select: { objectives: true } } },
-    });
-  }
-
-  async createObjective(dto: CreateObjectiveDto, userId: number) {
-    const cycle = await this.prisma.read.okrCycle.findUnique({
-      where: { id: dto.cycleId },
-    });
-    if (!cycle) throw new NotFoundException('Ciclo OKR não encontrado');
-    const objective = await this.prisma.objective.create({ data: dto });
-    await this.audit.logEntity(userId, 'CREATE', 'Objective', objective.id, {
-      title: dto.title,
-    });
-    return objective;
-  }
-
-  async findObjectives(cycleId: string, ownerId?: number) {
-    return this.prisma.read.objective.findMany({
-      where: { cycleId, deletedAt: null, ...(ownerId && { ownerId }) },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        owner: { select: { fullName: true } },
-        keyResults: { where: { deletedAt: null } },
-      },
-    });
-  }
-
-  async createKeyResult(dto: CreateKeyResultDto, userId: number) {
-    const objective = await this.prisma.read.objective.findUnique({
-      where: { id: dto.objectiveId },
-    });
-    if (!objective) throw new NotFoundException('Objectivo não encontrado');
-    const { dueDate, ...rest } = dto;
-    const kr = await this.prisma.keyResult.create({
-      data: {
-        ...rest,
-        ...(dueDate && { dueDate: new Date(dueDate) }),
-        currentValue: dto.startValue || 0,
-      },
-    });
-    await this.audit.logEntity(userId, 'CREATE', 'KeyResult', kr.id, { title: dto.title });
-    return kr;
-  }
-
-  async updateKeyResult(id: string, dto: UpdateKeyResultDto, user: CurrentUserData) {
-    const kr = await this.prisma.read.keyResult.findUnique({
-      where: { id },
-      include: { objective: { select: { ownerId: true } } },
-    });
-    // Ownership (A3): dono do Objectivo pai (KeyResult não tem owner directo)
-    // OU ADMIN/RH/GESTOR; senão 404.
-    assertCanAccess(kr, kr?.objective?.ownerId, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
-    const userId = user.id;
-
-    const range = kr.targetValue - kr.startValue;
-    const achieved = dto.newValue - kr.startValue;
-    const progress =
-      range !== 0 ? Math.max(0, Math.min(100, Math.round((achieved / range) * 100))) : 0;
-
-    const status =
-      progress >= 100
-        ? 'COMPLETED'
-        : progress >= 70
-          ? 'ON_TRACK'
-          : progress >= 40
-            ? 'AT_RISK'
-            : 'OFF_TRACK';
-
-    await this.prisma.keyResultUpdate.create({
-      data: {
-        keyResultId: id,
-        previousValue: kr.currentValue,
-        newValue: dto.newValue,
-        progress,
-        notes: dto.notes,
-        updatedById: userId,
-      },
-    });
-
-    const updated = await this.prisma.keyResult.update({
-      where: { id },
-      data: { currentValue: dto.newValue, progress, status },
-    });
-
-    // Recalcula progresso do objectivo (média dos KRs)
-    await this.recalcObjectiveProgress(kr.objectiveId);
-    await this.audit.logEntity(userId, 'UPDATE', 'KeyResult', id, {
-      newValue: dto.newValue,
-      progress,
-    });
-    return updated;
-  }
-
-  private async recalcObjectiveProgress(objectiveId: string) {
-    const krs = await this.prisma.read.keyResult.findMany({
-      where: { objectiveId, deletedAt: null },
-      select: { progress: true },
-    });
-    const avg =
-      krs.length > 0 ? Math.round(krs.reduce((s, k) => s + k.progress, 0) / krs.length) : 0;
-    await this.prisma.objective.update({
-      where: { id: objectiveId },
-      data: {
-        progress: avg,
-        status: avg >= 100 ? 'COMPLETED' : 'IN_PROGRESS',
-      },
-    });
-  }
 
   // ════════════════════════════════════════════════════
   // INDICADORES DE MONITORIA
@@ -383,22 +248,12 @@ export class MonitoringService {
   async getDashboard() {
     const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const [
-      activeCycles,
-      totalObjectives,
-      completedObjectives,
       activeIndicators,
       recordsThisMonth,
       activeEvalCycles,
       pendingEvaluations,
       completedEvaluations,
     ] = await Promise.all([
-      this.prisma.read.okrCycle.count({
-        where: { status: 'ACTIVE', deletedAt: null },
-      }),
-      this.prisma.read.objective.count({ where: { deletedAt: null } }),
-      this.prisma.read.objective.count({
-        where: { status: 'COMPLETED', deletedAt: null },
-      }),
       this.prisma.read.monitoringIndicator.count({
         where: { isActive: true, deletedAt: null },
       }),
@@ -419,13 +274,6 @@ export class MonitoringService {
       }),
     ]);
     return {
-      okrs: {
-        activeCycles,
-        totalObjectives,
-        completedObjectives,
-        objectiveCompletionRate:
-          totalObjectives > 0 ? Math.round((completedObjectives / totalObjectives) * 100) : 0,
-      },
       monitoring: { activeIndicators, recordsThisMonth },
       evaluation: {
         activeEvalCycles,

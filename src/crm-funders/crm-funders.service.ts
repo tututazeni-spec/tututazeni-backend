@@ -381,36 +381,6 @@ export class CrmFundersService {
     return updated;
   }
 
-  async getOverdueReports(filters: PaginationFilterDto = {} as PaginationFilterDto) {
-    const safePage = Math.max(filters.page ?? 1, 1);
-    const safeLimit = Math.min(Math.max(filters.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
-    const where: Prisma.FunderReportWhereInput = {
-      status: { in: ['PENDING', 'REJECTED'] },
-      dueDate: { lt: new Date() },
-      deletedAt: null,
-    };
-    const [data, total] = await Promise.all([
-      this.prisma.read.funderReport.findMany({
-        where,
-        skip: (safePage - 1) * safeLimit,
-        take: safeLimit,
-        include: {
-          funder: { select: { name: true, code: true, email: true } },
-          grant: { select: { title: true, code: true } },
-        },
-        orderBy: { dueDate: 'asc' },
-      }),
-      this.prisma.read.funderReport.count({ where }),
-    ]);
-    return {
-      data,
-      total,
-      page: safePage,
-      limit: safeLimit,
-      totalPages: Math.ceil(total / safeLimit),
-    };
-  }
-
   // ─── DASHBOARD ───────────────────────────────────────
 
   async getDashboard() {

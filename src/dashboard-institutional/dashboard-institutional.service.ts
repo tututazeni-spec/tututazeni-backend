@@ -16,9 +16,7 @@ import { AuditService as AuditLogStatsService } from '../audit/audit.service';
 import { CacheService } from '../cache/cache.service';
 import { DASHBOARD_CACHE_TTL } from '../cache/cache.constants';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
-import { EngagementService } from '../engagement/engagement.service';
 import { OnboardingService } from '../onboarding/onboarding.service';
-import { SuccessionService } from '../succession/succession.service';
 import { EventsService } from '../events/events.service';
 import { ProcessStandardService } from '../process-standard/process-standard.service';
 import { LegacyDocumentDeclarationsService } from '../work-declaration/legacy-document-declarations.service';
@@ -36,9 +34,7 @@ export class DashboardInstitutionalService {
     private prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly cache: CacheService,
-    private readonly engagementService: EngagementService,
     private readonly onboardingService: OnboardingService,
-    private readonly successionService: SuccessionService,
     private readonly eventsService: EventsService,
     private readonly processStandardService: ProcessStandardService,
     private readonly declarationsService: LegacyDocumentDeclarationsService,
@@ -421,9 +417,7 @@ export class DashboardInstitutionalService {
       DASHBOARD_CACHE_TTL,
       async () => {
         const [
-          engagement,
           onboarding,
-          succession,
           events,
           processes,
           declarations,
@@ -432,9 +426,7 @@ export class DashboardInstitutionalService {
           platform,
           monitoring,
         ] = await Promise.allSettled([
-          this.engagementService.getDashboard(),
           this.onboardingService.getDashboard(),
-          this.successionService.getDashboard(),
           this.eventsService.getStats(),
           this.processStandardService.getDashboard(),
           this.declarationsService.getDashboard(),
@@ -447,9 +439,7 @@ export class DashboardInstitutionalService {
         ]);
 
         const results = {
-          engagement,
           onboarding,
-          succession,
           events,
           processes,
           declarations,
@@ -468,9 +458,7 @@ export class DashboardInstitutionalService {
           }
         }
 
-        const eng = engagement.status === 'fulfilled' ? engagement.value : null;
         const onb = onboarding.status === 'fulfilled' ? onboarding.value : null;
-        const suc = succession.status === 'fulfilled' ? succession.value : null;
         const evt = events.status === 'fulfilled' ? events.value : null;
         const proc = processes.status === 'fulfilled' ? processes.value : null;
         const decl = declarations.status === 'fulfilled' ? declarations.value : null;
@@ -480,18 +468,6 @@ export class DashboardInstitutionalService {
         const mon = monitoring.status === 'fulfilled' ? monitoring.value : null;
 
         return {
-          engagement: eng && {
-            index: eng.kpis.engagementIndex,
-            level: eng.kpis.engagementLevel,
-            participationRate: eng.kpis.participationRate,
-            enps: eng.kpis.enps,
-          },
-          talentAndSuccession: suc && {
-            criticalPositions: suc.kpis.totalCriticalPositions,
-            withoutSuccessor: suc.kpis.withoutSuccessor,
-            coverageRate: suc.kpis.coverageRate,
-            highRiskPositions: suc.kpis.highRiskPositions,
-          },
           onboarding: onb && {
             active:
               (onb.summary.byStatus?.IN_PROGRESS ?? 0) + (onb.summary.byStatus?.NOT_STARTED ?? 0),
@@ -527,10 +503,6 @@ export class DashboardInstitutionalService {
             openAlerts: plat.alerts.open,
             criticalAlerts: plat.alerts.critical,
             integrationsWithErrors: plat.integrations.withErrors,
-          },
-          okr: mon && {
-            activeCycles: mon.okrs.activeCycles,
-            objectiveCompletionRate: mon.okrs.objectiveCompletionRate,
           },
           evaluationCycles: mon && {
             activeCycles: mon.evaluation.activeEvalCycles,
