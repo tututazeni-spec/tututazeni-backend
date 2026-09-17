@@ -162,6 +162,18 @@ export class CareerPlansCreateCareerPlanDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() careerPathId?: number;
   @ApiPropertyOptional() @IsOptional() @IsDateString() targetDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() mentorId?: number;
+  @ApiPropertyOptional({ description: 'Notas sobre o acompanhamento de mentoring' })
+  @IsOptional()
+  @IsString()
+  mentoringNotes?: string;
+  @ApiPropertyOptional({ description: 'Notas sobre o acompanhamento de coaching' })
+  @IsOptional()
+  @IsString()
+  coachingNotes?: string;
+  @ApiPropertyOptional({ description: 'Colaborador aberto a mobilidade interna' })
+  @IsOptional()
+  @IsBoolean()
+  openToMobility?: boolean;
 }
 
 export class CareerPlansUpdateCareerPlanDto extends PartialType(CareerPlansCreateCareerPlanDto) {}

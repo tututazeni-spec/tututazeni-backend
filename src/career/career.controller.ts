@@ -31,6 +31,8 @@ import {
   CareerInterestDto,
   VacancyFilterDto,
   CareerAnalyticsFilterDto,
+  CreateJobFamilyDto,
+  UpdateJobFamilyDto,
 } from './career.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -118,6 +120,28 @@ export class CareerController {
     @Param('targetPositionId', ParseIntPipe) targetPositionId: number,
   ) {
     return this.svc.simulateNextRole(userId, targetPositionId);
+  }
+
+  // ── Famílias Profissionais ────────────────────────────────────────────────
+
+  @Get('job-families')
+  @ApiOperation({ summary: 'Listar famílias profissionais' })
+  findJobFamilies() {
+    return this.svc.findAllJobFamilies();
+  }
+
+  @Post('job-families')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Criar família profissional' })
+  createJobFamily(@Body() dto: CreateJobFamilyDto) {
+    return this.svc.createJobFamily(dto);
+  }
+
+  @Put('job-families/:id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Actualizar família profissional' })
+  updateJobFamily(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateJobFamilyDto) {
+    return this.svc.updateJobFamily(id, dto);
   }
 
   // ── Trilhas de Carreira ───────────────────────────────────────────────────
@@ -287,7 +311,29 @@ export class CareerController {
     return this.svc.updateSuccessionReadiness(id, readiness, justification);
   }
 
+  // ── Histórico ─────────────────────────────────────────────────────────────
+
+  @Get('me/history')
+  @ApiOperation({ summary: 'Histórico de carreira do utilizador autenticado' })
+  myHistory(@CurrentUser() user: CurrentUserData) {
+    return this.svc.getCareerHistory(user.id);
+  }
+
+  @Get('users/:userId/history')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Histórico de carreira de um colaborador (RH/Gestor)' })
+  userHistory(@Param('userId', ParseIntPipe) userId: number) {
+    return this.svc.getCareerHistory(userId);
+  }
+
   // ── Analytics ─────────────────────────────────────────────────────────────
+
+  @Get('overview')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Visão geral de carreira (RH/Gestor) — agrega os 3 dashboards' })
+  overview(@Query() filters: CareerAnalyticsFilterDto) {
+    return this.svc.getCareerOverview(filters);
+  }
 
   @Get('analytics')
   @Roles(Role.ADMIN, Role.RH)

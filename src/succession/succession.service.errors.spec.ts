@@ -2,6 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { SuccessionService } from './succession.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+
+const mockDevelopmentPlansService = {
+  create: jest.fn().mockResolvedValue({ id: 1 }),
+  update: jest.fn(),
+  addAction: jest.fn(),
+};
 
 const mockPrisma = {
   criticalPosition: { findUnique: jest.fn() },
@@ -29,7 +36,11 @@ describe('SuccessionService.create — validações e cálculo automático de ma
     jest.clearAllMocks();
     Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [SuccessionService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        SuccessionService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DevelopmentPlansService, useValue: mockDevelopmentPlansService },
+      ],
     }).compile();
     service = module.get<SuccessionService>(SuccessionService);
   });
@@ -103,8 +114,10 @@ describe('SuccessionService.create — validações e cálculo automático de ma
     } as any);
 
     expect(result.matchScore).toBe(95);
-    // Não deve ter sido chamado outra vez para calcular (apenas a 1ª validação)
-    expect(mockPrisma.criticalPosition.findUnique).toHaveBeenCalledTimes(1);
+    // 1ª chamada é a validação do cargo crítico; a 2ª é o recomputeExitRisk()
+    // best-effort disparado após a criação do plano de sucessão — não é
+    // recalculado o matchScore, só o risco de saída (ver computeExitRisk()).
+    expect(mockPrisma.criticalPosition.findUnique).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -115,7 +128,11 @@ describe('SuccessionService — update / remove', () => {
     jest.clearAllMocks();
     Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [SuccessionService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        SuccessionService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DevelopmentPlansService, useValue: mockDevelopmentPlansService },
+      ],
     }).compile();
     service = module.get<SuccessionService>(SuccessionService);
   });
@@ -140,7 +157,11 @@ describe('SuccessionService — Talent Pool', () => {
     jest.clearAllMocks();
     Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [SuccessionService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        SuccessionService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DevelopmentPlansService, useValue: mockDevelopmentPlansService },
+      ],
     }).compile();
     service = module.get<SuccessionService>(SuccessionService);
   });

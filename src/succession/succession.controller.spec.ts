@@ -22,6 +22,7 @@ const mockSvc = {
   addToTalentPool: jest.fn().mockResolvedValue({}),
   removeFromTalentPool: jest.fn().mockResolvedValue({}),
   generatePDI: jest.fn().mockResolvedValue({ id: 1 }),
+  getSuccessionMatrix: jest.fn().mockResolvedValue([]),
 };
 
 describe('SuccessionController', () => {
@@ -133,9 +134,16 @@ describe('SuccessionController', () => {
     expect(mockSvc.removeFromTalentPool).toHaveBeenCalledWith(5);
   });
 
-  it('generatePDI → generatePDI(dto)', async () => {
+  it('generatePDI → generatePDI(dto, user)', async () => {
     const dto = {} as any;
-    await controller.generatePDI(dto);
-    expect(mockSvc.generatePDI).toHaveBeenCalledWith(dto);
+    const user = { id: 1 } as any;
+    await controller.generatePDI(dto, user);
+    expect(mockSvc.generatePDI).toHaveBeenCalledWith(dto, user);
+  });
+
+  it('getMatrix → getSuccessionMatrix(filters)', async () => {
+    const filters = {} as any;
+    await controller.getMatrix(filters);
+    expect(mockSvc.getSuccessionMatrix).toHaveBeenCalledWith(filters);
   });
 });

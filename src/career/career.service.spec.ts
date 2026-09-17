@@ -3,6 +3,7 @@ import { NotFoundException, ConflictException } from '@nestjs/common';
 import { CareerService } from './career.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SuccessionService } from '../succession/succession.service';
+import { CareerPlansService } from './career-plans.service';
 
 const mockUser = {
   findUnique: jest.fn(),
@@ -148,6 +149,10 @@ describe('CareerService', () => {
         CareerService,
         { provide: PrismaService, useValue: mockPrismaProxy },
         { provide: SuccessionService, useValue: { create: jest.fn(), update: jest.fn() } },
+        {
+          provide: CareerPlansService,
+          useValue: { getAnalytics: jest.fn().mockResolvedValue({}) },
+        },
       ],
     }).compile();
     service = module.get<CareerService>(CareerService);

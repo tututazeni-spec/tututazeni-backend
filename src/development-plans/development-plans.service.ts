@@ -180,6 +180,7 @@ export class DevelopmentPlansService {
           sourceReviewId: data.sourceReviewId,
           careerPlanId: data.careerPlanId,
           careerReadinessPercent: data.careerReadinessPercent,
+          successionPlanId: data.successionPlanId,
         },
       });
 

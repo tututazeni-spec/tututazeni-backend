@@ -20,17 +20,58 @@ import {
   VacancyStatus,
   ApplicationStatus,
   ReadinessLevel,
+  PositionLevel,
 } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export { CareerPathType, VacancyType, VacancyStatus, ApplicationStatus, ReadinessLevel };
+export {
+  CareerPathType,
+  VacancyType,
+  VacancyStatus,
+  ApplicationStatus,
+  ReadinessLevel,
+  PositionLevel,
+};
 
 export enum GoalTimeframe {
   SHORT_TERM = 'SHORT_TERM', // até 1 ano
   MEDIUM_TERM = 'MEDIUM_TERM', // 1-3 anos
   LONG_TERM = 'LONG_TERM', // 3+ anos
 }
+
+// ─── Família Profissional ("Job Family") ───────────────────────────────────────
+
+export class CreateJobFamilyDto {
+  @ApiProperty({ example: 'Engenharia de Software' })
+  @IsString()
+  @MaxLength(150)
+  name!: string;
+
+  @ApiPropertyOptional({ example: 'ENG' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ example: 'Tecnologia' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  area?: string;
+
+  @ApiPropertyOptional({ description: 'Ativa por padrão' })
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+}
+
+export class UpdateJobFamilyDto extends PartialType(CreateJobFamilyDto) {}
 
 // ─── Career Path ──────────────────────────────────────────────────────────────
 
@@ -39,6 +80,12 @@ export class CreateCareerPathDto {
   @IsString()
   @MaxLength(150)
   name!: string;
+
+  @ApiPropertyOptional({ example: 'TT-ENG' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  code?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -53,6 +100,11 @@ export class CreateCareerPathDto {
   @IsOptional()
   @IsInt()
   departmentId?: number;
+
+  @ApiPropertyOptional({ description: 'ID da família profissional' })
+  @IsOptional()
+  @IsInt()
+  jobFamilyId?: number;
 
   @ApiPropertyOptional({ description: 'Ativa por padrão' })
   @IsOptional()
@@ -78,12 +130,29 @@ export class AddCareerPathStepDto {
   @Min(0)
   minMonthsRequired?: number;
 
+  @ApiPropertyOptional({ description: 'Meses mínimos de experiência exigidos' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  minExperienceMonths?: number;
+
   @ApiPropertyOptional({ description: 'Score mínimo de performance (1-5)' })
   @IsOptional()
   @IsNumber()
   @Min(1)
   @Max(5)
   minPerformanceScore?: number;
+
+  @ApiPropertyOptional({ description: 'Marca este passo como movimento lateral (não vertical)' })
+  @IsOptional()
+  @IsBoolean()
+  isLateralMove?: boolean;
+
+  @ApiPropertyOptional({ description: 'Certificações exigidas neste nível' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  certifications?: string[];
 
   @ApiPropertyOptional({ description: 'IDs de cursos obrigatórios para promoção' })
   @IsOptional()
@@ -168,6 +237,12 @@ export class CreateInternalVacancyDto {
   @MaxLength(200)
   title!: string;
 
+  @ApiPropertyOptional({ example: 'VG-2026-014' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  code?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -186,6 +261,38 @@ export class CreateInternalVacancyDto {
   @IsOptional()
   @IsInt()
   departmentId?: number;
+
+  @ApiPropertyOptional({ description: 'ID da unidade/localização física' })
+  @IsOptional()
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional({ description: 'Localização livre (ex.: remoto, híbrido, cidade)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  location?: string;
+
+  @ApiPropertyOptional({ enum: PositionLevel, description: 'Nível de carreira da vaga' })
+  @IsOptional()
+  @IsEnum(PositionLevel)
+  careerLevel?: PositionLevel;
+
+  @ApiPropertyOptional({ description: 'ID do gestor responsável pela vaga' })
+  @IsOptional()
+  @IsInt()
+  responsibleManagerId?: number;
+
+  @ApiPropertyOptional({ description: 'Certificações exigidas' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  requiredCertifications?: string[];
+
+  @ApiPropertyOptional({ description: 'Formação exigida (texto livre)' })
+  @IsOptional()
+  @IsString()
+  requiredTraining?: string;
 
   @ApiPropertyOptional({ description: 'Data de fecho das candidaturas' })
   @IsOptional()

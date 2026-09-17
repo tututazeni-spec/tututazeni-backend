@@ -185,6 +185,12 @@ export class CreateDevelopmentPlanDto {
   @Min(0)
   @Max(100)
   careerReadinessPercent?: number;
+
+  // ─── Ligação a plano de sucessão (Career, secção 7 — Sucessão → PDI) ─────
+  @ApiPropertyOptional({ description: 'ID do plano de sucessão que originou este PDI' })
+  @IsOptional()
+  @IsInt()
+  successionPlanId?: number;
 }
 
 export class UpdateDevelopmentPlanDto extends PartialType(CreateDevelopmentPlanDto) {
