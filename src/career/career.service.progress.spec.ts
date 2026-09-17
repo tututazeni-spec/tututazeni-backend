@@ -10,6 +10,7 @@ import { NotFoundException, BadRequestException, ConflictException } from '@nest
 import { CareerService } from './career.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SuccessionService } from '../succession/succession.service';
+import { CareerPlansService } from './career-plans.service';
 
 const mockSuccession = {
   create: jest.fn(),
@@ -77,6 +78,10 @@ describe('CareerService (progress)', () => {
         CareerService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: SuccessionService, useValue: mockSuccession },
+        {
+          provide: CareerPlansService,
+          useValue: { getAnalytics: jest.fn().mockResolvedValue({}) },
+        },
       ],
     }).compile();
 
