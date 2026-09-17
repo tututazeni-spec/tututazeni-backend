@@ -598,20 +598,28 @@ export class SuccessionService {
       where: { successionPlanId: dto.successionPlanId },
     });
 
-    const developmentPlan = existing
-      ? await this.developmentPlans.update(existing.id, {
-          goal: developmentGoals,
-          competencyGaps,
-        })
-      : await this.developmentPlans.create({
-          name: `Preparação para sucessão — ${positionName}`,
-          goal: developmentGoals,
-          userId: plan.candidateId,
-          origin: 'SUCCESSION',
-          successionPlanId: dto.successionPlanId,
-          priority: 'HIGH',
-          competencyGaps,
-        });
+    let developmentPlan;
+    if (existing) {
+      developmentPlan = await this.developmentPlans.update(existing.id, {
+        goal: developmentGoals,
+        competencyGaps,
+      });
+    } else {
+      const created = await this.developmentPlans.create({
+        name: `Preparação para sucessão — ${positionName}`,
+        goal: developmentGoals,
+        userId: plan.candidateId,
+        origin: 'SUCCESSION',
+        successionPlanId: dto.successionPlanId,
+        priority: 'HIGH',
+        competencyGaps,
+      });
+      // Ao contrário de um PDI criado manualmente, este nasce já com os gaps
+      // e o plano de acção definidos automaticamente — não faz sentido
+      // passar por DRAFT/aprovação. Mantém o comportamento do antigo
+      // SuccessionPDI (sempre ACTIVE desde a criação).
+      developmentPlan = await this.developmentPlans.update(created.id, { status: 'ACTIVE' });
+    }
 
     const courseIds = dto.courseIds ?? suggestedCourses.slice(0, 5).map(cc => cc.courseId);
     for (const courseId of courseIds) {
@@ -637,7 +645,7 @@ export class SuccessionService {
     }
 
     return {
-      developmentPlan,
+      pdi: developmentPlan,
       suggestedCourses: suggestedCourses.map(cc => cc.course),
       suggestedLPs,
     };
