@@ -9,7 +9,7 @@ import {
   FilterIndicatorDto,
 } from './dto';
 import { AuditService } from '../common/services/audit.service';
-import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
+import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
