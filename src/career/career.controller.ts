@@ -295,6 +295,21 @@ export class CareerController {
     return this.svc.getCareerHistory(userId);
   }
 
+  // ── Histórico ─────────────────────────────────────────────────────────────
+
+  @Get('me/history')
+  @ApiOperation({ summary: 'Histórico de carreira do utilizador autenticado' })
+  myHistory(@CurrentUser() user: CurrentUserData) {
+    return this.svc.getCareerHistory(user.id);
+  }
+
+  @Get('users/:userId/history')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Histórico de carreira de um colaborador (RH/Gestor)' })
+  userHistory(@Param('userId', ParseIntPipe) userId: number) {
+    return this.svc.getCareerHistory(userId);
+  }
+
   // ── Analytics ─────────────────────────────────────────────────────────────
 
   @Get('overview')
