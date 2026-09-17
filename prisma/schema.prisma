@@ -408,10 +408,15 @@ enum CareerPathType {
   LATTICE
 }
 
+// Módulo Career, secção 7 (Sucessão) — 5 níveis de prontidão. READY_1_2_YEARS
+// e READY_2_3_YEARS são acrescentos aditivos; os 3 valores originais mantêm
+// o nome (dados existentes continuam válidos), só a etiqueta na UI muda.
 enum ReadinessLevel {
-  READY_NOW
-  READY_SOON
-  NEEDS_DEVELOPMENT
+  READY_NOW // Pronto agora
+  READY_SOON // Pronto em menos de 1 ano
+  READY_1_2_YEARS // Pronto em 1–2 anos
+  READY_2_3_YEARS // Pronto em 2–3 anos
+  NEEDS_DEVELOPMENT // Desenvolvimento de longo prazo
 }
 
 enum PromotionStatus {
@@ -675,6 +680,7 @@ model User {
   eventFeedbacks          EventFeedback[]
   attendanceRecords       AttendanceRecord[]      @relation("UserAttendanceRecords")
   createdVacancies        InternalVacancy[]       @relation("VacancyCreator")
+  managedVacancies        InternalVacancy[]       @relation("VacancyResponsibleManager")
   vacancyApplications     InternalApplication[]
 
   // ─── Perfil & Gamificação ─────────────────────────────────────
@@ -1208,6 +1214,7 @@ model Unit {
   departments          Department[]
   operationalMetrics   OperationalMetric[]
   leadershipTargetings LeadershipProgramTargeting[]
+  internalVacancies    InternalVacancy[]
 }
 
 enum PositionLevel {
@@ -1302,6 +1309,9 @@ model UserCareerPlan {
   mentor           User?              @relation("CareerMentor", fields: [mentorId], references: [id])
   targetDate       DateTime?
   activatedAt      DateTime?
+  mentoringNotes   String?            @db.Text
+  coachingNotes    String?            @db.Text
+  openToMobility   Boolean?
   goals            CareerGoal[]
   promotions       PromotionRequest[]
   developmentPlans DevelopmentPlan[]
@@ -1324,6 +1334,8 @@ model CareerRole {
   parent            CareerRole?            @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
   children          CareerRole[]           @relation("RoleHierarchy")
   active            Boolean                @default(true)
+  jobFamilyId       Int?
+  jobFamily         JobFamily?             @relation(fields: [jobFamilyId], references: [id])
   skillRequirements RoleSkillRequirement[]
   fromRules         ProgressionRule[]      @relation("FromRole")
   toRules           ProgressionRule[]      @relation("ToRole")
@@ -1335,6 +1347,7 @@ model CareerRole {
   updatedAt         DateTime               @updatedAt
 
   @@index([department, level])
+  @@index([jobFamilyId])
 }
 
 model CareerPosition {
@@ -1374,9 +1387,26 @@ model CareerSkill {
   createdAt   DateTime     @default(now())
 }
 
+// "Famílias profissionais" — módulo Career, secção 3 (Percursos de Carreira).
+model JobFamily {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  code        String?      @unique
+  description String?
+  area        String?
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  careerPaths CareerPath[]
+  careerRoles CareerRole[]
+
+  @@index([active])
+}
+
 model CareerPath {
   id           Int              @id @default(autoincrement())
   name         String
+  code         String?
   description  String?
   active       Boolean          @default(true)
   plans        UserCareerPlan[]
@@ -1385,10 +1415,13 @@ model CareerPath {
   type         CareerPathType
   departmentId Int?
   department   Department?      @relation(fields: [departmentId], references: [id])
+  jobFamilyId  Int?
+  jobFamily    JobFamily?       @relation(fields: [jobFamilyId], references: [id])
   steps        CareerPathStep[]
 
   @@index([active])
   @@index([departmentId])
+  @@index([jobFamilyId])
 }
 
 model CareerPathStep {
@@ -1400,7 +1433,10 @@ model CareerPathStep {
   careerPathId          Int
   positionId            Int
   minMonthsRequired     Int?
+  minExperienceMonths   Int?
   minPerformanceScore   Float?
+  isLateralMove         Boolean    @default(false)
+  certifications        String[]   @default([])
   requiredCourseIds     Int[]      @default([])
   requiredCompetencyIds Int[]      @default([])
   careerPath            CareerPath @relation(fields: [careerPathId], references: [id], onDelete: Cascade)
@@ -1451,30 +1487,41 @@ enum VacancyStatus {
 }
 
 model InternalVacancy {
-  id                    Int                   @id @default(autoincrement())
-  title                 String
-  description           String?               @db.Text
-  type                  VacancyType
-  status                VacancyStatus         @default(DRAFT)
-  positionId            Int?
-  departmentId          Int?
-  createdById           Int
-  slots                 Int                   @default(1)
-  closingDate           DateTime?
-  durationDays          Int?
-  publishedAt           DateTime?
-  requiredCompetencyIds Int[]                 @default([])
-  requiredCourseIds     Int[]                 @default([])
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
-  position              Position?             @relation(fields: [positionId], references: [id])
-  department            Department?           @relation(fields: [departmentId], references: [id])
-  createdBy             User                  @relation("VacancyCreator", fields: [createdById], references: [id])
-  applications          InternalApplication[]
+  id                     Int                   @id @default(autoincrement())
+  title                  String
+  code                   String?               @unique
+  description            String?               @db.Text
+  type                   VacancyType
+  status                 VacancyStatus         @default(DRAFT)
+  positionId             Int?
+  departmentId           Int?
+  unitId                 Int?
+  location               String?
+  careerLevel            PositionLevel?
+  createdById            Int
+  responsibleManagerId   Int?
+  slots                  Int                   @default(1)
+  closingDate            DateTime?
+  durationDays           Int?
+  publishedAt            DateTime?
+  requiredCompetencyIds  Int[]                 @default([])
+  requiredCourseIds      Int[]                 @default([])
+  requiredCertifications String[]              @default([])
+  requiredTraining       String?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  position               Position?             @relation(fields: [positionId], references: [id])
+  department             Department?           @relation(fields: [departmentId], references: [id])
+  unit                   Unit?                 @relation(fields: [unitId], references: [id])
+  createdBy              User                  @relation("VacancyCreator", fields: [createdById], references: [id])
+  responsibleManager     User?                 @relation("VacancyResponsibleManager", fields: [responsibleManagerId], references: [id])
+  applications           InternalApplication[]
 
   @@index([status])
   @@index([type])
   @@index([departmentId])
+  @@index([unitId])
+  @@index([responsibleManagerId])
 }
 
 model ProgressionRule {
@@ -1562,6 +1609,7 @@ model SuccessionPlan {
   criticalPosition   CriticalPosition  @relation(fields: [criticalPositionId], references: [id], onDelete: Cascade)
   candidate          User              @relation(fields: [candidateId], references: [id])
   pdi                SuccessionPDI?
+  developmentPlan    DevelopmentPlan?
   positionId         Int // ou String — verificar o tipo de Position.id
   position           Position          @relation(fields: [positionId], references: [id])
 
@@ -1588,6 +1636,10 @@ enum SuccessionPdiStatus {
   ACTIVE
 }
 
+// DEPRECATED para escrita: novas "PDI de preparação de sucessor" passam a
+// criar um DevelopmentPlan real (origin=SUCCESSION, successionPlanId
+// preenchido) via DevelopmentPlansService — ver POST /succession/pdi/generate.
+// Este modelo mantém-se apenas para leitura de registos históricos.
 model SuccessionPDI {
   id               Int                 @id @default(autoincrement())
   successionPlanId Int                 @unique
@@ -1752,6 +1804,12 @@ model DevelopmentPlan {
   careerPlan             UserCareerPlan? @relation(fields: [careerPlanId], references: [id])
   careerReadinessPercent Int?
 
+  // ── Ligação a plano de sucessão (Career, secção 7 — Sucessão → PDI) ─────
+  // Substitui SuccessionPDI como destino canónico de escrita a partir de
+  // POST /succession/pdi/generate.
+  successionPlanId Int?            @unique
+  successionPlan   SuccessionPlan? @relation(fields: [successionPlanId], references: [id])
+
   // ── Avaliação final e próximos passos (secções 19-20) ───────────────────
   finalResult        PdiFinalResult?
   overallResult      PdiOverallResult?
@@ -1778,6 +1836,7 @@ model DevelopmentPlan {
   @@index([managerId])
   @@index([sourceReviewId])
   @@index([careerPlanId])
+  @@index([successionPlanId])
 }
 
 // Secção 5 do doc — substitui o `focusCompetencyIds` que o DTO aceitava e o
@@ -1812,6 +1871,7 @@ enum ActionType {
   PEER_COACHING
   FEEDBACK
   CONFERENCE
+  LEADERSHIP_EXPOSURE
   OTHER
 }
 
