@@ -80,7 +80,11 @@ describe('SuccessionService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         {
           provide: DevelopmentPlansService,
-          useValue: { create: jest.fn().mockResolvedValue({ id: 1 }), update: jest.fn(), addAction: jest.fn() },
+          useValue: {
+            create: jest.fn().mockResolvedValue({ id: 1 }),
+            update: jest.fn(),
+            addAction: jest.fn(),
+          },
         },
       ],
     }).compile();

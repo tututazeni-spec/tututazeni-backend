@@ -129,7 +129,9 @@ export class SuccessionController {
   // [[project-innova-route-shadowing]]).
   @Get('matrix')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Matriz de sucessão: Posição, Titular, Sucessor, Prontidão, Gap, Risco' })
+  @ApiOperation({
+    summary: 'Matriz de sucessão: Posição, Titular, Sucessor, Prontidão, Gap, Risco',
+  })
   getMatrix(@Query() filters: GetSuccessionMatrixFilterDto) {
     return this.svc.getSuccessionMatrix(filters);
   }

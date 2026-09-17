@@ -1311,7 +1311,10 @@ export class CareerService {
   // (career.analytics, career-plans.analytics, succession.dashboard) e junta
   // as métricas que nenhum dos três calcula sozinho.
 
-  private countByKey<T>(items: T[], getKey: (item: T) => string | null): { key: string; count: number }[] {
+  private countByKey<T>(
+    items: T[],
+    getKey: (item: T) => string | null,
+  ): { key: string; count: number }[] {
     const map = new Map<string, number>();
     for (const item of items) {
       const key = getKey(item);
@@ -1324,7 +1327,9 @@ export class CareerService {
   async getCareerOverview(filters: CareerAnalyticsFilterDto = {}) {
     const [careerAnalytics, careerPlansAnalytics, successionDashboard] = await Promise.all([
       this.getCareerAnalytics(filters),
-      this.careerPlans.getAnalytics(filters.departmentId ? String(filters.departmentId) : undefined),
+      this.careerPlans.getAnalytics(
+        filters.departmentId ? String(filters.departmentId) : undefined,
+      ),
       this.succession.getDashboard(),
     ]);
 

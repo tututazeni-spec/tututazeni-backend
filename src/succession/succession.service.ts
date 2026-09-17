@@ -586,7 +586,8 @@ export class SuccessionService {
     });
 
     const positionName = plan.criticalPosition?.position?.name ?? 'o cargo crítico';
-    const developmentGoals = dto.developmentGoals ?? `Desenvolver competências para ${positionName}`;
+    const developmentGoals =
+      dto.developmentGoals ?? `Desenvolver competências para ${positionName}`;
     const competencyGaps = gaps.map(g => ({
       competencyId: g.competencyId,
       currentLevel: g.currentLevel,
@@ -635,7 +636,11 @@ export class SuccessionService {
         );
     }
 
-    return { developmentPlan, suggestedCourses: suggestedCourses.map(cc => cc.course), suggestedLPs };
+    return {
+      developmentPlan,
+      suggestedCourses: suggestedCourses.map(cc => cc.course),
+      suggestedLPs,
+    };
   }
 
   // ─── SUMÁRIO POR CARGO ────────────────────────────────────────────────────
@@ -924,7 +929,10 @@ export class SuccessionService {
     });
 
     if (exitRisk !== cp.exitRisk) {
-      await this.prisma.criticalPosition.update({ where: { id: criticalPositionId }, data: { exitRisk } });
+      await this.prisma.criticalPosition.update({
+        where: { id: criticalPositionId },
+        data: { exitRisk },
+      });
     }
   }
 
