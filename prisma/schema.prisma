@@ -656,6 +656,7 @@ model User {
   manager                 User?                   @relation("Hierarchy", fields: [managerId], references: [id])
   subordinates            User[]                  @relation("Hierarchy")
   departmentHead          Department[]            @relation("DeptHead")
+  departmentDirectManager Department[]            @relation("DeptDirectManager")
   departmentHeadHistory   DepartmentHeadHistory[]
   departmentTransferLogs  DepartmentTransferLog[]
   orgChanges              OrgChangeLog[]          @relation("OrgChangeUser")
@@ -1103,41 +1104,54 @@ enum DepartmentStatus {
 }
 
 model Department {
-  id                  Int                     @id @default(autoincrement())
-  code                String                  @unique
-  name                String
-  description         String?
-  active              Boolean                 @default(true)
-  status              DepartmentStatus        @default(ACTIVE)
-  color               String?
-  icon                String?
-  costCenter          String?
-  annualBudget        Float?
-  trainingBudget      Int?
-  parentId            Int?
-  headId              Int?
-  unitId              Int?
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
-  parent              Department?             @relation("DeptHierarchy", fields: [parentId], references: [id])
-  children            Department[]            @relation("DeptHierarchy")
-  head                User?                   @relation("DeptHead", fields: [headId], references: [id])
-  unit                Unit?                   @relation(fields: [unitId], references: [id])
-  users               User[]                  @relation("DeptMembers")
-  headHistory         DepartmentHeadHistory[]
-  transfersIn         DepartmentTransferLog[] @relation("TransferTo")
-  transfersOut        DepartmentTransferLog[] @relation("TransferFrom")
-  dashboardSnapshots  DashboardSnapshot[]
-  companyDocuments    CompanyDocument[]
-  executiveReports    ExecutiveReport[]
-  processStandards    ProcessStandard[]
-  onboardingTemplates OnboardingTemplate[]
-  orgChangesFrom      OrgChangeLog[]          @relation("OrgChangeFrom")
-  orgChangesTo        OrgChangeLog[]          @relation("OrgChangeTo")
-  courses             Course[]
-  internalVacancies   InternalVacancy[]
-  careerPaths         CareerPath[]
-  engagementActions   EngagementAction[]
+  id                   Int                     @id @default(autoincrement())
+  code                 String                  @unique
+  name                 String
+  description          String?
+  active               Boolean                 @default(true)
+  status               DepartmentStatus        @default(ACTIVE)
+  color                String?
+  icon                 String?
+  costCenter           String?
+  annualBudget         Float?
+  trainingBudget       Int?
+  parentId             Int?
+  headId               Int?
+  directManagerId      Int?
+  unitId               Int?
+  maxEmployees         Int?
+  operationalStartDate DateTime?
+  institutionalEmail   String?
+  phoneExtension       String?
+  location             String?
+  physicalLocation     String?
+  objective            String?
+  mainResponsibilities String?
+  functionalArea       String?
+  isStrategic          Boolean                 @default(false)
+  notes                String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  parent               Department?             @relation("DeptHierarchy", fields: [parentId], references: [id])
+  children             Department[]            @relation("DeptHierarchy")
+  head                 User?                   @relation("DeptHead", fields: [headId], references: [id])
+  directManager        User?                   @relation("DeptDirectManager", fields: [directManagerId], references: [id])
+  unit                 Unit?                   @relation(fields: [unitId], references: [id])
+  users                User[]                  @relation("DeptMembers")
+  headHistory          DepartmentHeadHistory[]
+  transfersIn          DepartmentTransferLog[] @relation("TransferTo")
+  transfersOut         DepartmentTransferLog[] @relation("TransferFrom")
+  dashboardSnapshots   DashboardSnapshot[]
+  companyDocuments     CompanyDocument[]
+  executiveReports     ExecutiveReport[]
+  processStandards     ProcessStandard[]
+  onboardingTemplates  OnboardingTemplate[]
+  orgChangesFrom       OrgChangeLog[]          @relation("OrgChangeFrom")
+  orgChangesTo         OrgChangeLog[]          @relation("OrgChangeTo")
+  courses              Course[]
+  internalVacancies    InternalVacancy[]
+  careerPaths          CareerPath[]
+  engagementActions    EngagementAction[]
 
   leadershipPrograms   LeadershipProgram[]
   leadershipTargetings LeadershipProgramTargeting[]
@@ -1272,27 +1286,27 @@ model OrgChangeLog {
 // ══════════════════════════════════════════════════════════════════
 
 model UserCareerPlan {
-  id            Int                @id @default(autoincrement())
-  userId        Int
-  user          User               @relation("UserCareerPlans", fields: [userId], references: [id])
-  title         String
-  description   String?
-  status        CareerPlanStatus   @default(DRAFT)
-  currentRoleId Int?
-  currentRole   CareerRole?        @relation("CurrentRole", fields: [currentRoleId], references: [id])
-  targetRoleId  Int?
-  targetRole    CareerRole?        @relation("TargetRole", fields: [targetRoleId], references: [id])
-  careerPathId  Int?
-  careerPath    CareerPath?        @relation(fields: [careerPathId], references: [id])
-  mentorId      Int?
-  mentor        User?              @relation("CareerMentor", fields: [mentorId], references: [id])
-  targetDate    DateTime?
-  activatedAt   DateTime?
-  goals         CareerGoal[]
-  promotions    PromotionRequest[]
+  id               Int                @id @default(autoincrement())
+  userId           Int
+  user             User               @relation("UserCareerPlans", fields: [userId], references: [id])
+  title            String
+  description      String?
+  status           CareerPlanStatus   @default(DRAFT)
+  currentRoleId    Int?
+  currentRole      CareerRole?        @relation("CurrentRole", fields: [currentRoleId], references: [id])
+  targetRoleId     Int?
+  targetRole       CareerRole?        @relation("TargetRole", fields: [targetRoleId], references: [id])
+  careerPathId     Int?
+  careerPath       CareerPath?        @relation(fields: [careerPathId], references: [id])
+  mentorId         Int?
+  mentor           User?              @relation("CareerMentor", fields: [mentorId], references: [id])
+  targetDate       DateTime?
+  activatedAt      DateTime?
+  goals            CareerGoal[]
+  promotions       PromotionRequest[]
   developmentPlans DevelopmentPlan[]
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   @@index([userId, status])
 }
@@ -1700,13 +1714,13 @@ enum PdiNextSteps {
 }
 
 model DevelopmentPlan {
-  id                 Int                     @id @default(autoincrement())
+  id                 Int          @id @default(autoincrement())
   name               String
-  goal               String                  @db.Text
+  goal               String       @db.Text
   userId             Int
   managerId          Int?
-  priority           PlanPriority            @default(MEDIUM)
-  status             PlanStatus              @default(DRAFT)
+  priority           PlanPriority @default(MEDIUM)
+  status             PlanStatus   @default(DRAFT)
   period             String?
   startDate          DateTime?
   endDate            DateTime?
@@ -1714,17 +1728,17 @@ model DevelopmentPlan {
   activatedAt        DateTime?
   cancelReason       String?
   performanceCycleId Int?
-  overallProgress    Int                     @default(0)
-  isTemplate         Boolean                 @default(false)
-  notes              String?                 @db.Text
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
+  overallProgress    Int          @default(0)
+  isTemplate         Boolean      @default(false)
+  notes              String?      @db.Text
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   // ── Origem e diagnóstico (secções 2-3 do doc) ──────────────────────────
-  origin               PdiOrigin?
-  originJustification  String?  @db.Text
-  strengths            String?  @db.Text // Principais pontos fortes
-  developmentNeeds     String?  @db.Text // Principais necessidades de desenvolvimento
+  origin              PdiOrigin?
+  originJustification String?    @db.Text
+  strengths           String?    @db.Text // Principais pontos fortes
+  developmentNeeds    String?    @db.Text // Principais necessidades de desenvolvimento
 
   // ── Ligação à avaliação de desempenho de origem (secção 4) ─────────────
   // performanceCycleId (acima) já referencia o ciclo; sourceReviewId aponta
@@ -1739,23 +1753,23 @@ model DevelopmentPlan {
   careerReadinessPercent Int?
 
   // ── Avaliação final e próximos passos (secções 19-20) ───────────────────
-  finalResult      PdiFinalResult?
-  overallResult    PdiOverallResult?
-  employeeComment  String?   @db.Text
-  managerComment   String?   @db.Text
-  rhComment        String?   @db.Text
+  finalResult        PdiFinalResult?
+  overallResult      PdiOverallResult?
+  employeeComment    String?           @db.Text
+  managerComment     String?           @db.Text
+  rhComment          String?           @db.Text
   employeeAcceptedAt DateTime?
-  nextSteps        PdiNextSteps?
+  nextSteps          PdiNextSteps?
 
-  user               User                    @relation(fields: [userId], references: [id])
-  manager            User?                   @relation("PDIManager", fields: [managerId], references: [id])
-  actions            DevelopmentPlanAction[]
-  goals              PdiGoal[]
-  checkpoints        PdiCheckpoint[]
-  approvals          PdiApproval[]
-  pdiActions         PdiAction[]
-  certificates       Certificate[]
-  competencyGaps     PdiCompetencyGap[]
+  user           User                    @relation(fields: [userId], references: [id])
+  manager        User?                   @relation("PDIManager", fields: [managerId], references: [id])
+  actions        DevelopmentPlanAction[]
+  goals          PdiGoal[]
+  checkpoints    PdiCheckpoint[]
+  approvals      PdiApproval[]
+  pdiActions     PdiAction[]
+  certificates   Certificate[]
+  competencyGaps PdiCompetencyGap[]
 
   leadershipParticipantPlans LeadershipParticipantPlan[]
 
@@ -1769,15 +1783,15 @@ model DevelopmentPlan {
 // Secção 5 do doc — substitui o `focusCompetencyIds` que o DTO aceitava e o
 // service descartava sem nunca gravar (ver memory computed_then_discarded).
 model PdiCompetencyGap {
-  id           Int                    @id @default(autoincrement())
+  id           Int                   @id @default(autoincrement())
   planId       Int
-  plan         DevelopmentPlan        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  plan         DevelopmentPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
   competencyId Int
-  competency   Competency             @relation(fields: [competencyId], references: [id])
+  competency   Competency            @relation(fields: [competencyId], references: [id])
   currentLevel Int?
   targetLevel  Int?
-  priority     PdiCompetencyPriority  @default(MEDIUM)
-  createdAt    DateTime               @default(now())
+  priority     PdiCompetencyPriority @default(MEDIUM)
+  createdAt    DateTime              @default(now())
 
   @@unique([planId, competencyId])
   @@index([planId])
@@ -2861,10 +2875,10 @@ model PerformanceReview {
   reviewer User?            @relation("ReviewerUser", fields: [reviewerId], references: [id])
   cycle    PerformanceCycle @relation(fields: [cycleId], references: [id])
 
-  goals           GoalEvaluation[]
-  competencyEvals CompetencyEvaluation[]
-  calibrationLogs CalibrationLog[]
-  disputes        PerformanceDispute[]
+  goals            GoalEvaluation[]
+  competencyEvals  CompetencyEvaluation[]
+  calibrationLogs  CalibrationLog[]
+  disputes         PerformanceDispute[]
   developmentPlans DevelopmentPlan[]
 
   @@unique([userId, cycleId, type])

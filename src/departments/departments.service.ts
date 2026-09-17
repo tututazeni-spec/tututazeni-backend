@@ -162,12 +162,26 @@ export class DepartmentsService {
         description: dto.description,
         parentId: dto.parentId,
         headId: dto.headId,
+        directManagerId: dto.directManagerId,
         color: dto.color,
         icon: dto.icon,
         costCenter: dto.costCenter,
         trainingBudget: dto.trainingBudget,
         annualBudget: dto.annualBudget,
         unitId: dto.unitId,
+        maxEmployees: dto.maxEmployees,
+        operationalStartDate: dto.operationalStartDate
+          ? new Date(dto.operationalStartDate)
+          : undefined,
+        institutionalEmail: dto.institutionalEmail,
+        phoneExtension: dto.phoneExtension,
+        location: dto.location,
+        physicalLocation: dto.physicalLocation,
+        objective: dto.objective,
+        mainResponsibilities: dto.mainResponsibilities,
+        functionalArea: dto.functionalArea,
+        isStrategic: dto.isStrategic ?? false,
+        notes: dto.notes,
         active,
         status: active ? 'ACTIVE' : 'INACTIVE',
       },
@@ -220,12 +234,15 @@ export class DepartmentsService {
     }
 
     // active é a fonte de verdade; se o DTO trouxer status, espelha-se em active
-    const { status, code: _code, ...rest } = dto;
+    const { status, code: _code, operationalStartDate, ...rest } = dto;
     const data: Prisma.DepartmentUncheckedUpdateInput = { ...rest };
     if (nextCode) data.code = nextCode;
     if (status !== undefined) {
       data.status = status;
       data.active = status === 'ACTIVE';
+    }
+    if (operationalStartDate !== undefined) {
+      data.operationalStartDate = new Date(operationalStartDate);
     }
 
     return this.prisma.department.update({
