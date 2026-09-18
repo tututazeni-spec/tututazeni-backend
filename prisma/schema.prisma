@@ -698,13 +698,16 @@ model User {
   assessedCompetencyMaps  CompetencyMap[]          @relation("AssessedCompetencyMaps")
 
   // ─── Aprendizagem ─────────────────────────────────────────────
-  enrollments             Enrollment[]
-  certificates            Certificate[]
-  lessonProgress          LessonProgress[]
-  quizAttempts            QuizAttempt[]
-  assessmentAttempts      AssessmentAttempt[]
-  learningPathEnrollments LearningPathEnrollment[]
-  courseFeedbacks         CourseFeedback[]
+  enrollments                Enrollment[]
+  certificates               Certificate[]
+  lessonProgress             LessonProgress[]
+  quizAttempts               QuizAttempt[]
+  assessmentAttempts         AssessmentAttempt[]
+  learningPathEnrollments    LearningPathEnrollment[]
+  courseFeedbacks            CourseFeedback[]
+  coursesAsPrimaryInstructor Course[]                 @relation("CoursePrimaryInstructor")
+  courseInstructorships      CourseInstructor[]       @relation("CourseCoInstructor")
+  liveLessonsInstructed      Lesson[]                 @relation("LessonLiveInstructor")
 
   // ─── Micro-Learning ───────────────────────────────────────────
   microLearningProgress     MicroLearningProgress[]
@@ -2037,33 +2040,59 @@ enum CourseLevel {
 enum CourseStatus {
   DRAFT
   PUBLISHED
+  PAUSED
   ARCHIVED
 }
 
+enum CourseVisibility {
+  PUBLIC
+  PRIVATE
+  EMPLOYEES_ONLY
+  SELECTED_GROUPS
+}
+
 model Course {
-  id                      Int                  @id @default(autoincrement())
+  id                      Int                   @id @default(autoincrement())
   title                   String
   shortDescription        String?
-  description             String?              @db.Text
+  description             String?               @db.Text
   category                String?
+  knowledgeArea           String?
   tags                    String[]
   thumbnailUrl            String?
   introVideoUrl           String?
   workloadHours           Int?
-  language                String               @default("pt")
-  level                   CourseLevel          @default(BEGINNER)
-  status                  CourseStatus         @default(DRAFT)
-  mandatory               Boolean              @default(false)
-  internalCode            String?              @unique
+  estimatedDurationDays   Int?
+  language                String                @default("pt")
+  level                   CourseLevel           @default(BEGINNER)
+  status                  CourseStatus          @default(DRAFT)
+  visibility              CourseVisibility      @default(PUBLIC)
+  mandatory               Boolean               @default(false)
+  internalCode            String?               @unique
   departmentId            Int?
+  unit                    String?
+  targetAudience          String[]              @default([])
   learningObjectives      String[]
+  startDate               DateTime?
+  endDate                 DateTime?
+  requiresApproval        Boolean               @default(false)
   passingScore            Int?
+  minCompletionPercent    Int?
+  certificateEnabled      Boolean               @default(false)
+  certificateCriteria     String?               @db.Text
   certificateValidityDays Int?
-  allowDownload           Boolean              @default(false)
+  allowDownload           Boolean               @default(false)
+  primaryInstructorId     Int?
+  requiredCourseId        Int?
   publishedAt             DateTime?
-  createdAt               DateTime             @default(now())
-  updatedAt               DateTime             @updatedAt
-  department              Department?          @relation(fields: [departmentId], references: [id])
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  department              Department?           @relation(fields: [departmentId], references: [id])
+  primaryInstructor       User?                 @relation("CoursePrimaryInstructor", fields: [primaryInstructorId], references: [id], onDelete: SetNull)
+  requiredCourse          Course?               @relation("CoursePrerequisite", fields: [requiredCourseId], references: [id], onDelete: SetNull)
+  unlocks                 Course[]              @relation("CoursePrerequisite")
+  instructors             CourseInstructor[]
+  audienceGroups          CourseAudienceGroup[]
   modules                 CourseModule[]
   enrollments             Enrollment[]
   feedbacks               CourseFeedback[]
@@ -2085,11 +2114,41 @@ model Course {
   @@index([category])
   @@index([mandatory])
   @@index([createdAt])
+  @@index([primaryInstructorId])
+  @@index([requiredCourseId])
+}
+
+model CourseInstructor {
+  id        Int      @id @default(autoincrement())
+  courseId  Int
+  userId    Int
+  createdAt DateTime @default(now())
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user      User     @relation("CourseCoInstructor", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, userId])
+  @@index([userId])
+}
+
+// Grupo de destinatários específico de um curso — usado só quando
+// Course.visibility = SELECTED_GROUPS. Não é um sistema de grupos
+// transversal à plataforma (esse conceito não existe noutro módulo).
+model CourseAudienceGroup {
+  id        Int      @id @default(autoincrement())
+  courseId  Int
+  name      String
+  userIds   Int[]    @default([])
+  createdAt DateTime @default(now())
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
 }
 
 enum ModuleStatus {
   DRAFT
   PUBLISHED
+  PAUSED
+  ARCHIVED
 }
 
 enum ModuleType {
@@ -2113,29 +2172,48 @@ enum CompletionRule {
 }
 
 model CourseModule {
-  id                   Int              @id @default(autoincrement())
-  courseId             Int
-  title                String
-  description          String?
-  learningObjectives   String[]
-  seq                  Int
-  status               ModuleStatus     @default(DRAFT)
-  type                 ModuleType?
-  progressionType      ProgressionType  @default(SEQUENTIAL)
-  completionRule       CompletionRule   @default(ALL_LESSONS)
-  minCompletionPercent Int              @default(100)
-  minQuizScore         Int?
-  mandatory            Boolean          @default(true)
-  dripDays             Int?
-  availableFrom        DateTime?
-  createdAt            DateTime         @default(now())
-  course               Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  lessons              Lesson[]
-  materials            ModuleMaterial[]
-  assessments          Assessment[]
+  id                       Int                @id @default(autoincrement())
+  courseId                 Int
+  code                     String?
+  title                    String
+  description              String?
+  thumbnailUrl             String?
+  learningObjectives       String[]
+  seq                      Int
+  status                   ModuleStatus       @default(DRAFT)
+  type                     ModuleType?
+  progressionType          ProgressionType    @default(SEQUENTIAL)
+  completionRule           CompletionRule     @default(ALL_LESSONS)
+  minCompletionPercent     Int                @default(100)
+  minQuizScore             Int?
+  mandatory                Boolean            @default(true)
+  allowSkip                Boolean            @default(false)
+  estimatedDurationMinutes Int?
+  dripDays                 Int?
+  availableFrom            DateTime?
+  requiredModuleId         Int?
+  createdAt                DateTime           @default(now())
+  course                   Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  requiredModule           CourseModule?      @relation("ModulePrerequisite", fields: [requiredModuleId], references: [id], onDelete: SetNull)
+  unlocks                  CourseModule[]     @relation("ModulePrerequisite")
+  lessons                  Lesson[]
+  materials                ModuleMaterial[]
+  assessments              Assessment[]
+  competencies             ModuleCompetency[]
 
   @@index([courseId])
   @@index([seq])
+  @@index([requiredModuleId])
+}
+
+model ModuleCompetency {
+  id           Int          @id @default(autoincrement())
+  moduleId     Int
+  competencyId Int
+  module       CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  competency   Competency   @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@unique([moduleId, competencyId])
 }
 
 enum LessonType {
@@ -2147,27 +2225,103 @@ enum LessonType {
   LINK
   SCORM
   QUIZ
+  LIVE
+}
+
+enum LessonStatus {
+  DRAFT
+  PUBLISHED
 }
 
 model Lesson {
-  id              Int              @id @default(autoincrement())
-  moduleId        Int
-  title           String
-  description     String?
-  type            LessonType       @default(VIDEO)
-  contentUrl      String?          @db.Text
-  textContent     String?          @db.Text
-  seq             Int
-  durationMinutes Int?
-  isFree          Boolean          @default(false)
-  allowDownload   Boolean          @default(false)
-  createdAt       DateTime         @default(now())
-  content         String?          @db.Text
-  module          CourseModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  progress        LessonProgress[]
-  quiz            Quiz?
+  id                 Int              @id @default(autoincrement())
+  moduleId           Int
+  code               String?
+  title              String
+  description        String?
+  type               LessonType       @default(VIDEO)
+  status             LessonStatus     @default(PUBLISHED)
+  contentUrl         String?          @db.Text
+  textContent        String?          @db.Text
+  captionsUrl        String?          @db.Text
+  transcript         String?          @db.Text
+  seq                Int
+  durationMinutes    Int?
+  isFree             Boolean          @default(false)
+  mandatory          Boolean          @default(true)
+  allowDownload      Boolean          @default(false)
+  minWatchSeconds    Int?
+  allowSkip          Boolean          @default(true)
+  autoComplete       Boolean          @default(false)
+  requiresActivity   Boolean          @default(false)
+  requiresAssessment Boolean          @default(false)
+  availableFrom      DateTime?
+  availableUntil     DateTime?
+  requiredLessonId   Int?
+  // Só usados quando type = LIVE.
+  liveDate           DateTime?
+  liveSessionUrl     String?          @db.Text
+  liveInstructorId   Int?
+  createdAt          DateTime         @default(now())
+  content            String?          @db.Text
+  module             CourseModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  requiredLesson     Lesson?          @relation("LessonPrerequisite", fields: [requiredLessonId], references: [id], onDelete: SetNull)
+  unlocks            Lesson[]         @relation("LessonPrerequisite")
+  liveInstructor     User?            @relation("LessonLiveInstructor", fields: [liveInstructorId], references: [id], onDelete: SetNull)
+  progress           LessonProgress[]
+  quiz               Quiz?
+  activities         LessonActivity[]
+  resources          LessonResource[]
 
   @@index([moduleId])
+  @@index([requiredLessonId])
+  @@index([liveInstructorId])
+}
+
+enum LessonActivityType {
+  TEXT
+  VIDEO
+  DOCUMENT
+  IMAGE
+  AUDIO
+  QUIZ
+  OPEN_QUESTION
+  EXERCISE
+  TASK
+  SURVEY
+  DISCUSSION
+  DOWNLOAD
+  EXTERNAL_LINK
+}
+
+model LessonActivity {
+  id          Int                @id @default(autoincrement())
+  lessonId    Int
+  type        LessonActivityType
+  title       String
+  description String?            @db.Text
+  contentUrl  String?            @db.Text
+  seq         Int                @default(0)
+  createdAt   DateTime           @default(now())
+  lesson      Lesson             @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId])
+}
+
+// Recursos/materiais de apoio da lição — distintos do conteúdo principal
+// (Lesson.contentUrl/textContent) e dos materiais ao nível do módulo
+// (ModuleMaterial).
+model LessonResource {
+  id         Int      @id @default(autoincrement())
+  lessonId   Int
+  title      String
+  url        String
+  fileType   String?
+  fileSizeKb Int?
+  createdAt  DateTime @default(now())
+  lesson     Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId])
 }
 
 model LessonProgress {
@@ -2201,6 +2355,7 @@ model ModuleMaterial {
 }
 
 enum EnrollmentStatus {
+  PENDING_APPROVAL
   NOT_STARTED
   IN_PROGRESS
   COMPLETED
@@ -2307,15 +2462,19 @@ model Certificate {
 }
 
 model Quiz {
-  id               Int            @id @default(autoincrement())
-  lessonId         Int            @unique
-  title            String
-  passingScore     Int            @default(70)
-  maxAttempts      Int            @default(0)
-  timeLimitMinutes Int?
-  lesson           Lesson         @relation(fields: [lessonId], references: [id])
-  questions        QuizQuestion[]
-  attempts         QuizAttempt[]
+  id                 Int            @id @default(autoincrement())
+  lessonId           Int            @unique
+  title              String
+  passingScore       Int            @default(70)
+  maxAttempts        Int            @default(0)
+  timeLimitMinutes   Int?
+  shuffleQuestions   Boolean        @default(false)
+  shuffleAnswers     Boolean        @default(false)
+  showCorrectAnswers Boolean        @default(true)
+  autoFeedback       Boolean        @default(true)
+  lesson             Lesson         @relation(fields: [lessonId], references: [id])
+  questions          QuizQuestion[]
+  attempts           QuizAttempt[]
 }
 
 enum QuizQuestionType {
@@ -2700,6 +2859,7 @@ model Competency {
   updatedAt                DateTime                 @updatedAt
   userCompetencies         UserCompetency[]
   courses                  CourseCompetency[]
+  modules                  ModuleCompetency[]
   positions                PositionCompetency[]
   proficiencyLevels        ProficiencyLevel[]
   endorsements             CompetencyEndorsement[]
