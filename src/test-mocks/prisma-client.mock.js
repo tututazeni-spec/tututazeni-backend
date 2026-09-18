@@ -107,6 +107,65 @@ const EvaluationRequestStatus = {
   SKIPPED: 'SKIPPED',
 };
 
+// Módulo Evaluation genérico (docs/12-modulo-evaluation.md, src/evaluation/) —
+// distinto do EvaluationRequestStatus/EvalType acima (monitoring/OKRs) e do
+// Eval360CycleStatus abaixo (evaluation360/).
+const EvalCampaignModel = {
+  DEG_90: 'DEG_90',
+  DEG_180: 'DEG_180',
+  DEG_270: 'DEG_270',
+  DEG_360: 'DEG_360',
+  CONTINUOUS: 'CONTINUOUS',
+  PROJECT: 'PROJECT',
+};
+
+const EvalCampaignStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  ACTIVE: 'ACTIVE',
+  PAUSED: 'PAUSED',
+  CALIBRATING: 'CALIBRATING',
+  COMPLETED: 'COMPLETED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const EvalQuestionType = {
+  SCALE: 'SCALE',
+  TEXT: 'TEXT',
+  NPS: 'NPS',
+  BOOLEAN: 'BOOLEAN',
+  NA_ALLOWED: 'NA_ALLOWED',
+};
+
+// docs/modulo_evaluation.md pontos 2-3 (remodelação Parte 1) — ver
+// memory project_innova_onboarding_plan_creation_roles_structure sobre
+// este ficheiro poder ficar dessincronizado do schema real.
+const EvalPurpose = {
+  PERFORMANCE: 'PERFORMANCE',
+  PROBATION: 'PROBATION',
+  EXTRAORDINARY: 'EXTRAORDINARY',
+  POST_TRAINING: 'POST_TRAINING',
+  COMPETENCY: 'COMPETENCY',
+  GOALS: 'GOALS',
+};
+
+const EvalPopulationType = {
+  ALL: 'ALL',
+  DEPARTMENT: 'DEPARTMENT',
+  UNIT: 'UNIT',
+  GROUP: 'GROUP',
+};
+
+const EvalStage = {
+  SELF_EVAL: 'SELF_EVAL',
+  MANAGER_EVAL: 'MANAGER_EVAL',
+  HR_REVIEW: 'HR_REVIEW',
+  CALIBRATION: 'CALIBRATION',
+  ONE_ON_ONE: 'ONE_ON_ONE',
+  APPROVAL: 'APPROVAL',
+  DONE: 'DONE',
+};
+
 const LeadershipProgramLevel = {
   INITIAL: 'INITIAL',
   INTERMEDIATE: 'INTERMEDIATE',
@@ -2029,6 +2088,12 @@ module.exports = {
   SurveyQuestionType,
   DisputeStatus,
   EvaluationRequestStatus,
+  EvalCampaignModel,
+  EvalCampaignStatus,
+  EvalQuestionType,
+  EvalPurpose,
+  EvalPopulationType,
+  EvalStage,
   LeadershipProgramLevel,
   ProgramStatus,
   ParticipantStatus,

@@ -2,12 +2,19 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { EvaluationService } from './evaluation.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
+
+const mockOneOnOne = {
+  schedule: jest.fn().mockResolvedValue({ id: 1 }),
+  getOne: jest.fn().mockResolvedValue(null),
+  complete: jest.fn().mockResolvedValue({ id: 1 }),
+};
 
 const mockEvalCycle = {
   id: 1,
   name: 'Ciclo Q1 2026',
   status: 'DRAFT',
-  model: '360',
+  model: 'DEG_360',
   startDate: new Date('2026-01-01'),
   endDate: new Date('2026-03-31'),
   weights: JSON.stringify([
@@ -32,8 +39,9 @@ const mockEvalCycleProxy = {
 };
 
 const mockPrisma: any = {
-  evaluationCycle: mockEvalCycleProxy,
-  evaluationForm: { ...mockEvalCycleProxy },
+  evaluationCampaign: mockEvalCycleProxy,
+  evaluationCampaignForm: { ...mockEvalCycleProxy },
+  evaluationCampaignQuestion: { ...mockEvalCycleProxy },
   evaluationRequest: { ...mockEvalCycleProxy },
   performanceEvaluation: { ...mockEvalCycleProxy },
   performanceReview: { ...mockEvalCycleProxy },
@@ -79,7 +87,11 @@ describe('EvaluationService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EvaluationService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        EvaluationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: OneOnOneService, useValue: mockOneOnOne },
+      ],
     }).compile();
     service = module.get<EvaluationService>(EvaluationService);
   });
@@ -88,7 +100,7 @@ describe('EvaluationService (additional)', () => {
 
   describe('createCycle', () => {
     it('deve criar ciclo com pesos válidos (soma 100)', async () => {
-      mockPrisma.evaluationCycle.create.mockResolvedValue(mockEvalCycle);
+      mockPrisma.evaluationCampaign.create.mockResolvedValue(mockEvalCycle);
       // EvaluatorWeightDto has no 'selfEvalIncluded' — use correct fields only
       const result = await service.createCycle(
         {
@@ -123,7 +135,7 @@ describe('EvaluationService (additional)', () => {
     });
 
     it('deve aceitar pesos com tolerância de 0.5%', async () => {
-      mockPrisma.evaluationCycle.create.mockResolvedValue(mockEvalCycle);
+      mockPrisma.evaluationCampaign.create.mockResolvedValue(mockEvalCycle);
       const result = await service.createCycle(
         {
           name: 'Ciclo tolerância',
@@ -145,16 +157,16 @@ describe('EvaluationService (additional)', () => {
 
   describe('getCycles', () => {
     it('deve retornar lista de ciclos paginada', async () => {
-      mockPrisma.evaluationCycle.findMany.mockResolvedValue([mockEvalCycle]);
-      mockPrisma.evaluationCycle.count.mockResolvedValue(1);
+      mockPrisma.evaluationCampaign.findMany.mockResolvedValue([mockEvalCycle]);
+      mockPrisma.evaluationCampaign.count.mockResolvedValue(1);
       const result = await service.getCycles({ page: 1, limit: 10 });
       expect(result.data).toBeDefined();
       expect(result.meta.page).toBe(1);
     });
 
     it('deve filtrar por status', async () => {
-      mockPrisma.evaluationCycle.findMany.mockResolvedValue([]);
-      mockPrisma.evaluationCycle.count.mockResolvedValue(0);
+      mockPrisma.evaluationCampaign.findMany.mockResolvedValue([]);
+      mockPrisma.evaluationCampaign.count.mockResolvedValue(0);
       const result = await service.getCycles({ status: 'ACTIVE' as any });
       expect(result.data).toHaveLength(0);
     });
@@ -170,7 +182,7 @@ describe('EvaluationService (additional)', () => {
 
   describe('getCycle', () => {
     it('deve retornar ciclo com estatísticas de participação', async () => {
-      mockPrisma.evaluationCycle.findUnique.mockResolvedValue(mockEvalCycle);
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(mockEvalCycle);
       mockPrisma.evaluationRequest.findMany.mockResolvedValue([
         { status: 'COMPLETED' },
         { status: 'PENDING' },
@@ -183,12 +195,12 @@ describe('EvaluationService (additional)', () => {
     });
 
     it('deve lançar NotFoundException se ciclo não existe', async () => {
-      mockPrisma.evaluationCycle.findUnique.mockResolvedValue(null);
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(null);
       await expect(service.getCycle(99)).rejects.toThrow(NotFoundException);
     });
 
     it('deve retornar rate 0 quando sem pedidos', async () => {
-      mockPrisma.evaluationCycle.findUnique.mockResolvedValue(mockEvalCycle);
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(mockEvalCycle);
       mockPrisma.evaluationRequest.findMany.mockResolvedValue([]);
       const result = await service.getCycle(1);
       expect(result.participation.rate).toBe(0);
@@ -199,7 +211,8 @@ describe('EvaluationService (additional)', () => {
 
   describe('updateCycle', () => {
     it('deve actualizar ciclo', async () => {
-      mockPrisma.evaluationCycle.update.mockResolvedValue({
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(mockEvalCycle);
+      mockPrisma.evaluationCampaign.update.mockResolvedValue({
         ...mockEvalCycle,
         name: 'Actualizado',
       });
@@ -208,11 +221,17 @@ describe('EvaluationService (additional)', () => {
     });
 
     it('deve converter endDate para Date', async () => {
-      mockPrisma.evaluationCycle.update.mockResolvedValue(mockEvalCycle);
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(mockEvalCycle);
+      mockPrisma.evaluationCampaign.update.mockResolvedValue(mockEvalCycle);
       await service.updateCycle(1, { endDate: '2026-12-31' });
-      expect(mockPrisma.evaluationCycle.update).toHaveBeenCalledWith(
+      expect(mockPrisma.evaluationCampaign.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ endDate: expect.any(Date) }) }),
       );
+    });
+
+    it('deve lançar NotFoundException se ciclo não existe', async () => {
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(null);
+      await expect(service.updateCycle(99, { name: 'X' })).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -220,7 +239,8 @@ describe('EvaluationService (additional)', () => {
 
   describe('publishCycle', () => {
     it('deve publicar ciclo', async () => {
-      mockPrisma.evaluationCycle.update.mockResolvedValue({
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(mockEvalCycle);
+      mockPrisma.evaluationCampaign.update.mockResolvedValue({
         ...mockEvalCycle,
         status: 'PUBLISHED',
       });
@@ -233,10 +253,13 @@ describe('EvaluationService (additional)', () => {
 
   describe('activateCycle', () => {
     it('deve activar ciclo e notificar participantes', async () => {
-      mockPrisma.evaluationCycle.findUnique.mockResolvedValue(mockEvalCycle);
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(mockEvalCycle);
       mockPrisma.evaluationRequest.findMany.mockResolvedValue([]);
       mockPrisma.user.findMany.mockResolvedValue([{ id: 1, managerId: null }]);
-      mockPrisma.evaluationCycle.update.mockResolvedValue({ ...mockEvalCycle, status: 'ACTIVE' });
+      mockPrisma.evaluationCampaign.update.mockResolvedValue({
+        ...mockEvalCycle,
+        status: 'ACTIVE',
+      });
       mockPrisma.notificationLog.createMany.mockResolvedValue({ count: 0 });
 
       const result = await service.activateCycle(1);
@@ -244,13 +267,16 @@ describe('EvaluationService (additional)', () => {
     });
 
     it('deve criar requests de avaliação para utilizadores com manager', async () => {
-      mockPrisma.evaluationCycle.findUnique.mockResolvedValue(mockEvalCycle);
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(mockEvalCycle);
       mockPrisma.evaluationRequest.findMany.mockResolvedValue([]);
       mockPrisma.user.findMany.mockResolvedValue([
         { id: 1, managerId: 2 },
         { id: 3, managerId: null },
       ]);
-      mockPrisma.evaluationCycle.update.mockResolvedValue({ ...mockEvalCycle, status: 'ACTIVE' });
+      mockPrisma.evaluationCampaign.update.mockResolvedValue({
+        ...mockEvalCycle,
+        status: 'ACTIVE',
+      });
       mockPrisma.notificationLog.createMany.mockResolvedValue({ count: 1 });
 
       await service.activateCycle(1);
@@ -263,7 +289,10 @@ describe('EvaluationService (additional)', () => {
 
   describe('createForm', () => {
     it('deve criar formulário de avaliação', async () => {
-      mockPrisma.evaluationForm.create.mockResolvedValue({ id: 1, title: 'Formulário Base' });
+      mockPrisma.evaluationCampaignForm.create.mockResolvedValue({
+        id: 1,
+        title: 'Formulário Base',
+      });
       // CreateFormDto uses 'title' not 'name'; 'questions' is required
       const result = await service.createForm(
         { title: 'Formulário Base', questions: [] } as any,
@@ -277,7 +306,7 @@ describe('EvaluationService (additional)', () => {
 
   describe('getForms', () => {
     it('deve retornar formulários', async () => {
-      mockPrisma.evaluationForm.findMany.mockResolvedValue([{ id: 1, name: 'Form' }]);
+      mockPrisma.evaluationCampaignForm.findMany.mockResolvedValue([{ id: 1, name: 'Form' }]);
       const result = await service.getForms();
       expect(result).toBeDefined();
     });
@@ -442,7 +471,7 @@ describe('EvaluationService (additional)', () => {
         department: null,
       });
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue([]);
-      mockPrisma.evaluationCycle.findUnique.mockResolvedValue(null);
+      mockPrisma.evaluationCampaign.findUnique.mockResolvedValue(null);
       // Real method: getResults(evaluatedId, cycleId?)
       const result = await service.getResults(1, 1);
       expect(result).toBeDefined();

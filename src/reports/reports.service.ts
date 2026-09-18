@@ -8,6 +8,7 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import type { CurrentUserData } from '../common/decorators';
 import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
+import { buildCsvString } from '../common/utils/csv-export.util';
 import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
 
 // ─────────────────────────────────────────────────────────────────
@@ -1142,16 +1143,7 @@ export class ReportsService {
     data: T[],
     headers: (keyof T & string)[],
   ): Promise<string> {
-    const rows = data.map(row =>
-      headers
-        .map(h => {
-          const v = row[h];
-          if (typeof v === 'string' && v.includes(',')) return `"${v}"`;
-          return v ?? '';
-        })
-        .join(','),
-    );
-    return [headers.join(','), ...rows].join('\n');
+    return buildCsvString(data, headers);
   }
 
   async exportToXlsx<T extends Record<string, unknown>>(

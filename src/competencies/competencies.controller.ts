@@ -175,6 +175,12 @@ export class CompetenciesController {
     return this.svc.getCompetencyGap(user.id, positionId);
   }
 
+  @Get('my/gap')
+  @ApiOperation({ summary: 'O meu gap para o meu cargo actual (resolvido automaticamente)' })
+  myGapAuto(@CurrentUser() user: CurrentUserData) {
+    return this.svc.getCompetencyGapForUser(user.id);
+  }
+
   @Get('my/recommendations')
   @ApiOperation({ summary: 'Recomendações baseadas nos meus gaps' })
   myRecommendations(@CurrentUser() user: CurrentUserData) {
@@ -221,6 +227,17 @@ export class CompetenciesController {
     @Param('positionId', ParseIntPipe) positionId: number,
   ) {
     return this.svc.getCompetencyGap(userId, positionId);
+  }
+
+  // Usada pela aba "Competências" do módulo Evaluation (docs/
+  // modulo_evaluation.md pt.6) — resolve o cargo actual do colaborador em vez
+  // de o exigir na URL, já que quem chama (gestor a rever a equipa) só tem o
+  // userId à mão.
+  @Get('user/:userId/gap')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.LIDER)
+  @ApiOperation({ summary: 'Gap analysis de um utilizador para o seu cargo actual' })
+  gapAnalysisAuto(@Param('userId', ParseIntPipe) userId: number) {
+    return this.svc.getCompetencyGapForUser(userId);
   }
 
   @Get('user/:userId/evolution')

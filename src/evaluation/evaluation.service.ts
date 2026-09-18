@@ -6,11 +6,12 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, EvalCampaignModel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUserData } from '../common/decorators';
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
 import {
   CreateCycleDto,
   UpdateCycleDto,
@@ -22,12 +23,46 @@ import {
   CalibrateScoreDto,
   EvaluationAnalyticsFilterDto,
   CreateEvaluationDto,
+  CreateScaleDto,
+  UpdateScaleDto,
+  CreateCriteriaDto,
+  UpdateCriteriaDto,
+  CreateTemplateDto,
+  UpdateTemplateDto,
   EvaluatorWeightDto,
   EvalType,
+  EvalModel,
   CycleStatus,
   RequestStatus,
+  EvalStage,
+  EvalPurpose,
+  EvalPopulationType,
+  EvaluationRequestFilterDto,
+  UpdateEvaluationRequestDto,
+  ScheduleOneOnOneDto,
+  RegisterOneOnOneDto,
+  EvaluationReportFilterDto,
 } from './evaluation.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+
+// EvalModel usa códigos curtos ('90'/'360', contrato da API) — EvalCampaignModel
+// é o enum real do Prisma ('DEG_90'/'DEG_360'). Mapeados nos dois sentidos aqui.
+const MODEL_TO_PRISMA: Record<EvalModel, EvalCampaignModel> = {
+  [EvalModel.DEG_90]: EvalCampaignModel.DEG_90,
+  [EvalModel.DEG_180]: EvalCampaignModel.DEG_180,
+  [EvalModel.DEG_270]: EvalCampaignModel.DEG_270,
+  [EvalModel.DEG_360]: EvalCampaignModel.DEG_360,
+  [EvalModel.CONTINUOUS]: EvalCampaignModel.CONTINUOUS,
+  [EvalModel.PROJECT]: EvalCampaignModel.PROJECT,
+};
+const PRISMA_TO_MODEL: Record<EvalCampaignModel, EvalModel> = {
+  [EvalCampaignModel.DEG_90]: EvalModel.DEG_90,
+  [EvalCampaignModel.DEG_180]: EvalModel.DEG_180,
+  [EvalCampaignModel.DEG_270]: EvalModel.DEG_270,
+  [EvalCampaignModel.DEG_360]: EvalModel.DEG_360,
+  [EvalCampaignModel.CONTINUOUS]: EvalModel.CONTINUOUS,
+  [EvalCampaignModel.PROJECT]: EvalModel.PROJECT,
+};
 
 // ─────────────────────────────────────────────────────────────────
 // HELPERS
@@ -65,49 +100,6 @@ function percentile(value: number, allValues: number[]): number {
   return Math.round((below / allValues.length) * 100);
 }
 
-/**
- * Safe model access for optional Prisma models.
- * Acesso dinâmico `prisma[name]` a um modelo que pode não existir não tem
- * nenhum tipo gerado pelo Prisma para se agarrar (mesmo problema/solução de
- * api-integration.service.ts/content-library.service.ts) — o único cast é
- * o `as unknown as DynamicModelDelegate` abaixo, confinado a esta linha;
- * sem `any` em lado nenhum. Os métodos do stub de fallback usam
- * `{ data: unknown }`/`{ create: unknown }` em vez de `(d: any)`.
- */
-type DynamicModelDelegate = Record<string, (...args: unknown[]) => Promise<unknown>>;
-
-const safeM = (prisma: PrismaService, name: string): DynamicModelDelegate =>
-  (prisma as unknown as Record<string, DynamicModelDelegate | undefined>)[name] ?? {
-    findMany: async () => [],
-    findFirst: async () => null,
-    findUnique: async () => null,
-    create: async (d: unknown) => (d as { data: unknown }).data,
-    createMany: async () => ({ count: 0 }),
-    upsert: async (d: unknown) => (d as { create: unknown }).create,
-    update: async (d: unknown) => (d as { data: unknown }).data,
-    delete: async () => null,
-    count: async () => 0,
-    groupBy: async () => [],
-  };
-
-// EvaluationCycle existe em prisma/schema.prisma, mas pertence a outro
-// domínio (monitoring/OKRs — id cuid, type/status como enums fixos, sem
-// formId/weights/targetDeptIds/selfEvalIncludedInScore); evaluationForm não
-// existe de todo. Ver nota estrutural junto de createCycle() abaixo — os
-// campos aqui ficam deliberadamente permissivos (index signature) em vez de
-// fingir conhecer a forma real de um registo que nunca chega a persistir
-// através deste ficheiro.
-export interface EvaluationCycleRow {
-  id?: number | string | null;
-  name?: string;
-  model?: string;
-  status?: string;
-  endDate?: string | Date;
-  weights?: string | null;
-  targetDeptIds?: number[];
-  [key: string]: unknown;
-}
-
 // ─────────────────────────────────────────────────────────────────
 // SERVICE
 // ─────────────────────────────────────────────────────────────────
@@ -116,27 +108,20 @@ export interface EvaluationCycleRow {
 export class EvaluationService {
   private readonly logger = new Logger(EvaluationService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly oneOnOne: OneOnOneService,
+  ) {}
 
   // ══════════════════════════════════════════════════════
-  // CYCLES
-  //
-  // ACHADO ESTRUTURAL (não corrigido nesta limpeza de tipos): o modelo
-  // Prisma real "EvaluationCycle" (prisma/schema.prisma) pertence de facto
-  // ao módulo monitoring (src/monitoring/monitoring.service.ts, OKRs) — tem
-  // id cuid, type/status como enums fixos, createdById, sem "model",
-  // "formId", "selfEvalIncludedInScore", "weights" nem "targetDeptIds", que
-  // é o shape que este bloco assume. Como safeM() só degrada quando a
-  // PROPRIEDADE do modelo não existe (e evaluationCycle existe mesmo,
-  // pertence só a outro domínio), create()/update() aqui rebentam sempre
-  // com erro de validação do Prisma — apanhado pelo .catch() — e caem
-  // sempre no fallback "modo compatibilidade": nenhum ciclo de avaliação
-  // real é alguma vez persistido por este bloco. Corrigir isto é uma
-  // decisão de arquitectura (criar um modelo próprio, ou decidir que este
-  // módulo deve reutilizar o EvaluationCycle real do monitoring), fora do
-  // âmbito de uma limpeza de `any` — os tipos aqui ficam propositadamente
-  // pouco fiáveis para não mascarar o problema.
+  // CYCLES (EvaluationCampaign)
   // ══════════════════════════════════════════════════════
+
+  private toPublicCampaign<T extends { model: EvalCampaignModel }>(
+    campaign: T,
+  ): Omit<T, 'model'> & { model: EvalModel } {
+    return { ...campaign, model: PRISMA_TO_MODEL[campaign.model] };
+  }
 
   async createCycle(dto: CreateCycleDto, createdById: number) {
     const totalWeight = dto.weights.reduce((s, w) => s + w.weight, 0);
@@ -144,125 +129,89 @@ export class EvaluationService {
       throw new BadRequestException(`A soma dos pesos deve ser 100% (actual: ${totalWeight}%)`);
     }
 
-    const cycle = await safeM(this.prisma, 'evaluationCycle')
-      .create({
-        data: {
-          name: dto.name,
-          description: dto.description,
-          model: dto.model,
-          status: CycleStatus.DRAFT,
-          startDate: new Date(dto.startDate),
-          endDate: new Date(dto.endDate),
-          formId: dto.formId,
-          createdById,
-          selfEvalIncludedInScore: dto.selfEvalIncludedInScore ?? false,
-          weights: JSON.stringify(dto.weights),
-          targetDeptIds: dto.targetDeptIds ?? [],
-        },
-      })
-      .catch(async (e: unknown) => {
-        // Fallback to performanceEvaluation approach if cycle model missing
-        this.logger.warn({
-          action: 'EVALUATION_CYCLE_CREATE',
-          name: dto.name,
-          createdById,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao criar ciclo de avaliação — a usar fallback de compatibilidade',
-        });
-        return {
-          id: null,
-          name: dto.name,
-          status: 'DRAFT',
-          message: 'Criado (modo compatibilidade)',
-        };
-      });
+    const campaign = await this.prisma.evaluationCampaign.create({
+      data: {
+        code: dto.code,
+        name: dto.name,
+        description: dto.description,
+        category: dto.category,
+        model: MODEL_TO_PRISMA[dto.model],
+        status: CycleStatus.DRAFT,
+        templateId: dto.templateId,
+        startDate: new Date(dto.startDate),
+        endDate: new Date(dto.endDate),
+        formId: dto.formId,
+        createdById,
+        targetDeptIds: dto.targetDeptIds ?? [],
+        mandatory: dto.mandatory ?? false,
+        confidential: dto.confidential ?? false,
+        selfEvalIncludedInScore: dto.selfEvalIncludedInScore ?? false,
+        weights: JSON.stringify(dto.weights),
+        minScore: dto.minScore,
+        maxScore: dto.maxScore,
+        requireComments: dto.requireComments ?? false,
+        requireEvidence: dto.requireEvidence ?? false,
+        allowEdit: dto.allowEdit ?? false,
+        allowContest: dto.allowContest ?? false,
+        allowCalibration: dto.allowCalibration ?? true,
+        resultsVisibility: dto.resultsVisibility,
+        linkPdi: dto.linkPdi ?? false,
+        linkCompetencies: dto.linkCompetencies ?? false,
+        linkCareer: dto.linkCareer ?? false,
+        linkSuccession: dto.linkSuccession ?? false,
+        link9Box: dto.link9Box ?? false,
+        notes: dto.notes,
+        purpose: dto.purpose,
+        blocks: dto.blocks ? (dto.blocks as unknown as Prisma.InputJsonValue) : undefined,
+        populationType: dto.populationType,
+        targetUnitIds: dto.targetUnitIds ?? [],
+        targetUserIds: dto.targetUserIds ?? [],
+        selfEvalDueDate: dto.selfEvalDueDate ? new Date(dto.selfEvalDueDate) : undefined,
+        managerEvalDueDate: dto.managerEvalDueDate ? new Date(dto.managerEvalDueDate) : undefined,
+      },
+    });
 
-    return cycle;
+    return this.toPublicCampaign(campaign);
   }
 
   async getCycles(filters: CycleFilterDto = {}) {
     const { page = 1, limit = 20, status } = filters;
     const { skip, take } = calculatePagination(page, limit);
-    // Record<string, unknown> em vez de `any` — não há
-    // Prisma.EvaluationCycleWhereInput real a que amarrar este filtro (ver
-    // nota estrutural em createCycle() abaixo).
-    const where: Record<string, unknown> = {};
+    const where: Prisma.EvaluationCampaignWhereInput = { deletedAt: null };
     if (status) where.status = status;
 
-    const data: EvaluationCycleRow[] = await (
-      safeM(this.prisma, 'evaluationCycle').findMany({
+    const [data, total] = await Promise.all([
+      this.prisma.evaluationCampaign.findMany({
         where,
         skip,
         take,
         orderBy: { createdAt: 'desc' },
-      }) as Promise<EvaluationCycleRow[]>
-    ).catch((e: unknown) => {
-      this.logger.warn({
-        action: 'EVALUATION_CYCLE_LIST',
-        filters,
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao listar ciclos de avaliação — a devolver lista vazia',
-      });
-      return [];
-    });
+      }),
+      this.prisma.evaluationCampaign.count({ where }),
+    ]);
 
-    const total = await (
-      safeM(this.prisma, 'evaluationCycle').count({ where }) as Promise<number>
-    ).catch((e: unknown) => {
-      this.logger.warn({
-        action: 'EVALUATION_CYCLE_COUNT',
-        filters,
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao contar ciclos de avaliação — a devolver 0',
-      });
-      return 0;
-    });
-
-    return buildPaginatedResponse(data, total, page, limit);
+    return buildPaginatedResponse(
+      data.map(c => this.toPublicCampaign(c)),
+      total,
+      page,
+      limit,
+    );
   }
 
   async getCycle(id: number) {
-    const cycle: EvaluationCycleRow | null = await (
-      safeM(this.prisma, 'evaluationCycle').findUnique({
-        where: { id },
-        include: { form: true },
-      }) as Promise<EvaluationCycleRow | null>
-    ).catch((e: unknown) => {
-      this.logger.warn({
-        action: 'EVALUATION_CYCLE_FETCH',
-        cycleId: id,
-        err: { message: e instanceof Error ? e.message : String(e) },
-        msg: 'Falha ao obter ciclo de avaliação — a devolver null',
-      });
-      return null;
+    const campaign = await this.prisma.evaluationCampaign.findFirst({
+      where: { id, deletedAt: null },
+      include: { form: true },
     });
 
-    if (!cycle) throw new NotFoundException('Ciclo não encontrado');
+    if (!campaign) throw new NotFoundException('Ciclo não encontrado');
 
-    // Participation stats
-    // EvaluationRequest.cycleId (Int?) e EvaluationCycle.id (cuid real, ou
-    // null em modo compatibilidade) são conceitos de "cycle" completamente
-    // diferentes — cast pontual documentado, não uma correcção de tipo real
-    // (ver nota estrutural em createCycle() acima).
-    const requests = await this.prisma.evaluationRequest
-      .findMany({
-        where: cycle.id ? { cycleId: cycle.id as number } : {},
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_REQUEST_LIST_BY_CYCLE',
-          cycleId: cycle.id,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao listar pedidos de avaliação do ciclo — a devolver lista vazia',
-        });
-        return [] as Prisma.EvaluationRequestGetPayload<object>[];
-      });
-
+    const requests = await this.prisma.evaluationRequest.findMany({ where: { cycleId: id } });
     const total = requests.length;
     const completed = requests.filter(r => r.status === 'COMPLETED').length;
 
     return {
-      ...cycle,
+      ...this.toPublicCampaign(campaign),
       participation: {
         total,
         completed,
@@ -272,129 +221,181 @@ export class EvaluationService {
   }
 
   async updateCycle(id: number, dto: UpdateCycleDto) {
-    // Record<string, unknown> pela mesma razão de getCycles() acima.
-    const data: Record<string, unknown> = { ...dto };
-    if (dto.endDate) data.endDate = new Date(dto.endDate);
-
-    return safeM(this.prisma, 'evaluationCycle')
-      .update({ where: { id }, data })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_CYCLE_UPDATE',
-          cycleId: id,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao actualizar ciclo de avaliação — a devolver dados de compatibilidade',
-        });
-        return { id, message: 'Actualizado', ...dto };
-      });
+    await this.assertCampaignExists(id);
+    const { endDate, selfEvalDueDate, managerEvalDueDate, blocks, ...rest } = dto;
+    const campaign = await this.prisma.evaluationCampaign.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(endDate ? { endDate: new Date(endDate) } : {}),
+        ...(selfEvalDueDate ? { selfEvalDueDate: new Date(selfEvalDueDate) } : {}),
+        ...(managerEvalDueDate ? { managerEvalDueDate: new Date(managerEvalDueDate) } : {}),
+        ...(blocks ? { blocks: blocks as unknown as Prisma.InputJsonValue } : {}),
+      },
+    });
+    return this.toPublicCampaign(campaign);
   }
 
   async publishCycle(id: number) {
-    return safeM(this.prisma, 'evaluationCycle')
-      .update({
-        where: { id },
-        data: { status: CycleStatus.PUBLISHED, publishedAt: new Date() },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_CYCLE_PUBLISH',
-          cycleId: id,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao publicar ciclo de avaliação — a devolver estado de compatibilidade',
-        });
-        return { id, status: 'PUBLISHED' };
-      });
+    await this.assertCampaignExists(id);
+    const campaign = await this.prisma.evaluationCampaign.update({
+      where: { id },
+      data: { status: CycleStatus.PUBLISHED },
+    });
+    return this.toPublicCampaign(campaign);
   }
 
   async activateCycle(id: number) {
-    const cycle = await this.getCycle(id);
+    const campaign = await this.assertCampaignExists(id);
 
     // Auto-assign evaluation requests based on team structure
-    await this.autoAssignCycleRequests(id, cycle);
+    await this.autoAssignCycleRequests(id, campaign);
 
-    const updated = await safeM(this.prisma, 'evaluationCycle')
-      .update({
-        where: { id },
-        data: { status: CycleStatus.ACTIVE, activatedAt: new Date() },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_CYCLE_ACTIVATE',
-          cycleId: id,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao activar ciclo de avaliação — a devolver estado de compatibilidade',
-        });
-        return { id, status: 'ACTIVE' };
-      });
+    const updated = await this.prisma.evaluationCampaign.update({
+      where: { id },
+      data: { status: CycleStatus.ACTIVE },
+    });
 
-    // Notify all participants
-    const requests = await this.prisma.evaluationRequest
-      .findMany({
-        where: { ...(id ? { cycleId: id } : {}) },
-        select: { evaluatorId: true },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_REQUEST_LIST_BY_CYCLE',
-          cycleId: id,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao listar avaliadores do ciclo para notificação — a devolver lista vazia',
-        });
-        return [] as { evaluatorId: number }[];
-      });
+    const requests = await this.prisma.evaluationRequest.findMany({
+      where: { cycleId: id },
+      select: { evaluatorId: true },
+    });
+    await this.notifyParticipants(
+      id,
+      [...new Set(requests.map(r => r.evaluatorId))],
+      'EVALUATION_CYCLE_STARTED',
+      `Ciclo de avaliação "${campaign.name}" foi iniciado — tens avaliações pendentes`,
+    );
 
+    return this.toPublicCampaign(updated);
+  }
+
+  // docs/modulo_evaluation.md ponto 3 — Pausar/Encerrar/Reabrir/Enviar lembretes.
+  async pauseCycle(id: number) {
+    await this.assertCampaignExists(id);
+    const campaign = await this.prisma.evaluationCampaign.update({
+      where: { id },
+      data: { status: CycleStatus.PAUSED },
+    });
+    return this.toPublicCampaign(campaign);
+  }
+
+  async closeCycle(id: number) {
+    await this.assertCampaignExists(id);
+    const campaign = await this.prisma.evaluationCampaign.update({
+      where: { id },
+      data: { status: CycleStatus.COMPLETED },
+    });
+    return this.toPublicCampaign(campaign);
+  }
+
+  async reopenCycle(id: number) {
+    await this.assertCampaignExists(id);
+    const campaign = await this.prisma.evaluationCampaign.update({
+      where: { id },
+      data: { status: CycleStatus.ACTIVE },
+    });
+    return this.toPublicCampaign(campaign);
+  }
+
+  async remindCycleParticipants(id: number) {
+    const campaign = await this.assertCampaignExists(id);
+    const requests = await this.prisma.evaluationRequest.findMany({
+      where: { cycleId: id, status: { in: [RequestStatus.PENDING, RequestStatus.IN_PROGRESS] } },
+      select: { evaluatorId: true },
+    });
     const uniqueIds = [...new Set(requests.map(r => r.evaluatorId))];
+    await this.notifyParticipants(
+      id,
+      uniqueIds,
+      'EVALUATION_REMINDER',
+      `Lembrete: tens avaliações pendentes no ciclo "${campaign.name}"`,
+    );
+    return { notified: uniqueIds.length };
+  }
+
+  private async notifyParticipants(
+    cycleId: number,
+    userIds: number[],
+    type: string,
+    message: string,
+  ) {
+    if (!userIds.length) return;
     await this.prisma.notificationLog
       .createMany({
-        data: uniqueIds.map(uid => ({
-          userId: uid,
-          type: 'EVALUATION_CYCLE_STARTED',
-          message: `Ciclo de avaliação "${cycle.name}" foi iniciado — tens avaliações pendentes`,
-          metadata: JSON.stringify({}),
-        })),
+        data: userIds.map(uid => ({ userId: uid, type, message, metadata: JSON.stringify({}) })),
         skipDuplicates: true,
       })
       .catch((e: unknown) => {
         this.logger.warn({
           action: 'EVALUATION_CYCLE_NOTIFY',
-          cycleId: id,
-          userIds: uniqueIds,
+          cycleId,
+          userIds,
           err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao criar notificações de início de ciclo',
+          msg: 'Falha ao criar notificações do ciclo',
         });
       });
-
-    return updated;
   }
 
-  private async autoAssignCycleRequests(cycleId: number, cycle: EvaluationCycleRow) {
-    // FIX (parcial): `cycle.weights` é lido mas a atribuição automática só
-    // cria pedidos SELF e MANAGER abaixo — nunca houve lógica para escolher
-    // avaliadores PEER/SUBORDINATE/EXTERNAL (nenhum outro sítio no módulo
-    // `evaluation` cria pedidos desse tipo). `weights` parece ter sido
-    // pensado para configurar quantos pares atribuir, mas essa selecção
-    // (por equipa? por departamento? aleatória?) nunca foi desenhada — não
-    // inventado aqui. Documentado, não implementado. Ver issue #249.
-    const _weights = cycle.weights ? JSON.parse(cycle.weights ?? '[]') : [];
-    const deptFilter: Prisma.UserWhereInput = {};
-    if (cycle.targetDeptIds?.length) deptFilter.departmentId = { in: cycle.targetDeptIds };
-
-    const users = await this.prisma.read.user.findMany({
-      where: { active: true, ...deptFilter },
-      select: { id: true, managerId: true },
+  private async assertCampaignExists(id: number) {
+    const campaign = await this.prisma.evaluationCampaign.findFirst({
+      where: { id, deletedAt: null },
     });
+    if (!campaign) throw new NotFoundException('Ciclo não encontrado');
+    return campaign;
+  }
+
+  private async autoAssignCycleRequests(
+    cycleId: number,
+    campaign: Prisma.EvaluationCampaignGetPayload<object>,
+  ) {
+    // FIX (parcial): `campaign.weights` é lido mas a atribuição automática só
+    // cria pedidos SELF e MANAGER abaixo — nunca houve lógica para escolher
+    // avaliadores PEER/SUBORDINATE/CLIENT (nenhum outro sítio no módulo
+    // `evaluation` cria pedidos desse tipo automaticamente). `weights` parece
+    // ter sido pensado para configurar quantos pares atribuir, mas essa
+    // selecção (por equipa? por departamento? aleatória?) nunca foi
+    // desenhada — não inventado aqui. Documentado, não implementado. Ver
+    // issue #249.
+    // docs/modulo_evaluation.md ponto 2, etapa 2 — população abrangida:
+    // GROUP usa a lista explícita de utilizadores; ALL/DEPARTMENT/UNIT (ou
+    // nenhum populationType, comportamento pré-existente) combinam os
+    // filtros de departamento/unidade indicados.
+    let users: { id: number; managerId: number | null }[];
+    if (campaign.populationType === 'GROUP' && campaign.targetUserIds?.length) {
+      users = await this.prisma.read.user.findMany({
+        where: { active: true, id: { in: campaign.targetUserIds } },
+        select: { id: true, managerId: true },
+      });
+    } else {
+      const scopeFilter: Prisma.UserWhereInput = {};
+      if (campaign.targetDeptIds?.length) scopeFilter.departmentId = { in: campaign.targetDeptIds };
+      if (campaign.targetUnitIds?.length) scopeFilter.unitId = { in: campaign.targetUnitIds };
+      users = await this.prisma.read.user.findMany({
+        where: { active: true, ...scopeFilter },
+        select: { id: true, managerId: true },
+      });
+    }
 
     const assignments: Prisma.EvaluationRequestCreateManyInput[] = [];
+    const selfModels: EvalCampaignModel[] = [
+      EvalCampaignModel.DEG_180,
+      EvalCampaignModel.DEG_270,
+      EvalCampaignModel.DEG_360,
+      EvalCampaignModel.CONTINUOUS,
+    ];
+    const managerModels: EvalCampaignModel[] = [
+      EvalCampaignModel.DEG_90,
+      EvalCampaignModel.DEG_180,
+      EvalCampaignModel.DEG_270,
+      EvalCampaignModel.DEG_360,
+    ];
 
     for (const u of users) {
-      const model = cycle.model ?? '360';
-
-      // Self
-      if (['180', '270', '360', 'CONTINUOUS'].includes(model)) {
+      if (selfModels.includes(campaign.model)) {
         assignments.push({ cycleId, evaluatorId: u.id, evaluatedId: u.id, type: EvalType.SELF });
       }
-      // Manager
-      if (['90', '180', '270', '360'].includes(model) && u.managerId) {
+      if (managerModels.includes(campaign.model) && u.managerId) {
         assignments.push({
           cycleId,
           evaluatorId: u.managerId,
@@ -410,7 +411,17 @@ export class EvaluationService {
           data: assignments.map(a => ({
             ...a,
             status: 'PENDING',
-            dueDate: new Date(cycle.endDate),
+            dueDate:
+              (a.type === EvalType.SELF ? campaign.selfEvalDueDate : undefined) ??
+              (a.type === EvalType.MANAGER ? campaign.managerEvalDueDate : undefined) ??
+              campaign.endDate,
+            purpose: campaign.purpose ?? undefined,
+            stage:
+              a.type === EvalType.SELF
+                ? EvalStage.SELF_EVAL
+                : a.type === EvalType.MANAGER
+                  ? EvalStage.MANAGER_EVAL
+                  : undefined,
           })),
           skipDuplicates: true,
         })
@@ -431,73 +442,232 @@ export class EvaluationService {
   // ══════════════════════════════════════════════════════
 
   async createForm(dto: CreateFormDto, createdById: number) {
-    return safeM(this.prisma, 'evaluationForm')
-      .create({
-        data: {
-          title: dto.title,
-          description: dto.description,
-          isTemplate: dto.isTemplate ?? false,
-          createdById,
-          questions: {
-            create: dto.questions.map((q, i) => ({
-              text: q.text,
-              type: q.type,
-              order: q.order ?? i + 1,
-              required: q.required ?? true,
-              scaleMax: q.scaleMax ?? 5,
-              competencyId: q.competencyId,
-              weight: q.weight ?? 100,
-            })),
-          },
+    return this.prisma.evaluationCampaignForm.create({
+      data: {
+        title: dto.title,
+        description: dto.description,
+        isTemplate: dto.isTemplate ?? false,
+        createdById,
+        questions: {
+          create: dto.questions.map((q, i) => ({
+            text: q.text,
+            type: q.type,
+            order: q.order ?? i + 1,
+            required: q.required ?? true,
+            scaleMax: q.scaleMax ?? 5,
+            competencyId: q.competencyId,
+            weight: q.weight ?? 100,
+          })),
         },
-        include: { questions: { orderBy: { order: 'asc' } } },
-      })
-      .catch(async (e: unknown) => {
-        // Fallback: return DTO as confirmation
-        this.logger.warn({
-          action: 'EVALUATION_FORM_CREATE',
-          title: dto.title,
-          createdById,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao criar formulário de avaliação — a usar fallback de compatibilidade',
-        });
-        return { ...dto, id: null, message: 'Formulário registado (modo compatibilidade)' };
-      });
+      },
+      include: { questions: { orderBy: { order: 'asc' } } },
+    });
   }
 
   async getForms() {
-    return safeM(this.prisma, 'evaluationForm')
-      .findMany({
-        include: { _count: { select: { questions: true } } },
-        orderBy: { createdAt: 'desc' },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_FORM_LIST',
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao listar formulários de avaliação — a devolver lista vazia',
-        });
-        return [];
-      });
+    return this.prisma.evaluationCampaignForm.findMany({
+      where: { deletedAt: null },
+      include: { _count: { select: { questions: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async getForm(id: number) {
-    const form = await safeM(this.prisma, 'evaluationForm')
-      .findUnique({
-        where: { id },
-        include: { questions: { orderBy: { order: 'asc' } } },
-      })
-      .catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_FORM_FETCH',
-          formId: id,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter formulário de avaliação — a devolver null',
-        });
-        return null;
-      });
+    const form = await this.prisma.evaluationCampaignForm.findFirst({
+      where: { id, deletedAt: null },
+      include: { questions: { orderBy: { order: 'asc' } } },
+    });
     if (!form) throw new NotFoundException('Formulário não encontrado');
     return form;
+  }
+
+  // ══════════════════════════════════════════════════════
+  // SCALES (aba "Escalas" / dashboard "escalas de avaliação")
+  // ══════════════════════════════════════════════════════
+
+  async createScale(dto: CreateScaleDto) {
+    return this.prisma.evaluationScale.create({
+      data: {
+        name: dto.name,
+        description: dto.description,
+        minValue: dto.minValue ?? 1,
+        maxValue: dto.maxValue ?? 5,
+        isDefault: dto.isDefault ?? false,
+        levels: dto.levels
+          ? {
+              create: dto.levels.map(l => ({
+                value: l.value,
+                label: l.label,
+                description: l.description,
+              })),
+            }
+          : undefined,
+      },
+      include: { levels: { orderBy: { value: 'asc' } } },
+    });
+  }
+
+  async getScales() {
+    return this.prisma.evaluationScale.findMany({
+      include: { levels: { orderBy: { value: 'asc' } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getScale(id: number) {
+    const scale = await this.prisma.evaluationScale.findUnique({
+      where: { id },
+      include: { levels: { orderBy: { value: 'asc' } } },
+    });
+    if (!scale) throw new NotFoundException('Escala não encontrada');
+    return scale;
+  }
+
+  async updateScale(id: number, dto: UpdateScaleDto) {
+    await this.getScale(id);
+    return this.prisma.evaluationScale.update({ where: { id }, data: dto });
+  }
+
+  async deleteScale(id: number) {
+    await this.getScale(id);
+    await this.prisma.evaluationScale.delete({ where: { id } });
+    return { message: 'Escala removida' };
+  }
+
+  // ══════════════════════════════════════════════════════
+  // CRITERIA (aba "Critérios")
+  // ══════════════════════════════════════════════════════
+
+  async createCriteria(dto: CreateCriteriaDto, createdById: number) {
+    return this.prisma.evaluationCriteria.create({
+      data: {
+        name: dto.name,
+        code: dto.code,
+        description: dto.description,
+        category: dto.category,
+        weight: dto.weight ?? 1,
+        scaleId: dto.scaleId,
+        competencyId: dto.competencyId,
+        behavioralIndicators: dto.behavioralIndicators,
+        createdById,
+      },
+      include: { scale: true, competency: true },
+    });
+  }
+
+  // `includeInactive`: a aba "Critérios" (biblioteca central, docs/
+  // modulo_evaluation.md pt.5) precisa de ver e reactivar critérios
+  // inactivos; a etapa 4 do wizard "Nova Avaliação" só quer os activos, por
+  // isso o omitir mantém o comportamento anterior.
+  async getCriteria(filters: { category?: string; includeInactive?: boolean } = {}) {
+    return this.prisma.evaluationCriteria.findMany({
+      where: {
+        deletedAt: null,
+        ...(filters.includeInactive ? {} : { isActive: true }),
+        ...(filters.category ? { category: filters.category } : {}),
+      },
+      include: { scale: true, competency: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private async assertCriteriaExists(id: number) {
+    const criteria = await this.prisma.evaluationCriteria.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!criteria) throw new NotFoundException('Critério não encontrado');
+    return criteria;
+  }
+
+  async updateCriteria(id: number, dto: UpdateCriteriaDto) {
+    await this.assertCriteriaExists(id);
+    return this.prisma.evaluationCriteria.update({ where: { id }, data: dto });
+  }
+
+  async deleteCriteria(id: number) {
+    await this.assertCriteriaExists(id);
+    await this.prisma.evaluationCriteria.update({ where: { id }, data: { deletedAt: new Date() } });
+    return { message: 'Critério removido' };
+  }
+
+  // ══════════════════════════════════════════════════════
+  // TEMPLATES (aba "Modelos")
+  // ══════════════════════════════════════════════════════
+
+  async createTemplate(dto: CreateTemplateDto, createdById: number) {
+    return this.prisma.evaluationTemplate.create({
+      data: {
+        name: dto.name,
+        description: dto.description,
+        type: dto.type ?? 'GENERIC',
+        scaleId: dto.scaleId,
+        isDefault: dto.isDefault ?? false,
+        createdById,
+        criteria: dto.criteria
+          ? {
+              create: dto.criteria.map((c, i) => ({
+                criteriaId: c.criteriaId,
+                weight: c.weight,
+                seq: c.seq ?? i,
+              })),
+            }
+          : undefined,
+      },
+      include: { criteria: { include: { criteria: true }, orderBy: { seq: 'asc' } } },
+    });
+  }
+
+  async getTemplates() {
+    return this.prisma.evaluationTemplate.findMany({
+      where: { deletedAt: null },
+      include: { _count: { select: { criteria: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private async assertTemplateExists(id: number) {
+    const template = await this.prisma.evaluationTemplate.findFirst({
+      where: { id, deletedAt: null },
+      include: { criteria: { include: { criteria: true }, orderBy: { seq: 'asc' } } },
+    });
+    if (!template) throw new NotFoundException('Modelo não encontrado');
+    return template;
+  }
+
+  async getTemplate(id: number) {
+    return this.assertTemplateExists(id);
+  }
+
+  async updateTemplate(id: number, dto: UpdateTemplateDto) {
+    await this.assertTemplateExists(id);
+    const { criteria, ...rest } = dto;
+    return this.prisma.$transaction(async tx => {
+      if (criteria) {
+        await tx.evaluationTemplateCriteria.deleteMany({ where: { templateId: id } });
+      }
+      return tx.evaluationTemplate.update({
+        where: { id },
+        data: {
+          ...rest,
+          criteria: criteria
+            ? {
+                create: criteria.map((c, i) => ({
+                  criteriaId: c.criteriaId,
+                  weight: c.weight,
+                  seq: c.seq ?? i,
+                })),
+              }
+            : undefined,
+        },
+        include: { criteria: { include: { criteria: true }, orderBy: { seq: 'asc' } } },
+      });
+    });
+  }
+
+  async deleteTemplate(id: number) {
+    await this.assertTemplateExists(id);
+    await this.prisma.evaluationTemplate.update({ where: { id }, data: { deletedAt: new Date() } });
+    return { message: 'Modelo removido' };
   }
 
   // ══════════════════════════════════════════════════════
@@ -539,6 +709,25 @@ export class EvaluationService {
 
     if (existing) throw new ConflictException('Avaliador já atribuído para este par neste ciclo');
 
+    // docs/modulo_evaluation.md ponto 2 — purpose/objectives/name vêm do
+    // pedido; purpose por omissão herda do ciclo quando associado a um.
+    let purpose = dto.purpose;
+    let dueDate = new Date(Date.now() + 14 * 86400000);
+    if (dto.cycleId) {
+      const campaign = await this.prisma.evaluationCampaign.findFirst({
+        where: { id: dto.cycleId, deletedAt: null },
+        select: { purpose: true, endDate: true, selfEvalDueDate: true, managerEvalDueDate: true },
+      });
+      purpose = purpose ?? campaign?.purpose ?? undefined;
+      const campaignDueDate =
+        dto.type === EvalType.SELF
+          ? campaign?.selfEvalDueDate
+          : dto.type === EvalType.MANAGER
+            ? campaign?.managerEvalDueDate
+            : undefined;
+      dueDate = campaignDueDate ?? campaign?.endDate ?? dueDate;
+    }
+
     const request = await this.prisma.evaluationRequest.create({
       data: {
         evaluatorId: dto.evaluatorId,
@@ -546,7 +735,18 @@ export class EvaluationService {
         type: dto.type,
         cycleId: dto.cycleId,
         status: RequestStatus.PENDING,
-        dueDate: new Date(Date.now() + 14 * 86400000),
+        dueDate,
+        name: dto.name,
+        purpose,
+        stage:
+          dto.type === EvalType.SELF
+            ? EvalStage.SELF_EVAL
+            : dto.type === EvalType.MANAGER
+              ? EvalStage.MANAGER_EVAL
+              : undefined,
+        objectives: dto.objectives
+          ? (dto.objectives as unknown as Prisma.InputJsonValue)
+          : undefined,
       },
       include: {
         evaluator: { select: { id: true, fullName: true } },
@@ -586,32 +786,304 @@ export class EvaluationService {
   }
 
   // ══════════════════════════════════════════════════════
+  // EVALUATION REQUESTS — vista "Avaliações" (docs/modulo_evaluation.md ponto 2)
+  //
+  // Uma "Avaliação" da lista é uma agregação por (evaluatedId, cycleId) dos
+  // vários EvaluationRequest (SELF/MANAGER/PEER/...) desse par — a linha
+  // representativa é a de tipo MANAGER (ou SELF na sua ausência), que é
+  // quem carrega prazo/estado/resultado mostrados na tabela.
+  // ══════════════════════════════════════════════════════
+
+  private static readonly REQUEST_INCLUDE = {
+    evaluated: {
+      select: {
+        id: true,
+        fullName: true,
+        avatarUrl: true,
+        employeeNumber: true,
+        department: { select: { id: true, name: true } },
+        position: { select: { id: true, name: true } },
+      },
+    },
+    evaluator: { select: { id: true, fullName: true, avatarUrl: true } },
+    cycle: { select: { id: true, name: true, startDate: true, endDate: true } },
+  } satisfies Prisma.EvaluationRequestInclude;
+
+  private pickRepresentative<T extends { type: string | null }>(rows: T[]): T {
+    const order: Record<string, number> = {
+      MANAGER: 0,
+      SELF: 1,
+      PEER: 2,
+      SUBORDINATE: 3,
+      CLIENT: 4,
+    };
+    return [...rows].sort((a, b) => (order[a.type ?? ''] ?? 9) - (order[b.type ?? ''] ?? 9))[0];
+  }
+
+  async getEvaluationRequestsList(filters: EvaluationRequestFilterDto = {}) {
+    const {
+      page = 1,
+      limit = 20,
+      cycleId,
+      departmentId,
+      unitId,
+      positionId,
+      evaluatorId,
+      status,
+      purpose,
+      period,
+    } = filters;
+
+    const where: Prisma.EvaluationRequestWhereInput = {};
+    if (cycleId) where.cycleId = cycleId;
+    if (evaluatorId) where.evaluatorId = evaluatorId;
+    if (status) where.status = status;
+    if (purpose) where.purpose = purpose;
+    if (departmentId || positionId) {
+      where.evaluated = {
+        ...(departmentId ? { departmentId } : {}),
+        ...(positionId ? { positionId } : {}),
+      };
+    }
+    if (unitId) where.evaluated = { ...(where.evaluated as object), unitId };
+
+    const rows = await this.prisma.read.evaluationRequest.findMany({
+      where,
+      include: EvaluationService.REQUEST_INCLUDE,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const groups = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const key = `${r.evaluatedId}-${r.cycleId ?? 'none'}`;
+      const group = groups.get(key);
+      if (group) group.push(r);
+      else groups.set(key, [r]);
+    }
+
+    // Resultados: uma única query para todo o conjunto de pares envolvidos.
+    const evaluatedIds = [...new Set(rows.map(r => r.evaluatedId))];
+    const results = evaluatedIds.length
+      ? await this.prisma.read.performanceEvaluation.findMany({
+          where: { evaluatedId: { in: evaluatedIds } },
+          select: {
+            evaluatorId: true,
+            evaluatedId: true,
+            cycleId: true,
+            overallScore: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+
+    let items = [...groups.entries()].map(([key, groupRows]) => {
+      const rep = this.pickRepresentative(groupRows);
+      const result = results.find(
+        r =>
+          r.evaluatorId === rep.evaluatorId &&
+          r.evaluatedId === rep.evaluatedId &&
+          r.cycleId === rep.cycleId,
+      );
+      const allCompleted = groupRows.every(r => r.status === 'COMPLETED');
+      const anyInProgress = groupRows.some(
+        r => r.status === 'IN_PROGRESS' || r.status === 'COMPLETED',
+      );
+      const aggregateStatus = allCompleted
+        ? 'COMPLETED'
+        : anyInProgress
+          ? 'IN_PROGRESS'
+          : 'PENDING';
+      // "Progresso" — docs/modulo_evaluation.md pt.7 (Avaliações Pendentes,
+      // vista do gestor): fracção de avaliadores irmãos (SELF/MANAGER/PEER/…)
+      // já concluídos, não um % de perguntas respondidas dentro de cada
+      // formulário (o schema não guarda progresso por pergunta).
+      const progress = groupRows.length
+        ? Math.round(
+            (groupRows.filter(r => r.status === 'COMPLETED').length / groupRows.length) * 100,
+          )
+        : 0;
+      const dueDate = groupRows
+        .map(r => r.dueDate)
+        .filter((d): d is Date => !!d)
+        .sort((a, b) => a.getTime() - b.getTime())[0];
+
+      return {
+        key,
+        id: rep.id,
+        evaluated: rep.evaluated,
+        evaluator: rep.evaluator,
+        type: rep.type,
+        purpose: rep.purpose ?? groupRows.find(r => r.purpose)?.purpose ?? null,
+        name: rep.name,
+        cycle: rep.cycle,
+        period: rep.cycle ? `${new Date(rep.cycle.startDate).getFullYear()}` : null,
+        status: aggregateStatus,
+        progress,
+        dueDate,
+        stage: rep.stage,
+        result: result?.overallScore ?? null,
+        completedAt: rep.completedAt ?? result?.createdAt ?? null,
+        evaluatorsCount: groupRows.length,
+      };
+    });
+
+    if (period) items = items.filter(i => i.period === period);
+    items.sort((a, b) => (b.dueDate?.getTime() ?? 0) - (a.dueDate?.getTime() ?? 0));
+
+    const total = items.length;
+    const { skip, take } = calculatePagination(page, limit);
+    return buildPaginatedResponse(items.slice(skip, skip + take), total, page, limit);
+  }
+
+  async getEvaluationRequestDetail(id: number) {
+    const request = await this.prisma.evaluationRequest.findUnique({
+      where: { id },
+      include: EvaluationService.REQUEST_INCLUDE,
+    });
+    if (!request) throw new NotFoundException('Avaliação não encontrada');
+
+    const siblings = request.cycleId
+      ? await this.prisma.evaluationRequest.findMany({
+          where: { evaluatedId: request.evaluatedId, cycleId: request.cycleId },
+          include: EvaluationService.REQUEST_INCLUDE,
+        })
+      : [request];
+
+    const result = await this.prisma.performanceEvaluation.findFirst({
+      where: {
+        evaluatorId: request.evaluatorId,
+        evaluatedId: request.evaluatedId,
+        cycleId: request.cycleId,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { ...request, siblings, result };
+  }
+
+  async updateEvaluationRequest(id: number, dto: UpdateEvaluationRequestDto) {
+    const request = await this.prisma.evaluationRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('Avaliação não encontrada');
+    if (request.status === 'COMPLETED')
+      throw new BadRequestException('Não é possível editar uma avaliação já concluída');
+
+    const { objectives, dueDate, ...rest } = dto;
+    return this.prisma.evaluationRequest.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(dueDate ? { dueDate: new Date(dueDate) } : {}),
+        ...(objectives ? { objectives: objectives as unknown as Prisma.InputJsonValue } : {}),
+      },
+    });
+  }
+
+  async remindEvaluationRequest(id: number) {
+    const request = await this.prisma.evaluationRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('Avaliação não encontrada');
+    await this.notifyParticipants(
+      request.cycleId ?? 0,
+      [request.evaluatorId],
+      'EVALUATION_REMINDER',
+      'Lembrete: tens uma avaliação pendente para preencher',
+    );
+    return { notified: true };
+  }
+
+  async finishEvaluationRequest(id: number) {
+    const request = await this.prisma.evaluationRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('Avaliação não encontrada');
+    return this.prisma.evaluationRequest.update({
+      where: { id },
+      data: { status: RequestStatus.COMPLETED, stage: EvalStage.DONE, completedAt: new Date() },
+    });
+  }
+
+  async reopenEvaluationRequest(id: number) {
+    const request = await this.prisma.evaluationRequest.findUnique({ where: { id } });
+    if (!request) throw new NotFoundException('Avaliação não encontrada');
+    return this.prisma.evaluationRequest.update({
+      where: { id },
+      data: { status: RequestStatus.IN_PROGRESS, completedAt: null },
+    });
+  }
+
+  // docs/modulo_evaluation.md ponto 2, etapa 8 — avanço manual do fluxo
+  // (Autoavaliação → Gestor → RH → Calibração → 1:1 → Aprovação → Resultado).
+  private static readonly STAGE_ORDER: EvalStage[] = [
+    EvalStage.SELF_EVAL,
+    EvalStage.MANAGER_EVAL,
+    EvalStage.HR_REVIEW,
+    EvalStage.CALIBRATION,
+    EvalStage.ONE_ON_ONE,
+    EvalStage.APPROVAL,
+    EvalStage.DONE,
+  ];
+
+  async advanceStage(id: number) {
+    const request = await this.prisma.evaluationRequest.findUnique({
+      where: { id },
+      include: { cycle: { select: { allowCalibration: true } } },
+    });
+    if (!request) throw new NotFoundException('Avaliação não encontrada');
+
+    const hasSelfRequest =
+      request.cycleId &&
+      (await this.prisma.evaluationRequest.count({
+        where: { evaluatedId: request.evaluatedId, cycleId: request.cycleId, type: EvalType.SELF },
+      })) > 0;
+
+    const currentIndex = EvaluationService.STAGE_ORDER.indexOf(
+      request.stage ?? EvalStage.SELF_EVAL,
+    );
+    let nextIndex = currentIndex + 1;
+    while (nextIndex < EvaluationService.STAGE_ORDER.length) {
+      const candidate = EvaluationService.STAGE_ORDER[nextIndex];
+      if (candidate === EvalStage.SELF_EVAL && !hasSelfRequest) {
+        nextIndex++;
+        continue;
+      }
+      if (candidate === EvalStage.CALIBRATION && request.cycle?.allowCalibration === false) {
+        nextIndex++;
+        continue;
+      }
+      break;
+    }
+    const nextStage =
+      EvaluationService.STAGE_ORDER[Math.min(nextIndex, EvaluationService.STAGE_ORDER.length - 1)];
+
+    return this.prisma.evaluationRequest.update({
+      where: { id },
+      data: {
+        stage: nextStage,
+        ...(nextStage === EvalStage.DONE
+          ? { status: RequestStatus.COMPLETED, completedAt: new Date() }
+          : {}),
+      },
+    });
+  }
+
+  // ══════════════════════════════════════════════════════
   // SUBMIT EVALUATION
   // ══════════════════════════════════════════════════════
 
   async submitEvaluation(evaluatorId: number, dto: SubmitEvaluationDto) {
-    // EvaluationRequest não tem relação `cycle` (só o escalar cycleId) —
-    // incluir a relação rebentava sempre ("Unknown field cycle"). Isto
-    // significa que todas as referências a `request.cycle` abaixo SEMPRE
-    // avaliaram para undefined mesmo antes desta limpeza de tipos (o
-    // optional chaining escondia-o) — o bloco de competencyScores por
-    // pergunta nunca executou de facto, e `period` cai sempre no fallback
-    // do ano corrente. Comportamento pré-existente, não alterado aqui.
-    const request: Prisma.EvaluationRequestGetPayload<object> | null =
-      await this.prisma.evaluationRequest
-        .findUnique({
-          where: { id: dto.requestId },
-        })
-        .catch((e: unknown) => {
-          this.logger.warn({
-            action: 'EVALUATION_REQUEST_FETCH',
-            requestId: dto.requestId,
-            evaluatorId,
-            err: { message: e instanceof Error ? e.message : String(e) },
-            msg: 'Falha ao obter pedido de avaliação — a devolver null',
-          });
-          return null;
+    const request = await this.prisma.evaluationRequest
+      .findUnique({
+        where: { id: dto.requestId },
+        include: { cycle: true },
+      })
+      .catch((e: unknown) => {
+        this.logger.warn({
+          action: 'EVALUATION_REQUEST_FETCH',
+          requestId: dto.requestId,
+          evaluatorId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao obter pedido de avaliação — a devolver null',
         });
+        return null;
+      });
 
     if (!request) throw new NotFoundException('Pedido de avaliação não encontrado');
     if (request.evaluatorId !== evaluatorId) {
@@ -626,28 +1098,25 @@ export class EvaluationService {
       ? +(numericAnswers.reduce((s, a) => s + (a.score ?? 0), 0) / numericAnswers.length).toFixed(2)
       : 0;
 
-    // Group scores by competency (questionId → competency via form)
-    // cycleFormId fica sempre undefined — dependia de request.cycle, que
-    // nunca existiu (ver nota acima) — por isso este bloco nunca executou
-    // de facto. Comportamento pré-existente, não alterado aqui.
+    // Group scores by competency (questionId → competency via cycle's form)
     const competencyScores: Record<number, number[]> = {};
-    const cycleFormId: number | undefined = undefined;
+    const cycleFormId = request.cycle?.formId ?? undefined;
     if (cycleFormId) {
-      const questions: { id: number; competencyId: number | null; weight: number }[] = await (
-        safeM(this.prisma, 'evaluationQuestion').findMany({
+      const questions = await this.prisma.evaluationCampaignQuestion
+        .findMany({
           where: { formId: cycleFormId, competencyId: { not: null } },
           select: { id: true, competencyId: true, weight: true },
-        }) as Promise<{ id: number; competencyId: number | null; weight: number }[]>
-      ).catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_QUESTION_LIST',
-          formId: cycleFormId,
-          requestId: dto.requestId,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao listar perguntas do formulário — a devolver lista vazia',
+        })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_QUESTION_LIST',
+            formId: cycleFormId,
+            requestId: dto.requestId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao listar perguntas do formulário — a devolver lista vazia',
+          });
+          return [] as { id: number; competencyId: number | null; weight: number | null }[];
         });
-        return [] as { id: number; competencyId: number | null; weight: number }[];
-      });
 
       for (const q of questions) {
         const ans = dto.answers.find(a => a.questionId === q.id);
@@ -670,9 +1139,8 @@ export class EvaluationService {
       evaluatorId,
       evaluatedId: request.evaluatedId,
       type: request.type,
-      // period cai sempre no fallback do ano corrente (request.cycle nunca
-      // existiu, ver nota acima).
-      period: new Date().getFullYear().toString(),
+      period:
+        request.cycle?.startDate?.getFullYear().toString() ?? new Date().getFullYear().toString(),
       criteria: dto.answers as unknown as Prisma.InputJsonValue,
       overallScore: avgScore,
       competencyScores: JSON.stringify(compAvg),
@@ -943,21 +1411,19 @@ export class EvaluationService {
     // sempre undefined após o JSON.parse, comportamento pré-existente.
     let weights: (EvaluatorWeightDto & { selfEvalIncluded?: boolean })[] = [];
     if (cycleId) {
-      const cycle = await (
-        safeM(this.prisma, 'evaluationCycle').findUnique({
-          where: { id: cycleId },
-        }) as Promise<EvaluationCycleRow | null>
-      ).catch((e: unknown) => {
-        this.logger.warn({
-          action: 'EVALUATION_CYCLE_FETCH_WEIGHTS',
-          cycleId,
-          evaluatedId,
-          err: { message: e instanceof Error ? e.message : String(e) },
-          msg: 'Falha ao obter pesos do ciclo para cálculo de resultados — a devolver null',
+      const campaign = await this.prisma.evaluationCampaign
+        .findUnique({ where: { id: cycleId } })
+        .catch((e: unknown) => {
+          this.logger.warn({
+            action: 'EVALUATION_CYCLE_FETCH_WEIGHTS',
+            cycleId,
+            evaluatedId,
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao obter pesos do ciclo para cálculo de resultados — a devolver null',
+          });
+          return null;
         });
-        return null;
-      });
-      if (cycle?.weights) weights = JSON.parse(cycle.weights);
+      if (campaign?.weights) weights = JSON.parse(campaign.weights);
     }
 
     // Group by evaluator type
@@ -1028,6 +1494,45 @@ export class EvaluationService {
           }
         : null;
 
+    // docs/modulo_evaluation.md ponto 8 — "Objetivos" do resultado: vêm do(s)
+    // EvaluationRequest.objectives preenchidos na etapa 6 do wizard, não de
+    // PerformanceEvaluation (que só guarda respostas de perguntas). Vários
+    // pedidos irmãos (SELF/MANAGER/...) do mesmo par podem ter objectives —
+    // achatamos todos porque tipicamente só um (MANAGER) os carrega.
+    const objectiveRequests = await this.prisma.read.evaluationRequest
+      .findMany({
+        where: { evaluatedId, ...(cycleId ? { cycleId } : {}) },
+        select: { objectives: true },
+      })
+      .catch(() => [] as { objectives: Prisma.JsonValue }[]);
+    const objectives = objectiveRequests.flatMap(r =>
+      Array.isArray(r.objectives) ? (r.objectives as unknown as Record<string, unknown>[]) : [],
+    );
+    const objectivesWithPct = objectives.filter(o => typeof o.percentage === 'number') as {
+      percentage: number;
+    }[];
+    const objectivesSummary = {
+      total: objectives.length,
+      avgAchievement: objectivesWithPct.length
+        ? +(
+            objectivesWithPct.reduce((s, o) => s + o.percentage, 0) / objectivesWithPct.length
+          ).toFixed(1)
+        : null,
+      items: objectives,
+    };
+
+    // Comentários separados por papel (docs pt.8 — "comentários do
+    // gestor"/"comentários do colaborador"), a partir dos mesmos registos
+    // PerformanceEvaluation já carregados acima (agrupados por `type`).
+    const commentsByRole = (role: EvalType) =>
+      evaluations
+        .filter(e => e.type === role && e.generalComment)
+        .map(e => ({ evaluatorId: e.evaluatorId, comment: e.generalComment }));
+
+    // Evolução histórica / comparação com avaliação anterior (docs pt.8 —
+    // reaproveita getUserEvolution em vez de duplicar o agrupamento por período).
+    const { evolution, trend } = await this.getUserEvolution(evaluatedId);
+
     return {
       evaluated,
       finalScore,
@@ -1048,6 +1553,12 @@ export class EvaluationService {
         improvements: evaluations.filter(e => e.improvements).map(e => e.improvements),
         recommendations: evaluations.filter(e => e.recommendations).map(e => e.recommendations),
       },
+      objectives: objectivesSummary,
+      comments: {
+        manager: commentsByRole(EvalType.MANAGER),
+        self: commentsByRole(EvalType.SELF),
+      },
+      evolution: { history: evolution, trend },
     };
   }
 
@@ -1070,7 +1581,7 @@ export class EvaluationService {
   // CALIBRATION
   // ══════════════════════════════════════════════════════
 
-  async getCycleForCalibration(cycleId: number) {
+  async getCycleForCalibration(cycleId: number, departmentId?: number) {
     type CalibrationEval = Prisma.PerformanceEvaluationGetPayload<{
       include: {
         evaluated: {
@@ -1086,8 +1597,15 @@ export class EvaluationService {
       };
     }>;
 
+    // docs/modulo_evaluation.md ponto 9 — "Selecionar departamento" filtra o
+    // conjunto calibrável; "Comparar equipas"/"Distribuição de resultados"
+    // (abaixo, byDepartment) continua a usar sempre todo o ciclo, não o
+    // subconjunto filtrado, para a comparação fazer sentido.
     const evals: CalibrationEval[] = await this.prisma.read.performanceEvaluation.findMany({
-      where: { ...(cycleId ? { cycleId } : {}) },
+      where: {
+        ...(cycleId ? { cycleId } : {}),
+        ...(departmentId ? { evaluated: { departmentId } } : {}),
+      },
       include: {
         evaluated: {
           select: {
@@ -1101,6 +1619,24 @@ export class EvaluationService {
         evaluator: { select: { id: true, fullName: true } },
       },
     });
+
+    const allEvals: CalibrationEval[] = departmentId
+      ? await this.prisma.read.performanceEvaluation.findMany({
+          where: { ...(cycleId ? { cycleId } : {}) },
+          include: {
+            evaluated: {
+              select: {
+                id: true,
+                fullName: true,
+                avatarUrl: true,
+                department: { select: { name: true } },
+                position: { select: { name: true } },
+              },
+            },
+            evaluator: { select: { id: true, fullName: true } },
+          },
+        })
+      : evals;
 
     // Group by evaluated
     const byEval: Record<
@@ -1154,12 +1690,118 @@ export class EvaluationService {
       })
       .filter(e => Math.abs(e.deviation) > 0.8);
 
-    return { participants: result, globalAvg: +globalAvg.toFixed(2), biasedEvaluators };
+    // "Comparar equipas" / "Distribuição de resultados" (docs pt.9) — sempre
+    // sobre o ciclo inteiro (allEvals), não sobre o filtro de departamento.
+    const deptMap: Record<string, number[]> = {};
+    for (const e of allEvals) {
+      const dept = e.evaluated?.department?.name ?? 'N/A';
+      if (!deptMap[dept]) deptMap[dept] = [];
+      deptMap[dept].push(e.overallScore ?? 0);
+    }
+    const byDepartment = Object.entries(deptMap)
+      .map(([department, scores]) => ({
+        department,
+        avgScore: +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2),
+        count: scores.length,
+      }))
+      .sort((a, b) => b.avgScore - a.avgScore);
+
+    const distribution = { exceptional: 0, above: 0, expected: 0, below: 0 };
+    for (const s of allEvals.map(e => e.overallScore ?? 0)) {
+      if (s >= 4) distribution.exceptional++;
+      else if (s >= 3) distribution.above++;
+      else if (s >= 2) distribution.expected++;
+      else distribution.below++;
+    }
+
+    return {
+      participants: result,
+      globalAvg: +globalAvg.toFixed(2),
+      biasedEvaluators,
+      byDepartment,
+      distribution,
+    };
+  }
+
+  // docs/modulo_evaluation.md ponto 9 — "Abrir calibração": move o ciclo para
+  // o estado CALIBRATING (enum já existia em EvalCampaignStatus, nunca
+  // escrito por nenhum serviço). Puramente informativo — não bloqueia
+  // calibrateScore, que já funciona independentemente do status do ciclo.
+  async openCalibration(cycleId: number) {
+    await this.assertCampaignExists(cycleId);
+    const campaign = await this.prisma.evaluationCampaign.update({
+      where: { id: cycleId },
+      data: { status: CycleStatus.CALIBRATING },
+    });
+    return this.toPublicCampaign(campaign);
+  }
+
+  // "Confirmar calibração": fecha a janela de calibração (volta a ACTIVE) e
+  // avança a etapa dos pedidos ainda em CALIBRATION para a seguinte
+  // (1:1/aprovação/resultado), reaproveitando advanceStage() por pedido.
+  async confirmCalibration(cycleId: number) {
+    const campaign = await this.assertCampaignExists(cycleId);
+    const pending = await this.prisma.evaluationRequest.findMany({
+      where: { cycleId, stage: EvalStage.CALIBRATION },
+      select: { id: true },
+    });
+    await Promise.allSettled(pending.map(r => this.advanceStage(r.id)));
+
+    const updated = await this.prisma.evaluationCampaign.update({
+      where: { id: cycleId },
+      data: {
+        status: campaign.status === CycleStatus.CALIBRATING ? CycleStatus.ACTIVE : campaign.status,
+      },
+    });
+    return { cycle: this.toPublicCampaign(updated), advanced: pending.length };
+  }
+
+  // docs/modulo_evaluation.md ponto 9 — "Histórico de alterações": lê o
+  // rasto deixado por calibrateScore() em AuditLog (entity=PerformanceEvaluation,
+  // action=CALIBRATION) em vez de um modelo dedicado — CalibrationLog existente
+  // no schema pertence ao módulo `performance` (FK para PerformanceReview, tipo
+  // incompatível), ver memory project_innova_performance_review_form.
+  async getCalibrationHistory(cycleId: number, evaluatedId?: number) {
+    const logs = await this.prisma.read.auditLog.findMany({
+      where: {
+        entity: 'PerformanceEvaluation',
+        action: 'CALIBRATION',
+        ...(evaluatedId ? { entityId: evaluatedId } : {}),
+      },
+      include: { user: { select: { id: true, fullName: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    return logs
+      .map(l => {
+        const metadata = l.metadata ? (JSON.parse(l.metadata) as { cycleId?: number }) : {};
+        return {
+          evaluatedId: l.entityId,
+          calibratedBy: l.user,
+          previousScore: l.before ? +l.before : null,
+          calibratedScore: l.after ? +l.after : null,
+          reason: l.reason,
+          cycleId: metadata.cycleId ?? null,
+          createdAt: l.createdAt,
+        };
+      })
+      .filter(l => l.cycleId === cycleId);
   }
 
   async calibrateScore(cycleId: number, dto: CalibrateScoreDto, calibratedById: number) {
     const where: Prisma.PerformanceEvaluationWhereInput = { evaluatedId: dto.evaluatedId };
     if (cycleId) where.cycleId = cycleId;
+
+    // Antes de sobrescrever: guarda a média actual para o "before" do
+    // histórico de calibração (docs pt.9 — "resultado inicial" na tabela de
+    // exemplo). updateMany() não devolve as linhas afectadas.
+    const before = await this.prisma.performanceEvaluation.findMany({
+      where,
+      select: { overallScore: true },
+    });
+    const previousScore = before.length
+      ? +(before.reduce((s, e) => s + (e.overallScore ?? 0), 0) / before.length).toFixed(2)
+      : null;
 
     await this.prisma.performanceEvaluation
       .updateMany({
@@ -1177,7 +1819,10 @@ export class EvaluationService {
         });
       });
 
-    // Log calibration in audit
+    // Log calibration in audit — before/after/reason (docs pt.9: "qualquer
+    // alteração feita na calibração deve ficar registada em auditoria",
+    // incluindo a justificação). metadata.cycleId permite filtrar o
+    // histórico por ciclo em getCalibrationHistory().
     await this.prisma.auditLog
       .create({
         data: {
@@ -1185,6 +1830,10 @@ export class EvaluationService {
           action: 'CALIBRATION',
           entity: 'PerformanceEvaluation',
           entityId: dto.evaluatedId,
+          before: previousScore !== null ? String(previousScore) : undefined,
+          after: String(dto.calibratedScore),
+          reason: dto.calibrationNote,
+          metadata: JSON.stringify({ cycleId }),
         },
       })
       .catch((e: unknown) => {
@@ -1219,6 +1868,7 @@ export class EvaluationService {
     return {
       message: 'Score calibrado',
       evaluatedId: dto.evaluatedId,
+      previousScore,
       newScore: dto.calibratedScore,
     };
   }
@@ -1354,6 +2004,91 @@ export class EvaluationService {
         .slice(-5)
         .reverse()
         .map(r => ({ ...r, percentile: percentile(r.avgScore, allScores) })),
+    };
+  }
+
+  // docs/modulo_evaluation.md ponto 1 — "Visão Geral". `privileged=true`
+  // devolve os KPIs organizacionais; caso contrário reaproveita
+  // getMyProgress/getPendingEvaluations (o mesmo conteúdo pessoal que já
+  // alimentava o OverviewTab antes desta remodelação).
+  async getOverviewDashboard(userId: number, privileged: boolean) {
+    if (!privileged) {
+      const [progress, pending] = await Promise.all([
+        this.getMyProgress(userId),
+        this.getPendingEvaluations(userId),
+      ]);
+      return { scope: 'personal' as const, progress, pending };
+    }
+
+    const now = new Date();
+    const [statusCounts, activeCycles, evaluatedIds, pendingRequests, overdueCount, evalScores] =
+      await Promise.all([
+        this.prisma.read.evaluationRequest.groupBy({ by: ['status'], _count: { _all: true } }),
+        this.prisma.read.evaluationCampaign.count({ where: { status: 'ACTIVE', deletedAt: null } }),
+        this.prisma.read.performanceEvaluation.findMany({
+          select: { evaluatedId: true },
+          distinct: ['evaluatedId'],
+        }),
+        this.prisma.read.evaluationRequest.findMany({
+          where: { status: { in: ['PENDING', 'IN_PROGRESS'] } },
+          select: {
+            id: true,
+            dueDate: true,
+            evaluated: { select: { id: true, fullName: true, avatarUrl: true } },
+          },
+          orderBy: { dueDate: 'asc' },
+          take: 8,
+        }),
+        this.prisma.read.evaluationRequest.count({
+          where: { status: { in: ['PENDING', 'IN_PROGRESS'] }, dueDate: { lt: now } },
+        }),
+        this.prisma.read.performanceEvaluation.findMany({ select: { overallScore: true } }),
+      ]);
+
+    const countByStatus = (status: string) =>
+      statusCounts.find(s => s.status === status)?._count._all ?? 0;
+    const pendingCount = countByStatus('PENDING');
+    const inProgressCount = countByStatus('IN_PROGRESS');
+    const completedCount = countByStatus('COMPLETED');
+    const totalRequests = pendingCount + inProgressCount + completedCount;
+
+    const scores = evalScores.map(e => e.overallScore ?? 0);
+    const avgScore = scores.length
+      ? +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2)
+      : 0;
+    const dist = { exceptional: 0, above: 0, expected: 0, below: 0 };
+    for (const s of scores) {
+      if (s >= 4) dist.exceptional++;
+      else if (s >= 3) dist.above++;
+      else if (s >= 2) dist.expected++;
+      else dist.below++;
+    }
+
+    const evaluatedUserIds = new Set(evaluatedIds.map(e => e.evaluatedId));
+    const pendingEvaluatedIds = new Set(
+      pendingRequests.map(r => r.evaluated.id).filter(id => !evaluatedUserIds.has(id)),
+    );
+
+    return {
+      scope: 'organization' as const,
+      kpis: {
+        inProgress: inProgressCount,
+        pending: pendingCount,
+        completed: completedCount,
+        completionRate:
+          totalRequests > 0 ? +((completedCount / totalRequests) * 100).toFixed(1) : 0,
+        avgScore,
+        evaluatedCount: evaluatedUserIds.size,
+      },
+      distribution: dist,
+      toEvaluateCount: pendingEvaluatedIds.size,
+      activeCycles,
+      upcomingDeadlines: pendingRequests.map(r => ({
+        id: r.id,
+        dueDate: r.dueDate,
+        evaluated: r.evaluated,
+      })),
+      alerts: overdueCount > 0 ? [{ type: 'OVERDUE', count: overdueCount }] : [],
     };
   }
 
@@ -1509,6 +2244,308 @@ export class EvaluationService {
       recommendation: `Foco de desenvolvimento: ${gaps.length} competências identificadas com gaps`,
       pdiAutoGenerated: false,
       managerNotified: !!user?.managerId,
+    };
+  }
+
+  // ══════════════════════════════════════════════════════
+  // CONVERSA 1:1 (docs/modulo_evaluation.md ponto 10)
+  //
+  // OneOnOneMeeting é o dono único (Fase G4 — src/one-on-one). O evaluation
+  // module só orquestra: liga o registo à EvaluationRequest representativa
+  // via oneOnOneMeetingId e avança o fluxo depois da conversa registada.
+  // ══════════════════════════════════════════════════════
+
+  async getOneOnOne(requestId: number) {
+    const request = await this.prisma.read.evaluationRequest.findUnique({
+      where: { id: requestId },
+      select: { oneOnOneMeetingId: true },
+    });
+    if (!request) throw new NotFoundException('Avaliação não encontrada');
+    if (!request.oneOnOneMeetingId) return null;
+    return this.oneOnOne.getOne(request.oneOnOneMeetingId);
+  }
+
+  async scheduleOneOnOne(requestId: number, dto: ScheduleOneOnOneDto) {
+    const request = await this.prisma.evaluationRequest.findUnique({ where: { id: requestId } });
+    if (!request) throw new NotFoundException('Avaliação não encontrada');
+    if (request.oneOnOneMeetingId) {
+      throw new ConflictException('Já existe uma conversa 1:1 agendada para esta avaliação');
+    }
+
+    const meeting = await this.oneOnOne.schedule({
+      hostId: request.evaluatorId,
+      participantId: request.evaluatedId,
+      scheduledAt: dto.scheduledAt,
+      agenda: dto.agenda,
+    });
+
+    await this.prisma.evaluationRequest.update({
+      where: { id: requestId },
+      data: { oneOnOneMeetingId: meeting.id },
+    });
+
+    return meeting;
+  }
+
+  // "Registar a conversa" — docs pt.10 pede Pontos discutidos/Pontos
+  // fortes/Áreas de desenvolvimento/Compromissos/Objetivos definidos/Ações/
+  // Próxima reunião/Observações. OneOnOneMeeting só tem campos genéricos
+  // (minutes/actionItems/nextMeetingDate) — os sub-campos estruturados vão
+  // como JSON dentro de `minutes`, mesmo padrão que NotificationLog.metadata
+  // usa para dados semi-estruturados sem duplicar colunas no dono único.
+  async registerOneOnOne(requestId: number, dto: RegisterOneOnOneDto) {
+    const request = await this.prisma.evaluationRequest.findUnique({ where: { id: requestId } });
+    if (!request) throw new NotFoundException('Avaliação não encontrada');
+
+    let meetingId = request.oneOnOneMeetingId;
+    if (!meetingId) {
+      const meeting = await this.oneOnOne.schedule({
+        hostId: request.evaluatorId,
+        participantId: request.evaluatedId,
+        scheduledAt: new Date(),
+      });
+      meetingId = meeting.id;
+      await this.prisma.evaluationRequest.update({
+        where: { id: requestId },
+        data: { oneOnOneMeetingId: meetingId },
+      });
+    }
+
+    const minutes = JSON.stringify({
+      discussionPoints: dto.discussionPoints,
+      strengths: dto.strengths,
+      developmentAreas: dto.developmentAreas,
+      commitments: dto.commitments,
+      objectivesSet: dto.objectivesSet,
+      observations: dto.observations,
+    });
+
+    const meeting = await this.oneOnOne.complete(meetingId, {
+      minutes,
+      actionItems: dto.actions,
+      nextMeetingDate: dto.nextMeetingDate,
+    });
+
+    // "Isto conecta directamente Evaluation com PDI" (docs pt.10) — avança o
+    // fluxo da avaliação para a etapa seguinte (Aprovação) assim que a
+    // conversa fica registada.
+    if (request.stage === EvalStage.ONE_ON_ONE) {
+      await this.advanceStage(requestId);
+    }
+
+    return meeting;
+  }
+
+  // ══════════════════════════════════════════════════════
+  // RELATÓRIOS (docs/modulo_evaluation.md ponto 11)
+  // ══════════════════════════════════════════════════════
+
+  async getReportsOverview(filters: EvaluationReportFilterDto = {}) {
+    const { cycleId, departmentId, unitId, positionId, managerId, period } = filters;
+
+    const evaluatedFilter: Prisma.UserWhereInput = {};
+    if (departmentId) evaluatedFilter.departmentId = departmentId;
+    if (unitId) evaluatedFilter.unitId = unitId;
+    if (positionId) evaluatedFilter.positionId = positionId;
+    if (managerId) evaluatedFilter.managerId = managerId;
+
+    const where: Prisma.PerformanceEvaluationWhereInput = {};
+    if (cycleId) where.cycleId = cycleId;
+    if (period) where.period = { contains: period };
+    if (Object.keys(evaluatedFilter).length) where.evaluated = evaluatedFilter;
+
+    type ReportEval = Prisma.PerformanceEvaluationGetPayload<{
+      include: {
+        evaluated: {
+          select: {
+            id: true;
+            fullName: true;
+            department: { select: { id: true; name: true } };
+            position: { select: { id: true; name: true } };
+            unit: { select: { id: true; name: true } };
+            manager: { select: { id: true; fullName: true } };
+          };
+        };
+      };
+    }>;
+
+    const [evals, totalRequests, completedRequests, objectiveRows] = await Promise.all([
+      this.prisma.read.performanceEvaluation.findMany({
+        where,
+        include: {
+          evaluated: {
+            select: {
+              id: true,
+              fullName: true,
+              department: { select: { id: true, name: true } },
+              position: { select: { id: true, name: true } },
+              unit: { select: { id: true, name: true } },
+              manager: { select: { id: true, fullName: true } },
+            },
+          },
+        },
+      }) as Promise<ReportEval[]>,
+      this.prisma.evaluationRequest.count({ where: cycleId ? { cycleId } : {} }).catch(() => 0),
+      this.prisma.evaluationRequest
+        .count({ where: { ...(cycleId ? { cycleId } : {}), status: 'COMPLETED' } })
+        .catch(() => 0),
+      this.prisma.read.evaluationRequest
+        .findMany({
+          where: { ...(cycleId ? { cycleId } : {}) },
+          select: { objectives: true },
+        })
+        .catch(() => [] as { objectives: Prisma.JsonValue }[]),
+    ]);
+
+    const groupBy = (keyFn: (e: ReportEval) => { id: number; name: string } | null | undefined) => {
+      const map = new Map<number, { name: string; scores: number[] }>();
+      for (const e of evals) {
+        const key = keyFn(e);
+        if (!key) continue;
+        const entry = map.get(key.id) ?? { name: key.name, scores: [] };
+        entry.scores.push(e.overallScore ?? 0);
+        map.set(key.id, entry);
+      }
+      return [...map.entries()]
+        .map(([id, { name, scores }]) => ({
+          id,
+          name,
+          count: scores.length,
+          avgScore: +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2),
+        }))
+        .sort((a, b) => b.avgScore - a.avgScore);
+    };
+
+    const byDepartment = groupBy(e => (e.evaluated?.department ? e.evaluated.department : null));
+    const byUnit = groupBy(e => (e.evaluated?.unit ? e.evaluated.unit : null));
+    const byPosition = groupBy(e => (e.evaluated?.position ? e.evaluated.position : null));
+    const byManager = groupBy(e =>
+      e.evaluated?.manager
+        ? { id: e.evaluated.manager.id, name: e.evaluated.manager.fullName }
+        : null,
+    );
+
+    // Distribuição das classificações (docs pt.11)
+    const distribution = { exceptional: 0, above: 0, expected: 0, below: 0 };
+    for (const s of evals.map(e => e.overallScore ?? 0)) {
+      if (s >= 4) distribution.exceptional++;
+      else if (s >= 3) distribution.above++;
+      else if (s >= 2) distribution.expected++;
+      else distribution.below++;
+    }
+
+    // Evolução do desempenho por período (docs pt.11)
+    const byPeriod: Record<string, number[]> = {};
+    for (const e of evals) {
+      if (!byPeriod[e.period]) byPeriod[e.period] = [];
+      byPeriod[e.period].push(e.overallScore ?? 0);
+    }
+    const evolution = Object.entries(byPeriod)
+      .map(([evalPeriod, scores]) => ({
+        period: evalPeriod,
+        avgScore: +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2),
+        count: scores.length,
+      }))
+      .sort((a, b) => a.period.localeCompare(b.period));
+
+    // Gaps de competências (docs pt.11) — média por competência sobre o
+    // conjunto filtrado; mesmo threshold (<3) usado em triggerPDIFromResults.
+    const compScores: Record<number, number[]> = {};
+    for (const e of evals) {
+      if (!e.competencyScores) continue;
+      const cs: Record<string, number> = JSON.parse(e.competencyScores);
+      for (const [cid, score] of Object.entries(cs)) {
+        const id = +cid;
+        if (!compScores[id]) compScores[id] = [];
+        compScores[id].push(score);
+      }
+    }
+    const competencyIds = Object.keys(compScores).map(Number);
+    const competencies = competencyIds.length
+      ? await this.prisma.read.competency.findMany({
+          where: { id: { in: competencyIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const competencyGaps = competencyIds
+      .map(id => {
+        const scores = compScores[id];
+        const avg = +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2);
+        return {
+          competencyId: id,
+          name: competencies.find(c => c.id === id)?.name ?? `#${id}`,
+          avgScore: avg,
+          gap: +(5 - avg).toFixed(2),
+        };
+      })
+      .filter(c => c.avgScore < 3)
+      .sort((a, b) => b.gap - a.gap);
+
+    // Objetivos alcançados (docs pt.11) — % médio de realização das metas
+    // definidas na etapa 6, através das EvaluationRequest.objectives.
+    const objectives = objectiveRows.flatMap(r =>
+      Array.isArray(r.objectives) ? (r.objectives as unknown as Record<string, unknown>[]) : [],
+    );
+    const objectivesWithPct = objectives.filter(o => typeof o.percentage === 'number') as {
+      percentage: number;
+    }[];
+    const objectivesAchieved = {
+      total: objectives.length,
+      avgAchievement: objectivesWithPct.length
+        ? +(
+            objectivesWithPct.reduce((s, o) => s + o.percentage, 0) / objectivesWithPct.length
+          ).toFixed(1)
+        : null,
+    };
+
+    return {
+      totalEvaluations: evals.length,
+      avgScore: evals.length
+        ? +(evals.reduce((s, e) => s + (e.overallScore ?? 0), 0) / evals.length).toFixed(2)
+        : 0,
+      completionRate:
+        totalRequests > 0 ? +((completedRequests / totalRequests) * 100).toFixed(1) : 0,
+      distribution,
+      byDepartment,
+      byUnit,
+      byPosition,
+      byManager,
+      evolution,
+      competencyGaps,
+      objectivesAchieved,
+    };
+  }
+
+  // ══════════════════════════════════════════════════════
+  // CONFIGURAÇÕES (docs/modulo_evaluation.md ponto 12)
+  //
+  // Agregador de leitura sobre a configuração já existente por peça
+  // (Escalas/Critérios/Modelos têm CRUD próprio acima) mais as listas fixas
+  // dos enums do domínio — não inventa mecanismos novos de config para
+  // "Fluxos de aprovação"/"Tipos"/"Estados", que já são código (STAGE_ORDER,
+  // EvalType, CycleStatus) em vez de dados configuráveis.
+  // ══════════════════════════════════════════════════════
+
+  async getSettings() {
+    const [scales, criteriaCount, templatesCount] = await Promise.all([
+      this.prisma.read.evaluationScale.findMany({
+        include: { levels: { orderBy: { value: 'asc' } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.read.evaluationCriteria.count({ where: { deletedAt: null } }),
+      this.prisma.read.evaluationTemplate.count({ where: { deletedAt: null } }),
+    ]);
+
+    return {
+      scales,
+      criteriaCount,
+      templatesCount,
+      evalTypes: Object.values(EvalType),
+      evalPurposes: Object.values(EvalPurpose),
+      populationTypes: Object.values(EvalPopulationType),
+      cycleStatuses: Object.values(CycleStatus),
+      approvalFlow: EvaluationService.STAGE_ORDER,
+      resultsVisibilityOptions: ['MANAGER_ONLY', 'SELF_AND_MANAGER', 'HR_ONLY', 'ALL'],
     };
   }
 }

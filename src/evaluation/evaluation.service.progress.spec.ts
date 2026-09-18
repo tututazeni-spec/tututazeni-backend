@@ -6,6 +6,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { EvaluationService } from './evaluation.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
+
+const mockOneOnOne = {
+  schedule: jest.fn().mockResolvedValue({ id: 1 }),
+  getOne: jest.fn().mockResolvedValue(null),
+  complete: jest.fn().mockResolvedValue({ id: 1 }),
+};
 
 // ─── Shared mocks ──────────────────────────────────────────────────
 
@@ -95,12 +102,12 @@ function buildMockPrisma() {
   return {
     user: crudMock(),
     performanceEvaluation: crudMock(),
-    evaluationCycle: crudMock(),
+    evaluationCampaign: crudMock(),
     evaluationRequest: crudMock(),
-    evaluationForm: crudMock(),
+    evaluationCampaignForm: crudMock(),
     evaluationScore: crudMock(),
     performanceReview: crudMock(),
-    evaluationQuestion: crudMock(),
+    evaluationCampaignQuestion: crudMock(),
     auditLog: crudMock(),
     notificationLog: crudMock(),
     userPoints: { upsert: jest.fn().mockResolvedValue({}) },
@@ -125,7 +132,11 @@ describe('EvaluationService (progress)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EvaluationService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        EvaluationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: OneOnOneService, useValue: mockOneOnOne },
+      ],
     }).compile();
 
     service = module.get<EvaluationService>(EvaluationService);
@@ -162,7 +173,7 @@ describe('EvaluationService (progress)', () => {
     it('deve calcular finalScore com pesos quando cycleId fornecido', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(userMock);
       mockPrisma.performanceEvaluation.findMany.mockResolvedValue(evalsMock);
-      mockPrisma.evaluationCycle.findUnique.mockResolvedValue(cycleMock);
+      mockPrisma.evaluationCampaign.findUnique.mockResolvedValue(cycleMock);
 
       const result = (await service.getResults(10, 1)) as any;
       expect(result.finalScore).toBeDefined();
