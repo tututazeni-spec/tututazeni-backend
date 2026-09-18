@@ -22,11 +22,7 @@ import { AssessmentsModule } from './assessments/assessments.module';
 // fundido lá como "Competências".
 import { CompetenciesModule } from './competencies/competencies.module';
 import { DevelopmentPlansModule } from './development-plans/development-plans.module';
-import { PerformanceModule } from './performance/performance.module';
-import { SuccessionModule } from './succession/succession.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
-import { LeadershipModule } from './leadership/leadership.module';
-import { MicroLearningModule } from './micro-learning/micro-learning.module';
 import { LiveClassesModule } from './live-classes/live-classes.module';
 import { MobileModule } from './mobile/mobile.module';
 import { ScalabilityModule } from './scalability/scalability.module';
@@ -36,7 +32,6 @@ import { ExecutiveReportsModule } from './executive-reports/executive-reports.mo
 import { NotificationsModule } from './notifications/notifications.module';
 import { AuditModule } from './audit/audit.module';
 import { AiTutorModule } from './ai-tutor/ai-tutor.module';
-import { InstructorModule } from './instructor/instructor.module';
 import { EventsModule } from './events/events.module';
 // UsersModule único junta UsersController (/users), EmployeesController
 // (/employees) e RolesPermissionsController (/roles-permissions) — ex-
@@ -55,10 +50,8 @@ import { DocumentRepositoryModule } from './document-repository/document-reposit
 // (/career-plans) — ex-CareerPlansModule, fundido aqui.
 import { CareerModule } from './career/career.module';
 import { TalentDevelopmentModule } from './talent-development/talent-development.module';
-import { EngagementModule } from './engagement/engagement.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { Evaluation360Module } from './evaluation360/evaluation360.module';
-import { AvatarTrainingModule } from './avatar-training/avatar-training.module';
 
 // MÓDULOS NOVOS — DASHBOARD E RELATÓRIOS
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -85,7 +78,6 @@ import { CrmFundersModule } from './crm-funders/crm-funders.module';
 // multimédia) e KnowledgeController (/knowledge — base de conhecimento) —
 // ex-ContentLibraryModule e ex-KnowledgeModule, fundidos aqui.
 import { LibraryModule } from './library/library.module';
-import { CertificationModule } from './certification/certification.module';
 import { DashboardInstitutionalModule } from './dashboard-institutional/dashboard-institutional.module';
 import { LmsModule } from './lms/lms.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
@@ -95,8 +87,6 @@ import { MetricsModule } from './metrics/metrics.module';
 // INFRA
 import { QueueModule } from './queue/queue.module';
 import { CacheModule } from './cache/cache.module';
-import { LearningPathsController } from './learning-paths/learning-paths.controller';
-import { LearningPathsService } from './learning-paths/learning-paths.service';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -163,11 +153,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     AssessmentsModule,
     CompetenciesModule,
     DevelopmentPlansModule,
-    PerformanceModule,
-    SuccessionModule,
     OnboardingModule,
-    LeadershipModule,
-    MicroLearningModule,
     LiveClassesModule,
     MobileModule,
     ScalabilityModule,
@@ -177,7 +163,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     NotificationsModule,
     AuditModule,
     AiTutorModule,
-    InstructorModule,
     EventsModule,
     AttendanceModule,
     LeaveManagementModule,
@@ -188,10 +173,8 @@ import { RolesGuard } from './common/guards/roles.guard';
     DocumentRepositoryModule,
     CareerModule,
     TalentDevelopmentModule,
-    EngagementModule,
     EvaluationModule,
     Evaluation360Module,
-    AvatarTrainingModule,
     DashboardModule,
     DashboardRhModule,
     ReportsModule,
@@ -207,16 +190,13 @@ import { RolesGuard } from './common/guards/roles.guard';
     CrmPartnersModule,
     CrmFundersModule,
     LibraryModule,
-    CertificationModule,
     DashboardInstitutionalModule,
     LmsModule,
     MonitoringModule,
     HealthModule,
     MetricsModule,
   ],
-  controllers: [LearningPathsController],
   providers: [
-    LearningPathsService,
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_GUARD, useClass: JwtAuthGuard },

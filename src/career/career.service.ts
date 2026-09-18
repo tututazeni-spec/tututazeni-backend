@@ -7,8 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma, ReadinessLevel, ReviewStatus, CareerPlanStatus, GoalType } from '@prisma/client';
-import { SuccessionService } from '../succession/succession.service';
+import { Prisma, ReviewStatus, CareerPlanStatus, GoalType } from '@prisma/client';
 import { CareerPlansService } from './career-plans.service';
 import {
   CreateCareerPathDto,
@@ -20,7 +19,6 @@ import {
   CreateInternalVacancyDto,
   ApplyToVacancyDto,
   UpdateApplicationStatusDto,
-  CreateSuccessionPlanDto,
   CareerInterestDto,
   VacancyFilterDto,
   CareerAnalyticsFilterDto,
@@ -34,7 +32,6 @@ export class CareerService {
 
   constructor(
     private prisma: PrismaService,
-    private readonly succession: SuccessionService,
     private readonly careerPlans: CareerPlansService,
   ) {}
 
@@ -999,80 +996,6 @@ export class CareerService {
     };
   }
 
-  // ─── PLANEAMENTO DE SUCESSÃO ──────────────────────────────────────────────
-
-  async getSuccessionPlans(positionId?: number) {
-    return this.prisma.read.successionPlan.findMany({
-      where: positionId ? { positionId } : undefined,
-      include: {
-        position: { select: { id: true, name: true, level: true } },
-        candidate: {
-          select: {
-            id: true,
-            fullName: true,
-            avatarUrl: true,
-            position: { select: { name: true } },
-            department: { select: { name: true } },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  // A escrita de SuccessionPlan tem um dono único — SuccessionService (Fase G2).
-  // Aqui resolve-se o cargo crítico a partir do positionId (contrato histórico
-  // de /career/succession) e delega-se; a priority é calculada pelo canónico.
-  async createSuccessionPlan(dto: CreateSuccessionPlanDto) {
-    const criticalPosition = await this.prisma.read.criticalPosition.findUnique({
-      where: { positionId: dto.positionId },
-    });
-    if (!criticalPosition) {
-      throw new NotFoundException(
-        'Este cargo ainda não foi marcado como crítico — crie primeiro em /succession/critical-positions',
-      );
-    }
-
-    const plan = await this.succession.create({
-      criticalPositionId: criticalPosition.id,
-      candidateId: dto.candidateId,
-      readinessLevel: dto.readiness,
-      notes: dto.justification,
-      readinessByDate: dto.estimatedReadyDate,
-    });
-
-    return this.toCareerSuccessionShape(plan);
-  }
-
-  // Adaptador de forma: /career/succession sempre expôs `position` de topo e
-  // `candidate {id, fullName}`. O canónico devolve `criticalPosition.position`
-  // e `candidate {id, fullName, avatarUrl}` — re-mapeia-se, chaves sempre
-  // presentes (extras toleradas).
-  private toCareerSuccessionShape(plan: {
-    criticalPosition?: { position?: { id: number; name: string } | null } | null;
-    candidate?: unknown;
-    [k: string]: unknown;
-  }) {
-    return {
-      ...plan,
-      position: plan.criticalPosition?.position
-        ? { id: plan.criticalPosition.position.id, name: plan.criticalPosition.position.name }
-        : null,
-      candidate: plan.candidate ?? null,
-    };
-  }
-
-  async updateSuccessionReadiness(
-    planId: number,
-    readiness: ReadinessLevel,
-    justification?: string,
-  ) {
-    return this.succession.update(planId, {
-      readinessLevel: readiness,
-      ...(justification !== undefined ? { notes: justification } : {}),
-    });
-  }
-
   // ─── INTERESSES DE CARREIRA ───────────────────────────────────────────────
 
   async updateCareerInterests(userId: number, dto: CareerInterestDto) {
@@ -1325,12 +1248,11 @@ export class CareerService {
   }
 
   async getCareerOverview(filters: CareerAnalyticsFilterDto = {}) {
-    const [careerAnalytics, careerPlansAnalytics, successionDashboard] = await Promise.all([
+    const [careerAnalytics, careerPlansAnalytics] = await Promise.all([
       this.getCareerAnalytics(filters),
       this.careerPlans.getAnalytics(
         filters.departmentId ? String(filters.departmentId) : undefined,
       ),
-      this.succession.getDashboard(),
     ]);
 
     const userWhere: Prisma.UserWhereInput = { active: true };
@@ -1363,9 +1285,7 @@ export class CareerService {
     ]);
 
     const totalUsers = careerAnalytics.overview.totalUsers;
-    const alerts: string[] = successionDashboard.criticalAlerts
-      .map(a => a.alert)
-      .filter((a): a is string => Boolean(a));
+    const alerts: string[] = [];
     if (totalUsers > 0 && employeesWithoutPlan / totalUsers > 0.5) {
       alerts.push(
         `🚨 ${employeesWithoutPlan} de ${totalUsers} colaboradores sem plano de carreira`,
@@ -1375,7 +1295,6 @@ export class CareerService {
     return {
       careerAnalytics,
       careerPlansAnalytics,
-      successionDashboard,
       employeesWithoutPlan,
       internalMovements: movements.map(m => ({ changeType: m.changeType, count: m._count })),
       evolutionByDepartment: this.countByKey(plansWithUser, p => p.user.department?.name ?? null),

@@ -3,9 +3,7 @@ import { DashboardInstitutionalController } from './dashboard-institutional.cont
 import { DashboardInstitutionalService } from './dashboard-institutional.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { DashboardModule } from '../dashboard/dashboard.module';
-import { EngagementModule } from '../engagement/engagement.module';
 import { OnboardingModule } from '../onboarding/onboarding.module';
-import { SuccessionModule } from '../succession/succession.module';
 import { EventsModule } from '../events/events.module';
 import { ProcessStandardModule } from '../process-standard/process-standard.module';
 import { WorkDeclarationModule } from '../work-declaration/work-declaration.module';
@@ -30,9 +28,7 @@ import { MonitoringModule } from '../monitoring/monitoring.module';
   imports: [
     PrismaModule,
     DashboardModule,
-    EngagementModule,
     OnboardingModule,
-    SuccessionModule,
     EventsModule,
     ProcessStandardModule,
     WorkDeclarationModule,

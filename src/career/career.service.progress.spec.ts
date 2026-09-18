@@ -2,20 +2,13 @@
 // Cobre métodos não testados: removeCareerPathStep, updateCareerPlan, addGoalToPlan,
 // updateGoalProgress, findAllVacancies, createVacancy, publishVacancy,
 // updateApplicationStatus, getMyApplications, checkPromotionEligibility,
-// requestPromotion, getSuccessionPlans, createSuccessionPlan,
-// updateSuccessionReadiness, updateCareerInterests, getTalentHeatmap
+// requestPromotion, updateCareerInterests, getTalentHeatmap
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { CareerService } from './career.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { SuccessionService } from '../succession/succession.service';
 import { CareerPlansService } from './career-plans.service';
-
-const mockSuccession = {
-  create: jest.fn(),
-  update: jest.fn(),
-};
 
 function buildMockPrisma() {
   const crud = () => ({
@@ -44,8 +37,6 @@ function buildMockPrisma() {
     internalApplication: crud(),
     vacancyApplication: crud(),
     promotionRequest: crud(),
-    successionPlan: crud(),
-    criticalPosition: crud(),
     positionCompetency: crud(),
     userCompetency: crud(),
     position: crud(),
@@ -77,7 +68,6 @@ describe('CareerService (progress)', () => {
       providers: [
         CareerService,
         { provide: PrismaService, useValue: mockPrisma },
-        { provide: SuccessionService, useValue: mockSuccession },
         {
           provide: CareerPlansService,
           useValue: { getAnalytics: jest.fn().mockResolvedValue({}) },
@@ -519,120 +509,6 @@ describe('CareerService (progress)', () => {
 
       const result = (await service.requestPromotion(1, 2, 'Motivo')) as any;
       expect(result.message).toBeDefined();
-    });
-  });
-
-  // ─── getSuccessionPlans ────────────────────────────────────────
-
-  describe('getSuccessionPlans', () => {
-    it('deve retornar todos os planos de sucessão', async () => {
-      mockPrisma.successionPlan.findMany.mockResolvedValue([
-        { id: 1, positionId: 1, candidateId: 5, readiness: 'READY_NOW' },
-      ]);
-      const result = await service.getSuccessionPlans();
-      expect(result).toHaveLength(1);
-    });
-
-    it('deve filtrar por positionId quando fornecido', async () => {
-      mockPrisma.successionPlan.findMany.mockResolvedValue([]);
-      await service.getSuccessionPlans(1);
-      expect(mockPrisma.successionPlan.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { positionId: 1 } }),
-      );
-    });
-
-    it('deve retornar todos quando positionId não fornecido', async () => {
-      mockPrisma.successionPlan.findMany.mockResolvedValue([]);
-      await service.getSuccessionPlans();
-      expect(mockPrisma.successionPlan.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: undefined }),
-      );
-    });
-  });
-
-  // ─── createSuccessionPlan ──────────────────────────────────────
-
-  describe('createSuccessionPlan', () => {
-    it('resolve o cargo crítico por positionId e delega em SuccessionService.create', async () => {
-      mockPrisma.criticalPosition.findUnique.mockResolvedValue({ id: 10, positionId: 1 });
-      mockSuccession.create.mockResolvedValue({
-        id: 1,
-        candidateId: 5,
-        criticalPosition: { position: { id: 1, name: 'CTO' } },
-        candidate: { id: 5, fullName: 'Candidato' },
-      });
-
-      const result = await service.createSuccessionPlan({
-        positionId: 1,
-        candidateId: 5,
-        readiness: 'READY_NOW',
-        justification: 'Tem todas as competências',
-      } as any);
-
-      expect(mockSuccession.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          criticalPositionId: 10,
-          candidateId: 5,
-          readinessLevel: 'READY_NOW',
-          notes: 'Tem todas as competências',
-        }),
-      );
-      // priority NÃO é decidida aqui — é do canónico
-      expect(mockSuccession.create.mock.calls[0][0]).not.toHaveProperty('priority');
-      // adaptador de forma: `position` de topo + `candidate`
-      expect(result.position).toEqual({ id: 1, name: 'CTO' });
-      expect(result.candidate).toEqual({ id: 5, fullName: 'Candidato' });
-    });
-
-    it('cargo não é crítico → NotFoundException (não delega)', async () => {
-      mockPrisma.criticalPosition.findUnique.mockResolvedValue(null);
-      await expect(
-        service.createSuccessionPlan({
-          positionId: 1,
-          candidateId: 5,
-          readiness: 'READY_NOW',
-        } as any),
-      ).rejects.toThrow(NotFoundException);
-      expect(mockSuccession.create).not.toHaveBeenCalled();
-    });
-
-    it('propaga ConflictException do serviço canónico', async () => {
-      mockPrisma.criticalPosition.findUnique.mockResolvedValue({ id: 10, positionId: 1 });
-      mockSuccession.create.mockRejectedValue(new ConflictException('já mapeado'));
-      await expect(
-        service.createSuccessionPlan({
-          positionId: 1,
-          candidateId: 5,
-          readiness: 'READY_NOW',
-        } as any),
-      ).rejects.toThrow(ConflictException);
-    });
-  });
-
-  // ─── updateSuccessionReadiness ─────────────────────────────────
-
-  describe('updateSuccessionReadiness', () => {
-    it('delega em SuccessionService.update com readinessLevel + notes', async () => {
-      mockSuccession.update.mockResolvedValue({ id: 1, readinessLevel: 'READY_NOW' });
-      const result = await service.updateSuccessionReadiness(1, 'READY_NOW', 'Nova justificação');
-      expect(mockSuccession.update).toHaveBeenCalledWith(1, {
-        readinessLevel: 'READY_NOW',
-        notes: 'Nova justificação',
-      });
-      expect(result).toBeDefined();
-    });
-
-    it('não envia `notes` quando justification é omitida (canónico preserva)', async () => {
-      mockSuccession.update.mockResolvedValue({});
-      await service.updateSuccessionReadiness(1, 'READY_SOON');
-      expect(mockSuccession.update).toHaveBeenCalledWith(1, { readinessLevel: 'READY_SOON' });
-    });
-
-    it('propaga NotFoundException do serviço canónico', async () => {
-      mockSuccession.update.mockRejectedValue(new NotFoundException('não encontrado'));
-      await expect(service.updateSuccessionReadiness(99, 'READY_NOW')).rejects.toThrow(
-        NotFoundException,
-      );
     });
   });
 

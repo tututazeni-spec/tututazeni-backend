@@ -343,33 +343,6 @@ export class UpdateApplicationStatusDto {
   feedback?: string;
 }
 
-// ─── Succession ───────────────────────────────────────────────────────────────
-
-export class CreateSuccessionPlanDto {
-  @ApiProperty({ description: 'ID do cargo crítico' })
-  @IsInt()
-  positionId!: number;
-
-  @ApiProperty({ description: 'ID do colaborador candidato' })
-  @IsInt()
-  candidateId!: number;
-
-  @ApiProperty({ enum: ReadinessLevel })
-  @IsEnum(ReadinessLevel)
-  readiness!: ReadinessLevel;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @MaxLength(1000)
-  justification?: string;
-
-  @ApiPropertyOptional({ description: 'Data estimada de prontidão' })
-  @IsOptional()
-  @IsDateString()
-  estimatedReadyDate?: string;
-}
-
 // ─── Career Goals (Objetivos pessoais) ────────────────────────────────────────
 
 export class CareerInterestDto {

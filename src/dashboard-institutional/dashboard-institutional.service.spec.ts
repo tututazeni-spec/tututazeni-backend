@@ -5,9 +5,7 @@ import { NotFoundException, ConflictException } from '@nestjs/common';
 import { AuditService } from '../common/services/audit.service';
 import { AuditService as AuditLogStatsService } from '../audit/audit.service';
 import { CacheService } from '../cache/cache.service';
-import { EngagementService } from '../engagement/engagement.service';
 import { OnboardingService } from '../onboarding/onboarding.service';
-import { SuccessionService } from '../succession/succession.service';
 import { EventsService } from '../events/events.service';
 import { ProcessStandardService } from '../process-standard/process-standard.service';
 import { LegacyDocumentDeclarationsService } from '../work-declaration/legacy-document-declarations.service';
@@ -56,24 +54,9 @@ const mockAudit = {
 const cacheGetOrSet = jest.fn((_k: string, _ttl: number, fn: () => any) => fn());
 const cacheMock = { getOrSet: cacheGetOrSet } as any;
 
-const mockEngagement = {
-  getDashboard: jest.fn().mockResolvedValue({
-    kpis: { engagementIndex: 70, engagementLevel: 'GOOD', participationRate: 60, enps: 20 },
-  }),
-};
 const mockOnboarding = {
   getDashboard: jest.fn().mockResolvedValue({
     summary: { byStatus: { IN_PROGRESS: 5, NOT_STARTED: 2 }, overdueTasks: 1, avgSurveyScore: 4.2 },
-  }),
-};
-const mockSuccession = {
-  getDashboard: jest.fn().mockResolvedValue({
-    kpis: {
-      totalCriticalPositions: 10,
-      withoutSuccessor: 3,
-      coverageRate: 70,
-      highRiskPositions: 2,
-    },
   }),
 };
 const mockEvents = {
@@ -110,12 +93,6 @@ const mockScalability = {
 };
 const mockMonitoring = {
   getDashboard: jest.fn().mockResolvedValue({
-    okrs: {
-      activeCycles: 2,
-      totalObjectives: 20,
-      completedObjectives: 10,
-      objectiveCompletionRate: 50,
-    },
     evaluation: {
       activeEvalCycles: 1,
       pendingEvaluations: 8,
@@ -150,9 +127,7 @@ describe('DashboardInstitutionalService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AuditService, useValue: mockAudit },
         { provide: CacheService, useValue: cacheMock },
-        { provide: EngagementService, useValue: mockEngagement },
         { provide: OnboardingService, useValue: mockOnboarding },
-        { provide: SuccessionService, useValue: mockSuccession },
         { provide: EventsService, useValue: mockEvents },
         { provide: ProcessStandardService, useValue: mockProcessStandard },
         { provide: LegacyDocumentDeclarationsService, useValue: mockDeclarations },
@@ -390,18 +365,6 @@ describe('DashboardInstitutionalService', () => {
     it('deve agregar os painéis de todos os módulos', async () => {
       const result = await service.getModulesOverview();
 
-      expect(result.engagement).toEqual({
-        index: 70,
-        level: 'GOOD',
-        participationRate: 60,
-        enps: 20,
-      });
-      expect(result.talentAndSuccession).toEqual({
-        criticalPositions: 10,
-        withoutSuccessor: 3,
-        coverageRate: 70,
-        highRiskPositions: 2,
-      });
       expect(result.onboarding).toEqual({ active: 7, overdueTasks: 1, avgSurveyScore: 4.2 });
       expect(result.events).toEqual({ total: 15, totalParticipants: 120 });
       expect(result.processes).toEqual({ active: 8, inProgress: 4, overdueSteps: 2 });
@@ -414,7 +377,6 @@ describe('DashboardInstitutionalService', () => {
         criticalAlerts: 0,
         integrationsWithErrors: 1,
       });
-      expect(result.okr).toEqual({ activeCycles: 2, objectiveCompletionRate: 50 });
       expect(result.evaluationCycles).toEqual({
         activeCycles: 1,
         pendingEvaluations: 8,
@@ -425,13 +387,12 @@ describe('DashboardInstitutionalService', () => {
     });
 
     it('deve degradar graciosamente quando um módulo falha (Promise.allSettled)', async () => {
-      mockSuccession.getDashboard.mockRejectedValueOnce(new Error('sucessão indisponível'));
+      mockOnboarding.getDashboard.mockRejectedValueOnce(new Error('onboarding indisponível'));
       const result = await service.getModulesOverview();
 
-      expect(result.talentAndSuccession).toBeNull();
+      expect(result.onboarding).toBeNull();
       // restantes módulos continuam presentes
-      expect(result.engagement).not.toBeNull();
-      expect(result.onboarding).not.toBeNull();
+      expect(result.events).not.toBeNull();
     });
 
     it('getModulesOverview usa cache com chave e TTL certos', async () => {

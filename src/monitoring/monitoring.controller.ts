@@ -16,10 +16,6 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { MonitoringService } from './monitoring.service';
 import {
-  CreateOkrCycleDto,
-  CreateObjectiveDto,
-  CreateKeyResultDto,
-  UpdateKeyResultDto,
   CreateIndicatorDto,
   CreateRecordDto,
   CreateEvalCycleDto,
@@ -42,49 +38,6 @@ export class MonitoringController {
   @ApiOperation({ summary: 'Dashboard de Monitoria e Avaliação' })
   getDashboard() {
     return this.service.getDashboard();
-  }
-
-  // ─── OKRs ────────────────────────────────────────────
-
-  @Post('okr/cycles')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Criar ciclo OKR' })
-  createOkrCycle(@Body() dto: CreateOkrCycleDto, @CurrentUser() user: CurrentUserData) {
-    return this.service.createOkrCycle(dto, user.id);
-  }
-
-  @Get('okr/cycles')
-  @ApiOperation({ summary: 'Listar ciclos OKR' })
-  findAllCycles() {
-    return this.service.findAllCycles();
-  }
-
-  @Post('okr/objectives')
-  @ApiOperation({ summary: 'Criar objectivo' })
-  createObjective(@Body() dto: CreateObjectiveDto, @CurrentUser() user: CurrentUserData) {
-    return this.service.createObjective(dto, user.id);
-  }
-
-  @Get('okr/cycles/:cycleId/objectives')
-  @ApiOperation({ summary: 'Objectivos de um ciclo' })
-  findObjectives(@Param('cycleId') cycleId: string, @Query('ownerId') ownerId?: string) {
-    return this.service.findObjectives(cycleId, ownerId ? Number(ownerId) : undefined);
-  }
-
-  @Post('okr/key-results')
-  @ApiOperation({ summary: 'Criar Key Result' })
-  createKeyResult(@Body() dto: CreateKeyResultDto, @CurrentUser() user: CurrentUserData) {
-    return this.service.createKeyResult(dto, user.id);
-  }
-
-  @Put('okr/key-results/:id')
-  @ApiOperation({ summary: 'Actualizar progresso do Key Result' })
-  updateKeyResult(
-    @Param('id') id: string,
-    @Body() dto: UpdateKeyResultDto,
-    @CurrentUser() user: CurrentUserData,
-  ) {
-    return this.service.updateKeyResult(id, dto, user);
   }
 
   // ─── INDICADORES ─────────────────────────────────────

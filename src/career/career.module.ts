@@ -14,11 +14,10 @@ import { CareerController } from './career.controller';
 import { CareerPlansService } from './career-plans.service';
 import { CareerPlansController } from './career-plans.controller';
 import { PrismaModule } from '../prisma/prisma.module';
-import { SuccessionModule } from '../succession/succession.module';
 import { AuditModule } from '../common/modules/audit.module';
 
 @Module({
-  imports: [PrismaModule, SuccessionModule, AuditModule],
+  imports: [PrismaModule, AuditModule],
   providers: [CareerService, CareerPlansService],
   controllers: [CareerController, CareerPlansController],
   exports: [CareerService, CareerPlansService],
