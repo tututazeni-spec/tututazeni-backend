@@ -15,7 +15,7 @@ import { EvaluationService } from './evaluation.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
-import { assertCanAccess } from '../common/authz/ownership';
+import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
 import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 import {
   CreateCycleDto,
@@ -34,6 +34,8 @@ import {
   UpdateCriteriaDto,
   CreateTemplateDto,
   UpdateTemplateDto,
+  EvaluationRequestFilterDto,
+  UpdateEvaluationRequestDto,
 } from './evaluation.dto';
 
 const ALL_ROLES = AUTHENTICATED_ROLES;
@@ -91,6 +93,34 @@ export class EvaluationController {
   @ApiOperation({ summary: 'Activar ciclo — auto-assign pedidos + notificar participantes' })
   activateCycle(@Param('id', ParseIntPipe) id: number) {
     return this.svc.activateCycle(id);
+  }
+
+  @Patch('cycles/:id/pause')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Pausar ciclo' })
+  pauseCycle(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.pauseCycle(id);
+  }
+
+  @Patch('cycles/:id/close')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Encerrar ciclo' })
+  closeCycle(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.closeCycle(id);
+  }
+
+  @Patch('cycles/:id/reopen')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Reabrir ciclo pausado/encerrado' })
+  reopenCycle(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.reopenCycle(id);
+  }
+
+  @Post('cycles/:id/remind')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Enviar lembrete a todos os participantes pendentes do ciclo' })
+  remindCycle(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remindCycleParticipants(id);
   }
 
   // ─── Forms ───────────────────────────────────────────────────
@@ -215,6 +245,60 @@ export class EvaluationController {
     return this.svc.bulkAssign(dto, user);
   }
 
+  // ─── Evaluation Requests — aba "Avaliações" (docs/modulo_evaluation.md pt.2) ──
+
+  @Get('requests')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Listar avaliações (1 linha por colaborador avaliado)' })
+  listRequests(@Query() filters: EvaluationRequestFilterDto) {
+    return this.svc.getEvaluationRequestsList(filters);
+  }
+
+  @Get('requests/:id')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Detalhe de uma avaliação (com pedidos irmãos + resultado)' })
+  getRequestDetail(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getEvaluationRequestDetail(id);
+  }
+
+  @Patch('requests/:id')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Editar avaliação (nome, tipo, objectivos, prazo)' })
+  updateRequest(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEvaluationRequestDto) {
+    return this.svc.updateEvaluationRequest(id, dto);
+  }
+
+  @Post('requests/:id/remind')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Enviar lembrete ao avaliador desta avaliação' })
+  remindRequest(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remindEvaluationRequest(id);
+  }
+
+  @Patch('requests/:id/finish')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Finalizar avaliação' })
+  finishRequest(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.finishEvaluationRequest(id);
+  }
+
+  @Patch('requests/:id/reopen')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Reabrir avaliação finalizada' })
+  reopenRequest(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.reopenEvaluationRequest(id);
+  }
+
+  @Post('requests/:id/advance-stage')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({
+    summary:
+      'Avançar a etapa do fluxo (Autoavaliação→Gestor→RH→Calibração→1:1→Aprovação→Resultado)',
+  })
+  advanceStage(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.advanceStage(id);
+  }
+
   // ─── Submit ──────────────────────────────────────────────────
 
   @Post('submit')
@@ -231,6 +315,19 @@ export class EvaluationController {
   @ApiOperation({ summary: '[Legacy] Submeter avaliação simples (compatibilidade)' })
   create(@CurrentUser() user: CurrentUserData, @Body() dto: CreateEvaluationDto) {
     return this.svc.create(user.id, dto);
+  }
+
+  // ─── Overview — aba "Visão Geral" (docs/modulo_evaluation.md pt.1) ──
+
+  @Get('overview')
+  @Roles(...ALL_ROLES)
+  @ApiOperation({
+    summary:
+      'Dashboard "Visão Geral" — KPIs organizacionais (gestão) ou progresso pessoal (colaborador)',
+  })
+  overview(@CurrentUser() user: CurrentUserData) {
+    const privileged = isPrivileged(user, [...MGMT_ROLES]);
+    return this.svc.getOverviewDashboard(user.id, privileged);
   }
 
   // ─── Pending / My evaluations ────────────────────────────────

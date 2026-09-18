@@ -19,15 +19,19 @@ import {
   EvaluationRequestStatus as RequestStatus,
   EvalCampaignStatus as CycleStatus,
   EvalQuestionType as QuestionType,
+  EvalPurpose,
+  EvalPopulationType,
+  EvalStage,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
 // ─── Enums ────────────────────────────────────────────────────────
 // CycleStatus/QuestionType são os enums reais do Prisma (EvalCampaignStatus/
 // EvalQuestionType) re-exportados — sem duplicação, sem casts na fronteira
-// service↔Prisma.
+// service↔Prisma. EvalPurpose/EvalPopulationType/EvalStage idem (docs/
+// modulo_evaluation.md pontos 2-3, remodelação Parte 1).
 
-export { RequestStatus, CycleStatus, QuestionType };
+export { RequestStatus, CycleStatus, QuestionType, EvalPurpose, EvalPopulationType, EvalStage };
 
 export enum EvalType {
   SELF = 'SELF',
@@ -92,6 +96,25 @@ export class CreateCycleDto {
   @ValidateNested({ each: true })
   @Type(() => EvaluatorWeightDto)
   weights!: EvaluatorWeightDto[];
+
+  // ── docs/modulo_evaluation.md pontos 2-3 (remodelação Parte 1) ──
+  @ApiPropertyOptional({ enum: EvalPurpose })
+  @IsOptional()
+  @IsEnum(EvalPurpose)
+  purpose?: EvalPurpose;
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  blocks?: string[];
+  @ApiPropertyOptional({ enum: EvalPopulationType })
+  @IsOptional()
+  @IsEnum(EvalPopulationType)
+  populationType?: EvalPopulationType;
+  @ApiPropertyOptional() @IsOptional() @IsArray() @IsInt({ each: true }) targetUnitIds?: number[];
+  @ApiPropertyOptional() @IsOptional() @IsArray() @IsInt({ each: true }) targetUserIds?: number[];
+  @ApiPropertyOptional() @IsOptional() @IsDateString() selfEvalDueDate?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() managerEvalDueDate?: string;
 }
 
 export class UpdateCycleDto {
@@ -106,6 +129,23 @@ export class UpdateCycleDto {
   @ApiPropertyOptional() @IsOptional() @IsBoolean() mandatory?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() confidential?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+  @ApiPropertyOptional({ enum: EvalPurpose })
+  @IsOptional()
+  @IsEnum(EvalPurpose)
+  purpose?: EvalPurpose;
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  blocks?: string[];
+  @ApiPropertyOptional({ enum: EvalPopulationType })
+  @IsOptional()
+  @IsEnum(EvalPopulationType)
+  populationType?: EvalPopulationType;
+  @ApiPropertyOptional() @IsOptional() @IsArray() @IsInt({ each: true }) targetUnitIds?: number[];
+  @ApiPropertyOptional() @IsOptional() @IsArray() @IsInt({ each: true }) targetUserIds?: number[];
+  @ApiPropertyOptional() @IsOptional() @IsDateString() selfEvalDueDate?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() managerEvalDueDate?: string;
 }
 
 export class CycleFilterDto extends BaseFilterDto {
@@ -162,11 +202,34 @@ export class SubmitEvaluationDto {
 
 // ─── Evaluator Assignment DTOs ────────────────────────────────────
 
+// docs/modulo_evaluation.md ponto 2, etapa 6 ("Objetivos").
+export class EvaluationObjectiveDto {
+  @ApiProperty() @IsString() @MaxLength(300) objective!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) indicator?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) target?: string;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100) weight?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) achievedResult?: string;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(200) percentage?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) employeeComment?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) evaluatorComment?: string;
+}
+
 export class AssignEvaluatorDto {
   @ApiProperty() @IsInt() evaluatedId!: number;
   @ApiProperty() @IsInt() evaluatorId!: number;
   @ApiProperty({ enum: EvalType }) @IsEnum(EvalType) type!: EvalType;
   @ApiPropertyOptional() @IsOptional() @IsInt() cycleId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) name?: string;
+  @ApiPropertyOptional({ enum: EvalPurpose })
+  @IsOptional()
+  @IsEnum(EvalPurpose)
+  purpose?: EvalPurpose;
+  @ApiPropertyOptional({ type: [EvaluationObjectiveDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => EvaluationObjectiveDto)
+  objectives?: EvaluationObjectiveDto[];
 }
 
 export class BulkAssignDto {
@@ -176,6 +239,40 @@ export class BulkAssignDto {
   @ValidateNested({ each: true })
   @Type(() => AssignEvaluatorDto)
   assignments!: AssignEvaluatorDto[];
+}
+
+// ─── Evaluation Requests list / detail DTOs (docs/modulo_evaluation.md ponto 2) ──
+
+export class EvaluationRequestFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) cycleId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) positionId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) evaluatorId?: number;
+  @ApiPropertyOptional({ enum: RequestStatus })
+  @IsOptional()
+  @IsEnum(RequestStatus)
+  status?: RequestStatus;
+  @ApiPropertyOptional({ enum: EvalPurpose })
+  @IsOptional()
+  @IsEnum(EvalPurpose)
+  purpose?: EvalPurpose;
+  @ApiPropertyOptional() @IsOptional() @IsString() period?: string;
+}
+
+export class UpdateEvaluationRequestDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) name?: string;
+  @ApiPropertyOptional({ enum: EvalPurpose })
+  @IsOptional()
+  @IsEnum(EvalPurpose)
+  purpose?: EvalPurpose;
+  @ApiPropertyOptional({ type: [EvaluationObjectiveDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => EvaluationObjectiveDto)
+  objectives?: EvaluationObjectiveDto[];
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dueDate?: string;
 }
 
 // ─── Calibration DTOs ────────────────────────────────────────────

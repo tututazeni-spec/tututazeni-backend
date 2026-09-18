@@ -3285,6 +3285,11 @@ model EvaluationRequest {
   cycleId     Int?
   completedAt DateTime?
   createdAt   DateTime                @default(now())
+  // docs/modulo_evaluation.md pontos 2-3 (remodelação Parte 1):
+  purpose     EvalPurpose?
+  objectives  Json? // etapa 6 do wizard — [{objective,indicator,target,weight,achievedResult,percentage,employeeComment,evaluatorComment}]
+  name        String?
+  stage       EvalStage?
   evaluator   User                    @relation("RequestEvaluator", fields: [evaluatorId], references: [id])
   evaluated   User                    @relation("RequestEvaluated", fields: [evaluatedId], references: [id])
   cycle       EvaluationCampaign?     @relation(fields: [cycleId], references: [id])
@@ -9534,6 +9539,7 @@ enum EvalCampaignStatus {
   DRAFT
   PUBLISHED
   ACTIVE
+  PAUSED
   CALIBRATING
   COMPLETED
   ARCHIVED
@@ -9547,40 +9553,82 @@ enum EvalQuestionType {
   NA_ALLOWED
 }
 
+// docs/modulo_evaluation.md ponto 2, etapa 1 ("Tipo de avaliação") —
+// distinto de EvalType (que é "quem avalia": SELF/MANAGER/PEER/...).
+enum EvalPurpose {
+  PERFORMANCE
+  PROBATION
+  EXTRAORDINARY
+  POST_TRAINING
+  COMPETENCY
+  GOALS
+}
+
+// docs/modulo_evaluation.md ponto 2, etapa 2 ("Possibilidade de
+// seleccionar") — como a população-alvo de uma avaliação/ciclo foi
+// escolhida.
+enum EvalPopulationType {
+  ALL
+  DEPARTMENT
+  UNIT
+  GROUP
+}
+
+// docs/modulo_evaluation.md ponto 2, etapa 8 ("Fluxo") — avançado
+// manualmente via POST /evaluations/requests/:id/advance-stage nesta
+// parte (não é uma state machine automática, ver plano).
+enum EvalStage {
+  SELF_EVAL
+  MANAGER_EVAL
+  HR_REVIEW
+  CALIBRATION
+  ONE_ON_ONE
+  APPROVAL
+  DONE
+}
+
 model EvaluationCampaign {
-  id                      Int                @id @default(autoincrement())
-  code                    String?            @unique
+  id                      Int                 @id @default(autoincrement())
+  code                    String?             @unique
   name                    String
-  description             String?            @db.Text
+  description             String?             @db.Text
   category                String?
-  model                   EvalCampaignModel  @default(DEG_360)
-  status                  EvalCampaignStatus @default(DRAFT)
+  model                   EvalCampaignModel   @default(DEG_360)
+  status                  EvalCampaignStatus  @default(DRAFT)
   templateId              Int?
   startDate               DateTime
   endDate                 DateTime
   formId                  Int?
   targetDeptIds           Int[]
-  mandatory               Boolean            @default(false)
-  confidential            Boolean            @default(false)
-  selfEvalIncludedInScore Boolean            @default(false)
+  mandatory               Boolean             @default(false)
+  confidential            Boolean             @default(false)
+  selfEvalIncludedInScore Boolean             @default(false)
   weights                 String? // JSON.stringify(EvaluatorWeightDto[])
   minScore                Float?
   maxScore                Float?
-  requireComments         Boolean            @default(false)
-  requireEvidence         Boolean            @default(false)
-  allowEdit               Boolean            @default(false)
-  allowContest            Boolean            @default(false)
-  allowCalibration        Boolean            @default(true)
+  requireComments         Boolean             @default(false)
+  requireEvidence         Boolean             @default(false)
+  allowEdit               Boolean             @default(false)
+  allowContest            Boolean             @default(false)
+  allowCalibration        Boolean             @default(true)
   resultsVisibility       String?
-  linkPdi                 Boolean            @default(false)
-  linkCompetencies        Boolean            @default(false)
-  linkCareer              Boolean            @default(false)
-  linkSuccession          Boolean            @default(false)
-  link9Box                Boolean            @default(false)
-  notes                   String?            @db.Text
+  linkPdi                 Boolean             @default(false)
+  linkCompetencies        Boolean             @default(false)
+  linkCareer              Boolean             @default(false)
+  linkSuccession          Boolean             @default(false)
+  link9Box                Boolean             @default(false)
+  notes                   String?             @db.Text
+  // docs/modulo_evaluation.md pontos 2-3 (remodelação Parte 1):
+  purpose                 EvalPurpose?
+  blocks                  Json? // etapa 3 do wizard — blocos seleccionados (Objetivos, Competências, ...)
+  populationType          EvalPopulationType?
+  targetUnitIds           Int[]               @default([])
+  targetUserIds           Int[]               @default([])
+  selfEvalDueDate         DateTime?
+  managerEvalDueDate      DateTime?
   createdById             Int
-  createdAt               DateTime           @default(now())
-  updatedAt               DateTime           @updatedAt
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
   deletedAt               DateTime?
 
   createdBy   User                    @relation("EvalCampaignCreator", fields: [createdById], references: [id])

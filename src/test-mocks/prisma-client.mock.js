@@ -123,6 +123,7 @@ const EvalCampaignStatus = {
   DRAFT: 'DRAFT',
   PUBLISHED: 'PUBLISHED',
   ACTIVE: 'ACTIVE',
+  PAUSED: 'PAUSED',
   CALIBRATING: 'CALIBRATING',
   COMPLETED: 'COMPLETED',
   ARCHIVED: 'ARCHIVED',
@@ -134,6 +135,35 @@ const EvalQuestionType = {
   NPS: 'NPS',
   BOOLEAN: 'BOOLEAN',
   NA_ALLOWED: 'NA_ALLOWED',
+};
+
+// docs/modulo_evaluation.md pontos 2-3 (remodelação Parte 1) — ver
+// memory project_innova_onboarding_plan_creation_roles_structure sobre
+// este ficheiro poder ficar dessincronizado do schema real.
+const EvalPurpose = {
+  PERFORMANCE: 'PERFORMANCE',
+  PROBATION: 'PROBATION',
+  EXTRAORDINARY: 'EXTRAORDINARY',
+  POST_TRAINING: 'POST_TRAINING',
+  COMPETENCY: 'COMPETENCY',
+  GOALS: 'GOALS',
+};
+
+const EvalPopulationType = {
+  ALL: 'ALL',
+  DEPARTMENT: 'DEPARTMENT',
+  UNIT: 'UNIT',
+  GROUP: 'GROUP',
+};
+
+const EvalStage = {
+  SELF_EVAL: 'SELF_EVAL',
+  MANAGER_EVAL: 'MANAGER_EVAL',
+  HR_REVIEW: 'HR_REVIEW',
+  CALIBRATION: 'CALIBRATION',
+  ONE_ON_ONE: 'ONE_ON_ONE',
+  APPROVAL: 'APPROVAL',
+  DONE: 'DONE',
 };
 
 const LeadershipProgramLevel = {
@@ -2061,6 +2091,9 @@ module.exports = {
   EvalCampaignModel,
   EvalCampaignStatus,
   EvalQuestionType,
+  EvalPurpose,
+  EvalPopulationType,
+  EvalStage,
   LeadershipProgramLevel,
   ProgramStatus,
   ParticipantStatus,
