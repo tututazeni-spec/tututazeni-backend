@@ -717,6 +717,32 @@ export class CareerService {
     return updated;
   }
 
+  // Secção 5 (Oportunidades): candidatos por vaga — RH/Gestor precisam
+  // disto para rever/aceitar/rejeitar candidaturas via
+  // PATCH /career/vacancies/applications/:appId/status, que antes não
+  // tinha nenhum caminho de leitura correspondente no frontend.
+  async getVacancyApplications(vacancyId: number) {
+    const vacancy = await this.prisma.read.internalVacancy.findUnique({ where: { id: vacancyId } });
+    if (!vacancy) throw new NotFoundException('Vaga não encontrada');
+
+    return this.prisma.read.internalApplication.findMany({
+      where: { vacancyId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            email: true,
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { appliedAt: 'asc' },
+    });
+  }
+
   async applyToVacancy(vacancyId: number, userId: number, dto: ApplyToVacancyDto) {
     const vacancy = await this.prisma.read.internalVacancy.findUnique({ where: { id: vacancyId } });
     if (!vacancy) throw new NotFoundException('Vaga não encontrada');
