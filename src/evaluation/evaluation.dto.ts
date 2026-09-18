@@ -315,18 +315,24 @@ export class UpdateScaleDto {
 
 export class CreateCriteriaDto {
   @ApiProperty() @IsString() @MaxLength(200) name!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) code?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() category?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) weight?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() scaleId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() competencyId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() behavioralIndicators?: string;
 }
 
 export class UpdateCriteriaDto {
   @ApiPropertyOptional() @IsOptional() @IsString() name?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(50) code?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() category?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) weight?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() scaleId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() competencyId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() behavioralIndicators?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
@@ -355,8 +361,18 @@ export class CreateTemplateDto {
 export class UpdateTemplateDto {
   @ApiPropertyOptional() @IsOptional() @IsString() name?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() type?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() scaleId?: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isDefault?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
+  // Quando presente, substitui por completo os critérios ligados ao modelo
+  // (docs/modulo_evaluation.md pt.4 — "cada modelo contém critérios/pesos").
+  @ApiPropertyOptional({ type: [TemplateCriterionLinkDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TemplateCriterionLinkDto)
+  criteria?: TemplateCriterionLinkDto[];
 }
 
 // ─── Analytics DTOs ──────────────────────────────────────────────

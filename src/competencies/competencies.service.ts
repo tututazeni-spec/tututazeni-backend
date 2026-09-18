@@ -429,6 +429,30 @@ export class CompetenciesService {
     return { gaps, totalGap, mandatoryGaps, readinessPercent, positionId, userId };
   }
 
+  // Aba "Competências" do módulo Evaluation (docs/modulo_evaluation.md pt.6)
+  // integra directamente com este motor de gap em vez de duplicar a lógica —
+  // só resolve o positionId do utilizador em vez de o exigir como parâmetro,
+  // já que aí o consumidor tem o userId (colaborador avaliado) mas não sabe
+  // o cargo. Sem cargo atribuído devolve gaps vazio em vez de rebentar.
+  async getCompetencyGapForUser(userId: number) {
+    const user = await this.prisma.read.user.findUnique({
+      where: { id: userId },
+      select: { positionId: true },
+    });
+    if (!user?.positionId) {
+      return {
+        gaps: [],
+        totalGap: 0,
+        mandatoryGaps: 0,
+        readinessPercent: 100,
+        positionId: null,
+        userId,
+        noPosition: true,
+      };
+    }
+    return this.getCompetencyGap(userId, user.positionId);
+  }
+
   // ─── MAPEAMENTOS ──────────────────────────────────────────────────────────
 
   // PositionCompetency não tem @@unique([positionId, competencyId]) — suporta

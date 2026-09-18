@@ -4,6 +4,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -188,8 +189,11 @@ export class EvaluationController {
   @Get('criteria')
   @Roles(...MGMT_ROLES)
   @ApiOperation({ summary: 'Listar critérios de avaliação' })
-  getCriteria(@Query('category') category?: string) {
-    return this.svc.getCriteria({ category });
+  getCriteria(
+    @Query('category') category?: string,
+    @Query('includeInactive') includeInactive?: string,
+  ) {
+    return this.svc.getCriteria({ category, includeInactive: includeInactive === 'true' });
   }
 
   @Patch('criteria/:id')
@@ -197,6 +201,13 @@ export class EvaluationController {
   @ApiOperation({ summary: 'Actualizar critério de avaliação' })
   updateCriteria(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCriteriaDto) {
     return this.svc.updateCriteria(id, dto);
+  }
+
+  @Delete('criteria/:id')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Remover critério de avaliação (soft delete)' })
+  deleteCriteria(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.deleteCriteria(id);
   }
 
   // ─── Templates (Modelos) ──────────────────────────────────────
@@ -227,6 +238,13 @@ export class EvaluationController {
   @ApiOperation({ summary: 'Actualizar modelo de avaliação' })
   updateTemplate(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTemplateDto) {
     return this.svc.updateTemplate(id, dto);
+  }
+
+  @Delete('templates/:id')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Remover modelo de avaliação (soft delete)' })
+  deleteTemplate(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.deleteTemplate(id);
   }
 
   // ─── Assignments ─────────────────────────────────────────────

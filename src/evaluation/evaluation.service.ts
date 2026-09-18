@@ -533,23 +533,31 @@ export class EvaluationService {
     return this.prisma.evaluationCriteria.create({
       data: {
         name: dto.name,
+        code: dto.code,
         description: dto.description,
         category: dto.category,
         weight: dto.weight ?? 1,
         scaleId: dto.scaleId,
         competencyId: dto.competencyId,
+        behavioralIndicators: dto.behavioralIndicators,
         createdById,
       },
+      include: { scale: true, competency: true },
     });
   }
 
-  async getCriteria(filters: { category?: string } = {}) {
+  // `includeInactive`: a aba "Critérios" (biblioteca central, docs/
+  // modulo_evaluation.md pt.5) precisa de ver e reactivar critérios
+  // inactivos; a etapa 4 do wizard "Nova Avaliação" só quer os activos, por
+  // isso o omitir mantém o comportamento anterior.
+  async getCriteria(filters: { category?: string; includeInactive?: boolean } = {}) {
     return this.prisma.evaluationCriteria.findMany({
       where: {
         deletedAt: null,
-        isActive: true,
+        ...(filters.includeInactive ? {} : { isActive: true }),
         ...(filters.category ? { category: filters.category } : {}),
       },
+      include: { scale: true, competency: true },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -623,7 +631,28 @@ export class EvaluationService {
 
   async updateTemplate(id: number, dto: UpdateTemplateDto) {
     await this.assertTemplateExists(id);
-    return this.prisma.evaluationTemplate.update({ where: { id }, data: dto });
+    const { criteria, ...rest } = dto;
+    return this.prisma.$transaction(async tx => {
+      if (criteria) {
+        await tx.evaluationTemplateCriteria.deleteMany({ where: { templateId: id } });
+      }
+      return tx.evaluationTemplate.update({
+        where: { id },
+        data: {
+          ...rest,
+          criteria: criteria
+            ? {
+                create: criteria.map((c, i) => ({
+                  criteriaId: c.criteriaId,
+                  weight: c.weight,
+                  seq: c.seq ?? i,
+                })),
+              }
+            : undefined,
+        },
+        include: { criteria: { include: { criteria: true }, orderBy: { seq: 'asc' } } },
+      });
+    });
   }
 
   async deleteTemplate(id: number) {
@@ -856,6 +885,15 @@ export class EvaluationService {
         : anyInProgress
           ? 'IN_PROGRESS'
           : 'PENDING';
+      // "Progresso" — docs/modulo_evaluation.md pt.7 (Avaliações Pendentes,
+      // vista do gestor): fracção de avaliadores irmãos (SELF/MANAGER/PEER/…)
+      // já concluídos, não um % de perguntas respondidas dentro de cada
+      // formulário (o schema não guarda progresso por pergunta).
+      const progress = groupRows.length
+        ? Math.round(
+            (groupRows.filter(r => r.status === 'COMPLETED').length / groupRows.length) * 100,
+          )
+        : 0;
       const dueDate = groupRows
         .map(r => r.dueDate)
         .filter((d): d is Date => !!d)
@@ -872,6 +910,7 @@ export class EvaluationService {
         cycle: rep.cycle,
         period: rep.cycle ? `${new Date(rep.cycle.startDate).getFullYear()}` : null,
         status: aggregateStatus,
+        progress,
         dueDate,
         stage: rep.stage,
         result: result?.overallScore ?? null,
