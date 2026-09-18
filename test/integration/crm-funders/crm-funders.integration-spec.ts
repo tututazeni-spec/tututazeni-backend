@@ -221,14 +221,6 @@ describe('CRM Funders Integration', () => {
       expect(res.body).toBeDefined();
     });
 
-    it('GET /crm/funders/overdue-reports — RH → 200', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/crm/funders/overdue-reports')
-        .set('Authorization', `Bearer ${rhToken}`)
-        .expect(200);
-      expect(res.body).toBeDefined();
-    });
-
     it('GET /crm/funders/report — período → 200', async () => {
       const res = await request(app.getHttpServer())
         .get('/crm/funders/report')

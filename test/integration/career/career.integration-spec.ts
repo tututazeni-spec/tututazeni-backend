@@ -25,8 +25,6 @@ describe('Career Integration', () => {
   let planId: number;
   let goalId: number;
   let vacancyId: number;
-  let criticalPositionId: number;
-  let successionPlanId: number;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -74,12 +72,6 @@ describe('Career Integration', () => {
     if (vacancyId) {
       await prisma.internalApplication.deleteMany({ where: { vacancyId } }).catch(() => undefined);
       await prisma.internalVacancy.deleteMany({ where: { id: vacancyId } }).catch(() => undefined);
-    }
-    if (criticalPositionId) {
-      // SuccessionPDI/SuccessionPlan cascadeiam ao apagar CriticalPosition.
-      await prisma.criticalPosition
-        .deleteMany({ where: { id: criticalPositionId } })
-        .catch(() => undefined);
     }
     await prisma.careerRole.deleteMany({ where: { name: POSITION_NAME } }).catch(() => undefined);
     if (positionId) {
@@ -286,69 +278,6 @@ describe('Career Integration', () => {
         .send({ status: 'SHORTLISTED' })
         .expect(200);
       expect(res.body.status).toBe('SHORTLISTED');
-    });
-  });
-
-  describe('Planeamento de sucessão', () => {
-    it('POST /career/succession — cargo ainda não é crítico → 404', async () => {
-      await request(app.getHttpServer())
-        .post('/career/succession')
-        .set('Authorization', `Bearer ${rhToken}`)
-        .send({ positionId, candidateId: employeeId, readiness: 'READY_NOW' })
-        .expect(404);
-    });
-
-    it('marca o cargo como crítico (fixture directa)', async () => {
-      const cp = await prisma.criticalPosition.create({
-        data: {
-          positionId,
-          businessImpact: 'HIGH',
-          replacementTime: 'MEDIUM_TERM',
-          exitRisk: 'MEDIUM',
-        },
-      });
-      criticalPositionId = cp.id;
-      expect(criticalPositionId).toBeDefined();
-    });
-
-    it('POST /career/succession — cria plano (priority PRIMARY derivado) → 201', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/career/succession')
-        .set('Authorization', `Bearer ${rhToken}`)
-        .send({
-          positionId,
-          candidateId: employeeId,
-          readiness: 'READY_SOON',
-          justification: 'Bom desempenho consistente',
-        })
-        .expect(201);
-      successionPlanId = res.body.id;
-      expect(res.body.candidateId).toBe(employeeId);
-    });
-
-    it('POST /career/succession — mesmo candidato/cargo → 409', async () => {
-      await request(app.getHttpServer())
-        .post('/career/succession')
-        .set('Authorization', `Bearer ${rhToken}`)
-        .send({ positionId, candidateId: employeeId, readiness: 'READY_NOW' })
-        .expect(409);
-    });
-
-    it('PATCH /career/succession/:id/readiness → 200', async () => {
-      await request(app.getHttpServer())
-        .patch(`/career/succession/${successionPlanId}/readiness`)
-        .set('Authorization', `Bearer ${rhToken}`)
-        .send({ readiness: 'READY_NOW' })
-        .expect(200);
-    });
-
-    it('GET /career/succession → 200', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/career/succession')
-        .set('Authorization', `Bearer ${rhToken}`)
-        .query({ positionId })
-        .expect(200);
-      expect(res.body.some((p: any) => p.id === successionPlanId)).toBe(true);
     });
   });
 

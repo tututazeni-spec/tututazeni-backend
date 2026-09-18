@@ -6,12 +6,6 @@ import { RolesGuard } from '../common/guards/roles.guard';
 
 const mockSvc = {
   getDashboard: jest.fn().mockResolvedValue({}),
-  createOkrCycle: jest.fn().mockResolvedValue({ id: 1 }),
-  findAllCycles: jest.fn().mockResolvedValue([]),
-  createObjective: jest.fn().mockResolvedValue({ id: 1 }),
-  findObjectives: jest.fn().mockResolvedValue([]),
-  createKeyResult: jest.fn().mockResolvedValue({ id: 1 }),
-  updateKeyResult: jest.fn().mockResolvedValue({ id: 1 }),
   createIndicator: jest.fn().mockResolvedValue({ id: 1 }),
   findAllIndicators: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   addRecord: jest.fn().mockResolvedValue({ id: 1 }),
@@ -45,45 +39,6 @@ describe('MonitoringController', () => {
   it('getDashboard → getDashboard()', async () => {
     await controller.getDashboard();
     expect(mockSvc.getDashboard).toHaveBeenCalled();
-  });
-
-  it('createOkrCycle → createOkrCycle(dto, userId)', async () => {
-    const dto = {} as any;
-    await controller.createOkrCycle(dto, mockUser as any);
-    expect(mockSvc.createOkrCycle).toHaveBeenCalledWith(dto, 1);
-  });
-
-  it('findAllCycles → findAllCycles()', async () => {
-    await controller.findAllCycles();
-    expect(mockSvc.findAllCycles).toHaveBeenCalled();
-  });
-
-  it('createObjective → createObjective(dto, userId)', async () => {
-    const dto = {} as any;
-    await controller.createObjective(dto, mockUser as any);
-    expect(mockSvc.createObjective).toHaveBeenCalledWith(dto, 1);
-  });
-
-  it('findObjectives sem ownerId → findObjectives(cycleId, undefined)', async () => {
-    await controller.findObjectives('cy1');
-    expect(mockSvc.findObjectives).toHaveBeenCalledWith('cy1', undefined);
-  });
-
-  it('findObjectives com ownerId → findObjectives(cycleId, Number(ownerId))', async () => {
-    await controller.findObjectives('cy1', '5');
-    expect(mockSvc.findObjectives).toHaveBeenCalledWith('cy1', 5);
-  });
-
-  it('createKeyResult → createKeyResult(dto, userId)', async () => {
-    const dto = {} as any;
-    await controller.createKeyResult(dto, mockUser as any);
-    expect(mockSvc.createKeyResult).toHaveBeenCalledWith(dto, 1);
-  });
-
-  it('updateKeyResult → updateKeyResult(id, dto, user)', async () => {
-    const dto = {} as any;
-    await controller.updateKeyResult('kr1', dto, mockUser as any);
-    expect(mockSvc.updateKeyResult).toHaveBeenCalledWith('kr1', dto, mockUser);
   });
 
   it('createIndicator → createIndicator(dto, userId)', async () => {

@@ -78,156 +78,6 @@ describe('MonitoringService', () => {
     jest.clearAllMocks();
   });
 
-  // ─── OKRs ────────────────────────────────────────────
-
-  describe('createOkrCycle', () => {
-    it('deve criar ciclo OKR', async () => {
-      mockPrisma.okrCycle.create.mockResolvedValue({
-        id: 'cyc-1',
-        name: 'Q2 2026',
-      });
-      mockPrisma.auditLog.create.mockResolvedValue({});
-      const result = await service.createOkrCycle(
-        { name: 'Q2 2026', startDate: '2026-04-01', endDate: '2026-06-30' },
-        1,
-      );
-      expect(result.name).toBe('Q2 2026');
-    });
-  });
-
-  describe('createObjective', () => {
-    it('deve criar objectivo num ciclo existente', async () => {
-      mockPrisma.okrCycle.findUnique.mockResolvedValue({ id: 'cyc-1' });
-      mockPrisma.objective.create.mockResolvedValue({
-        id: 'obj-1',
-        title: 'Objectivo',
-      });
-      mockPrisma.auditLog.create.mockResolvedValue({});
-      const result = await service.createObjective(
-        { cycleId: 'cyc-1', ownerId: 1, title: 'Objectivo' },
-        1,
-      );
-      expect(result.title).toBe('Objectivo');
-    });
-
-    it('deve lançar NotFoundException se ciclo não existe', async () => {
-      mockPrisma.okrCycle.findUnique.mockResolvedValue(null);
-      await expect(
-        service.createObjective({ cycleId: 'x', ownerId: 1, title: 't' }, 1),
-      ).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe('createKeyResult', () => {
-    it('deve criar KR num objectivo existente', async () => {
-      mockPrisma.objective.findUnique.mockResolvedValue({ id: 'obj-1' });
-      mockPrisma.keyResult.create.mockResolvedValue({
-        id: 'kr-1',
-        title: 'KR',
-      });
-      mockPrisma.auditLog.create.mockResolvedValue({});
-      const result = await service.createKeyResult(
-        { objectiveId: 'obj-1', title: 'KR', targetValue: 80 },
-        1,
-      );
-      expect(result.id).toBe('kr-1');
-    });
-  });
-
-  describe('updateKeyResult', () => {
-    it('deve calcular progresso e marcar COMPLETED', async () => {
-      mockPrisma.keyResult.findUnique.mockResolvedValue({
-        id: 'kr-1',
-        objectiveId: 'obj-1',
-        startValue: 0,
-        targetValue: 100,
-        currentValue: 0,
-        objective: { ownerId: 1 },
-      });
-      mockPrisma.keyResultUpdate.create.mockResolvedValue({});
-      mockPrisma.keyResult.update.mockResolvedValue({
-        id: 'kr-1',
-        progress: 100,
-        status: 'COMPLETED',
-      });
-      mockPrisma.keyResult.findMany.mockResolvedValue([{ progress: 100 }]);
-      mockPrisma.objective.update.mockResolvedValue({});
-      mockPrisma.auditLog.create.mockResolvedValue({});
-
-      const result = await service.updateKeyResult('kr-1', { newValue: 100 }, ownerUser as any);
-      expect(result.progress).toBe(100);
-      expect(result.status).toBe('COMPLETED');
-    });
-
-    it('deve marcar AT_RISK para progresso entre 40-70', async () => {
-      mockPrisma.keyResult.findUnique.mockResolvedValue({
-        id: 'kr-1',
-        objectiveId: 'obj-1',
-        startValue: 0,
-        targetValue: 100,
-        currentValue: 0,
-        objective: { ownerId: 1 },
-      });
-      mockPrisma.keyResultUpdate.create.mockResolvedValue({});
-      mockPrisma.keyResult.update.mockResolvedValue({
-        id: 'kr-1',
-        progress: 50,
-        status: 'AT_RISK',
-      });
-      mockPrisma.keyResult.findMany.mockResolvedValue([{ progress: 50 }]);
-      mockPrisma.objective.update.mockResolvedValue({});
-      mockPrisma.auditLog.create.mockResolvedValue({});
-
-      const result = await service.updateKeyResult('kr-1', { newValue: 50 }, ownerUser as any);
-      expect(result.status).toBe('AT_RISK');
-    });
-
-    it('deve lançar NotFoundException se KR não existe', async () => {
-      mockPrisma.keyResult.findUnique.mockResolvedValue(null);
-      await expect(
-        service.updateKeyResult('x', { newValue: 10 }, ownerUser as any),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('não permite utilizador B actualizar Key Result do Objectivo de A', async () => {
-      mockPrisma.keyResult.findUnique.mockResolvedValue({
-        id: 'kr-1',
-        objectiveId: 'obj-1',
-        startValue: 0,
-        targetValue: 100,
-        currentValue: 0,
-        objective: { ownerId: 1 },
-      });
-      await expect(
-        service.updateKeyResult('kr-1', { newValue: 50 }, otherUser as any),
-      ).rejects.toThrow(NotFoundException);
-      expect(mockPrisma.keyResult.update).not.toHaveBeenCalled();
-    });
-
-    it('permite ADMIN actualizar Key Result de qualquer Objectivo', async () => {
-      mockPrisma.keyResult.findUnique.mockResolvedValue({
-        id: 'kr-1',
-        objectiveId: 'obj-1',
-        startValue: 0,
-        targetValue: 100,
-        currentValue: 0,
-        objective: { ownerId: 1 },
-      });
-      mockPrisma.keyResultUpdate.create.mockResolvedValue({});
-      mockPrisma.keyResult.update.mockResolvedValue({
-        id: 'kr-1',
-        progress: 50,
-        status: 'AT_RISK',
-      });
-      mockPrisma.keyResult.findMany.mockResolvedValue([{ progress: 50 }]);
-      mockPrisma.objective.update.mockResolvedValue({});
-      mockPrisma.auditLog.create.mockResolvedValue({});
-
-      const result = await service.updateKeyResult('kr-1', { newValue: 50 }, adminUser as any);
-      expect(result).toBeDefined();
-    });
-  });
-
   // ─── INDICADORES ─────────────────────────────────────
 
   describe('createIndicator', () => {
@@ -403,18 +253,14 @@ describe('MonitoringService', () => {
   });
 
   describe('getDashboard', () => {
-    it('deve retornar OKRs, monitoring e evaluation', async () => {
-      mockPrisma.okrCycle.count.mockResolvedValue(2);
-      mockPrisma.objective.count.mockResolvedValueOnce(10).mockResolvedValueOnce(6);
+    it('deve retornar monitoring e evaluation', async () => {
       mockPrisma.monitoringIndicator.count.mockResolvedValue(5);
       mockPrisma.monitoringRecord.count.mockResolvedValue(20);
       mockPrisma.evaluationCycle.count.mockResolvedValue(1);
       mockPrisma.userEvaluation.count.mockResolvedValueOnce(3).mockResolvedValueOnce(7);
       const result = await service.getDashboard();
-      expect(result).toHaveProperty('okrs');
       expect(result).toHaveProperty('monitoring');
       expect(result).toHaveProperty('evaluation');
-      expect(result.okrs.objectiveCompletionRate).toBe(60);
       expect(result.evaluation.evaluationCompletionRate).toBe(70);
     });
   });

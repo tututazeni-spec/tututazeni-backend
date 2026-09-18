@@ -59,13 +59,6 @@ export class CrmFundersController {
     return this.service.getDashboard();
   }
 
-  @Get('overdue-reports')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Relatórios em atraso (paginado)' })
-  getOverdueReports(@Query() filters: PaginationFilterDto) {
-    return this.service.getOverdueReports(filters);
-  }
-
   @Get('report')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Relatório por período' })

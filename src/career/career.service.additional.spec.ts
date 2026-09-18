@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { CareerService } from './career.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { SuccessionService } from '../succession/succession.service';
 import { CareerPlansService } from './career-plans.service';
 
 const baseUser = {
@@ -186,7 +185,6 @@ describe('CareerService (additional)', () => {
       providers: [
         CareerService,
         { provide: PrismaService, useValue: mockPrisma },
-        { provide: SuccessionService, useValue: { create: jest.fn(), update: jest.fn() } },
         {
           provide: CareerPlansService,
           useValue: { getAnalytics: jest.fn().mockResolvedValue({}) },

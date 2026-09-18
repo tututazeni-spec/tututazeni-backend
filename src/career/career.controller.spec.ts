@@ -29,9 +29,6 @@ const mockSvc = {
   applyToVacancy: jest.fn().mockResolvedValue({ id: 1 }),
   getMyApplications: jest.fn().mockResolvedValue([]),
   updateApplicationStatus: jest.fn().mockResolvedValue({}),
-  getSuccessionPlans: jest.fn().mockResolvedValue([]),
-  createSuccessionPlan: jest.fn().mockResolvedValue({ id: 1 }),
-  updateSuccessionReadiness: jest.fn().mockResolvedValue({}),
   getCareerAnalytics: jest.fn().mockResolvedValue({}),
   getTalentHeatmap: jest.fn().mockResolvedValue([]),
 };
@@ -204,22 +201,6 @@ describe('CareerController', () => {
     const dto = {} as any;
     await controller.updateAppStatus(5, dto);
     expect(mockSvc.updateApplicationStatus).toHaveBeenCalledWith(5, dto);
-  });
-
-  it('getSuccession sem posId → getSuccessionPlans(undefined)', async () => {
-    await controller.getSuccession();
-    expect(mockSvc.getSuccessionPlans).toHaveBeenCalledWith(undefined);
-  });
-
-  it('createSuccession → createSuccessionPlan(dto)', async () => {
-    const dto = {} as any;
-    await controller.createSuccession(dto);
-    expect(mockSvc.createSuccessionPlan).toHaveBeenCalledWith(dto);
-  });
-
-  it('updateReadiness → updateSuccessionReadiness(id, readiness)', async () => {
-    await controller.updateReadiness(1, 'READY');
-    expect(mockSvc.updateSuccessionReadiness).toHaveBeenCalledWith(1, 'READY', undefined);
   });
 
   it('analytics → getCareerAnalytics(filters)', async () => {

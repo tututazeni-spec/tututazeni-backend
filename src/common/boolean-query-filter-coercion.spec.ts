@@ -18,7 +18,6 @@ import { plainToInstance } from 'class-transformer';
 import { AiSessionFilterDto } from '../ai-tutor/ai-tutor.dto';
 import { AnalyticsFilterDto } from '../analytics/analytics.dto';
 import { AuditFilterDto } from '../audit/audit.dto';
-import { AvatarFilterDto } from '../avatar-training/avatar-training.dto';
 import { VacancyFilterDto, CareerAnalyticsFilterDto } from '../career/career.dto';
 import { SkillFilterDto } from '../competency-map/competency-map.dto';
 import { ContentFilterDto } from '../content-library/content-library.dto';
@@ -38,7 +37,6 @@ const CASES: Array<[new () => object, string, string]> = [
   [AiSessionFilterDto, 'activeOnly', 'ai-tutor'],
   [AnalyticsFilterDto, 'includeInactive', 'analytics'],
   [AuditFilterDto, 'criticalOnly', 'audit'],
-  [AvatarFilterDto, 'isPublic', 'avatar-training'],
   [VacancyFilterDto, 'matchingOnly', 'career (Vacancy)'],
   [CareerAnalyticsFilterDto, 'includeRisk', 'career (Analytics)'],
   [SkillFilterDto, 'active', 'competency-map'],

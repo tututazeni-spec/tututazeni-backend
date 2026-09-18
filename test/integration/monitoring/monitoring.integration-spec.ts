@@ -17,9 +17,6 @@ describe('Monitoring Integration', () => {
   let employeeId: number;
   let gestorId: number;
 
-  let cycleId: string;
-  let objectiveId: string;
-  let keyResultId: string;
   let indicatorId: string;
   let evalCycleId: string;
   let managerEvalId: string;
@@ -76,104 +73,10 @@ describe('Monitoring Integration', () => {
         .deleteMany({ where: { id: indicatorId } })
         .catch(() => undefined);
     }
-    if (keyResultId)
-      await (prisma as any).keyResultUpdate
-        .deleteMany({ where: { keyResultId } })
-        .catch(() => undefined);
-    if (objectiveId)
-      await (prisma as any).keyResult.deleteMany({ where: { objectiveId } }).catch(() => undefined);
-    if (objectiveId)
-      await (prisma as any).objective
-        .deleteMany({ where: { id: objectiveId } })
-        .catch(() => undefined);
-    if (cycleId)
-      await (prisma as any).okrCycle.deleteMany({ where: { id: cycleId } }).catch(() => undefined);
 
     await prisma.$disconnect();
     await pool.end();
     await app.close();
-  });
-
-  describe('OKRs — ciclos, objectivos e key results', () => {
-    it('RH cria ciclo OKR → 201', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/monitoring/okr/cycles')
-        .set('Authorization', `Bearer ${rhToken}`)
-        .send({ name: 'Q3 Integração', startDate: '2026-07-01', endDate: '2026-09-30' })
-        .expect(201);
-      cycleId = res.body.id;
-    });
-
-    it('lista ciclos OKR → 200', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/monitoring/okr/cycles')
-        .set('Authorization', `Bearer ${employeeToken}`)
-        .expect(200);
-      expect(Array.isArray(res.body)).toBe(true);
-    });
-
-    it('colaborador cria objectivo para si próprio → 201', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/monitoring/okr/objectives')
-        .set('Authorization', `Bearer ${employeeToken}`)
-        .send({ cycleId, ownerId: employeeId, title: 'Melhorar taxa de conclusão' })
-        .expect(201);
-      objectiveId = res.body.id;
-    });
-
-    it('objectivo com ciclo inexistente → 404', async () => {
-      await request(app.getHttpServer())
-        .post('/monitoring/okr/objectives')
-        .set('Authorization', `Bearer ${employeeToken}`)
-        .send({ cycleId: 'nao-existe', ownerId: employeeId, title: 'Objectivo fantasma' })
-        .expect(404);
-    });
-
-    it('lista objectivos do ciclo → 200', async () => {
-      const res = await request(app.getHttpServer())
-        .get(`/monitoring/okr/cycles/${cycleId}/objectives`)
-        .set('Authorization', `Bearer ${employeeToken}`)
-        .expect(200);
-      expect(res.body.some((o: any) => o.id === objectiveId)).toBe(true);
-    });
-
-    it('cria key result para o objectivo → 201', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/monitoring/okr/key-results')
-        .set('Authorization', `Bearer ${employeeToken}`)
-        .send({ objectiveId, title: 'Atingir 80%', targetValue: 80, startValue: 0 })
-        .expect(201);
-      keyResultId = res.body.id;
-    });
-
-    it('key result com objectivo inexistente → 404', async () => {
-      await request(app.getHttpServer())
-        .post('/monitoring/okr/key-results')
-        .set('Authorization', `Bearer ${employeeToken}`)
-        .send({ objectiveId: 'nao-existe', title: 'x', targetValue: 10 })
-        .expect(404);
-    });
-
-    it('dono do objectivo actualiza o key result → progress calculado', async () => {
-      const res = await request(app.getHttpServer())
-        .put(`/monitoring/okr/key-results/${keyResultId}`)
-        .set('Authorization', `Bearer ${employeeToken}`)
-        .send({ newValue: 40 })
-        .expect(200);
-      expect(res.body.progress).toBe(50);
-      // Limiares do serviço: >=100 COMPLETED, >=70 ON_TRACK, >=40 AT_RISK, senão OFF_TRACK.
-      expect(res.body.status).toBe('AT_RISK');
-    });
-
-    it('GESTOR (privilegiado) também pode actualizar o key result', async () => {
-      const res = await request(app.getHttpServer())
-        .put(`/monitoring/okr/key-results/${keyResultId}`)
-        .set('Authorization', `Bearer ${gestorToken}`)
-        .send({ newValue: 80 })
-        .expect(200);
-      expect(res.body.progress).toBe(100);
-      expect(res.body.status).toBe('COMPLETED');
-    });
   });
 
   describe('Indicadores de monitoria', () => {
