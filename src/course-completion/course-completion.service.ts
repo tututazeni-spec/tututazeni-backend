@@ -120,7 +120,15 @@ export class CourseCompletionService {
    */
   private async assertLessonAccessible(
     userId: number,
-    mod: { id: number; courseId: number; status: string; dripDays: number | null; availableFrom: Date | null; progressionType: string; seq: number },
+    mod: {
+      id: number;
+      courseId: number;
+      status: string;
+      dripDays: number | null;
+      availableFrom: Date | null;
+      progressionType: string;
+      seq: number;
+    },
     enrollment: { enrolledAt: Date },
   ): Promise<void> {
     if (mod.status !== 'PUBLISHED') {
@@ -137,7 +145,9 @@ export class CourseCompletionService {
     }
 
     if (mod.availableFrom && new Date() < mod.availableFrom) {
-      throw new ForbiddenException(`Disponível a partir de ${mod.availableFrom.toLocaleDateString('pt')}`);
+      throw new ForbiddenException(
+        `Disponível a partir de ${mod.availableFrom.toLocaleDateString('pt')}`,
+      );
     }
 
     if (mod.progressionType === 'SEQUENTIAL' && mod.seq > 0) {
