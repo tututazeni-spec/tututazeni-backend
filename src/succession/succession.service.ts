@@ -10,6 +10,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { AuditService } from '../common/services/audit.service';
 import { CurrentUserData } from '../common/decorators';
 import {
   CreateCriticalPositionDto,
@@ -40,6 +41,10 @@ interface MatchScoreInput {
     userCompetencies?: Array<{ competencyId: number; currentLevel: number | null }>;
     performanceReviews?: Array<{ score: number | null }>;
     hireDate?: Date | null;
+    // Secção 7, acrescento 4: eixo "Potencial" do pipeline — reaproveita a
+    // mesma classificação 9-box usada em career.getTalentHeatmap(), última
+    // colocação do candidato (independente do ciclo).
+    nineBoxPlacements?: Array<{ potentialAxis: number }>;
   } | null;
 }
 
@@ -50,11 +55,12 @@ export class SuccessionService {
   constructor(
     private prisma: PrismaService,
     private readonly developmentPlans: DevelopmentPlansService,
+    private readonly audit: AuditService,
   ) {}
 
   // ─── CARGOS CRÍTICOS ──────────────────────────────────────────────────────
 
-  async createCriticalPosition(dto: CreateCriticalPositionDto) {
+  async createCriticalPosition(dto: CreateCriticalPositionDto, userId: number) {
     const position = await this.prisma.read.position.findUnique({ where: { id: dto.positionId } });
     if (!position) throw new NotFoundException('Posição não encontrada');
 
@@ -73,7 +79,7 @@ export class SuccessionService {
         actualSuccessorCount: 0,
       });
 
-    return this.prisma.criticalPosition.create({
+    const created = await this.prisma.criticalPosition.create({
       data: {
         positionId: dto.positionId,
         businessImpact: dto.businessImpact,
@@ -87,6 +93,14 @@ export class SuccessionService {
       },
       include: { position: true },
     });
+
+    await this.logSuccessionHistory(userId, 'CREATE', 'CriticalPosition', created.id, {
+      position: created.position.name,
+      businessImpact: created.businessImpact,
+      exitRisk: created.exitRisk,
+    });
+
+    return created;
   }
 
   async getCriticalPositions(filters: CriticalPositionFilterDto) {
@@ -178,7 +192,31 @@ export class SuccessionService {
                 email: true,
                 position: { select: { name: true } },
                 department: { select: { name: true } },
+                hireDate: true,
                 userCompetencies: { include: { competency: true }, take: 10 },
+                performanceReviews: {
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                  select: { score: true, category: true },
+                },
+                nineBoxPlacements: {
+                  orderBy: { updatedAt: 'desc' },
+                  take: 1,
+                  select: { potentialAxis: true },
+                },
+              },
+            },
+            // Secção 7, acrescento 3 (plano de preparação do sucessor):
+            // resumo do DevelopmentPlan já gerado (se algum) — o detalhe
+            // completo (adicionar mentoring/coaching/job rotation/exposição
+            // à liderança) continua a viver no módulo PDI, não se duplica
+            // aqui, mesmo padrão do separador "PDI & Desenvolvimento".
+            developmentPlan: {
+              select: {
+                id: true,
+                status: true,
+                overallProgress: true,
+                actions: { select: { type: true, status: true } },
               },
             },
           },
@@ -188,10 +226,25 @@ export class SuccessionService {
       },
     });
     if (!cp) throw new NotFoundException('Cargo crítico não encontrado');
-    return cp;
+
+    // Enriquecer cada sucessor com a quebra Desempenho/Potencial/
+    // Competências/Gaps (acrescento 4) — o matchScore guardado no plano
+    // continua a ser a fonte da % apresentada; isto só acrescenta o detalhe
+    // por eixo, sem o recalcular nem o persistir.
+    const successionPlans = await Promise.all(
+      cp.successionPlans.map(async sp => {
+        const match = await this.calculateMatchScore({
+          criticalPosition: { position: { competencies: cp.position?.competencies ?? [] } },
+          candidate: sp.candidate,
+        });
+        return { ...sp, matchDetails: match.details };
+      }),
+    );
+
+    return { ...cp, successionPlans };
   }
 
-  async updateCriticalPosition(id: number, dto: UpdateCriticalPositionDto) {
+  async updateCriticalPosition(id: number, dto: UpdateCriticalPositionDto, userId: number) {
     const cp = await this.prisma.read.criticalPosition.findUnique({
       where: { id },
       include: { successionPlans: { select: { readinessLevel: true } } },
@@ -212,7 +265,19 @@ export class SuccessionService {
             actualSuccessorCount: cp.successionPlans.length,
           }));
 
-    return this.prisma.criticalPosition.update({ where: { id }, data: { ...dto, exitRisk } });
+    const updated = await this.prisma.criticalPosition.update({
+      where: { id },
+      data: { ...dto, exitRisk },
+    });
+
+    await this.logSuccessionHistory(userId, 'UPDATE', 'CriticalPosition', id, {
+      exitRiskBefore: cp.exitRisk,
+      exitRiskAfter: updated.exitRisk,
+      businessImpactBefore: cp.businessImpact,
+      businessImpactAfter: updated.businessImpact,
+    });
+
+    return updated;
   }
 
   // ─── PLANOS DE SUCESSÃO ───────────────────────────────────────────────────
@@ -289,6 +354,11 @@ export class SuccessionService {
               include: { learningPath: { select: { title: true } } },
               take: 5,
             },
+            nineBoxPlacements: {
+              orderBy: { updatedAt: 'desc' },
+              take: 1,
+              select: { potentialAxis: true },
+            },
           },
         },
         pdi: true,
@@ -302,7 +372,7 @@ export class SuccessionService {
     return { ...s, matchScore: match.score, matchDetails: match.details };
   }
 
-  async create(dto: SuccessionCreateSuccessionPlanDto) {
+  async create(dto: SuccessionCreateSuccessionPlanDto, userId: number) {
     const cp = await this.prisma.read.criticalPosition.findUnique({
       where: { id: dto.criticalPositionId },
     });
@@ -395,6 +465,16 @@ export class SuccessionService {
       }),
     );
 
+    await this.logSuccessionHistory(userId, 'CREATE', 'SuccessionPlan', plan.id, {
+      criticalPositionId: dto.criticalPositionId,
+      // Usa o `candidate` já validado acima, não `plan.candidate` — este
+      // spec (unit) faz mock de `successionPlan.create` sem o `include`
+      // real, e ler daqui evita depender desse shape.
+      candidate: candidate.fullName,
+      readinessLevel: plan.readinessLevel,
+      priority: plan.priority,
+    });
+
     return plan;
   }
 
@@ -409,7 +489,7 @@ export class SuccessionService {
     return count === 0 ? 'PRIMARY' : count === 1 ? 'SECONDARY' : 'TERTIARY';
   }
 
-  async update(id: number, dto: UpdateSuccessionPlanDto) {
+  async update(id: number, dto: UpdateSuccessionPlanDto, userId: number) {
     const existing = await this.findOne(id);
     const updated = await this.prisma.successionPlan.update({ where: { id }, data: dto });
 
@@ -424,10 +504,20 @@ export class SuccessionService {
       );
     }
 
+    await this.logSuccessionHistory(userId, 'UPDATE', 'SuccessionPlan', id, {
+      criticalPositionId: existing.criticalPositionId,
+      readinessLevelBefore: existing.readinessLevel,
+      readinessLevelAfter: updated.readinessLevel,
+      priorityBefore: existing.priority,
+      priorityAfter: updated.priority,
+      availableBefore: existing.available,
+      availableAfter: updated.available,
+    });
+
     return updated;
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId: number) {
     const existing = await this.findOne(id);
     await this.prisma.successionPlan.delete({ where: { id } });
 
@@ -439,6 +529,11 @@ export class SuccessionService {
         msg: 'Falha ao recalcular risco de saída após remoção de plano de sucessão',
       }),
     );
+
+    await this.logSuccessionHistory(userId, 'DELETE', 'SuccessionPlan', id, {
+      criticalPositionId: existing.criticalPositionId,
+      candidate: existing.candidate.fullName,
+    });
 
     return { message: 'Plano de sucessão removido' };
   }
@@ -455,6 +550,7 @@ export class SuccessionService {
       include: {
         userCompetencies: true,
         performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
+        nineBoxPlacements: { orderBy: { updatedAt: 'desc' }, take: 1, select: { potentialAxis: true } },
       },
     });
 
@@ -491,6 +587,15 @@ export class SuccessionService {
 
     const finalScore = Math.round(compScore * 0.4 + perfScore * 0.4 + expScore * 0.2);
 
+    // "Potencial" (secção 7, acrescento 4) — eixo próprio, informativo, NÃO
+    // entra no matchScore ponderado acima (esse continua
+    // competências/desempenho/experiência, como sempre foi). 9-box:
+    // potentialAxis 1-5 → 0-100; sem colocação 9-box → null (não "neutro
+    // 50", para o front distinguir "sem dado" de "potencial médio").
+    const latestPlacement = plan.candidate?.nineBoxPlacements?.[0];
+    const potentialScore =
+      latestPlacement != null ? Math.round((latestPlacement.potentialAxis / 5) * 100) : null;
+
     const gaps = requiredComps
       .filter(rc => (userCompMap.get(rc.competencyId) ?? 0) < rc.requiredLevel)
       .map(rc => ({
@@ -502,7 +607,7 @@ export class SuccessionService {
 
     return {
       score: finalScore,
-      details: { compScore, perfScore, expScore, gaps },
+      details: { compScore, perfScore, expScore, potentialScore, gaps },
     };
   }
 
@@ -849,6 +954,7 @@ export class SuccessionService {
         include: {
           userCompetencies: { include: { competency: true } },
           performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
+          nineBoxPlacements: { orderBy: { updatedAt: 'desc' }, take: 1, select: { potentialAxis: true } },
         },
       }),
       this.prisma.read.user.findUnique({
@@ -856,6 +962,7 @@ export class SuccessionService {
         include: {
           userCompetencies: { include: { competency: true } },
           performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
+          nineBoxPlacements: { orderBy: { updatedAt: 'desc' }, take: 1, select: { potentialAxis: true } },
         },
       }),
       this.prisma.read.criticalPosition.findUnique({
@@ -1009,6 +1116,61 @@ export class SuccessionService {
     }
 
     return rows;
+  }
+
+  // ─── HISTÓRICO DE SUCESSÃO ────────────────────────────────────────────────
+  // Módulo Career, secção 7: "histórico de sucessão". AuditLog não tinha
+  // nenhuma escrita a partir deste módulo — mudanças de risco/prontidão/
+  // prioridade não deixavam rasto nenhum. Usa a AuditService partilhada
+  // (src/common/services/audit.service.ts, NÃO a cadeia de hash em
+  // src/audit/ — ver [[project_innova_audit_module_split]]), entity
+  // 'CriticalPosition'/'SuccessionPlan'. `metadata` guarda sempre
+  // `criticalPositionId` mesmo nas entradas de SuccessionPlan, porque um
+  // sucessor removido deixa de ter linha própria para se poder ligar de
+  // volta ao cargo — só a entrada de auditoria sobrevive.
+  async getSuccessionHistory(criticalPositionId: number) {
+    const logs = await this.prisma.read.auditLog.findMany({
+      where: {
+        OR: [
+          { entity: 'CriticalPosition', entityId: criticalPositionId },
+          {
+            entity: 'SuccessionPlan',
+            metadata: { contains: `"criticalPositionId":${criticalPositionId}` },
+          },
+        ],
+      },
+      include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    return logs.map(l => ({
+      id: l.id,
+      action: l.action,
+      entity: l.entity,
+      entityId: l.entityId,
+      user: l.user,
+      metadata: l.metadata ? (JSON.parse(l.metadata) as Record<string, unknown>) : null,
+      createdAt: l.createdAt,
+    }));
+  }
+
+  private async logSuccessionHistory(
+    userId: number,
+    action: 'CREATE' | 'UPDATE' | 'DELETE',
+    entity: 'CriticalPosition' | 'SuccessionPlan',
+    entityId: number,
+    metadata: object,
+  ): Promise<void> {
+    await this.audit.log({ userId, action, entity, entityId, metadata }).catch(e =>
+      this.logger.warn({
+        entity,
+        entityId,
+        action,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao registar histórico de sucessão em AuditLog',
+      }),
+    );
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────

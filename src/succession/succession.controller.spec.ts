@@ -23,6 +23,7 @@ const mockSvc = {
   removeFromTalentPool: jest.fn().mockResolvedValue({}),
   generatePDI: jest.fn().mockResolvedValue({ id: 1 }),
   getSuccessionMatrix: jest.fn().mockResolvedValue([]),
+  getSuccessionHistory: jest.fn().mockResolvedValue([]),
 };
 
 describe('SuccessionController', () => {
@@ -58,16 +59,23 @@ describe('SuccessionController', () => {
     expect(mockSvc.findOneCriticalPosition).toHaveBeenCalledWith(2);
   });
 
-  it('createCriticalPosition → createCriticalPosition(dto)', async () => {
+  it('createCriticalPosition → createCriticalPosition(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.createCriticalPosition(dto);
-    expect(mockSvc.createCriticalPosition).toHaveBeenCalledWith(dto);
+    const user = { id: 1 } as any;
+    await controller.createCriticalPosition(dto, user);
+    expect(mockSvc.createCriticalPosition).toHaveBeenCalledWith(dto, 1);
   });
 
-  it('updateCriticalPosition → updateCriticalPosition(id, dto)', async () => {
+  it('updateCriticalPosition → updateCriticalPosition(id, dto, userId)', async () => {
     const dto = {} as any;
-    await controller.updateCriticalPosition(1, dto);
-    expect(mockSvc.updateCriticalPosition).toHaveBeenCalledWith(1, dto);
+    const user = { id: 1 } as any;
+    await controller.updateCriticalPosition(1, dto, user);
+    expect(mockSvc.updateCriticalPosition).toHaveBeenCalledWith(1, dto, 1);
+  });
+
+  it('getCriticalPositionHistory → getSuccessionHistory(id)', async () => {
+    await controller.getCriticalPositionHistory(3);
+    expect(mockSvc.getSuccessionHistory).toHaveBeenCalledWith(3);
   });
 
   it('findAll → findAll(filters)', async () => {
@@ -101,21 +109,24 @@ describe('SuccessionController', () => {
     expect(mockSvc.findOne).toHaveBeenCalledWith(1);
   });
 
-  it('create → create(dto)', async () => {
+  it('create → create(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.create(dto);
-    expect(mockSvc.create).toHaveBeenCalledWith(dto);
+    const user = { id: 1 } as any;
+    await controller.create(dto, user);
+    expect(mockSvc.create).toHaveBeenCalledWith(dto, 1);
   });
 
-  it('update → update(id, dto)', async () => {
+  it('update → update(id, dto, userId)', async () => {
     const dto = {} as any;
-    await controller.update(1, dto);
-    expect(mockSvc.update).toHaveBeenCalledWith(1, dto);
+    const user = { id: 1 } as any;
+    await controller.update(1, dto, user);
+    expect(mockSvc.update).toHaveBeenCalledWith(1, dto, 1);
   });
 
-  it('remove → remove(id)', async () => {
-    await controller.remove(1);
-    expect(mockSvc.remove).toHaveBeenCalledWith(1);
+  it('remove → remove(id, userId)', async () => {
+    const user = { id: 1 } as any;
+    await controller.remove(1, user);
+    expect(mockSvc.remove).toHaveBeenCalledWith(1, 1);
   });
 
   it('getTalentPool → getTalentPool', async () => {

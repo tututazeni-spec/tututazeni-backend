@@ -224,6 +224,21 @@ describe('Succession Integration', () => {
         .set('Authorization', `Bearer ${rhToken}`)
         .expect(200);
       expect(res.body._count.successionPlans).toBe(1);
+      // Secção 7, acrescento 4: pipeline enriquecido com a quebra
+      // Desempenho/Potencial/Competências/Gaps por sucessor, e o resumo do
+      // plano de preparação (developmentPlan — acrescento 3), ainda nulo
+      // porque o PDI só é gerado no describe() seguinte.
+      const sp = res.body.successionPlans[0];
+      expect(sp.matchDetails).toEqual(
+        expect.objectContaining({
+          compScore: expect.any(Number),
+          perfScore: expect.any(Number),
+          expScore: expect.any(Number),
+          gaps: expect.any(Array),
+        }),
+      );
+      expect(sp.matchDetails).toHaveProperty('potentialScore');
+      expect(sp.developmentPlan).toBeNull();
     });
 
     it('PUT actualiza o plano', async () => {
@@ -287,6 +302,84 @@ describe('Succession Integration', () => {
         .expect(201);
       expect(res.body.pdi.successionPlanId).toBe(successionPlanId);
       expect(res.body.pdi.status).toBe('ACTIVE');
+    });
+
+    it('o pipeline do cargo crítico agora mostra o developmentPlan gerado', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/succession/critical-positions/${criticalPositionId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      const sp = res.body.successionPlans[0];
+      expect(sp.developmentPlan).toEqual(
+        expect.objectContaining({ status: 'ACTIVE', overallProgress: expect.any(Number) }),
+      );
+    });
+  });
+
+  describe('Histórico de sucessão', () => {
+    // logSuccessionHistory() escreve via AuditService, que por omissão
+    // enfileira o write na fila Bull 'audit' (processado de forma
+    // assíncrona pelo AuditProcessor). Testado à parte, de forma
+    // determinística e sem depender da fila, em
+    // succession.service.spec.ts (createCriticalPosition/create chamam
+    // logSuccessionHistory com os argumentos certos). A fila deste
+    // ambiente perde jobs de forma não-determinística mesmo com poll longo
+    // — reproduzido de forma independente deste código em
+    // test/integration/payroll/payroll.integration-spec.ts (o mesmo
+    // waitForAuditRow(), para PayrollRun:publish, falha isoladamente).
+    // Este describe() semeia AuditLog directamente, para testar só o que é
+    // deste endpoint: a query (entity/entityId/metadata→criticalPositionId)
+    // e o RBAC — não a latência da fila, que não é desta feature.
+    let seededLogIds: number[] = [];
+
+    beforeAll(async () => {
+      const rows = await Promise.all([
+        prisma.auditLog.create({
+          data: {
+            userId: employeeId,
+            action: 'CREATE',
+            entity: 'CriticalPosition',
+            entityId: criticalPositionId,
+            metadata: JSON.stringify({ position: `${MARK} Position` }),
+          },
+        }),
+        prisma.auditLog.create({
+          data: {
+            userId: employeeId,
+            action: 'CREATE',
+            entity: 'SuccessionPlan',
+            entityId: successionPlanId,
+            metadata: JSON.stringify({ criticalPositionId }),
+          },
+        }),
+      ]);
+      seededLogIds = rows.map(r => r.id);
+    });
+
+    afterAll(async () => {
+      if (seededLogIds.length) {
+        await prisma.auditLog.deleteMany({ where: { id: { in: seededLogIds } } }).catch(() => undefined);
+      }
+    });
+
+    it('GET /critical-positions/:id/history devolve os registos do cargo e dos seus planos', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/succession/critical-positions/${criticalPositionId}/history`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+
+      const ids = res.body.map((h: any) => h.id);
+      expect(ids).toEqual(expect.arrayContaining(seededLogIds));
+      const seeded = res.body.filter((h: any) => seededLogIds.includes(h.id));
+      expect(seeded.map((h: any) => h.entity).sort()).toEqual(['CriticalPosition', 'SuccessionPlan']);
+      expect(seeded[0].user).toHaveProperty('fullName');
+    });
+
+    it('colaborador não acede ao histórico → 403', async () => {
+      await request(app.getHttpServer())
+        .get(`/succession/critical-positions/${criticalPositionId}/history`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
     });
   });
 
