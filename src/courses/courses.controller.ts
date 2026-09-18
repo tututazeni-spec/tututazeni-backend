@@ -444,6 +444,13 @@ export class CoursesController {
 
   // ── Quiz ──────────────────────────────────────────────────────────────────
 
+  @Get('lessons/:lessonId/quiz')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Ler quiz de uma aula para edição (inclui respostas certas)' })
+  getQuizForEdit(@Param('lessonId', ParseIntPipe) lessonId: number) {
+    return this.svc.getQuizForEdit(lessonId);
+  }
+
   @Post('lessons/:lessonId/quiz')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar quiz para uma aula' })
@@ -453,9 +460,18 @@ export class CoursesController {
 
   @Put('quizzes/:quizId')
   @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Actualizar configurações do quiz (embaralhar, feedback, tentativas)' })
+  @ApiOperation({ summary: 'Actualizar configurações e perguntas do quiz' })
   updateQuiz(@Param('quizId', ParseIntPipe) quizId: number, @Body() dto: UpdateQuizDto) {
     return this.svc.updateQuiz(quizId, dto);
+  }
+
+  @Get('quizzes/:quizId/attempt')
+  @ApiOperation({ summary: 'Ler quiz para o aluno responder (sem respostas certas) + tentativas' })
+  getQuizForAttempt(
+    @Param('quizId', ParseIntPipe) quizId: number,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.getQuizForAttempt(quizId, user.id);
   }
 
   @Post('quizzes/:quizId/submit')

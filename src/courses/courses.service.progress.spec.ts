@@ -55,6 +55,7 @@ const mockPrisma: any = {
     findMany: jest.fn().mockResolvedValue([]),
     update: jest.fn().mockResolvedValue({}),
     delete: jest.fn().mockResolvedValue({}),
+    count: jest.fn().mockResolvedValue(0),
   },
   lesson: {
     create: jest.fn().mockResolvedValue({ id: 11 }),
@@ -64,6 +65,15 @@ const mockPrisma: any = {
     update: jest.fn().mockResolvedValue({}),
     delete: jest.fn().mockResolvedValue({}),
     count: jest.fn().mockResolvedValue(5),
+  },
+  department: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  user: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  courseCompetency: {
+    findMany: jest.fn().mockResolvedValue([]),
   },
   lessonProgress: {
     upsert: jest.fn().mockResolvedValue({ lessonId: 10, userId: 1, completed: true }),
@@ -83,6 +93,7 @@ const mockPrisma: any = {
     create: jest.fn().mockResolvedValue({ id: 'cert-1', validationCode: 'CERT-1-1-123' }),
     findFirst: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
   },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   courseAnalytics: {
@@ -91,27 +102,34 @@ const mockPrisma: any = {
     findFirst: jest
       .fn()
       .mockResolvedValue({ totalEnrollments: 5, totalCompleted: 2, avgRating: 4.2 }),
+    findMany: jest.fn().mockResolvedValue([]),
   },
   quiz: {
     create: jest.fn(),
     findUnique: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
+    update: jest.fn().mockResolvedValue({}),
   },
   quizQuestion: {
     createMany: jest.fn().mockResolvedValue({ count: 2 }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
   quizAttempt: {
     count: jest.fn().mockResolvedValue(0),
     create: jest.fn().mockResolvedValue({ id: 'att-1', score: 80, passed: true }),
+    groupBy: jest.fn().mockResolvedValue([]),
+    findMany: jest.fn().mockResolvedValue([]),
   },
   courseFeedback: {
     findFirst: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
     create: jest.fn(),
     update: jest.fn(),
     aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4.0 }, _count: 5 }),
   },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { update: jest.fn().mockResolvedValue({}) },
+  learningPathCourse: { findMany: jest.fn().mockResolvedValue([]) },
 };
 
 const mockCourseCompletion = {
@@ -320,6 +338,122 @@ describe('CoursesService (progress & quiz & analytics)', () => {
     });
   });
 
+  // ─── updateQuiz ───────────────────────────────────────────────────────────
+
+  describe('updateQuiz', () => {
+    it('sem `questions` no dto, só actualiza definições (não mexe nas perguntas)', async () => {
+      mockPrisma.quiz.findUnique.mockResolvedValueOnce({ id: 1 });
+      mockPrisma.quiz.findUnique.mockResolvedValueOnce({ id: 1, questions: [] });
+
+      await service.updateQuiz(1, { passingScore: 80 } as any);
+
+      expect(mockPrisma.quiz.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { passingScore: 80 },
+      });
+      expect(mockPrisma.quizQuestion.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('com `questions` no dto, substitui as perguntas (antes eram descartadas em silêncio)', async () => {
+      mockPrisma.quiz.findUnique.mockResolvedValueOnce({ id: 1 });
+      mockPrisma.quiz.findUnique.mockResolvedValueOnce({ id: 1, questions: [] });
+
+      await service.updateQuiz(1, {
+        passingScore: 80,
+        questions: [
+          { question: 'Nova pergunta?', type: 'TRUE_FALSE', correctAnswer: 'true', points: 2 },
+        ],
+      } as any);
+
+      expect(mockPrisma.quizQuestion.deleteMany).toHaveBeenCalledWith({ where: { quizId: 1 } });
+      expect(mockPrisma.quizQuestion.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            quizId: 1,
+            question: 'Nova pergunta?',
+            correctAnswer: 'true',
+            points: 2,
+            seq: 0,
+          }),
+        ],
+      });
+    });
+
+    it('deve lançar NotFoundException se quiz não existe', async () => {
+      mockPrisma.quiz.findUnique.mockResolvedValue(null);
+      await expect(service.updateQuiz(99, { passingScore: 80 } as any)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  // ─── getQuizForEdit / getQuizForAttempt ─────────────────────────────────────
+
+  describe('getQuizForEdit', () => {
+    it('devolve o quiz com correctAnswer visível', async () => {
+      mockPrisma.read.quiz.findUnique.mockResolvedValue({
+        id: 1,
+        questions: [{ id: 1, question: 'Q?', correctAnswer: 'A' }],
+      });
+      const result = await service.getQuizForEdit(10);
+      expect(result?.questions[0].correctAnswer).toBe('A');
+    });
+  });
+
+  describe('getQuizForAttempt', () => {
+    it('nunca expõe correctAnswer e devolve tentativas restantes', async () => {
+      mockPrisma.read.quiz.findUnique.mockResolvedValue({
+        id: 1,
+        title: 'Quiz',
+        passingScore: 70,
+        maxAttempts: 2,
+        timeLimitMinutes: null,
+        shuffleQuestions: false,
+        shuffleAnswers: false,
+        lesson: { module: { courseId: 20 } },
+        questions: [
+          {
+            id: 1,
+            question: 'Q?',
+            type: 'MULTIPLE_CHOICE',
+            points: 1,
+            correctAnswer: 'A',
+            options: JSON.stringify([
+              { text: 'A', isCorrect: true },
+              { text: 'B', isCorrect: false },
+            ]),
+          },
+        ],
+      });
+      mockPrisma.read.enrollment.findFirst.mockResolvedValue({ id: 5, userId: 1, courseId: 20 });
+      mockPrisma.read.quizAttempt.findMany.mockResolvedValue([
+        { id: 1, score: 50, passed: false, submittedAt: new Date('2026-01-01') },
+      ]);
+
+      const result = await service.getQuizForAttempt(1, 1);
+
+      expect(result.attemptsUsed).toBe(1);
+      expect(result.attemptsRemaining).toBe(1);
+      expect(result.questions[0]).not.toHaveProperty('correctAnswer');
+      expect(result.questions[0].options).toEqual([{ text: 'A' }, { text: 'B' }]);
+    });
+
+    it('não matriculado → ForbiddenException', async () => {
+      mockPrisma.read.quiz.findUnique.mockResolvedValue({
+        id: 1,
+        lesson: { module: { courseId: 20 } },
+        questions: [],
+      });
+      mockPrisma.read.enrollment.findFirst.mockResolvedValue(null);
+      await expect(service.getQuizForAttempt(1, 1)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('quiz inexistente → NotFoundException', async () => {
+      mockPrisma.read.quiz.findUnique.mockResolvedValue(null);
+      await expect(service.getQuizForAttempt(99, 1)).rejects.toThrow(NotFoundException);
+    });
+  });
+
   // ─── submitQuiz ───────────────────────────────────────────────────────────
 
   describe('submitQuiz', () => {
@@ -478,15 +612,41 @@ describe('CoursesService (progress & quiz & analytics)', () => {
   // ─── getAdminDashboard ────────────────────────────────────────────────────
 
   describe('getAdminDashboard', () => {
-    it('deve retornar dashboard administrativo', async () => {
-      mockPrisma.course.count.mockResolvedValueOnce(50).mockResolvedValueOnce(30);
-      mockPrisma.enrollment.count
-        .mockResolvedValueOnce(1000)
-        .mockResolvedValueOnce(600)
-        .mockResolvedValueOnce(20);
+    beforeEach(() => {
+      // getCourseAnalytics (acima) deixa lesson.findMany/enrollment.findMany
+      // com mockResolvedValue permanente — clearAllMocks() não limpa
+      // implementações, só chamadas. Repor aqui para não herdar forma errada.
+      mockPrisma.lesson.findMany.mockResolvedValue([]);
+      mockPrisma.enrollment.findMany.mockResolvedValue([]);
+    });
+
+    it('deve retornar dashboard administrativo com as secções da doc', async () => {
+      mockPrisma.course.groupBy.mockResolvedValue([
+        { status: 'PUBLISHED', _count: 30 },
+        { status: 'DRAFT', _count: 15 },
+      ]);
+      mockPrisma.enrollment.count.mockResolvedValue(0);
+      mockPrisma.enrollment.count.mockImplementation(async ({ where }: any = {}) =>
+        where?.status === 'COMPLETED' ? 600 : where === undefined ? 1000 : 0,
+      );
 
       const result = await service.getAdminDashboard();
-      expect(result).toBeDefined();
+
+      expect(result.counts.published).toBe(30);
+      expect(result.counts.draft).toBe(15);
+      expect(result).toHaveProperty('rates');
+      expect(result).toHaveProperty('byCategory');
+      expect(result).toHaveProperty('byDepartment');
+      expect(result).toHaveProperty('byInstructor');
+      expect(result).toHaveProperty('recentActivity');
+      expect(result).toHaveProperty('monthlyTrend');
+      expect(result).toHaveProperty('alerts');
+    });
+
+    it('sem departamentos/instrutores não interroga User/Department (evita findMany({where:{id:{in:[]}}}))', async () => {
+      await service.getAdminDashboard();
+      expect(mockPrisma.department.findMany).not.toHaveBeenCalled();
+      expect(mockPrisma.user.findMany).not.toHaveBeenCalled();
     });
   });
 });
