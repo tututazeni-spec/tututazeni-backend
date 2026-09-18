@@ -73,7 +73,7 @@ export class CourseCompletionService {
     // permitindo concluir aulas de módulos bloqueados/sequenciais via o catálogo.
     // Centralizado aqui porque ambos os controllers de módulos/lições (courses.*
     // e course-modules.*) chamam este orquestrador único para a escrita de progresso.
-    await this.assertLessonAccessible(userId, lesson.module, enrollment);
+    await this.assertLessonAccessible(userId, lesson.module, enrollment, lesson.requiredLessonId);
 
     const progress = await this.prisma.lessonProgress.upsert({
       where: { lessonId_userId: { lessonId, userId } },
@@ -128,8 +128,10 @@ export class CourseCompletionService {
       availableFrom: Date | null;
       progressionType: string;
       seq: number;
+      requiredModuleId: number | null;
     },
     enrollment: { enrolledAt: Date },
+    requiredLessonId: number | null,
   ): Promise<void> {
     // Cursos "planos" sem nenhum módulo publicado usam o caminho de fallback
     // de evaluateCompletion (conta todas as aulas do curso, ver acima) — não
@@ -170,6 +172,27 @@ export class CourseCompletionService {
         if (!prevCompleted) {
           throw new ForbiddenException('Deve concluir o módulo anterior primeiro');
         }
+      }
+    }
+
+    // Pré-requisito explícito de módulo (docs/06-modulo-courses.md secção 10)
+    // — independente da adjacência por `seq` acima, escolhido livremente no
+    // ModuleModal ("Módulo pré-requisito"). Até esta correcção o campo era
+    // gravado mas nunca lido por nenhum gate de acesso real.
+    if (mod.requiredModuleId) {
+      const prereqCompleted = await this.isModuleCompleted(mod.requiredModuleId, userId);
+      if (!prereqCompleted) {
+        throw new ForbiddenException('Deve concluir o módulo pré-requisito primeiro');
+      }
+    }
+
+    // Pré-requisito explícito de aula, mesma lacuna que o de módulo acima.
+    if (requiredLessonId) {
+      const prereqProgress = await this.prisma.lessonProgress.findUnique({
+        where: { lessonId_userId: { lessonId: requiredLessonId, userId } },
+      });
+      if (!prereqProgress?.completed) {
+        throw new ForbiddenException('Deve concluir a aula pré-requisito primeiro');
       }
     }
   }
