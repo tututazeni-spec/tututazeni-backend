@@ -553,8 +553,38 @@ describe('CourseCompletionService', () => {
         courseId: 20,
         status: 'IN_PROGRESS',
       });
+      // Curso já tem outro módulo publicado — cenário real do bypass. Um curso
+      // sem NENHUM módulo publicado cai no fallback de evaluateCompletion (ver
+      // teste "curso sem módulos publicados" em course-completion.service.ts)
+      // e não deve ser bloqueado por este gate.
+      mockPrisma.courseModule.findFirst.mockResolvedValue({ id: 99, status: 'PUBLISHED' });
       await expect(service.markLessonComplete(10, 1, {})).rejects.toThrow(ForbiddenException);
       expect(mockPrisma.lessonProgress.upsert).not.toHaveBeenCalled();
+    });
+
+    it('curso sem nenhum módulo publicado → gate não bloqueia (fallback de evaluateCompletion)', async () => {
+      mockPrisma.read.lesson.findUnique.mockResolvedValue({
+        id: 1,
+        moduleId: 5,
+        module: { courseId: 20, status: 'DRAFT' },
+      });
+      mockPrisma.enrollment.findFirst.mockResolvedValue({
+        id: 7,
+        userId: 10,
+        courseId: 20,
+        status: 'IN_PROGRESS',
+        enrolledAt: new Date(),
+      });
+      mockPrisma.courseModule.findFirst.mockResolvedValue(null);
+      mockPrisma.lessonProgress.upsert.mockResolvedValue({ id: 1 });
+      mockPrisma.enrollment.update.mockResolvedValue({});
+      jest.spyOn(service, 'evaluateCompletion').mockResolvedValue({ complete: false, reason: 'x' });
+      jest
+        .spyOn(service, 'getCourseProgressNumbers')
+        .mockResolvedValue({ total: 2, completed: 1, percent: 50 });
+
+      await expect(service.markLessonComplete(10, 1, {})).resolves.toBeDefined();
+      expect(mockPrisma.lessonProgress.upsert).toHaveBeenCalled();
     });
 
     it('módulo sequencial com anterior por concluir → ForbiddenException', async () => {

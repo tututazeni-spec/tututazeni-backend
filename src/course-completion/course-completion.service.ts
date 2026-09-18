@@ -131,6 +131,17 @@ export class CourseCompletionService {
     },
     enrollment: { enrolledAt: Date },
   ): Promise<void> {
+    // Cursos "planos" sem nenhum módulo publicado usam o caminho de fallback
+    // de evaluateCompletion (conta todas as aulas do curso, ver acima) — não
+    // têm estrutura de módulos a proteger, por isso o gate não se aplica. Só
+    // entra em jogo quando o curso já tem pelo menos um módulo publicado,
+    // que é exactamente o cenário do bypass que este método fecha.
+    const hasPublishedModule = await this.prisma.courseModule.findFirst({
+      where: { courseId: mod.courseId, status: 'PUBLISHED' },
+      select: { id: true },
+    });
+    if (!hasPublishedModule) return;
+
     if (mod.status !== 'PUBLISHED') {
       throw new ForbiddenException('Módulo não publicado');
     }
