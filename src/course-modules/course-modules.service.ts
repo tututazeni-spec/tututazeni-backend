@@ -527,6 +527,9 @@ export class CourseModulesService {
           orderBy: { seq: 'asc' },
           include: {
             progress: { where: { userId } },
+            activities: { orderBy: { seq: 'asc' } },
+            resources: { orderBy: { createdAt: 'asc' } },
+            liveInstructor: { select: { id: true, fullName: true } },
           },
         },
         materials: true,
@@ -587,6 +590,16 @@ export class CourseModulesService {
             isFree: l.isFree,
             allowDownload: l.allowDownload,
             contentUrl: canSeeContent ? l.contentUrl : null,
+            // Só disponíveis a quem está inscrito — mesma regra de canSeeContent
+            // já aplicada a contentUrl (ver comentário acima).
+            textContent: canSeeContent ? l.textContent : null,
+            captionsUrl: canSeeContent ? l.captionsUrl : null,
+            transcript: canSeeContent ? l.transcript : null,
+            liveDate: l.liveDate,
+            liveSessionUrl: canSeeContent ? l.liveSessionUrl : null,
+            liveInstructor: l.liveInstructor,
+            activities: l.activities,
+            resources: canSeeContent ? l.resources : [],
             completed: l.progress[0]?.completed ?? false,
             completedAt: l.progress[0]?.completedAt ?? null,
             resumePosition: l.progress[0]?.resumePosition ?? 0,
