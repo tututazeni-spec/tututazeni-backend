@@ -279,6 +279,23 @@ describe('Career Integration', () => {
         .expect(200);
       expect(res.body.status).toBe('SHORTLISTED');
     });
+
+    it('GET /career/vacancies/:id/applications — RH revê candidatos → 200', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/career/vacancies/${vacancyId}/applications`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body.some((a: any) => a.status === 'SHORTLISTED')).toBe(true);
+      expect(res.body[0].user).toHaveProperty('fullName');
+    });
+
+    it('GET /career/vacancies/:id/applications — colaborador → 403', async () => {
+      await request(app.getHttpServer())
+        .get(`/career/vacancies/${vacancyId}/applications`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
   });
 
   describe('Analytics', () => {

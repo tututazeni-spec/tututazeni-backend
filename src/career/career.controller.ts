@@ -269,6 +269,13 @@ export class CareerController {
     return this.svc.getMyApplications(user.id);
   }
 
+  @Get('vacancies/:id/applications')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar candidaturas de uma vaga (para revisão)' })
+  vacancyApplications(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getVacancyApplications(id);
+  }
+
   @Patch('vacancies/applications/:appId/status')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Atualizar status de candidatura' })

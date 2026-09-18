@@ -22,6 +22,12 @@ import { AssessmentsModule } from './assessments/assessments.module';
 // fundido lá como "Competências".
 import { CompetenciesModule } from './competencies/competencies.module';
 import { DevelopmentPlansModule } from './development-plans/development-plans.module';
+// SuccessionModule — módulo Career, secção 7 (Sucessão): cargos críticos,
+// planos de sucessão, matriz e dashboard. Removido por engano na limpeza de
+// "módulos legados" (#295) junto com módulos efectivamente mortos
+// (leadership, engagement, avatar-training…); restaurado porque é o motor
+// real por trás do separador "Sucessão" da spec docs/04-modulo-career.md.
+import { SuccessionModule } from './succession/succession.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { LiveClassesModule } from './live-classes/live-classes.module';
 import { MobileModule } from './mobile/mobile.module';
@@ -153,6 +159,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     AssessmentsModule,
     CompetenciesModule,
     DevelopmentPlansModule,
+    SuccessionModule,
     OnboardingModule,
     LiveClassesModule,
     MobileModule,
