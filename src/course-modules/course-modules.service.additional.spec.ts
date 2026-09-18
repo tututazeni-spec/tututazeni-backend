@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { CourseModulesService } from './course-modules.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
@@ -49,6 +49,15 @@ const mockPrisma: any = {
   },
   enrollment: { findFirst: jest.fn().mockResolvedValue(null) },
   assessment: { count: jest.fn().mockResolvedValue(0) },
+  quiz: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    delete: jest.fn().mockResolvedValue({}),
+  },
+  quizQuestion: {
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
 };
 
 const baseCourse = { id: 1, title: 'Curso TypeScript', status: 'PUBLISHED' };
@@ -172,6 +181,13 @@ describe('CourseModulesService (additional)', () => {
       await service.deleteModule(1);
       expect(mockPrisma.courseModule.delete).toHaveBeenCalled();
     });
+
+    it('bloqueia se alguma aula do módulo tem quiz com tentativas', async () => {
+      mockPrisma.courseModule.findUnique.mockResolvedValue(baseModule);
+      mockPrisma.quiz.findMany.mockResolvedValue([{ id: 1, _count: { attempts: 1 } }]);
+      await expect(service.deleteModule(1)).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.courseModule.delete).not.toHaveBeenCalled();
+    });
   });
 
   // ─── reorderModules ───────────────────────────────────────────
@@ -235,6 +251,13 @@ describe('CourseModulesService (additional)', () => {
       mockPrisma.lesson.delete.mockResolvedValue({});
       await service.deleteLesson(1);
       expect(mockPrisma.lesson.delete).toHaveBeenCalled();
+    });
+
+    it('bloqueia se a aula tem quiz com tentativas de alunos', async () => {
+      mockPrisma.lesson.findUnique.mockResolvedValue({ id: 1, moduleId: 1 });
+      mockPrisma.quiz.findUnique.mockResolvedValue({ id: 9, _count: { attempts: 4 } });
+      await expect(service.deleteLesson(1)).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.lesson.delete).not.toHaveBeenCalled();
     });
   });
 

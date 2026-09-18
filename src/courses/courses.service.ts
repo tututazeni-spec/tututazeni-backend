@@ -448,6 +448,27 @@ export class CoursesService {
   async removeModule(courseId: number, moduleId: number) {
     const mod = await this.prisma.courseModule.findFirst({ where: { id: moduleId, courseId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
+
+    // Lesson→CourseModule tem onDelete: Cascade, mas Quiz→Lesson não — sem
+    // isto, eliminar um módulo com uma aula com quiz rebentava com 500
+    // (mesma FK RESTRICT não tratada de removeLesson, aqui atingida via
+    // cascata). Mesma regra: bloquear se há tentativas reais, senão eliminar
+    // os quizzes das aulas do módulo antes do módulo.
+    const quizzes = await this.prisma.quiz.findMany({
+      where: { lesson: { moduleId } },
+      include: { _count: { select: { attempts: true } } },
+    });
+    const withAttempts = quizzes.filter(q => q._count.attempts > 0);
+    if (withAttempts.length > 0) {
+      throw new ForbiddenException(
+        `${withAttempts.length} aula(s) deste módulo têm quiz com tentativas de alunos. Não pode ser eliminado.`,
+      );
+    }
+    if (quizzes.length > 0) {
+      await this.prisma.quizQuestion.deleteMany({ where: { quizId: { in: quizzes.map(q => q.id) } } });
+      await this.prisma.quiz.deleteMany({ where: { id: { in: quizzes.map(q => q.id) } } });
+    }
+
     return this.prisma.courseModule.delete({ where: { id: moduleId } });
   }
 
@@ -583,6 +604,27 @@ export class CoursesService {
   async removeLesson(lessonId: number) {
     const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
+
+    // Quiz.lessonId e QuizAttempt.quizId não têm onDelete: Cascade (RESTRICT
+    // por omissão) — sem isto, eliminar uma aula com quiz rebentava com 500
+    // (violação de FK não tratada) em vez de um erro claro. Bloquear se há
+    // tentativas reais de alunos (dados que não devem desaparecer em
+    // silêncio); sem tentativas, o quiz é só configuração e pode ser
+    // eliminado em cascata com a aula.
+    const quiz = await this.prisma.quiz.findUnique({
+      where: { lessonId },
+      include: { _count: { select: { attempts: true } } },
+    });
+    if (quiz) {
+      if (quiz._count.attempts > 0) {
+        throw new ForbiddenException(
+          `Esta aula tem um quiz com ${quiz._count.attempts} tentativa(s) de alunos. Não pode ser eliminada.`,
+        );
+      }
+      await this.prisma.quizQuestion.deleteMany({ where: { quizId: quiz.id } });
+      await this.prisma.quiz.delete({ where: { id: quiz.id } });
+    }
+
     return this.prisma.lesson.delete({ where: { id: lessonId } });
   }
 

@@ -65,6 +65,15 @@ const mockPrisma = {
     findMany: jest.fn(),
   },
   learningPathCourse: { findMany: jest.fn().mockResolvedValue([]) },
+  quiz: {
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    delete: jest.fn().mockResolvedValue({}),
+  },
+  quizQuestion: {
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+  },
 };
 
 const mockCourseCompletion = {
@@ -354,6 +363,23 @@ describe('CoursesService (additional)', () => {
       mockPrisma.courseModule.findFirst.mockResolvedValue(null);
       await expect(service.removeModule(1, 99)).rejects.toThrow(NotFoundException);
     });
+
+    it('bloqueia se alguma aula do módulo tem quiz com tentativas', async () => {
+      mockPrisma.courseModule.findFirst.mockResolvedValue({ id: 1, courseId: 1 });
+      mockPrisma.quiz.findMany.mockResolvedValue([{ id: 1, _count: { attempts: 2 } }]);
+      await expect(service.removeModule(1, 1)).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.courseModule.delete).not.toHaveBeenCalled();
+    });
+
+    it('elimina os quizzes sem tentativas antes de eliminar o módulo', async () => {
+      mockPrisma.courseModule.findFirst.mockResolvedValue({ id: 1, courseId: 1 });
+      mockPrisma.quiz.findMany.mockResolvedValue([{ id: 5, _count: { attempts: 0 } }]);
+      mockPrisma.courseModule.delete.mockResolvedValue({});
+      await service.removeModule(1, 1);
+      expect(mockPrisma.quizQuestion.deleteMany).toHaveBeenCalledWith({ where: { quizId: { in: [5] } } });
+      expect(mockPrisma.quiz.deleteMany).toHaveBeenCalledWith({ where: { id: { in: [5] } } });
+      expect(mockPrisma.courseModule.delete).toHaveBeenCalled();
+    });
   });
 
   // ─── createLesson ─────────────────────────────────────────────
@@ -411,6 +437,23 @@ describe('CoursesService (additional)', () => {
     it('deve lançar NotFoundException se aula não existe', async () => {
       mockPrisma.lesson.findUnique.mockResolvedValue(null);
       await expect(service.removeLesson(99)).rejects.toThrow(NotFoundException);
+    });
+
+    it('bloqueia se a aula tem quiz com tentativas de alunos', async () => {
+      mockPrisma.lesson.findUnique.mockResolvedValue({ id: 1 });
+      mockPrisma.quiz.findUnique.mockResolvedValue({ id: 5, _count: { attempts: 3 } });
+      await expect(service.removeLesson(1)).rejects.toThrow(ForbiddenException);
+      expect(mockPrisma.lesson.delete).not.toHaveBeenCalled();
+    });
+
+    it('elimina o quiz sem tentativas antes de eliminar a aula', async () => {
+      mockPrisma.lesson.findUnique.mockResolvedValue({ id: 1 });
+      mockPrisma.quiz.findUnique.mockResolvedValue({ id: 5, _count: { attempts: 0 } });
+      mockPrisma.lesson.delete.mockResolvedValue({});
+      await service.removeLesson(1);
+      expect(mockPrisma.quizQuestion.deleteMany).toHaveBeenCalledWith({ where: { quizId: 5 } });
+      expect(mockPrisma.quiz.delete).toHaveBeenCalledWith({ where: { id: 5 } });
+      expect(mockPrisma.lesson.delete).toHaveBeenCalled();
     });
   });
 
