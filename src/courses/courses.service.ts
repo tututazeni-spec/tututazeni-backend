@@ -1052,37 +1052,363 @@ export class CoursesService {
     };
   }
 
+  // docs/06-modulo-courses.md — "Dashboard Admin → Cursos". A versão anterior
+  // só cobria ~4 dos ~45 indicadores pedidos pelo doc; esta cobre a maioria
+  // dos que têm dados reais no schema. Não incluído por não existir campo
+  // nenhum no schema para o suportar: "por modalidade" (Course não tem
+  // campo modalidade/formato — ver docs/06-modulo-courses.md secção 1 vs.
+  // schema.prisma real). "Atalhos" ficam só no frontend (são links de
+  // navegação, não dados).
   async getAdminDashboard() {
-    const [totalCourses, published, totalEnrollments, completedEnrollments, overdueEnrollments] =
-      await Promise.all([
-        this.prisma.read.course.count(),
-        this.prisma.read.course.count({ where: { status: 'PUBLISHED' } }),
-        this.prisma.read.enrollment.count(),
-        this.prisma.read.enrollment.count({ where: { status: 'COMPLETED' } }),
-        this.prisma.read.enrollment.count({
-          where: { deadline: { lt: new Date() }, status: { notIn: ['COMPLETED', 'EXPIRED'] } },
-        }),
-      ]);
+    const now = new Date();
+    const soon = new Date(now.getTime() + 14 * 86400 * 1000);
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
-    const topCourses = await this.prisma.read.course.findMany({
-      where: { status: 'PUBLISHED' },
-      include: { _count: { select: { enrollments: true } } },
-      orderBy: { enrollments: { _count: 'desc' } },
-      take: 5,
+    const [
+      statusCounts,
+      totalModules,
+      totalLessons,
+      totalEnrollments,
+      pendingEnrollments,
+      completedEnrollments,
+      overdueEnrollments,
+      mandatoryCourses,
+      optionalCourses,
+      certificatesIssued,
+      byCategory,
+      byLevel,
+      byUnit,
+      byDepartmentRaw,
+      byInstructorRaw,
+      recentlyCreated,
+      recentlyUpdated,
+      openForEnrollment,
+      endingSoon,
+      withoutEnrollments,
+      withoutContent,
+      withoutInstructor,
+      withPendingContent,
+      upcomingLiveSessions,
+      recentEnrollments,
+      recentCompletions,
+      recentFeedbacks,
+      recentCertificates,
+      monthlyEnrollments,
+      monthlyCompletions,
+      feedbackAvg,
+      quizPassStats,
+      analyticsRows,
+      courseCompetencies,
+    ] = await Promise.all([
+      this.prisma.read.course.groupBy({ by: ['status'], _count: true }),
+      this.prisma.read.courseModule.count(),
+      this.prisma.read.lesson.count(),
+      this.prisma.read.enrollment.count(),
+      this.prisma.read.enrollment.count({ where: { status: 'PENDING_APPROVAL' } }),
+      this.prisma.read.enrollment.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.read.enrollment.count({
+        where: { deadline: { lt: now }, status: { notIn: ['COMPLETED', 'EXPIRED'] } },
+      }),
+      this.prisma.read.course.count({ where: { mandatory: true } }),
+      this.prisma.read.course.count({ where: { mandatory: false } }),
+      this.prisma.read.certificate.count({ where: { type: 'COURSE' } }),
+      this.prisma.read.course.groupBy({ by: ['category'], _count: true }),
+      this.prisma.read.course.groupBy({ by: ['level'], _count: true }),
+      this.prisma.read.course.groupBy({ by: ['unit'], _count: true }),
+      this.prisma.read.course.groupBy({ by: ['departmentId'], _count: true }),
+      this.prisma.read.course.groupBy({ by: ['primaryInstructorId'], _count: true }),
+      this.prisma.read.course.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: { id: true, title: true, createdAt: true },
+      }),
+      this.prisma.read.course.findMany({
+        orderBy: { updatedAt: 'desc' },
+        take: 5,
+        select: { id: true, title: true, updatedAt: true },
+      }),
+      this.prisma.read.course.count({
+        where: { status: 'PUBLISHED', OR: [{ endDate: null }, { endDate: { gt: now } }] },
+      }),
+      this.prisma.read.course.findMany({
+        where: { status: 'PUBLISHED', endDate: { gte: now, lte: soon } },
+        orderBy: { endDate: 'asc' },
+        take: 5,
+        select: { id: true, title: true, endDate: true },
+      }),
+      this.prisma.read.course.count({
+        where: { status: 'PUBLISHED', enrollments: { none: {} } },
+      }),
+      this.prisma.read.course.count({ where: { modules: { none: {} } } }),
+      this.prisma.read.course.count({ where: { primaryInstructorId: null } }),
+      this.prisma.read.course.count({ where: { modules: { some: { status: 'DRAFT' } } } }),
+      this.prisma.read.lesson.findMany({
+        where: { type: 'LIVE', liveDate: { gt: now } },
+        orderBy: { liveDate: 'asc' },
+        take: 5,
+        select: {
+          id: true,
+          title: true,
+          liveDate: true,
+          liveInstructor: { select: { fullName: true } },
+          module: { select: { course: { select: { id: true, title: true } } } },
+        },
+      }),
+      this.prisma.read.enrollment.findMany({
+        orderBy: { enrolledAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          enrolledAt: true,
+          user: { select: { fullName: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      this.prisma.read.enrollment.findMany({
+        where: { status: 'COMPLETED' },
+        orderBy: { completedAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          completedAt: true,
+          user: { select: { fullName: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      this.prisma.read.courseFeedback.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          rating: true,
+          createdAt: true,
+          user: { select: { fullName: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      this.prisma.read.certificate.findMany({
+        where: { type: 'COURSE' },
+        orderBy: { issuedAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          issuedAt: true,
+          user: { select: { fullName: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      this.prisma.read.enrollment.findMany({
+        where: { enrolledAt: { gte: sixMonthsAgo } },
+        select: { enrolledAt: true },
+      }),
+      this.prisma.read.enrollment.findMany({
+        where: { status: 'COMPLETED', completedAt: { gte: sixMonthsAgo } },
+        select: { completedAt: true },
+      }),
+      this.prisma.read.courseFeedback.aggregate({ _avg: { rating: true } }),
+      this.prisma.read.quizAttempt.groupBy({ by: ['passed'], _count: true }),
+      this.prisma.read.courseAnalytics.findMany({
+        where: { totalEnrollments: { gt: 0 } },
+        include: { course: { select: { id: true, title: true } } },
+      }),
+      this.prisma.read.courseCompetency.findMany({
+        include: {
+          competency: { select: { id: true, name: true } },
+          course: { select: { analytics: { select: { totalCompleted: true } } } },
+        },
+      }),
+    ]);
+
+    const countByStatus = (status: string) =>
+      statusCounts.find(s => s.status === status)?._count ?? 0;
+
+    // Nomes para os groupBy de departamento/instrutor — groupBy não faz join.
+    const deptIds = byDepartmentRaw.map(d => d.departmentId).filter((v): v is number => v != null);
+    const instructorIds = byInstructorRaw
+      .map(i => i.primaryInstructorId)
+      .filter((v): v is number => v != null);
+    const [depts, instructors] = await Promise.all([
+      deptIds.length
+        ? this.prisma.read.department.findMany({
+            where: { id: { in: deptIds } },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([]),
+      instructorIds.length
+        ? this.prisma.read.user.findMany({
+            where: { id: { in: instructorIds } },
+            select: { id: true, fullName: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const deptName = (id: number | null) => depts.find(d => d.id === id)?.name ?? 'Sem departamento';
+    const instructorName = (id: number | null) =>
+      instructors.find(i => i.id === id)?.fullName ?? 'Sem instrutor';
+
+    const topCourses = [...analyticsRows]
+      .sort((a, b) => b.totalEnrollments - a.totalEnrollments)
+      .slice(0, 5)
+      .map(a => ({ id: a.course.id, title: a.course.title, enrollments: a.totalEnrollments }));
+
+    const withRate = analyticsRows.map(a => ({
+      id: a.course.id,
+      title: a.course.title,
+      rate: Math.round((a.totalCompleted / a.totalEnrollments) * 100),
+    }));
+    const bestCompletion = [...withRate].sort((a, b) => b.rate - a.rate).slice(0, 5);
+    const worstCompletion = [...withRate].sort((a, b) => a.rate - b.rate).slice(0, 5);
+
+    // Horas totais de aprendizagem — soma de workloadHours × inscrições
+    // concluídas por curso (proxy: não há registo de tempo efectivamente
+    // gasto por lição a nível agregado).
+    const completedByCourse = await this.prisma.read.enrollment.groupBy({
+      by: ['courseId'],
+      where: { status: 'COMPLETED' },
+      _count: true,
     });
+    const courseHours = completedByCourse.length
+      ? await this.prisma.read.course.findMany({
+          where: { id: { in: completedByCourse.map(c => c.courseId) } },
+          select: { id: true, workloadHours: true },
+        })
+      : [];
+    const totalLearningHours = completedByCourse.reduce((sum, c) => {
+      const hours = courseHours.find(h => h.id === c.courseId)?.workloadHours ?? 0;
+      return sum + hours * c._count;
+    }, 0);
+
+    const quizTotal = quizPassStats.reduce((s, q) => s + q._count, 0);
+    const quizPassed = quizPassStats.find(q => q.passed)?._count ?? 0;
+    const avgPassRate = quizTotal > 0 ? Math.round((quizPassed / quizTotal) * 100) : 0;
+
+    const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const bucketByMonth = (dates: Date[]) => {
+      const buckets = new Map<string, number>();
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+        buckets.set(monthKey(d), 0);
+      }
+      for (const d of dates) {
+        const key = monthKey(d);
+        if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + 1);
+      }
+      return Array.from(buckets.entries()).map(([month, count]) => ({ month, count }));
+    };
+
+    const competencyCompletions = new Map<string, { id: number; name: string; count: number }>();
+    for (const cc of courseCompetencies) {
+      const key = String(cc.competency.id);
+      const entry = competencyCompletions.get(key) ?? {
+        id: cc.competency.id,
+        name: cc.competency.name,
+        count: 0,
+      };
+      entry.count += cc.course.analytics?.totalCompleted ?? 0;
+      competencyCompletions.set(key, entry);
+    }
+    const topCompetencies = Array.from(competencyCompletions.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    const alerts = [
+      pendingEnrollments > 0 && {
+        message: `${pendingEnrollments} inscrições pendentes de aprovação`,
+        severity: 'warning' as const,
+      },
+      withoutInstructor > 0 && {
+        message: `${withoutInstructor} cursos sem instrutor`,
+        severity: 'warning' as const,
+      },
+      withoutContent > 0 && {
+        message: `${withoutContent} cursos sem conteúdo`,
+        severity: 'danger' as const,
+      },
+      withPendingContent > 0 && {
+        message: `${withPendingContent} cursos com módulos por publicar`,
+        severity: 'info' as const,
+      },
+      withoutEnrollments > 0 && {
+        message: `${withoutEnrollments} cursos publicados sem qualquer inscrição`,
+        severity: 'info' as const,
+      },
+      overdueEnrollments > 0 && {
+        message: `${overdueEnrollments} inscrições com prazo ultrapassado`,
+        severity: 'danger' as const,
+      },
+    ].filter((a): a is { message: string; severity: 'warning' | 'danger' | 'info' } => !!a);
 
     const completionRate =
       totalEnrollments > 0 ? Math.round((completedEnrollments / totalEnrollments) * 100) : 0;
 
     return {
-      courses: { total: totalCourses, published },
-      enrollments: {
-        total: totalEnrollments,
-        completed: completedEnrollments,
-        overdue: overdueEnrollments,
-      },
+      // Mantidos por compatibilidade com o AdminDashboard já consumido pelo frontend.
+      courses: { total: statusCounts.reduce((s, c) => s + c._count, 0), published: countByStatus('PUBLISHED') },
+      enrollments: { total: totalEnrollments, completed: completedEnrollments, overdue: overdueEnrollments },
       completionRate,
+
+      counts: {
+        total: statusCounts.reduce((s, c) => s + c._count, 0),
+        published: countByStatus('PUBLISHED'),
+        draft: countByStatus('DRAFT'),
+        paused: countByStatus('PAUSED'),
+        archived: countByStatus('ARCHIVED'),
+        totalModules,
+        totalLessons,
+        totalEnrollments,
+        pendingEnrollments,
+        mandatoryCourses,
+        optionalCourses,
+        certificatesIssued,
+      },
+      rates: {
+        avgCompletionRate: completionRate,
+        avgPassRate,
+        avgRating: feedbackAvg._avg.rating ? Math.round(feedbackAvg._avg.rating * 10) / 10 : 0,
+        totalLearningHours,
+      },
       topCourses,
+      bestCompletion,
+      worstCompletion,
+      byCategory: byCategory.map(c => ({ category: c.category ?? 'Sem categoria', count: c._count })),
+      byLevel: byLevel.map(l => ({ level: l.level, count: l._count })),
+      byUnit: byUnit.map(u => ({ unit: u.unit ?? 'Sem unidade', count: u._count })),
+      byDepartment: byDepartmentRaw.map(d => ({
+        department: deptName(d.departmentId),
+        count: d._count,
+      })),
+      byInstructor: byInstructorRaw.map(i => ({
+        instructor: instructorName(i.primaryInstructorId),
+        count: i._count,
+      })),
+      recentlyCreated,
+      recentlyUpdated,
+      openForEnrollment,
+      endingSoon,
+      withoutEnrollments,
+      withoutContent,
+      withoutInstructor,
+      withPendingContent,
+      upcomingLiveSessions: upcomingLiveSessions.map(l => ({
+        id: l.id,
+        title: l.title,
+        liveDate: l.liveDate,
+        instructor: l.liveInstructor?.fullName ?? null,
+        course: l.module.course,
+      })),
+      recentActivity: {
+        enrollments: recentEnrollments,
+        completions: recentCompletions,
+        feedbacks: recentFeedbacks,
+        certificates: recentCertificates,
+      },
+      monthlyTrend: {
+        enrollments: bucketByMonth(monthlyEnrollments.map(e => e.enrolledAt)),
+        completions: bucketByMonth(
+          monthlyCompletions.map(e => e.completedAt).filter((d): d is Date => !!d),
+        ),
+      },
+      topCompetencies,
+      alerts,
     };
   }
 }

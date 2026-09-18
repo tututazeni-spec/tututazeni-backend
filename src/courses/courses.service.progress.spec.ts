@@ -55,6 +55,7 @@ const mockPrisma: any = {
     findMany: jest.fn().mockResolvedValue([]),
     update: jest.fn().mockResolvedValue({}),
     delete: jest.fn().mockResolvedValue({}),
+    count: jest.fn().mockResolvedValue(0),
   },
   lesson: {
     create: jest.fn().mockResolvedValue({ id: 11 }),
@@ -64,6 +65,15 @@ const mockPrisma: any = {
     update: jest.fn().mockResolvedValue({}),
     delete: jest.fn().mockResolvedValue({}),
     count: jest.fn().mockResolvedValue(5),
+  },
+  department: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  user: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  courseCompetency: {
+    findMany: jest.fn().mockResolvedValue([]),
   },
   lessonProgress: {
     upsert: jest.fn().mockResolvedValue({ lessonId: 10, userId: 1, completed: true }),
@@ -83,6 +93,7 @@ const mockPrisma: any = {
     create: jest.fn().mockResolvedValue({ id: 'cert-1', validationCode: 'CERT-1-1-123' }),
     findFirst: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
   },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   courseAnalytics: {
@@ -91,6 +102,7 @@ const mockPrisma: any = {
     findFirst: jest
       .fn()
       .mockResolvedValue({ totalEnrollments: 5, totalCompleted: 2, avgRating: 4.2 }),
+    findMany: jest.fn().mockResolvedValue([]),
   },
   quiz: {
     create: jest.fn(),
@@ -103,9 +115,11 @@ const mockPrisma: any = {
   quizAttempt: {
     count: jest.fn().mockResolvedValue(0),
     create: jest.fn().mockResolvedValue({ id: 'att-1', score: 80, passed: true }),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   courseFeedback: {
     findFirst: jest.fn(),
+    findMany: jest.fn().mockResolvedValue([]),
     create: jest.fn(),
     update: jest.fn(),
     aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4.0 }, _count: 5 }),
@@ -479,15 +493,42 @@ describe('CoursesService (progress & quiz & analytics)', () => {
   // ─── getAdminDashboard ────────────────────────────────────────────────────
 
   describe('getAdminDashboard', () => {
-    it('deve retornar dashboard administrativo', async () => {
-      mockPrisma.course.count.mockResolvedValueOnce(50).mockResolvedValueOnce(30);
+    beforeEach(() => {
+      // getCourseAnalytics (acima) deixa lesson.findMany/enrollment.findMany
+      // com mockResolvedValue permanente — clearAllMocks() não limpa
+      // implementações, só chamadas. Repor aqui para não herdar forma errada.
+      mockPrisma.lesson.findMany.mockResolvedValue([]);
+      mockPrisma.enrollment.findMany.mockResolvedValue([]);
+    });
+
+    it('deve retornar dashboard administrativo com as secções da doc', async () => {
+      mockPrisma.course.groupBy.mockResolvedValue([
+        { status: 'PUBLISHED', _count: 30 },
+        { status: 'DRAFT', _count: 15 },
+      ]);
+      mockPrisma.enrollment.count.mockResolvedValue(0);
       mockPrisma.enrollment.count
-        .mockResolvedValueOnce(1000)
-        .mockResolvedValueOnce(600)
-        .mockResolvedValueOnce(20);
+        .mockImplementation(async ({ where }: any = {}) =>
+          where?.status === 'COMPLETED' ? 600 : where === undefined ? 1000 : 0,
+        );
 
       const result = await service.getAdminDashboard();
-      expect(result).toBeDefined();
+
+      expect(result.counts.published).toBe(30);
+      expect(result.counts.draft).toBe(15);
+      expect(result).toHaveProperty('rates');
+      expect(result).toHaveProperty('byCategory');
+      expect(result).toHaveProperty('byDepartment');
+      expect(result).toHaveProperty('byInstructor');
+      expect(result).toHaveProperty('recentActivity');
+      expect(result).toHaveProperty('monthlyTrend');
+      expect(result).toHaveProperty('alerts');
+    });
+
+    it('sem departamentos/instrutores não interroga User/Department (evita findMany({where:{id:{in:[]}}}))', async () => {
+      await service.getAdminDashboard();
+      expect(mockPrisma.department.findMany).not.toHaveBeenCalled();
+      expect(mockPrisma.user.findMany).not.toHaveBeenCalled();
     });
   });
 });
