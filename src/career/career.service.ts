@@ -1248,11 +1248,11 @@ export class CareerService {
   }
 
   async getCareerOverview(filters: CareerAnalyticsFilterDto = {}) {
-    const [careerAnalytics, careerPlansAnalytics] = await Promise.all([
+    const departmentFilter = filters.departmentId ? String(filters.departmentId) : undefined;
+    const [careerAnalytics, careerPlansAnalytics, successionKpis] = await Promise.all([
       this.getCareerAnalytics(filters),
-      this.careerPlans.getAnalytics(
-        filters.departmentId ? String(filters.departmentId) : undefined,
-      ),
+      this.careerPlans.getAnalytics(departmentFilter),
+      this.careerPlans.getSuccessionKpis(departmentFilter),
     ]);
 
     const userWhere: Prisma.UserWhereInput = { active: true };
@@ -1295,6 +1295,7 @@ export class CareerService {
     return {
       careerAnalytics,
       careerPlansAnalytics,
+      successionDashboard: { kpis: successionKpis },
       employeesWithoutPlan,
       internalMovements: movements.map(m => ({ changeType: m.changeType, count: m._count })),
       evolutionByDepartment: this.countByKey(plansWithUser, p => p.user.department?.name ?? null),

@@ -774,38 +774,89 @@ export class CareerPlansService {
     };
   }
 
-  async getSuccessionDashboard(department?: string) {
+  private async getCriticalPositionsWithCandidates(department?: string) {
     const roles = await this.prisma.read.careerRole.findMany({
       where: {
         active: true,
         ...(department ? { department: { contains: department, mode: 'insensitive' } } : {}),
       },
-      include: { _count: { select: { plans: true } } },
     });
 
-    const dashboard = await Promise.all(
+    return Promise.all(
       roles
         .filter(r => r.level >= 4)
         .map(async role => {
-          const candidateCount = await this.prisma.read.userCareerPlan.count({
+          const candidates = await this.prisma.read.userCareerPlan.findMany({
             where: { targetRoleId: role.id, status: CareerPlanStatus.ACTIVE },
+            select: { userId: true },
           });
           return {
             roleId: role.id,
             roleName: role.name,
             level: role.level,
             department: role.department,
-            candidateCount,
-            riskLevel: candidateCount === 0 ? 'HIGH' : candidateCount === 1 ? 'MEDIUM' : 'LOW',
+            candidates,
           };
         }),
     );
+  }
+
+  async getSuccessionDashboard(department?: string) {
+    const positions = await this.getCriticalPositionsWithCandidates(department);
+
+    const dashboard = positions.map(p => ({
+      roleId: p.roleId,
+      roleName: p.roleName,
+      level: p.level,
+      department: p.department,
+      candidateCount: p.candidates.length,
+      riskLevel: p.candidates.length === 0 ? 'HIGH' : p.candidates.length === 1 ? 'MEDIUM' : 'LOW',
+    }));
 
     return dashboard.sort(
       (a, b) =>
         ['HIGH', 'MEDIUM', 'LOW'].indexOf(a.riskLevel) -
         ['HIGH', 'MEDIUM', 'LOW'].indexOf(b.riskLevel),
     );
+  }
+
+  // Resumo em KPIs do dashboard de sucessão, para o `GET /career/overview`.
+  // Reaproveita `calculateReadiness` (mesma fonte usada no pipeline por cargo)
+  // para que `avgMatchScore`/`readinessIndex` reflictam skills reais, não só
+  // contagem de candidatos.
+  async getSuccessionKpis(department?: string) {
+    const positions = await this.getCriticalPositionsWithCandidates(department);
+    const totalCriticalPositions = positions.length;
+
+    const positionsWithScores = await Promise.all(
+      positions.map(async p => {
+        const scores = await Promise.all(
+          p.candidates.map(c => this.calculateReadiness(c.userId, p.roleId)),
+        );
+        return { ...p, scores };
+      }),
+    );
+
+    const withoutSuccessor = positionsWithScores.filter(p => p.candidates.length === 0).length;
+    const positionsWithReadyCandidate = positionsWithScores.filter(p =>
+      p.scores.some(s => s.readinessLevel === ReadinessLevel.READY),
+    ).length;
+    const allScores = positionsWithScores.flatMap(p => p.scores.map(s => s.score));
+
+    return {
+      totalCriticalPositions,
+      withoutSuccessor,
+      coverageRate: totalCriticalPositions
+        ? Math.round(((totalCriticalPositions - withoutSuccessor) / totalCriticalPositions) * 100)
+        : 100,
+      readinessIndex: totalCriticalPositions
+        ? Math.round((positionsWithReadyCandidate / totalCriticalPositions) * 100)
+        : 100,
+      highRiskPositions: withoutSuccessor,
+      avgMatchScore: allScores.length
+        ? +(allScores.reduce((sum, s) => sum + s, 0) / allScores.length).toFixed(1)
+        : 0,
+    };
   }
 
   async getAnalytics(department?: string) {
