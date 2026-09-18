@@ -360,13 +360,21 @@ describe('CoursesService (progress & quiz & analytics)', () => {
 
       await service.updateQuiz(1, {
         passingScore: 80,
-        questions: [{ question: 'Nova pergunta?', type: 'TRUE_FALSE', correctAnswer: 'true', points: 2 }],
+        questions: [
+          { question: 'Nova pergunta?', type: 'TRUE_FALSE', correctAnswer: 'true', points: 2 },
+        ],
       } as any);
 
       expect(mockPrisma.quizQuestion.deleteMany).toHaveBeenCalledWith({ where: { quizId: 1 } });
       expect(mockPrisma.quizQuestion.createMany).toHaveBeenCalledWith({
         data: [
-          expect.objectContaining({ quizId: 1, question: 'Nova pergunta?', correctAnswer: 'true', points: 2, seq: 0 }),
+          expect.objectContaining({
+            quizId: 1,
+            question: 'Nova pergunta?',
+            correctAnswer: 'true',
+            points: 2,
+            seq: 0,
+          }),
         ],
       });
     });
@@ -410,7 +418,10 @@ describe('CoursesService (progress & quiz & analytics)', () => {
             type: 'MULTIPLE_CHOICE',
             points: 1,
             correctAnswer: 'A',
-            options: JSON.stringify([{ text: 'A', isCorrect: true }, { text: 'B', isCorrect: false }]),
+            options: JSON.stringify([
+              { text: 'A', isCorrect: true },
+              { text: 'B', isCorrect: false },
+            ]),
           },
         ],
       });
@@ -615,10 +626,9 @@ describe('CoursesService (progress & quiz & analytics)', () => {
         { status: 'DRAFT', _count: 15 },
       ]);
       mockPrisma.enrollment.count.mockResolvedValue(0);
-      mockPrisma.enrollment.count
-        .mockImplementation(async ({ where }: any = {}) =>
-          where?.status === 'COMPLETED' ? 600 : where === undefined ? 1000 : 0,
-        );
+      mockPrisma.enrollment.count.mockImplementation(async ({ where }: any = {}) =>
+        where?.status === 'COMPLETED' ? 600 : where === undefined ? 1000 : 0,
+      );
 
       const result = await service.getAdminDashboard();
 

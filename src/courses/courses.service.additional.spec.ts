@@ -376,7 +376,9 @@ describe('CoursesService (additional)', () => {
       mockPrisma.quiz.findMany.mockResolvedValue([{ id: 5, _count: { attempts: 0 } }]);
       mockPrisma.courseModule.delete.mockResolvedValue({});
       await service.removeModule(1, 1);
-      expect(mockPrisma.quizQuestion.deleteMany).toHaveBeenCalledWith({ where: { quizId: { in: [5] } } });
+      expect(mockPrisma.quizQuestion.deleteMany).toHaveBeenCalledWith({
+        where: { quizId: { in: [5] } },
+      });
       expect(mockPrisma.quiz.deleteMany).toHaveBeenCalledWith({ where: { id: { in: [5] } } });
       expect(mockPrisma.courseModule.delete).toHaveBeenCalled();
     });

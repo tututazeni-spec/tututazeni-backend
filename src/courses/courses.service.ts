@@ -465,7 +465,9 @@ export class CoursesService {
       );
     }
     if (quizzes.length > 0) {
-      await this.prisma.quizQuestion.deleteMany({ where: { quizId: { in: quizzes.map(q => q.id) } } });
+      await this.prisma.quizQuestion.deleteMany({
+        where: { quizId: { in: quizzes.map(q => q.id) } },
+      });
       await this.prisma.quiz.deleteMany({ where: { id: { in: quizzes.map(q => q.id) } } });
     }
 
@@ -1009,7 +1011,8 @@ export class CoursesService {
       shuffleQuestions: quiz.shuffleQuestions,
       shuffleAnswers: quiz.shuffleAnswers,
       attemptsUsed: attempts.length,
-      attemptsRemaining: quiz.maxAttempts > 0 ? Math.max(0, quiz.maxAttempts - attempts.length) : null,
+      attemptsRemaining:
+        quiz.maxAttempts > 0 ? Math.max(0, quiz.maxAttempts - attempts.length) : null,
       myAttempts: attempts,
       questions: quiz.questions.map(q => ({
         id: q.id,
@@ -1369,7 +1372,8 @@ export class CoursesService {
           })
         : Promise.resolve([]),
     ]);
-    const deptName = (id: number | null) => depts.find(d => d.id === id)?.name ?? 'Sem departamento';
+    const deptName = (id: number | null) =>
+      depts.find(d => d.id === id)?.name ?? 'Sem departamento';
     const instructorName = (id: number | null) =>
       instructors.find(i => i.id === id)?.fullName ?? 'Sem instrutor';
 
@@ -1470,8 +1474,15 @@ export class CoursesService {
 
     return {
       // Mantidos por compatibilidade com o AdminDashboard já consumido pelo frontend.
-      courses: { total: statusCounts.reduce((s, c) => s + c._count, 0), published: countByStatus('PUBLISHED') },
-      enrollments: { total: totalEnrollments, completed: completedEnrollments, overdue: overdueEnrollments },
+      courses: {
+        total: statusCounts.reduce((s, c) => s + c._count, 0),
+        published: countByStatus('PUBLISHED'),
+      },
+      enrollments: {
+        total: totalEnrollments,
+        completed: completedEnrollments,
+        overdue: overdueEnrollments,
+      },
       completionRate,
 
       counts: {
@@ -1497,7 +1508,10 @@ export class CoursesService {
       topCourses,
       bestCompletion,
       worstCompletion,
-      byCategory: byCategory.map(c => ({ category: c.category ?? 'Sem categoria', count: c._count })),
+      byCategory: byCategory.map(c => ({
+        category: c.category ?? 'Sem categoria',
+        count: c._count,
+      })),
       byLevel: byLevel.map(l => ({ level: l.level, count: l._count })),
       byUnit: byUnit.map(u => ({ unit: u.unit ?? 'Sem unidade', count: u._count })),
       byDepartment: byDepartmentRaw.map(d => ({

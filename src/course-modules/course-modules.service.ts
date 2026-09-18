@@ -147,7 +147,9 @@ export class CourseModulesService {
       );
     }
     if (quizzes.length > 0) {
-      await this.prisma.quizQuestion.deleteMany({ where: { quizId: { in: quizzes.map(q => q.id) } } });
+      await this.prisma.quizQuestion.deleteMany({
+        where: { quizId: { in: quizzes.map(q => q.id) } },
+      });
       await this.prisma.quiz.deleteMany({ where: { id: { in: quizzes.map(q => q.id) } } });
     }
 
