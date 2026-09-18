@@ -275,12 +275,37 @@ export class UpdateEvaluationRequestDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() dueDate?: string;
 }
 
-// ─── Calibration DTOs ────────────────────────────────────────────
+// ─── Calibration DTOs (docs/modulo_evaluation.md ponto 9) ────────
 
 export class CalibrateScoreDto {
   @ApiProperty() @IsInt() evaluatedId!: number;
   @ApiProperty() @IsNumber() @Min(0) @Max(5) calibratedScore!: number;
-  @ApiPropertyOptional() @IsOptional() @IsString() calibrationNote?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) calibrationNote?: string;
+}
+
+export class CalibrationFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+}
+
+// ─── Conversa 1:1 DTOs (docs/modulo_evaluation.md ponto 10) ──────
+// Campos estruturados guardados como JSON em OneOnOneMeeting.minutes —
+// dono único da escrita continua a ser OneOnOneService (Fase G4); o
+// evaluation module só orquestra a ligação via EvaluationRequest.
+
+export class ScheduleOneOnOneDto {
+  @ApiProperty() @IsDateString() scheduledAt!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) agenda?: string;
+}
+
+export class RegisterOneOnOneDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) discussionPoints?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) strengths?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) developmentAreas?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) commitments?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) objectivesSet?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) actions?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(2000) observations?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() nextMeetingDate?: string;
 }
 
 // ─── Scale DTOs ───────────────────────────────────────────────────
@@ -381,6 +406,14 @@ export class EvaluationAnalyticsFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) cycleId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() period?: string;
+}
+
+// ─── Reports DTOs (docs/modulo_evaluation.md ponto 11) ───────────
+
+export class EvaluationReportFilterDto extends EvaluationAnalyticsFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) positionId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) managerId?: number;
 }
 
 // ─── Legacy DTO (keep backward compat) ───────────────────────────

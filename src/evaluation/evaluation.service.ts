@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUserData } from '../common/decorators';
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
 import {
   CreateCycleDto,
   UpdateCycleDto,
@@ -34,8 +35,13 @@ import {
   CycleStatus,
   RequestStatus,
   EvalStage,
+  EvalPurpose,
+  EvalPopulationType,
   EvaluationRequestFilterDto,
   UpdateEvaluationRequestDto,
+  ScheduleOneOnOneDto,
+  RegisterOneOnOneDto,
+  EvaluationReportFilterDto,
 } from './evaluation.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
@@ -102,7 +108,10 @@ function percentile(value: number, allValues: number[]): number {
 export class EvaluationService {
   private readonly logger = new Logger(EvaluationService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly oneOnOne: OneOnOneService,
+  ) {}
 
   // ══════════════════════════════════════════════════════
   // CYCLES (EvaluationCampaign)
@@ -1485,6 +1494,45 @@ export class EvaluationService {
           }
         : null;
 
+    // docs/modulo_evaluation.md ponto 8 — "Objetivos" do resultado: vêm do(s)
+    // EvaluationRequest.objectives preenchidos na etapa 6 do wizard, não de
+    // PerformanceEvaluation (que só guarda respostas de perguntas). Vários
+    // pedidos irmãos (SELF/MANAGER/...) do mesmo par podem ter objectives —
+    // achatamos todos porque tipicamente só um (MANAGER) os carrega.
+    const objectiveRequests = await this.prisma.read.evaluationRequest
+      .findMany({
+        where: { evaluatedId, ...(cycleId ? { cycleId } : {}) },
+        select: { objectives: true },
+      })
+      .catch(() => [] as { objectives: Prisma.JsonValue }[]);
+    const objectives = objectiveRequests.flatMap(r =>
+      Array.isArray(r.objectives) ? (r.objectives as unknown as Record<string, unknown>[]) : [],
+    );
+    const objectivesWithPct = objectives.filter(o => typeof o.percentage === 'number') as {
+      percentage: number;
+    }[];
+    const objectivesSummary = {
+      total: objectives.length,
+      avgAchievement: objectivesWithPct.length
+        ? +(
+            objectivesWithPct.reduce((s, o) => s + o.percentage, 0) / objectivesWithPct.length
+          ).toFixed(1)
+        : null,
+      items: objectives,
+    };
+
+    // Comentários separados por papel (docs pt.8 — "comentários do
+    // gestor"/"comentários do colaborador"), a partir dos mesmos registos
+    // PerformanceEvaluation já carregados acima (agrupados por `type`).
+    const commentsByRole = (role: EvalType) =>
+      evaluations
+        .filter(e => e.type === role && e.generalComment)
+        .map(e => ({ evaluatorId: e.evaluatorId, comment: e.generalComment }));
+
+    // Evolução histórica / comparação com avaliação anterior (docs pt.8 —
+    // reaproveita getUserEvolution em vez de duplicar o agrupamento por período).
+    const { evolution, trend } = await this.getUserEvolution(evaluatedId);
+
     return {
       evaluated,
       finalScore,
@@ -1505,6 +1553,12 @@ export class EvaluationService {
         improvements: evaluations.filter(e => e.improvements).map(e => e.improvements),
         recommendations: evaluations.filter(e => e.recommendations).map(e => e.recommendations),
       },
+      objectives: objectivesSummary,
+      comments: {
+        manager: commentsByRole(EvalType.MANAGER),
+        self: commentsByRole(EvalType.SELF),
+      },
+      evolution: { history: evolution, trend },
     };
   }
 
@@ -1527,7 +1581,7 @@ export class EvaluationService {
   // CALIBRATION
   // ══════════════════════════════════════════════════════
 
-  async getCycleForCalibration(cycleId: number) {
+  async getCycleForCalibration(cycleId: number, departmentId?: number) {
     type CalibrationEval = Prisma.PerformanceEvaluationGetPayload<{
       include: {
         evaluated: {
@@ -1543,8 +1597,15 @@ export class EvaluationService {
       };
     }>;
 
+    // docs/modulo_evaluation.md ponto 9 — "Selecionar departamento" filtra o
+    // conjunto calibrável; "Comparar equipas"/"Distribuição de resultados"
+    // (abaixo, byDepartment) continua a usar sempre todo o ciclo, não o
+    // subconjunto filtrado, para a comparação fazer sentido.
     const evals: CalibrationEval[] = await this.prisma.read.performanceEvaluation.findMany({
-      where: { ...(cycleId ? { cycleId } : {}) },
+      where: {
+        ...(cycleId ? { cycleId } : {}),
+        ...(departmentId ? { evaluated: { departmentId } } : {}),
+      },
       include: {
         evaluated: {
           select: {
@@ -1558,6 +1619,24 @@ export class EvaluationService {
         evaluator: { select: { id: true, fullName: true } },
       },
     });
+
+    const allEvals: CalibrationEval[] = departmentId
+      ? await this.prisma.read.performanceEvaluation.findMany({
+          where: { ...(cycleId ? { cycleId } : {}) },
+          include: {
+            evaluated: {
+              select: {
+                id: true,
+                fullName: true,
+                avatarUrl: true,
+                department: { select: { name: true } },
+                position: { select: { name: true } },
+              },
+            },
+            evaluator: { select: { id: true, fullName: true } },
+          },
+        })
+      : evals;
 
     // Group by evaluated
     const byEval: Record<
@@ -1611,12 +1690,118 @@ export class EvaluationService {
       })
       .filter(e => Math.abs(e.deviation) > 0.8);
 
-    return { participants: result, globalAvg: +globalAvg.toFixed(2), biasedEvaluators };
+    // "Comparar equipas" / "Distribuição de resultados" (docs pt.9) — sempre
+    // sobre o ciclo inteiro (allEvals), não sobre o filtro de departamento.
+    const deptMap: Record<string, number[]> = {};
+    for (const e of allEvals) {
+      const dept = e.evaluated?.department?.name ?? 'N/A';
+      if (!deptMap[dept]) deptMap[dept] = [];
+      deptMap[dept].push(e.overallScore ?? 0);
+    }
+    const byDepartment = Object.entries(deptMap)
+      .map(([department, scores]) => ({
+        department,
+        avgScore: +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2),
+        count: scores.length,
+      }))
+      .sort((a, b) => b.avgScore - a.avgScore);
+
+    const distribution = { exceptional: 0, above: 0, expected: 0, below: 0 };
+    for (const s of allEvals.map(e => e.overallScore ?? 0)) {
+      if (s >= 4) distribution.exceptional++;
+      else if (s >= 3) distribution.above++;
+      else if (s >= 2) distribution.expected++;
+      else distribution.below++;
+    }
+
+    return {
+      participants: result,
+      globalAvg: +globalAvg.toFixed(2),
+      biasedEvaluators,
+      byDepartment,
+      distribution,
+    };
+  }
+
+  // docs/modulo_evaluation.md ponto 9 — "Abrir calibração": move o ciclo para
+  // o estado CALIBRATING (enum já existia em EvalCampaignStatus, nunca
+  // escrito por nenhum serviço). Puramente informativo — não bloqueia
+  // calibrateScore, que já funciona independentemente do status do ciclo.
+  async openCalibration(cycleId: number) {
+    await this.assertCampaignExists(cycleId);
+    const campaign = await this.prisma.evaluationCampaign.update({
+      where: { id: cycleId },
+      data: { status: CycleStatus.CALIBRATING },
+    });
+    return this.toPublicCampaign(campaign);
+  }
+
+  // "Confirmar calibração": fecha a janela de calibração (volta a ACTIVE) e
+  // avança a etapa dos pedidos ainda em CALIBRATION para a seguinte
+  // (1:1/aprovação/resultado), reaproveitando advanceStage() por pedido.
+  async confirmCalibration(cycleId: number) {
+    const campaign = await this.assertCampaignExists(cycleId);
+    const pending = await this.prisma.evaluationRequest.findMany({
+      where: { cycleId, stage: EvalStage.CALIBRATION },
+      select: { id: true },
+    });
+    await Promise.allSettled(pending.map(r => this.advanceStage(r.id)));
+
+    const updated = await this.prisma.evaluationCampaign.update({
+      where: { id: cycleId },
+      data: {
+        status: campaign.status === CycleStatus.CALIBRATING ? CycleStatus.ACTIVE : campaign.status,
+      },
+    });
+    return { cycle: this.toPublicCampaign(updated), advanced: pending.length };
+  }
+
+  // docs/modulo_evaluation.md ponto 9 — "Histórico de alterações": lê o
+  // rasto deixado por calibrateScore() em AuditLog (entity=PerformanceEvaluation,
+  // action=CALIBRATION) em vez de um modelo dedicado — CalibrationLog existente
+  // no schema pertence ao módulo `performance` (FK para PerformanceReview, tipo
+  // incompatível), ver memory project_innova_performance_review_form.
+  async getCalibrationHistory(cycleId: number, evaluatedId?: number) {
+    const logs = await this.prisma.read.auditLog.findMany({
+      where: {
+        entity: 'PerformanceEvaluation',
+        action: 'CALIBRATION',
+        ...(evaluatedId ? { entityId: evaluatedId } : {}),
+      },
+      include: { user: { select: { id: true, fullName: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    return logs
+      .map(l => {
+        const metadata = l.metadata ? (JSON.parse(l.metadata) as { cycleId?: number }) : {};
+        return {
+          evaluatedId: l.entityId,
+          calibratedBy: l.user,
+          previousScore: l.before ? +l.before : null,
+          calibratedScore: l.after ? +l.after : null,
+          reason: l.reason,
+          cycleId: metadata.cycleId ?? null,
+          createdAt: l.createdAt,
+        };
+      })
+      .filter(l => l.cycleId === cycleId);
   }
 
   async calibrateScore(cycleId: number, dto: CalibrateScoreDto, calibratedById: number) {
     const where: Prisma.PerformanceEvaluationWhereInput = { evaluatedId: dto.evaluatedId };
     if (cycleId) where.cycleId = cycleId;
+
+    // Antes de sobrescrever: guarda a média actual para o "before" do
+    // histórico de calibração (docs pt.9 — "resultado inicial" na tabela de
+    // exemplo). updateMany() não devolve as linhas afectadas.
+    const before = await this.prisma.performanceEvaluation.findMany({
+      where,
+      select: { overallScore: true },
+    });
+    const previousScore = before.length
+      ? +(before.reduce((s, e) => s + (e.overallScore ?? 0), 0) / before.length).toFixed(2)
+      : null;
 
     await this.prisma.performanceEvaluation
       .updateMany({
@@ -1634,7 +1819,10 @@ export class EvaluationService {
         });
       });
 
-    // Log calibration in audit
+    // Log calibration in audit — before/after/reason (docs pt.9: "qualquer
+    // alteração feita na calibração deve ficar registada em auditoria",
+    // incluindo a justificação). metadata.cycleId permite filtrar o
+    // histórico por ciclo em getCalibrationHistory().
     await this.prisma.auditLog
       .create({
         data: {
@@ -1642,6 +1830,10 @@ export class EvaluationService {
           action: 'CALIBRATION',
           entity: 'PerformanceEvaluation',
           entityId: dto.evaluatedId,
+          before: previousScore !== null ? String(previousScore) : undefined,
+          after: String(dto.calibratedScore),
+          reason: dto.calibrationNote,
+          metadata: JSON.stringify({ cycleId }),
         },
       })
       .catch((e: unknown) => {
@@ -1676,6 +1868,7 @@ export class EvaluationService {
     return {
       message: 'Score calibrado',
       evaluatedId: dto.evaluatedId,
+      previousScore,
       newScore: dto.calibratedScore,
     };
   }
@@ -2051,6 +2244,308 @@ export class EvaluationService {
       recommendation: `Foco de desenvolvimento: ${gaps.length} competências identificadas com gaps`,
       pdiAutoGenerated: false,
       managerNotified: !!user?.managerId,
+    };
+  }
+
+  // ══════════════════════════════════════════════════════
+  // CONVERSA 1:1 (docs/modulo_evaluation.md ponto 10)
+  //
+  // OneOnOneMeeting é o dono único (Fase G4 — src/one-on-one). O evaluation
+  // module só orquestra: liga o registo à EvaluationRequest representativa
+  // via oneOnOneMeetingId e avança o fluxo depois da conversa registada.
+  // ══════════════════════════════════════════════════════
+
+  async getOneOnOne(requestId: number) {
+    const request = await this.prisma.read.evaluationRequest.findUnique({
+      where: { id: requestId },
+      select: { oneOnOneMeetingId: true },
+    });
+    if (!request) throw new NotFoundException('Avaliação não encontrada');
+    if (!request.oneOnOneMeetingId) return null;
+    return this.oneOnOne.getOne(request.oneOnOneMeetingId);
+  }
+
+  async scheduleOneOnOne(requestId: number, dto: ScheduleOneOnOneDto) {
+    const request = await this.prisma.evaluationRequest.findUnique({ where: { id: requestId } });
+    if (!request) throw new NotFoundException('Avaliação não encontrada');
+    if (request.oneOnOneMeetingId) {
+      throw new ConflictException('Já existe uma conversa 1:1 agendada para esta avaliação');
+    }
+
+    const meeting = await this.oneOnOne.schedule({
+      hostId: request.evaluatorId,
+      participantId: request.evaluatedId,
+      scheduledAt: dto.scheduledAt,
+      agenda: dto.agenda,
+    });
+
+    await this.prisma.evaluationRequest.update({
+      where: { id: requestId },
+      data: { oneOnOneMeetingId: meeting.id },
+    });
+
+    return meeting;
+  }
+
+  // "Registar a conversa" — docs pt.10 pede Pontos discutidos/Pontos
+  // fortes/Áreas de desenvolvimento/Compromissos/Objetivos definidos/Ações/
+  // Próxima reunião/Observações. OneOnOneMeeting só tem campos genéricos
+  // (minutes/actionItems/nextMeetingDate) — os sub-campos estruturados vão
+  // como JSON dentro de `minutes`, mesmo padrão que NotificationLog.metadata
+  // usa para dados semi-estruturados sem duplicar colunas no dono único.
+  async registerOneOnOne(requestId: number, dto: RegisterOneOnOneDto) {
+    const request = await this.prisma.evaluationRequest.findUnique({ where: { id: requestId } });
+    if (!request) throw new NotFoundException('Avaliação não encontrada');
+
+    let meetingId = request.oneOnOneMeetingId;
+    if (!meetingId) {
+      const meeting = await this.oneOnOne.schedule({
+        hostId: request.evaluatorId,
+        participantId: request.evaluatedId,
+        scheduledAt: new Date(),
+      });
+      meetingId = meeting.id;
+      await this.prisma.evaluationRequest.update({
+        where: { id: requestId },
+        data: { oneOnOneMeetingId: meetingId },
+      });
+    }
+
+    const minutes = JSON.stringify({
+      discussionPoints: dto.discussionPoints,
+      strengths: dto.strengths,
+      developmentAreas: dto.developmentAreas,
+      commitments: dto.commitments,
+      objectivesSet: dto.objectivesSet,
+      observations: dto.observations,
+    });
+
+    const meeting = await this.oneOnOne.complete(meetingId, {
+      minutes,
+      actionItems: dto.actions,
+      nextMeetingDate: dto.nextMeetingDate,
+    });
+
+    // "Isto conecta directamente Evaluation com PDI" (docs pt.10) — avança o
+    // fluxo da avaliação para a etapa seguinte (Aprovação) assim que a
+    // conversa fica registada.
+    if (request.stage === EvalStage.ONE_ON_ONE) {
+      await this.advanceStage(requestId);
+    }
+
+    return meeting;
+  }
+
+  // ══════════════════════════════════════════════════════
+  // RELATÓRIOS (docs/modulo_evaluation.md ponto 11)
+  // ══════════════════════════════════════════════════════
+
+  async getReportsOverview(filters: EvaluationReportFilterDto = {}) {
+    const { cycleId, departmentId, unitId, positionId, managerId, period } = filters;
+
+    const evaluatedFilter: Prisma.UserWhereInput = {};
+    if (departmentId) evaluatedFilter.departmentId = departmentId;
+    if (unitId) evaluatedFilter.unitId = unitId;
+    if (positionId) evaluatedFilter.positionId = positionId;
+    if (managerId) evaluatedFilter.managerId = managerId;
+
+    const where: Prisma.PerformanceEvaluationWhereInput = {};
+    if (cycleId) where.cycleId = cycleId;
+    if (period) where.period = { contains: period };
+    if (Object.keys(evaluatedFilter).length) where.evaluated = evaluatedFilter;
+
+    type ReportEval = Prisma.PerformanceEvaluationGetPayload<{
+      include: {
+        evaluated: {
+          select: {
+            id: true;
+            fullName: true;
+            department: { select: { id: true; name: true } };
+            position: { select: { id: true; name: true } };
+            unit: { select: { id: true; name: true } };
+            manager: { select: { id: true; fullName: true } };
+          };
+        };
+      };
+    }>;
+
+    const [evals, totalRequests, completedRequests, objectiveRows] = await Promise.all([
+      this.prisma.read.performanceEvaluation.findMany({
+        where,
+        include: {
+          evaluated: {
+            select: {
+              id: true,
+              fullName: true,
+              department: { select: { id: true, name: true } },
+              position: { select: { id: true, name: true } },
+              unit: { select: { id: true, name: true } },
+              manager: { select: { id: true, fullName: true } },
+            },
+          },
+        },
+      }) as Promise<ReportEval[]>,
+      this.prisma.evaluationRequest.count({ where: cycleId ? { cycleId } : {} }).catch(() => 0),
+      this.prisma.evaluationRequest
+        .count({ where: { ...(cycleId ? { cycleId } : {}), status: 'COMPLETED' } })
+        .catch(() => 0),
+      this.prisma.read.evaluationRequest
+        .findMany({
+          where: { ...(cycleId ? { cycleId } : {}) },
+          select: { objectives: true },
+        })
+        .catch(() => [] as { objectives: Prisma.JsonValue }[]),
+    ]);
+
+    const groupBy = (keyFn: (e: ReportEval) => { id: number; name: string } | null | undefined) => {
+      const map = new Map<number, { name: string; scores: number[] }>();
+      for (const e of evals) {
+        const key = keyFn(e);
+        if (!key) continue;
+        const entry = map.get(key.id) ?? { name: key.name, scores: [] };
+        entry.scores.push(e.overallScore ?? 0);
+        map.set(key.id, entry);
+      }
+      return [...map.entries()]
+        .map(([id, { name, scores }]) => ({
+          id,
+          name,
+          count: scores.length,
+          avgScore: +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2),
+        }))
+        .sort((a, b) => b.avgScore - a.avgScore);
+    };
+
+    const byDepartment = groupBy(e => (e.evaluated?.department ? e.evaluated.department : null));
+    const byUnit = groupBy(e => (e.evaluated?.unit ? e.evaluated.unit : null));
+    const byPosition = groupBy(e => (e.evaluated?.position ? e.evaluated.position : null));
+    const byManager = groupBy(e =>
+      e.evaluated?.manager
+        ? { id: e.evaluated.manager.id, name: e.evaluated.manager.fullName }
+        : null,
+    );
+
+    // Distribuição das classificações (docs pt.11)
+    const distribution = { exceptional: 0, above: 0, expected: 0, below: 0 };
+    for (const s of evals.map(e => e.overallScore ?? 0)) {
+      if (s >= 4) distribution.exceptional++;
+      else if (s >= 3) distribution.above++;
+      else if (s >= 2) distribution.expected++;
+      else distribution.below++;
+    }
+
+    // Evolução do desempenho por período (docs pt.11)
+    const byPeriod: Record<string, number[]> = {};
+    for (const e of evals) {
+      if (!byPeriod[e.period]) byPeriod[e.period] = [];
+      byPeriod[e.period].push(e.overallScore ?? 0);
+    }
+    const evolution = Object.entries(byPeriod)
+      .map(([evalPeriod, scores]) => ({
+        period: evalPeriod,
+        avgScore: +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2),
+        count: scores.length,
+      }))
+      .sort((a, b) => a.period.localeCompare(b.period));
+
+    // Gaps de competências (docs pt.11) — média por competência sobre o
+    // conjunto filtrado; mesmo threshold (<3) usado em triggerPDIFromResults.
+    const compScores: Record<number, number[]> = {};
+    for (const e of evals) {
+      if (!e.competencyScores) continue;
+      const cs: Record<string, number> = JSON.parse(e.competencyScores);
+      for (const [cid, score] of Object.entries(cs)) {
+        const id = +cid;
+        if (!compScores[id]) compScores[id] = [];
+        compScores[id].push(score);
+      }
+    }
+    const competencyIds = Object.keys(compScores).map(Number);
+    const competencies = competencyIds.length
+      ? await this.prisma.read.competency.findMany({
+          where: { id: { in: competencyIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const competencyGaps = competencyIds
+      .map(id => {
+        const scores = compScores[id];
+        const avg = +(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(2);
+        return {
+          competencyId: id,
+          name: competencies.find(c => c.id === id)?.name ?? `#${id}`,
+          avgScore: avg,
+          gap: +(5 - avg).toFixed(2),
+        };
+      })
+      .filter(c => c.avgScore < 3)
+      .sort((a, b) => b.gap - a.gap);
+
+    // Objetivos alcançados (docs pt.11) — % médio de realização das metas
+    // definidas na etapa 6, através das EvaluationRequest.objectives.
+    const objectives = objectiveRows.flatMap(r =>
+      Array.isArray(r.objectives) ? (r.objectives as unknown as Record<string, unknown>[]) : [],
+    );
+    const objectivesWithPct = objectives.filter(o => typeof o.percentage === 'number') as {
+      percentage: number;
+    }[];
+    const objectivesAchieved = {
+      total: objectives.length,
+      avgAchievement: objectivesWithPct.length
+        ? +(
+            objectivesWithPct.reduce((s, o) => s + o.percentage, 0) / objectivesWithPct.length
+          ).toFixed(1)
+        : null,
+    };
+
+    return {
+      totalEvaluations: evals.length,
+      avgScore: evals.length
+        ? +(evals.reduce((s, e) => s + (e.overallScore ?? 0), 0) / evals.length).toFixed(2)
+        : 0,
+      completionRate:
+        totalRequests > 0 ? +((completedRequests / totalRequests) * 100).toFixed(1) : 0,
+      distribution,
+      byDepartment,
+      byUnit,
+      byPosition,
+      byManager,
+      evolution,
+      competencyGaps,
+      objectivesAchieved,
+    };
+  }
+
+  // ══════════════════════════════════════════════════════
+  // CONFIGURAÇÕES (docs/modulo_evaluation.md ponto 12)
+  //
+  // Agregador de leitura sobre a configuração já existente por peça
+  // (Escalas/Critérios/Modelos têm CRUD próprio acima) mais as listas fixas
+  // dos enums do domínio — não inventa mecanismos novos de config para
+  // "Fluxos de aprovação"/"Tipos"/"Estados", que já são código (STAGE_ORDER,
+  // EvalType, CycleStatus) em vez de dados configuráveis.
+  // ══════════════════════════════════════════════════════
+
+  async getSettings() {
+    const [scales, criteriaCount, templatesCount] = await Promise.all([
+      this.prisma.read.evaluationScale.findMany({
+        include: { levels: { orderBy: { value: 'asc' } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.read.evaluationCriteria.count({ where: { deletedAt: null } }),
+      this.prisma.read.evaluationTemplate.count({ where: { deletedAt: null } }),
+    ]);
+
+    return {
+      scales,
+      criteriaCount,
+      templatesCount,
+      evalTypes: Object.values(EvalType),
+      evalPurposes: Object.values(EvalPurpose),
+      populationTypes: Object.values(EvalPopulationType),
+      cycleStatuses: Object.values(CycleStatus),
+      approvalFlow: EvaluationService.STAGE_ORDER,
+      resultsVisibilityOptions: ['MANAGER_ONLY', 'SELF_AND_MANAGER', 'HR_ONLY', 'ALL'],
     };
   }
 }

@@ -3290,9 +3290,15 @@ model EvaluationRequest {
   objectives  Json? // etapa 6 do wizard — [{objective,indicator,target,weight,achievedResult,percentage,employeeComment,evaluatorComment}]
   name        String?
   stage       EvalStage?
+  // docs/modulo_evaluation.md ponto 10 — "Conversa 1:1": a etapa ONE_ON_ONE
+  // do fluxo liga-se a um registo real em OneOnOneMeeting (dono único,
+  // Fase G4 — src/one-on-one/one-on-one.service.ts), em vez de duplicar
+  // campos de reunião aqui.
+  oneOnOneMeetingId Int?                @unique
   evaluator   User                    @relation("RequestEvaluator", fields: [evaluatorId], references: [id])
   evaluated   User                    @relation("RequestEvaluated", fields: [evaluatedId], references: [id])
   cycle       EvaluationCampaign?     @relation(fields: [cycleId], references: [id])
+  oneOnOneMeeting OneOnOneMeeting?    @relation(fields: [oneOnOneMeetingId], references: [id])
 
   @@index([evaluatorId])
   @@index([evaluatedId])
@@ -9936,6 +9942,8 @@ model OneOnOneMeeting {
   legacyOneOnOneId Int?           @unique
   host             User           @relation("OneOnOneMeetingHost", fields: [hostId], references: [id], onDelete: Cascade)
   participant      User           @relation("OneOnOneMeetingParticipant", fields: [participantId], references: [id], onDelete: Cascade)
+  // back-relation da FK opcional evaluationRequest.oneOnOneMeetingId acima
+  evaluationRequest EvaluationRequest?
 
   @@index([hostId])
   @@index([participantId])

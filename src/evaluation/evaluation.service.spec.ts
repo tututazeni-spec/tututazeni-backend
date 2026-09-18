@@ -2,7 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EvaluationService } from './evaluation.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OneOnOneService } from '../one-on-one/one-on-one.service';
 import { EvalType, EvalModel } from './evaluation.dto';
+
+const mockOneOnOne = {
+  schedule: jest.fn().mockResolvedValue({ id: 1 }),
+  getOne: jest.fn().mockResolvedValue(null),
+  complete: jest.fn().mockResolvedValue({ id: 1 }),
+};
 
 const mockPrisma = {
   user: { findUnique: jest.fn(), findMany: jest.fn() },
@@ -65,7 +72,11 @@ describe('EvaluationService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EvaluationService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        EvaluationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: OneOnOneService, useValue: mockOneOnOne },
+      ],
     }).compile();
     service = module.get<EvaluationService>(EvaluationService);
   });

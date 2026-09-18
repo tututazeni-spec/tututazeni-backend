@@ -1,8 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EvaluationController } from './evaluation.controller';
 import { EvaluationService } from './evaluation.service';
+import { PdfService } from '../pdf/pdf.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+
+const mockPdf = {
+  generateExecutiveReport: jest.fn().mockResolvedValue(Buffer.from('')),
+};
 
 const mockSvc = {
   createCycle: jest.fn().mockResolvedValue({ id: 1 }),
@@ -41,6 +46,14 @@ const mockSvc = {
   getAnalyticsDashboard: jest.fn().mockResolvedValue({}),
   getTeamDashboard: jest.fn().mockResolvedValue({}),
   triggerPDIFromResults: jest.fn().mockResolvedValue({}),
+  openCalibration: jest.fn().mockResolvedValue({}),
+  confirmCalibration: jest.fn().mockResolvedValue({ advanced: 0 }),
+  getCalibrationHistory: jest.fn().mockResolvedValue([]),
+  getOneOnOne: jest.fn().mockResolvedValue(null),
+  scheduleOneOnOne: jest.fn().mockResolvedValue({}),
+  registerOneOnOne: jest.fn().mockResolvedValue({}),
+  getReportsOverview: jest.fn().mockResolvedValue({}),
+  getSettings: jest.fn().mockResolvedValue({}),
 };
 
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
@@ -52,7 +65,10 @@ describe('EvaluationController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [EvaluationController],
-      providers: [{ provide: EvaluationService, useValue: mockSvc }],
+      providers: [
+        { provide: EvaluationService, useValue: mockSvc },
+        { provide: PdfService, useValue: mockPdf },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
@@ -288,7 +304,12 @@ describe('EvaluationController', () => {
 
   it('calibrationPanel → getCycleForCalibration(cycleId)', async () => {
     await controller.calibrationPanel(2);
-    expect(mockSvc.getCycleForCalibration).toHaveBeenCalledWith(2);
+    expect(mockSvc.getCycleForCalibration).toHaveBeenCalledWith(2, undefined);
+  });
+
+  it('calibrationPanel com departmentId → getCycleForCalibration(cycleId, parsed)', async () => {
+    await controller.calibrationPanel(2, '5');
+    expect(mockSvc.getCycleForCalibration).toHaveBeenCalledWith(2, 5);
   });
 
   it('calibrate → calibrateScore(cycleId, dto, userId)', async () => {

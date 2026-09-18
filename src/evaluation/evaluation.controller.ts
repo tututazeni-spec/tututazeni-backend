@@ -10,9 +10,14 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Header,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EvaluationService } from './evaluation.service';
+import { PdfService } from '../pdf/pdf.service';
+import { buildCsvString } from '../common/utils/csv-export.util';
+import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
@@ -37,6 +42,9 @@ import {
   UpdateTemplateDto,
   EvaluationRequestFilterDto,
   UpdateEvaluationRequestDto,
+  ScheduleOneOnOneDto,
+  RegisterOneOnOneDto,
+  EvaluationReportFilterDto,
 } from './evaluation.dto';
 
 const ALL_ROLES = AUTHENTICATED_ROLES;
@@ -48,7 +56,10 @@ const ADMIN_ROLES = [Role.ADMIN, Role.RH] as const;
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('evaluations')
 export class EvaluationController {
-  constructor(private readonly svc: EvaluationService) {}
+  constructor(
+    private readonly svc: EvaluationService,
+    private readonly pdf: PdfService,
+  ) {}
 
   // ─── Cycles ──────────────────────────────────────────────────
 
@@ -412,13 +423,42 @@ export class EvaluationController {
     return this.svc.getUserEvolution(userId);
   }
 
-  // ─── Calibration ─────────────────────────────────────────────
+  // ─── Calibration (docs/modulo_evaluation.md ponto 9) ──────────
 
   @Get('calibration/:cycleId')
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Painel de calibração — dispersão, percentil, avaliadores com viés' })
-  calibrationPanel(@Param('cycleId', ParseIntPipe) cycleId: number) {
-    return this.svc.getCycleForCalibration(cycleId);
+  calibrationPanel(
+    @Param('cycleId', ParseIntPipe) cycleId: number,
+    @Query('departmentId') departmentId?: string,
+  ) {
+    return this.svc.getCycleForCalibration(cycleId, departmentId ? +departmentId : undefined);
+  }
+
+  @Post('calibration/:cycleId/open')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Abrir calibração do ciclo (status → CALIBRATING)' })
+  openCalibration(@Param('cycleId', ParseIntPipe) cycleId: number) {
+    return this.svc.openCalibration(cycleId);
+  }
+
+  @Post('calibration/:cycleId/confirm')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({
+    summary: 'Confirmar calibração — fecha a janela e avança o fluxo das avaliações calibradas',
+  })
+  confirmCalibration(@Param('cycleId', ParseIntPipe) cycleId: number) {
+    return this.svc.confirmCalibration(cycleId);
+  }
+
+  @Get('calibration/:cycleId/history')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Histórico de alterações de calibração do ciclo' })
+  calibrationHistory(
+    @Param('cycleId', ParseIntPipe) cycleId: number,
+    @Query('evaluatedId') evaluatedId?: string,
+  ) {
+    return this.svc.getCalibrationHistory(cycleId, evaluatedId ? +evaluatedId : undefined);
   }
 
   @Post('calibration/:cycleId/calibrate')
@@ -460,5 +500,149 @@ export class EvaluationController {
   @ApiOperation({ summary: 'Gerar sugestão de PDI baseada nos gaps identificados' })
   triggerPDI(@Param('userId', ParseIntPipe) userId: number, @Query('cycleId') cycleId?: string) {
     return this.svc.triggerPDIFromResults(userId, cycleId ? +cycleId : undefined);
+  }
+
+  // ─── Conversa 1:1 (docs/modulo_evaluation.md ponto 10) ────────
+
+  @Get('requests/:id/one-on-one')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Ver a conversa 1:1 ligada a esta avaliação (se existir)' })
+  getOneOnOne(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getOneOnOne(id);
+  }
+
+  @Post('requests/:id/one-on-one')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Agendar a conversa 1:1 pós-avaliação' })
+  scheduleOneOnOne(@Param('id', ParseIntPipe) id: number, @Body() dto: ScheduleOneOnOneDto) {
+    return this.svc.scheduleOneOnOne(id, dto);
+  }
+
+  @Patch('requests/:id/one-on-one')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({
+    summary: 'Registar a conversa 1:1 (pontos discutidos, compromissos, próxima reunião...)',
+  })
+  registerOneOnOne(@Param('id', ParseIntPipe) id: number, @Body() dto: RegisterOneOnOneDto) {
+    return this.svc.registerOneOnOne(id, dto);
+  }
+
+  // ─── Relatórios (docs/modulo_evaluation.md ponto 11) ──────────
+
+  @Get('reports/overview')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({
+    summary:
+      'Relatórios de avaliação para RH — por departamento/unidade/cargo/gestor, gaps de competências, objetivos, evolução',
+  })
+  reportsOverview(@Query() filters: EvaluationReportFilterDto) {
+    return this.svc.getReportsOverview(filters);
+  }
+
+  @Get('reports/export.csv')
+  @Roles(...ADMIN_ROLES)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="avaliacoes.csv"')
+  @ApiOperation({ summary: 'Exportar relatório de avaliação como CSV' })
+  async exportReportCsv(@Query() filters: EvaluationReportFilterDto) {
+    const data = await this.svc.getReportsOverview(filters);
+    const rows = [
+      ...data.byDepartment.map(d => ({
+        grupo: 'Departamento',
+        nome: d.name,
+        media: d.avgScore,
+        total: d.count,
+      })),
+      ...data.byPosition.map(p => ({
+        grupo: 'Cargo',
+        nome: p.name,
+        media: p.avgScore,
+        total: p.count,
+      })),
+      ...data.byManager.map(m => ({
+        grupo: 'Gestor',
+        nome: m.name,
+        media: m.avgScore,
+        total: m.count,
+      })),
+    ];
+    return buildCsvString(rows, ['grupo', 'nome', 'media', 'total']);
+  }
+
+  @Get('reports/export.xlsx')
+  @Roles(...ADMIN_ROLES)
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="avaliacoes.xlsx"')
+  @ApiOperation({ summary: 'Exportar relatório de avaliação como XLSX' })
+  async exportReportXlsx(@Query() filters: EvaluationReportFilterDto) {
+    const data = await this.svc.getReportsOverview(filters);
+    const rows = [
+      ...data.byDepartment.map(d => ({
+        grupo: 'Departamento',
+        nome: d.name,
+        media: d.avgScore,
+        total: d.count,
+      })),
+      ...data.byPosition.map(p => ({
+        grupo: 'Cargo',
+        nome: p.name,
+        media: p.avgScore,
+        total: p.count,
+      })),
+      ...data.byManager.map(m => ({
+        grupo: 'Gestor',
+        nome: m.name,
+        media: m.avgScore,
+        total: m.count,
+      })),
+    ];
+    const buffer = await buildXlsxBuffer(rows, ['grupo', 'nome', 'media', 'total'], 'Avaliações');
+    return new StreamableFile(buffer);
+  }
+
+  @Get('reports/export.pdf')
+  @Roles(...ADMIN_ROLES)
+  @Header('Content-Type', 'application/pdf')
+  @Header('Content-Disposition', 'attachment; filename="avaliacoes.pdf"')
+  @ApiOperation({ summary: 'Exportar relatório de avaliação como PDF' })
+  async exportReportPdf(@Query() filters: EvaluationReportFilterDto) {
+    const data = await this.svc.getReportsOverview(filters);
+    const buffer = await this.pdf.generateExecutiveReport({
+      title: 'Relatório de Avaliações',
+      period: filters.period ?? 'Todos os períodos',
+      metrics: [
+        { label: 'Total de Avaliações', value: data.totalEvaluations },
+        { label: 'Score Médio', value: data.avgScore },
+        { label: 'Taxa de Conclusão', value: `${data.completionRate}%` },
+      ],
+      sections: [
+        {
+          title: 'Por Departamento',
+          content:
+            data.byDepartment
+              .map(d => `${d.name}: ${d.avgScore} (${d.count} avaliações)`)
+              .join('\n') || 'Sem dados.',
+        },
+        {
+          title: 'Gaps de Competências',
+          content:
+            data.competencyGaps
+              .map(c => `${c.name}: média ${c.avgScore}, gap ${c.gap}`)
+              .join('\n') || 'Sem gaps identificados.',
+        },
+      ],
+    });
+    return new StreamableFile(buffer);
+  }
+
+  // ─── Configurações (docs/modulo_evaluation.md ponto 12) ───────
+
+  @Get('settings')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({
+    summary: 'Configurações agregadas — escalas, critérios, modelos, fluxo, tipos, estados',
+  })
+  settings() {
+    return this.svc.getSettings();
   }
 }
