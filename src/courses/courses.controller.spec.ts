@@ -34,6 +34,9 @@ const mockSvc = {
   enroll: jest.fn().mockResolvedValue({ id: 1 }),
   assignCourse: jest.fn().mockResolvedValue({}),
   createQuiz: jest.fn().mockResolvedValue({ id: 1 }),
+  updateQuiz: jest.fn().mockResolvedValue({ id: 1 }),
+  getQuizForEdit: jest.fn().mockResolvedValue({ id: 1 }),
+  getQuizForAttempt: jest.fn().mockResolvedValue({ id: 1 }),
   submitQuiz: jest.fn().mockResolvedValue({ score: 80 }),
   addFeedback: jest.fn().mockResolvedValue({}),
 };
@@ -212,6 +215,22 @@ describe('CoursesController', () => {
     const dto = {} as any;
     await controller.createQuiz(4, dto);
     expect(mockSvc.createQuiz).toHaveBeenCalledWith(4, dto);
+  });
+
+  it('getQuizForEdit → getQuizForEdit(lessonId)', async () => {
+    await controller.getQuizForEdit(4);
+    expect(mockSvc.getQuizForEdit).toHaveBeenCalledWith(4);
+  });
+
+  it('updateQuiz → updateQuiz(quizId, dto)', async () => {
+    const dto = { title: 'Novo título' } as any;
+    await controller.updateQuiz(5, dto);
+    expect(mockSvc.updateQuiz).toHaveBeenCalledWith(5, dto);
+  });
+
+  it('getQuizForAttempt → getQuizForAttempt(quizId, userId)', async () => {
+    await controller.getQuizForAttempt(5, mockUser as any);
+    expect(mockSvc.getQuizForAttempt).toHaveBeenCalledWith(5, 1);
   });
 
   it('submitQuiz → submitQuiz(quizId, userId, dto)', async () => {

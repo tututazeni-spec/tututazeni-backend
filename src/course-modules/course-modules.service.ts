@@ -133,6 +133,24 @@ export class CourseModulesService {
     // em vez de bloquear (mesma convenção usada em deleteLesson()).
     const linkedAssessments = await this.prisma.read.assessment.count({ where: { moduleId: id } });
 
+    // Quiz→Lesson não tem onDelete: Cascade — activeProgress acima não cobre
+    // o caso de um quiz sem tentativas (nem LessonProgress correspondente);
+    // sem isto, o delete do módulo rebentava com 500 na cascata para Lesson.
+    // Ver o mesmo fix em deleteLesson() e em courses/courses.service.ts.
+    const quizzes = await this.prisma.read.quiz.findMany({
+      where: { lesson: { moduleId: id } },
+      include: { _count: { select: { attempts: true } } },
+    });
+    if (quizzes.some(q => q._count.attempts > 0)) {
+      throw new ForbiddenException(
+        'Uma ou mais aulas deste módulo têm quiz com tentativas de alunos. Não pode ser eliminado.',
+      );
+    }
+    if (quizzes.length > 0) {
+      await this.prisma.quizQuestion.deleteMany({ where: { quizId: { in: quizzes.map(q => q.id) } } });
+      await this.prisma.quiz.deleteMany({ where: { id: { in: quizzes.map(q => q.id) } } });
+    }
+
     await this.prisma.courseModule.delete({ where: { id } });
     return {
       message: 'Módulo eliminado',
@@ -301,6 +319,23 @@ export class CourseModulesService {
 
     // Aviso se há progresso — não bloquear, apenas informar
     const progressCount = await this.prisma.read.lessonProgress.count({ where: { lessonId: id } });
+
+    // Quiz→Lesson e QuizAttempt→Quiz não têm onDelete: Cascade — ver o mesmo
+    // fix em courses/courses.service.ts removeLesson. Bloquear só quando há
+    // tentativas reais de alunos; senão eliminar o quiz em cascata.
+    const quiz = await this.prisma.read.quiz.findUnique({
+      where: { lessonId: id },
+      include: { _count: { select: { attempts: true } } },
+    });
+    if (quiz) {
+      if (quiz._count.attempts > 0) {
+        throw new ForbiddenException(
+          `Esta aula tem um quiz com ${quiz._count.attempts} tentativa(s) de alunos. Não pode ser eliminada.`,
+        );
+      }
+      await this.prisma.quizQuestion.deleteMany({ where: { quizId: quiz.id } });
+      await this.prisma.quiz.delete({ where: { id: quiz.id } });
+    }
 
     await this.prisma.lesson.delete({ where: { id } });
     return { message: 'Aula eliminada', hadProgress: progressCount > 0, progressCount };
@@ -530,6 +565,7 @@ export class CourseModulesService {
             activities: { orderBy: { seq: 'asc' } },
             resources: { orderBy: { createdAt: 'asc' } },
             liveInstructor: { select: { id: true, fullName: true } },
+            quiz: { select: { id: true } },
           },
         },
         materials: true,
@@ -600,6 +636,7 @@ export class CourseModulesService {
             liveInstructor: l.liveInstructor,
             activities: l.activities,
             resources: canSeeContent ? l.resources : [],
+            quizId: l.quiz?.id ?? null,
             completed: l.progress[0]?.completed ?? false,
             completedAt: l.progress[0]?.completedAt ?? null,
             resumePosition: l.progress[0]?.resumePosition ?? 0,
