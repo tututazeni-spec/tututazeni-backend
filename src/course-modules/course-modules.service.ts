@@ -20,6 +20,11 @@ import {
   CloneModuleDto,
 } from './course-modules.dto';
 
+// NOTA — dois sistemas paralelos de Módulos/Lições: ver comentário equivalente
+// no topo de courses/courses.service.ts. Este service é a rota usada por
+// ModuleBuilder/ProgressModal em /courses/[id]/learn; courses.service.ts é a
+// usada por ModuleModal/ModulosView em Gestão. Gate de acesso a aulas
+// centralizado em CourseCompletionService.markLessonComplete.
 @Injectable()
 export class CourseModulesService {
   private readonly logger = new Logger(CourseModulesService.name);
@@ -389,7 +394,11 @@ export class CourseModulesService {
   }
 
   async markLessonComplete(userId: number, dto: MarkModuleLessonCompleteDto) {
-    // Segurança: gate de progressão sequencial (efeito próprio de course-modules)
+    // Pré-verificação redundante mas inofensiva: o gate real (drip/publicação/
+    // progressão sequencial) agora vive em CourseCompletionService.markLessonComplete
+    // e corre para QUALQUER caminho de conclusão, incluindo o de courses.service.ts
+    // (ver comentário nesse ficheiro). Mantido aqui só para preservar a mensagem de
+    // erro específica quando chamado por esta rota.
     const access = await this.isLessonAccessible(dto.lessonId, userId);
     if (!access.accessible) {
       throw new ForbiddenException(access.reason ?? 'Aula não acessível');
@@ -518,6 +527,9 @@ export class CourseModulesService {
           orderBy: { seq: 'asc' },
           include: {
             progress: { where: { userId } },
+            activities: { orderBy: { seq: 'asc' } },
+            resources: { orderBy: { createdAt: 'asc' } },
+            liveInstructor: { select: { id: true, fullName: true } },
           },
         },
         materials: true,
@@ -578,6 +590,16 @@ export class CourseModulesService {
             isFree: l.isFree,
             allowDownload: l.allowDownload,
             contentUrl: canSeeContent ? l.contentUrl : null,
+            // Só disponíveis a quem está inscrito — mesma regra de canSeeContent
+            // já aplicada a contentUrl (ver comentário acima).
+            textContent: canSeeContent ? l.textContent : null,
+            captionsUrl: canSeeContent ? l.captionsUrl : null,
+            transcript: canSeeContent ? l.transcript : null,
+            liveDate: l.liveDate,
+            liveSessionUrl: canSeeContent ? l.liveSessionUrl : null,
+            liveInstructor: l.liveInstructor,
+            activities: l.activities,
+            resources: canSeeContent ? l.resources : [],
             completed: l.progress[0]?.completed ?? false,
             completedAt: l.progress[0]?.completedAt ?? null,
             resumePosition: l.progress[0]?.resumePosition ?? 0,

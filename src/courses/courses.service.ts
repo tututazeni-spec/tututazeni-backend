@@ -65,6 +65,22 @@ function toDateOrNull(value?: string | null) {
   return value ? new Date(value) : value === null ? null : undefined;
 }
 
+// NOTA — dois sistemas paralelos de Módulos/Lições (ver docs/06-modulo-courses.md):
+// Este service e `course-modules/course-modules.service.ts` expõem CRUD distinto
+// (rotas `/courses/:id/modules|/courses/modules/:id/lessons` aqui vs. `/modules`,
+// `/lessons` no outro) sobre os MESMOS modelos Prisma (CourseModule/Lesson) — sem
+// divergência de dados, mas com histórico duplicado por terem sido escritos sem
+// consciência um do outro (PR #296 não sabia que `/modules`/`/lessons` já existiam).
+// Este service tem os campos mais completos do doc (code, status, live*,
+// competências, activities, resources); o outro tem a lógica de acesso mais madura
+// (drip/sequencial/analytics/clone/TTS). Frontend: ModuleModal/ModulosView (Gestão)
+// usam este; ModuleBuilder/ProgressModal (/courses/[id]/learn) usam o outro.
+// O único ponto onde a duplicação era um bug real de segurança — conclusão de
+// aula a ignorar pré-requisitos de módulo via esta rota — foi corrigido
+// centralizando o gate de acesso em CourseCompletionService.markLessonComplete,
+// chamado por ambos. Não fundido fisicamente por agora (risco/custo de reescrever
+// duas UIs admin distintas); mesmo padrão de "documentar em vez de fundir" já
+// usado no repo para os dois AuditService (ver CLAUDE.md).
 @Injectable()
 export class CoursesService {
   private readonly logger = new Logger(CoursesService.name);

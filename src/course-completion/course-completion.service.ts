@@ -58,13 +58,22 @@ export class CourseCompletionService {
     // antiga calculateCourseProgress).
     const lesson = await this.prisma.lesson.findUnique({
       where: { id: lessonId },
-      include: { module: { select: { courseId: true } } },
+      include: { module: true },
     });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
     const courseId = lesson.module.courseId;
 
     const enrollment = await this.prisma.enrollment.findFirst({ where: { userId, courseId } });
     if (!enrollment) throw new ForbiddenException('Não está matriculado neste curso');
+
+    // Gate único de acesso (drip/publicação/progressão sequencial). Antes desta
+    // consolidação, este gate só existia em CourseModulesService.markLessonComplete
+    // — a rota POST /courses/lessons/:lessonId/complete (courses.controller) chamava
+    // este método directamente e ignorava por completo pré-requisitos de módulo,
+    // permitindo concluir aulas de módulos bloqueados/sequenciais via o catálogo.
+    // Centralizado aqui porque ambos os controllers de módulos/lições (courses.*
+    // e course-modules.*) chamam este orquestrador único para a escrita de progresso.
+    await this.assertLessonAccessible(userId, lesson.module, enrollment);
 
     const progress = await this.prisma.lessonProgress.upsert({
       where: { lessonId_userId: { lessonId, userId } },
@@ -101,6 +110,68 @@ export class CourseCompletionService {
     }
 
     return { progress, courseProgress, courseCompleted };
+  }
+
+  /**
+   * Gate de acesso a uma aula — módulo publicado, drip content, janela de
+   * disponibilidade e progressão sequencial (módulo anterior concluído).
+   * Portado de CourseModulesService.isLessonAccessible (era só chamado pela
+   * rota /lessons/progress; agora corre para qualquer caminho de conclusão).
+   */
+  private async assertLessonAccessible(
+    userId: number,
+    mod: {
+      id: number;
+      courseId: number;
+      status: string;
+      dripDays: number | null;
+      availableFrom: Date | null;
+      progressionType: string;
+      seq: number;
+    },
+    enrollment: { enrolledAt: Date },
+  ): Promise<void> {
+    // Cursos "planos" sem nenhum módulo publicado usam o caminho de fallback
+    // de evaluateCompletion (conta todas as aulas do curso, ver acima) — não
+    // têm estrutura de módulos a proteger, por isso o gate não se aplica. Só
+    // entra em jogo quando o curso já tem pelo menos um módulo publicado,
+    // que é exactamente o cenário do bypass que este método fecha.
+    const hasPublishedModule = await this.prisma.courseModule.findFirst({
+      where: { courseId: mod.courseId, status: 'PUBLISHED' },
+      select: { id: true },
+    });
+    if (!hasPublishedModule) return;
+
+    if (mod.status !== 'PUBLISHED') {
+      throw new ForbiddenException('Módulo não publicado');
+    }
+
+    if (mod.dripDays && mod.dripDays > 0) {
+      const availableAt = new Date(enrollment.enrolledAt.getTime() + mod.dripDays * 86400 * 1000);
+      if (new Date() < availableAt) {
+        throw new ForbiddenException(
+          `Disponível em ${Math.ceil((availableAt.getTime() - Date.now()) / 86400000)} dia(s)`,
+        );
+      }
+    }
+
+    if (mod.availableFrom && new Date() < mod.availableFrom) {
+      throw new ForbiddenException(
+        `Disponível a partir de ${mod.availableFrom.toLocaleDateString('pt')}`,
+      );
+    }
+
+    if (mod.progressionType === 'SEQUENTIAL' && mod.seq > 0) {
+      const previousModule = await this.prisma.courseModule.findFirst({
+        where: { courseId: mod.courseId, seq: mod.seq - 1, status: 'PUBLISHED' },
+      });
+      if (previousModule) {
+        const prevCompleted = await this.isModuleCompleted(previousModule.id, userId);
+        if (!prevCompleted) {
+          throw new ForbiddenException('Deve concluir o módulo anterior primeiro');
+        }
+      }
+    }
   }
 
   async isModuleCompleted(moduleId: number, userId: number): Promise<boolean> {
