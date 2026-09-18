@@ -942,6 +942,12 @@ model User {
   evaluationsAsUser      UserEvaluation[]      @relation("EvalUser")
   evaluationsAsEvaluator UserEvaluation[]      @relation("EvalEvaluator")
 
+  // ─── Módulo Evaluation (genérico — docs/12-modulo-evaluation.md) ─
+  createdEvalCampaigns     EvaluationCampaign[]     @relation("EvalCampaignCreator")
+  createdEvalCampaignForms EvaluationCampaignForm[] @relation("EvalCampaignFormCreator")
+  createdEvalCriteria      EvaluationCriteria[]     @relation("EvalCriteriaCreator")
+  createdEvalTemplates     EvaluationTemplate[]     @relation("EvalTemplateCreator")
+
   // ─── Engagement (Grupo A) ─────────────────────────────────────
   moodCheckins         MoodCheckin[]
   feedbackGiven        Feedback[]    @relation("FeedbackFrom")
@@ -2874,6 +2880,8 @@ model Competency {
   leadershipSelectionCriteria   LeadershipSelectionCriterion[]
   trainingCompetencies          TrainingCompetency[]
   pdiCompetencyGaps             PdiCompetencyGap[]
+  evaluationCriteria            EvaluationCriteria[]
+  evaluationCampaignQuestions   EvaluationCampaignQuestion[]
 
   @@index([category])
   @@index([status])
@@ -3235,27 +3243,29 @@ model NineBoxPlacement {
 }
 
 model PerformanceEvaluation {
-  id               Int      @id @default(autoincrement())
+  id               Int                 @id @default(autoincrement())
   evaluatorId      Int
   evaluatedId      Int
   type             EvalType
   period           String
   criteria         Json
-  generalComment   String?  @db.Text
-  overallScore     Float    @default(0)
+  generalComment   String?             @db.Text
+  overallScore     Float               @default(0)
   cycleId          Int?
-  competencyScores String?  @db.Text
-  strengths        String?  @db.Text
-  improvements     String?  @db.Text
-  recommendations  String?  @db.Text
-  isDraft          Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  evaluator        User     @relation("EvaluatorRelation", fields: [evaluatorId], references: [id])
-  evaluated        User     @relation("EvaluatedRelation", fields: [evaluatedId], references: [id])
+  competencyScores String?             @db.Text
+  strengths        String?             @db.Text
+  improvements     String?             @db.Text
+  recommendations  String?             @db.Text
+  isDraft          Boolean             @default(false)
+  createdAt        DateTime            @default(now())
+  evaluator        User                @relation("EvaluatorRelation", fields: [evaluatorId], references: [id])
+  evaluated        User                @relation("EvaluatedRelation", fields: [evaluatedId], references: [id])
+  cycle            EvaluationCampaign? @relation(fields: [cycleId], references: [id])
 
   @@index([evaluatedId])
   @@index([evaluatorId])
   @@index([period])
+  @@index([cycleId])
 }
 
 enum EvaluationRequestStatus {
@@ -3277,9 +3287,11 @@ model EvaluationRequest {
   createdAt   DateTime                @default(now())
   evaluator   User                    @relation("RequestEvaluator", fields: [evaluatorId], references: [id])
   evaluated   User                    @relation("RequestEvaluated", fields: [evaluatedId], references: [id])
+  cycle       EvaluationCampaign?     @relation(fields: [cycleId], references: [id])
 
   @@index([evaluatorId])
   @@index([evaluatedId])
+  @@index([cycleId])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -9485,6 +9497,210 @@ enum MonitoringEvalStatus {
   PENDING
   OPEN
   CLOSED
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Módulo Evaluation (genérico — docs/12-modulo-evaluation.md)
+//
+// NOTA: "EvaluationCycle"/"UserEvaluation" acima pertencem ao módulo
+// monitoring (OKRs) — ver comentário em src/evaluation/evaluation.service.ts.
+// src/evaluation usava safeM(this.prisma, 'evaluationCycle') a apontar para
+// esses modelos (shape errado), o que fazia todo o create()/update() falhar
+// a validação do Prisma e cair sempre num fallback "modo compatibilidade" —
+// nenhum ciclo/avaliação genérico alguma vez foi persistido. Os modelos
+// abaixo são a correcção: uma família de modelos própria para este módulo,
+// com nomes que não colidem com monitoring.
+// ─────────────────────────────────────────────────────────────────
+
+enum EvalCampaignModel {
+  DEG_90
+  DEG_180
+  DEG_270
+  DEG_360
+  CONTINUOUS
+  PROJECT
+}
+
+enum EvalCampaignStatus {
+  DRAFT
+  SCHEDULED
+  IN_PROGRESS
+  PENDING
+  COMPLETED
+  CLOSED
+  CANCELLED
+  ARCHIVED
+}
+
+enum EvalQuestionType {
+  SCALE
+  TEXT
+  NPS
+  BOOLEAN
+  NA_ALLOWED
+}
+
+model EvaluationCampaign {
+  id                      Int                @id @default(autoincrement())
+  code                    String?            @unique
+  name                    String
+  description             String?            @db.Text
+  category                String?
+  model                   EvalCampaignModel  @default(DEG_360)
+  status                  EvalCampaignStatus @default(DRAFT)
+  templateId              Int?
+  startDate               DateTime
+  endDate                 DateTime
+  formId                  Int?
+  targetDeptIds           Int[]
+  mandatory               Boolean            @default(false)
+  confidential            Boolean            @default(false)
+  selfEvalIncludedInScore Boolean            @default(false)
+  weights                 String? // JSON.stringify(EvaluatorWeightDto[])
+  minScore                Float?
+  maxScore                Float?
+  requireComments         Boolean            @default(false)
+  requireEvidence         Boolean            @default(false)
+  allowEdit               Boolean            @default(false)
+  allowContest            Boolean            @default(false)
+  allowCalibration        Boolean            @default(true)
+  resultsVisibility       String?
+  linkPdi                 Boolean            @default(false)
+  linkCompetencies        Boolean            @default(false)
+  linkCareer              Boolean            @default(false)
+  linkSuccession          Boolean            @default(false)
+  link9Box                Boolean            @default(false)
+  notes                   String?            @db.Text
+  createdById             Int
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  deletedAt               DateTime?
+
+  createdBy   User                    @relation("EvalCampaignCreator", fields: [createdById], references: [id])
+  template    EvaluationTemplate?     @relation(fields: [templateId], references: [id])
+  form        EvaluationCampaignForm? @relation(fields: [formId], references: [id])
+  requests    EvaluationRequest[]
+  evaluations PerformanceEvaluation[]
+
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model EvaluationCampaignForm {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  isTemplate  Boolean   @default(false)
+  createdById Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  createdBy User                         @relation("EvalCampaignFormCreator", fields: [createdById], references: [id])
+  questions EvaluationCampaignQuestion[]
+  campaigns EvaluationCampaign[]
+
+  @@index([deletedAt])
+}
+
+model EvaluationCampaignQuestion {
+  id           Int              @id @default(autoincrement())
+  formId       Int
+  text         String
+  type         EvalQuestionType @default(SCALE)
+  order        Int              @default(0)
+  required     Boolean          @default(true)
+  scaleMax     Int?
+  competencyId Int?
+  weight       Float?
+
+  form       EvaluationCampaignForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  competency Competency?            @relation(fields: [competencyId], references: [id])
+
+  @@index([formId])
+}
+
+model EvaluationScale {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  minValue    Int      @default(1)
+  maxValue    Int      @default(5)
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  levels    EvaluationScaleLevel[]
+  criteria  EvaluationCriteria[]
+  templates EvaluationTemplate[]
+}
+
+model EvaluationScaleLevel {
+  id          Int     @id @default(autoincrement())
+  scaleId     Int
+  value       Int
+  label       String
+  description String?
+
+  scale EvaluationScale @relation(fields: [scaleId], references: [id], onDelete: Cascade)
+
+  @@unique([scaleId, value])
+}
+
+model EvaluationCriteria {
+  id           Int       @id @default(autoincrement())
+  name         String
+  description  String?   @db.Text
+  category     String?
+  weight       Float     @default(1)
+  scaleId      Int?
+  competencyId Int?
+  isActive     Boolean   @default(true)
+  createdById  Int
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  scale         EvaluationScale?             @relation(fields: [scaleId], references: [id])
+  competency    Competency?                  @relation(fields: [competencyId], references: [id])
+  createdBy     User                         @relation("EvalCriteriaCreator", fields: [createdById], references: [id])
+  templateLinks EvaluationTemplateCriteria[]
+
+  @@index([deletedAt])
+}
+
+model EvaluationTemplate {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?   @db.Text
+  type        String    @default("GENERIC")
+  scaleId     Int?
+  isDefault   Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  createdById Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  scale     EvaluationScale?             @relation(fields: [scaleId], references: [id])
+  createdBy User                         @relation("EvalTemplateCreator", fields: [createdById], references: [id])
+  criteria  EvaluationTemplateCriteria[]
+  campaigns EvaluationCampaign[]
+
+  @@index([deletedAt])
+}
+
+model EvaluationTemplateCriteria {
+  id         Int    @id @default(autoincrement())
+  templateId Int
+  criteriaId Int
+  weight     Float?
+  seq        Int    @default(0)
+
+  template EvaluationTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  criteria EvaluationCriteria @relation(fields: [criteriaId], references: [id])
+
+  @@unique([templateId, criteriaId])
 }
 
 model SavedReport {

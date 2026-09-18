@@ -25,18 +25,21 @@ const mockPrisma = {
     update: jest.fn().mockResolvedValue({}),
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
-  evaluationForm: {
-    findUnique: jest
-      .fn()
-      .mockResolvedValue({ id: 1, name: 'Formulário 2024', sections: [], questions: [] }),
+  evaluationCampaignForm: {
+    findFirst: jest.fn().mockResolvedValue({ id: 1, title: 'Formulário 2024', questions: [] }),
     findMany: jest.fn().mockResolvedValue([]),
-    create: jest.fn().mockResolvedValue({ id: 1, name: 'Formulário 2024' }),
+    create: jest.fn().mockResolvedValue({ id: 1, title: 'Formulário 2024' }),
   },
-  evaluationCycle: {
+  evaluationCampaignQuestion: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  evaluationCampaign: {
+    findFirst: jest.fn().mockResolvedValue(null),
     findUnique: jest.fn().mockResolvedValue(null),
     findMany: jest.fn().mockResolvedValue([]),
-    create: jest.fn().mockResolvedValue({ id: 1, name: 'Ciclo 2024' }),
+    create: jest.fn().mockResolvedValue({ id: 1, name: 'Ciclo 2024', model: 'DEG_360' }),
     update: jest.fn().mockResolvedValue({}),
+    delete: jest.fn().mockResolvedValue({}),
     count: jest.fn().mockResolvedValue(0),
   },
   notificationLog: {
@@ -151,6 +154,7 @@ describe('EvaluationService', () => {
 
   describe('updateCycle', () => {
     it('deve actualizar ciclo', async () => {
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue({ id: 1, name: 'Ciclo 2024' });
       const result = await service.updateCycle(1, { name: 'Ciclo Actualizado' });
       expect(result).toBeDefined();
     });
@@ -160,6 +164,7 @@ describe('EvaluationService', () => {
 
   describe('publishCycle', () => {
     it('deve publicar ciclo', async () => {
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue({ id: 1, name: 'Ciclo 2024' });
       const result = await service.publishCycle(1);
       expect(result).toBeDefined();
     });
@@ -172,14 +177,17 @@ describe('EvaluationService', () => {
       const fakeCycle = {
         id: 1,
         name: 'Ciclo 2024',
-        status: 'PUBLISHED',
+        status: 'SCHEDULED',
         endDate: new Date(),
-        model: '360',
+        model: 'DEG_360',
         targetDeptIds: [],
         weights: JSON.stringify([]),
       };
-      mockPrisma.evaluationCycle.findUnique.mockResolvedValue(fakeCycle);
-      mockPrisma.evaluationCycle.update.mockResolvedValue({ ...fakeCycle, status: 'ACTIVE' });
+      mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(fakeCycle);
+      mockPrisma.evaluationCampaign.update.mockResolvedValue({
+        ...fakeCycle,
+        status: 'IN_PROGRESS',
+      });
       const result = await service.activateCycle(1);
       expect(result).toBeDefined();
     });
@@ -189,7 +197,7 @@ describe('EvaluationService', () => {
 
   describe('createForm', () => {
     it('deve criar formulário de avaliação', async () => {
-      mockPrisma.evaluationForm.create.mockResolvedValue({
+      mockPrisma.evaluationCampaignForm.create.mockResolvedValue({
         id: 1,
         title: 'Formulário 2024',
         questions: [],
@@ -220,7 +228,7 @@ describe('EvaluationService', () => {
     });
 
     it('deve lançar NotFoundException se não encontrado', async () => {
-      mockPrisma.evaluationForm.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.evaluationCampaignForm.findFirst.mockResolvedValueOnce(null);
       await expect(service.getForm(999)).rejects.toThrow(NotFoundException);
     });
   });

@@ -28,6 +28,12 @@ import {
   CalibrateScoreDto,
   EvaluationAnalyticsFilterDto,
   CreateEvaluationDto,
+  CreateScaleDto,
+  UpdateScaleDto,
+  CreateCriteriaDto,
+  UpdateCriteriaDto,
+  CreateTemplateDto,
+  UpdateTemplateDto,
 } from './evaluation.dto';
 
 const ALL_ROLES = AUTHENTICATED_ROLES;
@@ -108,6 +114,89 @@ export class EvaluationController {
   @ApiOperation({ summary: 'Detalhe do formulário com perguntas' })
   getForm(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getForm(id);
+  }
+
+  // ─── Scales ──────────────────────────────────────────────────
+
+  @Post('scales')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Criar escala de avaliação com níveis' })
+  createScale(@Body() dto: CreateScaleDto) {
+    return this.svc.createScale(dto);
+  }
+
+  @Get('scales')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Listar escalas de avaliação' })
+  getScales() {
+    return this.svc.getScales();
+  }
+
+  @Get('scales/:id')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Detalhe da escala com níveis' })
+  getScale(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getScale(id);
+  }
+
+  @Patch('scales/:id')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Actualizar escala' })
+  updateScale(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateScaleDto) {
+    return this.svc.updateScale(id, dto);
+  }
+
+  // ─── Criteria ────────────────────────────────────────────────
+
+  @Post('criteria')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Criar critério de avaliação' })
+  createCriteria(@Body() dto: CreateCriteriaDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.createCriteria(dto, user.id);
+  }
+
+  @Get('criteria')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Listar critérios de avaliação' })
+  getCriteria(@Query('category') category?: string) {
+    return this.svc.getCriteria({ category });
+  }
+
+  @Patch('criteria/:id')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Actualizar critério de avaliação' })
+  updateCriteria(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCriteriaDto) {
+    return this.svc.updateCriteria(id, dto);
+  }
+
+  // ─── Templates (Modelos) ──────────────────────────────────────
+
+  @Post('templates')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Criar modelo de avaliação com critérios ponderados' })
+  createTemplate(@Body() dto: CreateTemplateDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.createTemplate(dto, user.id);
+  }
+
+  @Get('templates')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Listar modelos de avaliação' })
+  getTemplates() {
+    return this.svc.getTemplates();
+  }
+
+  @Get('templates/:id')
+  @Roles(...MGMT_ROLES)
+  @ApiOperation({ summary: 'Detalhe do modelo com critérios' })
+  getTemplate(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getTemplate(id);
+  }
+
+  @Patch('templates/:id')
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Actualizar modelo de avaliação' })
+  updateTemplate(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTemplateDto) {
+    return this.svc.updateTemplate(id, dto);
   }
 
   // ─── Assignments ─────────────────────────────────────────────

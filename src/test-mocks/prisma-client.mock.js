@@ -107,6 +107,37 @@ const EvaluationRequestStatus = {
   SKIPPED: 'SKIPPED',
 };
 
+// Módulo Evaluation genérico (docs/12-modulo-evaluation.md, src/evaluation/) —
+// distinto do EvaluationRequestStatus/EvalType acima (monitoring/OKRs) e do
+// Eval360CycleStatus abaixo (evaluation360/).
+const EvalCampaignModel = {
+  DEG_90: 'DEG_90',
+  DEG_180: 'DEG_180',
+  DEG_270: 'DEG_270',
+  DEG_360: 'DEG_360',
+  CONTINUOUS: 'CONTINUOUS',
+  PROJECT: 'PROJECT',
+};
+
+const EvalCampaignStatus = {
+  DRAFT: 'DRAFT',
+  SCHEDULED: 'SCHEDULED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  PENDING: 'PENDING',
+  COMPLETED: 'COMPLETED',
+  CLOSED: 'CLOSED',
+  CANCELLED: 'CANCELLED',
+  ARCHIVED: 'ARCHIVED',
+};
+
+const EvalQuestionType = {
+  SCALE: 'SCALE',
+  TEXT: 'TEXT',
+  NPS: 'NPS',
+  BOOLEAN: 'BOOLEAN',
+  NA_ALLOWED: 'NA_ALLOWED',
+};
+
 const LeadershipProgramLevel = {
   INITIAL: 'INITIAL',
   INTERMEDIATE: 'INTERMEDIATE',
@@ -2029,6 +2060,9 @@ module.exports = {
   SurveyQuestionType,
   DisputeStatus,
   EvaluationRequestStatus,
+  EvalCampaignModel,
+  EvalCampaignStatus,
+  EvalQuestionType,
   LeadershipProgramLevel,
   ProgramStatus,
   ParticipantStatus,
