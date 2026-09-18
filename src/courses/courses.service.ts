@@ -891,8 +891,94 @@ export class CoursesService {
   async updateQuiz(quizId: number, dto: UpdateQuizDto) {
     const quiz = await this.prisma.quiz.findUnique({ where: { id: quizId } });
     if (!quiz) throw new NotFoundException('Quiz não encontrado');
-    const { questions: _questions, ...settings } = dto;
-    return this.prisma.quiz.update({ where: { id: quizId }, data: settings });
+    const { questions, ...settings } = dto;
+
+    await this.prisma.quiz.update({ where: { id: quizId }, data: settings });
+
+    // Antes desta correcção, `questions` era destruturado só para o
+    // descartar — o admin conseguia enviar perguntas editadas e a resposta
+    // 200 sugeria sucesso, mas nada mudava na BD (bug real: perda silenciosa
+    // de dados, mesma classe de problema já documentada no CLAUDE.md para
+    // outros campos "aceites mas nunca persistidos").
+    if (questions) {
+      await this.prisma.quizQuestion.deleteMany({ where: { quizId } });
+      await this.prisma.quizQuestion.createMany({
+        data: questions.map((q, idx) => ({
+          quizId,
+          question: q.question,
+          type: q.type,
+          options: q.options ? JSON.stringify(q.options) : null,
+          correctAnswer: q.correctAnswer,
+          points: q.points ?? 1,
+          seq: idx,
+        })),
+      });
+    }
+
+    return this.prisma.quiz.findUnique({
+      where: { id: quizId },
+      include: { questions: { orderBy: { seq: 'asc' } } },
+    });
+  }
+
+  /** Quiz + perguntas com resposta certa — só para a UI de edição (ADMIN/RH). */
+  async getQuizForEdit(lessonId: number) {
+    const quiz = await this.prisma.read.quiz.findUnique({
+      where: { lessonId },
+      include: { questions: { orderBy: { seq: 'asc' } } },
+    });
+    return quiz;
+  }
+
+  /**
+   * Quiz + perguntas para o aluno responder — nunca inclui a resposta certa
+   * (nem em `options[].isCorrect` nem em `correctAnswer`), e devolve as
+   * tentativas já feitas para a UI mostrar "restam N tentativas" e o
+   * histórico. Exige matrícula no curso da aula — mesma regra de acesso já
+   * usada para o conteúdo da aula (ver CourseCompletionService).
+   */
+  async getQuizForAttempt(quizId: number, userId: number) {
+    const quiz = await this.prisma.read.quiz.findUnique({
+      where: { id: quizId },
+      include: {
+        questions: { orderBy: { seq: 'asc' } },
+        lesson: { select: { module: { select: { courseId: true } } } },
+      },
+    });
+    if (!quiz) throw new NotFoundException('Quiz não encontrado');
+
+    const enrollment = await this.prisma.read.enrollment.findFirst({
+      where: { userId, courseId: quiz.lesson.module.courseId },
+    });
+    if (!enrollment) throw new ForbiddenException('Não está matriculado neste curso');
+
+    const attempts = await this.prisma.read.quizAttempt.findMany({
+      where: { quizId, userId },
+      orderBy: { submittedAt: 'desc' },
+      select: { id: true, score: true, passed: true, submittedAt: true },
+    });
+
+    return {
+      id: quiz.id,
+      title: quiz.title,
+      passingScore: quiz.passingScore,
+      maxAttempts: quiz.maxAttempts,
+      timeLimitMinutes: quiz.timeLimitMinutes,
+      shuffleQuestions: quiz.shuffleQuestions,
+      shuffleAnswers: quiz.shuffleAnswers,
+      attemptsUsed: attempts.length,
+      attemptsRemaining: quiz.maxAttempts > 0 ? Math.max(0, quiz.maxAttempts - attempts.length) : null,
+      myAttempts: attempts,
+      questions: quiz.questions.map(q => ({
+        id: q.id,
+        question: q.question,
+        type: q.type,
+        points: q.points,
+        options: q.options
+          ? (JSON.parse(q.options) as { text?: string }[]).map(o => ({ text: o.text }))
+          : null,
+      })),
+    };
   }
 
   async submitQuiz(quizId: number, userId: number, dto: SubmitQuizDto) {

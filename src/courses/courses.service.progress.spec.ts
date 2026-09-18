@@ -108,14 +108,17 @@ const mockPrisma: any = {
     create: jest.fn(),
     findUnique: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
+    update: jest.fn().mockResolvedValue({}),
   },
   quizQuestion: {
     createMany: jest.fn().mockResolvedValue({ count: 2 }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
   },
   quizAttempt: {
     count: jest.fn().mockResolvedValue(0),
     create: jest.fn().mockResolvedValue({ id: 'att-1', score: 80, passed: true }),
     groupBy: jest.fn().mockResolvedValue([]),
+    findMany: jest.fn().mockResolvedValue([]),
   },
   courseFeedback: {
     findFirst: jest.fn(),
@@ -332,6 +335,111 @@ describe('CoursesService (progress & quiz & analytics)', () => {
       await expect(service.createQuiz(99, { title: 'Q', questions: [] } as any)).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  // ─── updateQuiz ───────────────────────────────────────────────────────────
+
+  describe('updateQuiz', () => {
+    it('sem `questions` no dto, só actualiza definições (não mexe nas perguntas)', async () => {
+      mockPrisma.quiz.findUnique.mockResolvedValueOnce({ id: 1 });
+      mockPrisma.quiz.findUnique.mockResolvedValueOnce({ id: 1, questions: [] });
+
+      await service.updateQuiz(1, { passingScore: 80 } as any);
+
+      expect(mockPrisma.quiz.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { passingScore: 80 },
+      });
+      expect(mockPrisma.quizQuestion.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('com `questions` no dto, substitui as perguntas (antes eram descartadas em silêncio)', async () => {
+      mockPrisma.quiz.findUnique.mockResolvedValueOnce({ id: 1 });
+      mockPrisma.quiz.findUnique.mockResolvedValueOnce({ id: 1, questions: [] });
+
+      await service.updateQuiz(1, {
+        passingScore: 80,
+        questions: [{ question: 'Nova pergunta?', type: 'TRUE_FALSE', correctAnswer: 'true', points: 2 }],
+      } as any);
+
+      expect(mockPrisma.quizQuestion.deleteMany).toHaveBeenCalledWith({ where: { quizId: 1 } });
+      expect(mockPrisma.quizQuestion.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({ quizId: 1, question: 'Nova pergunta?', correctAnswer: 'true', points: 2, seq: 0 }),
+        ],
+      });
+    });
+
+    it('deve lançar NotFoundException se quiz não existe', async () => {
+      mockPrisma.quiz.findUnique.mockResolvedValue(null);
+      await expect(service.updateQuiz(99, { passingScore: 80 } as any)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  // ─── getQuizForEdit / getQuizForAttempt ─────────────────────────────────────
+
+  describe('getQuizForEdit', () => {
+    it('devolve o quiz com correctAnswer visível', async () => {
+      mockPrisma.read.quiz.findUnique.mockResolvedValue({
+        id: 1,
+        questions: [{ id: 1, question: 'Q?', correctAnswer: 'A' }],
+      });
+      const result = await service.getQuizForEdit(10);
+      expect(result?.questions[0].correctAnswer).toBe('A');
+    });
+  });
+
+  describe('getQuizForAttempt', () => {
+    it('nunca expõe correctAnswer e devolve tentativas restantes', async () => {
+      mockPrisma.read.quiz.findUnique.mockResolvedValue({
+        id: 1,
+        title: 'Quiz',
+        passingScore: 70,
+        maxAttempts: 2,
+        timeLimitMinutes: null,
+        shuffleQuestions: false,
+        shuffleAnswers: false,
+        lesson: { module: { courseId: 20 } },
+        questions: [
+          {
+            id: 1,
+            question: 'Q?',
+            type: 'MULTIPLE_CHOICE',
+            points: 1,
+            correctAnswer: 'A',
+            options: JSON.stringify([{ text: 'A', isCorrect: true }, { text: 'B', isCorrect: false }]),
+          },
+        ],
+      });
+      mockPrisma.read.enrollment.findFirst.mockResolvedValue({ id: 5, userId: 1, courseId: 20 });
+      mockPrisma.read.quizAttempt.findMany.mockResolvedValue([
+        { id: 1, score: 50, passed: false, submittedAt: new Date('2026-01-01') },
+      ]);
+
+      const result = await service.getQuizForAttempt(1, 1);
+
+      expect(result.attemptsUsed).toBe(1);
+      expect(result.attemptsRemaining).toBe(1);
+      expect(result.questions[0]).not.toHaveProperty('correctAnswer');
+      expect(result.questions[0].options).toEqual([{ text: 'A' }, { text: 'B' }]);
+    });
+
+    it('não matriculado → ForbiddenException', async () => {
+      mockPrisma.read.quiz.findUnique.mockResolvedValue({
+        id: 1,
+        lesson: { module: { courseId: 20 } },
+        questions: [],
+      });
+      mockPrisma.read.enrollment.findFirst.mockResolvedValue(null);
+      await expect(service.getQuizForAttempt(1, 1)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('quiz inexistente → NotFoundException', async () => {
+      mockPrisma.read.quiz.findUnique.mockResolvedValue(null);
+      await expect(service.getQuizForAttempt(99, 1)).rejects.toThrow(NotFoundException);
     });
   });
 
