@@ -112,6 +112,7 @@ const mockPrisma: any = {
   },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { update: jest.fn().mockResolvedValue({}) },
+  learningPathCourse: { findMany: jest.fn().mockResolvedValue([]) },
 };
 
 const mockCourseCompletion = {

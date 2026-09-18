@@ -44,6 +44,7 @@ const mockPrisma = {
   auditLog: { create: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { update: jest.fn().mockResolvedValue({}) },
+  learningPathCourse: { findMany: jest.fn().mockResolvedValue([]) },
 };
 
 const mockCourseCompletion = {
@@ -127,6 +128,43 @@ describe('CoursesService', () => {
     it('deve lançar NotFoundException se não encontrado', async () => {
       mockPrisma.course.findUnique.mockResolvedValue(null);
       await expect(service.findOne(99)).rejects.toThrow(NotFoundException);
+    });
+
+    it('sem categoria nem competências não interroga cursos relacionados', async () => {
+      mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
+      const result = await service.findOne(1);
+
+      expect(mockPrisma.course.findMany).not.toHaveBeenCalled();
+      expect(result.relatedCourses).toEqual([]);
+    });
+
+    it('devolve percursos de aprendizagem que incluem este curso', async () => {
+      mockPrisma.course.findUnique.mockResolvedValue(baseCourse);
+      mockPrisma.learningPathCourse.findMany.mockResolvedValue([
+        { learningPath: { id: 5, title: 'Percurso de Liderança' } },
+      ]);
+
+      const result = await service.findOne(1);
+
+      expect(result.learningPaths).toEqual([{ id: 5, title: 'Percurso de Liderança' }]);
+    });
+
+    it('com categoria, procura cursos relacionados publicados excluindo o próprio', async () => {
+      mockPrisma.course.findUnique.mockResolvedValue({ ...baseCourse, category: 'Liderança' });
+      mockPrisma.course.findMany.mockResolvedValue([{ id: 2, title: 'Outro curso' }]);
+
+      const result = await service.findOne(1);
+
+      expect(mockPrisma.course.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: { not: 1 },
+            status: 'PUBLISHED',
+            OR: [{ category: 'Liderança' }],
+          }),
+        }),
+      );
+      expect(result.relatedCourses).toEqual([{ id: 2, title: 'Outro curso' }]);
     });
   });
 

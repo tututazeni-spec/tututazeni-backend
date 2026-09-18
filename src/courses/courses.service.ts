@@ -140,7 +140,43 @@ export class CoursesService {
       include: COURSE_DETAIL_INCLUDE,
     });
     if (!course) throw new NotFoundException('Curso não encontrado');
-    return course;
+
+    // docs/06-modulo-courses.md secções 11-12 — "Cursos relacionados" e
+    // "Este curso faz parte de: Percurso X". Sem isto o resto da página de
+    // detalhe (secções 1-10) já tinha os dados via COURSE_DETAIL_INCLUDE mas
+    // não era renderizado; estas duas secções não tinham sequer os dados.
+    const competencyIds = course.competencies.map(c => c.competencyId);
+    const relatedWhere: Prisma.CourseWhereInput[] = [];
+    if (course.category) relatedWhere.push({ category: course.category });
+    if (competencyIds.length > 0) {
+      relatedWhere.push({ competencies: { some: { competencyId: { in: competencyIds } } } });
+    }
+    const [relatedCourses, pathLinks] = await Promise.all([
+      relatedWhere.length > 0
+        ? this.prisma.read.course.findMany({
+            where: { id: { not: id }, status: 'PUBLISHED', OR: relatedWhere },
+            take: 6,
+            select: {
+              id: true,
+              title: true,
+              thumbnailUrl: true,
+              category: true,
+              level: true,
+              workloadHours: true,
+            },
+          })
+        : Promise.resolve([]),
+      this.prisma.read.learningPathCourse.findMany({
+        where: { courseId: id },
+        select: { learningPath: { select: { id: true, title: true } } },
+      }),
+    ]);
+
+    return {
+      ...course,
+      relatedCourses,
+      learningPaths: pathLinks.map(l => l.learningPath),
+    };
   }
 
   async getCategories() {
@@ -754,7 +790,10 @@ export class CoursesService {
   }
 
   async getCourseProgress(courseId: number, userId: number) {
-    const enrollment = await this.prisma.read.enrollment.findFirst({ where: { userId, courseId } });
+    const enrollment = await this.prisma.read.enrollment.findFirst({
+      where: { userId, courseId },
+      include: { certificate: { select: { id: true, code: true, issuedAt: true, fileUrl: true } } },
+    });
     if (!enrollment) return null;
 
     const courseProgress = await this.courseCompletion.getCourseProgressNumbers(courseId, userId);

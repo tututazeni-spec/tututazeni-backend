@@ -64,6 +64,7 @@ const mockPrisma = {
   user: {
     findMany: jest.fn(),
   },
+  learningPathCourse: { findMany: jest.fn().mockResolvedValue([]) },
 };
 
 const mockCourseCompletion = {
