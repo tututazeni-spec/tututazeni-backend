@@ -325,6 +325,12 @@ export class CreateCourseModuleDto {
   @IsOptional()
   @IsInt()
   requiredModuleId?: number;
+
+  @ApiPropertyOptional({ description: 'Competências associadas ao módulo', type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  competencyIds?: number[];
 }
 
 export class UpdateCourseModuleDto extends PartialType(CreateCourseModuleDto) {}

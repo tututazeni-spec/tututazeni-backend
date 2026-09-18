@@ -422,6 +422,26 @@ export class CourseModulesService {
       }
     }
 
+    // Pré-requisito explícito de módulo/aula (docs/06-modulo-courses.md
+    // secção 10) — mesma regra do gate real em
+    // CourseCompletionService.assertLessonAccessible, replicada aqui para que
+    // o "locked" devolvido a /module-progress (usado pelo learn page) já
+    // reflicta o bloqueio antes do aluno tentar concluir a aula.
+    if (mod.requiredModuleId) {
+      const prereqCompleted = await this.isModuleCompleted(mod.requiredModuleId, userId);
+      if (!prereqCompleted) {
+        return { accessible: false, reason: 'Deve concluir o módulo pré-requisito primeiro' };
+      }
+    }
+    if (lesson.requiredLessonId) {
+      const prereqProgress = await this.prisma.read.lessonProgress.findUnique({
+        where: { lessonId_userId: { lessonId: lesson.requiredLessonId, userId } },
+      });
+      if (!prereqProgress?.completed) {
+        return { accessible: false, reason: 'Deve concluir a aula pré-requisito primeiro' };
+      }
+    }
+
     return { accessible: true };
   }
 
