@@ -9521,14 +9521,21 @@ enum EvalCampaignModel {
   PROJECT
 }
 
+// Vocabulário DRAFT/PUBLISHED/ACTIVE/CALIBRATING/COMPLETED/ARCHIVED (não o
+// "Rascunho/Agendada/Em curso/Pendente/Concluída/Encerrada/Cancelada/
+// Arquivada" de docs/12-modulo-evaluation.md) porque é o que já estava
+// implementado em publishCycle()/activateCycle() e, sobretudo, o que
+// frontend/components/evaluation/{CyclesTab,constants}.tsx já esperava
+// (STATUS_MAP + comparação literal `cycle.status === 'PUBLISHED'`) antes
+// desta correcção — mudar o vocabulário para bater com o doc partia o botão
+// "Activar" da aba Ciclos, que nunca aparecia porque o backend passou a
+// devolver 'SCHEDULED' em vez de 'PUBLISHED'.
 enum EvalCampaignStatus {
   DRAFT
-  SCHEDULED
-  IN_PROGRESS
-  PENDING
+  PUBLISHED
+  ACTIVE
+  CALIBRATING
   COMPLETED
-  CLOSED
-  CANCELLED
   ARCHIVED
 }
 

@@ -156,7 +156,7 @@ describe('EvaluationService (additional)', () => {
     it('deve filtrar por status', async () => {
       mockPrisma.evaluationCampaign.findMany.mockResolvedValue([]);
       mockPrisma.evaluationCampaign.count.mockResolvedValue(0);
-      const result = await service.getCycles({ status: 'IN_PROGRESS' as any });
+      const result = await service.getCycles({ status: 'ACTIVE' as any });
       expect(result.data).toHaveLength(0);
     });
 
@@ -231,7 +231,7 @@ describe('EvaluationService (additional)', () => {
       mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(mockEvalCycle);
       mockPrisma.evaluationCampaign.update.mockResolvedValue({
         ...mockEvalCycle,
-        status: 'SCHEDULED',
+        status: 'PUBLISHED',
       });
       const result = await service.publishCycle(1);
       expect(result).toBeDefined();
@@ -247,7 +247,7 @@ describe('EvaluationService (additional)', () => {
       mockPrisma.user.findMany.mockResolvedValue([{ id: 1, managerId: null }]);
       mockPrisma.evaluationCampaign.update.mockResolvedValue({
         ...mockEvalCycle,
-        status: 'IN_PROGRESS',
+        status: 'ACTIVE',
       });
       mockPrisma.notificationLog.createMany.mockResolvedValue({ count: 0 });
 
@@ -264,7 +264,7 @@ describe('EvaluationService (additional)', () => {
       ]);
       mockPrisma.evaluationCampaign.update.mockResolvedValue({
         ...mockEvalCycle,
-        status: 'IN_PROGRESS',
+        status: 'ACTIVE',
       });
       mockPrisma.notificationLog.createMany.mockResolvedValue({ count: 1 });
 

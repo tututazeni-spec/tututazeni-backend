@@ -177,7 +177,7 @@ describe('EvaluationService', () => {
       const fakeCycle = {
         id: 1,
         name: 'Ciclo 2024',
-        status: 'SCHEDULED',
+        status: 'PUBLISHED',
         endDate: new Date(),
         model: 'DEG_360',
         targetDeptIds: [],
@@ -186,7 +186,7 @@ describe('EvaluationService', () => {
       mockPrisma.evaluationCampaign.findFirst.mockResolvedValue(fakeCycle);
       mockPrisma.evaluationCampaign.update.mockResolvedValue({
         ...fakeCycle,
-        status: 'IN_PROGRESS',
+        status: 'ACTIVE',
       });
       const result = await service.activateCycle(1);
       expect(result).toBeDefined();

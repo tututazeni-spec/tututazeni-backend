@@ -215,7 +215,7 @@ export class EvaluationService {
     await this.assertCampaignExists(id);
     const campaign = await this.prisma.evaluationCampaign.update({
       where: { id },
-      data: { status: CycleStatus.SCHEDULED },
+      data: { status: CycleStatus.PUBLISHED },
     });
     return this.toPublicCampaign(campaign);
   }
@@ -228,7 +228,7 @@ export class EvaluationService {
 
     const updated = await this.prisma.evaluationCampaign.update({
       where: { id },
-      data: { status: CycleStatus.IN_PROGRESS },
+      data: { status: CycleStatus.ACTIVE },
     });
 
     // Notify all participants
