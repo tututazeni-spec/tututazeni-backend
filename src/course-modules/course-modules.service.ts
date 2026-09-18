@@ -20,6 +20,11 @@ import {
   CloneModuleDto,
 } from './course-modules.dto';
 
+// NOTA — dois sistemas paralelos de Módulos/Lições: ver comentário equivalente
+// no topo de courses/courses.service.ts. Este service é a rota usada por
+// ModuleBuilder/ProgressModal em /courses/[id]/learn; courses.service.ts é a
+// usada por ModuleModal/ModulosView em Gestão. Gate de acesso a aulas
+// centralizado em CourseCompletionService.markLessonComplete.
 @Injectable()
 export class CourseModulesService {
   private readonly logger = new Logger(CourseModulesService.name);
@@ -389,7 +394,11 @@ export class CourseModulesService {
   }
 
   async markLessonComplete(userId: number, dto: MarkModuleLessonCompleteDto) {
-    // Segurança: gate de progressão sequencial (efeito próprio de course-modules)
+    // Pré-verificação redundante mas inofensiva: o gate real (drip/publicação/
+    // progressão sequencial) agora vive em CourseCompletionService.markLessonComplete
+    // e corre para QUALQUER caminho de conclusão, incluindo o de courses.service.ts
+    // (ver comentário nesse ficheiro). Mantido aqui só para preservar a mensagem de
+    // erro específica quando chamado por esta rota.
     const access = await this.isLessonAccessible(dto.lessonId, userId);
     if (!access.accessible) {
       throw new ForbiddenException(access.reason ?? 'Aula não acessível');
