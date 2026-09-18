@@ -5,6 +5,7 @@ import {
   IsInt,
   IsArray,
   IsEnum,
+  IsDateString,
   Min,
   Max,
   MaxLength,
@@ -13,10 +14,34 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
-import { CourseLevel, CourseStatus, LessonType, QuizQuestionType } from '@prisma/client';
+import {
+  CourseLevel,
+  CourseStatus,
+  CourseVisibility,
+  ModuleStatus,
+  ModuleType,
+  ProgressionType,
+  CompletionRule,
+  LessonType,
+  LessonStatus,
+  LessonActivityType,
+  QuizQuestionType,
+} from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
-export { CourseLevel, CourseStatus, LessonType, QuizQuestionType };
+export {
+  CourseLevel,
+  CourseStatus,
+  CourseVisibility,
+  ModuleStatus,
+  ModuleType,
+  ProgressionType,
+  CompletionRule,
+  LessonType,
+  LessonStatus,
+  LessonActivityType,
+  QuizQuestionType,
+};
 
 // AssignmentTarget local — usado apenas para despachar destinatários de
 // atribuição de curso (não é persistido directamente como coluna neste
@@ -48,6 +73,11 @@ export class CreateCourseDto {
   @IsString()
   category?: string;
 
+  @ApiPropertyOptional({ description: 'Área de conhecimento' })
+  @IsOptional()
+  @IsString()
+  knowledgeArea?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
@@ -76,6 +106,12 @@ export class CreateCourseDto {
   @Min(0)
   workloadHours?: number;
 
+  @ApiPropertyOptional({ description: 'Duração estimada em dias' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  estimatedDurationDays?: number;
+
   @ApiPropertyOptional({ default: 'pt' })
   @IsOptional()
   @IsString()
@@ -90,6 +126,11 @@ export class CreateCourseDto {
   @IsOptional()
   @IsEnum(CourseStatus)
   status?: CourseStatus;
+
+  @ApiPropertyOptional({ enum: CourseVisibility, default: CourseVisibility.PUBLIC })
+  @IsOptional()
+  @IsEnum(CourseVisibility)
+  visibility?: CourseVisibility;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -106,6 +147,17 @@ export class CreateCourseDto {
   @IsInt()
   departmentId?: number;
 
+  @ApiPropertyOptional({ description: 'Unidade responsável' })
+  @IsOptional()
+  @IsString()
+  unit?: string;
+
+  @ApiPropertyOptional({ description: 'Público-alvo' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  targetAudience?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
@@ -114,10 +166,42 @@ export class CreateCourseDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiPropertyOptional({ description: 'Requer aprovação para inscrição' })
+  @IsOptional()
+  @IsBoolean()
+  requiresApproval?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsInt()
   @Min(0)
   @Max(100)
   passingScore?: number;
+
+  @ApiPropertyOptional({ description: 'Percentagem mínima de conclusão' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  minCompletionPercent?: number;
+
+  @ApiPropertyOptional({ description: 'Emite certificado ao concluir' })
+  @IsOptional()
+  @IsBoolean()
+  certificateEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Critérios para emissão do certificado' })
+  @IsOptional()
+  @IsString()
+  certificateCriteria?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -129,6 +213,16 @@ export class CreateCourseDto {
   @IsOptional()
   @IsBoolean()
   allowDownload?: boolean;
+
+  @ApiPropertyOptional({ description: 'Instrutor principal' })
+  @IsOptional()
+  @IsInt()
+  primaryInstructorId?: number;
+
+  @ApiPropertyOptional({ description: 'Curso pré-requisito' })
+  @IsOptional()
+  @IsInt()
+  requiredCourseId?: number;
 }
 
 export class UpdateCourseDto extends PartialType(CreateCourseDto) {}
@@ -142,12 +236,94 @@ export class CreateCourseModuleDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  thumbnailUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  learningObjectives?: string[];
 
   @ApiProperty()
   @IsInt()
   @Min(0)
   seq!: number;
+
+  @ApiPropertyOptional({ enum: ModuleStatus })
+  @IsOptional()
+  @IsEnum(ModuleStatus)
+  status?: ModuleStatus;
+
+  @ApiPropertyOptional({ enum: ModuleType })
+  @IsOptional()
+  @IsEnum(ModuleType)
+  type?: ModuleType;
+
+  @ApiPropertyOptional({ enum: ProgressionType })
+  @IsOptional()
+  @IsEnum(ProgressionType)
+  progressionType?: ProgressionType;
+
+  @ApiPropertyOptional({ enum: CompletionRule })
+  @IsOptional()
+  @IsEnum(CompletionRule)
+  completionRule?: CompletionRule;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  minCompletionPercent?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  minQuizScore?: number;
+
+  @ApiPropertyOptional({ description: 'Módulo obrigatório' })
+  @IsOptional()
+  @IsBoolean()
+  mandatory?: boolean;
+
+  @ApiPropertyOptional({ description: 'Pode avançar sem concluir' })
+  @IsOptional()
+  @IsBoolean()
+  allowSkip?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  estimatedDurationMinutes?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  dripDays?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  availableFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Módulo pré-requisito' })
+  @IsOptional()
+  @IsInt()
+  requiredModuleId?: number;
 }
 
 export class UpdateCourseModuleDto extends PartialType(CreateCourseModuleDto) {}
@@ -161,11 +337,21 @@ export class CreateLessonDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   description?: string;
 
   @ApiProperty({ enum: LessonType })
   @IsEnum(LessonType)
   type!: LessonType;
+
+  @ApiPropertyOptional({ enum: LessonStatus })
+  @IsOptional()
+  @IsEnum(LessonStatus)
+  status?: LessonStatus;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -176,6 +362,16 @@ export class CreateLessonDto {
   @IsOptional()
   @IsString()
   textContent?: string;
+
+  @ApiPropertyOptional({ description: 'Legendas (URL)' })
+  @IsOptional()
+  @IsString()
+  captionsUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Transcrição do vídeo/áudio' })
+  @IsOptional()
+  @IsString()
+  transcript?: string;
 
   @ApiProperty()
   @IsInt()
@@ -193,10 +389,71 @@ export class CreateLessonDto {
   @IsBoolean()
   isFree?: boolean;
 
+  @ApiPropertyOptional({ description: 'Aula obrigatória' })
+  @IsOptional()
+  @IsBoolean()
+  mandatory?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
   allowDownload?: boolean;
+
+  @ApiPropertyOptional({ description: 'Tempo mínimo de visualização (segundos)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  minWatchSeconds?: number;
+
+  @ApiPropertyOptional({ description: 'Permitir avançar antes de concluir' })
+  @IsOptional()
+  @IsBoolean()
+  allowSkip?: boolean;
+
+  @ApiPropertyOptional({ description: 'Marcar automaticamente como concluída' })
+  @IsOptional()
+  @IsBoolean()
+  autoComplete?: boolean;
+
+  @ApiPropertyOptional({ description: 'Exigir conclusão de actividade' })
+  @IsOptional()
+  @IsBoolean()
+  requiresActivity?: boolean;
+
+  @ApiPropertyOptional({ description: 'Exigir avaliação' })
+  @IsOptional()
+  @IsBoolean()
+  requiresAssessment?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  availableFrom?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  availableUntil?: string;
+
+  @ApiPropertyOptional({ description: 'Aula pré-requisito' })
+  @IsOptional()
+  @IsInt()
+  requiredLessonId?: number;
+
+  @ApiPropertyOptional({ description: 'Data/hora da aula ao vivo (type=LIVE)' })
+  @IsOptional()
+  @IsDateString()
+  liveDate?: string;
+
+  @ApiPropertyOptional({ description: 'Link da sessão ao vivo (type=LIVE)' })
+  @IsOptional()
+  @IsString()
+  liveSessionUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Instrutor da aula ao vivo (type=LIVE)' })
+  @IsOptional()
+  @IsInt()
+  liveInstructorId?: number;
 }
 
 export class UpdateLessonDto extends PartialType(CreateLessonDto) {}
@@ -348,6 +605,26 @@ export class CreateQuizDto {
   @Min(0)
   timeLimitMinutes?: number;
 
+  @ApiPropertyOptional({ description: 'Embaralhar perguntas' })
+  @IsOptional()
+  @IsBoolean()
+  shuffleQuestions?: boolean;
+
+  @ApiPropertyOptional({ description: 'Embaralhar respostas' })
+  @IsOptional()
+  @IsBoolean()
+  shuffleAnswers?: boolean;
+
+  @ApiPropertyOptional({ description: 'Mostrar respostas correctas após submissão' })
+  @IsOptional()
+  @IsBoolean()
+  showCorrectAnswers?: boolean;
+
+  @ApiPropertyOptional({ description: 'Feedback automático' })
+  @IsOptional()
+  @IsBoolean()
+  autoFeedback?: boolean;
+
   @ApiProperty({ type: [CreateQuizQuestionDto] })
   @IsArray()
   @ArrayMinSize(1)
@@ -355,6 +632,8 @@ export class CreateQuizDto {
   @Type(() => CreateQuizQuestionDto)
   questions!: CreateQuizQuestionDto[];
 }
+
+export class UpdateQuizDto extends PartialType(CreateQuizDto) {}
 
 export class SubmitQuizDto {
   @ApiProperty()
@@ -372,3 +651,77 @@ export class CourseFeedbackDto {
   @Max(5)
   rating!: number;
 }
+
+// ── Actividades da lição ──────────────────────────────────────────────────
+
+export class CreateLessonActivityDto {
+  @ApiProperty({ enum: LessonActivityType })
+  @IsEnum(LessonActivityType)
+  type!: LessonActivityType;
+
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  title!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contentUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  seq?: number;
+}
+
+export class UpdateLessonActivityDto extends PartialType(CreateLessonActivityDto) {}
+
+// ── Recursos da lição ────────────────────────────────────────────────────
+
+export class CreateLessonResourceDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  title!: string;
+
+  @ApiProperty()
+  @IsString()
+  url!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fileType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  fileSizeKb?: number;
+}
+
+export class UpdateLessonResourceDto extends PartialType(CreateLessonResourceDto) {}
+
+// ── Grupos de audiência (visibilidade = SELECTED_GROUPS) ───────────────────
+
+export class CreateCourseAudienceGroupDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  userIds?: number[];
+}
+
+export class UpdateCourseAudienceGroupDto extends PartialType(CreateCourseAudienceGroupDto) {}

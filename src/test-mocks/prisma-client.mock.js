@@ -427,9 +427,26 @@ const LeadershipClassification = {
 
 const CourseLevel = { BEGINNER: 'BEGINNER', INTERMEDIATE: 'INTERMEDIATE', ADVANCED: 'ADVANCED' };
 
-const CourseStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHIVED' };
+const CourseStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  PAUSED: 'PAUSED',
+  ARCHIVED: 'ARCHIVED',
+};
 
-const ModuleStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED' };
+const CourseVisibility = {
+  PUBLIC: 'PUBLIC',
+  PRIVATE: 'PRIVATE',
+  EMPLOYEES_ONLY: 'EMPLOYEES_ONLY',
+  SELECTED_GROUPS: 'SELECTED_GROUPS',
+};
+
+const ModuleStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  PAUSED: 'PAUSED',
+  ARCHIVED: 'ARCHIVED',
+};
 
 const ModuleType = {
   THEORETICAL: 'THEORETICAL',
@@ -456,6 +473,25 @@ const LessonType = {
   LINK: 'LINK',
   SCORM: 'SCORM',
   QUIZ: 'QUIZ',
+  LIVE: 'LIVE',
+};
+
+const LessonStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED' };
+
+const LessonActivityType = {
+  TEXT: 'TEXT',
+  VIDEO: 'VIDEO',
+  DOCUMENT: 'DOCUMENT',
+  IMAGE: 'IMAGE',
+  AUDIO: 'AUDIO',
+  QUIZ: 'QUIZ',
+  OPEN_QUESTION: 'OPEN_QUESTION',
+  EXERCISE: 'EXERCISE',
+  TASK: 'TASK',
+  SURVEY: 'SURVEY',
+  DISCUSSION: 'DISCUSSION',
+  DOWNLOAD: 'DOWNLOAD',
+  EXTERNAL_LINK: 'EXTERNAL_LINK',
 };
 
 const EnrollmentOrigin = {
@@ -721,6 +757,7 @@ const TimelineEventType = {
 };
 
 const EnrollmentStatus = {
+  PENDING_APPROVAL: 'PENDING_APPROVAL',
   NOT_STARTED: 'NOT_STARTED',
   IN_PROGRESS: 'IN_PROGRESS',
   COMPLETED: 'COMPLETED',
@@ -2030,11 +2067,14 @@ module.exports = {
   LeadershipClassification,
   CourseLevel,
   CourseStatus,
+  CourseVisibility,
   ModuleStatus,
   ModuleType,
   ProgressionType,
   CompletionRule,
   LessonType,
+  LessonStatus,
+  LessonActivityType,
   EnrollmentOrigin,
   QuizQuestionType,
   LearningPathLevel,

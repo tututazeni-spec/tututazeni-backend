@@ -23,15 +23,47 @@ import {
   EnrollDto,
   AssignCourseDto,
   CreateQuizDto,
+  UpdateQuizDto,
   SubmitQuizDto,
   CourseFeedbackDto,
   AssignmentTarget,
+  CreateLessonActivityDto,
+  UpdateLessonActivityDto,
+  CreateLessonResourceDto,
+  UpdateLessonResourceDto,
+  CreateCourseAudienceGroupDto,
+  UpdateCourseAudienceGroupDto,
 } from './courses.dto';
 
 const COURSE_BASE_INCLUDE = {
   _count: { select: { enrollments: true, feedbacks: true, modules: true } },
   competencies: { include: { competency: true } },
 } as const;
+
+const COURSE_DETAIL_INCLUDE = {
+  ...COURSE_BASE_INCLUDE,
+  primaryInstructor: { select: { id: true, fullName: true, avatarUrl: true } },
+  requiredCourse: { select: { id: true, title: true } },
+  instructors: { include: { user: { select: { id: true, fullName: true, avatarUrl: true } } } },
+  audienceGroups: true,
+  modules: {
+    orderBy: { seq: 'asc' as const },
+    include: {
+      lessons: { orderBy: { seq: 'asc' as const }, include: { activities: true, resources: true } },
+      competencies: { include: { competency: true } },
+    },
+  },
+  feedbacks: {
+    include: { user: { select: { id: true, fullName: true } } },
+    orderBy: { createdAt: 'desc' as const },
+    take: 10,
+  },
+  department: { select: { id: true, name: true, code: true } },
+} as const;
+
+function toDateOrNull(value?: string | null) {
+  return value ? new Date(value) : value === null ? null : undefined;
+}
 
 @Injectable()
 export class CoursesService {
@@ -89,19 +121,7 @@ export class CoursesService {
   async findOne(id: number) {
     const course = await this.prisma.read.course.findUnique({
       where: { id },
-      include: {
-        ...COURSE_BASE_INCLUDE,
-        modules: {
-          orderBy: { seq: 'asc' },
-          include: { lessons: { orderBy: { seq: 'asc' } } },
-        },
-        feedbacks: {
-          include: { user: { select: { id: true, fullName: true } } },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-        department: { select: { id: true, name: true, code: true } },
-      },
+      include: COURSE_DETAIL_INCLUDE,
     });
     if (!course) throw new NotFoundException('Curso não encontrado');
     return course;
@@ -131,9 +151,12 @@ export class CoursesService {
       data: {
         ...dto,
         tags: dto.tags ?? [],
+        targetAudience: dto.targetAudience ?? [],
         learningObjectives: dto.learningObjectives ?? [],
         status: dto.status ?? 'DRAFT',
         language: dto.language ?? 'pt',
+        startDate: toDateOrNull(dto.startDate),
+        endDate: toDateOrNull(dto.endDate),
       },
     });
 
@@ -146,7 +169,14 @@ export class CoursesService {
 
   async update(id: number, dto: UpdateCourseDto) {
     await this.findOne(id);
-    return this.prisma.course.update({ where: { id }, data: dto });
+    return this.prisma.course.update({
+      where: { id },
+      data: {
+        ...dto,
+        startDate: toDateOrNull(dto.startDate),
+        endDate: toDateOrNull(dto.endDate),
+      },
+    });
   }
 
   async publish(id: number) {
@@ -167,55 +197,138 @@ export class CoursesService {
 
   async duplicate(id: number) {
     const original = await this.findOne(id);
-    // Achado real: `department`/`competencies` (objectos de relação vindos do
-    // `include` de findOne()) não estavam excluídos deste destructure e
-    // vazavam para `...data` → `course.create({ data: {...data, ...} })`
-    // abaixo rebentava sempre em runtime real ("Unknown argument department/
-    // competencies") — mascarado pelo `as any` e nunca apanhado pelos testes
-    // unitários (mock de Prisma não valida argumentos). `competencies` nunca
-    // foi copiado para o curso duplicado (só modules/lessons o são, no loop
-    // abaixo), por isso fica excluído aqui tal como já era feito com
-    // modules/feedbacks/_count.
-    const {
-      id: _id,
-      createdAt,
-      updatedAt,
-      publishedAt,
-      modules,
-      feedbacks,
-      _count,
-      department: _department,
-      competencies: _competencies,
-      ...data
-    } = original;
-
+    // Whitelist explícito dos campos escalares do Course a copiar — nunca
+    // espalhar `original` directamente: `findOne()` inclui relações
+    // (department, competencies, primaryInstructor, requiredCourse,
+    // instructors, audienceGroups, modules, feedbacks, _count) que não são
+    // argumentos válidos de `course.create({ data })` e rebentam em runtime
+    // real (mascarado pelos testes unitários, que mockam o Prisma). Ver
+    // histórico desta função.
     const copy = await this.prisma.course.create({
       data: {
-        ...data,
-        title: `${data.title} (cópia)`,
+        title: `${original.title} (cópia)`,
+        shortDescription: original.shortDescription,
+        description: original.description,
+        category: original.category,
+        knowledgeArea: original.knowledgeArea,
+        tags: original.tags,
+        thumbnailUrl: original.thumbnailUrl,
+        introVideoUrl: original.introVideoUrl,
+        workloadHours: original.workloadHours,
+        estimatedDurationDays: original.estimatedDurationDays,
+        language: original.language,
+        level: original.level,
         status: 'DRAFT',
-        internalCode: data.internalCode ? `${data.internalCode}-COPY` : undefined,
+        visibility: original.visibility,
+        mandatory: original.mandatory,
+        internalCode: original.internalCode ? `${original.internalCode}-COPY` : undefined,
+        departmentId: original.departmentId,
+        unit: original.unit,
+        targetAudience: original.targetAudience,
+        learningObjectives: original.learningObjectives,
+        requiresApproval: original.requiresApproval,
+        passingScore: original.passingScore,
+        minCompletionPercent: original.minCompletionPercent,
+        certificateEnabled: original.certificateEnabled,
+        certificateCriteria: original.certificateCriteria,
+        certificateValidityDays: original.certificateValidityDays,
+        allowDownload: original.allowDownload,
+        primaryInstructorId: original.primaryInstructorId,
+        requiredCourseId: original.requiredCourseId,
       },
     });
 
-    for (const mod of modules) {
+    const moduleIdMap = new Map<number, number>();
+
+    for (const mod of original.modules) {
       const newMod = await this.prisma.courseModule.create({
-        data: { courseId: copy.id, title: mod.title, description: mod.description, seq: mod.seq },
+        data: {
+          courseId: copy.id,
+          code: mod.code,
+          title: mod.title,
+          description: mod.description,
+          thumbnailUrl: mod.thumbnailUrl,
+          learningObjectives: mod.learningObjectives,
+          seq: mod.seq,
+          status: 'DRAFT',
+          type: mod.type,
+          progressionType: mod.progressionType,
+          completionRule: mod.completionRule,
+          minCompletionPercent: mod.minCompletionPercent,
+          minQuizScore: mod.minQuizScore,
+          mandatory: mod.mandatory,
+          allowSkip: mod.allowSkip,
+          estimatedDurationMinutes: mod.estimatedDurationMinutes,
+          dripDays: mod.dripDays,
+        },
       });
+      moduleIdMap.set(mod.id, newMod.id);
+
+      for (const competency of mod.competencies ?? []) {
+        await this.prisma.moduleCompetency.create({
+          data: { moduleId: newMod.id, competencyId: competency.competencyId },
+        });
+      }
+
       for (const lesson of mod.lessons) {
-        await this.prisma.lesson.create({
+        const newLesson = await this.prisma.lesson.create({
           data: {
             moduleId: newMod.id,
+            code: lesson.code,
             title: lesson.title,
             description: lesson.description,
             type: lesson.type,
             contentUrl: lesson.contentUrl,
             textContent: lesson.textContent,
+            captionsUrl: lesson.captionsUrl,
+            transcript: lesson.transcript,
             seq: lesson.seq,
             durationMinutes: lesson.durationMinutes,
             isFree: lesson.isFree,
+            mandatory: lesson.mandatory,
             allowDownload: lesson.allowDownload,
+            minWatchSeconds: lesson.minWatchSeconds,
+            allowSkip: lesson.allowSkip,
+            autoComplete: lesson.autoComplete,
+            requiresActivity: lesson.requiresActivity,
+            requiresAssessment: lesson.requiresAssessment,
           },
+        });
+
+        for (const activity of lesson.activities ?? []) {
+          await this.prisma.lessonActivity.create({
+            data: {
+              lessonId: newLesson.id,
+              type: activity.type,
+              title: activity.title,
+              description: activity.description,
+              contentUrl: activity.contentUrl,
+              seq: activity.seq,
+            },
+          });
+        }
+
+        for (const resource of lesson.resources ?? []) {
+          await this.prisma.lessonResource.create({
+            data: {
+              lessonId: newLesson.id,
+              title: resource.title,
+              url: resource.url,
+              fileType: resource.fileType,
+              fileSizeKb: resource.fileSizeKb,
+            },
+          });
+        }
+      }
+    }
+
+    // Pré-requisitos entre módulos apontam para IDs do curso original —
+    // remapeia para os novos IDs da cópia (segunda passagem, já com o mapa completo).
+    for (const mod of original.modules) {
+      if (mod.requiredModuleId && moduleIdMap.has(mod.requiredModuleId)) {
+        await this.prisma.courseModule.update({
+          where: { id: moduleIdMap.get(mod.id)! },
+          data: { requiredModuleId: moduleIdMap.get(mod.requiredModuleId) },
         });
       }
     }
@@ -257,13 +370,18 @@ export class CoursesService {
 
   async createModule(courseId: number, dto: CreateCourseModuleDto) {
     await this.findOne(courseId);
-    return this.prisma.courseModule.create({ data: { courseId, ...dto } });
+    return this.prisma.courseModule.create({
+      data: { courseId, ...dto, availableFrom: toDateOrNull(dto.availableFrom) },
+    });
   }
 
   async updateModule(courseId: number, moduleId: number, dto: UpdateCourseModuleDto) {
     const mod = await this.prisma.courseModule.findFirst({ where: { id: moduleId, courseId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
-    return this.prisma.courseModule.update({ where: { id: moduleId }, data: dto });
+    return this.prisma.courseModule.update({
+      where: { id: moduleId },
+      data: { ...dto, availableFrom: toDateOrNull(dto.availableFrom) },
+    });
   }
 
   async reorderModules(courseId: number, orderedIds: number[]) {
@@ -286,13 +404,121 @@ export class CoursesService {
   async createLesson(moduleId: number, dto: CreateLessonDto) {
     const mod = await this.prisma.courseModule.findUnique({ where: { id: moduleId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
-    return this.prisma.lesson.create({ data: { moduleId, ...dto } });
+    return this.prisma.lesson.create({
+      data: {
+        moduleId,
+        ...dto,
+        availableFrom: toDateOrNull(dto.availableFrom),
+        availableUntil: toDateOrNull(dto.availableUntil),
+        liveDate: toDateOrNull(dto.liveDate),
+      },
+    });
   }
 
   async updateLesson(lessonId: number, dto: UpdateLessonDto) {
     const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
     if (!lesson) throw new NotFoundException('Aula não encontrada');
-    return this.prisma.lesson.update({ where: { id: lessonId }, data: dto });
+    return this.prisma.lesson.update({
+      where: { id: lessonId },
+      data: {
+        ...dto,
+        availableFrom: toDateOrNull(dto.availableFrom),
+        availableUntil: toDateOrNull(dto.availableUntil),
+        liveDate: toDateOrNull(dto.liveDate),
+      },
+    });
+  }
+
+  // ─── Actividades da lição ─────────────────────────────────────────────────
+
+  async createLessonActivity(lessonId: number, dto: CreateLessonActivityDto) {
+    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson) throw new NotFoundException('Aula não encontrada');
+    return this.prisma.lessonActivity.create({ data: { lessonId, ...dto } });
+  }
+
+  async updateLessonActivity(activityId: number, dto: UpdateLessonActivityDto) {
+    const activity = await this.prisma.lessonActivity.findUnique({ where: { id: activityId } });
+    if (!activity) throw new NotFoundException('Actividade não encontrada');
+    return this.prisma.lessonActivity.update({ where: { id: activityId }, data: dto });
+  }
+
+  async removeLessonActivity(activityId: number) {
+    const activity = await this.prisma.lessonActivity.findUnique({ where: { id: activityId } });
+    if (!activity) throw new NotFoundException('Actividade não encontrada');
+    return this.prisma.lessonActivity.delete({ where: { id: activityId } });
+  }
+
+  // ─── Recursos da lição ────────────────────────────────────────────────────
+
+  async createLessonResource(lessonId: number, dto: CreateLessonResourceDto) {
+    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson) throw new NotFoundException('Aula não encontrada');
+    return this.prisma.lessonResource.create({ data: { lessonId, ...dto } });
+  }
+
+  async updateLessonResource(resourceId: number, dto: UpdateLessonResourceDto) {
+    const resource = await this.prisma.lessonResource.findUnique({ where: { id: resourceId } });
+    if (!resource) throw new NotFoundException('Recurso não encontrado');
+    return this.prisma.lessonResource.update({ where: { id: resourceId }, data: dto });
+  }
+
+  async removeLessonResource(resourceId: number) {
+    const resource = await this.prisma.lessonResource.findUnique({ where: { id: resourceId } });
+    if (!resource) throw new NotFoundException('Recurso não encontrado');
+    return this.prisma.lessonResource.delete({ where: { id: resourceId } });
+  }
+
+  // ─── Instrutores ──────────────────────────────────────────────────────────
+
+  async addInstructor(courseId: number, userId: number) {
+    await this.findOne(courseId);
+    return this.prisma.courseInstructor.upsert({
+      where: { courseId_userId: { courseId, userId } },
+      create: { courseId, userId },
+      update: {},
+    });
+  }
+
+  async removeInstructor(courseId: number, userId: number) {
+    return this.prisma.courseInstructor.deleteMany({ where: { courseId, userId } });
+  }
+
+  // ─── Grupos de audiência ──────────────────────────────────────────────────
+
+  async createAudienceGroup(courseId: number, dto: CreateCourseAudienceGroupDto) {
+    await this.findOne(courseId);
+    return this.prisma.courseAudienceGroup.create({
+      data: { courseId, name: dto.name, userIds: dto.userIds ?? [] },
+    });
+  }
+
+  async updateAudienceGroup(groupId: number, dto: UpdateCourseAudienceGroupDto) {
+    const group = await this.prisma.courseAudienceGroup.findUnique({ where: { id: groupId } });
+    if (!group) throw new NotFoundException('Grupo não encontrado');
+    return this.prisma.courseAudienceGroup.update({ where: { id: groupId }, data: dto });
+  }
+
+  async removeAudienceGroup(groupId: number) {
+    const group = await this.prisma.courseAudienceGroup.findUnique({ where: { id: groupId } });
+    if (!group) throw new NotFoundException('Grupo não encontrado');
+    return this.prisma.courseAudienceGroup.delete({ where: { id: groupId } });
+  }
+
+  // ─── Competências do módulo ──────────────────────────────────────────────
+
+  async addModuleCompetency(moduleId: number, competencyId: number) {
+    const mod = await this.prisma.courseModule.findUnique({ where: { id: moduleId } });
+    if (!mod) throw new NotFoundException('Módulo não encontrado');
+    return this.prisma.moduleCompetency.upsert({
+      where: { moduleId_competencyId: { moduleId, competencyId } },
+      create: { moduleId, competencyId },
+      update: {},
+    });
+  }
+
+  async removeModuleCompetency(moduleId: number, competencyId: number) {
+    return this.prisma.moduleCompetency.deleteMany({ where: { moduleId, competencyId } });
   }
 
   async reorderLessons(moduleId: number, orderedIds: number[]) {
@@ -322,28 +548,99 @@ export class CoursesService {
       throw new ConflictException('Utilizador já matriculado neste curso');
     }
 
+    const pending = course.requiresApproval === true;
+
     const enrollment = await this.prisma.enrollment.create({
       data: {
         courseId,
         userId,
-        status: 'NOT_STARTED',
+        status: pending ? 'PENDING_APPROVAL' : 'NOT_STARTED',
         mandatory: dto.mandatory ?? course.mandatory ?? false,
         deadline: dto.deadline ? new Date(dto.deadline) : null,
       },
     });
 
-    await this.prisma.courseAnalytics.updateMany({
-      where: { courseId },
-      data: { totalEnrollments: { increment: 1 } },
-    });
+    if (!pending) {
+      await this.prisma.courseAnalytics.updateMany({
+        where: { courseId },
+        data: { totalEnrollments: { increment: 1 } },
+      });
+    }
 
-    await createNotificationSafe(this.prisma, this.logger, {
-      userId,
-      type: 'COURSE_ENROLLED',
-      message: `Está matriculado no curso "${course.title}"`,
-    });
+    if (pending) {
+      // Curso exige aprovação — notifica o instrutor principal (ou, na
+      // ausência, um utilizador RH) em vez do próprio requerente. Mesmo
+      // padrão de notificação single-target usado noutros módulos (ver
+      // leave-management.service.ts / work-declarations.service.ts).
+      const approver =
+        course.primaryInstructorId ??
+        (await this.prisma.read.user.findFirst({ where: { role: { code: 'RH' } } }))?.id;
+      if (approver) {
+        await createNotificationSafe(this.prisma, this.logger, {
+          userId: approver,
+          type: 'COURSE_ENROLLMENT_REQUESTED',
+          message: `Novo pedido de inscrição em "${course.title}" aguarda aprovação`,
+        });
+      }
+    } else {
+      await createNotificationSafe(this.prisma, this.logger, {
+        userId,
+        type: 'COURSE_ENROLLED',
+        message: `Está matriculado no curso "${course.title}"`,
+      });
+    }
 
     return enrollment;
+  }
+
+  async listPendingEnrollments(courseId: number) {
+    return this.prisma.read.enrollment.findMany({
+      where: { courseId, status: 'PENDING_APPROVAL' },
+      include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
+      orderBy: { enrolledAt: 'asc' },
+    });
+  }
+
+  async approveEnrollment(enrollmentId: number) {
+    const enrollment = await this.prisma.enrollment.findUnique({ where: { id: enrollmentId } });
+    if (!enrollment) throw new NotFoundException('Matrícula não encontrada');
+    if (enrollment.status !== 'PENDING_APPROVAL') {
+      throw new BadRequestException('Esta matrícula não está pendente de aprovação');
+    }
+    const updated = await this.prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: { status: 'NOT_STARTED' },
+    });
+    await this.prisma.courseAnalytics.updateMany({
+      where: { courseId: enrollment.courseId },
+      data: { totalEnrollments: { increment: 1 } },
+    });
+    const course = await this.prisma.read.course.findUnique({ where: { id: enrollment.courseId } });
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: enrollment.userId,
+      type: 'COURSE_ENROLLED',
+      message: `A sua inscrição em "${course?.title ?? 'curso'}" foi aprovada`,
+    });
+    return updated;
+  }
+
+  async rejectEnrollment(enrollmentId: number, reason?: string) {
+    const enrollment = await this.prisma.enrollment.findUnique({ where: { id: enrollmentId } });
+    if (!enrollment) throw new NotFoundException('Matrícula não encontrada');
+    if (enrollment.status !== 'PENDING_APPROVAL') {
+      throw new BadRequestException('Esta matrícula não está pendente de aprovação');
+    }
+    const updated = await this.prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: { status: 'CANCELLED', cancelReason: reason ?? 'Pedido de inscrição rejeitado' },
+    });
+    const course = await this.prisma.read.course.findUnique({ where: { id: enrollment.courseId } });
+    await createNotificationSafe(this.prisma, this.logger, {
+      userId: enrollment.userId,
+      type: 'COURSE_ENROLLMENT_REJECTED',
+      message: `A sua inscrição em "${course?.title ?? 'curso'}" foi rejeitada`,
+    });
+    return updated;
   }
 
   async assignCourse(courseId: number, dto: AssignCourseDto, assignedById: number) {
@@ -510,6 +807,10 @@ export class CoursesService {
         passingScore: dto.passingScore ?? 70,
         maxAttempts: dto.maxAttempts ?? 0,
         timeLimitMinutes: dto.timeLimitMinutes,
+        shuffleQuestions: dto.shuffleQuestions ?? false,
+        shuffleAnswers: dto.shuffleAnswers ?? false,
+        showCorrectAnswers: dto.showCorrectAnswers ?? true,
+        autoFeedback: dto.autoFeedback ?? true,
       },
     });
 
@@ -530,6 +831,13 @@ export class CoursesService {
       where: { id: quiz.id },
       include: { questions: { orderBy: { seq: 'asc' } } },
     });
+  }
+
+  async updateQuiz(quizId: number, dto: UpdateQuizDto) {
+    const quiz = await this.prisma.quiz.findUnique({ where: { id: quizId } });
+    if (!quiz) throw new NotFoundException('Quiz não encontrado');
+    const { questions: _questions, ...settings } = dto;
+    return this.prisma.quiz.update({ where: { id: quizId }, data: settings });
   }
 
   async submitQuiz(quizId: number, userId: number, dto: SubmitQuizDto) {
@@ -594,7 +902,20 @@ export class CoursesService {
       },
     });
 
-    return { attempt, score, passed, passingScore: quiz.passingScore, results };
+    // showCorrectAnswers=false: esconde a resposta correcta na resposta ao
+    // cliente (fica guardada em quizAttempt.results para auditoria/correcção manual).
+    const visibleResults = quiz.showCorrectAnswers
+      ? results
+      : results.map(({ correctAnswer: _correctAnswer, ...r }) => r);
+
+    return {
+      attempt,
+      score,
+      passed,
+      passingScore: quiz.passingScore,
+      results: visibleResults,
+      feedback: quiz.autoFeedback ? (passed ? 'Aprovado' : 'Reprovado') : undefined,
+    };
   }
 
   // ─── Feedback ─────────────────────────────────────────────────────────────
