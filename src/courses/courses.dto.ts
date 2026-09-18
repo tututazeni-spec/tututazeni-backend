@@ -28,6 +28,7 @@ import {
   QuizQuestionType,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
+import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 
 export {
   CourseLevel,
@@ -692,7 +693,7 @@ export class CreateLessonResourceDto {
   title!: string;
 
   @ApiProperty()
-  @IsString()
+  @IsAllowedFileUrl()
   url!: string;
 
   @ApiPropertyOptional()
