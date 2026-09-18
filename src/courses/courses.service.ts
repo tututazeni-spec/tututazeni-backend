@@ -51,6 +51,8 @@ const COURSE_DETAIL_INCLUDE = {
     include: {
       lessons: { orderBy: { seq: 'asc' as const }, include: { activities: true, resources: true } },
       competencies: { include: { competency: true } },
+      materials: true,
+      assessments: { select: { id: true, title: true, status: true } },
     },
   },
   feedbacks: {
@@ -422,17 +424,33 @@ export class CoursesService {
 
   async createModule(courseId: number, dto: CreateCourseModuleDto) {
     await this.findOne(courseId);
-    return this.prisma.courseModule.create({
-      data: { courseId, ...dto, availableFrom: toDateOrNull(dto.availableFrom) },
+    const { competencyIds, ...data } = dto;
+    const mod = await this.prisma.courseModule.create({
+      data: { courseId, ...data, availableFrom: toDateOrNull(dto.availableFrom) },
     });
+    await this.syncModuleCompetencies(mod.id, competencyIds);
+    return mod;
   }
 
   async updateModule(courseId: number, moduleId: number, dto: UpdateCourseModuleDto) {
     const mod = await this.prisma.courseModule.findFirst({ where: { id: moduleId, courseId } });
     if (!mod) throw new NotFoundException('Módulo não encontrado');
-    return this.prisma.courseModule.update({
+    const { competencyIds, ...data } = dto;
+    const updated = await this.prisma.courseModule.update({
       where: { id: moduleId },
-      data: { ...dto, availableFrom: toDateOrNull(dto.availableFrom) },
+      data: { ...data, availableFrom: toDateOrNull(dto.availableFrom) },
+    });
+    await this.syncModuleCompetencies(moduleId, competencyIds);
+    return updated;
+  }
+
+  private async syncModuleCompetencies(moduleId: number, competencyIds?: number[]) {
+    if (competencyIds === undefined) return;
+    await this.prisma.moduleCompetency.deleteMany({ where: { moduleId } });
+    if (competencyIds.length === 0) return;
+    await this.prisma.moduleCompetency.createMany({
+      data: competencyIds.map(competencyId => ({ moduleId, competencyId })),
+      skipDuplicates: true,
     });
   }
 
