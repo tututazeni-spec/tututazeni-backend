@@ -114,23 +114,28 @@ describe('SuccessionService', () => {
       // test/integration/succession/succession.integration-spec.ts sobre a
       // perda não-determinística do 1º job de auditoria nesse ambiente).
       expect(mockAuditService.log).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 1, action: 'CREATE', entity: 'CriticalPosition', entityId: baseCritical.id }),
+        expect.objectContaining({
+          userId: 1,
+          action: 'CREATE',
+          entity: 'CriticalPosition',
+          entityId: baseCritical.id,
+        }),
       );
     });
 
     it('deve lançar NotFoundException se posição não encontrada', async () => {
       mockPrisma.position.findUnique.mockResolvedValue(null);
-      await expect(
-        service.createCriticalPosition({ positionId: 99 } as any, 1),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.createCriticalPosition({ positionId: 99 } as any, 1)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('deve lançar ConflictException se já é crítica', async () => {
       mockPrisma.position.findUnique.mockResolvedValue(basePosition);
       mockPrisma.criticalPosition.findUnique.mockResolvedValue(baseCritical);
-      await expect(
-        service.createCriticalPosition({ positionId: 1 } as any, 1),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.createCriticalPosition({ positionId: 1 } as any, 1)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -170,7 +175,12 @@ describe('SuccessionService', () => {
       const result = await service.create({ criticalPositionId: 1, candidateId: 2 } as any, 1);
       expect(result).toBeDefined();
       expect(mockAuditService.log).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 1, action: 'CREATE', entity: 'SuccessionPlan', entityId: basePlan.id }),
+        expect.objectContaining({
+          userId: 1,
+          action: 'CREATE',
+          entity: 'SuccessionPlan',
+          entityId: basePlan.id,
+        }),
       );
     });
 

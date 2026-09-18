@@ -550,7 +550,11 @@ export class SuccessionService {
       include: {
         userCompetencies: true,
         performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
-        nineBoxPlacements: { orderBy: { updatedAt: 'desc' }, take: 1, select: { potentialAxis: true } },
+        nineBoxPlacements: {
+          orderBy: { updatedAt: 'desc' },
+          take: 1,
+          select: { potentialAxis: true },
+        },
       },
     });
 
@@ -954,7 +958,11 @@ export class SuccessionService {
         include: {
           userCompetencies: { include: { competency: true } },
           performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
-          nineBoxPlacements: { orderBy: { updatedAt: 'desc' }, take: 1, select: { potentialAxis: true } },
+          nineBoxPlacements: {
+            orderBy: { updatedAt: 'desc' },
+            take: 1,
+            select: { potentialAxis: true },
+          },
         },
       }),
       this.prisma.read.user.findUnique({
@@ -962,7 +970,11 @@ export class SuccessionService {
         include: {
           userCompetencies: { include: { competency: true } },
           performanceReviews: { orderBy: { createdAt: 'desc' }, take: 1 },
-          nineBoxPlacements: { orderBy: { updatedAt: 'desc' }, take: 1, select: { potentialAxis: true } },
+          nineBoxPlacements: {
+            orderBy: { updatedAt: 'desc' },
+            take: 1,
+            select: { potentialAxis: true },
+          },
         },
       }),
       this.prisma.read.criticalPosition.findUnique({
