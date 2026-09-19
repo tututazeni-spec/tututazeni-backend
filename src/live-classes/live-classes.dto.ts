@@ -198,3 +198,45 @@ export class LiveClassCalendarFilterDto {
   @ApiProperty() @IsDateString() from!: string;
   @ApiProperty() @IsDateString() to!: string;
 }
+
+// ─── Participantes / Presenças (secções 6 e 10) ────────────────────────────
+
+export class RegisterAttendanceDto {
+  @ApiProperty() @IsInt() userId!: number;
+  @ApiPropertyOptional({ description: 'Sessão de uma aula recorrente' })
+  @IsOptional()
+  @IsInt()
+  sessionId?: number;
+  @ApiPropertyOptional({ enum: LiveAttendanceStatus })
+  @IsOptional()
+  @IsEnum(LiveAttendanceStatus)
+  status?: LiveAttendanceStatus;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() joinedAt?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() leftAt?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() justification?: string;
+}
+
+export class UpdateAttendanceDto {
+  @ApiPropertyOptional({ enum: LiveAttendanceStatus })
+  @IsOptional()
+  @IsEnum(LiveAttendanceStatus)
+  status?: LiveAttendanceStatus;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() joinedAt?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() leftAt?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() justification?: string;
+}
+
+export class ParticipantsFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) liveClassId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) sessionId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) courseId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
+  @ApiPropertyOptional({ enum: LiveAttendanceStatus })
+  @IsOptional()
+  @IsEnum(LiveAttendanceStatus)
+  status?: LiveAttendanceStatus;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dateFrom?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dateTo?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
+}

@@ -22,6 +22,9 @@ import {
   CancelLiveClassDto,
   CreateLiveClassSessionDto,
   UpdateLiveClassSessionDto,
+  RegisterAttendanceDto,
+  UpdateAttendanceDto,
+  ParticipantsFilterDto,
 } from './live-classes.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -63,6 +66,30 @@ export class LiveClassesController {
   @ApiOperation({ summary: 'Todas as sessões de todas as aulas (secção 5)' })
   listAllSessions(@Query() filters: LiveClassFilterDto) {
     return this.svc.listAllSessions(filters);
+  }
+
+  @Get('participants')
+  @ApiOperation({ summary: 'Participantes de todas as aulas (secção 6)' })
+  listParticipants(@Query() filters: ParticipantsFilterDto) {
+    return this.svc.listParticipants(filters);
+  }
+
+  @Get('instructors')
+  @ApiOperation({ summary: 'Formadores com aulas ao vivo atribuídas (secção 7)' })
+  listInstructors() {
+    return this.svc.listInstructors();
+  }
+
+  @Get('virtual-rooms')
+  @ApiOperation({ summary: 'Salas virtuais (Zoom/link de reunião) das aulas (secção 8)' })
+  listVirtualRooms(@Query() filters: LiveClassFilterDto) {
+    return this.svc.listVirtualRooms(filters);
+  }
+
+  @Get('recordings')
+  @ApiOperation({ summary: 'Gravações de todas as aulas e sessões (secção 9)' })
+  listRecordings(@Query() filters: LiveClassFilterDto) {
+    return this.svc.listRecordings(filters);
   }
 
   @Get(':id')
@@ -171,6 +198,47 @@ export class LiveClassesController {
     return this.svc.createSession(id, dto);
   }
 
+  @Post(':id/attendance')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
+  @ApiOperation({ summary: 'Adicionar participante / registar presença manualmente (secção 6)' })
+  registerAttendance(@Param('id', ParseIntPipe) id: number, @Body() dto: RegisterAttendanceDto) {
+    return this.svc.registerAttendance(id, dto);
+  }
+
+  @Post(':id/recording/publish')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Publicar gravação da aula (secção 9)' })
+  publishRecording(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.publishRecording(id, true);
+  }
+
+  @Post(':id/recording/unpublish')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Despublicar gravação da aula' })
+  unpublishRecording(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.publishRecording(id, false);
+  }
+
+  @Post(':id/sessions/:sessionId/recording/publish')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Publicar gravação da sessão' })
+  publishSessionRecording(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+  ) {
+    return this.svc.publishSessionRecording(id, sessionId, true);
+  }
+
+  @Post(':id/sessions/:sessionId/recording/unpublish')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Despublicar gravação da sessão' })
+  unpublishSessionRecording(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+  ) {
+    return this.svc.publishSessionRecording(id, sessionId, false);
+  }
+
   @Put(':id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atualizar aula' })
@@ -189,6 +257,17 @@ export class LiveClassesController {
     return this.svc.updateSession(id, sessionId, dto);
   }
 
+  @Put(':id/attendance/:attendanceId')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
+  @ApiOperation({ summary: 'Registar presença / justificar ausência (secções 6/10)' })
+  updateAttendance(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('attendanceId', ParseIntPipe) attendanceId: number,
+    @Body() dto: UpdateAttendanceDto,
+  ) {
+    return this.svc.updateAttendance(id, attendanceId, dto);
+  }
+
   @Delete(':id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover aula' })
@@ -204,5 +283,32 @@ export class LiveClassesController {
     @Param('sessionId', ParseIntPipe) sessionId: number,
   ) {
     return this.svc.deleteSession(id, sessionId);
+  }
+
+  @Delete(':id/attendance/:attendanceId')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
+  @ApiOperation({ summary: 'Remover participante (secção 6)' })
+  removeAttendance(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('attendanceId', ParseIntPipe) attendanceId: number,
+  ) {
+    return this.svc.removeAttendance(id, attendanceId);
+  }
+
+  @Delete(':id/recording')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Eliminar gravação da aula' })
+  deleteRecording(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.deleteRecording(id);
+  }
+
+  @Delete(':id/sessions/:sessionId/recording')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Eliminar gravação da sessão' })
+  deleteSessionRecording(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+  ) {
+    return this.svc.deleteSessionRecording(id, sessionId);
   }
 }

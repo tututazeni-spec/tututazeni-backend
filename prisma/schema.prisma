@@ -6256,6 +6256,9 @@ model LiveClass {
   recordSession          Boolean   @default(true)
   recordingExpiresAt     DateTime?
   allowRecordingDownload Boolean   @default(false)
+  // Secção 9 — Gravações: null = não publicada (só visível a quem gere a
+  // aula), preenchida = publicada/disponível aos participantes.
+  recordingPublishedAt   DateTime?
 
   // Etapa 8 — Avaliação (liga-se ao PostClassEvaluation já existente)
   evaluationRequired Boolean @default(false)
@@ -6295,18 +6298,19 @@ model LiveClass {
 // "sessão", exactamente como antes desta extensão (zero impacto em dados
 // existentes). Não tem sala Jitsi/chat próprios — ver nota no topo.
 model LiveClassSession {
-  id              Int             @id @default(autoincrement())
-  liveClassId     Int
-  seq             Int
-  sessionDate     DateTime
-  durationMinutes Int
-  instructorId    Int?
-  location        String?
-  meetingUrl      String?
-  status          LiveClassStatus @default(AGENDADA)
-  notes           String?
-  recordingUrl    String?
-  createdAt       DateTime        @default(now())
+  id                   Int             @id @default(autoincrement())
+  liveClassId          Int
+  seq                  Int
+  sessionDate          DateTime
+  durationMinutes      Int
+  instructorId         Int?
+  location             String?
+  meetingUrl           String?
+  status               LiveClassStatus @default(AGENDADA)
+  notes                String?
+  recordingUrl         String?
+  recordingPublishedAt DateTime?
+  createdAt            DateTime        @default(now())
 
   liveClass   LiveClass                  @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
   instructor  TrainingInstructorProfile? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
@@ -6321,7 +6325,11 @@ model LiveAttendance {
   id                Int                   @id @default(autoincrement())
   liveClassId       Int
   userId            Int
-  joinedAt          DateTime
+  // Nullable (secção 6 — "Inscrição" vs "Presença"): a linha pode existir
+  // como mera inscrição/registo manual (RH/ADMIN, "Adicionar participante")
+  // antes de o utilizador chegar a entrar na sala — nesse caso joinedAt
+  // fica null até ao join real ou ao registo manual de presença.
+  joinedAt          DateTime?
   leftAt            DateTime?
   // Presente só quando sessionId aponta para uma LiveClassSession de uma
   // aula recorrente; aulas de ocorrência única (a maioria) mantêm-se null
@@ -6334,7 +6342,14 @@ model LiveAttendance {
   user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   session           LiveClassSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
-  @@unique([liveClassId, userId])
+  // Alargado de [liveClassId, userId] para incluir sessionId (secções 6/10
+  // — coluna "Sessão"): uma aula recorrente tem uma LiveClassSession por
+  // ocorrência, e cada uma precisa da sua própria linha de presença por
+  // participante. sessionId=null continua a ser "a própria aula" (aulas
+  // ONCE) — nulls não colidem em Postgres, por isso o serviço faz sempre
+  // find-then-create/update em vez de confiar só neste índice para o caso
+  // null (ver live-classes.service.ts).
+  @@unique([liveClassId, userId, sessionId])
   @@index([sessionId])
 }
 

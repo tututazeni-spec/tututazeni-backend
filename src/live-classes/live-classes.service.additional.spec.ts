@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { LiveClassesService } from './live-classes.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
+
+const mockCourseCompletion = { markLessonComplete: jest.fn() };
 
 const mockPrisma: any = {
   liveClass: {
@@ -24,9 +27,11 @@ const mockPrisma: any = {
   },
   liveAttendance: {
     findUnique: jest.fn().mockResolvedValue(null),
+    findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn(),
     update: jest.fn(),
     findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
     aggregate: jest.fn().mockResolvedValue({ _avg: { attendancePercent: 0 }, _count: { _all: 0 } }),
   },
   trainingInstructorProfile: {
@@ -65,7 +70,11 @@ describe('LiveClassesService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [LiveClassesService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        LiveClassesService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CourseCompletionService, useValue: mockCourseCompletion },
+      ],
     }).compile();
     service = module.get<LiveClassesService>(LiveClassesService);
   });
@@ -148,14 +157,14 @@ describe('LiveClassesService (additional)', () => {
 
   describe('joinClass', () => {
     it('deve criar nova presença quando utilizador entra', async () => {
-      mockPrisma.liveAttendance.findUnique.mockResolvedValue(null);
+      mockPrisma.liveAttendance.findFirst.mockResolvedValue(null);
       mockPrisma.liveAttendance.create.mockResolvedValue({ id: 1, liveClassId: 1, userId: 2 });
       const result = await service.joinClass(1, 2);
       expect(result).toBeDefined();
     });
 
     it('deve actualizar presença existente quando utilizador re-entra', async () => {
-      mockPrisma.liveAttendance.findUnique.mockResolvedValue({ id: 1, liveClassId: 1, userId: 2 });
+      mockPrisma.liveAttendance.findFirst.mockResolvedValue({ id: 1, liveClassId: 1, userId: 2 });
       mockPrisma.liveAttendance.update.mockResolvedValue({ id: 1, joinedAt: new Date() });
       const result = await service.joinClass(1, 2);
       expect(result).toBeDefined();
@@ -166,7 +175,7 @@ describe('LiveClassesService (additional)', () => {
 
   describe('leaveClass', () => {
     it('deve registar saída da aula', async () => {
-      mockPrisma.liveAttendance.findUnique.mockResolvedValue({ id: 1 });
+      mockPrisma.liveAttendance.findFirst.mockResolvedValue({ id: 1 });
       mockPrisma.liveAttendance.update.mockResolvedValue({ id: 1, leftAt: new Date() });
       const result = await service.leaveClass(1, 2);
       expect(result).toBeDefined();

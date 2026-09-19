@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { LiveClassesService } from './live-classes.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
+
+const mockCourseCompletion = { markLessonComplete: jest.fn() };
 
 const mockPrisma = {
   liveClass: {
@@ -42,7 +45,11 @@ describe('LiveClassesService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [LiveClassesService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        LiveClassesService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: CourseCompletionService, useValue: mockCourseCompletion },
+      ],
     }).compile();
     service = module.get<LiveClassesService>(LiveClassesService);
   });

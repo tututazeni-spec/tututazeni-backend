@@ -73,7 +73,9 @@ describe('Live Classes Integration', () => {
       await prisma.liveAttendance
         .deleteMany({ where: { liveClassId: { in: extraLiveClassIds } } })
         .catch(() => undefined);
-      await prisma.liveClass.deleteMany({ where: { id: { in: extraLiveClassIds } } }).catch(() => undefined);
+      await prisma.liveClass
+        .deleteMany({ where: { id: { in: extraLiveClassIds } } })
+        .catch(() => undefined);
     }
     if (liveClassId) {
       await prisma.postClassResponse
@@ -366,7 +368,10 @@ describe('Live Classes Integration', () => {
       const res = await request(app.getHttpServer())
         .post(`/live-classes/${recurringClassId}/sessions`)
         .set('Authorization', `Bearer ${rhToken}`)
-        .send({ sessionDate: new Date(Date.now() + 30 * 24 * 3600000).toISOString(), durationMinutes: 45 })
+        .send({
+          sessionDate: new Date(Date.now() + 30 * 24 * 3600000).toISOString(),
+          durationMinutes: 45,
+        })
         .expect(201);
       sessionId = res.body.id;
       expect(res.body.seq).toBeGreaterThanOrEqual(4);
@@ -432,6 +437,177 @@ describe('Live Classes Integration', () => {
         .expect(200);
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body.some((e: any) => e.liveClassId === liveClassId)).toBe(true);
+    });
+  });
+
+  describe('Participantes/Formadores/Salas/Gravações/Presenças (secções 6-10)', () => {
+    let sectionClassId: number;
+    let sectionSessionId: number;
+    let attendanceId: number;
+    let instructorProfileId: number;
+
+    beforeAll(async () => {
+      const instructor = await prisma.trainingInstructorProfile.create({
+        data: { type: 'INTERNAL', name: 'Formador Integração 6-10', status: 'ACTIVE' },
+      });
+      instructorProfileId = instructor.id;
+
+      const res = await request(app.getHttpServer())
+        .post('/live-classes')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({
+          courseId,
+          topic: 'Aula secções 6-10',
+          scheduledAt: new Date(Date.now() + 3600000).toISOString(),
+          duration: 60,
+          instructorId: instructorProfileId,
+          modality: 'ONLINE',
+          zoomMeetingId: 'zoom-int-test-123',
+          recurrence: 'WEEKLY',
+          recurrenceEndDate: new Date(Date.now() + 14 * 24 * 3600000).toISOString(),
+        })
+        .expect(201);
+      sectionClassId = res.body.id;
+      extraLiveClassIds.push(sectionClassId);
+
+      const sessions = await request(app.getHttpServer())
+        .get(`/live-classes/${sectionClassId}/sessions`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      sectionSessionId = sessions.body[0].id;
+    });
+
+    afterAll(async () => {
+      await prisma.trainingInstructorProfile
+        .delete({ where: { id: instructorProfileId } })
+        .catch(() => undefined);
+    });
+
+    it('RH adiciona um participante manualmente (secção 6 — "Adicionar")', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/live-classes/${sectionClassId}/attendance`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ userId: employeeId, sessionId: sectionSessionId })
+        .expect(201);
+      attendanceId = res.body.id;
+      expect(res.body.sessionId).toBe(sectionSessionId);
+    });
+
+    it('colaborador não pode adicionar participantes → 403', async () => {
+      await request(app.getHttpServer())
+        .post(`/live-classes/${sectionClassId}/attendance`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ userId: employeeId })
+        .expect(403);
+    });
+
+    it('GET /live-classes/participants — inclui o participante com dados de departamento/curso/sessão', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/live-classes/participants')
+        .query({ liveClassId: sectionClassId })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      const row = res.body.data.find((p: any) => p.id === attendanceId);
+      expect(row).toBeDefined();
+      expect(row.session.id).toBe(sectionSessionId);
+      expect(row.liveClass.course).toBeDefined();
+      expect(row.computedStatus).toBe('AUSENTE');
+    });
+
+    it('RH regista presença (entrada/saída) → estado calculado a partir da duração', async () => {
+      const joinedAt = new Date();
+      const leftAt = new Date(joinedAt.getTime() + 60 * 60000);
+      const res = await request(app.getHttpServer())
+        .put(`/live-classes/${sectionClassId}/attendance/${attendanceId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ joinedAt: joinedAt.toISOString(), leftAt: leftAt.toISOString() })
+        .expect(200);
+      expect(res.body.computedStatus).toBe('PRESENTE');
+      expect(res.body.attendancePercent).toBe(100);
+    });
+
+    it('RH justifica uma ausência → estado JUSTIFICADO com motivo', async () => {
+      const res = await request(app.getHttpServer())
+        .put(`/live-classes/${sectionClassId}/attendance/${attendanceId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ status: 'JUSTIFICADO', justification: 'Falha de rede' })
+        .expect(200);
+      expect(res.body.computedStatus).toBe('JUSTIFICADO');
+      expect(res.body.justification).toBe('Falha de rede');
+    });
+
+    it('GET /live-classes/instructors — inclui o formador com estatísticas da aula', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/live-classes/instructors')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      const row = res.body.find((i: any) => i.id === instructorProfileId);
+      expect(row).toBeDefined();
+      expect(row.liveClassStats.scheduled).toBeGreaterThanOrEqual(1);
+    });
+
+    it('GET /live-classes/virtual-rooms — inclui a sala Zoom da aula', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/live-classes/virtual-rooms')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      const row = res.body.data.find((r: any) => r.liveClassId === sectionClassId);
+      expect(row).toBeDefined();
+      expect(row.platform).toBe('Zoom');
+      expect(row.meetingId).toBe('zoom-int-test-123');
+    });
+
+    it('gravação: publicar → aparece em GET /recordings publicada; despublicar → deixa de o estar', async () => {
+      await request(app.getHttpServer())
+        .put(`/live-classes/${sectionClassId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ recordingUrl: 'https://example.com/rec.mp4' })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post(`/live-classes/${sectionClassId}/recording/publish`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(201);
+
+      let res = await request(app.getHttpServer())
+        .get('/live-classes/recordings')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      let row = res.body.data.find((r: any) => r.liveClassId === sectionClassId);
+      expect(row.publishedAt).toBeTruthy();
+
+      await request(app.getHttpServer())
+        .post(`/live-classes/${sectionClassId}/recording/unpublish`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(201);
+
+      res = await request(app.getHttpServer())
+        .get('/live-classes/recordings')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      row = res.body.data.find((r: any) => r.liveClassId === sectionClassId);
+      expect(row.publishedAt).toBeFalsy();
+    });
+
+    it('colaborador não pode publicar gravações → 403', async () => {
+      await request(app.getHttpServer())
+        .post(`/live-classes/${sectionClassId}/recording/publish`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+
+    it('RH remove o participante (secção 6 — "Remover")', async () => {
+      await request(app.getHttpServer())
+        .delete(`/live-classes/${sectionClassId}/attendance/${attendanceId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .get('/live-classes/participants')
+        .query({ liveClassId: sectionClassId })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.data.find((p: any) => p.id === attendanceId)).toBeUndefined();
     });
   });
 
