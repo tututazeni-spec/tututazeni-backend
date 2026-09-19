@@ -98,7 +98,9 @@ export class LiveClassesController {
   }
 
   @Get('materials')
-  @ApiOperation({ summary: 'Materiais de todas as aulas e sessões, ligados à Biblioteca (secção 11)' })
+  @ApiOperation({
+    summary: 'Materiais de todas as aulas e sessões, ligados à Biblioteca (secção 11)',
+  })
   listMaterials(@Query() filters: MaterialsFilterDto) {
     return this.svc.listMaterials(filters);
   }
@@ -138,7 +140,10 @@ export class LiveClassesController {
 
   @Get('settings')
   @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Configurações agregadas — tipos, estados, modalidades, regras, permissões (secção 14)' })
+  @ApiOperation({
+    summary:
+      'Configurações agregadas — tipos, estados, modalidades, regras, permissões (secção 14)',
+  })
   settings() {
     return this.svc.getSettings();
   }

@@ -154,7 +154,10 @@ export class CreateLiveClassSessionDto {
   @ApiPropertyOptional() @IsOptional() @IsString() location?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() meetingUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
-  @ApiPropertyOptional({ type: [Number], description: 'IDs de documentos da Biblioteca (secção 11)' })
+  @ApiPropertyOptional({
+    type: [Number],
+    description: 'IDs de documentos da Biblioteca (secção 11)',
+  })
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
@@ -174,7 +177,11 @@ export class LiveChatMessageDto {
 
 export class PostClassResponseDto {
   @ApiProperty() @IsInt() evaluationId!: number;
-  @ApiProperty({ description: 'Avaliação da sessão (1–5)' }) @IsInt() @Min(1) @Max(5) rating!: number;
+  @ApiProperty({ description: 'Avaliação da sessão (1–5)' })
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  rating!: number;
   // Secção 12 — rubrica detalhada, opcional (1–5 cada)
   @ApiPropertyOptional({ description: 'Avaliação do formador (1–5)' })
   @IsOptional()
