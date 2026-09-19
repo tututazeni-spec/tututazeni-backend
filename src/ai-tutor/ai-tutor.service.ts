@@ -19,11 +19,35 @@ import {
   ExecuteAgentActionDto,
   GenerateContentDto,
   ExerciseFeedbackDto,
+  UpdateAiTutorSettingsDto,
   TutorPersonality,
   AgentAction,
 } from './ai-tutor.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
+
+// Secção 8 (Configurações) — singleton em AiTutorSettings (id fixo = 1).
+export interface AiTutorSettingsData {
+  allowOutsideKnowledge: boolean;
+  sourceOnlyMode: boolean;
+  showSources: boolean;
+  temperature: number;
+  defaultLanguage: string;
+  dailyMessageLimit: number | null;
+  historyRetentionDays: number | null;
+  customSystemPromptAddendum: string | null;
+}
+
+const DEFAULT_AI_TUTOR_SETTINGS: AiTutorSettingsData = {
+  allowOutsideKnowledge: true,
+  sourceOnlyMode: false,
+  showSources: true,
+  temperature: 0.7,
+  defaultLanguage: 'pt',
+  dailyMessageLimit: null,
+  historyRetentionDays: null,
+  customSystemPromptAddendum: null,
+};
 
 type StartSessionUser = Prisma.UserGetPayload<{
   include: {
@@ -86,6 +110,33 @@ export class AiTutorService {
       }
     }
 
+    // 2b. Contexto da lição actual (secção 10 — tutor embutido num curso/lição).
+    // dto.lessonId já existia no DTO mas nunca era lido aqui — sem isto, o
+    // tutor só via a lista de títulos das lições do curso, nunca o conteúdo
+    // da lição que o colaborador está mesmo a ver.
+    let lessonContext = '';
+    if (dto.lessonId) {
+      const lesson = await this.prisma.read.lesson.findUnique({
+        where: { id: dto.lessonId },
+        select: { title: true, textContent: true },
+      });
+      if (lesson) {
+        lessonContext = `Lição actual: "${lesson.title}". ${lesson.textContent ? `Conteúdo: ${lesson.textContent.slice(0, 1200)}` : ''}`;
+      }
+    }
+
+    // 2c. Contexto da Formação (Training) — secção 9 (Integrações).
+    let trainingContext = '';
+    if (dto.trainingId) {
+      const training = await this.prisma.read.training.findUnique({
+        where: { id: dto.trainingId },
+        select: { title: true, description: true, objectives: true },
+      });
+      if (training) {
+        trainingContext = `Formação: "${training.title}". ${training.description ?? ''} ${training.objectives ? `Objectivos: ${training.objectives}` : ''}`;
+      }
+    }
+
     // 3. Contexto do PDI
     let pdiContext = '';
     if (dto.planId) {
@@ -111,18 +162,27 @@ export class AiTutorService {
     });
 
     // 6. System prompt completo e contextualizado
+    const settings = await this.getSettings();
     const systemPrompt = this.buildSystemPrompt({
       user,
       courseContext,
+      lessonContext,
+      trainingContext,
       pdiContext,
       memory: memory?.summary ?? '',
       personality: dto.personality ?? TutorPersonality.FRIENDLY,
       recentCourses: recentCourses.map(e => e.course?.title ?? '').filter(Boolean),
+      settings,
     });
 
     // 7. Criar sessão
     const session = await this.prisma.aiTutorSession.create({
-      data: { userId, courseId: dto.courseId, enrollmentId: dto.enrollmentId },
+      data: {
+        userId,
+        courseId: dto.courseId,
+        enrollmentId: dto.enrollmentId,
+        trainingId: dto.trainingId,
+      },
     });
 
     await this.prisma.aiMessage.create({
@@ -171,6 +231,20 @@ export class AiTutorService {
     if (session.endedAt) throw new BadRequestException('Esta sessão já foi encerrada');
     if (!dto.message?.trim()) throw new BadRequestException('Mensagem vazia');
 
+    const settings = await this.getSettings();
+    if (settings.dailyMessageLimit) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const messagesToday = await this.prisma.read.aiMessage.count({
+        where: { role: 'USER', session: { userId }, createdAt: { gte: todayStart } },
+      });
+      if (messagesToday >= settings.dailyMessageLimit) {
+        throw new BadRequestException(
+          `Limite diário de ${settings.dailyMessageLimit} perguntas ao AI Tutor atingido. Tenta novamente amanhã.`,
+        );
+      }
+    }
+
     const start = Date.now();
 
     // Guardar mensagem do utilizador
@@ -199,9 +273,12 @@ export class AiTutorService {
       });
       return [];
     });
+    const citeInstruction = settings.showSources
+      ? 'cita a fonte no formato "Fonte: <nome>"'
+      : 'usa esta informação sem citar a fonte explicitamente no texto';
     const knowledgeBlock =
       sources.length > 0
-        ? `\n\n[Base de Conhecimento autorizada — usa esta informação quando relevante e cita a fonte no formato "Fonte: <nome>"]\n${sources
+        ? `\n\n[Base de Conhecimento autorizada — usa esta informação quando relevante e ${citeInstruction}]\n${sources
             .map(s => `- (${s.label}) ${s.snippet}`)
             .join('\n')}`
         : '';
@@ -216,6 +293,7 @@ export class AiTutorService {
       systemMsg?.content ?? this.buildFallbackPrompt(),
       historyMsgs,
       dto.maxTokens ?? 1024,
+      settings.temperature,
     );
 
     const latency = Date.now() - start;
@@ -273,7 +351,7 @@ export class AiTutorService {
       provider: aiResponse.provider,
       model: aiResponse.model,
       latencyMs: latency,
-      sources,
+      sources: settings.showSources ? sources : [],
     };
   }
 
@@ -422,6 +500,14 @@ export class AiTutorService {
             contextText += ` Lição actual: ${lesson.textContent.slice(0, 800)}`;
         }
       }
+    } else if (dto.trainingId) {
+      const training = await this.prisma.read.training.findUnique({
+        where: { id: dto.trainingId },
+        select: { title: true, description: true, objectives: true },
+      });
+      if (training) {
+        contextText = `Formação: "${training.title}". ${training.description ?? ''} ${training.objectives ? `Objectivos: ${training.objectives}` : ''}`;
+      }
     } else if (dto.topic) {
       contextText = `Tema: ${dto.topic}`;
     }
@@ -440,11 +526,34 @@ export class AiTutorService {
 
     const systemPrompt = `És um especialista em design instrucional e pedagogia corporativa. Responde SEMPRE em português e em formato JSON válido quando pedido.`;
 
+    const settings = await this.getSettings();
     const response = await this.aiProviders.chat(
       systemPrompt,
       [{ role: 'user', content: prompts[dto.type] }],
       2048,
+      settings.temperature,
     );
+
+    // Regista para o Histórico (secção 6) e "Exercícios realizados" do Analytics (secção 7).
+    await this.prisma.aiGeneratedExercise
+      .create({
+        data: {
+          userId,
+          type: dto.type,
+          topic: dto.topic ?? null,
+          courseId: dto.courseId ?? null,
+          count: dto.count ?? null,
+        },
+      })
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          type: dto.type,
+          action: 'LOG_AI_GENERATED_EXERCISE',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar exercício gerado no histórico',
+        });
+      });
 
     // Tentar fazer parse do JSON
     // Formato do JSON gerado varia por dto.type (quiz/flashcards/resumo/plano) —
@@ -522,18 +631,87 @@ Gaps de competência: ${competencyGaps.join(', ') || 'nenhum identificado'}.
 ${activePDI ? `PDI activo: "${activePDI.name}"` : ''}
 Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevemente o porquê de cada uma.`;
 
+    const settings = await this.getSettings();
     const aiInsight = await this.aiProviders.chat(
       systemPrompt,
       [{ role: 'user', content: userPrompt }],
       512,
+      settings.temperature,
     );
 
+    // Regista para o Histórico (secção 6) e "Recomendações aceites" do Analytics
+    // (secção 7) — a aceitação é marcada depois via acceptRecommendation().
+    const log = await this.prisma.aiRecommendationLog
+      .create({
+        data: {
+          userId,
+          courseIdsJson: JSON.stringify(recommended.map(c => c.id)),
+          competencyGapsJson: JSON.stringify(competencyGaps),
+        },
+      })
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          action: 'LOG_AI_RECOMMENDATION',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar recomendações no histórico',
+        });
+        return null;
+      });
+
+    // Secção 9 (Integrações) — Notificações: avisa o colaborador de que há
+    // novas recomendações, no máximo uma vez por dia.
+    if (recommended.length > 0) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const alreadyNotifiedToday = await this.prisma.read.notificationLog.findFirst({
+        where: { userId, type: 'AI_TUTOR_RECOMMENDATION', createdAt: { gte: todayStart } },
+      });
+      if (!alreadyNotifiedToday) {
+        await createNotificationSafe(this.prisma, this.logger, {
+          userId,
+          type: 'AI_TUTOR_RECOMMENDATION',
+          message: `A Ísis tem ${recommended.length} recomendaç${recommended.length > 1 ? 'ões' : 'ão'} de aprendizagem personalizada${recommended.length > 1 ? 's' : ''} para ti.`,
+          priority: 'LOW',
+          category: 'LMS',
+          metadata: { courseIds: recommended.map(c => c.id) },
+        });
+      }
+    }
+
     return {
+      logId: log?.id ?? null,
       courses: recommended,
       competencyGaps,
       aiInsight: aiInsight.text,
       provider: aiInsight.provider,
     };
+  }
+
+  /** Marca uma recomendação como aceite e inscreve o colaborador no curso (secção 7). */
+  async acceptRecommendation(userId: number, logId: number, courseId: number) {
+    const log = await this.prisma.read.aiRecommendationLog.findFirst({
+      where: { id: logId, userId },
+    });
+    if (!log) throw new NotFoundException('Recomendação não encontrada');
+
+    const recommendedCourseIds = JSON.parse(log.courseIdsJson) as number[];
+    if (!recommendedCourseIds.includes(courseId)) {
+      throw new BadRequestException('Este curso não fazia parte desta recomendação');
+    }
+
+    await this.prisma.aiRecommendationLog.update({
+      where: { id: logId },
+      data: { acceptedCourseId: courseId, acceptedAt: new Date() },
+    });
+
+    const existing = await this.prisma.read.enrollment.findFirst({ where: { userId, courseId } });
+    if (existing) return { enrollment: existing, alreadyEnrolled: true };
+
+    const enrollment = await this.prisma.enrollment.create({
+      data: { userId, courseId, status: 'NOT_STARTED', origin: 'AI_TUTOR' },
+    });
+    return { enrollment, alreadyEnrolled: false };
   }
 
   // ─── FEEDBACK DE EXERCÍCIOS ───────────────────────────────────────────────
@@ -896,6 +1074,208 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
     };
   }
 
+  // ─── HISTÓRICO (secção 6 — "Aba Histórico (a aumentar)") ─────────────────
+
+  /** Feed unificado da actividade do colaborador: perguntas, sessões, exercícios, recomendações, conteúdos consultados. */
+  async getMyActivity(userId: number, limit = 10) {
+    const [recentMessages, exercises, recommendations] = await Promise.all([
+      this.prisma.read.aiMessage.findMany({
+        where: { role: 'USER', session: { userId } },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: { id: true, content: true, createdAt: true, sessionId: true },
+      }),
+      this.prisma.read.aiGeneratedExercise.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+      this.prisma.read.aiRecommendationLog.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+    ]);
+
+    // Conteúdos consultados — respostas da IA a estas perguntas, com as fontes citadas.
+    const sessionIds = [...new Set(recentMessages.map(m => m.sessionId))];
+    const assistantReplies =
+      sessionIds.length > 0
+        ? await this.prisma.read.aiMessage.findMany({
+            where: {
+              sessionId: { in: sessionIds },
+              role: 'ASSISTANT',
+              sourcesConsulted: { not: null },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            select: { id: true, sourcesConsulted: true, createdAt: true },
+          })
+        : [];
+    const sourcesConsulted = assistantReplies.flatMap(m => {
+      try {
+        const parsed = JSON.parse(m.sourcesConsulted) as Array<{ title: string; type: string }>;
+        return parsed.map(p => ({ ...p, consultedAt: m.createdAt }));
+      } catch {
+        return [];
+      }
+    });
+
+    return {
+      questions: recentMessages.map(m => ({
+        id: m.id,
+        content: m.content,
+        createdAt: m.createdAt,
+        sessionId: m.sessionId,
+      })),
+      exercises,
+      recommendations: recommendations.map(r => ({
+        id: r.id,
+        createdAt: r.createdAt,
+        courseIds: JSON.parse(r.courseIdsJson) as number[],
+        accepted: !!r.acceptedAt,
+      })),
+      sourcesConsulted: sourcesConsulted.slice(0, limit),
+    };
+  }
+
+  // ─── ANALYTICS (secção 7 — "Para Academia/RH") ────────────────────────────
+
+  async getAnalytics() {
+    const [
+      totalUsersActive,
+      distinctActiveUsers,
+      totalSessions,
+      exerciciosRealizados,
+      recomendacoesAceites,
+      sessionsWithCourseMsgs,
+      endedDurations,
+      messagesBySession,
+    ] = await Promise.all([
+      this.prisma.read.user.count({ where: { active: true } }),
+      this.prisma.read.aiTutorSession.findMany({
+        distinct: ['userId'],
+        select: { userId: true },
+      }),
+      this.prisma.read.aiTutorSession.count(),
+      this.prisma.read.aiGeneratedExercise.count(),
+      this.prisma.read.aiRecommendationLog.count({ where: { acceptedAt: { not: null } } }),
+      this.prisma.read.aiTutorSession.findMany({
+        where: { courseId: { not: null } },
+        select: {
+          courseId: true,
+          course: { select: { title: true } },
+          messages: { where: { role: 'USER' }, select: { id: true } },
+        },
+      }),
+      this.prisma.read.aiTutorSession.findMany({
+        where: { endedAt: { not: null } },
+        select: { startedAt: true, endedAt: true },
+      }),
+      this.prisma.read.aiTutorSession.findMany({
+        select: {
+          messages: {
+            orderBy: { createdAt: 'asc' },
+            select: { role: true, content: true, sourcesConsulted: true },
+          },
+        },
+      }),
+    ]);
+
+    const perguntasPorCurso = new Map<number, { title: string; count: number }>();
+    for (const s of sessionsWithCourseMsgs) {
+      if (!s.courseId || !s.course) continue;
+      const entry = perguntasPorCurso.get(s.courseId) ?? { title: s.course.title, count: 0 };
+      entry.count += s.messages.length;
+      perguntasPorCurso.set(s.courseId, entry);
+    }
+
+    const totalMinutes = endedDurations.reduce(
+      (acc, s) => acc + Math.max(0, (s.endedAt.getTime() - s.startedAt.getTime()) / 60000),
+      0,
+    );
+    const tempoMedioMinutos = endedDurations.length
+      ? Math.round((totalMinutes / endedDurations.length) * 10) / 10
+      : 0;
+
+    // Perguntas sem resposta — pergunta do colaborador cuja resposta seguinte não
+    // encontrou nenhuma fonte autorizada na Base de Conhecimento (proxy de lacuna
+    // de conteúdo; ver docs/ai-tutor.md secção 7).
+    const unansweredCounts = new Map<string, number>();
+    for (const session of messagesBySession) {
+      for (let i = 0; i < session.messages.length; i++) {
+        const msg = session.messages[i];
+        if (msg.role !== 'USER') continue;
+        const next = session.messages[i + 1];
+        if (next?.role === 'ASSISTANT' && !next.sourcesConsulted) {
+          const key = msg.content.trim().toLowerCase();
+          unansweredCounts.set(key, (unansweredCounts.get(key) ?? 0) + 1);
+        }
+      }
+    }
+    const perguntasSemResposta = [...unansweredCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([question, count]) => ({
+        question: question.length > 140 ? `${question.slice(0, 140)}…` : question,
+        count,
+      }));
+
+    return {
+      utilizadoresDoAiTutor: distinctActiveUsers.length,
+      taxaDeUtilizacao:
+        totalUsersActive > 0
+          ? Math.round((distinctActiveUsers.length / totalUsersActive) * 100)
+          : 0,
+      sessoesPorColaborador: distinctActiveUsers.length
+        ? Math.round((totalSessions / distinctActiveUsers.length) * 10) / 10
+        : 0,
+      tempoMedioMinutos,
+      exerciciosRealizados,
+      recomendacoesAceites,
+      perguntasPorCurso: [...perguntasPorCurso.values()]
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10),
+      perguntasSemResposta,
+    };
+  }
+
+  // ─── CONFIGURAÇÕES (secção 8) ─────────────────────────────────────────────
+
+  async getSettings(): Promise<AiTutorSettingsData> {
+    const row = await this.prisma.read.aiTutorSettings.findUnique({ where: { id: 1 } });
+    return row ?? DEFAULT_AI_TUTOR_SETTINGS;
+  }
+
+  async updateSettings(adminUserId: number, dto: UpdateAiTutorSettingsDto) {
+    return this.prisma.aiTutorSettings.upsert({
+      where: { id: 1 },
+      create: { id: 1, ...dto, updatedById: adminUserId },
+      update: { ...dto, updatedById: adminUserId },
+    });
+  }
+
+  /** Elimina sessões (e mensagens) mais antigas que `historyRetentionDays`, se configurado. */
+  async purgeOldHistory() {
+    const settings = await this.getSettings();
+    if (!settings.historyRetentionDays) {
+      return { purged: 0, message: 'historyRetentionDays não configurado — nada a fazer' };
+    }
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - settings.historyRetentionDays);
+
+    const oldSessions = await this.prisma.read.aiTutorSession.findMany({
+      where: { startedAt: { lt: cutoff } },
+      select: { id: true },
+    });
+    const ids = oldSessions.map(s => s.id);
+    if (ids.length === 0) return { purged: 0 };
+
+    await this.prisma.aiMessage.deleteMany({ where: { sessionId: { in: ids } } });
+    await this.prisma.aiTutorSession.deleteMany({ where: { id: { in: ids } } });
+    return { purged: ids.length };
+  }
+
   // ─── HELPERS ──────────────────────────────────────────────────────────────
 
   private getQuickActions(
@@ -923,10 +1303,13 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
   private buildSystemPrompt(ctx: {
     user: StartSessionUser | null;
     courseContext: string;
+    lessonContext?: string;
+    trainingContext?: string;
     pdiContext: string;
     memory: string;
     personality: TutorPersonality;
     recentCourses: string[];
+    settings?: AiTutorSettingsData;
   }): string {
     const personas: Record<TutorPersonality, string> = {
       PROFESSIONAL: 'Tens um estilo profissional e preciso. Respostas estruturadas e formais.',
@@ -937,6 +1320,13 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
       GAMIFIED:
         'Tens um estilo gamificado. Celebras conquistas, usas analogias de jogos e manténs o utilizador motivado.',
     };
+
+    const settings = ctx.settings ?? DEFAULT_AI_TUTOR_SETTINGS;
+    const knowledgePolicy = settings.sourceOnlyMode
+      ? 'Responde APENAS com informação encontrada nas fontes autorizadas da Base de Conhecimento fornecidas no contexto. Se não encontrares informação suficiente, diz claramente que não tens essa informação autorizada em vez de inventar ou usar conhecimento geral.'
+      : settings.allowOutsideKnowledge
+        ? 'Usa preferencialmente as fontes autorizadas da Base de Conhecimento; quando não forem suficientes, podes complementar com conhecimento geral, deixando claro quando a informação não vem de uma fonte autorizada da INNOVA.'
+        : 'Usa apenas as fontes autorizadas da Base de Conhecimento fornecidas no contexto; se não forem suficientes, diz que não tens essa informação em vez de complementar com conhecimento geral.';
 
     return `És a Ísis, o Tutor de IA da plataforma INNOVA — especializado em aprendizagem corporativa e desenvolvimento profissional no contexto angolano.
 
@@ -949,10 +1339,15 @@ PERFIL DO UTILIZADOR:
 - Cursos recentes: ${ctx.recentCourses.join(', ') || 'nenhum'}
 
 ${ctx.courseContext ? `CONTEXTO DO CURSO:\n${ctx.courseContext}\n` : ''}
+${ctx.lessonContext ? `CONTEXTO DA LIÇÃO ACTUAL:\n${ctx.lessonContext}\n` : ''}
+${ctx.trainingContext ? `CONTEXTO DA FORMAÇÃO:\n${ctx.trainingContext}\n` : ''}
 ${ctx.pdiContext ? `CONTEXTO DO PDI:\n${ctx.pdiContext}\n` : ''}
 ${ctx.memory ? `MEMÓRIA (interações anteriores):\n${ctx.memory}\n` : ''}
 
 PERSONALIDADE: ${personas[ctx.personality]}
+
+POLÍTICA DA BASE DE CONHECIMENTO: ${knowledgePolicy}
+${settings.showSources ? 'Quando usares informação de uma fonte autorizada, cita-a no formato "Fonte: <nome>".' : ''}
 
 REGRAS:
 - Responde SEMPRE em português europeu/angolano, de forma clara e didáctica
@@ -962,7 +1357,8 @@ REGRAS:
 - Respostas concisas mas completas (máximo 3-4 parágrafos)
 - NUNCA acedas a dados de outros utilizadores
 - NUNCA executes acções sem confirmação explícita do utilizador
-- Ao recomendar acções na plataforma, usa o formato: [ACÇÃO: tipo_da_acção | params]`;
+- Ao recomendar acções na plataforma, usa o formato: [ACÇÃO: tipo_da_acção | params]
+${settings.customSystemPromptAddendum ? `\nINSTRUÇÕES ADICIONAIS DA ACADEMIA:\n${settings.customSystemPromptAddendum}` : ''}`;
   }
 
   private buildFallbackPrompt(): string {

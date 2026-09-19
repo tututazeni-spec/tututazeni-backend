@@ -17,6 +17,16 @@ const mockPrisma = {
     count: jest.fn().mockResolvedValue(0),
   },
   aiMessage: { create: jest.fn(), findMany: makeFind(), count: jest.fn().mockResolvedValue(0) },
+  aiTutorSettings: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() },
+  aiGeneratedExercise: { create: jest.fn().mockResolvedValue({}), findMany: makeFind() },
+  aiRecommendationLog: {
+    create: jest.fn().mockResolvedValue({ id: 1 }),
+    findFirst: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    findMany: makeFind(),
+  },
+  notificationLog: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
   aiTutorMemory: {
     upsert: jest.fn(),
     findFirst: jest.fn(),
@@ -32,7 +42,6 @@ const mockPrisma = {
   userCompetency: { findMany: makeFind() },
   developmentPlan: { findFirst: jest.fn() },
   pdiAction: { findMany: makeFind() },
-  notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
 const baseSession = {

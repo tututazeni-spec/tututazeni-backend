@@ -27,6 +27,8 @@ import {
   GenerateContentDto,
   ExerciseFeedbackDto,
   KnowledgeSearchDto,
+  AcceptRecommendationDto,
+  UpdateAiTutorSettingsDto,
 } from './ai-tutor.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -182,5 +184,57 @@ export class AiTutorController {
   @ApiOperation({ summary: 'Recomendações personalizadas de aprendizagem com insight IA' })
   recommendations(@CurrentUser() user: CurrentUserData) {
     return this.svc.getRecommendations(user.id);
+  }
+
+  @Post('recommendations/:id/accept')
+  @ApiOperation({ summary: 'Aceitar uma recomendação e inscrever-se no curso' })
+  acceptRecommendation(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AcceptRecommendationDto,
+  ) {
+    return this.svc.acceptRecommendation(user.id, id, dto.courseId);
+  }
+
+  // ── Histórico (secção 6) ────────────────────────────────────────────────────
+
+  @Get('history')
+  @ApiOperation({
+    summary: 'Feed de actividade: perguntas, exercícios, recomendações, conteúdos consultados',
+  })
+  history(@CurrentUser() user: CurrentUserData) {
+    return this.svc.getMyActivity(user.id);
+  }
+
+  // ── Analytics (secção 7) ────────────────────────────────────────────────────
+
+  @Get('analytics')
+  @Roles(...AI_TUTOR_ADMIN_ROLES)
+  @ApiOperation({ summary: 'Métricas detalhadas de utilização (ADMIN/RH)' })
+  analytics() {
+    return this.svc.getAnalytics();
+  }
+
+  // ── Configurações (secção 8) ────────────────────────────────────────────────
+
+  @Get('settings')
+  @Roles(...AI_TUTOR_ADMIN_ROLES)
+  @ApiOperation({ summary: 'Configuração actual do AI Tutor (ADMIN/RH)' })
+  getSettings() {
+    return this.svc.getSettings();
+  }
+
+  @Patch('settings')
+  @Roles(...AI_TUTOR_ADMIN_ROLES)
+  @ApiOperation({ summary: 'Actualizar configuração do AI Tutor (ADMIN/RH)' })
+  updateSettings(@CurrentUser() user: CurrentUserData, @Body() dto: UpdateAiTutorSettingsDto) {
+    return this.svc.updateSettings(user.id, dto);
+  }
+
+  @Post('settings/purge-history')
+  @Roles(...AI_TUTOR_ADMIN_ROLES)
+  @ApiOperation({ summary: 'Eliminar sessões mais antigas que a retenção configurada (ADMIN/RH)' })
+  purgeHistory() {
+    return this.svc.purgeOldHistory();
   }
 }

@@ -851,8 +851,10 @@ model User {
   mobileSyncLogs MobileSyncLog[]
 
   // ─── IA & Sessões ─────────────────────────────────────────────
-  aiSessions     AiTutorSession[]
-  avatarSessions AvatarSession[]
+  aiSessions           AiTutorSession[]
+  avatarSessions       AvatarSession[]
+  aiGeneratedExercises AiGeneratedExercise[]
+  aiRecommendationLogs AiRecommendationLog[]
 
   // ─── Instrutor ────────────────────────────────────────────────
   instructorProfile InstructorProfile?
@@ -4836,6 +4838,7 @@ model Training {
   documents          TrainingDocument[]
   assessmentLinks    TrainingAssessment[]
   resourceBookings   TrainingResourceBooking[]
+  aiTutorSessions    AiTutorSession[]
 
   @@index([status])
   @@index([type])
@@ -6378,22 +6381,22 @@ model PostClassEvaluation {
 }
 
 model PostClassResponse {
-  id           Int                 @id @default(autoincrement())
-  evaluationId Int
-  userId       Int
+  id                  Int                 @id @default(autoincrement())
+  evaluationId        Int
+  userId              Int
   // Secção 12 — "Avaliação da sessão" (nota geral, já existia)
-  rating       Int
+  rating              Int
   // Secção 12 — rubrica detalhada ("Exemplo"), todos 1–5, opcionais
-  instructorRating   Int?
-  contentRating      Int?
-  organizationRating Int?
+  instructorRating    Int?
+  contentRating       Int?
+  organizationRating  Int?
   applicabilityRating Int?
   // NPS da sessão — escala 0–10 própria (não o `rating` 1–5 acima)
-  nps          Int?
-  feedback     String?             @db.Text
-  createdAt    DateTime            @default(now())
-  evaluation   PostClassEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
-  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nps                 Int?
+  feedback            String?             @db.Text
+  createdAt           DateTime            @default(now())
+  evaluation          PostClassEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([evaluationId, userId])
 }
@@ -7274,35 +7277,40 @@ model AiTutorSession {
   userId       Int
   courseId     Int?
   enrollmentId Int?
+  // Secção 9 (Integrações) — contexto de Formação (Training), em paralelo ao
+  // de Curso (courseId) já existente.
+  trainingId   Int?
   startedAt    DateTime    @default(now())
   endedAt      DateTime?
   user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   course       Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
   enrollment   Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  training     Training?   @relation(fields: [trainingId], references: [id], onDelete: SetNull)
   messages     AiMessage[]
 
   @@index([userId])
   @@index([courseId])
+  @@index([trainingId])
 }
 
 model AiMessage {
-  id             Int            @id @default(autoincrement())
-  sessionId      Int
-  role           String
-  content        String         @db.Text
-  tokensUsed     Int?
-  latencyMs      Int?
-  provider       String?
-  model          String?
-  rating         Int?
-  ratingFeedback String?
-  agentAction    String?
+  id               Int            @id @default(autoincrement())
+  sessionId        Int
+  role             String
+  content          String         @db.Text
+  tokensUsed       Int?
+  latencyMs        Int?
+  provider         String?
+  model            String?
+  rating           Int?
+  ratingFeedback   String?
+  agentAction      String?
   // JSON.stringify(Array<{ type, id, title }>) das fontes da Base de
   // Conhecimento citadas nesta resposta — ver CLAUDE.md, campos String? de
   // metadata são sempre JSON.stringify.
-  sourcesConsulted String?      @db.Text
-  createdAt      DateTime       @default(now())
-  session        AiTutorSession @relation(fields: [sessionId], references: [id])
+  sourcesConsulted String?        @db.Text
+  createdAt        DateTime       @default(now())
+  session          AiTutorSession @relation(fields: [sessionId], references: [id])
 
   @@index([sessionId])
   @@index([role])
@@ -7316,6 +7324,57 @@ model AiTutorMemory {
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
+}
+
+// Regista cada geração de exercícios/conteúdo (secção 5) para alimentar o
+// Histórico (secção 6, "Exercícios") e a métrica "Exercícios realizados" do
+// Analytics (secção 7).
+model AiGeneratedExercise {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      String
+  topic     String?
+  courseId  Int?
+  count     Int?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Regista cada conjunto de recomendações dado (secção 1/6) e se o
+// colaborador aceitou uma delas (secção 7, "Recomendações aceites").
+model AiRecommendationLog {
+  id                 Int       @id @default(autoincrement())
+  userId             Int
+  // JSON.stringify(number[]) — IDs dos cursos recomendados nesta chamada.
+  courseIdsJson      String    @db.Text
+  // JSON.stringify(string[]) — gaps de competência identificados.
+  competencyGapsJson String?   @db.Text
+  acceptedCourseId   Int?
+  acceptedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Configuração global do AI Tutor (secção 8) — singleton (id fixo = 1).
+model AiTutorSettings {
+  id                         Int      @id @default(1)
+  allowOutsideKnowledge      Boolean  @default(true)
+  sourceOnlyMode             Boolean  @default(false)
+  showSources                Boolean  @default(true)
+  temperature                Float    @default(0.7)
+  defaultLanguage            String   @default("pt")
+  dailyMessageLimit          Int?
+  historyRetentionDays       Int?
+  customSystemPromptAddendum String?  @db.Text
+  updatedById                Int?
+  updatedAt                  DateTime @updatedAt
+  createdAt                  DateTime @default(now())
 }
 
 model AvatarScript {
