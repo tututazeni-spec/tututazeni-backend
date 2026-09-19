@@ -9,9 +9,11 @@ import { TrainerController } from './trainers.controller';
 import { TrainingResourceService } from './resources.service';
 import { TrainingResourceController } from './resources.controller';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AuditModule } from '../common/modules/audit.module';
+import { CompetenciesModule } from '../competencies/competencies.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, AuditModule, CompetenciesModule],
   providers: [TrainingService, TrainingPlanService, TrainerService, TrainingResourceService],
   controllers: [
     TrainingController,

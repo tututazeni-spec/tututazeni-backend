@@ -188,10 +188,10 @@ describe('TrainingController', () => {
     expect(mockSvc.cancelParticipant).toHaveBeenCalledWith(3, 1, undefined);
   });
 
-  it('updateParticipantStatus → updateParticipantStatus(id, dto)', async () => {
+  it('updateParticipantStatus → updateParticipantStatus(id, dto, user.id)', async () => {
     const dto = {} as any;
-    await controller.updateParticipantStatus(5, dto);
-    expect(mockSvc.updateParticipantStatus).toHaveBeenCalledWith(5, dto);
+    await controller.updateParticipantStatus(5, dto, mockUser as any);
+    expect(mockSvc.updateParticipantStatus).toHaveBeenCalledWith(5, dto, mockUser.id);
   });
 
   it('approveParticipant → approveParticipant(id, user)', async () => {

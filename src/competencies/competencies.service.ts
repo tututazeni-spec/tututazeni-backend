@@ -716,4 +716,34 @@ export class CompetenciesService {
 
     this.logger.log(`Competências actualizadas para user ${userId} após curso ${courseId}`);
   }
+
+  // docs/trainings-detalhado.md — Fluxo completo do Trainings: Conclusão →
+  // Certificação → Competências → PDI/Carreira. Mesmo padrão de
+  // updateFromCourse acima, chamado por TrainingService.updateParticipantStatus
+  // quando um participante conclui uma Training. TrainingCompetency não tem
+  // `levelGained` (ao contrário de CourseCompetency) — concluir a formação
+  // garante pelo menos o nível 1 na competência associada.
+  async updateFromTraining(userId: number, trainingId: number) {
+    const trainingComps = await this.prisma.read.trainingCompetency.findMany({
+      where: { trainingId },
+    });
+
+    for (const tc of trainingComps) {
+      const existing = await this.prisma.userCompetency.findFirst({
+        where: { userId, competencyId: tc.competencyId },
+      });
+      const newLevel = Math.min(5, Math.max(existing?.currentLevel ?? 0, 1));
+
+      if (!existing || existing.currentLevel < newLevel) {
+        await this.upsertUserCompetency({
+          userId,
+          competencyId: tc.competencyId,
+          currentLevel: newLevel,
+          source: CompetencySource.TRAINING,
+        });
+      }
+    }
+
+    this.logger.log(`Competências actualizadas para user ${userId} após formação ${trainingId}`);
+  }
 }

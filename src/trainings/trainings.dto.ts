@@ -1157,3 +1157,47 @@ export class ResourceAvailabilityFilterDto {
   @IsDateString()
   endAt!: string;
 }
+
+// ─── Relatórios (docs/trainings-detalhado.md pt.10) ──────────────────────────
+
+export class TrainingReportFilterDto {
+  @ApiPropertyOptional({ description: 'Ano (por startDate da formação / year do plano)' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  year?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ enum: TrainingType, description: 'Modalidade' })
+  @IsOptional()
+  @IsEnum(TrainingType)
+  modality?: TrainingType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  instructorId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  trainingPlanId?: number;
+}

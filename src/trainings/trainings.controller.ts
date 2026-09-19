@@ -36,6 +36,7 @@ import {
   TrainingCalendarFilterDto,
   TransferParticipantDto,
   BulkRegisterParticipantsDto,
+  TrainingReportFilterDto,
 } from './trainings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -100,6 +101,30 @@ export class TrainingController {
     return this.svc.getCalendar(filters);
   }
 
+  // ── Relatórios (docs/trainings-detalhado.md pt.10) ─────────────────────────
+  // Rotas com prefixo fixo ("reports/...") registadas ANTES de ':id' — caso
+  // contrário o Nest fazia-as cair na rota parametrizada abaixo (mesmo
+  // problema de route shadowing já visto noutros módulos deste projecto).
+
+  @Get('reports/overview')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({
+    summary:
+      'Relatórios (Academia/RH/Administração): execução, participantes, horas, custos, satisfação, eficácia, certificados',
+  })
+  reports(@Query() filters: TrainingReportFilterDto) {
+    return this.svc.getReports(filters);
+  }
+
+  @Get('reports/export')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="relatorio-formacoes.csv"')
+  @ApiOperation({ summary: 'Exportar relatório anual/filtrado da Academia como CSV' })
+  exportReports(@Query() filters: TrainingReportFilterDto) {
+    return this.svc.exportReportsCsv(filters);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do treinamento (sessões, rating médio)' })
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
@@ -111,6 +136,16 @@ export class TrainingController {
   @ApiOperation({ summary: 'Relatório de presença e conclusão' })
   attendanceReport(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAttendanceReport(id);
+  }
+
+  @Get(':id/history')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({
+    summary:
+      'Histórico da formação (aba "Histórico" — criação, alterações, sessões, inscrições, presenças, avaliações, conclusão)',
+  })
+  history(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getHistory(id);
   }
 
   @Get(':id/results')
@@ -328,8 +363,9 @@ export class TrainingController {
   updateParticipantStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: TrainingsUpdateParticipantStatusDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.updateParticipantStatus(id, dto);
+    return this.svc.updateParticipantStatus(id, dto, user.id);
   }
 
   @Patch('participants/:id/approve')

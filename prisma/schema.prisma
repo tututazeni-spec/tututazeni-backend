@@ -2956,6 +2956,10 @@ enum CompetencySource {
   ASSESSMENT
   MANAGER
   HRIS
+  // docs/trainings-detalhado.md — Fluxo completo do Trainings: Conclusão →
+  // Certificação → Competências. Mesmo padrão de COURSE (CompetenciesService.
+  // updateFromCourse) aplicado à conclusão de uma Training.
+  TRAINING
 }
 
 model UserCompetency {

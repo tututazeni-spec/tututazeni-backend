@@ -12,6 +12,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCanAccess, isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import { CurrentUserData } from '../common/types/current-user';
+import { AuditService } from '../common/services/audit.service';
+import { CompetenciesService } from '../competencies/competencies.service';
 import {
   CreateTrainingDto,
   UpdateTrainingDto,
@@ -31,6 +33,7 @@ import {
   TrainingCalendarFilterDto,
   TransferParticipantDto,
   BulkRegisterParticipantsDto,
+  TrainingReportFilterDto,
 } from './trainings.dto';
 import { buildCsvString } from '../common/utils/csv-export.util';
 
@@ -44,7 +47,28 @@ const PRIVILEGED_ROLES = [Role.ADMIN, Role.RH];
 export class TrainingService {
   private readonly logger = new Logger(TrainingService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly audit: AuditService,
+    private readonly competencies: CompetenciesService,
+  ) {}
+
+  // ─── HISTÓRICO (docs/trainings-detalhado.md pt.11 — aba "Histórico") ──────
+  // Wrapper fino sobre AuditService.log(): nunca deve rebentar a acção
+  // principal (mesmo padrão de tolerância a falha do resto do módulo, ex.
+  // notificações via notificationLog.create().catch(...)).
+  private logHistory(action: string, trainingId: number, userId: number, metadata?: object) {
+    return this.audit
+      .log({ action, entity: 'Training', entityId: trainingId, userId, metadata })
+      .catch(e =>
+        this.logger.warn({
+          trainingId,
+          action,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao registar histórico de formação em AuditLog',
+        }),
+      );
+  }
 
   // ─── OWNERSHIP ────────────────────────────────────────────────────────────
 
@@ -311,6 +335,7 @@ export class TrainingService {
 
     await this.syncCompetencies(training.id, competencyIds);
     await this.syncCoInstructors(training.id, coInstructorIds);
+    this.logHistory('CREATE', training.id, creatorId, { title: training.title });
 
     return training;
   }
@@ -335,6 +360,7 @@ export class TrainingService {
 
     if (competencyIds !== undefined) await this.syncCompetencies(id, competencyIds);
     if (coInstructorIds !== undefined) await this.syncCoInstructors(id, coInstructorIds);
+    this.logHistory('UPDATE', id, user.id, { fields: Object.keys(data) });
 
     return training;
   }
@@ -361,15 +387,22 @@ export class TrainingService {
 
   async publish(id: number, user: CurrentUserData) {
     await this.assertCanManage(id, user);
-    return this.prisma.training.update({
+    const training = await this.prisma.training.update({
       where: { id },
       data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
+    this.logHistory('PUBLISH', id, user.id);
+    return training;
   }
 
   async archive(id: number, user: CurrentUserData) {
     await this.assertCanManage(id, user);
-    return this.prisma.training.update({ where: { id }, data: { status: 'ARCHIVED' } });
+    const training = await this.prisma.training.update({
+      where: { id },
+      data: { status: 'ARCHIVED' },
+    });
+    this.logHistory('ARCHIVE', id, user.id);
+    return training;
   }
 
   // docs/trainings-detalhado.md pt.3 — acções "cancelar"/"concluir" da
@@ -385,10 +418,12 @@ export class TrainingService {
     if (t.status === 'CANCELLED' || t.status === 'COMPLETED') {
       throw new ConflictException('Formação já terminada — não pode ser cancelada');
     }
-    return this.prisma.training.update({
+    const training = await this.prisma.training.update({
       where: { id },
       data: { status: 'CANCELLED', cancellationReason: dto.reason },
     });
+    this.logHistory('CANCEL', id, user.id, { reason: dto.reason ?? null });
+    return training;
   }
 
   async complete(id: number, user: CurrentUserData) {
@@ -401,7 +436,12 @@ export class TrainingService {
     if (t.status !== 'PUBLISHED') {
       throw new ConflictException('Só uma formação publicada pode ser concluída');
     }
-    return this.prisma.training.update({ where: { id }, data: { status: 'COMPLETED' } });
+    const training = await this.prisma.training.update({
+      where: { id },
+      data: { status: 'COMPLETED' },
+    });
+    this.logHistory('COMPLETE', id, user.id);
+    return training;
   }
 
   async remove(id: number, user: CurrentUserData) {
@@ -422,6 +462,10 @@ export class TrainingService {
       throw new ForbiddenException('Treinamento com avaliações não pode ser eliminado.');
     }
     await this.prisma.training.delete({ where: { id } });
+    // AuditLog.entityId não tem FK para Training — o registo de eliminação
+    // sobrevive ao delete() acima e continua consultável via getHistory(),
+    // ainda que a formação já não exista.
+    this.logHistory('DELETE', id, user.id, { title: t.title });
     return { message: 'Treinamento eliminado' };
   }
 
@@ -429,7 +473,7 @@ export class TrainingService {
 
   async createSession(dto: CreateTrainingSessionDto, user: CurrentUserData) {
     await this.assertCanManage(dto.trainingId, user);
-    return this.prisma.trainingSession.create({
+    const session = await this.prisma.trainingSession.create({
       data: {
         trainingId: dto.trainingId,
         sessionDate: new Date(dto.sessionDate),
@@ -443,11 +487,18 @@ export class TrainingService {
         notes: dto.notes,
       },
     });
+    this.logHistory('SESSION_CREATE', dto.trainingId, user.id, {
+      sessionId: session.id,
+      sessionDate: session.sessionDate,
+    });
+    return session;
   }
 
   async updateSession(id: number, dto: UpdateTrainingSessionDto, user: CurrentUserData) {
-    await this.assertCanManageSession(id, user);
-    return this.prisma.trainingSession.update({ where: { id }, data: dto });
+    const session = await this.assertCanManageSession(id, user);
+    const updated = await this.prisma.trainingSession.update({ where: { id }, data: dto });
+    this.logHistory('SESSION_UPDATE', session.trainingId, user.id, { sessionId: id });
+    return updated;
   }
 
   async removeSession(id: number, user: CurrentUserData) {
@@ -461,6 +512,7 @@ export class TrainingService {
       throw new BadRequestException('Sessão com participantes não pode ser eliminada');
     }
     await this.prisma.trainingSession.delete({ where: { id } });
+    this.logHistory('SESSION_REMOVE', session.trainingId, user.id, { sessionId: id });
     return { message: 'Sessão eliminada' };
   }
 
@@ -507,6 +559,10 @@ export class TrainingService {
         },
         include: { user: { select: { id: true, fullName: true } } },
       });
+      this.logHistory('PARTICIPANT_REGISTER', session.trainingId, dto.userId, {
+        sessionId: dto.sessionId,
+        status: participant.status,
+      });
       return participant;
     }
 
@@ -542,6 +598,10 @@ export class TrainingService {
       },
       include: { user: { select: { id: true, fullName: true } } },
     });
+    this.logHistory('PARTICIPANT_REGISTER', session.trainingId, dto.userId, {
+      sessionId: dto.sessionId,
+      status: participant.status,
+    });
 
     // Notificar
     await this.prisma.notificationLog
@@ -572,6 +632,7 @@ export class TrainingService {
   async cancelParticipant(participantId: number, userId: number, reason?: string) {
     const p = await this.prisma.read.trainingParticipant.findUnique({
       where: { id: participantId },
+      include: { session: { select: { trainingId: true } } },
     });
     if (!p) throw new NotFoundException('Inscrição não encontrada');
     // FIX: casts `as any` desnecessários — `p` já vem tipado do findUnique()
@@ -582,6 +643,7 @@ export class TrainingService {
       where: { id: participantId },
       data: { status: 'CANCELLED', cancellationReason: reason },
     });
+    this.logHistory('PARTICIPANT_CANCEL', p.session.trainingId, userId, { reason: reason ?? null });
 
     // Promover o primeiro da lista de espera
     const nextWaitlist = await this.prisma.read.trainingParticipant.findFirst({
@@ -685,7 +747,11 @@ export class TrainingService {
   }
 
   // NOTA: sem ownership — mesmo motivo de getSessionParticipants acima.
-  async updateParticipantStatus(id: number, dto: TrainingsUpdateParticipantStatusDto) {
+  async updateParticipantStatus(
+    id: number,
+    dto: TrainingsUpdateParticipantStatusDto,
+    actorId?: number,
+  ) {
     const p = await this.prisma.read.trainingParticipant.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('Participante não encontrado');
 
@@ -702,19 +768,42 @@ export class TrainingService {
 
     // FIX: casts `as any` desnecessários — `p` já vem tipado do findUnique()
     // acima, e `session`/`session.training` já vêm tipados do `include`.
+    const session = await this.prisma.read.trainingSession.findUnique({
+      where: { id: p.sessionId },
+      include: { training: true },
+    });
+    const training = session?.training;
+    if (training) {
+      this.logHistory(
+        dto.status === 'COMPLETED' ? 'PARTICIPANT_COMPLETE' : 'PARTICIPANT_STATUS_UPDATE',
+        training.id,
+        actorId ?? p.userId,
+        { participantId: id, userId: p.userId, status: dto.status },
+      );
+    }
+
     // Emitir certificado automaticamente se COMPLETED e passou
     if (dto.status === 'COMPLETED') {
-      const session = await this.prisma.read.trainingSession.findUnique({
-        where: { id: p.sessionId },
-        include: { training: true },
-      });
-      const training = session?.training;
-
       if (training?.issueCertificate) {
         const score = dto.finalScore ?? 100;
         if (score >= (training.passingScore ?? 70)) {
           await this.issueCertificate(p.userId, p.sessionId, score);
         }
+      }
+
+      // docs/trainings-detalhado.md — Fluxo completo: Conclusão →
+      // Certificação → Competências → PDI/Carreira (ver comentário em
+      // CompetenciesService.updateFromTraining).
+      if (training) {
+        await this.competencies.updateFromTraining(p.userId, training.id).catch(e =>
+          this.logger.warn({
+            userId: p.userId,
+            trainingId: training.id,
+            action: 'TRAINING_COMPLETED_COMPETENCIES',
+            err: { message: e instanceof Error ? e.message : String(e) },
+            msg: 'Falha ao actualizar competências após conclusão de treinamento',
+          }),
+        );
       }
 
       // XP
@@ -784,6 +873,12 @@ export class TrainingService {
         }),
       );
 
+    this.logHistory('BULK_ATTENDANCE', session.trainingId, registrarId, {
+      sessionId: dto.sessionId,
+      attended,
+      absent,
+    });
+
     return { sessionId: dto.sessionId, attended, absent, total: participants.length };
   }
 
@@ -845,12 +940,19 @@ export class TrainingService {
         }),
       );
 
+    this.logHistory('PARTICIPANT_APPROVE', session.trainingId, user.id, {
+      participantId,
+      userId: p.userId,
+      status,
+    });
+
     return updated;
   }
 
   async rejectParticipant(participantId: number, dto: RejectParticipantDto, user: CurrentUserData) {
     const p = await this.prisma.read.trainingParticipant.findUnique({
       where: { id: participantId },
+      include: { session: { select: { trainingId: true } } },
     });
     if (!p) throw new NotFoundException('Participante não encontrado');
     await this.assertCanManageSession(p.sessionId, user);
@@ -861,6 +963,11 @@ export class TrainingService {
     const updated = await this.prisma.trainingParticipant.update({
       where: { id: participantId },
       data: { status: 'REJECTED', cancellationReason: dto.reason },
+    });
+    this.logHistory('PARTICIPANT_REJECT', p.session.trainingId, user.id, {
+      participantId,
+      userId: p.userId,
+      reason: dto.reason ?? null,
     });
 
     await this.prisma.notificationLog
@@ -929,7 +1036,7 @@ export class TrainingService {
 
   async addDocument(trainingId: number, dto: CreateTrainingDocumentDto, user: CurrentUserData) {
     await this.assertCanManage(trainingId, user);
-    return this.prisma.trainingDocument.create({
+    const doc = await this.prisma.trainingDocument.create({
       data: {
         trainingId,
         name: dto.name,
@@ -938,6 +1045,8 @@ export class TrainingService {
         uploadedById: user.id,
       },
     });
+    this.logHistory('DOCUMENT_ADD', trainingId, user.id, { name: dto.name });
+    return doc;
   }
 
   async removeDocument(documentId: number, user: CurrentUserData) {
@@ -959,12 +1068,17 @@ export class TrainingService {
 
     // upsert por [trainingId, role] — @@unique garante no máximo uma
     // avaliação associada por papel (inicial/final/satisfação/formador).
-    return this.prisma.trainingAssessment.upsert({
+    const link = await this.prisma.trainingAssessment.upsert({
       where: { trainingId_role: { trainingId, role: dto.role } },
       create: { trainingId, assessmentId: dto.assessmentId, role: dto.role },
       update: { assessmentId: dto.assessmentId },
       include: { assessment: { select: { id: true, title: true, type: true, status: true } } },
     });
+    this.logHistory('ASSESSMENT_LINK', trainingId, user.id, {
+      role: dto.role,
+      assessmentId: dto.assessmentId,
+    });
+    return link;
   }
 
   async unlinkAssessment(trainingId: number, role: TrainingAssessmentRole, user: CurrentUserData) {
@@ -999,8 +1113,12 @@ export class TrainingService {
     });
     if (!training) throw new NotFoundException('Treinamento não encontrado');
 
+    // FIX: `training: { id: trainingId }` filtrava pela relação
+    // TrainingParticipant.trainingId, que nenhum write deste serviço alguma
+    // vez preenche (só sessionId é gravado) — devolvia sempre 0 registos.
+    // A formação de um participante é sempre alcançada via session.trainingId.
     const participants = await this.prisma.read.trainingParticipant.findMany({
-      where: { training: { id: trainingId } },
+      where: { session: { trainingId } },
       select: { status: true, finalScore: true },
     });
 
@@ -1118,11 +1236,35 @@ export class TrainingService {
   async rateTraining(userId: number, dto: RateTrainingDto) {
     await this.findOne(dto.trainingId);
 
-    return this.prisma.trainingRating.upsert({
+    const rating = await this.prisma.trainingRating.upsert({
       where: { userId_trainingId: { userId, trainingId: dto.trainingId } },
       create: { userId, trainingId: dto.trainingId, rating: dto.rating, comment: dto.comment },
       update: { rating: dto.rating, comment: dto.comment },
     });
+    this.logHistory('RATE', dto.trainingId, userId, { rating: dto.rating });
+    return rating;
+  }
+
+  // ─── HISTÓRICO DA FORMAÇÃO (docs/trainings-detalhado.md pt.11) ────────────
+
+  // NOTA: sem ownership — mesmo motivo de getResults/getAttendanceReport
+  // acima (leitura agregada disponível a qualquer papel que possa gerir
+  // formações, não scoped à que criou).
+  async getHistory(trainingId: number) {
+    const logs = await this.prisma.read.auditLog.findMany({
+      where: { entity: 'Training', entityId: trainingId },
+      include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
+      orderBy: { timestamp: 'desc' },
+      take: 200,
+    });
+
+    return logs.map(l => ({
+      id: l.id,
+      action: l.action,
+      user: l.user,
+      timestamp: l.timestamp,
+      metadata: l.metadata ? JSON.parse(l.metadata) : null,
+    }));
   }
 
   // ─── HISTÓRICO DO UTILIZADOR ──────────────────────────────────────────────
@@ -1580,5 +1722,241 @@ export class TrainingService {
         publishedPlans > 0 ? Math.round((plansWithTrainings / publishedPlans) * 100) : 0,
       topTrainings,
     };
+  }
+
+  // ─── RELATÓRIOS (docs/trainings-detalhado.md pt.10) ────────────────────────
+  // Ao contrário do dashboard (getAdminDashboard, sempre global e restrito a
+  // ADMIN/RH), esta aba serve Academia+RH+Administração com filtros
+  // (ano/departamento/unidade/categoria/modalidade/formador/plano) — mesmos
+  // papéis de CAN_CREATE_TRAININGS no controller.
+
+  private buildReportTrainingWhere(filters: TrainingReportFilterDto): Prisma.TrainingWhereInput {
+    const where: Prisma.TrainingWhereInput = {};
+    if (filters.year) {
+      where.startDate = {
+        gte: new Date(filters.year, 0, 1),
+        lt: new Date(filters.year + 1, 0, 1),
+      };
+    }
+    if (filters.departmentId) where.targetDeptIds = { has: filters.departmentId };
+    if (filters.unitId) where.targetUnitIds = { has: filters.unitId };
+    if (filters.category) where.category = filters.category;
+    if (filters.modality) where.type = filters.modality;
+    if (filters.instructorId) where.instructorId = filters.instructorId;
+    if (filters.trainingPlanId) where.trainingPlanId = filters.trainingPlanId;
+    return where;
+  }
+
+  async getReports(filters: TrainingReportFilterDto) {
+    const where = this.buildReportTrainingWhere(filters);
+
+    const trainings = await this.prisma.read.training.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        type: true,
+        status: true,
+        workloadHours: true,
+        plannedBudget: true,
+        passingScore: true,
+        cost: true,
+        instructorCost: true,
+        materialCost: true,
+        transportCost: true,
+        foodCost: true,
+        lodgingCost: true,
+        otherCosts: true,
+        instructor: { select: { id: true, fullName: true } },
+      },
+    });
+    const trainingIds = trainings.map(t => t.id);
+    const dateRange = filters.year
+      ? { gte: new Date(filters.year, 0, 1), lt: new Date(filters.year + 1, 0, 1) }
+      : undefined;
+
+    const [participants, ratings, certificatesIssued, competencyLinks, plans] = await Promise.all([
+      this.prisma.read.trainingParticipant.findMany({
+        where: { session: { trainingId: { in: trainingIds } } },
+        select: {
+          status: true,
+          finalScore: true,
+          attendedHours: true,
+          training: { select: { passingScore: true } },
+          session: { select: { trainingId: true } },
+          user: { select: { department: { select: { id: true, name: true } } } },
+        },
+      }),
+      this.prisma.read.trainingRating.findMany({
+        where: { trainingId: { in: trainingIds } },
+        select: { rating: true },
+      }),
+      this.prisma.read.certificate.count({
+        where: { type: 'TRAINING', ...(dateRange ? { issuedAt: dateRange } : {}) },
+      }),
+      this.prisma.read.trainingCompetency.findMany({
+        where: { trainingId: { in: trainingIds } },
+        select: { competencyId: true },
+        distinct: ['competencyId'],
+      }),
+      this.prisma.read.trainingPlan.findMany({
+        where: filters.year ? { year: filters.year } : {},
+        select: {
+          id: true,
+          plannedBudget: true,
+          status: true,
+          _count: { select: { trainings: true } },
+        },
+      }),
+    ]);
+
+    // Participantes/presenças/conclusão — mesma classificação de getResults().
+    const active = participants.filter(p =>
+      ['REGISTERED', 'ATTENDED', 'ABSENT', 'COMPLETED'].includes(p.status),
+    );
+    const attended = active.filter(p => p.status === 'ATTENDED' || p.status === 'COMPLETED');
+    const completed = active.filter(p => p.status === 'COMPLETED');
+    const cancelled = participants.filter(p => p.status === 'CANCELLED');
+    const scored = active.filter(p => p.finalScore != null);
+    const approved = scored.filter(p => (p.finalScore ?? 0) >= (p.training?.passingScore ?? 70));
+
+    // Horas — total e por departamento (do participante, não da formação:
+    // targetDeptIds é "público-alvo previsto", não quem realmente compareceu).
+    const hoursByDeptMap = new Map<string, number>();
+    let totalHours = 0;
+    for (const p of active) {
+      if (!p.attendedHours) continue;
+      totalHours += p.attendedHours;
+      const deptName = p.user.department?.name ?? 'Sem departamento';
+      hoursByDeptMap.set(deptName, (hoursByDeptMap.get(deptName) ?? 0) + p.attendedHours);
+    }
+    const hoursByDepartment = Array.from(hoursByDeptMap.entries())
+      .map(([department, hours]) => ({ department, hours: Math.round(hours * 10) / 10 }))
+      .sort((a, b) => b.hours - a.hours);
+
+    // Custos — mesma fórmula de computeTotalCost, agregada por formação.
+    const totalCost = trainings.reduce((sum, t) => sum + this.computeTotalCost(t), 0);
+    const plannedBudgetTotal =
+      trainings.reduce((sum, t) => sum + (t.plannedBudget ?? 0), 0) +
+      plans.reduce((sum, p) => sum + (p.plannedBudget ?? 0), 0);
+
+    const nps =
+      ratings.length > 0
+        ? Math.round(
+            ((ratings.filter(r => r.rating === 5).length -
+              ratings.filter(r => r.rating <= 3).length) /
+              ratings.length) *
+              100,
+          )
+        : null;
+    const avgSatisfaction =
+      ratings.length > 0
+        ? Math.round((ratings.reduce((s, r) => s + r.rating, 0) / ratings.length) * 10) / 10
+        : null;
+
+    const byCategoryMap = new Map<string, number>();
+    const byModalityMap = new Map<string, number>();
+    const byInstructorMap = new Map<string, number>();
+    for (const t of trainings) {
+      const cat = t.category ?? 'Sem categoria';
+      byCategoryMap.set(cat, (byCategoryMap.get(cat) ?? 0) + 1);
+      byModalityMap.set(t.type, (byModalityMap.get(t.type) ?? 0) + 1);
+      const instructorName = t.instructor?.fullName ?? 'Sem formador';
+      byInstructorMap.set(instructorName, (byInstructorMap.get(instructorName) ?? 0) + 1);
+    }
+    const toSortedArray = (m: Map<string, number>, key: string) =>
+      Array.from(m.entries())
+        .map(([k, count]) => ({ [key]: k, count }))
+        .sort((a, b) => b.count - a.count);
+
+    const plansPublished = plans.filter(p => p.status === 'PUBLISHED');
+    const plansExecuted = plansPublished.filter(p => p._count.trainings > 0);
+
+    return {
+      filters,
+      totals: {
+        trainings: trainings.length,
+        planned: trainings.filter(t => t.status === 'DRAFT').length,
+        published: trainings.filter(t => t.status === 'PUBLISHED').length,
+        completed: trainings.filter(t => t.status === 'COMPLETED').length,
+        cancelled: trainings.filter(t => t.status === 'CANCELLED').length,
+      },
+      participants: {
+        enrolled: active.length,
+        attended: attended.length,
+        completed: completed.length,
+        notCompleted: active.length - completed.length,
+        cancelled: cancelled.length,
+        participationRate:
+          active.length > 0 ? Math.round((attended.length / active.length) * 100) : 0,
+        completionRate:
+          active.length > 0 ? Math.round((completed.length / active.length) * 100) : 0,
+      },
+      hours: {
+        total: Math.round(totalHours * 10) / 10,
+        byDepartment: hoursByDepartment,
+      },
+      byCategory: toSortedArray(byCategoryMap, 'category'),
+      byModality: toSortedArray(byModalityMap, 'modality'),
+      byInstructor: toSortedArray(byInstructorMap, 'instructor'),
+      costs: {
+        total: Math.round(totalCost * 100) / 100,
+        perParticipant: active.length > 0 ? Math.round((totalCost / active.length) * 100) / 100 : 0,
+        perHour: totalHours > 0 ? Math.round((totalCost / totalHours) * 100) / 100 : 0,
+        budgetPlanned: Math.round(plannedBudgetTotal * 100) / 100,
+        budgetExecutionRate:
+          plannedBudgetTotal > 0 ? Math.round((totalCost / plannedBudgetTotal) * 100) : 0,
+      },
+      satisfaction: {
+        avgRating: avgSatisfaction,
+        nps,
+        responses: ratings.length,
+      },
+      efficacy: {
+        approvalRate: scored.length > 0 ? Math.round((approved.length / scored.length) * 100) : 0,
+        scoredParticipants: scored.length,
+      },
+      competenciesDeveloped: competencyLinks.length,
+      certificatesIssued,
+      planExecution: {
+        plans: plansPublished.length,
+        executed: plansExecuted.length,
+        rate:
+          plansPublished.length > 0
+            ? Math.round((plansExecuted.length / plansPublished.length) * 100)
+            : 0,
+      },
+    };
+  }
+
+  // "Relatório anual da Academia" — mesmo relatório acima, sempre com o ano
+  // corrente (ou o pedido) e sem os restantes filtros, exportado em CSV.
+  async exportReportsCsv(filters: TrainingReportFilterDto): Promise<string> {
+    const report = await this.getReports(filters);
+    const rows = [
+      { metrica: 'Formações (total)', valor: report.totals.trainings },
+      { metrica: 'Formações planeadas', valor: report.totals.planned },
+      { metrica: 'Formações publicadas', valor: report.totals.published },
+      { metrica: 'Formações concluídas', valor: report.totals.completed },
+      { metrica: 'Formações canceladas', valor: report.totals.cancelled },
+      { metrica: 'Participantes inscritos', valor: report.participants.enrolled },
+      { metrica: 'Participantes concluídos', valor: report.participants.completed },
+      { metrica: 'Taxa de participação (%)', valor: report.participants.participationRate },
+      { metrica: 'Taxa de conclusão (%)', valor: report.participants.completionRate },
+      { metrica: 'Horas de formação (total)', valor: report.hours.total },
+      { metrica: 'Custo total', valor: report.costs.total },
+      { metrica: 'Custo por participante', valor: report.costs.perParticipant },
+      { metrica: 'Custo por hora', valor: report.costs.perHour },
+      { metrica: 'Orçamento previsto', valor: report.costs.budgetPlanned },
+      { metrica: 'Execução orçamental (%)', valor: report.costs.budgetExecutionRate },
+      { metrica: 'Satisfação média', valor: report.satisfaction.avgRating ?? '' },
+      { metrica: 'NPS', valor: report.satisfaction.nps ?? '' },
+      { metrica: 'Taxa de aprovação (%)', valor: report.efficacy.approvalRate },
+      { metrica: 'Competências desenvolvidas', valor: report.competenciesDeveloped },
+      { metrica: 'Certificados emitidos', valor: report.certificatesIssued },
+      { metrica: 'Execução do plano de formação (%)', valor: report.planExecution.rate },
+    ];
+    return buildCsvString(rows, ['metrica', 'valor']);
   }
 }
