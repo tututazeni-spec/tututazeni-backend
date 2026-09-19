@@ -85,7 +85,6 @@ import { CrmFundersModule } from './crm-funders/crm-funders.module';
 // ex-ContentLibraryModule e ex-KnowledgeModule, fundidos aqui.
 import { LibraryModule } from './library/library.module';
 import { DashboardInstitutionalModule } from './dashboard-institutional/dashboard-institutional.module';
-import { LmsModule } from './lms/lms.module';
 import { MonitoringModule } from './monitoring/monitoring.module';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
@@ -198,7 +197,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     CrmFundersModule,
     LibraryModule,
     DashboardInstitutionalModule,
-    LmsModule,
     MonitoringModule,
     HealthModule,
     MetricsModule,
