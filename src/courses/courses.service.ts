@@ -33,16 +33,23 @@ import {
   UpdateLessonResourceDto,
   CreateCourseAudienceGroupDto,
   UpdateCourseAudienceGroupDto,
+  CreateCourseCohortDto,
+  UpdateCourseCohortDto,
+  AddCohortParticipantsDto,
+  MarkCohortAttendanceDto,
+  CreateCourseCategoryDto,
+  UpdateCourseCategoryDto,
 } from './courses.dto';
+import { CurrentUserData } from '../common/types/current-user';
 
 const COURSE_BASE_INCLUDE = {
   _count: { select: { enrollments: true, feedbacks: true, modules: true } },
   competencies: { include: { competency: true } },
+  primaryInstructor: { select: { id: true, fullName: true, avatarUrl: true } },
 } as const;
 
 const COURSE_DETAIL_INCLUDE = {
   ...COURSE_BASE_INCLUDE,
-  primaryInstructor: { select: { id: true, fullName: true, avatarUrl: true } },
   requiredCourse: { select: { id: true, title: true } },
   instructors: { include: { user: { select: { id: true, fullName: true, avatarUrl: true } } } },
   audienceGroups: true,
@@ -104,6 +111,9 @@ export class CoursesService {
       status,
       mandatory,
       departmentId,
+      type,
+      modality,
+      unit,
     } = filters;
     const { skip, take } = calculatePagination(page, limit);
 
@@ -113,6 +123,9 @@ export class CoursesService {
     if (level) where.level = level;
     if (mandatory !== undefined) where.mandatory = mandatory;
     if (departmentId) where.departmentId = departmentId;
+    if (type) where.type = type;
+    if (modality) where.modality = modality;
+    if (unit) where.unit = { contains: unit, mode: 'insensitive' };
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
@@ -133,7 +146,30 @@ export class CoursesService {
       this.prisma.read.course.count({ where }),
     ]);
 
-    return buildPaginatedResponse(data, total, page, limit);
+    // "Progresso médio" (docs/modulo_courses.md secção 2, coluna da tabela
+    // Cursos) — average de Enrollment.progress agrupado por curso, só para
+    // os cursos desta página (evita groupBy sobre a tabela toda).
+    const courseIds = data.map(c => c.id);
+    const avgProgressByCourseFn =
+      courseIds.length > 0
+        ? this.prisma.read.enrollment.groupBy({
+            by: ['courseId'],
+            where: { courseId: { in: courseIds } },
+            _avg: { progress: true },
+          })
+        : Promise.resolve([] as { courseId: number; _avg: { progress: number | null } }[]);
+    const avgProgressGroups = await avgProgressByCourseFn;
+    const avgProgressByCourse: Record<number, number> = {};
+    for (const g of avgProgressGroups) {
+      avgProgressByCourse[g.courseId] = Math.round(g._avg.progress ?? 0);
+    }
+
+    const enriched = data.map(c => ({
+      ...c,
+      avgProgress: avgProgressByCourse[c.id] ?? 0,
+    }));
+
+    return buildPaginatedResponse(enriched, total, page, limit);
   }
 
   async findOne(id: number) {
@@ -331,6 +367,7 @@ export class CoursesService {
             code: lesson.code,
             title: lesson.title,
             description: lesson.description,
+            learningObjectives: lesson.learningObjectives,
             type: lesson.type,
             contentUrl: lesson.contentUrl,
             textContent: lesson.textContent,
@@ -1201,13 +1238,10 @@ export class CoursesService {
     };
   }
 
-  // docs/06-modulo-courses.md — "Dashboard Admin → Cursos". A versão anterior
-  // só cobria ~4 dos ~45 indicadores pedidos pelo doc; esta cobre a maioria
-  // dos que têm dados reais no schema. Não incluído por não existir campo
-  // nenhum no schema para o suportar: "por modalidade" (Course não tem
-  // campo modalidade/formato — ver docs/06-modulo-courses.md secção 1 vs.
-  // schema.prisma real). "Atalhos" ficam só no frontend (são links de
-  // navegação, não dados).
+  // docs/modulo_courses.md secção 1 ("Visão Geral"). "Atalhos" ficam só no
+  // frontend (são links de navegação, não dados). `type`/`modality` (secção 2)
+  // não entram nas distribuições deste dashboard — usados na tabela/filtros
+  // da aba "Cursos" (ver findAll acima e GestaoView no frontend).
   async getAdminDashboard() {
     const now = new Date();
     const soon = new Date(now.getTime() + 14 * 86400 * 1000);
@@ -1220,6 +1254,7 @@ export class CoursesService {
       totalEnrollments,
       pendingEnrollments,
       completedEnrollments,
+      distinctLearners,
       overdueEnrollments,
       mandatoryCourses,
       optionalCourses,
@@ -1255,6 +1290,9 @@ export class CoursesService {
       this.prisma.read.enrollment.count(),
       this.prisma.read.enrollment.count({ where: { status: 'PENDING_APPROVAL' } }),
       this.prisma.read.enrollment.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.read.enrollment
+        .findMany({ distinct: ['userId'], select: { userId: true } })
+        .then(rows => rows.length),
       this.prisma.read.enrollment.count({
         where: { deadline: { lt: now }, status: { notIn: ['COMPLETED', 'EXPIRED'] } },
       }),
@@ -1513,6 +1551,8 @@ export class CoursesService {
         totalLessons,
         totalEnrollments,
         pendingEnrollments,
+        completions: completedEnrollments,
+        totalLearners: distinctLearners,
         mandatoryCourses,
         optionalCourses,
         certificatesIssued,
@@ -1569,6 +1609,309 @@ export class CoursesService {
       },
       topCompetencies,
       alerts,
+    };
+  }
+
+  // ─── Turmas (docs/modulo_courses.md secção 5) ───────────────────────────
+  // Cursos presenciais/híbridos. Gestão (criar/editar/encerrar/participantes/
+  // presenças) é ADMIN/RH ou o próprio INSTRUCTOR da turma — assertCohortAccess
+  // valida ownership para evitar que um instrutor mexa na turma de outro
+  // (ver memory project_innova_ownership_check_gaps: não assumir cobertura).
+
+  private privilegedForCohorts(user: CurrentUserData) {
+    return ['ADMIN', 'RH'].includes(user.role?.name ?? '');
+  }
+
+  private assertCohortAccess(cohort: { instructorId: number | null }, user: CurrentUserData) {
+    if (this.privilegedForCohorts(user)) return;
+    if (cohort.instructorId === user.id) return;
+    throw new ForbiddenException('Sem acesso a esta turma');
+  }
+
+  async listCohorts(courseId: number) {
+    const cohorts = await this.prisma.read.courseCohort.findMany({
+      where: { courseId },
+      include: {
+        instructor: { select: { id: true, fullName: true, avatarUrl: true } },
+        _count: { select: { participants: true } },
+      },
+      orderBy: { startDate: 'desc' },
+    });
+    return cohorts.map(c => ({
+      ...c,
+      enrolled: c._count.participants,
+      availableSlots: Math.max(0, c.capacity - c._count.participants),
+    }));
+  }
+
+  async getCohort(id: number, user: CurrentUserData) {
+    const cohort = await this.prisma.read.courseCohort.findUnique({
+      where: { id },
+      include: {
+        course: { select: { id: true, title: true } },
+        instructor: { select: { id: true, fullName: true, avatarUrl: true } },
+        participants: {
+          include: {
+            user: { select: { id: true, fullName: true, avatarUrl: true, email: true } },
+          },
+          orderBy: { enrolledAt: 'asc' },
+        },
+      },
+    });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    return {
+      ...cohort,
+      enrolled: cohort.participants.length,
+      availableSlots: Math.max(0, cohort.capacity - cohort.participants.length),
+    };
+  }
+
+  async createCohort(courseId: number, dto: CreateCourseCohortDto) {
+    await this.findOne(courseId);
+    return this.prisma.courseCohort.create({
+      data: {
+        courseId,
+        name: dto.name,
+        instructorId: dto.instructorId,
+        location: dto.location,
+        room: dto.room,
+        schedule: dto.schedule,
+        capacity: dto.capacity ?? 30,
+        startDate: new Date(dto.startDate),
+        endDate: dto.endDate ? new Date(dto.endDate) : null,
+      },
+    });
+  }
+
+  async updateCohort(id: number, dto: UpdateCourseCohortDto, user: CurrentUserData) {
+    const cohort = await this.prisma.courseCohort.findUnique({ where: { id } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    return this.prisma.courseCohort.update({
+      where: { id },
+      data: {
+        name: dto.name,
+        instructorId: dto.instructorId,
+        location: dto.location,
+        room: dto.room,
+        schedule: dto.schedule,
+        capacity: dto.capacity,
+        status: dto.status,
+        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+      },
+    });
+  }
+
+  async closeCohort(id: number, user: CurrentUserData) {
+    const cohort = await this.prisma.courseCohort.findUnique({ where: { id } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    return this.prisma.courseCohort.update({ where: { id }, data: { status: 'CLOSED' } });
+  }
+
+  async addCohortParticipants(
+    cohortId: number,
+    dto: AddCohortParticipantsDto,
+    user: CurrentUserData,
+  ) {
+    const cohort = await this.prisma.courseCohort.findUnique({
+      where: { id: cohortId },
+      include: { _count: { select: { participants: true } } },
+    });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+
+    const alreadyIn = await this.prisma.courseCohortParticipant.findMany({
+      where: { cohortId, userId: { in: dto.userIds } },
+      select: { userId: true },
+    });
+    const alreadyInIds = new Set(alreadyIn.map(p => p.userId));
+    const newUserIds = dto.userIds.filter(id => !alreadyInIds.has(id));
+
+    const availableSlots = cohort.capacity - cohort._count.participants;
+    if (newUserIds.length > availableSlots) {
+      throw new ConflictException(
+        `Capacidade insuficiente: ${availableSlots} vaga(s) disponível(eis) para ${newUserIds.length} participante(s)`,
+      );
+    }
+    if (newUserIds.length === 0) return { added: 0 };
+
+    await this.prisma.courseCohortParticipant.createMany({
+      data: newUserIds.map(userId => ({ cohortId, userId })),
+    });
+    return { added: newUserIds.length };
+  }
+
+  async removeCohortParticipant(cohortId: number, userId: number, user: CurrentUserData) {
+    const cohort = await this.prisma.courseCohort.findUnique({ where: { id: cohortId } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    await this.prisma.courseCohortParticipant.deleteMany({ where: { cohortId, userId } });
+    return { removed: true };
+  }
+
+  async markCohortAttendance(
+    cohortId: number,
+    dto: MarkCohortAttendanceDto,
+    user: CurrentUserData,
+  ) {
+    const cohort = await this.prisma.courseCohort.findUnique({ where: { id: cohortId } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+
+    const date = new Date(dto.date);
+    await Promise.all(
+      dto.records.map(r =>
+        this.prisma.attendanceRecord.upsert({
+          where: { userId_date_context: { userId: r.userId, date, context: 'LMS' } },
+          create: {
+            userId: r.userId,
+            date,
+            context: 'LMS',
+            status: r.present ? 'PRESENT' : 'ABSENT',
+            courseId: cohort.courseId,
+            sessionId: cohort.id,
+            notes: r.notes,
+          },
+          update: {
+            status: r.present ? 'PRESENT' : 'ABSENT',
+            notes: r.notes,
+          },
+        }),
+      ),
+    );
+    return { marked: dto.records.length };
+  }
+
+  async getCohortAttendance(cohortId: number, date: string, user: CurrentUserData) {
+    const cohort = await this.prisma.read.courseCohort.findUnique({ where: { id: cohortId } });
+    if (!cohort) throw new NotFoundException('Turma não encontrada');
+    this.assertCohortAccess(cohort, user);
+    return this.prisma.read.attendanceRecord.findMany({
+      where: {
+        courseId: cohort.courseId,
+        sessionId: cohort.id,
+        context: 'LMS',
+        date: new Date(date),
+      },
+      select: { userId: true, status: true, notes: true },
+    });
+  }
+
+  // ─── Categorias (docs/modulo_courses.md secção 6) ───────────────────────
+  // Course.category continua String livre — CourseCategory é o registo de
+  // gestão (descrição/estado); a contagem "cursos associados" é por nome.
+
+  async listCategoriesManaged() {
+    const [managed, counts] = await Promise.all([
+      this.prisma.read.courseCategory.findMany({ orderBy: { name: 'asc' } }),
+      this.prisma.read.course.groupBy({
+        by: ['category'],
+        where: { category: { not: null } },
+        _count: true,
+      }),
+    ]);
+    const countByName = new Map(counts.map(c => [c.category, c._count]));
+    return managed.map(cat => ({ ...cat, courseCount: countByName.get(cat.name) ?? 0 }));
+  }
+
+  async createCategory(dto: CreateCourseCategoryDto) {
+    const exists = await this.prisma.courseCategory.findUnique({ where: { name: dto.name } });
+    if (exists) throw new ConflictException(`Categoria "${dto.name}" já existe`);
+    return this.prisma.courseCategory.create({ data: dto });
+  }
+
+  async updateCategory(id: number, dto: UpdateCourseCategoryDto) {
+    const category = await this.prisma.courseCategory.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException('Categoria não encontrada');
+    return this.prisma.courseCategory.update({ where: { id }, data: dto });
+  }
+
+  async removeCategory(id: number) {
+    const category = await this.prisma.courseCategory.findUnique({ where: { id } });
+    if (!category) throw new NotFoundException('Categoria não encontrada');
+    const coursesUsing = await this.prisma.read.course.count({
+      where: { category: category.name },
+    });
+    if (coursesUsing > 0) {
+      throw new ConflictException(
+        `Não é possível remover: ${coursesUsing} curso(s) usam esta categoria. Desactive-a em vez disso.`,
+      );
+    }
+    return this.prisma.courseCategory.delete({ where: { id } });
+  }
+
+  // ─── Relatórios (docs/modulo_courses.md secção 7) ───────────────────────
+  // Reaproveita as agregações já calculadas em getAdminDashboard (cursos mais
+  // frequentados, conclusão, horas de formação, departamento/unidade) e
+  // acrescenta só as métricas que a Visão Geral não cobre: resultados de
+  // avaliações formais, taxa de abandono e formação obrigatória pendente.
+
+  async getCourseReports() {
+    const [dashboard, evaluationAttempts, progressAgg, mandatoryPendingCourses, abandoned] =
+      await Promise.all([
+        this.getAdminDashboard(),
+        this.prisma.read.evaluationAttempt.findMany({
+          where: { finishedAt: { not: null } },
+          select: { scorePercent: true, passed: true },
+        }),
+        this.prisma.read.enrollment.aggregate({ _avg: { progress: true } }),
+        this.prisma.read.course.findMany({
+          where: {
+            mandatory: true,
+            enrollments: { some: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } },
+          },
+          select: {
+            id: true,
+            title: true,
+            _count: {
+              select: { enrollments: { where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } } },
+            },
+          },
+        }),
+        this.prisma.read.enrollment.count({ where: { status: { in: ['CANCELLED', 'EXPIRED'] } } }),
+      ]);
+
+    const scored = evaluationAttempts.filter(a => a.scorePercent != null);
+    const avgEvaluationScore = scored.length
+      ? Math.round((scored.reduce((s, a) => s + (a.scorePercent ?? 0), 0) / scored.length) * 10) /
+        10
+      : 0;
+    const evaluationsPassed = evaluationAttempts.filter(a => a.passed).length;
+    const evaluationPassRate = evaluationAttempts.length
+      ? Math.round((evaluationsPassed / evaluationAttempts.length) * 100)
+      : 0;
+
+    const totalEnrollments = dashboard.counts.totalEnrollments;
+    const abandonmentRate =
+      totalEnrollments > 0 ? Math.round((abandoned / totalEnrollments) * 100) : 0;
+
+    return {
+      topCourses: dashboard.topCourses,
+      bestCompletion: dashboard.bestCompletion,
+      worstCompletion: dashboard.worstCompletion,
+      learnersByCourse: dashboard.topCourses,
+      byDepartment: dashboard.byDepartment,
+      byUnit: dashboard.byUnit,
+      totalLearningHours: dashboard.rates.totalLearningHours,
+      approvalRate: dashboard.rates.avgCompletionRate,
+      abandonmentRate,
+      avgProgress: progressAgg._avg.progress ? Math.round(progressAgg._avg.progress) : 0,
+      evaluationResults: {
+        totalAttempts: evaluationAttempts.length,
+        avgScore: avgEvaluationScore,
+        passRate: evaluationPassRate,
+      },
+      mandatoryPending: {
+        count: mandatoryPendingCourses.reduce((s, c) => s + c._count.enrollments, 0),
+        courses: mandatoryPendingCourses.map(c => ({
+          id: c.id,
+          title: c.title,
+          pending: c._count.enrollments,
+        })),
+      },
     };
   }
 }

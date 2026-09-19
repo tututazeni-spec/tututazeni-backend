@@ -500,6 +500,25 @@ const CourseVisibility = {
   SELECTED_GROUPS: 'SELECTED_GROUPS',
 };
 
+const CourseType = {
+  OBRIGATORIO: 'OBRIGATORIO',
+  OPCIONAL: 'OPCIONAL',
+  COMPLIANCE: 'COMPLIANCE',
+  INTEGRACAO: 'INTEGRACAO',
+  DESENVOLVIMENTO: 'DESENVOLVIMENTO',
+  TECNICO: 'TECNICO',
+  COMPORTAMENTAL: 'COMPORTAMENTAL',
+  LIDERANCA: 'LIDERANCA',
+};
+
+const CourseModality = {
+  ONLINE: 'ONLINE',
+  PRESENCIAL: 'PRESENCIAL',
+  HIBRIDO: 'HIBRIDO',
+  AO_VIVO: 'AO_VIVO',
+  AUTOAPRENDIZAGEM: 'AUTOAPRENDIZAGEM',
+};
+
 const ModuleStatus = {
   DRAFT: 'DRAFT',
   PUBLISHED: 'PUBLISHED',
@@ -659,6 +678,7 @@ const CompetencySource = {
   ASSESSMENT: 'ASSESSMENT',
   MANAGER: 'MANAGER',
   HRIS: 'HRIS',
+  TRAINING: 'TRAINING',
 };
 
 const MappingPriority = { MANDATORY: 'MANDATORY', OPTIONAL: 'OPTIONAL' };
@@ -1737,7 +1757,30 @@ const TrainingType = {
 
 const TrainingLevel = { BEGINNER: 'BEGINNER', INTERMEDIATE: 'INTERMEDIATE', ADVANCED: 'ADVANCED' };
 
-const TrainingStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHIVED' };
+const TrainingStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+  CANCELLED: 'CANCELLED',
+  COMPLETED: 'COMPLETED',
+};
+
+const TrainingPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', URGENT: 'URGENT' };
+
+const TrainingPlanPeriod = {
+  ANNUAL: 'ANNUAL',
+  QUARTERLY: 'QUARTERLY',
+  EXTRAORDINARY: 'EXTRAORDINARY',
+};
+
+const TrainingPlanStatus = {
+  DRAFT: 'DRAFT',
+  SUBMITTED: 'SUBMITTED',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+};
 
 const TrainingParticipantStatus = {
   WAITLIST: 'WAITLIST',
@@ -1755,9 +1798,32 @@ const TrainingAssessmentRole = {
   FINAL: 'FINAL',
   SATISFACTION_SURVEY: 'SATISFACTION_SURVEY',
   INSTRUCTOR_EVALUATION: 'INSTRUCTOR_EVALUATION',
+  ORGANIZATION_EVALUATION: 'ORGANIZATION_EVALUATION',
+  APPLICABILITY_EVALUATION: 'APPLICABILITY_EVALUATION',
+  POST_TRAINING_EFFECTIVENESS: 'POST_TRAINING_EFFECTIVENESS',
 };
 
 const SessionModality = { PRESENTIAL: 'PRESENTIAL', ONLINE: 'ONLINE', HYBRID: 'HYBRID' };
+
+const TrainingInstructorType = { INTERNAL: 'INTERNAL', EXTERNAL: 'EXTERNAL' };
+
+const TrainingInstructorStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE' };
+
+const TrainingResourceKind = {
+  ROOM: 'ROOM',
+  EQUIPMENT: 'EQUIPMENT',
+  MATERIAL: 'MATERIAL',
+  CATERING: 'CATERING',
+  TRANSPORT: 'TRANSPORT',
+  ACCOMMODATION: 'ACCOMMODATION',
+  OTHER: 'OTHER',
+};
+
+const TrainingResourceStatus = {
+  AVAILABLE: 'AVAILABLE',
+  UNAVAILABLE: 'UNAVAILABLE',
+  MAINTENANCE: 'MAINTENANCE',
+};
 
 const ArticleStatus = {
   DRAFT: 'DRAFT',
@@ -2071,6 +2137,14 @@ const CohortStatus = {
 
 const CohortParticipantStatus = { ACTIVE: 'ACTIVE' };
 
+const CourseCohortStatus = {
+  DRAFT: 'DRAFT',
+  OPEN: 'OPEN',
+  ACTIVE: 'ACTIVE',
+  CLOSED: 'CLOSED',
+  CANCELLED: 'CANCELLED',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -2133,6 +2207,8 @@ module.exports = {
   CourseLevel,
   CourseStatus,
   CourseVisibility,
+  CourseType,
+  CourseModality,
   ModuleStatus,
   ModuleType,
   ProgressionType,
@@ -2310,9 +2386,16 @@ module.exports = {
   TrainingType,
   TrainingLevel,
   TrainingStatus,
+  TrainingPriority,
+  TrainingPlanPeriod,
+  TrainingPlanStatus,
   TrainingParticipantStatus,
   TrainingAssessmentRole,
   SessionModality,
+  TrainingInstructorType,
+  TrainingInstructorStatus,
+  TrainingResourceKind,
+  TrainingResourceStatus,
   ArticleStatus,
   ArticleAccess,
   InteractionAction,
@@ -2361,4 +2444,5 @@ module.exports = {
   CohortModalidade,
   CohortStatus,
   CohortParticipantStatus,
+  CourseCohortStatus,
 };

@@ -18,6 +18,8 @@ import {
   CourseLevel,
   CourseStatus,
   CourseVisibility,
+  CourseType,
+  CourseModality,
   ModuleStatus,
   ModuleType,
   ProgressionType,
@@ -26,6 +28,7 @@ import {
   LessonStatus,
   LessonActivityType,
   QuizQuestionType,
+  CourseCohortStatus,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
@@ -34,6 +37,8 @@ export {
   CourseLevel,
   CourseStatus,
   CourseVisibility,
+  CourseType,
+  CourseModality,
   ModuleStatus,
   ModuleType,
   ProgressionType,
@@ -42,6 +47,7 @@ export {
   LessonStatus,
   LessonActivityType,
   QuizQuestionType,
+  CourseCohortStatus,
 };
 
 // AssignmentTarget local — usado apenas para despachar destinatários de
@@ -137,6 +143,16 @@ export class CreateCourseDto {
   @IsOptional()
   @IsBoolean()
   mandatory?: boolean;
+
+  @ApiPropertyOptional({ enum: CourseType })
+  @IsOptional()
+  @IsEnum(CourseType)
+  type?: CourseType;
+
+  @ApiPropertyOptional({ enum: CourseModality })
+  @IsOptional()
+  @IsEnum(CourseModality)
+  modality?: CourseModality;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -351,6 +367,12 @@ export class CreateLessonDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  learningObjectives?: string[];
+
   @ApiProperty({ enum: LessonType })
   @IsEnum(LessonType)
   type!: LessonType;
@@ -499,6 +521,21 @@ export class CourseFilterDto extends BaseFilterDto {
   @IsOptional()
   @IsEnum(CourseStatus)
   status?: CourseStatus;
+
+  @ApiPropertyOptional({ enum: CourseType })
+  @IsOptional()
+  @IsEnum(CourseType)
+  type?: CourseType;
+
+  @ApiPropertyOptional({ enum: CourseModality })
+  @IsOptional()
+  @IsEnum(CourseModality)
+  modality?: CourseModality;
+
+  @ApiPropertyOptional({ description: 'Unidade responsável (contains, case-insensitive)' })
+  @IsOptional()
+  @IsString()
+  unit?: string;
 
   // @Type(() => Boolean) coage '?mandatory=false' para true — ver
   // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
@@ -729,6 +766,118 @@ export class CreateCourseAudienceGroupDto {
   @IsArray()
   @IsInt({ each: true })
   userIds?: number[];
+}
+
+// ── Turmas (docs/modulo_courses.md secção 5) ────────────────────────────────
+
+export class CreateCourseCohortDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  instructorId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  room?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  schedule?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  capacity?: number;
+
+  @ApiProperty()
+  @IsDateString()
+  startDate!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+}
+
+export class UpdateCourseCohortDto extends PartialType(CreateCourseCohortDto) {
+  @ApiPropertyOptional({ enum: CourseCohortStatus })
+  @IsOptional()
+  @IsEnum(CourseCohortStatus)
+  status?: CourseCohortStatus;
+}
+
+export class AddCohortParticipantsDto {
+  @ApiProperty({ type: [Number] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsInt({ each: true })
+  userIds!: number[];
+}
+
+export class MarkCohortAttendanceDto {
+  @ApiProperty()
+  @IsDateString()
+  date!: string;
+
+  @ApiProperty({ type: [Object], description: 'Lista de { userId, present, notes? }' })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CohortAttendanceEntryDto)
+  records!: CohortAttendanceEntryDto[];
+}
+
+export class CohortAttendanceEntryDto {
+  @ApiProperty()
+  @IsInt()
+  userId!: number;
+
+  @ApiProperty()
+  @IsBoolean()
+  present!: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+// ── Categorias (docs/modulo_courses.md secção 6) ────────────────────────────
+
+export class CreateCourseCategoryDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(120)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+}
+
+export class UpdateCourseCategoryDto extends PartialType(CreateCourseCategoryDto) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateCourseAudienceGroupDto extends PartialType(CreateCourseAudienceGroupDto) {}

@@ -13,6 +13,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TrainingService } from './trainings.service';
@@ -31,6 +32,11 @@ import {
   CreateTrainingDocumentDto,
   LinkTrainingAssessmentDto,
   TrainingAssessmentRole,
+  CancelTrainingDto,
+  TrainingCalendarFilterDto,
+  TransferParticipantDto,
+  BulkRegisterParticipantsDto,
+  TrainingReportFilterDto,
 } from './trainings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -89,6 +95,36 @@ export class TrainingController {
     return this.svc.getMyTrainings(user.id);
   }
 
+  @Get('calendar')
+  @ApiOperation({ summary: 'Calendário de sessões/formações num intervalo de datas' })
+  calendar(@Query() filters: TrainingCalendarFilterDto) {
+    return this.svc.getCalendar(filters);
+  }
+
+  // ── Relatórios (docs/trainings-detalhado.md pt.10) ─────────────────────────
+  // Rotas com prefixo fixo ("reports/...") registadas ANTES de ':id' — caso
+  // contrário o Nest fazia-as cair na rota parametrizada abaixo (mesmo
+  // problema de route shadowing já visto noutros módulos deste projecto).
+
+  @Get('reports/overview')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({
+    summary:
+      'Relatórios (Academia/RH/Administração): execução, participantes, horas, custos, satisfação, eficácia, certificados',
+  })
+  reports(@Query() filters: TrainingReportFilterDto) {
+    return this.svc.getReports(filters);
+  }
+
+  @Get('reports/export')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="relatorio-formacoes.csv"')
+  @ApiOperation({ summary: 'Exportar relatório anual/filtrado da Academia como CSV' })
+  exportReports(@Query() filters: TrainingReportFilterDto) {
+    return this.svc.exportReportsCsv(filters);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do treinamento (sessões, rating médio)' })
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
@@ -102,6 +138,16 @@ export class TrainingController {
     return this.svc.getAttendanceReport(id);
   }
 
+  @Get(':id/history')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({
+    summary:
+      'Histórico da formação (aba "Histórico" — criação, alterações, sessões, inscrições, presenças, avaliações, conclusão)',
+  })
+  history(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getHistory(id);
+  }
+
   @Get(':id/results')
   @Roles(...CAN_CREATE_TRAININGS)
   @ApiOperation({
@@ -110,6 +156,15 @@ export class TrainingController {
   })
   results(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getResults(id);
+  }
+
+  @Get(':id/participants/export')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="participantes.csv"')
+  @ApiOperation({ summary: 'Exportar participantes (todas as sessões) como CSV' })
+  exportParticipants(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.exportParticipantsCsv(id);
   }
 
   // ── Gestão da formação (Admin/RH/Gestor/Instrutor/Director/Líder) ─────────
@@ -146,6 +201,26 @@ export class TrainingController {
   @HttpCode(HttpStatus.OK)
   archive(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.archive(id, user);
+  }
+
+  @Patch(':id/cancel')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Cancelar treinamento' })
+  @HttpCode(HttpStatus.OK)
+  cancel(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CancelTrainingDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.cancel(id, dto, user);
+  }
+
+  @Patch(':id/complete')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Concluir treinamento' })
+  @HttpCode(HttpStatus.OK)
+  complete(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.complete(id, user);
   }
 
   @Delete(':id')
@@ -288,8 +363,9 @@ export class TrainingController {
   updateParticipantStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: TrainingsUpdateParticipantStatusDto,
+    @CurrentUser() user: CurrentUserData,
   ) {
-    return this.svc.updateParticipantStatus(id, dto);
+    return this.svc.updateParticipantStatus(id, dto, user.id);
   }
 
   @Patch('participants/:id/approve')
@@ -310,6 +386,21 @@ export class TrainingController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.rejectParticipant(id, dto, user);
+  }
+
+  @Post('sessions/register/bulk')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Inscrever vários colaboradores numa sessão' })
+  bulkRegister(@Body() dto: BulkRegisterParticipantsDto) {
+    return this.svc.bulkRegisterParticipants(dto);
+  }
+
+  @Patch('participants/:id/transfer')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Transferir participante para outra turma/sessão' })
+  @HttpCode(HttpStatus.OK)
+  transferParticipant(@Param('id', ParseIntPipe) id: number, @Body() dto: TransferParticipantDto) {
+    return this.svc.transferParticipant(id, dto);
   }
 
   @Post('sessions/attendance/bulk')

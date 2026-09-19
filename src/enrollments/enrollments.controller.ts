@@ -84,8 +84,8 @@ export class EnrollmentsController {
   @Get()
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar matrículas com filtros avançados (inclui compliance)' })
-  findAll(@Query() filters: EnrollmentFilterDto) {
-    return this.svc.findAll(filters);
+  findAll(@Query() filters: EnrollmentFilterDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.findAll(filters, user);
   }
 
   @Get('admin/dashboard')
@@ -109,6 +109,13 @@ export class EnrollmentsController {
   @ApiQuery({ name: 'courseId', required: false })
   teamProgress(@CurrentUser() user: CurrentUserData, @Query('courseId') courseId?: string) {
     return this.svc.getTeamProgress(user.id, courseId ? parseInt(courseId) : undefined);
+  }
+
+  @Get('by-department')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Progresso agregado por departamento/unidade (para RH)' })
+  progressByDepartment() {
+    return this.svc.getProgressByDepartment();
   }
 
   @Get('users/:userId')
@@ -178,6 +185,30 @@ export class EnrollmentsController {
   @HttpCode(HttpStatus.OK)
   certificate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.generateCertificate(id, user);
+  }
+
+  @Post(':id/reset-progress')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Reiniciar progresso da matrícula (apaga o progresso das aulas)' })
+  @HttpCode(HttpStatus.OK)
+  resetProgress(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.resetProgress(id);
+  }
+
+  @Post(':id/reenroll')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Reinscrever (matrícula cancelada ou expirada)' })
+  @HttpCode(HttpStatus.OK)
+  reenroll(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.reenroll(id);
+  }
+
+  @Post(':id/remind')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Enviar lembrete de formação por concluir' })
+  @HttpCode(HttpStatus.OK)
+  remind(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.remind(id, user);
   }
 
   @Post('sync-overdue')

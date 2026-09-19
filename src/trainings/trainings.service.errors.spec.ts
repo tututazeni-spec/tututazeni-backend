@@ -7,6 +7,11 @@ import {
 } from '@nestjs/common';
 import { TrainingService as TrainingsService } from './trainings.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../common/services/audit.service';
+import { CompetenciesService } from '../competencies/competencies.service';
+
+const mockAuditService = { log: jest.fn().mockResolvedValue(undefined) };
+const mockCompetenciesService = { updateFromTraining: jest.fn().mockResolvedValue(undefined) };
 
 const mockPrisma = {
   trainingParticipant: {
@@ -30,7 +35,12 @@ describe('TrainingsService — registerParticipant (capacidade / lista de espera
     jest.clearAllMocks();
     Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TrainingsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        TrainingsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAuditService },
+        { provide: CompetenciesService, useValue: mockCompetenciesService },
+      ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
   });
@@ -130,7 +140,12 @@ describe('TrainingsService — cancelParticipant (ownership + promoção da list
     jest.clearAllMocks();
     Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TrainingsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        TrainingsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAuditService },
+        { provide: CompetenciesService, useValue: mockCompetenciesService },
+      ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
   });
@@ -151,6 +166,7 @@ describe('TrainingsService — cancelParticipant (ownership + promoção da list
       id: 1,
       userId: 7,
       sessionId: 10,
+      session: { trainingId: 5 },
     });
     mockPrisma.trainingParticipant.findFirst.mockResolvedValue({ id: 20, userId: 30 });
 
@@ -167,6 +183,7 @@ describe('TrainingsService — cancelParticipant (ownership + promoção da list
       id: 1,
       userId: 7,
       sessionId: 10,
+      session: { trainingId: 5 },
     });
     mockPrisma.trainingParticipant.findFirst.mockResolvedValue(null);
 
@@ -183,7 +200,12 @@ describe('TrainingsService — updateParticipantStatus (emissão automática de 
     jest.clearAllMocks();
     Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TrainingsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        TrainingsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAuditService },
+        { provide: CompetenciesService, useValue: mockCompetenciesService },
+      ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
   });
@@ -251,7 +273,12 @@ describe('TrainingsService — bulkAttendance', () => {
     jest.clearAllMocks();
     Object.defineProperty(mockPrisma, 'read', { get: () => mockPrisma, configurable: true });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TrainingsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        TrainingsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAuditService },
+        { provide: CompetenciesService, useValue: mockCompetenciesService },
+      ],
     }).compile();
     service = module.get<TrainingsService>(TrainingsService);
   });
