@@ -18,6 +18,10 @@ import {
   LiveChatMessageDto,
   PostClassResponseDto,
   LiveClassFilterDto,
+  PostponeLiveClassDto,
+  CancelLiveClassDto,
+  CreateLiveClassSessionDto,
+  UpdateLiveClassSessionDto,
 } from './live-classes.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -43,6 +47,24 @@ export class LiveClassesController {
     return this.svc.getUpcoming();
   }
 
+  @Get('dashboard')
+  @ApiOperation({ summary: 'Visão geral — cards e contadores' })
+  dashboard() {
+    return this.svc.getDashboard();
+  }
+
+  @Get('calendar')
+  @ApiOperation({ summary: 'Aulas e sessões num intervalo de datas' })
+  calendar(@Query('from') from: string, @Query('to') to: string) {
+    return this.svc.getCalendar(from, to);
+  }
+
+  @Get('sessions')
+  @ApiOperation({ summary: 'Todas as sessões de todas as aulas (secção 5)' })
+  listAllSessions(@Query() filters: LiveClassFilterDto) {
+    return this.svc.listAllSessions(filters);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe da aula' })
   findOne(@Param('id', ParseIntPipe) id: number) {
@@ -64,6 +86,12 @@ export class LiveClassesController {
   @ApiOperation({ summary: 'Relatório de presença' })
   attendanceReport(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getAttendanceReport(id);
+  }
+
+  @Get(':id/sessions')
+  @ApiOperation({ summary: 'Listar sessões da aula (aulas recorrentes)' })
+  listSessions(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.listSessions(id);
   }
 
   @Post()
@@ -108,6 +136,41 @@ export class LiveClassesController {
     return this.svc.submitPostResponse(user.id, dto);
   }
 
+  @Post(':id/start')
+  @Roles(Role.ADMIN, Role.RH, Role.INSTRUCTOR)
+  @ApiOperation({ summary: 'Iniciar aula (estado → Em curso)' })
+  start(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.start(id);
+  }
+
+  @Post(':id/postpone')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Adiar aula para nova data' })
+  postpone(@Param('id', ParseIntPipe) id: number, @Body() dto: PostponeLiveClassDto) {
+    return this.svc.postpone(id, dto);
+  }
+
+  @Post(':id/cancel')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Cancelar aula' })
+  cancel(@Param('id', ParseIntPipe) id: number, @Body() dto: CancelLiveClassDto) {
+    return this.svc.cancel(id, dto);
+  }
+
+  @Post(':id/duplicate')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Duplicar aula' })
+  duplicate(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.duplicate(id);
+  }
+
+  @Post(':id/sessions')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Adicionar sessão à aula' })
+  createSession(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateLiveClassSessionDto) {
+    return this.svc.createSession(id, dto);
+  }
+
   @Put(':id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Atualizar aula' })
@@ -115,10 +178,31 @@ export class LiveClassesController {
     return this.svc.update(id, dto);
   }
 
+  @Put(':id/sessions/:sessionId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Atualizar sessão' })
+  updateSession(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @Body() dto: UpdateLiveClassSessionDto,
+  ) {
+    return this.svc.updateSession(id, sessionId, dto);
+  }
+
   @Delete(':id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Remover aula' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.svc.remove(id);
+  }
+
+  @Delete(':id/sessions/:sessionId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Remover sessão' })
+  removeSession(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+  ) {
+    return this.svc.deleteSession(id, sessionId);
   }
 }

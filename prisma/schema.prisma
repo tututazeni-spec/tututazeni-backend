@@ -2244,6 +2244,7 @@ model CourseModule {
   materials                ModuleMaterial[]
   assessments              Assessment[]
   competencies             ModuleCompetency[]
+  liveClasses              LiveClass[]
 
   @@index([courseId])
   @@index([seq])
@@ -2317,6 +2318,7 @@ model Lesson {
   quiz               Quiz?
   activities         LessonActivity[]
   resources          LessonResource[]
+  liveClasses        LiveClass[]
 
   @@index([moduleId])
   @@index([requiredLessonId])
@@ -5065,8 +5067,11 @@ model TrainingInstructorProfile {
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
 
-  user              User?      @relation("TrainingInstructorProfileUser", fields: [userId], references: [id])
-  externalTrainings Training[] @relation("TrainingExternalInstructor")
+  user                      User?              @relation("TrainingInstructorProfileUser", fields: [userId], references: [id])
+  externalTrainings         Training[]         @relation("TrainingExternalInstructor")
+  liveClassesAsInstructor   LiveClass[]        @relation("LiveClassInstructor")
+  liveClassesAsCoInstructor LiveClass[]        @relation("LiveClassCoInstructor")
+  liveClassSessions         LiveClassSession[]
 
   @@index([status])
   @@index([type])
@@ -6137,34 +6142,200 @@ model DocumentDownload {
 // ══════════════════════════════════════════════════════════════════
 // LIVE CLASSES
 // ══════════════════════════════════════════════════════════════════
+// docs/aulas-ao-vivo.md — "Aula" é a entidade agendada/gerida (curso,
+// formador, modalidade, participantes, presença, gravação, avaliação,
+// notificações); "Sessão" (LiveClassSession, ver mais abaixo) só existe
+// para aulas recorrentes e serve apenas para agendar/registar cada
+// ocorrência (data/formador/sala/link/presenças/estado) — a sala Jitsi ao
+// vivo, o chat e a avaliação pós-aula continuam ao nível da Aula, tal como
+// já funcionava antes desta extensão (decisão explícita: não duplicar toda
+// a infraestrutura de sala ao vivo por sessão).
+//
+// Reaproveita modelos do módulo Trainings em vez de duplicar: formador/
+// co-formador apontam para TrainingInstructorProfile (docs pt.7 — "Liga aos
+// formadores no módulo Trainings"); "Salas & Links"/materiais ficam fora
+// desta fase (secções 7/8/11 do doc), só a Aula liga-se-lhes por picker.
+
+enum LiveClassType {
+  AULA
+  WEBINAR
+  WORKSHOP
+  SESSAO_PRATICA
+  SESSAO_ESCLARECIMENTO
+  MENTORIA
+  TUTORIA
+  SESSAO_REVISAO
+}
+
+enum LiveClassStatus {
+  AGENDADA
+  EM_PREPARACAO
+  EM_CURSO
+  CONCLUIDA
+  CANCELADA
+  ADIADA
+}
+
+enum LiveClassRecurrence {
+  ONCE
+  DAILY
+  WEEKLY
+  CUSTOM
+}
+
+enum LiveClassEnrollmentMode {
+  AUTO
+  MANUAL
+  SELF
+  APPROVAL
+}
+
+enum LiveAttendanceStatus {
+  PRESENTE
+  AUSENTE
+  ATRASADO
+  PARCIAL
+  JUSTIFICADO
+}
 
 model LiveClass {
-  id             Int                  @id @default(autoincrement())
-  courseId       Int
-  zoomMeetingId  String?              @db.Text
-  topic          String               @db.Text
-  scheduledAt    DateTime
-  duration       Int
-  recordingUrl   String?              @db.Text
-  createdAt      DateTime             @default(now())
-  course         Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  id            Int      @id @default(autoincrement())
+  courseId      Int
+  zoomMeetingId String?  @db.Text
+  topic         String   @db.Text
+  scheduledAt   DateTime
+  duration      Int
+  recordingUrl  String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  // Etapa 1 — Informações gerais
+  code           String?         @unique
+  description    String?         @db.Text
+  type           LiveClassType   @default(AULA)
+  status         LiveClassStatus @default(AGENDADA)
+  moduleId       Int?
+  lessonId       Int?
+  instructorId   Int?
+  coInstructorId Int?
+
+  // Etapa 2 — Data e horário / recorrência
+  recurrence           LiveClassRecurrence @default(ONCE)
+  recurrenceEndDate    DateTime?
+  recurrenceDaysOfWeek Int[]               @default([])
+  timezone             String              @default("Europe/Lisbon")
+
+  // Etapa 3 — Modalidade
+  modality SessionModality @default(ONLINE)
+  location String?
+  building String?
+  room     String?
+  capacity Int?
+
+  // Etapa 4 — Participantes
+  enrollmentMode    LiveClassEnrollmentMode @default(MANUAL)
+  maxParticipants   Int?
+  waitlistEnabled   Boolean                 @default(false)
+  targetDeptIds     Int[]                   @default([])
+  targetUnitIds     Int[]                   @default([])
+  targetPositionIds Int[]                   @default([])
+
+  // Etapa 5 — Conteúdo (materiais ligam-se à Biblioteca — FK "solta", sem
+  // relação Prisma, mesmo padrão de Training.requiredResources)
+  objectives          String?
+  agenda              String?  @db.Text
+  topics              String[] @default([])
+  materialDocumentIds Int[]    @default([])
+
+  // Etapa 6 — Presença (regra: só "Presente" com >= minAttendancePercent)
+  attendanceAutoRegister Boolean @default(true)
+  attendanceRequired     Boolean @default(false)
+  minAttendancePercent   Int     @default(70)
+  lateToleranceMinutes   Int     @default(10)
+
+  // Etapa 7 — Gravação (recordingUrl acima é o resultado; isto é config)
+  recordSession          Boolean   @default(true)
+  recordingExpiresAt     DateTime?
+  allowRecordingDownload Boolean   @default(false)
+
+  // Etapa 8 — Avaliação (liga-se ao PostClassEvaluation já existente)
+  evaluationRequired Boolean @default(false)
+
+  // Etapa 9 — Notificações. Sem scheduler para lembretes temporizados
+  // (24h/1h antes) — mesma limitação documentada no módulo automation;
+  // aqui só se persistem os toggles e disparam-se os eventos que já
+  // acontecem em código (inscrição/alteração/cancelamento).
+  notifySettings Json?
+
+  // Adiamento/cancelamento
+  postponedFromAt    DateTime?
+  postponeReason     String?
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  course         Course                     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module         CourseModule?              @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  lesson         Lesson?                    @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  instructor     TrainingInstructorProfile? @relation("LiveClassInstructor", fields: [instructorId], references: [id], onDelete: SetNull)
+  coInstructor   TrainingInstructorProfile? @relation("LiveClassCoInstructor", fields: [coInstructorId], references: [id], onDelete: SetNull)
   attendances    LiveAttendance[]
   messages       LiveChatMessage[]
   postEvaluation PostClassEvaluation?
+  sessions       LiveClassSession[]
 
   @@index([courseId])
+  @@index([status])
+  @@index([type])
+  @@index([moduleId])
+  @@index([instructorId])
+}
+
+// Sub-ocorrências de uma Aula recorrente (docs/aulas-ao-vivo.md secção 5).
+// Só existem quando LiveClass.recurrence != ONCE — para o caso simples
+// (uma única ocorrência), a própria LiveClass continua a ser a única
+// "sessão", exactamente como antes desta extensão (zero impacto em dados
+// existentes). Não tem sala Jitsi/chat próprios — ver nota no topo.
+model LiveClassSession {
+  id              Int             @id @default(autoincrement())
+  liveClassId     Int
+  seq             Int
+  sessionDate     DateTime
+  durationMinutes Int
+  instructorId    Int?
+  location        String?
+  meetingUrl      String?
+  status          LiveClassStatus @default(AGENDADA)
+  notes           String?
+  recordingUrl    String?
+  createdAt       DateTime        @default(now())
+
+  liveClass   LiveClass                  @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+  instructor  TrainingInstructorProfile? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  attendances LiveAttendance[]
+
+  @@unique([liveClassId, seq])
+  @@index([liveClassId])
+  @@index([sessionDate])
 }
 
 model LiveAttendance {
-  id          Int       @id @default(autoincrement())
-  liveClassId Int
-  userId      Int
-  joinedAt    DateTime
-  leftAt      DateTime?
-  liveClass   LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                Int                   @id @default(autoincrement())
+  liveClassId       Int
+  userId            Int
+  joinedAt          DateTime
+  leftAt            DateTime?
+  // Presente só quando sessionId aponta para uma LiveClassSession de uma
+  // aula recorrente; aulas de ocorrência única (a maioria) mantêm-se null
+  // — mesmo comportamento de antes desta extensão.
+  sessionId         Int?
+  status            LiveAttendanceStatus?
+  attendancePercent Float?
+  justification     String?
+  liveClass         LiveClass             @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session           LiveClassSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
   @@unique([liveClassId, userId])
+  @@index([sessionId])
 }
 
 model LiveChatMessage {

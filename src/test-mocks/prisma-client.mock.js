@@ -1805,6 +1805,43 @@ const TrainingAssessmentRole = {
 
 const SessionModality = { PRESENTIAL: 'PRESENTIAL', ONLINE: 'ONLINE', HYBRID: 'HYBRID' };
 
+const LiveClassType = {
+  AULA: 'AULA',
+  WEBINAR: 'WEBINAR',
+  WORKSHOP: 'WORKSHOP',
+  SESSAO_PRATICA: 'SESSAO_PRATICA',
+  SESSAO_ESCLARECIMENTO: 'SESSAO_ESCLARECIMENTO',
+  MENTORIA: 'MENTORIA',
+  TUTORIA: 'TUTORIA',
+  SESSAO_REVISAO: 'SESSAO_REVISAO',
+};
+
+const LiveClassStatus = {
+  AGENDADA: 'AGENDADA',
+  EM_PREPARACAO: 'EM_PREPARACAO',
+  EM_CURSO: 'EM_CURSO',
+  CONCLUIDA: 'CONCLUIDA',
+  CANCELADA: 'CANCELADA',
+  ADIADA: 'ADIADA',
+};
+
+const LiveClassRecurrence = { ONCE: 'ONCE', DAILY: 'DAILY', WEEKLY: 'WEEKLY', CUSTOM: 'CUSTOM' };
+
+const LiveClassEnrollmentMode = {
+  AUTO: 'AUTO',
+  MANUAL: 'MANUAL',
+  SELF: 'SELF',
+  APPROVAL: 'APPROVAL',
+};
+
+const LiveAttendanceStatus = {
+  PRESENTE: 'PRESENTE',
+  AUSENTE: 'AUSENTE',
+  ATRASADO: 'ATRASADO',
+  PARCIAL: 'PARCIAL',
+  JUSTIFICADO: 'JUSTIFICADO',
+};
+
 const TrainingInstructorType = { INTERNAL: 'INTERNAL', EXTERNAL: 'EXTERNAL' };
 
 const TrainingInstructorStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE' };
@@ -2392,6 +2429,11 @@ module.exports = {
   TrainingParticipantStatus,
   TrainingAssessmentRole,
   SessionModality,
+  LiveClassType,
+  LiveClassStatus,
+  LiveClassRecurrence,
+  LiveClassEnrollmentMode,
+  LiveAttendanceStatus,
   TrainingInstructorType,
   TrainingInstructorStatus,
   TrainingResourceKind,
