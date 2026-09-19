@@ -2057,6 +2057,30 @@ enum CourseVisibility {
   SELECTED_GROUPS
 }
 
+// docs/modulo_courses.md secção 2 ("Tipos") — nenhum campo no schema
+// suportava isto antes (só existia o boolean `mandatory`, que cobre só
+// Obrigatório/Opcional). Nullable: cursos existentes ficam sem tipo definido.
+enum CourseType {
+  OBRIGATORIO
+  OPCIONAL
+  COMPLIANCE
+  INTEGRACAO
+  DESENVOLVIMENTO
+  TECNICO
+  COMPORTAMENTAL
+  LIDERANCA
+}
+
+// docs/modulo_courses.md secção 6 ("Modalidade") — idem, campo nunca existiu
+// (ver comentário em courses.service.ts#getAdminDashboard antes desta PR).
+enum CourseModality {
+  ONLINE
+  PRESENCIAL
+  HIBRIDO
+  AO_VIVO
+  AUTOAPRENDIZAGEM
+}
+
 model Course {
   id                      Int                   @id @default(autoincrement())
   title                   String
@@ -2074,6 +2098,8 @@ model Course {
   status                  CourseStatus          @default(DRAFT)
   visibility              CourseVisibility      @default(PUBLIC)
   mandatory               Boolean               @default(false)
+  type                    CourseType?
+  modality                CourseModality?
   internalCode            String?               @unique
   departmentId            Int?
   unit                    String?
@@ -2119,6 +2145,8 @@ model Course {
   @@index([status])
   @@index([category])
   @@index([mandatory])
+  @@index([type])
+  @@index([modality])
   @@index([createdAt])
   @@index([primaryInstructorId])
   @@index([requiredCourseId])

@@ -38,11 +38,11 @@ import {
 const COURSE_BASE_INCLUDE = {
   _count: { select: { enrollments: true, feedbacks: true, modules: true } },
   competencies: { include: { competency: true } },
+  primaryInstructor: { select: { id: true, fullName: true, avatarUrl: true } },
 } as const;
 
 const COURSE_DETAIL_INCLUDE = {
   ...COURSE_BASE_INCLUDE,
-  primaryInstructor: { select: { id: true, fullName: true, avatarUrl: true } },
   requiredCourse: { select: { id: true, title: true } },
   instructors: { include: { user: { select: { id: true, fullName: true, avatarUrl: true } } } },
   audienceGroups: true,
@@ -104,6 +104,9 @@ export class CoursesService {
       status,
       mandatory,
       departmentId,
+      type,
+      modality,
+      unit,
     } = filters;
     const { skip, take } = calculatePagination(page, limit);
 
@@ -113,6 +116,9 @@ export class CoursesService {
     if (level) where.level = level;
     if (mandatory !== undefined) where.mandatory = mandatory;
     if (departmentId) where.departmentId = departmentId;
+    if (type) where.type = type;
+    if (modality) where.modality = modality;
+    if (unit) where.unit = { contains: unit, mode: 'insensitive' };
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
@@ -133,7 +139,30 @@ export class CoursesService {
       this.prisma.read.course.count({ where }),
     ]);
 
-    return buildPaginatedResponse(data, total, page, limit);
+    // "Progresso médio" (docs/modulo_courses.md secção 2, coluna da tabela
+    // Cursos) — average de Enrollment.progress agrupado por curso, só para
+    // os cursos desta página (evita groupBy sobre a tabela toda).
+    const courseIds = data.map(c => c.id);
+    const avgProgressByCourseFn =
+      courseIds.length > 0
+        ? this.prisma.read.enrollment.groupBy({
+            by: ['courseId'],
+            where: { courseId: { in: courseIds } },
+            _avg: { progress: true },
+          })
+        : Promise.resolve([] as { courseId: number; _avg: { progress: number | null } }[]);
+    const avgProgressGroups = await avgProgressByCourseFn;
+    const avgProgressByCourse: Record<number, number> = {};
+    for (const g of avgProgressGroups) {
+      avgProgressByCourse[g.courseId] = Math.round(g._avg.progress ?? 0);
+    }
+
+    const enriched = data.map(c => ({
+      ...c,
+      avgProgress: avgProgressByCourse[c.id] ?? 0,
+    }));
+
+    return buildPaginatedResponse(enriched, total, page, limit);
   }
 
   async findOne(id: number) {
@@ -1201,13 +1230,10 @@ export class CoursesService {
     };
   }
 
-  // docs/06-modulo-courses.md — "Dashboard Admin → Cursos". A versão anterior
-  // só cobria ~4 dos ~45 indicadores pedidos pelo doc; esta cobre a maioria
-  // dos que têm dados reais no schema. Não incluído por não existir campo
-  // nenhum no schema para o suportar: "por modalidade" (Course não tem
-  // campo modalidade/formato — ver docs/06-modulo-courses.md secção 1 vs.
-  // schema.prisma real). "Atalhos" ficam só no frontend (são links de
-  // navegação, não dados).
+  // docs/modulo_courses.md secção 1 ("Visão Geral"). "Atalhos" ficam só no
+  // frontend (são links de navegação, não dados). `type`/`modality` (secção 2)
+  // não entram nas distribuições deste dashboard — usados na tabela/filtros
+  // da aba "Cursos" (ver findAll acima e GestaoView no frontend).
   async getAdminDashboard() {
     const now = new Date();
     const soon = new Date(now.getTime() + 14 * 86400 * 1000);
@@ -1220,6 +1246,7 @@ export class CoursesService {
       totalEnrollments,
       pendingEnrollments,
       completedEnrollments,
+      distinctLearners,
       overdueEnrollments,
       mandatoryCourses,
       optionalCourses,
@@ -1255,6 +1282,9 @@ export class CoursesService {
       this.prisma.read.enrollment.count(),
       this.prisma.read.enrollment.count({ where: { status: 'PENDING_APPROVAL' } }),
       this.prisma.read.enrollment.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.read.enrollment
+        .findMany({ distinct: ['userId'], select: { userId: true } })
+        .then(rows => rows.length),
       this.prisma.read.enrollment.count({
         where: { deadline: { lt: now }, status: { notIn: ['COMPLETED', 'EXPIRED'] } },
       }),
@@ -1513,6 +1543,8 @@ export class CoursesService {
         totalLessons,
         totalEnrollments,
         pendingEnrollments,
+        completions: completedEnrollments,
+        totalLearners: distinctLearners,
         mandatoryCourses,
         optionalCourses,
         certificatesIssued,

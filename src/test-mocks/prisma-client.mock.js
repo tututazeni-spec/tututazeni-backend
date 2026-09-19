@@ -500,6 +500,25 @@ const CourseVisibility = {
   SELECTED_GROUPS: 'SELECTED_GROUPS',
 };
 
+const CourseType = {
+  OBRIGATORIO: 'OBRIGATORIO',
+  OPCIONAL: 'OPCIONAL',
+  COMPLIANCE: 'COMPLIANCE',
+  INTEGRACAO: 'INTEGRACAO',
+  DESENVOLVIMENTO: 'DESENVOLVIMENTO',
+  TECNICO: 'TECNICO',
+  COMPORTAMENTAL: 'COMPORTAMENTAL',
+  LIDERANCA: 'LIDERANCA',
+};
+
+const CourseModality = {
+  ONLINE: 'ONLINE',
+  PRESENCIAL: 'PRESENCIAL',
+  HIBRIDO: 'HIBRIDO',
+  AO_VIVO: 'AO_VIVO',
+  AUTOAPRENDIZAGEM: 'AUTOAPRENDIZAGEM',
+};
+
 const ModuleStatus = {
   DRAFT: 'DRAFT',
   PUBLISHED: 'PUBLISHED',
@@ -2133,6 +2152,8 @@ module.exports = {
   CourseLevel,
   CourseStatus,
   CourseVisibility,
+  CourseType,
+  CourseModality,
   ModuleStatus,
   ModuleType,
   ProgressionType,

@@ -18,6 +18,8 @@ import {
   CourseLevel,
   CourseStatus,
   CourseVisibility,
+  CourseType,
+  CourseModality,
   ModuleStatus,
   ModuleType,
   ProgressionType,
@@ -34,6 +36,8 @@ export {
   CourseLevel,
   CourseStatus,
   CourseVisibility,
+  CourseType,
+  CourseModality,
   ModuleStatus,
   ModuleType,
   ProgressionType,
@@ -137,6 +141,16 @@ export class CreateCourseDto {
   @IsOptional()
   @IsBoolean()
   mandatory?: boolean;
+
+  @ApiPropertyOptional({ enum: CourseType })
+  @IsOptional()
+  @IsEnum(CourseType)
+  type?: CourseType;
+
+  @ApiPropertyOptional({ enum: CourseModality })
+  @IsOptional()
+  @IsEnum(CourseModality)
+  modality?: CourseModality;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -499,6 +513,21 @@ export class CourseFilterDto extends BaseFilterDto {
   @IsOptional()
   @IsEnum(CourseStatus)
   status?: CourseStatus;
+
+  @ApiPropertyOptional({ enum: CourseType })
+  @IsOptional()
+  @IsEnum(CourseType)
+  type?: CourseType;
+
+  @ApiPropertyOptional({ enum: CourseModality })
+  @IsOptional()
+  @IsEnum(CourseModality)
+  modality?: CourseModality;
+
+  @ApiPropertyOptional({ description: 'Unidade responsável (contains, case-insensitive)' })
+  @IsOptional()
+  @IsString()
+  unit?: string;
 
   // @Type(() => Boolean) coage '?mandatory=false' para true — ver
   // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
