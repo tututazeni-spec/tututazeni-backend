@@ -147,14 +147,19 @@ describe('CoursesService — Turmas/Categorias/Relatórios', () => {
         startDate: '2026-10-01',
       } as any);
       expect(mockPrisma.courseCohort.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ courseId: 5, name: 'Turma A' }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ courseId: 5, name: 'Turma A' }),
+        }),
       );
     });
   });
 
   describe('updateCohort / closeCohort', () => {
     it('lança ForbiddenException se o instrutor não é o dono', async () => {
-      mockPrisma.courseCohort.findUnique.mockResolvedValue({ id: 1, instructorId: instructorOwner.id });
+      mockPrisma.courseCohort.findUnique.mockResolvedValue({
+        id: 1,
+        instructorId: instructorOwner.id,
+      });
       await expect(
         service.updateCohort(1, { name: 'Nova' } as any, instructorOther),
       ).rejects.toThrow(ForbiddenException);
@@ -205,11 +210,21 @@ describe('CoursesService — Turmas/Categorias/Relatórios', () => {
 
   describe('markCohortAttendance', () => {
     it('faz upsert por participante com context LMS e sessionId = cohortId', async () => {
-      mockPrisma.courseCohort.findUnique.mockResolvedValue({ id: 7, courseId: 3, instructorId: null });
+      mockPrisma.courseCohort.findUnique.mockResolvedValue({
+        id: 7,
+        courseId: 3,
+        instructorId: null,
+      });
       mockPrisma.attendanceRecord.upsert.mockResolvedValue({});
       await service.markCohortAttendance(
         7,
-        { date: '2026-09-19', records: [{ userId: 1, present: true }, { userId: 2, present: false }] } as any,
+        {
+          date: '2026-09-19',
+          records: [
+            { userId: 1, present: true },
+            { userId: 2, present: false },
+          ],
+        } as any,
         admin,
       );
       expect(mockPrisma.attendanceRecord.upsert).toHaveBeenCalledTimes(2);
