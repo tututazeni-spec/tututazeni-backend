@@ -5,7 +5,15 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma, LiveClassStatus, LiveClassRecurrence, LiveAttendanceStatus } from '@prisma/client';
+import {
+  Prisma,
+  LiveClassStatus,
+  LiveClassRecurrence,
+  LiveClassType,
+  LiveClassEnrollmentMode,
+  SessionModality,
+  LiveAttendanceStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CourseCompletionService } from '../course-completion/course-completion.service';
 import {
@@ -21,8 +29,12 @@ import {
   RegisterAttendanceDto,
   UpdateAttendanceDto,
   ParticipantsFilterDto,
+  MaterialsFilterDto,
+  EvaluationsFilterDto,
+  LiveClassReportFilterDto,
 } from './live-classes.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { buildCsvString } from '../common/utils/csv-export.util';
 
 // Limite de segurança para a expansão de sessões recorrentes — evita um
 // intervalo mal preenchido (ex.: recurrenceEndDate a 10 anos de distância)
@@ -454,9 +466,22 @@ export class LiveClassesService {
         evaluationId: dto.evaluationId,
         userId,
         rating: dto.rating,
+        instructorRating: dto.instructorRating,
+        contentRating: dto.contentRating,
+        organizationRating: dto.organizationRating,
+        applicabilityRating: dto.applicabilityRating,
+        nps: dto.nps,
         feedback: dto.feedback,
       },
-      update: { rating: dto.rating, feedback: dto.feedback },
+      update: {
+        rating: dto.rating,
+        instructorRating: dto.instructorRating,
+        contentRating: dto.contentRating,
+        organizationRating: dto.organizationRating,
+        applicabilityRating: dto.applicabilityRating,
+        nps: dto.nps,
+        feedback: dto.feedback,
+      },
     });
 
     const avg = await this.prisma.read.postClassResponse.aggregate({
@@ -1123,5 +1148,444 @@ export class LiveClassesService {
     }));
 
     return [...classEvents, ...sessionEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
+  }
+
+  // ─── Materiais (secção 11) — reúne LiveClass.materialDocumentIds e
+  // LiveClassSession.materialDocumentIds (FK "solta" para a Biblioteca,
+  // mesmo padrão de Training.requiredResources) e resolve contra Document. ──
+
+  async listMaterials(filters: MaterialsFilterDto) {
+    const classWhere: Prisma.LiveClassWhereInput = { materialDocumentIds: { isEmpty: false } };
+    if (filters.courseId) classWhere.courseId = filters.courseId;
+    if (filters.instructorId) classWhere.instructorId = filters.instructorId;
+
+    const sessionWhere: Prisma.LiveClassSessionWhereInput = { materialDocumentIds: { isEmpty: false } };
+    if (filters.courseId || filters.instructorId) {
+      sessionWhere.liveClass = {
+        ...(filters.courseId ? { courseId: filters.courseId } : {}),
+        ...(filters.instructorId ? { instructorId: filters.instructorId } : {}),
+      };
+    }
+
+    const [classes, sessions] = await Promise.all([
+      this.prisma.read.liveClass.findMany({
+        where: classWhere,
+        select: {
+          id: true,
+          topic: true,
+          materialDocumentIds: true,
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      this.prisma.read.liveClassSession.findMany({
+        where: sessionWhere,
+        select: {
+          id: true,
+          seq: true,
+          materialDocumentIds: true,
+          liveClass: { select: { id: true, topic: true, course: { select: { id: true, title: true } } } },
+        },
+      }),
+    ]);
+
+    interface MaterialRef {
+      liveClassId: number;
+      topic: string;
+      course: { id: number; title: string } | null;
+      sessionId: number | null;
+      sessionSeq: number | null;
+    }
+    const refs = new Map<number, MaterialRef[]>();
+    const touch = (docId: number, ref: MaterialRef) => {
+      const arr = refs.get(docId) ?? [];
+      arr.push(ref);
+      refs.set(docId, arr);
+    };
+    for (const c of classes) {
+      for (const docId of c.materialDocumentIds) {
+        touch(docId, { liveClassId: c.id, topic: c.topic, course: c.course, sessionId: null, sessionSeq: null });
+      }
+    }
+    for (const s of sessions) {
+      for (const docId of s.materialDocumentIds) {
+        touch(docId, {
+          liveClassId: s.liveClass.id,
+          topic: s.liveClass.topic,
+          course: s.liveClass.course,
+          sessionId: s.id,
+          sessionSeq: s.seq,
+        });
+      }
+    }
+
+    const documentIds = [...refs.keys()];
+    const { page = 1, limit = 20 } = filters;
+    if (documentIds.length === 0) return buildPaginatedResponse([], 0, page, limit);
+
+    const documents = await this.prisma.read.document.findMany({
+      where: {
+        id: { in: documentIds },
+        deletedAt: null,
+        ...(filters.search ? { title: { contains: filters.search, mode: 'insensitive' } } : {}),
+      },
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        fileUrl: true,
+        mimeType: true,
+        fileSize: true,
+        tags: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const rows = documents.map(document => ({ document, referencedBy: refs.get(document.id) ?? [] }));
+    const total = rows.length;
+    const start = (page - 1) * limit;
+    return buildPaginatedResponse(rows.slice(start, start + limit), total, page, limit);
+  }
+
+  private async assertDocumentExists(documentId: number) {
+    const doc = await this.prisma.read.document.findUnique({ where: { id: documentId } });
+    if (!doc || doc.deletedAt) throw new NotFoundException('Documento não encontrado na Biblioteca');
+    return doc;
+  }
+
+  async addClassMaterial(liveClassId: number, documentId: number) {
+    const lc = await this.findOne(liveClassId);
+    await this.assertDocumentExists(documentId);
+    if (lc.materialDocumentIds.includes(documentId)) return lc;
+    return this.prisma.liveClass.update({
+      where: { id: liveClassId },
+      data: { materialDocumentIds: { push: documentId } },
+      include: CLASS_INCLUDE,
+    });
+  }
+
+  async removeClassMaterial(liveClassId: number, documentId: number) {
+    const lc = await this.findOne(liveClassId);
+    return this.prisma.liveClass.update({
+      where: { id: liveClassId },
+      data: { materialDocumentIds: lc.materialDocumentIds.filter(id => id !== documentId) },
+      include: CLASS_INCLUDE,
+    });
+  }
+
+  async addSessionMaterial(liveClassId: number, sessionId: number, documentId: number) {
+    const session = await this.prisma.read.liveClassSession.findUnique({ where: { id: sessionId } });
+    if (!session || session.liveClassId !== liveClassId) throw new NotFoundException('Sessão não encontrada');
+    await this.assertDocumentExists(documentId);
+    if (session.materialDocumentIds.includes(documentId)) return session;
+    return this.prisma.liveClassSession.update({
+      where: { id: sessionId },
+      data: { materialDocumentIds: { push: documentId } },
+    });
+  }
+
+  async removeSessionMaterial(liveClassId: number, sessionId: number, documentId: number) {
+    const session = await this.prisma.read.liveClassSession.findUnique({ where: { id: sessionId } });
+    if (!session || session.liveClassId !== liveClassId) throw new NotFoundException('Sessão não encontrada');
+    return this.prisma.liveClassSession.update({
+      where: { id: sessionId },
+      data: { materialDocumentIds: session.materialDocumentIds.filter(id => id !== documentId) },
+    });
+  }
+
+  // ─── Avaliações (secção 12) — lista agregada + resumo (rubrica detalhada
+  // e NPS) sobre PostClassResponse, cruzando todas as aulas. ─────────────────
+
+  private buildEvaluationWhere(filters: EvaluationsFilterDto): Prisma.PostClassResponseWhereInput {
+    const liveClassWhere: Prisma.LiveClassWhereInput = {};
+    if (filters.courseId) liveClassWhere.courseId = filters.courseId;
+    if (filters.instructorId) liveClassWhere.instructorId = filters.instructorId;
+    if (filters.dateFrom || filters.dateTo) {
+      liveClassWhere.scheduledAt = {
+        ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
+        ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
+      };
+    }
+    const evaluationWhere: Prisma.PostClassEvaluationWhereInput = {};
+    if (filters.liveClassId) evaluationWhere.liveClassId = filters.liveClassId;
+    if (Object.keys(liveClassWhere).length) evaluationWhere.liveClass = liveClassWhere;
+    return Object.keys(evaluationWhere).length ? { evaluation: evaluationWhere } : {};
+  }
+
+  async getEvaluations(filters: EvaluationsFilterDto) {
+    const { page = 1, limit = 20 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const where = this.buildEvaluationWhere(filters);
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.postClassResponse.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          user: { select: { id: true, fullName: true } },
+          evaluation: {
+            select: {
+              id: true,
+              averageScore: true,
+              liveClass: {
+                select: {
+                  id: true,
+                  topic: true,
+                  scheduledAt: true,
+                  course: { select: { id: true, title: true } },
+                  instructor: { select: { id: true, name: true } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.read.postClassResponse.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  async getEvaluationsSummary(filters: EvaluationsFilterDto) {
+    const where = this.buildEvaluationWhere(filters);
+    const responses = await this.prisma.read.postClassResponse.findMany({
+      where,
+      select: {
+        rating: true,
+        instructorRating: true,
+        contentRating: true,
+        organizationRating: true,
+        applicabilityRating: true,
+        nps: true,
+      },
+    });
+
+    const avg = (values: (number | null)[]) => {
+      const nums = values.filter((n): n is number => n != null);
+      return nums.length ? Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10 : null;
+    };
+
+    const npsValues = responses.map(r => r.nps).filter((n): n is number => n != null);
+    const promoters = npsValues.filter(n => n >= 9).length;
+    const detractors = npsValues.filter(n => n <= 6).length;
+    const nps = npsValues.length ? Math.round(((promoters - detractors) / npsValues.length) * 100) : null;
+
+    return {
+      responses: responses.length,
+      avgRating: avg(responses.map(r => r.rating)),
+      avgInstructorRating: avg(responses.map(r => r.instructorRating)),
+      avgContentRating: avg(responses.map(r => r.contentRating)),
+      avgOrganizationRating: avg(responses.map(r => r.organizationRating)),
+      avgApplicabilityRating: avg(responses.map(r => r.applicabilityRating)),
+      nps,
+    };
+  }
+
+  // ─── Relatórios (secção 13) ─────────────────────────────────────────────────
+
+  private buildReportClassWhere(filters: LiveClassReportFilterDto): Prisma.LiveClassWhereInput {
+    const where: Prisma.LiveClassWhereInput = {};
+    if (filters.year) {
+      where.scheduledAt = { gte: new Date(filters.year, 0, 1), lt: new Date(filters.year + 1, 0, 1) };
+    }
+    if (filters.courseId) where.courseId = filters.courseId;
+    if (filters.instructorId) where.instructorId = filters.instructorId;
+    if (filters.departmentId) where.targetDeptIds = { has: filters.departmentId };
+    if (filters.unitId) where.targetUnitIds = { has: filters.unitId };
+    return where;
+  }
+
+  async getReports(filters: LiveClassReportFilterDto) {
+    const where = this.buildReportClassWhere(filters);
+
+    const classes = await this.prisma.read.liveClass.findMany({
+      where,
+      select: {
+        id: true,
+        status: true,
+        duration: true,
+        scheduledAt: true,
+        minAttendancePercent: true,
+        lateToleranceMinutes: true,
+        instructorId: true,
+        instructor: { select: { id: true, name: true } },
+        postEvaluation: { select: { averageScore: true } },
+      },
+    });
+    const classIds = classes.map(c => c.id);
+    const classById = new Map(classes.map(c => [c.id, c]));
+
+    const attendances = classIds.length
+      ? await this.prisma.read.liveAttendance.findMany({
+          where: { liveClassId: { in: classIds } },
+          select: {
+            liveClassId: true,
+            joinedAt: true,
+            leftAt: true,
+            status: true,
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                department: { select: { id: true, name: true } },
+                unit: { select: { id: true, name: true } },
+              },
+            },
+          },
+        })
+      : [];
+
+    const derived = attendances.map(a => ({ ...a, ...this.deriveAttendance(a, classById.get(a.liveClassId)!) }));
+
+    const presente = derived.filter(a => a.computedStatus === 'PRESENTE').length;
+    const ausente = derived.filter(a => a.computedStatus === 'AUSENTE').length;
+    const atrasado = derived.filter(a => a.computedStatus === 'ATRASADO').length;
+
+    const completed = classes.filter(c => c.status === LiveClassStatus.CONCLUIDA);
+    const cancelled = classes.filter(c => c.status === LiveClassStatus.CANCELADA);
+    const hoursDelivered = completed.reduce((sum, c) => sum + c.duration, 0) / 60;
+
+    const evaluatedScores = classes.map(c => c.postEvaluation?.averageScore).filter((n): n is number => !!n);
+    const avgEvaluation = evaluatedScores.length
+      ? Math.round((evaluatedScores.reduce((a, b) => a + b, 0) / evaluatedScores.length) * 10) / 10
+      : null;
+
+    // Desempenho por formador
+    interface InstructorAgg {
+      name: string;
+      completed: number;
+      scores: number[];
+    }
+    const byInstructorMap = new Map<number, InstructorAgg>();
+    for (const c of classes) {
+      if (!c.instructorId) continue;
+      const agg = byInstructorMap.get(c.instructorId) ?? {
+        name: c.instructor?.name ?? '—',
+        completed: 0,
+        scores: [],
+      };
+      if (c.status === LiveClassStatus.CONCLUIDA) agg.completed++;
+      if (c.postEvaluation?.averageScore) agg.scores.push(c.postEvaluation.averageScore);
+      byInstructorMap.set(c.instructorId, agg);
+    }
+    const byInstructor = [...byInstructorMap.values()]
+      .map(a => ({
+        instructor: a.name,
+        completed: a.completed,
+        avgRating: a.scores.length
+          ? Math.round((a.scores.reduce((x, y) => x + y, 0) / a.scores.length) * 10) / 10
+          : null,
+      }))
+      .sort((a, b) => b.completed - a.completed);
+
+    // Participação por departamento / unidade
+    const toSortedCount = (values: (string | null | undefined)[], key: string) => {
+      const m = new Map<string, number>();
+      for (const v of values) {
+        const k = v ?? 'Sem atribuição';
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+      return [...m.entries()]
+        .map(([k, count]) => ({ [key]: k, count }))
+        .sort((a, b) => b.count - a.count);
+    };
+    const byDepartment = toSortedCount(attendances.map(a => a.user.department?.name), 'department');
+    const byUnit = toSortedCount(attendances.map(a => a.user.unit?.name), 'unit');
+
+    // Horas de formação por colaborador (participações com presença efectiva)
+    const hoursByUserMap = new Map<number, { name: string; minutes: number }>();
+    for (const a of derived) {
+      if (a.computedStatus !== 'PRESENTE' && a.computedStatus !== 'ATRASADO') continue;
+      if (!a.durationMinutes) continue;
+      const entry = hoursByUserMap.get(a.user.id) ?? { name: a.user.fullName, minutes: 0 };
+      entry.minutes += a.durationMinutes;
+      hoursByUserMap.set(a.user.id, entry);
+    }
+    const hoursByCollaborator = [...hoursByUserMap.entries()]
+      .map(([userId, v]) => ({ userId, collaborator: v.name, hours: Math.round((v.minutes / 60) * 10) / 10 }))
+      .sort((a, b) => b.hours - a.hours)
+      .slice(0, 20);
+
+    return {
+      filters,
+      totals: {
+        classes: classes.length,
+        completed: completed.length,
+        cancelled: cancelled.length,
+        hoursDelivered: Math.round(hoursDelivered * 10) / 10,
+      },
+      attendance: {
+        participants: attendances.length,
+        present: presente,
+        absent: ausente,
+        late: atrasado,
+        attendanceRate: attendances.length > 0 ? Math.round((presente / attendances.length) * 100) : 0,
+      },
+      avgEvaluation,
+      byInstructor,
+      byDepartment,
+      byUnit,
+      hoursByCollaborator,
+    };
+  }
+
+  async exportReportsCsv(filters: LiveClassReportFilterDto): Promise<string> {
+    const report = await this.getReports(filters);
+    const rows = [
+      { metrica: 'Aulas (total)', valor: report.totals.classes },
+      { metrica: 'Aulas realizadas', valor: report.totals.completed },
+      { metrica: 'Aulas canceladas', valor: report.totals.cancelled },
+      { metrica: 'Horas ministradas', valor: report.totals.hoursDelivered },
+      { metrica: 'Participantes', valor: report.attendance.participants },
+      { metrica: 'Presenças', valor: report.attendance.present },
+      { metrica: 'Ausências', valor: report.attendance.absent },
+      { metrica: 'Atrasos', valor: report.attendance.late },
+      { metrica: 'Taxa de presença (%)', valor: report.attendance.attendanceRate },
+      { metrica: 'Avaliação média', valor: report.avgEvaluation ?? '' },
+    ];
+    return buildCsvString(rows, ['metrica', 'valor']);
+  }
+
+  // ─── Configurações (secção 14) — vista agregada, só de leitura, sobre os
+  // enums do domínio e os @default reais do schema + os papéis já aplicados
+  // no controller. Não inventa um mecanismo de configuração novo para o que
+  // já é código — mesmo padrão de evaluation.service.ts#getSettings(). ──────
+
+  getSettings() {
+    return {
+      types: Object.values(LiveClassType),
+      statuses: Object.values(LiveClassStatus),
+      modalities: Object.values(SessionModality),
+      recurrences: Object.values(LiveClassRecurrence),
+      enrollmentModes: Object.values(LiveClassEnrollmentMode),
+      attendanceStatuses: Object.values(LiveAttendanceStatus),
+      attendanceDefaults: {
+        minAttendancePercent: 70,
+        lateToleranceMinutes: 10,
+      },
+      recordingDefaults: {
+        recordSession: true,
+        allowRecordingDownload: false,
+      },
+      notifySettingsKeys: [
+        'onEnroll',
+        'reminder24h',
+        'reminder1h',
+        'onStart',
+        'onReschedule',
+        'onCancel',
+        'onRecordingAvailable',
+      ],
+      notificationChannels: ['INNOVA', 'EMAIL', 'PUSH', 'SMS', 'WHATSAPP'],
+      permissions: [
+        { action: 'Criar / editar / cancelar / adiar / duplicar aula', roles: ['ADMIN', 'RH'] },
+        { action: 'Iniciar aula', roles: ['ADMIN', 'RH', 'INSTRUCTOR'] },
+        { action: 'Gerir participantes e presenças', roles: ['ADMIN', 'RH', 'LIDER'] },
+        { action: 'Publicar / eliminar gravações', roles: ['ADMIN', 'RH'] },
+        { action: 'Ver relatório de presença e relatórios agregados', roles: ['ADMIN', 'RH', 'LIDER'] },
+        { action: 'Entrar na aula, usar o chat, responder à avaliação pós-aula', roles: ['Qualquer utilizador autenticado'] },
+      ],
+    };
   }
 }

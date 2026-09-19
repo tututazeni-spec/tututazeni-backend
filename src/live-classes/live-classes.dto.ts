@@ -154,6 +154,11 @@ export class CreateLiveClassSessionDto {
   @ApiPropertyOptional() @IsOptional() @IsString() location?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() meetingUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+  @ApiPropertyOptional({ type: [Number], description: 'IDs de documentos da Biblioteca (secção 11)' })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  materialDocumentIds?: number[];
 }
 export class UpdateLiveClassSessionDto extends PartialType(CreateLiveClassSessionDto) {
   @ApiPropertyOptional({ enum: LiveClassStatus })
@@ -169,7 +174,38 @@ export class LiveChatMessageDto {
 
 export class PostClassResponseDto {
   @ApiProperty() @IsInt() evaluationId!: number;
-  @ApiProperty() @IsInt() rating!: number;
+  @ApiProperty({ description: 'Avaliação da sessão (1–5)' }) @IsInt() @Min(1) @Max(5) rating!: number;
+  // Secção 12 — rubrica detalhada, opcional (1–5 cada)
+  @ApiPropertyOptional({ description: 'Avaliação do formador (1–5)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  instructorRating?: number;
+  @ApiPropertyOptional({ description: 'Avaliação do conteúdo (1–5)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  contentRating?: number;
+  @ApiPropertyOptional({ description: 'Organização (1–5)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  organizationRating?: number;
+  @ApiPropertyOptional({ description: 'Aplicabilidade (1–5)' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  applicabilityRating?: number;
+  @ApiPropertyOptional({ description: 'NPS da sessão (0–10)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  nps?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() feedback?: string;
 }
 
@@ -239,4 +275,42 @@ export class ParticipantsFilterDto extends BaseFilterDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() dateFrom?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() dateTo?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
+}
+
+// ─── Materiais (secção 11) ──────────────────────────────────────────────────
+
+export class AddMaterialDto {
+  @ApiProperty({ description: 'ID de um documento existente na Biblioteca' })
+  @IsInt()
+  documentId!: number;
+}
+
+export class MaterialsFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) courseId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) instructorId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
+}
+
+// ─── Avaliações (secção 12) ─────────────────────────────────────────────────
+
+export class EvaluationsFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) liveClassId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) courseId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) instructorId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dateFrom?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dateTo?: string;
+}
+
+// ─── Relatórios (secção 13) ─────────────────────────────────────────────────
+
+export class LiveClassReportFilterDto {
+  @ApiPropertyOptional({ description: 'Ano (por scheduledAt)' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  year?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) courseId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) instructorId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) unitId?: number;
 }

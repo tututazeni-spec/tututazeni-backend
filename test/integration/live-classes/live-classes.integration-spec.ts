@@ -611,6 +611,169 @@ describe('Live Classes Integration', () => {
     });
   });
 
+  describe('Materiais/Avaliações/Relatórios/Configurações (secções 11-14)', () => {
+    let materialsClassId: number;
+    let documentId: number;
+
+    beforeAll(async () => {
+      const doc = await prisma.document.create({
+        data: {
+          title: 'Manual Integração — Live Classes',
+          category: 'LEARNING',
+          fileUrl: 'https://example.com/manual.pdf',
+          mimeType: 'application/pdf',
+          createdById: employeeId,
+        },
+      });
+      documentId = doc.id;
+
+      const res = await request(app.getHttpServer())
+        .post('/live-classes')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({
+          courseId,
+          topic: 'Aula secções 11-14',
+          scheduledAt: new Date(Date.now() + 3600000).toISOString(),
+          duration: 60,
+        })
+        .expect(201);
+      materialsClassId = res.body.id;
+      extraLiveClassIds.push(materialsClassId);
+    });
+
+    afterAll(async () => {
+      await prisma.document.deleteMany({ where: { id: documentId } }).catch(() => undefined);
+    });
+
+    it('RH associa um material da Biblioteca à aula (secção 11)', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/live-classes/${materialsClassId}/materials`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ documentId })
+        .expect(201);
+      expect(res.body.materialDocumentIds).toContain(documentId);
+    });
+
+    it('colaborador não pode associar materiais → 403', async () => {
+      await request(app.getHttpServer())
+        .post(`/live-classes/${materialsClassId}/materials`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ documentId })
+        .expect(403);
+    });
+
+    it('GET /live-classes/materials — inclui o material com a referência à aula', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/live-classes/materials')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      const row = res.body.data.find((m: any) => m.document.id === documentId);
+      expect(row).toBeDefined();
+      expect(row.referencedBy.some((r: any) => r.liveClassId === materialsClassId)).toBe(true);
+    });
+
+    it('RH remove o material da aula (secção 11)', async () => {
+      await request(app.getHttpServer())
+        .delete(`/live-classes/${materialsClassId}/materials/${documentId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .get('/live-classes/materials')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      expect(res.body.data.find((m: any) => m.document.id === documentId)).toBeUndefined();
+    });
+
+    it('RH cria avaliação pós-aula com rubrica detalhada e NPS (secção 12)', async () => {
+      const evalRes = await request(app.getHttpServer())
+        .post(`/live-classes/${materialsClassId}/post-evaluation`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post('/live-classes/post-evaluation/respond')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({
+          evaluationId: evalRes.body.id,
+          rating: 5,
+          instructorRating: 5,
+          contentRating: 4,
+          organizationRating: 4,
+          applicabilityRating: 5,
+          nps: 10,
+          feedback: 'Excelente sessão',
+        })
+        .expect(201);
+
+      const stored = await prisma.postClassResponse.findFirst({
+        where: { evaluationId: evalRes.body.id, userId: employeeId },
+      });
+      expect(stored!.instructorRating).toBe(5);
+      expect(stored!.nps).toBe(10);
+    });
+
+    it('GET /live-classes/evaluations/summary — NPS e médias por rubrica (secção 12)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/live-classes/evaluations/summary')
+        .query({ courseId })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.responses).toBeGreaterThanOrEqual(1);
+      expect(res.body.nps).toBe(100);
+    });
+
+    it('colaborador não acede às avaliações agregadas → 403', async () => {
+      await request(app.getHttpServer())
+        .get('/live-classes/evaluations')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+
+    it('GET /live-classes/reports/overview — métricas agregadas (secção 13)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/live-classes/reports/overview')
+        .query({ courseId })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.totals.classes).toBeGreaterThanOrEqual(1);
+      expect(typeof res.body.attendance.attendanceRate).toBe('number');
+    });
+
+    it('GET /live-classes/reports/export — CSV com cabeçalho métrica,valor (secção 13)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/live-classes/reports/export')
+        .query({ courseId })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.text.split('\n')[0]).toBe('metrica,valor');
+    });
+
+    it('colaborador não acede aos relatórios → 403', async () => {
+      await request(app.getHttpServer())
+        .get('/live-classes/reports/overview')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+
+    it('GET /live-classes/settings — enums e permissões agregadas (secção 14)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/live-classes/settings')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.types).toContain('AULA');
+      expect(res.body.attendanceDefaults.minAttendancePercent).toBe(70);
+      expect(Array.isArray(res.body.permissions)).toBe(true);
+    });
+
+    it('colaborador não acede às configurações → 403', async () => {
+      await request(app.getHttpServer())
+        .get('/live-classes/settings')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+  });
+
   describe('Remoção', () => {
     it('admin remove a aula → cascata limpa presenças/mensagens/avaliação', async () => {
       await request(app.getHttpServer())

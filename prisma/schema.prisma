@@ -6312,6 +6312,10 @@ model LiveClassSession {
   recordingPublishedAt DateTime?
   createdAt            DateTime        @default(now())
 
+  // Secção 11 — materiais específicos desta ocorrência, além dos da Aula
+  // (LiveClass.materialDocumentIds). Mesma FK "solta" para a Biblioteca.
+  materialDocumentIds Int[] @default([])
+
   liveClass   LiveClass                  @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
   instructor  TrainingInstructorProfile? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
   attendances LiveAttendance[]
@@ -6377,7 +6381,15 @@ model PostClassResponse {
   id           Int                 @id @default(autoincrement())
   evaluationId Int
   userId       Int
+  // Secção 12 — "Avaliação da sessão" (nota geral, já existia)
   rating       Int
+  // Secção 12 — rubrica detalhada ("Exemplo"), todos 1–5, opcionais
+  instructorRating   Int?
+  contentRating      Int?
+  organizationRating Int?
+  applicabilityRating Int?
+  // NPS da sessão — escala 0–10 própria (não o `rating` 1–5 acima)
+  nps          Int?
   feedback     String?             @db.Text
   createdAt    DateTime            @default(now())
   evaluation   PostClassEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)

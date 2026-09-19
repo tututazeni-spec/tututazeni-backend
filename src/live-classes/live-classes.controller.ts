@@ -9,6 +9,7 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { LiveClassesService } from './live-classes.service';
@@ -25,6 +26,10 @@ import {
   RegisterAttendanceDto,
   UpdateAttendanceDto,
   ParticipantsFilterDto,
+  AddMaterialDto,
+  MaterialsFilterDto,
+  EvaluationsFilterDto,
+  LiveClassReportFilterDto,
 } from './live-classes.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -90,6 +95,52 @@ export class LiveClassesController {
   @ApiOperation({ summary: 'Gravações de todas as aulas e sessões (secção 9)' })
   listRecordings(@Query() filters: LiveClassFilterDto) {
     return this.svc.listRecordings(filters);
+  }
+
+  @Get('materials')
+  @ApiOperation({ summary: 'Materiais de todas as aulas e sessões, ligados à Biblioteca (secção 11)' })
+  listMaterials(@Query() filters: MaterialsFilterDto) {
+    return this.svc.listMaterials(filters);
+  }
+
+  @Get('evaluations')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
+  @ApiOperation({ summary: 'Avaliações pós-aula de todas as aulas (secção 12)' })
+  listEvaluations(@Query() filters: EvaluationsFilterDto) {
+    return this.svc.getEvaluations(filters);
+  }
+
+  @Get('evaluations/summary')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
+  @ApiOperation({ summary: 'Resumo das avaliações — médias por rubrica e NPS (secção 12)' })
+  evaluationsSummary(@Query() filters: EvaluationsFilterDto) {
+    return this.svc.getEvaluationsSummary(filters);
+  }
+
+  @Get('reports/overview')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
+  @ApiOperation({
+    summary:
+      'Relatórios: aulas realizadas/canceladas, horas, participantes, presenças, desempenho por formador (secção 13)',
+  })
+  reports(@Query() filters: LiveClassReportFilterDto) {
+    return this.svc.getReports(filters);
+  }
+
+  @Get('reports/export')
+  @Roles(Role.ADMIN, Role.RH, Role.LIDER)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="relatorio-aulas-ao-vivo.csv"')
+  @ApiOperation({ summary: 'Exportar relatório filtrado como CSV' })
+  exportReports(@Query() filters: LiveClassReportFilterDto) {
+    return this.svc.exportReportsCsv(filters);
+  }
+
+  @Get('settings')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Configurações agregadas — tipos, estados, modalidades, regras, permissões (secção 14)' })
+  settings() {
+    return this.svc.getSettings();
   }
 
   @Get(':id')
@@ -198,6 +249,24 @@ export class LiveClassesController {
     return this.svc.createSession(id, dto);
   }
 
+  @Post(':id/materials')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Associar material da Biblioteca à aula (secção 11)' })
+  addMaterial(@Param('id', ParseIntPipe) id: number, @Body() dto: AddMaterialDto) {
+    return this.svc.addClassMaterial(id, dto.documentId);
+  }
+
+  @Post(':id/sessions/:sessionId/materials')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Associar material da Biblioteca à sessão (secção 11)' })
+  addSessionMaterial(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @Body() dto: AddMaterialDto,
+  ) {
+    return this.svc.addSessionMaterial(id, sessionId, dto.documentId);
+  }
+
   @Post(':id/attendance')
   @Roles(Role.ADMIN, Role.RH, Role.LIDER)
   @ApiOperation({ summary: 'Adicionar participante / registar presença manualmente (secção 6)' })
@@ -293,6 +362,27 @@ export class LiveClassesController {
     @Param('attendanceId', ParseIntPipe) attendanceId: number,
   ) {
     return this.svc.removeAttendance(id, attendanceId);
+  }
+
+  @Delete(':id/materials/:documentId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Remover material da aula (secção 11)' })
+  removeMaterial(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('documentId', ParseIntPipe) documentId: number,
+  ) {
+    return this.svc.removeClassMaterial(id, documentId);
+  }
+
+  @Delete(':id/sessions/:sessionId/materials/:documentId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Remover material da sessão (secção 11)' })
+  removeSessionMaterial(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @Param('documentId', ParseIntPipe) documentId: number,
+  ) {
+    return this.svc.removeSessionMaterial(id, sessionId, documentId);
   }
 
   @Delete(':id/recording')
