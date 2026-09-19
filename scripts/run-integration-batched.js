@@ -60,18 +60,11 @@ const BATCHES = [
   // antigo batch 5 no mesmo processo jest esgotavam a heap ("exit null").
   ['instructor', 'knowledge', 'leader', 'leadership'],
   ['learning-paths', 'leave-management', 'library', 'live-classes', 'lms'],
-  [
-    'metrics',
-    'micro-learning',
-    'mobile',
-    'monitoring',
-    'notifications',
-    'onboarding',
-    'organization',
-    'payslips',
-    'payroll',
-    'pdf',
-  ],
+  // Batch 7 original (10 módulos) começou a esgotar a heap de 4 GB à medida
+  // que os módulos cresceram — dividido em dois, mesmo padrão do isolamento
+  // do `leadership` acima.
+  ['metrics', 'micro-learning', 'mobile', 'monitoring', 'notifications'],
+  ['onboarding', 'organization', 'payslips', 'payroll', 'pdf'],
   [
     'pdi',
     'performance',
@@ -83,16 +76,9 @@ const BATCHES = [
     'search',
     'succession',
   ],
-  [
-    'talent-development',
-    'trainings',
-    'users',
-    'work-declaration',
-    'enrollments',
-    'development-plans',
-    'history',
-    'health',
-  ],
+  // Batch 9 original (8 módulos) — mesmo motivo do split acima.
+  ['talent-development', 'trainings', 'users', 'work-declaration'],
+  ['enrollments', 'development-plans', 'history', 'health'],
 ];
 
 let failed = false;
