@@ -32,7 +32,14 @@ import { Role } from '../auth/enums/role.enum';
 
 // Mesmos papéis que podem criar/gerir formações (TrainingController) —
 // quem não for ADMIN/RH só gere os planos que criou (assertCanManage).
-const CAN_MANAGE_PLANS = [Role.ADMIN, Role.RH, Role.GESTOR, Role.INSTRUCTOR, Role.DIRECTOR, Role.LIDER];
+const CAN_MANAGE_PLANS = [
+  Role.ADMIN,
+  Role.RH,
+  Role.GESTOR,
+  Role.INSTRUCTOR,
+  Role.DIRECTOR,
+  Role.LIDER,
+];
 // Aprovar/rejeitar um plano submetido é sempre ADMIN/RH — não faz sentido
 // um GESTOR aprovar o seu próprio plano.
 const CAN_APPROVE_PLANS = [Role.ADMIN, Role.RH];
@@ -46,7 +53,9 @@ export class TrainingPlanController {
 
   @Get()
   @Roles(...CAN_MANAGE_PLANS)
-  @ApiOperation({ summary: 'Listar planos de formação (ADMIN/RH vêem todos; os restantes só os seus)' })
+  @ApiOperation({
+    summary: 'Listar planos de formação (ADMIN/RH vêem todos; os restantes só os seus)',
+  })
   findAll(@Query() filters: TrainingPlanFilterDto, @CurrentUser() user: CurrentUserData) {
     return this.svc.findAll(filters, user);
   }

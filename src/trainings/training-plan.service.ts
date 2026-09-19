@@ -43,7 +43,11 @@ export class TrainingPlanService {
     if (year) where.year = year;
     if (period) where.period = period;
     if (status) where.status = status;
-    if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { code: { contains: search, mode: 'insensitive' } }];
+    if (search)
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
+      ];
     if (!isPrivileged(user, PRIVILEGED_ROLES)) where.createdById = user.id;
 
     const [data, total] = await Promise.all([
@@ -192,7 +196,10 @@ export class TrainingPlanService {
 
   async submit(id: number, user: CurrentUserData) {
     await this.assertCanManage(id, user);
-    const plan = await this.prisma.read.trainingPlan.findUnique({ where: { id }, select: { status: true } });
+    const plan = await this.prisma.read.trainingPlan.findUnique({
+      where: { id },
+      select: { status: true },
+    });
     if (!plan || (plan.status !== 'DRAFT' && plan.status !== 'REJECTED')) {
       throw new ConflictException('Só um plano em rascunho ou rejeitado pode ser submetido');
     }
@@ -203,7 +210,10 @@ export class TrainingPlanService {
   }
 
   async approve(id: number) {
-    const plan = await this.prisma.read.trainingPlan.findUnique({ where: { id }, select: { status: true } });
+    const plan = await this.prisma.read.trainingPlan.findUnique({
+      where: { id },
+      select: { status: true },
+    });
     if (!plan) throw new NotFoundException('Plano de formação não encontrado');
     if (plan.status !== 'SUBMITTED') {
       throw new ConflictException('Só um plano submetido pode ser aprovado');
@@ -215,7 +225,10 @@ export class TrainingPlanService {
   }
 
   async reject(id: number, dto: RejectTrainingPlanDto) {
-    const plan = await this.prisma.read.trainingPlan.findUnique({ where: { id }, select: { status: true } });
+    const plan = await this.prisma.read.trainingPlan.findUnique({
+      where: { id },
+      select: { status: true },
+    });
     if (!plan) throw new NotFoundException('Plano de formação não encontrado');
     if (plan.status !== 'SUBMITTED') {
       throw new ConflictException('Só um plano submetido pode ser rejeitado');
@@ -228,7 +241,10 @@ export class TrainingPlanService {
 
   async publish(id: number, user: CurrentUserData) {
     await this.assertCanManage(id, user);
-    const plan = await this.prisma.read.trainingPlan.findUnique({ where: { id }, select: { status: true } });
+    const plan = await this.prisma.read.trainingPlan.findUnique({
+      where: { id },
+      select: { status: true },
+    });
     if (!plan || plan.status !== 'APPROVED') {
       throw new ConflictException('Só um plano aprovado pode ser publicado');
     }
@@ -293,7 +309,7 @@ export class TrainingPlanService {
       const anySet = costParts.some(p => p != null);
       realizedBudget += anySet
         ? costParts.reduce((sum: number, p) => sum + (p ?? 0), 0)
-        : t.cost ?? 0;
+        : (t.cost ?? 0);
       realizedParticipants += t._count.participants;
       realizedHours += t.workloadHours ?? 0;
       if (t.status === 'COMPLETED') completedTrainings += 1;
