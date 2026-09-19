@@ -705,9 +705,11 @@ model User {
   assessmentAttempts         AssessmentAttempt[]
   learningPathEnrollments    LearningPathEnrollment[]
   courseFeedbacks            CourseFeedback[]
-  coursesAsPrimaryInstructor Course[]                 @relation("CoursePrimaryInstructor")
-  courseInstructorships      CourseInstructor[]       @relation("CourseCoInstructor")
-  liveLessonsInstructed      Lesson[]                 @relation("LessonLiveInstructor")
+  coursesAsPrimaryInstructor Course[]                  @relation("CoursePrimaryInstructor")
+  courseInstructorships      CourseInstructor[]        @relation("CourseCoInstructor")
+  courseCohortsAsInstructor  CourseCohort[]            @relation("CourseCohortInstructor")
+  courseCohortParticipations CourseCohortParticipant[] @relation("CourseCohortParticipantUser")
+  liveLessonsInstructed      Lesson[]                  @relation("LessonLiveInstructor")
 
   // ─── Micro-Learning ───────────────────────────────────────────
   microLearningProgress     MicroLearningProgress[]
@@ -2138,6 +2140,7 @@ model Course {
   trainingImpacts         TrainingImpact[]
   learningPaths           LearningPathCourse[]
   cohorts                 InstructorCohort[]
+  courseCohorts           CourseCohort[]
 
   leadershipContents    LeadershipProgramContent[]
   leadershipPlanActions LeadershipParticipantPlanAction[] @relation("LeadershipPlanActionCourse")
@@ -3304,29 +3307,29 @@ enum EvaluationRequestStatus {
 }
 
 model EvaluationRequest {
-  id          Int                     @id @default(autoincrement())
-  evaluatorId Int
-  evaluatedId Int
-  type        EvalType?
-  status      EvaluationRequestStatus @default(PENDING)
-  dueDate     DateTime?
-  cycleId     Int?
-  completedAt DateTime?
-  createdAt   DateTime                @default(now())
+  id                Int                     @id @default(autoincrement())
+  evaluatorId       Int
+  evaluatedId       Int
+  type              EvalType?
+  status            EvaluationRequestStatus @default(PENDING)
+  dueDate           DateTime?
+  cycleId           Int?
+  completedAt       DateTime?
+  createdAt         DateTime                @default(now())
   // docs/modulo_evaluation.md pontos 2-3 (remodelação Parte 1):
-  purpose     EvalPurpose?
-  objectives  Json? // etapa 6 do wizard — [{objective,indicator,target,weight,achievedResult,percentage,employeeComment,evaluatorComment}]
-  name        String?
-  stage       EvalStage?
+  purpose           EvalPurpose?
+  objectives        Json? // etapa 6 do wizard — [{objective,indicator,target,weight,achievedResult,percentage,employeeComment,evaluatorComment}]
+  name              String?
+  stage             EvalStage?
   // docs/modulo_evaluation.md ponto 10 — "Conversa 1:1": a etapa ONE_ON_ONE
   // do fluxo liga-se a um registo real em OneOnOneMeeting (dono único,
   // Fase G4 — src/one-on-one/one-on-one.service.ts), em vez de duplicar
   // campos de reunião aqui.
-  oneOnOneMeetingId Int?                @unique
-  evaluator   User                    @relation("RequestEvaluator", fields: [evaluatorId], references: [id])
-  evaluated   User                    @relation("RequestEvaluated", fields: [evaluatedId], references: [id])
-  cycle       EvaluationCampaign?     @relation(fields: [cycleId], references: [id])
-  oneOnOneMeeting OneOnOneMeeting?    @relation(fields: [oneOnOneMeetingId], references: [id])
+  oneOnOneMeetingId Int?                    @unique
+  evaluator         User                    @relation("RequestEvaluator", fields: [evaluatorId], references: [id])
+  evaluated         User                    @relation("RequestEvaluated", fields: [evaluatedId], references: [id])
+  cycle             EvaluationCampaign?     @relation(fields: [cycleId], references: [id])
+  oneOnOneMeeting   OneOnOneMeeting?        @relation(fields: [oneOnOneMeetingId], references: [id])
 
   @@index([evaluatorId])
   @@index([evaluatedId])
@@ -6020,6 +6023,70 @@ model CohortParticipant {
   @@unique([cohortId, userId])
   @@index([cohortId])
   @@index([userId])
+}
+
+// Turmas (docs/modulo_courses.md secção 5) — cursos presenciais/híbridos.
+// Distinto de InstructorCohort acima: aquele pertence ao contexto do
+// marketplace de instrutores externos (instructorId → InstructorProfile,
+// nunca usado por nenhum controller/service — ver comentário do enum
+// CohortParticipantStatus). CourseCohort é o modelo interno de turma de RH,
+// com Formador ligado directamente a User (qualquer colaborador/instrutor
+// interno, sem exigir perfil de marketplace aprovado).
+enum CourseCohortStatus {
+  DRAFT
+  OPEN
+  ACTIVE
+  CLOSED
+  CANCELLED
+}
+
+model CourseCohort {
+  id           Int                       @id @default(autoincrement())
+  courseId     Int
+  instructorId Int?
+  name         String
+  location     String?
+  room         String?
+  schedule     String?
+  capacity     Int                       @default(30)
+  status       CourseCohortStatus        @default(DRAFT)
+  startDate    DateTime
+  endDate      DateTime?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  course       Course                    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  instructor   User?                     @relation("CourseCohortInstructor", fields: [instructorId], references: [id], onDelete: SetNull)
+  participants CourseCohortParticipant[]
+
+  @@index([courseId])
+  @@index([instructorId])
+  @@index([status])
+}
+
+model CourseCohortParticipant {
+  id         Int          @id @default(autoincrement())
+  cohortId   Int
+  userId     Int
+  enrolledAt DateTime     @default(now())
+  cohort     CourseCohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  user       User         @relation("CourseCohortParticipantUser", fields: [userId], references: [id])
+
+  @@unique([cohortId, userId])
+  @@index([cohortId])
+  @@index([userId])
+}
+
+// Categorias (docs/modulo_courses.md secção 6). Course.category continua
+// String livre (não FK) — não migrar dados existentes; a contagem de
+// "Cursos associados" é calculada por correspondência de nome, não por
+// relação directa.
+model CourseCategory {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model InstructorCourse {
@@ -9951,25 +10018,25 @@ model Recognition {
 // ══════════════════════════════════════════════════════════════════
 
 model OneOnOneMeeting {
-  id               Int            @id @default(autoincrement())
-  hostId           Int
-  participantId    Int
-  scheduledAt      DateTime
-  durationMinutes  Int            @default(30)
-  agenda           String?        @db.Text
-  status           OneOnOneStatus @default(SCHEDULED)
-  recurring        Boolean        @default(false)
-  frequency        String?
-  meetingUrl       String?
-  minutes          String?        @db.Text
-  actionItems      String?        @db.Text
-  nextMeetingDate  DateTime?
-  completedAt      DateTime?
-  createdAt        DateTime       @default(now())
+  id                Int                @id @default(autoincrement())
+  hostId            Int
+  participantId     Int
+  scheduledAt       DateTime
+  durationMinutes   Int                @default(30)
+  agenda            String?            @db.Text
+  status            OneOnOneStatus     @default(SCHEDULED)
+  recurring         Boolean            @default(false)
+  frequency         String?
+  meetingUrl        String?
+  minutes           String?            @db.Text
+  actionItems       String?            @db.Text
+  nextMeetingDate   DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime           @default(now())
   // Fase G4: id do OneOnOne (legado) que originou esta linha via backfill.
-  legacyOneOnOneId Int?           @unique
-  host             User           @relation("OneOnOneMeetingHost", fields: [hostId], references: [id], onDelete: Cascade)
-  participant      User           @relation("OneOnOneMeetingParticipant", fields: [participantId], references: [id], onDelete: Cascade)
+  legacyOneOnOneId  Int?               @unique
+  host              User               @relation("OneOnOneMeetingHost", fields: [hostId], references: [id], onDelete: Cascade)
+  participant       User               @relation("OneOnOneMeetingParticipant", fields: [participantId], references: [id], onDelete: Cascade)
   // back-relation da FK opcional evaluationRequest.oneOnOneMeetingId acima
   evaluationRequest EvaluationRequest?
 

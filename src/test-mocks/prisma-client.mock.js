@@ -2090,6 +2090,14 @@ const CohortStatus = {
 
 const CohortParticipantStatus = { ACTIVE: 'ACTIVE' };
 
+const CourseCohortStatus = {
+  DRAFT: 'DRAFT',
+  OPEN: 'OPEN',
+  ACTIVE: 'ACTIVE',
+  CLOSED: 'CLOSED',
+  CANCELLED: 'CANCELLED',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -2382,4 +2390,5 @@ module.exports = {
   CohortModalidade,
   CohortStatus,
   CohortParticipantStatus,
+  CourseCohortStatus,
 };
