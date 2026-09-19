@@ -126,10 +126,22 @@ export class ExecuteAgentActionDto {
 
 // ─── Generate ─────────────────────────────────────────────────────────────────
 
+export const EXERCISE_TYPES = [
+  'QUIZ',
+  'TRUE_FALSE',
+  'OPEN_QUESTION',
+  'PRACTICAL_CASE',
+  'SIMULATION',
+  'SCENARIO',
+  'FLASHCARDS',
+] as const;
+
+export type ExerciseType = (typeof EXERCISE_TYPES)[number];
+
 export class GenerateContentDto {
-  @ApiProperty({ enum: ['QUIZ', 'FLASHCARDS', 'SUMMARY', 'STUDY_PLAN'] })
+  @ApiProperty({ enum: [...EXERCISE_TYPES, 'SUMMARY', 'STUDY_PLAN'] })
   @IsString()
-  type!: 'QUIZ' | 'FLASHCARDS' | 'SUMMARY' | 'STUDY_PLAN';
+  type!: ExerciseType | 'SUMMARY' | 'STUDY_PLAN';
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -154,6 +166,43 @@ export class GenerateContentDto {
   count?: number;
 }
 
+// ─── Feedback de exercícios ────────────────────────────────────────────────────
+
+export class ExerciseFeedbackDto {
+  @ApiProperty({ enum: ['OPEN_QUESTION', 'PRACTICAL_CASE', 'SIMULATION', 'SCENARIO'] })
+  @IsEnum(['OPEN_QUESTION', 'PRACTICAL_CASE', 'SIMULATION', 'SCENARIO'])
+  exerciseType!: 'OPEN_QUESTION' | 'PRACTICAL_CASE' | 'SIMULATION' | 'SCENARIO';
+
+  @ApiProperty({ description: 'Enunciado da pergunta/caso/cenário' })
+  @IsString()
+  question!: string;
+
+  @ApiProperty({ description: 'Resposta dada pelo colaborador' })
+  @IsString()
+  userAnswer!: string;
+
+  @ApiPropertyOptional({ description: 'Resposta-modelo ou pontos-chave esperados' })
+  @IsOptional()
+  @IsString()
+  modelAnswer?: string;
+}
+
+// ─── Base de Conhecimento ───────────────────────────────────────────────────────
+
+export class KnowledgeSearchDto {
+  @ApiProperty({ description: 'Texto a pesquisar na base de conhecimento autorizada' })
+  @IsString()
+  q!: string;
+
+  @ApiPropertyOptional({ default: 5 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  @Type(() => Number)
+  limit?: number;
+}
+
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
 export class AiSessionFilterDto extends BaseFilterDto {
@@ -167,4 +216,11 @@ export class AiSessionFilterDto extends BaseFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   activeOnly?: boolean;
+}
+
+export class AdminSessionFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) courseId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() dateFrom?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() dateTo?: string;
 }

@@ -3,6 +3,12 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { AiTutorService } from './ai-tutor.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProvidersService } from './ai-providers.service';
+import { AiKnowledgeService } from './ai-knowledge.service';
+
+const mockAiKnowledge = {
+  search: jest.fn().mockResolvedValue([]),
+  getSources: jest.fn().mockResolvedValue({}),
+};
 
 const mockAiProviders = {
   chat: jest.fn().mockResolvedValue({
@@ -80,6 +86,7 @@ describe('AiTutorService (additional)', () => {
         AiTutorService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AiProvidersService, useValue: mockAiProviders },
+        { provide: AiKnowledgeService, useValue: mockAiKnowledge },
       ],
     }).compile();
     service = module.get<AiTutorService>(AiTutorService);

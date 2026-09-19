@@ -7297,11 +7297,16 @@ model AiMessage {
   rating         Int?
   ratingFeedback String?
   agentAction    String?
+  // JSON.stringify(Array<{ type, id, title }>) das fontes da Base de
+  // Conhecimento citadas nesta resposta — ver CLAUDE.md, campos String? de
+  // metadata são sempre JSON.stringify.
+  sourcesConsulted String?      @db.Text
   createdAt      DateTime       @default(now())
   session        AiTutorSession @relation(fields: [sessionId], references: [id])
 
   @@index([sessionId])
   @@index([role])
+  @@index([createdAt])
 }
 
 model AiTutorMemory {

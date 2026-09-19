@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { AiTutorService } from './ai-tutor.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProvidersService } from './ai-providers.service';
+import { AiKnowledgeService } from './ai-knowledge.service';
 
 const makeFind = (data: any[] = []) => jest.fn().mockResolvedValue(data);
 
@@ -63,6 +64,13 @@ describe('AiTutorService', () => {
           useValue: {
             complete: jest.fn().mockResolvedValue({ text: 'AI response', tokens: 10 }),
             getProviderInfo: jest.fn().mockReturnValue({ name: 'mock', model: 'mock-model' }),
+          },
+        },
+        {
+          provide: AiKnowledgeService,
+          useValue: {
+            search: jest.fn().mockResolvedValue([]),
+            getSources: jest.fn().mockResolvedValue({}),
           },
         },
       ],

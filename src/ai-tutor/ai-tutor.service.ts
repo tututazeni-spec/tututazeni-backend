@@ -9,13 +9,16 @@ import {
 import { Prisma, ActionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProvidersService } from './ai-providers.service';
+import { AiKnowledgeService } from './ai-knowledge.service';
 import {
   StartAiSessionDto,
   SendAiMessageDto,
   AiSessionFilterDto,
+  AdminSessionFilterDto,
   RateMessageDto,
   ExecuteAgentActionDto,
   GenerateContentDto,
+  ExerciseFeedbackDto,
   TutorPersonality,
   AgentAction,
 } from './ai-tutor.dto';
@@ -42,6 +45,7 @@ export class AiTutorService {
   constructor(
     private prisma: PrismaService,
     private aiProviders: AiProvidersService,
+    private knowledge: AiKnowledgeService,
   ) {}
 
   // ─── INICIAR SESSÃO ───────────────────────────────────────────────────────
@@ -184,10 +188,27 @@ export class AiTutorService {
         content: m.content,
       }));
 
+    // Base de Conhecimento — pesquisa RAG sobre conteúdos autorizados (docs/ai-tutor.md secção 3)
+    const sources = await this.knowledge.search(dto.message, 3).catch(e => {
+      this.logger.warn({
+        userId,
+        sessionId: dto.sessionId,
+        action: 'AI_TUTOR_KNOWLEDGE_SEARCH',
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: 'Falha ao pesquisar a base de conhecimento — a prosseguir sem contexto RAG',
+      });
+      return [];
+    });
+    const knowledgeBlock =
+      sources.length > 0
+        ? `\n\n[Base de Conhecimento autorizada — usa esta informação quando relevante e cita a fonte no formato "Fonte: <nome>"]\n${sources
+            .map(s => `- (${s.label}) ${s.snippet}`)
+            .join('\n')}`
+        : '';
+
     // Adicionar contexto extra se fornecido
-    const userContent = dto.contextHint
-      ? `[Contexto: ${dto.contextHint}]\n\n${dto.message}`
-      : dto.message;
+    const userContent =
+      (dto.contextHint ? `[Contexto: ${dto.contextHint}]\n\n` : '') + dto.message + knowledgeBlock;
 
     historyMsgs.push({ role: 'user', content: userContent });
 
@@ -208,6 +229,10 @@ export class AiTutorService {
         latencyMs: latency,
         provider: aiResponse.provider,
         model: aiResponse.model,
+        sourcesConsulted:
+          sources.length > 0
+            ? JSON.stringify(sources.map(s => ({ type: s.type, id: s.id, title: s.title })))
+            : null,
       },
     });
 
@@ -248,6 +273,7 @@ export class AiTutorService {
       provider: aiResponse.provider,
       model: aiResponse.model,
       latencyMs: latency,
+      sources,
     };
   }
 
@@ -402,6 +428,11 @@ export class AiTutorService {
 
     const prompts: Record<string, string> = {
       QUIZ: `Com base no seguinte conteúdo, gera ${dto.count ?? 5} questões de múltipla escolha (A/B/C/D) com a resposta correcta indicada. Formato JSON: [{"question":"...","options":["A)...","B)...","C)...","D)..."],"correct":"A","explanation":"..."}]. Conteúdo: ${contextText}`,
+      TRUE_FALSE: `Com base no seguinte conteúdo, gera ${dto.count ?? 5} afirmações de Verdadeiro/Falso, indicando se cada uma é verdadeira e uma breve justificação. Formato JSON: [{"statement":"...","isTrue":true,"explanation":"..."}]. Conteúdo: ${contextText}`,
+      OPEN_QUESTION: `Com base no seguinte conteúdo, gera ${dto.count ?? 3} perguntas abertas (resposta dissertativa) e uma resposta-modelo para cada uma, para efeitos de auto-avaliação. Formato JSON: [{"question":"...","modelAnswer":"..."}]. Conteúdo: ${contextText}`,
+      PRACTICAL_CASE: `Com base no seguinte conteúdo, cria ${dto.count ?? 2} casos práticos aplicados a um contexto de trabalho real, cada um com uma situação descrita, uma pergunta de análise e os pontos-chave esperados na resposta. Formato JSON: [{"scenario":"...","question":"...","keyPoints":["..."]}]. Conteúdo: ${contextText}`,
+      SIMULATION: `Com base no seguinte conteúdo, cria ${dto.count ?? 2} simulações de decisão: uma situação e 2 a 3 opções de acção, cada uma com a sua consequência e indicação se é a melhor opção. Formato JSON: [{"situation":"...","options":[{"text":"...","consequence":"...","isBest":false}]}]. Conteúdo: ${contextText}`,
+      SCENARIO: `Com base no seguinte conteúdo, cria ${dto.count ?? 2} cenários hipotéticos realistas para discussão, cada um com contexto, o desafio a resolver e uma pergunta reflexiva final. Formato JSON: [{"context":"...","challenge":"...","reflectionQuestion":"..."}]. Conteúdo: ${contextText}`,
       FLASHCARDS: `Cria ${dto.count ?? 8} flashcards do seguinte conteúdo. Formato JSON: [{"front":"...","back":"..."}]. Conteúdo: ${contextText}`,
       SUMMARY: `Faz um resumo estruturado e didáctico do seguinte conteúdo, com pontos principais e takeaways. Máximo 400 palavras. Conteúdo: ${contextText}`,
       STUDY_PLAN: `Cria um plano de estudo semanal de 4 semanas para dominar o seguinte tema. Formato JSON: [{"week":1,"title":"...","objectives":["..."],"activities":["..."]}]. Tema: ${contextText}`,
@@ -505,6 +536,36 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
     };
   }
 
+  // ─── FEEDBACK DE EXERCÍCIOS ───────────────────────────────────────────────
+
+  async exerciseFeedback(userId: number, dto: ExerciseFeedbackDto) {
+    const systemPrompt = `És a Ísis, tutora de IA da INNOVA, a avaliar a resposta de um colaborador a um exercício de tipo ${dto.exerciseType}. Dá feedback construtivo em português: o que está correcto, o que falta ou pode melhorar, e termina com "Pontuação: X/10".`;
+    const userPrompt = `Pergunta/Caso: ${dto.question}\n${dto.modelAnswer ? `Resposta-modelo/pontos-chave esperados: ${dto.modelAnswer}\n` : ''}Resposta do colaborador: ${dto.userAnswer}`;
+
+    const response = await this.aiProviders.chat(
+      systemPrompt,
+      [{ role: 'user', content: userPrompt }],
+      512,
+    );
+
+    await this.prisma.userPoints
+      .upsert({
+        where: { userId },
+        create: { userId, points: 1 },
+        update: { points: { increment: 1 } },
+      })
+      .catch(e => {
+        this.logger.warn({
+          userId,
+          action: 'AWARD_AI_TUTOR_EXERCISE_XP',
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao atribuir XP por feedback de exercício',
+        });
+      });
+
+    return { feedback: response.text, provider: response.provider };
+  }
+
   // ─── SESSÃO / HISTÓRICO ───────────────────────────────────────────────────
 
   async endSession(userId: number, sessionId: number) {
@@ -518,16 +579,95 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
     });
   }
 
-  async getSession(userId: number, sessionId: number) {
+  async getSession(userId: number, sessionId: number, viewAll = false) {
     const session = await this.prisma.read.aiTutorSession.findFirst({
-      where: { id: sessionId, userId },
+      where: viewAll ? { id: sessionId } : { id: sessionId, userId },
       include: {
         messages: { where: { role: { not: 'SYSTEM' } }, orderBy: { createdAt: 'asc' } },
         course: { select: { id: true, title: true } },
+        user: { select: { id: true, fullName: true } },
       },
     });
     if (!session) throw new NotFoundException('Sessão não encontrada');
     return session;
+  }
+
+  /** Eliminar histórico de uma sessão (secção 4 — "Eliminar histórico"). */
+  async deleteSession(sessionId: number, userId?: number) {
+    const session = await this.prisma.read.aiTutorSession.findFirst({
+      where: userId ? { id: sessionId, userId } : { id: sessionId },
+    });
+    if (!session) throw new NotFoundException('Sessão não encontrada');
+    await this.prisma.aiMessage.deleteMany({ where: { sessionId } });
+    await this.prisma.aiTutorSession.delete({ where: { id: sessionId } });
+    return { deleted: true };
+  }
+
+  /** Todas as sessões da plataforma — para a aba Sessões (ADMIN/RH). */
+  async listAllSessions(filters: AdminSessionFilterDto) {
+    const { page = 1, limit = 20, userId, courseId, dateFrom, dateTo } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const where: Prisma.AiTutorSessionWhereInput = {};
+    if (userId) where.userId = userId;
+    if (courseId) where.courseId = courseId;
+    if (dateFrom || dateTo) {
+      where.startedAt = {
+        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+        ...(dateTo ? { lte: new Date(dateTo) } : {}),
+      };
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.aiTutorSession.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          user: { select: { id: true, fullName: true } },
+          course: { select: { id: true, title: true } },
+          messages: {
+            where: { role: { not: 'SYSTEM' } },
+            select: { role: true, rating: true, sourcesConsulted: true },
+          },
+        },
+        orderBy: { startedAt: 'desc' },
+      }),
+      this.prisma.read.aiTutorSession.count({ where }),
+    ]);
+
+    const enriched = data.map(s => {
+      const questions = s.messages.filter(m => m.role === 'USER').length;
+      const ratings = s.messages.map(m => m.rating).filter((r): r is number => r != null);
+      const consultedSet = new Set<string>();
+      for (const m of s.messages) {
+        if (!m.sourcesConsulted) continue;
+        try {
+          const parsed = JSON.parse(m.sourcesConsulted) as Array<{ title: string }>;
+          parsed.forEach(p => consultedSet.add(p.title));
+        } catch {
+          /* ignora mensagens com sourcesConsulted corrompido */
+        }
+      }
+      const durationMin = s.endedAt
+        ? Math.max(1, Math.round((s.endedAt.getTime() - s.startedAt.getTime()) / 60000))
+        : null;
+
+      return {
+        id: s.id,
+        user: s.user,
+        course: s.course,
+        startedAt: s.startedAt,
+        endedAt: s.endedAt,
+        durationMinutes: durationMin,
+        questions,
+        contentsConsulted: consultedSet.size,
+        avgRating: ratings.length
+          ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10
+          : null,
+      };
+    });
+
+    return buildPaginatedResponse(enriched, total, page, limit);
   }
 
   async getMySessions(userId: number, filters: AiSessionFilterDto) {
@@ -577,27 +717,141 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
     });
   }
 
-  // ─── STATS ────────────────────────────────────────────────────────────────
+  // ─── STATS (Visão Geral — docs/ai-tutor.md secção 1) ─────────────────────
 
   async getUsageStats() {
-    const [totalSessions, activeSessions, totalMessages, tokensUsed, avgRating, byProvider] =
-      await Promise.all([
-        this.prisma.read.aiTutorSession.count(),
-        this.prisma.read.aiTutorSession.count({ where: { endedAt: null } }),
-        this.prisma.read.aiMessage.count({ where: { role: 'USER' } }),
-        this.prisma.read.aiMessage.aggregate({ _sum: { tokensUsed: true } }),
-        this.prisma.read.aiMessage.aggregate({
-          where: { rating: { not: null } },
-          _avg: { rating: true },
-        }),
-        this.prisma.read.aiMessage.groupBy({
-          by: ['provider'],
-          where: { provider: { not: null } },
-          _count: true,
-        }),
-      ]);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [
+      totalSessions,
+      activeSessions,
+      endedSessions,
+      totalMessages,
+      conversasHoje,
+      tokensUsed,
+      avgRating,
+      byProvider,
+      sessionsWithCourse,
+      endedDurations,
+      topQuestions,
+      questionsWithSession,
+    ] = await Promise.all([
+      this.prisma.read.aiTutorSession.count(),
+      this.prisma.read.aiTutorSession.count({ where: { endedAt: null } }),
+      this.prisma.read.aiTutorSession.count({ where: { endedAt: { not: null } } }),
+      this.prisma.read.aiMessage.count({ where: { role: 'USER' } }),
+      this.prisma.read.aiMessage.count({
+        where: { role: 'USER', createdAt: { gte: todayStart } },
+      }),
+      this.prisma.read.aiMessage.aggregate({ _sum: { tokensUsed: true } }),
+      this.prisma.read.aiMessage.aggregate({
+        where: { rating: { not: null } },
+        _avg: { rating: true },
+      }),
+      this.prisma.read.aiMessage.groupBy({
+        by: ['provider'],
+        where: { provider: { not: null } },
+        _count: true,
+      }),
+      this.prisma.read.aiTutorSession.findMany({
+        where: { courseId: { not: null } },
+        select: { courseId: true, course: { select: { title: true, category: true } } },
+      }),
+      this.prisma.read.aiTutorSession.findMany({
+        where: { endedAt: { not: null } },
+        select: { startedAt: true, endedAt: true },
+      }),
+      this.prisma.read.aiMessage.groupBy({
+        by: ['content'],
+        where: { role: 'USER' },
+        _count: { content: true },
+        orderBy: { _count: { content: 'desc' } },
+        take: 20,
+      }),
+      this.prisma.read.aiMessage.findMany({
+        where: { role: 'USER' },
+        select: { session: { select: { userId: true } } },
+      }),
+    ]);
+
+    // Cursos mais utilizados / temas mais procurados (proxy: categoria do curso)
+    const courseCounts = new Map<number, { title: string; count: number }>();
+    const themeCounts = new Map<string, number>();
+    for (const s of sessionsWithCourse) {
+      if (s.courseId && s.course) {
+        const entry = courseCounts.get(s.courseId) ?? { title: s.course.title, count: 0 };
+        entry.count += 1;
+        courseCounts.set(s.courseId, entry);
+        if (s.course.category) {
+          themeCounts.set(s.course.category, (themeCounts.get(s.course.category) ?? 0) + 1);
+        }
+      }
+    }
+    const cursosMaisUtilizados = [...courseCounts.values()]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    const temasMaisProcurados = [...themeCounts.entries()]
+      .map(([theme, count]) => ({ theme, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    // Horas de aprendizagem com IA
+    const totalMinutes = endedDurations.reduce(
+      (acc, s) => acc + Math.max(0, (s.endedAt.getTime() - s.startedAt.getTime()) / 60000),
+      0,
+    );
+    const horasAprendizagem = Math.round((totalMinutes / 60) * 10) / 10;
+
+    // Perguntas mais frequentes (perguntas literalmente repetidas por vários colaboradores)
+    const perguntasFrequentes = topQuestions
+      .filter(q => q._count.content > 1)
+      .slice(0, 5)
+      .map(q => ({
+        question: q.content.length > 140 ? `${q.content.slice(0, 140)}…` : q.content,
+        count: q._count.content,
+      }));
+
+    // Utilizadores mais activos (por nº de perguntas)
+    const userCounts = new Map<number, number>();
+    for (const m of questionsWithSession) {
+      const uid = m.session?.userId;
+      if (uid) userCounts.set(uid, (userCounts.get(uid) ?? 0) + 1);
+    }
+    const topUserIds = [...userCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id]) => id);
+    const topUsersData =
+      topUserIds.length > 0
+        ? await this.prisma.read.user.findMany({
+            where: { id: { in: topUserIds } },
+            select: { id: true, fullName: true },
+          })
+        : [];
+    const utilizadoresMaisAtivos = topUserIds.map(id => ({
+      userId: id,
+      fullName: topUsersData.find(u => u.id === id)?.fullName ?? 'Desconhecido',
+      count: userCounts.get(id) ?? 0,
+    }));
 
     return {
+      // Cards principais
+      conversasHoje,
+      utilizadoresAtivos: userCounts.size,
+      sessoesAprendizagem: totalSessions,
+      perguntasRespondidas: totalMessages,
+      cursosApoiados: courseCounts.size,
+      taxaConclusao: totalSessions > 0 ? Math.round((endedSessions / totalSessions) * 100) : 0,
+      horasAprendizagem,
+
+      // Listas de destaque
+      perguntasFrequentes,
+      cursosMaisUtilizados,
+      temasMaisProcurados,
+      utilizadoresMaisAtivos,
+
+      // Métricas legadas (mantidas para compatibilidade)
       totalSessions,
       activeSessions,
       totalMessages,
@@ -606,6 +860,39 @@ Sugere 3 próximas acções de aprendizagem personalizadas, explicando brevement
       byProvider: byProvider.map(p => ({ provider: p.provider, count: p._count })),
       currentProvider: this.aiProviders.getProviderInfo(),
       cost: 'GRATUITO — sem custo de API',
+    };
+  }
+
+  /** Visão pessoal das mesmas métricas, para colaboradores sem acesso a Analytics. */
+  async getMyUsageStats(userId: number) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [totalSessions, endedSessions, totalMessages, conversasHoje, sessions] =
+      await Promise.all([
+        this.prisma.read.aiTutorSession.count({ where: { userId } }),
+        this.prisma.read.aiTutorSession.count({ where: { userId, endedAt: { not: null } } }),
+        this.prisma.read.aiMessage.count({ where: { role: 'USER', session: { userId } } }),
+        this.prisma.read.aiMessage.count({
+          where: { role: 'USER', session: { userId }, createdAt: { gte: todayStart } },
+        }),
+        this.prisma.read.aiTutorSession.findMany({
+          where: { userId, endedAt: { not: null } },
+          select: { startedAt: true, endedAt: true },
+        }),
+      ]);
+
+    const totalMinutes = sessions.reduce(
+      (acc, s) => acc + Math.max(0, (s.endedAt.getTime() - s.startedAt.getTime()) / 60000),
+      0,
+    );
+
+    return {
+      conversasHoje,
+      sessoesAprendizagem: totalSessions,
+      perguntasRespondidas: totalMessages,
+      taxaConclusao: totalSessions > 0 ? Math.round((endedSessions / totalSessions) * 100) : 0,
+      horasAprendizagem: Math.round((totalMinutes / 60) * 10) / 10,
     };
   }
 
