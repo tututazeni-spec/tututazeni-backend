@@ -444,7 +444,9 @@ export class EnrollmentsService {
   async resetProgress(id: number) {
     const e = await this.findOne(id);
     if (e.status === 'CANCELLED') {
-      throw new BadRequestException('Não é possível reiniciar o progresso de uma matrícula cancelada');
+      throw new BadRequestException(
+        'Não é possível reiniciar o progresso de uma matrícula cancelada',
+      );
     }
 
     await this.prisma.lessonProgress.deleteMany({ where: { enrollmentId: id } });
@@ -514,16 +516,17 @@ export class EnrollmentsService {
       this.prisma.read.unit.findMany({ select: { id: true, name: true } }),
     ]);
 
-    async function statsFor(
-      prisma: PrismaService,
-      where: Prisma.EnrollmentWhereInput,
-    ) {
+    async function statsFor(prisma: PrismaService, where: Prisma.EnrollmentWhereInput) {
       const [total, completed, inProgress, overdue] = await Promise.all([
         prisma.read.enrollment.count({ where }),
         prisma.read.enrollment.count({ where: { ...where, status: 'COMPLETED' } }),
         prisma.read.enrollment.count({ where: { ...where, status: 'IN_PROGRESS' } }),
         prisma.read.enrollment.count({
-          where: { ...where, deadline: { lt: new Date() }, status: { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] } },
+          where: {
+            ...where,
+            deadline: { lt: new Date() },
+            status: { notIn: ['COMPLETED', 'CANCELLED', 'EXPIRED'] },
+          },
         }),
       ]);
       return {
