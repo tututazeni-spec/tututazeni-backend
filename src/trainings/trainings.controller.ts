@@ -31,6 +31,8 @@ import {
   CreateTrainingDocumentDto,
   LinkTrainingAssessmentDto,
   TrainingAssessmentRole,
+  CancelTrainingDto,
+  TrainingCalendarFilterDto,
 } from './trainings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -87,6 +89,12 @@ export class TrainingController {
   @ApiOperation({ summary: 'Os meus treinamentos (inscrições e histórico)' })
   myTrainings(@CurrentUser() user: CurrentUserData) {
     return this.svc.getMyTrainings(user.id);
+  }
+
+  @Get('calendar')
+  @ApiOperation({ summary: 'Calendário de sessões/formações num intervalo de datas' })
+  calendar(@Query() filters: TrainingCalendarFilterDto) {
+    return this.svc.getCalendar(filters);
   }
 
   @Get(':id')
@@ -146,6 +154,26 @@ export class TrainingController {
   @HttpCode(HttpStatus.OK)
   archive(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
     return this.svc.archive(id, user);
+  }
+
+  @Patch(':id/cancel')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Cancelar treinamento' })
+  @HttpCode(HttpStatus.OK)
+  cancel(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CancelTrainingDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.cancel(id, dto, user);
+  }
+
+  @Patch(':id/complete')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Concluir treinamento' })
+  @HttpCode(HttpStatus.OK)
+  complete(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.complete(id, user);
   }
 
   @Delete(':id')

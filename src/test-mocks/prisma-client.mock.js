@@ -1756,7 +1756,26 @@ const TrainingType = {
 
 const TrainingLevel = { BEGINNER: 'BEGINNER', INTERMEDIATE: 'INTERMEDIATE', ADVANCED: 'ADVANCED' };
 
-const TrainingStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHIVED' };
+const TrainingStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+  CANCELLED: 'CANCELLED',
+  COMPLETED: 'COMPLETED',
+};
+
+const TrainingPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', URGENT: 'URGENT' };
+
+const TrainingPlanPeriod = { ANNUAL: 'ANNUAL', QUARTERLY: 'QUARTERLY', EXTRAORDINARY: 'EXTRAORDINARY' };
+
+const TrainingPlanStatus = {
+  DRAFT: 'DRAFT',
+  SUBMITTED: 'SUBMITTED',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+};
 
 const TrainingParticipantStatus = {
   WAITLIST: 'WAITLIST',
@@ -2339,6 +2358,9 @@ module.exports = {
   TrainingType,
   TrainingLevel,
   TrainingStatus,
+  TrainingPriority,
+  TrainingPlanPeriod,
+  TrainingPlanStatus,
   TrainingParticipantStatus,
   TrainingAssessmentRole,
   SessionModality,

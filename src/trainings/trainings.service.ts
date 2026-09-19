@@ -27,6 +27,12 @@ import {
   CreateTrainingDocumentDto,
   LinkTrainingAssessmentDto,
   ParticipantStatus,
+  CancelTrainingDto,
+  CreateTrainingPlanDto,
+  UpdateTrainingPlanDto,
+  RejectTrainingPlanDto,
+  TrainingPlanFilterDto,
+  TrainingCalendarFilterDto,
 } from './trainings.dto';
 
 // Papéis com acesso total de gestão a QUALQUER formação. Os restantes
@@ -77,6 +83,8 @@ export class TrainingService {
       category,
       instructorId,
       mandatory,
+      trainingPlanId,
+      priority,
     } = filters;
     const skip = (page - 1) * limit;
 
@@ -88,6 +96,8 @@ export class TrainingService {
     if (category) where.category = category;
     if (instructorId) where.instructorId = instructorId;
     if (mandatory !== undefined) where.mandatory = mandatory;
+    if (trainingPlanId) where.trainingPlanId = trainingPlanId;
+    if (priority) where.priority = priority;
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
@@ -126,13 +136,15 @@ export class TrainingService {
   // ownership: ADMIN/RH vêem tudo, os restantes papéis que podem criar
   // formações (GESTOR/INSTRUCTOR/DIRECTOR/LIDER) só vêem as suas.
   async findForManagement(filters: TrainingFilterDto, user: CurrentUserData) {
-    const { page = 1, limit = 20, status, type, category } = filters;
+    const { page = 1, limit = 20, status, type, category, trainingPlanId, priority } = filters;
     const skip = (page - 1) * limit;
 
     const where: Prisma.TrainingWhereInput = {};
     if (status) where.status = status;
     if (type) where.type = type;
     if (category) where.category = category;
+    if (trainingPlanId) where.trainingPlanId = trainingPlanId;
+    if (priority) where.priority = priority;
     if (!isPrivileged(user, PRIVILEGED_ROLES)) where.createdById = user.id;
 
     const [data, total] = await Promise.all([
@@ -282,6 +294,15 @@ export class TrainingService {
         foodCost: data.foodCost,
         lodgingCost: data.lodgingCost,
         otherCosts: data.otherCosts,
+        plannedBudget: data.plannedBudget,
+        priority: data.priority ?? 'MEDIUM',
+        responsibleId: data.responsibleId,
+        trainingPlanId: data.trainingPlanId,
+        courseId: data.courseId,
+        learningPathId: data.learningPathId,
+        targetDeptIds: data.targetDeptIds ?? [],
+        targetUnitIds: data.targetUnitIds ?? [],
+        targetPositionIds: data.targetPositionIds ?? [],
         createdById: creatorId,
       },
       include: { instructor: { select: { id: true, fullName: true } } },
@@ -303,6 +324,9 @@ export class TrainingService {
         ...data,
         tags: data.tags ?? undefined,
         requiredResources: data.requiredResources ?? undefined,
+        targetDeptIds: data.targetDeptIds ?? undefined,
+        targetUnitIds: data.targetUnitIds ?? undefined,
+        targetPositionIds: data.targetPositionIds ?? undefined,
         startDate: data.startDate ? new Date(data.startDate) : undefined,
         endDate: data.endDate ? new Date(data.endDate) : undefined,
       },
@@ -345,6 +369,32 @@ export class TrainingService {
   async archive(id: number, user: CurrentUserData) {
     await this.assertCanManage(id, user);
     return this.prisma.training.update({ where: { id }, data: { status: 'ARCHIVED' } });
+  }
+
+  // docs/trainings-detalhado.md pt.3 — acções "cancelar"/"concluir" da
+  // formação (distintas de cancelParticipant/updateParticipantStatus, que
+  // operam ao nível do participante).
+  async cancel(id: number, dto: CancelTrainingDto, user: CurrentUserData) {
+    await this.assertCanManage(id, user);
+    const t = await this.prisma.read.training.findUnique({ where: { id }, select: { status: true } });
+    if (!t) throw new NotFoundException('Treinamento não encontrado');
+    if (t.status === 'CANCELLED' || t.status === 'COMPLETED') {
+      throw new ConflictException('Formação já terminada — não pode ser cancelada');
+    }
+    return this.prisma.training.update({
+      where: { id },
+      data: { status: 'CANCELLED', cancellationReason: dto.reason },
+    });
+  }
+
+  async complete(id: number, user: CurrentUserData) {
+    await this.assertCanManage(id, user);
+    const t = await this.prisma.read.training.findUnique({ where: { id }, select: { status: true } });
+    if (!t) throw new NotFoundException('Treinamento não encontrado');
+    if (t.status !== 'PUBLISHED') {
+      throw new ConflictException('Só uma formação publicada pode ser concluída');
+    }
+    return this.prisma.training.update({ where: { id }, data: { status: 'COMPLETED' } });
   }
 
   async remove(id: number, user: CurrentUserData) {
@@ -1093,14 +1143,238 @@ export class TrainingService {
 
   // ─── DASHBOARD ADMIN ──────────────────────────────────────────────────────
 
+  // ─── CALENDÁRIO (docs/trainings-detalhado.md pt.4) ─────────────────────────
+  // Este schema não separa Formação/Turma em dois modelos (ver comentário de
+  // `classDescription` na Training acima) — os "eventos" do calendário são
+  // as TrainingSession (têm data concreta); uma formação já com startDate
+  // mas ainda sem nenhuma sessão marcada também aparece, para não desaparecer
+  // do calendário enquanto está só "planeada"/"agendada".
+  async getCalendar(filters: TrainingCalendarFilterDto) {
+    const from = filters.from ? new Date(filters.from) : new Date();
+    const to = filters.to ? new Date(filters.to) : new Date(from.getTime() + 90 * 24 * 60 * 60 * 1000);
+
+    const trainingFilter: Prisma.TrainingWhereInput = {};
+    if (filters.instructorId) trainingFilter.instructorId = filters.instructorId;
+    if (filters.status) trainingFilter.status = filters.status;
+    if (filters.departmentId) trainingFilter.targetDeptIds = { has: filters.departmentId };
+
+    const sessionWhere: Prisma.TrainingSessionWhereInput = {
+      sessionDate: { gte: from, lte: to },
+    };
+    if (filters.trainingId) sessionWhere.trainingId = filters.trainingId;
+    if (filters.modality) sessionWhere.modality = filters.modality;
+    if (filters.location) sessionWhere.location = { contains: filters.location, mode: 'insensitive' };
+    if (Object.keys(trainingFilter).length) sessionWhere.training = trainingFilter;
+
+    const sessions = await this.prisma.read.trainingSession.findMany({
+      where: sessionWhere,
+      include: {
+        training: {
+          select: {
+            id: true,
+            title: true,
+            type: true,
+            status: true,
+            roomLocation: true,
+            instructor: { select: { id: true, fullName: true } },
+          },
+        },
+        _count: { select: { participants: true } },
+      },
+      orderBy: { sessionDate: 'asc' },
+    });
+
+    const unscheduledWhere: Prisma.TrainingWhereInput = {
+      ...trainingFilter,
+      startDate: { gte: from, lte: to },
+      sessions: { none: {} },
+    };
+    if (filters.trainingId) unscheduledWhere.id = filters.trainingId;
+    if (filters.location) unscheduledWhere.roomLocation = { contains: filters.location, mode: 'insensitive' };
+
+    const unscheduled = filters.modality
+      ? [] // sem sessão -> sem modalidade de sessão para filtrar
+      : await this.prisma.read.training.findMany({
+          where: unscheduledWhere,
+          select: {
+            id: true,
+            title: true,
+            type: true,
+            status: true,
+            startDate: true,
+            endDate: true,
+            roomLocation: true,
+            instructor: { select: { id: true, fullName: true } },
+          },
+        });
+
+    const events = [
+      ...sessions.map(s => ({
+        kind: 'session' as const,
+        id: s.id,
+        trainingId: s.trainingId,
+        title: s.training.title,
+        trainingType: s.training.type,
+        status: s.training.status,
+        start: s.sessionDate,
+        end: s.sessionEndDate,
+        modality: s.modality,
+        location: s.location ?? s.training.roomLocation,
+        instructor: s.training.instructor,
+        participants: s._count.participants,
+        maxParticipants: s.maxParticipants,
+      })),
+      ...unscheduled.map(t => ({
+        kind: 'training' as const,
+        id: t.id,
+        trainingId: t.id,
+        title: t.title,
+        trainingType: t.type,
+        status: t.status,
+        start: t.startDate,
+        end: t.endDate,
+        modality: null,
+        location: t.roomLocation,
+        instructor: t.instructor,
+        participants: 0,
+        maxParticipants: null,
+      })),
+    ].sort((a, b) => (a.start?.getTime() ?? 0) - (b.start?.getTime() ?? 0));
+
+    return { from, to, events };
+  }
+
+  // ─── DASHBOARD (docs/trainings-detalhado.md pt.1 — Visão Geral) ────────────
+
   async getAdminDashboard() {
-    const [total, published, totalParticipants, completed, avgRating] = await Promise.all([
+    const now = new Date();
+
+    const [
+      total,
+      planned,
+      cancelled,
+      completedExplicit,
+      publishedScheduled,
+      publishedInProgress,
+      publishedPastEnd,
+      mandatory,
+      registeredParticipants,
+      inTrainingParticipants,
+      completedParticipants,
+      totalNonWaitlist,
+      attendedOrCompleted,
+      avgRating,
+      distinctInstructors,
+      publishedTrainingsForRooms,
+      upcomingSessions,
+      hoursAgg,
+      publishedPlans,
+      plansWithTrainings,
+    ] = await Promise.all([
       this.prisma.read.training.count(),
-      this.prisma.read.training.count({ where: { status: 'PUBLISHED' } }),
-      this.prisma.read.trainingParticipant.count({ where: { status: { not: 'WAITLIST' } } }),
+      this.prisma.read.training.count({ where: { status: 'DRAFT' } }),
+      this.prisma.read.training.count({ where: { status: 'CANCELLED' } }),
+      this.prisma.read.training.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.read.training.count({
+        where: { status: 'PUBLISHED', OR: [{ startDate: null }, { startDate: { gt: now } }] },
+      }),
+      this.prisma.read.training.count({
+        where: {
+          status: 'PUBLISHED',
+          startDate: { lte: now },
+          OR: [{ endDate: null }, { endDate: { gte: now } }],
+        },
+      }),
+      this.prisma.read.training.count({
+        where: { status: 'PUBLISHED', endDate: { lt: now } },
+      }),
+      this.prisma.read.training.count({ where: { status: 'PUBLISHED', mandatory: true } }),
+      this.prisma.read.trainingParticipant.count({
+        where: { status: { in: ['REGISTERED', 'WAITLIST', 'PENDING_APPROVAL'] } },
+      }),
+      this.prisma.read.trainingParticipant.count({
+        where: { status: { in: ['REGISTERED', 'ATTENDED'] } },
+      }),
       this.prisma.read.trainingParticipant.count({ where: { status: 'COMPLETED' } }),
+      this.prisma.read.trainingParticipant.count({ where: { status: { not: 'WAITLIST' } } }),
+      this.prisma.read.trainingParticipant.count({
+        where: { status: { in: ['ATTENDED', 'COMPLETED'] } },
+      }),
       this.prisma.read.trainingRating.aggregate({ _avg: { rating: true } }),
+      this.prisma.read.training.findMany({
+        where: { status: 'PUBLISHED', instructorId: { not: null } },
+        select: { instructorId: true },
+        distinct: ['instructorId'],
+      }),
+      this.prisma.read.training.findMany({
+        where: { status: 'PUBLISHED', roomLocation: { not: null } },
+        select: { roomLocation: true },
+        distinct: ['roomLocation'],
+      }),
+      this.prisma.read.trainingSession.findMany({
+        where: { sessionDate: { gt: now } },
+        select: {
+          id: true,
+          sessionDate: true,
+          location: true,
+          training: { select: { id: true, title: true } },
+        },
+        orderBy: { sessionDate: 'asc' },
+        take: 5,
+      }),
+      this.prisma.read.trainingParticipant.aggregate({
+        _sum: { attendedHours: true },
+        _count: { _all: true },
+        where: { attendedHours: { not: null } },
+      }),
+      this.prisma.read.trainingPlan.count({ where: { status: 'PUBLISHED' } }),
+      this.prisma.read.trainingPlan.count({
+        where: { status: 'PUBLISHED', trainings: { some: {} } },
+      }),
     ]);
+
+    const completed = completedExplicit + publishedPastEnd;
+
+    // Custo/hora e custo/participante — computados sobre as formações
+    // publicadas (mesma fórmula de computeTotalCost, agregada em memória
+    // porque os custos são a soma de 6 colunas opcionais, não uma coluna
+    // única sobre a qual o Prisma possa agregar).
+    const costRows = await this.prisma.read.training.findMany({
+      where: { status: { in: ['PUBLISHED', 'COMPLETED', 'ARCHIVED'] } },
+      select: {
+        cost: true,
+        instructorCost: true,
+        materialCost: true,
+        transportCost: true,
+        foodCost: true,
+        lodgingCost: true,
+        otherCosts: true,
+        workloadHours: true,
+      },
+    });
+    const totalCost = costRows.reduce((sum, t) => sum + this.computeTotalCost(t), 0);
+    const totalHours = costRows.reduce((sum, t) => sum + (t.workloadHours ?? 0), 0);
+
+    // Taxa de aprovação — nota final do participante vs. passingScore da
+    // sua formação (varia por formação, por isso não é agregável em SQL).
+    const scored = await this.prisma.read.trainingParticipant.findMany({
+      where: { finalScore: { not: null } },
+      select: { finalScore: true, training: { select: { passingScore: true } } },
+    });
+    const approved = scored.filter(
+      p => (p.finalScore ?? 0) >= (p.training?.passingScore ?? 70),
+    ).length;
+
+    // Execução orçamental — orçamento previsto (Training.plannedBudget +
+    // TrainingPlan.plannedBudget das que não têm o próprio) vs. custo real.
+    const plansWithBudget = await this.prisma.read.trainingPlan.aggregate({
+      _sum: { plannedBudget: true },
+    });
+    const trainingsBudget = await this.prisma.read.training.aggregate({
+      _sum: { plannedBudget: true },
+    });
+    const plannedBudgetTotal =
+      (plansWithBudget._sum.plannedBudget ?? 0) + (trainingsBudget._sum.plannedBudget ?? 0);
 
     const topTrainings = await this.prisma.read.training.findMany({
       where: { status: 'PUBLISHED' },
@@ -1109,15 +1383,44 @@ export class TrainingService {
       take: 5,
     });
 
-    const mandatory = await this.prisma.read.training.count({
-      where: { status: 'PUBLISHED', mandatory: true },
-    });
-
     return {
-      trainings: { total, published, mandatory },
-      participants: { total: totalParticipants, completed },
-      completionRate: totalParticipants > 0 ? Math.round((completed / totalParticipants) * 100) : 0,
+      trainings: {
+        total,
+        planned,
+        scheduled: publishedScheduled,
+        inProgress: publishedInProgress,
+        completed,
+        cancelled,
+        mandatory,
+        activeClasses: publishedInProgress,
+      },
+      participants: {
+        registered: registeredParticipants,
+        inTraining: inTrainingParticipants,
+        completed: completedParticipants,
+      },
+      upcomingSessions: upcomingSessions.map(s => ({
+        id: s.id,
+        trainingId: s.training.id,
+        title: s.training.title,
+        date: s.sessionDate,
+        location: s.location,
+      })),
+      activeInstructors: distinctInstructors.length,
+      roomsInUse: publishedTrainingsForRooms.length,
+      completionRate: totalNonWaitlist > 0 ? Math.round((completed / totalNonWaitlist) * 100) : 0,
+      participationRate:
+        totalNonWaitlist > 0 ? Math.round((attendedOrCompleted / totalNonWaitlist) * 100) : 0,
       avgRating: Math.round((avgRating._avg.rating ?? 0) * 10) / 10,
+      hoursPerEmployee:
+        hoursAgg._count._all > 0
+          ? Math.round(((hoursAgg._sum.attendedHours ?? 0) / hoursAgg._count._all) * 10) / 10
+          : 0,
+      costPerParticipant: totalNonWaitlist > 0 ? Math.round(totalCost / totalNonWaitlist) : 0,
+      costPerHour: totalHours > 0 ? Math.round(totalCost / totalHours) : 0,
+      approvalRate: scored.length > 0 ? Math.round((approved / scored.length) * 100) : 0,
+      budgetExecutionRate: plannedBudgetTotal > 0 ? Math.round((totalCost / plannedBudgetTotal) * 100) : 0,
+      planExecutionRate: publishedPlans > 0 ? Math.round((plansWithTrainings / publishedPlans) * 100) : 0,
       topTrainings,
     };
   }

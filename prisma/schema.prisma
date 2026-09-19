@@ -719,12 +719,16 @@ model User {
   microLearningsAuthored    MicroLearning[]
 
   // ─── Treinamentos ─────────────────────────────────────────────
-  instructedTrainings    Training[]             @relation("TrainingInstructor")
-  createdTrainings       Training[]             @relation("TrainingCreatedBy")
-  trainingParticipants   TrainingParticipant[]
-  trainingRatings        TrainingRating[]
-  trainingCoInstructorOf TrainingCoInstructor[]
-  trainingDocsUploaded   TrainingDocument[]
+  instructedTrainings      Training[]             @relation("TrainingInstructor")
+  createdTrainings         Training[]             @relation("TrainingCreatedBy")
+  responsibleForTrainings  Training[]             @relation("TrainingResponsible")
+  trainingParticipants     TrainingParticipant[]
+  trainingRatings          TrainingRating[]
+  trainingCoInstructorOf   TrainingCoInstructor[]
+  trainingDocsUploaded     TrainingDocument[]
+  trainingPlansResponsible TrainingPlan[]         @relation("TrainingPlanResponsible")
+  trainingPlansApproved    TrainingPlan[]         @relation("TrainingPlanApprover")
+  trainingPlansCreated     TrainingPlan[]         @relation("TrainingPlanCreatedBy")
 
   // ─── Onboarding ───────────────────────────────────────────────
   onboardingAsUser    OnboardingPlan[]         @relation("OnboardingPlanUser")
@@ -2911,6 +2915,7 @@ model Competency {
   leadershipProgramCompetencies LeadershipProgramCompetency[]
   leadershipSelectionCriteria   LeadershipSelectionCriterion[]
   trainingCompetencies          TrainingCompetency[]
+  trainingPlanCompetencies      TrainingPlanCompetency[]
   pdiCompetencyGaps             PdiCompetencyGap[]
   evaluationCriteria            EvaluationCriteria[]
   evaluationCampaignQuestions   EvaluationCampaignQuestion[]
@@ -4657,6 +4662,42 @@ enum TrainingStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
+  // Adicionados para docs/trainings-detalhado.md pt.1/3 — "Formações em
+  // curso/concluídas/canceladas" no dashboard e acções cancelar/concluir.
+  // PLANNED/SCHEDULED/IN_PROGRESS continuam derivados de PUBLISHED+datas
+  // (ver classifyLifecycle em trainings.service.ts); estes dois são estados
+  // explícitos porque não há campo de data que os determine sozinho.
+  CANCELLED
+  COMPLETED
+}
+
+// docs/trainings-detalhado.md pt.2 — "Prioridade" do Plano de Formação e da
+// Formação. Enum dedicado ao módulo (mesmo padrão de GapPriority/PlanPriority
+// noutros módulos) em vez de reutilizar um enum global.
+enum TrainingPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// docs/trainings-detalhado.md pt.2 — período do Plano de Formação.
+enum TrainingPlanPeriod {
+  ANNUAL
+  QUARTERLY
+  EXTRAORDINARY
+}
+
+// docs/trainings-detalhado.md pt.2 — ciclo de vida do Plano de Formação
+// (submissão → aprovação → publicação), distinto do TrainingStatus da
+// formação individual.
+enum TrainingPlanStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  PUBLISHED
+  ARCHIVED
 }
 
 enum TrainingParticipantStatus {
@@ -4702,6 +4743,27 @@ model Training {
   thumbnailUrl           String?
   prerequisites          String?
   instructorId           Int?
+  // docs/trainings-detalhado.md pt.3 — "Responsável" da formação, distinto
+  // de instructorId (quem forma) e createdById (quem criou o registo).
+  responsibleId          Int?
+  // Curso/percurso associados — FK "solta" (sem relação Prisma), mesmo
+  // padrão de requiredCourseIds/learningPathIds usado noutros módulos, para
+  // não acoplar o schema de Course/LearningPath a este módulo.
+  courseId               Int?
+  learningPathId         Int?
+  priority               TrainingPriority @default(MEDIUM)
+  targetDeptIds          Int[]            @default([])
+  targetUnitIds          Int[]            @default([])
+  targetPositionIds      Int[]            @default([])
+  // Plano de Formação a que esta formação pertence (opcional — nem toda
+  // formação nasce de um plano).
+  trainingPlanId         Int?
+  // "Orçamento previsto" (pt.2/3) — distinto do `cost`/instructorCost/etc.
+  // abaixo, que representam custo estimado/realizado.
+  plannedBudget          Float?
+  // Motivo de cancelamento — só preenchido pela acção cancel() (status
+  // CANCELLED); distinto de TrainingParticipant.cancellationReason.
+  cancellationReason     String?
   trainingEntity         String?
   // Descrição específica desta turma/edição (distinta da `description`
   // genérica da formação, que se mantém entre edições).
@@ -4741,7 +4803,9 @@ model Training {
   updatedAt              DateTime       @updatedAt
 
   instructor      User?                  @relation("TrainingInstructor", fields: [instructorId], references: [id])
+  responsible     User?                  @relation("TrainingResponsible", fields: [responsibleId], references: [id])
   createdBy       User?                  @relation("TrainingCreatedBy", fields: [createdById], references: [id])
+  trainingPlan    TrainingPlan?          @relation(fields: [trainingPlanId], references: [id])
   sessions        TrainingSession[]
   participants    TrainingParticipant[]
   ratings         TrainingRating[]
@@ -4753,6 +4817,72 @@ model Training {
   @@index([status])
   @@index([type])
   @@index([createdById])
+  @@index([trainingPlanId])
+  @@index([responsibleId])
+}
+
+// ─── Plano de Formação ───────────────────────────────────────────────────────
+// docs/trainings-detalhado.md pt.2. Agrega necessidades/prioridades
+// estratégicas e o conjunto de Formações previstas (Training.trainingPlanId);
+// "planeado vs. realizado" é sempre calculado a partir das Training ligadas
+// (nunca guardado), para nunca ficar desactualizado — mesmo padrão do
+// `computeTotalCost` da Training.
+model TrainingPlan {
+  id                   Int                @id @default(autoincrement())
+  name                 String
+  code                 String?            @unique
+  year                 Int
+  period               TrainingPlanPeriod @default(ANNUAL)
+  description          String?            @db.Text
+  objectives           String?
+  identifiedNeeds      String?
+  strategicPriorities  String?
+  targetDeptIds        Int[]              @default([])
+  targetUnitIds        Int[]              @default([])
+  targetPositionIds    Int[]              @default([])
+  targetAudience       String?
+  expectedParticipants Int?
+  expectedHours        Float?
+  modality             TrainingType?
+  plannedBudget        Float?
+  priority             TrainingPriority   @default(MEDIUM)
+  responsibleId        Int?
+  approverId           Int?
+  startDate            DateTime?
+  endDate              DateTime?
+  status               TrainingPlanStatus @default(DRAFT)
+  submittedAt          DateTime?
+  approvedAt           DateTime?
+  rejectedAt           DateTime?
+  rejectionReason      String?
+  publishedAt          DateTime?
+  archivedAt           DateTime?
+  notes                String?
+  createdById          Int?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  responsible  User?                    @relation("TrainingPlanResponsible", fields: [responsibleId], references: [id])
+  approver     User?                    @relation("TrainingPlanApprover", fields: [approverId], references: [id])
+  createdBy    User?                    @relation("TrainingPlanCreatedBy", fields: [createdById], references: [id])
+  competencies TrainingPlanCompetency[]
+  trainings    Training[]
+
+  @@index([status])
+  @@index([year])
+  @@index([createdById])
+}
+
+// ─── Competências a desenvolver do plano (M2M) ───────────────────────────────
+model TrainingPlanCompetency {
+  id             Int          @id @default(autoincrement())
+  trainingPlanId Int
+  competencyId   Int
+  trainingPlan   TrainingPlan @relation(fields: [trainingPlanId], references: [id], onDelete: Cascade)
+  competency     Competency   @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@unique([trainingPlanId, competencyId])
+  @@index([competencyId])
 }
 
 // ─── Competências desenvolvidas (M2M) ────────────────────────────────────────
