@@ -678,6 +678,7 @@ const CompetencySource = {
   ASSESSMENT: 'ASSESSMENT',
   MANAGER: 'MANAGER',
   HRIS: 'HRIS',
+  TRAINING: 'TRAINING',
 };
 
 const MappingPriority = { MANDATORY: 'MANDATORY', OPTIONAL: 'OPTIONAL' };
