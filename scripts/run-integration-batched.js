@@ -33,28 +33,16 @@ const BATCHES = [
     'competency-map',
     'content-library',
   ],
-  [
-    'course-modules',
-    'courses',
-    'crm-beneficiaries',
-    'crm-funders',
-    'crm-partners',
-    'dashboard',
-    'dashboard-institutional',
-    'dashboard-rh',
-    'declarations',
-  ],
-  [
-    'departments',
-    'document-repository',
-    'employees',
-    'engagement',
-    'enrollment',
-    'evaluation',
-    'evaluation360',
-    'events',
-    'executive-reports',
-  ],
+  // Batch 3 original (9 módulos) também passou a esgotar a heap de 4 GB — o
+  // bootstrap Nest de cada spec ficou mais pesado à medida que app.module.ts
+  // acumulou módulos de outras features entretanto integradas. Mesmo split
+  // usado acima nos batches 7 e 9.
+  ['course-modules', 'courses', 'crm-beneficiaries', 'crm-funders', 'crm-partners'],
+  ['dashboard', 'dashboard-institutional', 'dashboard-rh', 'declarations'],
+  // Split preventivo (mesmo motivo dos batches 3/7/9): 9 módulos por processo
+  // já não cabe folgadamente na heap de 4 GB com o app.module.ts actual.
+  ['departments', 'document-repository', 'employees', 'engagement', 'enrollment'],
+  ['evaluation', 'evaluation360', 'events', 'executive-reports'],
   // `leadership` isolado: o workspace corporativo (plano 2026-09-09) trouxe 6
   // specs que arrancam cada uma a sua app Nest completa; juntas com o resto do
   // antigo batch 5 no mesmo processo jest esgotavam a heap ("exit null").
@@ -65,17 +53,9 @@ const BATCHES = [
   // do `leadership` acima.
   ['metrics', 'micro-learning', 'mobile', 'monitoring', 'notifications'],
   ['onboarding', 'organization', 'payslips', 'payroll', 'pdf'],
-  [
-    'pdi',
-    'performance',
-    'process-standard',
-    'reports',
-    'roi-impact',
-    'roles-permissions',
-    'scalability',
-    'search',
-    'succession',
-  ],
+  // Split preventivo — mesmo motivo do batch acima.
+  ['pdi', 'performance', 'process-standard', 'reports', 'roi-impact'],
+  ['roles-permissions', 'scalability', 'search', 'succession'],
   // Batch 9 original (8 módulos) — mesmo motivo do split acima.
   ['talent-development', 'trainings', 'users', 'work-declaration'],
   ['enrollments', 'development-plans', 'history', 'health'],
