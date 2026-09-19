@@ -13,6 +13,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TrainingService } from './trainings.service';
@@ -33,6 +34,8 @@ import {
   TrainingAssessmentRole,
   CancelTrainingDto,
   TrainingCalendarFilterDto,
+  TransferParticipantDto,
+  BulkRegisterParticipantsDto,
 } from './trainings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -118,6 +121,15 @@ export class TrainingController {
   })
   results(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getResults(id);
+  }
+
+  @Get(':id/participants/export')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="participantes.csv"')
+  @ApiOperation({ summary: 'Exportar participantes (todas as sessões) como CSV' })
+  exportParticipants(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.exportParticipantsCsv(id);
   }
 
   // ── Gestão da formação (Admin/RH/Gestor/Instrutor/Director/Líder) ─────────
@@ -338,6 +350,21 @@ export class TrainingController {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.svc.rejectParticipant(id, dto, user);
+  }
+
+  @Post('sessions/register/bulk')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Inscrever vários colaboradores numa sessão' })
+  bulkRegister(@Body() dto: BulkRegisterParticipantsDto) {
+    return this.svc.bulkRegisterParticipants(dto);
+  }
+
+  @Patch('participants/:id/transfer')
+  @Roles(...CAN_CREATE_TRAININGS)
+  @ApiOperation({ summary: 'Transferir participante para outra turma/sessão' })
+  @HttpCode(HttpStatus.OK)
+  transferParticipant(@Param('id', ParseIntPipe) id: number, @Body() dto: TransferParticipantDto) {
+    return this.svc.transferParticipant(id, dto);
   }
 
   @Post('sessions/attendance/bulk')

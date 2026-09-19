@@ -20,7 +20,10 @@ const mockPrisma = {
   trainingDocument: { create: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
   trainingAssessment: { upsert: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
   assessment: { findUnique: jest.fn() },
-  trainingRating: { aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4 } }) },
+  trainingRating: {
+    aggregate: jest.fn().mockResolvedValue({ _avg: { rating: 4 }, _count: { rating: 0 } }),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 

@@ -24,6 +24,10 @@ import {
   TrainingPriority,
   TrainingPlanPeriod,
   TrainingPlanStatus,
+  TrainingInstructorType,
+  TrainingInstructorStatus,
+  TrainingResourceKind,
+  TrainingResourceStatus,
 } from '@prisma/client';
 import { IsAllowedFileUrl } from '../common/validators/is-allowed-file-url.validator';
 
@@ -42,6 +46,10 @@ export {
   TrainingPriority,
   TrainingPlanPeriod,
   TrainingPlanStatus,
+  TrainingInstructorType,
+  TrainingInstructorStatus,
+  TrainingResourceKind,
+  TrainingResourceStatus,
 };
 
 // ─── Training ─────────────────────────────────────────────────────────────────
@@ -128,6 +136,13 @@ export class CreateTrainingDto {
   @IsArray()
   @IsInt({ each: true })
   coInstructorIds?: number[];
+
+  @ApiPropertyOptional({
+    description: 'ID de um formador externo (TrainingInstructorProfile sem User associado)',
+  })
+  @IsOptional()
+  @IsInt()
+  externalInstructorId?: number;
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()
@@ -628,7 +643,9 @@ export class TrainingCalendarFilterDto {
   @Type(() => Number)
   instructorId?: number;
 
-  @ApiPropertyOptional({ description: 'Local/sala (texto livre, corresponde a location/roomLocation)' })
+  @ApiPropertyOptional({
+    description: 'Local/sala (texto livre, corresponde a location/roomLocation)',
+  })
   @IsOptional()
   @IsString()
   location?: string;
@@ -831,4 +848,312 @@ export class TrainingPlanFilterDto {
   @Min(1)
   @Type(() => Number)
   limit?: number;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Turmas & Sessões / Participantes — pts 5-6: transferência e inscrição em
+// massa (docs/trainings-detalhado.md)
+// ═════════════════════════════════════════════════════════════════════════════
+
+export class TransferParticipantDto {
+  @ApiProperty({ description: 'ID da sessão de destino (outra turma/edição)' })
+  @IsInt()
+  targetSessionId!: number;
+}
+
+export class BulkRegisterParticipantsDto {
+  @ApiProperty()
+  @IsInt()
+  sessionId!: number;
+
+  @ApiProperty({ description: 'IDs dos colaboradores a inscrever' })
+  @IsArray()
+  @IsInt({ each: true })
+  userIds!: number[];
+
+  @ApiPropertyOptional({ description: 'Registar mesmo sem vagas (vai para lista de espera)' })
+  @IsOptional()
+  @IsBoolean()
+  allowWaitlist?: boolean;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Formadores (docs/trainings-detalhado.md pt.7)
+// ═════════════════════════════════════════════════════════════════════════════
+
+export class CreateTrainingInstructorDto {
+  @ApiProperty({ enum: TrainingInstructorType })
+  @IsEnum(TrainingInstructorType)
+  type!: TrainingInstructorType;
+
+  @ApiPropertyOptional({ description: 'Colaborador associado (formador interno)' })
+  @IsOptional()
+  @IsInt()
+  userId?: number;
+
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  name!: string;
+
+  @ApiPropertyOptional({ description: 'Entidade formadora (externos)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  entity?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  nif?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  specialties?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  trainingAreas?: string[];
+
+  @ApiPropertyOptional({ type: [Number], description: 'IDs de competências' })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  competencyIds?: number[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  certifications?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  professionalExperience?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  trainerExperience?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  availability?: string;
+
+  @ApiPropertyOptional({ description: 'Custo/hora (Kz)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  hourlyCost?: number;
+
+  @ApiPropertyOptional({ description: 'URL de documentação (HTTPS, domínio autorizado)' })
+  @IsOptional()
+  @IsAllowedFileUrl()
+  documentUrl?: string;
+
+  @ApiPropertyOptional({ enum: TrainingInstructorStatus, default: TrainingInstructorStatus.ACTIVE })
+  @IsOptional()
+  @IsEnum(TrainingInstructorStatus)
+  status?: TrainingInstructorStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpdateTrainingInstructorDto extends PartialType(CreateTrainingInstructorDto) {}
+
+export class TrainingInstructorFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ enum: TrainingInstructorType })
+  @IsOptional()
+  @IsEnum(TrainingInstructorType)
+  type?: TrainingInstructorType;
+
+  @ApiPropertyOptional({ enum: TrainingInstructorStatus })
+  @IsOptional()
+  @IsEnum(TrainingInstructorStatus)
+  status?: TrainingInstructorStatus;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 20 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  limit?: number;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Recursos & Logística (docs/trainings-detalhado.md pt.8)
+// ═════════════════════════════════════════════════════════════════════════════
+
+export class CreateTrainingResourceDto {
+  @ApiProperty({ enum: TrainingResourceKind })
+  @IsEnum(TrainingResourceKind)
+  kind!: TrainingResourceKind;
+
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  code?: string;
+
+  @ApiPropertyOptional({ description: 'Tipo de sala / categoria do recurso' })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional({ description: 'Capacidade (salas)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  capacity?: number;
+
+  @ApiPropertyOptional({ description: 'Quantidade disponível (equipamento/material)', default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  quantity?: number;
+
+  @ApiPropertyOptional({ type: [String], description: 'Equipamentos disponíveis (salas)' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  equipment?: string[];
+
+  @ApiPropertyOptional({ description: 'Custo (Kz)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  cost?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  responsibleId?: number;
+
+  @ApiPropertyOptional({ enum: TrainingResourceStatus, default: TrainingResourceStatus.AVAILABLE })
+  @IsOptional()
+  @IsEnum(TrainingResourceStatus)
+  status?: TrainingResourceStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpdateTrainingResourceDto extends PartialType(CreateTrainingResourceDto) {}
+
+export class TrainingResourceFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ enum: TrainingResourceKind })
+  @IsOptional()
+  @IsEnum(TrainingResourceKind)
+  kind?: TrainingResourceKind;
+
+  @ApiPropertyOptional({ enum: TrainingResourceStatus })
+  @IsOptional()
+  @IsEnum(TrainingResourceStatus)
+  status?: TrainingResourceStatus;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 20 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  limit?: number;
+}
+
+export class CreateResourceBookingDto {
+  @ApiProperty()
+  @IsInt()
+  resourceId!: number;
+
+  @ApiPropertyOptional({ description: 'Turma (Training) a que se atribui o recurso' })
+  @IsOptional()
+  @IsInt()
+  trainingId?: number;
+
+  @ApiPropertyOptional({ description: 'Sessão a que se atribui o recurso' })
+  @IsOptional()
+  @IsInt()
+  sessionId?: number;
+
+  @ApiProperty()
+  @IsDateString()
+  startAt!: string;
+
+  @ApiProperty()
+  @IsDateString()
+  endAt!: string;
+}
+
+export class ResourceAvailabilityFilterDto {
+  @ApiProperty()
+  @IsInt()
+  @Type(() => Number)
+  resourceId!: number;
+
+  @ApiProperty()
+  @IsDateString()
+  startAt!: string;
+
+  @ApiProperty()
+  @IsDateString()
+  endAt!: string;
 }

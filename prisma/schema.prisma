@@ -719,16 +719,19 @@ model User {
   microLearningsAuthored    MicroLearning[]
 
   // ─── Treinamentos ─────────────────────────────────────────────
-  instructedTrainings      Training[]             @relation("TrainingInstructor")
-  createdTrainings         Training[]             @relation("TrainingCreatedBy")
-  responsibleForTrainings  Training[]             @relation("TrainingResponsible")
-  trainingParticipants     TrainingParticipant[]
-  trainingRatings          TrainingRating[]
-  trainingCoInstructorOf   TrainingCoInstructor[]
-  trainingDocsUploaded     TrainingDocument[]
-  trainingPlansResponsible TrainingPlan[]         @relation("TrainingPlanResponsible")
-  trainingPlansApproved    TrainingPlan[]         @relation("TrainingPlanApprover")
-  trainingPlansCreated     TrainingPlan[]         @relation("TrainingPlanCreatedBy")
+  instructedTrainings             Training[]                 @relation("TrainingInstructor")
+  createdTrainings                Training[]                 @relation("TrainingCreatedBy")
+  responsibleForTrainings         Training[]                 @relation("TrainingResponsible")
+  trainingParticipants            TrainingParticipant[]
+  trainingRatings                 TrainingRating[]
+  trainingCoInstructorOf          TrainingCoInstructor[]
+  trainingDocsUploaded            TrainingDocument[]
+  trainingPlansResponsible        TrainingPlan[]             @relation("TrainingPlanResponsible")
+  trainingPlansApproved           TrainingPlan[]             @relation("TrainingPlanApprover")
+  trainingPlansCreated            TrainingPlan[]             @relation("TrainingPlanCreatedBy")
+  trainingInstructorProfile       TrainingInstructorProfile? @relation("TrainingInstructorProfileUser")
+  trainingResourcesOwned          TrainingResource[]         @relation("TrainingResourceResponsible")
+  trainingResourceBookingsCreated TrainingResourceBooking[]  @relation("TrainingResourceBookingCreatedBy")
 
   // ─── Onboarding ───────────────────────────────────────────────
   onboardingAsUser    OnboardingPlan[]         @relation("OnboardingPlanUser")
@@ -4716,6 +4719,13 @@ enum TrainingAssessmentRole {
   FINAL
   SATISFACTION_SURVEY
   INSTRUCTOR_EVALUATION
+  // docs/trainings-detalhado.md pt.9 — "Tipos de avaliação" restantes:
+  // organização, aplicabilidade, eficácia/pós-formação (as duas últimas
+  // partilham um único papel — medem a mesma coisa em momentos diferentes,
+  // ver comentário no schema de TrainingAssessment).
+  ORGANIZATION_EVALUATION
+  APPLICABILITY_EVALUATION
+  POST_TRAINING_EFFECTIVENESS
 }
 
 enum SessionModality {
@@ -4725,24 +4735,29 @@ enum SessionModality {
 }
 
 model Training {
-  id                     Int            @id @default(autoincrement())
+  id                     Int              @id @default(autoincrement())
   title                  String
-  code                   String?        @unique
+  code                   String?          @unique
   shortDescription       String?
-  description            String?        @db.Text
+  description            String?          @db.Text
   objectives             String?
   targetAudience         String?
   type                   TrainingType
   level                  TrainingLevel
-  status                 TrainingStatus @default(DRAFT)
+  status                 TrainingStatus   @default(DRAFT)
   category               String?
   thematicArea           String?
   tags                   String[]
-  language               String         @default("pt")
+  language               String           @default("pt")
   workloadHours          Float?
   thumbnailUrl           String?
   prerequisites          String?
   instructorId           Int?
+  // docs/trainings-detalhado.md pt.7 — formador SEM conta de colaborador
+  // (externo, registado só no TrainingInstructorProfile). instructorId
+  // acima mantém-se para formadores internos (User) — este campo cobre o
+  // caso que instructorId não consegue representar, em vez de o substituir.
+  externalInstructorId   Int?
   // docs/trainings-detalhado.md pt.3 — "Responsável" da formação, distinto
   // de instructorId (quem forma) e createdById (quem criou o registo).
   responsibleId          Int?
@@ -4771,9 +4786,9 @@ model Training {
   // "Modalidade" — plataforma/link (ONLINE), info da sala (VIRTUAL_ROOM) ou
   // instruções de acesso (HYBRID), consoante o `type` escolhido acima.
   modalityDetails        String?
-  mandatory              Boolean        @default(false)
-  passingScore           Int            @default(70)
-  issueCertificate       Boolean        @default(false)
+  mandatory              Boolean          @default(false)
+  passingScore           Int              @default(70)
+  issueCertificate       Boolean          @default(false)
   cost                   Float?
   completionDeadlineDays Int?
   startDate              DateTime?
@@ -4785,9 +4800,9 @@ model Training {
   plannedSessionsCount   Int?
   // Participantes — inscrição passa a PENDING_APPROVAL em vez de
   // REGISTERED/WAITLIST quando true (ver trainings.service.ts).
-  requiresApproval       Boolean        @default(false)
+  requiresApproval       Boolean          @default(false)
   // Operação
-  requiredResources      String[]       @default([])
+  requiredResources      String[]         @default([])
   // Custos — `cost` acima mantém-se como valor legado/override; o total
   // apresentado na UI é calculado (soma destes + `cost` se nenhum destes
   // estiver preenchido) em vez de guardado, para nunca ficar desactualizado.
@@ -4799,26 +4814,29 @@ model Training {
   otherCosts             Float?
   createdById            Int?
   publishedAt            DateTime?
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
 
-  instructor      User?                  @relation("TrainingInstructor", fields: [instructorId], references: [id])
-  responsible     User?                  @relation("TrainingResponsible", fields: [responsibleId], references: [id])
-  createdBy       User?                  @relation("TrainingCreatedBy", fields: [createdById], references: [id])
-  trainingPlan    TrainingPlan?          @relation(fields: [trainingPlanId], references: [id])
-  sessions        TrainingSession[]
-  participants    TrainingParticipant[]
-  ratings         TrainingRating[]
-  competencies    TrainingCompetency[]
-  coInstructors   TrainingCoInstructor[]
-  documents       TrainingDocument[]
-  assessmentLinks TrainingAssessment[]
+  instructor         User?                      @relation("TrainingInstructor", fields: [instructorId], references: [id])
+  externalInstructor TrainingInstructorProfile? @relation("TrainingExternalInstructor", fields: [externalInstructorId], references: [id])
+  responsible        User?                      @relation("TrainingResponsible", fields: [responsibleId], references: [id])
+  createdBy          User?                      @relation("TrainingCreatedBy", fields: [createdById], references: [id])
+  trainingPlan       TrainingPlan?              @relation(fields: [trainingPlanId], references: [id])
+  sessions           TrainingSession[]
+  participants       TrainingParticipant[]
+  ratings            TrainingRating[]
+  competencies       TrainingCompetency[]
+  coInstructors      TrainingCoInstructor[]
+  documents          TrainingDocument[]
+  assessmentLinks    TrainingAssessment[]
+  resourceBookings   TrainingResourceBooking[]
 
   @@index([status])
   @@index([type])
   @@index([createdById])
   @@index([trainingPlanId])
   @@index([responsibleId])
+  @@index([externalInstructorId])
 }
 
 // ─── Plano de Formação ───────────────────────────────────────────────────────
@@ -4948,20 +4966,21 @@ model TrainingAssessment {
 }
 
 model TrainingSession {
-  id              Int                   @id @default(autoincrement())
-  trainingId      Int
-  sessionDate     DateTime
-  sessionEndDate  DateTime?
-  durationMinutes Int
-  modality        SessionModality
-  location        String?
-  meetingUrl      String?
-  maxParticipants Int                   @default(0)
-  waitlistEnabled Boolean               @default(true)
-  notes           String?
-  createdAt       DateTime              @default(now())
-  training        Training              @relation(fields: [trainingId], references: [id], onDelete: Cascade)
-  participants    TrainingParticipant[]
+  id               Int                       @id @default(autoincrement())
+  trainingId       Int
+  sessionDate      DateTime
+  sessionEndDate   DateTime?
+  durationMinutes  Int
+  modality         SessionModality
+  location         String?
+  meetingUrl       String?
+  maxParticipants  Int                       @default(0)
+  waitlistEnabled  Boolean                   @default(true)
+  notes            String?
+  createdAt        DateTime                  @default(now())
+  training         Training                  @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  participants     TrainingParticipant[]
+  resourceBookings TrainingResourceBooking[]
 
   @@index([trainingId])
   @@index([sessionDate])
@@ -5000,6 +5019,124 @@ model TrainingRating {
 
   @@unique([userId, trainingId])
   @@index([trainingId])
+}
+
+// ─── Formadores (docs/trainings-detalhado.md pt.7) ───────────────────────────
+// Registo dedicado — distinto de `User` porque um formador externo (entidade
+// formadora, freelancer) não tem necessariamente conta de colaborador.
+// Formadores internos podem opcionalmente ligar-se a um User (`userId`); a
+// atribuição efectiva a uma Training continua a usar `Training.instructorId`
+// (User) quando interno, ou `Training.externalInstructorId` (este modelo)
+// quando não há User associado — ver comentário em Training.
+enum TrainingInstructorType {
+  INTERNAL
+  EXTERNAL
+}
+
+enum TrainingInstructorStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model TrainingInstructorProfile {
+  id                     Int                      @id @default(autoincrement())
+  type                   TrainingInstructorType
+  userId                 Int?                     @unique
+  name                   String
+  entity                 String?
+  nif                    String?
+  email                  String?
+  phone                  String?
+  specialties            String[]                 @default([])
+  trainingAreas          String[]                 @default([])
+  competencyIds          Int[]                    @default([])
+  certifications         String?
+  professionalExperience String?                  @db.Text
+  trainerExperience      String?                  @db.Text
+  availability           String?
+  hourlyCost             Float?
+  documentUrl            String?
+  status                 TrainingInstructorStatus @default(ACTIVE)
+  notes                  String?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  user              User?      @relation("TrainingInstructorProfileUser", fields: [userId], references: [id])
+  externalTrainings Training[] @relation("TrainingExternalInstructor")
+
+  @@index([status])
+  @@index([type])
+}
+
+// ─── Recursos & Logística (docs/trainings-detalhado.md pt.8) ────────────────
+// Um único modelo para salas e recursos/equipamento — mesma tabela ("Nova
+// Sala"/"Novo Recurso" são só dois formulários sobre os mesmos campos, tal
+// como o doc os agrupa numa só aba), distinguidos por `kind`.
+enum TrainingResourceKind {
+  ROOM
+  EQUIPMENT
+  MATERIAL
+  CATERING
+  TRANSPORT
+  ACCOMMODATION
+  OTHER
+}
+
+enum TrainingResourceStatus {
+  AVAILABLE
+  UNAVAILABLE
+  MAINTENANCE
+}
+
+model TrainingResource {
+  id            Int                    @id @default(autoincrement())
+  kind          TrainingResourceKind
+  name          String
+  code          String?                @unique
+  category      String?
+  location      String?
+  unitId        Int?
+  // Sala: capacidade de pessoas. Recurso/equipamento: quantidade disponível.
+  capacity      Int?
+  quantity      Int                    @default(1)
+  equipment     String[]               @default([])
+  cost          Float?
+  responsibleId Int?
+  status        TrainingResourceStatus @default(AVAILABLE)
+  notes         String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  responsible User?                     @relation("TrainingResourceResponsible", fields: [responsibleId], references: [id])
+  bookings    TrainingResourceBooking[]
+
+  @@index([kind])
+  @@index([status])
+}
+
+// Reserva de uma sala/recurso para uma Turma (Training) e/ou Sessão —
+// "atribuir recurso à turma"/"atribuir recurso à sessão". `releasedAt` nulo
+// = reserva activa (mesmo padrão de soft-delete usado noutros módulos); é
+// o que "verificar disponibilidade" filtra.
+model TrainingResourceBooking {
+  id          Int       @id @default(autoincrement())
+  resourceId  Int
+  trainingId  Int?
+  sessionId   Int?
+  startAt     DateTime
+  endAt       DateTime
+  releasedAt  DateTime?
+  createdById Int?
+  createdAt   DateTime  @default(now())
+
+  resource  TrainingResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  training  Training?        @relation(fields: [trainingId], references: [id])
+  session   TrainingSession? @relation(fields: [sessionId], references: [id])
+  createdBy User?            @relation("TrainingResourceBookingCreatedBy", fields: [createdById], references: [id])
+
+  @@index([resourceId])
+  @@index([trainingId])
+  @@index([sessionId])
 }
 
 // ══════════════════════════════════════════════════════════════════

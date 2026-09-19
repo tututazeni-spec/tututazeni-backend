@@ -1766,7 +1766,11 @@ const TrainingStatus = {
 
 const TrainingPriority = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', URGENT: 'URGENT' };
 
-const TrainingPlanPeriod = { ANNUAL: 'ANNUAL', QUARTERLY: 'QUARTERLY', EXTRAORDINARY: 'EXTRAORDINARY' };
+const TrainingPlanPeriod = {
+  ANNUAL: 'ANNUAL',
+  QUARTERLY: 'QUARTERLY',
+  EXTRAORDINARY: 'EXTRAORDINARY',
+};
 
 const TrainingPlanStatus = {
   DRAFT: 'DRAFT',
@@ -1793,9 +1797,32 @@ const TrainingAssessmentRole = {
   FINAL: 'FINAL',
   SATISFACTION_SURVEY: 'SATISFACTION_SURVEY',
   INSTRUCTOR_EVALUATION: 'INSTRUCTOR_EVALUATION',
+  ORGANIZATION_EVALUATION: 'ORGANIZATION_EVALUATION',
+  APPLICABILITY_EVALUATION: 'APPLICABILITY_EVALUATION',
+  POST_TRAINING_EFFECTIVENESS: 'POST_TRAINING_EFFECTIVENESS',
 };
 
 const SessionModality = { PRESENTIAL: 'PRESENTIAL', ONLINE: 'ONLINE', HYBRID: 'HYBRID' };
+
+const TrainingInstructorType = { INTERNAL: 'INTERNAL', EXTERNAL: 'EXTERNAL' };
+
+const TrainingInstructorStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE' };
+
+const TrainingResourceKind = {
+  ROOM: 'ROOM',
+  EQUIPMENT: 'EQUIPMENT',
+  MATERIAL: 'MATERIAL',
+  CATERING: 'CATERING',
+  TRANSPORT: 'TRANSPORT',
+  ACCOMMODATION: 'ACCOMMODATION',
+  OTHER: 'OTHER',
+};
+
+const TrainingResourceStatus = {
+  AVAILABLE: 'AVAILABLE',
+  UNAVAILABLE: 'UNAVAILABLE',
+  MAINTENANCE: 'MAINTENANCE',
+};
 
 const ArticleStatus = {
   DRAFT: 'DRAFT',
@@ -2364,6 +2391,10 @@ module.exports = {
   TrainingParticipantStatus,
   TrainingAssessmentRole,
   SessionModality,
+  TrainingInstructorType,
+  TrainingInstructorStatus,
+  TrainingResourceKind,
+  TrainingResourceStatus,
   ArticleStatus,
   ArticleAccess,
   InteractionAction,
