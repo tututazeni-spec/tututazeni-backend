@@ -367,6 +367,7 @@ export class CoursesService {
             code: lesson.code,
             title: lesson.title,
             description: lesson.description,
+            learningObjectives: lesson.learningObjectives,
             type: lesson.type,
             contentUrl: lesson.contentUrl,
             textContent: lesson.textContent,

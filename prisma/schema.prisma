@@ -2276,6 +2276,7 @@ model Lesson {
   code               String?
   title              String
   description        String?
+  learningObjectives String[]
   type               LessonType       @default(VIDEO)
   status             LessonStatus     @default(PUBLISHED)
   contentUrl         String?          @db.Text

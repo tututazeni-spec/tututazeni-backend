@@ -367,6 +367,12 @@ export class CreateLessonDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  learningObjectives?: string[];
+
   @ApiProperty({ enum: LessonType })
   @IsEnum(LessonType)
   type!: LessonType;
