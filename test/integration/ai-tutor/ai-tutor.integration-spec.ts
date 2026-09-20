@@ -34,6 +34,7 @@ describe('AI Tutor Integration', () => {
   let employeeToken: string;
   let rhToken: string;
   let adminToken: string;
+  let managerToken: string;
 
   const pool = new Pool({ connectionString: TEST_DB_URL });
   const adapter = new PrismaPg(pool);
@@ -69,6 +70,7 @@ describe('AI Tutor Integration', () => {
     employeeToken = await getToken(app.getHttpServer(), 'employee');
     rhToken = await getToken(app.getHttpServer(), 'rh');
     adminToken = await getToken(app.getHttpServer(), 'admin');
+    managerToken = await getToken(app.getHttpServer(), 'manager');
 
     const employee = await prisma.user.findUnique({
       where: { email: INT_CREDENTIALS.employee.email },
@@ -164,8 +166,16 @@ describe('AI Tutor Integration', () => {
     it('GET /ai-tutor/sessions/:id — sessão de outro utilizador → 404', async () => {
       await request(app.getHttpServer())
         .get(`/ai-tutor/sessions/${sessionId}`)
-        .set('Authorization', `Bearer ${rhToken}`)
+        .set('Authorization', `Bearer ${managerToken}`)
         .expect(404);
+    });
+
+    it('GET /ai-tutor/sessions/:id — RH pode ver conversa de outro utilizador (secção 4, "Ver conversa") → 200', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/ai-tutor/sessions/${sessionId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.id).toBe(sessionId);
     });
 
     it('GET /ai-tutor/sessions/:id — inexistente → 404', async () => {

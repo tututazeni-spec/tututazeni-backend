@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { AiTutorService } from './ai-tutor.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProvidersService } from './ai-providers.service';
+import { AiKnowledgeService } from './ai-knowledge.service';
 
 const makeFind = (data: any[] = []) => jest.fn().mockResolvedValue(data);
 
@@ -16,6 +17,16 @@ const mockPrisma = {
     count: jest.fn().mockResolvedValue(0),
   },
   aiMessage: { create: jest.fn(), findMany: makeFind(), count: jest.fn().mockResolvedValue(0) },
+  aiTutorSettings: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() },
+  aiGeneratedExercise: { create: jest.fn().mockResolvedValue({}), findMany: makeFind() },
+  aiRecommendationLog: {
+    create: jest.fn().mockResolvedValue({ id: 1 }),
+    findFirst: jest.fn(),
+    update: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
+    findMany: makeFind(),
+  },
+  notificationLog: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
   aiTutorMemory: {
     upsert: jest.fn(),
     findFirst: jest.fn(),
@@ -31,7 +42,6 @@ const mockPrisma = {
   userCompetency: { findMany: makeFind() },
   developmentPlan: { findFirst: jest.fn() },
   pdiAction: { findMany: makeFind() },
-  notificationLog: { create: jest.fn().mockResolvedValue({}) },
 };
 
 const baseSession = {
@@ -63,6 +73,13 @@ describe('AiTutorService', () => {
           useValue: {
             complete: jest.fn().mockResolvedValue({ text: 'AI response', tokens: 10 }),
             getProviderInfo: jest.fn().mockReturnValue({ name: 'mock', model: 'mock-model' }),
+          },
+        },
+        {
+          provide: AiKnowledgeService,
+          useValue: {
+            search: jest.fn().mockResolvedValue([]),
+            getSources: jest.fn().mockResolvedValue({}),
           },
         },
       ],

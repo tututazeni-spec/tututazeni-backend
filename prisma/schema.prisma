@@ -851,8 +851,10 @@ model User {
   mobileSyncLogs MobileSyncLog[]
 
   // ─── IA & Sessões ─────────────────────────────────────────────
-  aiSessions     AiTutorSession[]
-  avatarSessions AvatarSession[]
+  aiSessions           AiTutorSession[]
+  avatarSessions       AvatarSession[]
+  aiGeneratedExercises AiGeneratedExercise[]
+  aiRecommendationLogs AiRecommendationLog[]
 
   // ─── Instrutor ────────────────────────────────────────────────
   instructorProfile InstructorProfile?
@@ -2244,6 +2246,7 @@ model CourseModule {
   materials                ModuleMaterial[]
   assessments              Assessment[]
   competencies             ModuleCompetency[]
+  liveClasses              LiveClass[]
 
   @@index([courseId])
   @@index([seq])
@@ -2317,6 +2320,7 @@ model Lesson {
   quiz               Quiz?
   activities         LessonActivity[]
   resources          LessonResource[]
+  liveClasses        LiveClass[]
 
   @@index([moduleId])
   @@index([requiredLessonId])
@@ -4834,6 +4838,7 @@ model Training {
   documents          TrainingDocument[]
   assessmentLinks    TrainingAssessment[]
   resourceBookings   TrainingResourceBooking[]
+  aiTutorSessions    AiTutorSession[]
 
   @@index([status])
   @@index([type])
@@ -5065,8 +5070,11 @@ model TrainingInstructorProfile {
   createdAt              DateTime                 @default(now())
   updatedAt              DateTime                 @updatedAt
 
-  user              User?      @relation("TrainingInstructorProfileUser", fields: [userId], references: [id])
-  externalTrainings Training[] @relation("TrainingExternalInstructor")
+  user                      User?              @relation("TrainingInstructorProfileUser", fields: [userId], references: [id])
+  externalTrainings         Training[]         @relation("TrainingExternalInstructor")
+  liveClassesAsInstructor   LiveClass[]        @relation("LiveClassInstructor")
+  liveClassesAsCoInstructor LiveClass[]        @relation("LiveClassCoInstructor")
+  liveClassSessions         LiveClassSession[]
 
   @@index([status])
   @@index([type])
@@ -6137,34 +6145,219 @@ model DocumentDownload {
 // ══════════════════════════════════════════════════════════════════
 // LIVE CLASSES
 // ══════════════════════════════════════════════════════════════════
+// docs/aulas-ao-vivo.md — "Aula" é a entidade agendada/gerida (curso,
+// formador, modalidade, participantes, presença, gravação, avaliação,
+// notificações); "Sessão" (LiveClassSession, ver mais abaixo) só existe
+// para aulas recorrentes e serve apenas para agendar/registar cada
+// ocorrência (data/formador/sala/link/presenças/estado) — a sala Jitsi ao
+// vivo, o chat e a avaliação pós-aula continuam ao nível da Aula, tal como
+// já funcionava antes desta extensão (decisão explícita: não duplicar toda
+// a infraestrutura de sala ao vivo por sessão).
+//
+// Reaproveita modelos do módulo Trainings em vez de duplicar: formador/
+// co-formador apontam para TrainingInstructorProfile (docs pt.7 — "Liga aos
+// formadores no módulo Trainings"); "Salas & Links"/materiais ficam fora
+// desta fase (secções 7/8/11 do doc), só a Aula liga-se-lhes por picker.
+
+enum LiveClassType {
+  AULA
+  WEBINAR
+  WORKSHOP
+  SESSAO_PRATICA
+  SESSAO_ESCLARECIMENTO
+  MENTORIA
+  TUTORIA
+  SESSAO_REVISAO
+}
+
+enum LiveClassStatus {
+  AGENDADA
+  EM_PREPARACAO
+  EM_CURSO
+  CONCLUIDA
+  CANCELADA
+  ADIADA
+}
+
+enum LiveClassRecurrence {
+  ONCE
+  DAILY
+  WEEKLY
+  CUSTOM
+}
+
+enum LiveClassEnrollmentMode {
+  AUTO
+  MANUAL
+  SELF
+  APPROVAL
+}
+
+enum LiveAttendanceStatus {
+  PRESENTE
+  AUSENTE
+  ATRASADO
+  PARCIAL
+  JUSTIFICADO
+}
 
 model LiveClass {
-  id             Int                  @id @default(autoincrement())
-  courseId       Int
-  zoomMeetingId  String?              @db.Text
-  topic          String               @db.Text
-  scheduledAt    DateTime
-  duration       Int
-  recordingUrl   String?              @db.Text
-  createdAt      DateTime             @default(now())
-  course         Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  id            Int      @id @default(autoincrement())
+  courseId      Int
+  zoomMeetingId String?  @db.Text
+  topic         String   @db.Text
+  scheduledAt   DateTime
+  duration      Int
+  recordingUrl  String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  // Etapa 1 — Informações gerais
+  code           String?         @unique
+  description    String?         @db.Text
+  type           LiveClassType   @default(AULA)
+  status         LiveClassStatus @default(AGENDADA)
+  moduleId       Int?
+  lessonId       Int?
+  instructorId   Int?
+  coInstructorId Int?
+
+  // Etapa 2 — Data e horário / recorrência
+  recurrence           LiveClassRecurrence @default(ONCE)
+  recurrenceEndDate    DateTime?
+  recurrenceDaysOfWeek Int[]               @default([])
+  timezone             String              @default("Europe/Lisbon")
+
+  // Etapa 3 — Modalidade
+  modality SessionModality @default(ONLINE)
+  location String?
+  building String?
+  room     String?
+  capacity Int?
+
+  // Etapa 4 — Participantes
+  enrollmentMode    LiveClassEnrollmentMode @default(MANUAL)
+  maxParticipants   Int?
+  waitlistEnabled   Boolean                 @default(false)
+  targetDeptIds     Int[]                   @default([])
+  targetUnitIds     Int[]                   @default([])
+  targetPositionIds Int[]                   @default([])
+
+  // Etapa 5 — Conteúdo (materiais ligam-se à Biblioteca — FK "solta", sem
+  // relação Prisma, mesmo padrão de Training.requiredResources)
+  objectives          String?
+  agenda              String?  @db.Text
+  topics              String[] @default([])
+  materialDocumentIds Int[]    @default([])
+
+  // Etapa 6 — Presença (regra: só "Presente" com >= minAttendancePercent)
+  attendanceAutoRegister Boolean @default(true)
+  attendanceRequired     Boolean @default(false)
+  minAttendancePercent   Int     @default(70)
+  lateToleranceMinutes   Int     @default(10)
+
+  // Etapa 7 — Gravação (recordingUrl acima é o resultado; isto é config)
+  recordSession          Boolean   @default(true)
+  recordingExpiresAt     DateTime?
+  allowRecordingDownload Boolean   @default(false)
+  // Secção 9 — Gravações: null = não publicada (só visível a quem gere a
+  // aula), preenchida = publicada/disponível aos participantes.
+  recordingPublishedAt   DateTime?
+
+  // Etapa 8 — Avaliação (liga-se ao PostClassEvaluation já existente)
+  evaluationRequired Boolean @default(false)
+
+  // Etapa 9 — Notificações. Sem scheduler para lembretes temporizados
+  // (24h/1h antes) — mesma limitação documentada no módulo automation;
+  // aqui só se persistem os toggles e disparam-se os eventos que já
+  // acontecem em código (inscrição/alteração/cancelamento).
+  notifySettings Json?
+
+  // Adiamento/cancelamento
+  postponedFromAt    DateTime?
+  postponeReason     String?
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  course         Course                     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module         CourseModule?              @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  lesson         Lesson?                    @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  instructor     TrainingInstructorProfile? @relation("LiveClassInstructor", fields: [instructorId], references: [id], onDelete: SetNull)
+  coInstructor   TrainingInstructorProfile? @relation("LiveClassCoInstructor", fields: [coInstructorId], references: [id], onDelete: SetNull)
   attendances    LiveAttendance[]
   messages       LiveChatMessage[]
   postEvaluation PostClassEvaluation?
+  sessions       LiveClassSession[]
 
   @@index([courseId])
+  @@index([status])
+  @@index([type])
+  @@index([moduleId])
+  @@index([instructorId])
+}
+
+// Sub-ocorrências de uma Aula recorrente (docs/aulas-ao-vivo.md secção 5).
+// Só existem quando LiveClass.recurrence != ONCE — para o caso simples
+// (uma única ocorrência), a própria LiveClass continua a ser a única
+// "sessão", exactamente como antes desta extensão (zero impacto em dados
+// existentes). Não tem sala Jitsi/chat próprios — ver nota no topo.
+model LiveClassSession {
+  id                   Int             @id @default(autoincrement())
+  liveClassId          Int
+  seq                  Int
+  sessionDate          DateTime
+  durationMinutes      Int
+  instructorId         Int?
+  location             String?
+  meetingUrl           String?
+  status               LiveClassStatus @default(AGENDADA)
+  notes                String?
+  recordingUrl         String?
+  recordingPublishedAt DateTime?
+  createdAt            DateTime        @default(now())
+
+  // Secção 11 — materiais específicos desta ocorrência, além dos da Aula
+  // (LiveClass.materialDocumentIds). Mesma FK "solta" para a Biblioteca.
+  materialDocumentIds Int[] @default([])
+
+  liveClass   LiveClass                  @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+  instructor  TrainingInstructorProfile? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  attendances LiveAttendance[]
+
+  @@unique([liveClassId, seq])
+  @@index([liveClassId])
+  @@index([sessionDate])
 }
 
 model LiveAttendance {
-  id          Int       @id @default(autoincrement())
-  liveClassId Int
-  userId      Int
-  joinedAt    DateTime
-  leftAt      DateTime?
-  liveClass   LiveClass @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                Int                   @id @default(autoincrement())
+  liveClassId       Int
+  userId            Int
+  // Nullable (secção 6 — "Inscrição" vs "Presença"): a linha pode existir
+  // como mera inscrição/registo manual (RH/ADMIN, "Adicionar participante")
+  // antes de o utilizador chegar a entrar na sala — nesse caso joinedAt
+  // fica null até ao join real ou ao registo manual de presença.
+  joinedAt          DateTime?
+  leftAt            DateTime?
+  // Presente só quando sessionId aponta para uma LiveClassSession de uma
+  // aula recorrente; aulas de ocorrência única (a maioria) mantêm-se null
+  // — mesmo comportamento de antes desta extensão.
+  sessionId         Int?
+  status            LiveAttendanceStatus?
+  attendancePercent Float?
+  justification     String?
+  liveClass         LiveClass             @relation(fields: [liveClassId], references: [id], onDelete: Cascade)
+  user              User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session           LiveClassSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
-  @@unique([liveClassId, userId])
+  // Alargado de [liveClassId, userId] para incluir sessionId (secções 6/10
+  // — coluna "Sessão"): uma aula recorrente tem uma LiveClassSession por
+  // ocorrência, e cada uma precisa da sua própria linha de presença por
+  // participante. sessionId=null continua a ser "a própria aula" (aulas
+  // ONCE) — nulls não colidem em Postgres, por isso o serviço faz sempre
+  // find-then-create/update em vez de confiar só neste índice para o caso
+  // null (ver live-classes.service.ts).
+  @@unique([liveClassId, userId, sessionId])
+  @@index([sessionId])
 }
 
 model LiveChatMessage {
@@ -6188,14 +6381,22 @@ model PostClassEvaluation {
 }
 
 model PostClassResponse {
-  id           Int                 @id @default(autoincrement())
-  evaluationId Int
-  userId       Int
-  rating       Int
-  feedback     String?             @db.Text
-  createdAt    DateTime            @default(now())
-  evaluation   PostClassEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
-  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  Int                 @id @default(autoincrement())
+  evaluationId        Int
+  userId              Int
+  // Secção 12 — "Avaliação da sessão" (nota geral, já existia)
+  rating              Int
+  // Secção 12 — rubrica detalhada ("Exemplo"), todos 1–5, opcionais
+  instructorRating    Int?
+  contentRating       Int?
+  organizationRating  Int?
+  applicabilityRating Int?
+  // NPS da sessão — escala 0–10 própria (não o `rating` 1–5 acima)
+  nps                 Int?
+  feedback            String?             @db.Text
+  createdAt           DateTime            @default(now())
+  evaluation          PostClassEvaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([evaluationId, userId])
 }
@@ -7076,34 +7277,44 @@ model AiTutorSession {
   userId       Int
   courseId     Int?
   enrollmentId Int?
+  // Secção 9 (Integrações) — contexto de Formação (Training), em paralelo ao
+  // de Curso (courseId) já existente.
+  trainingId   Int?
   startedAt    DateTime    @default(now())
   endedAt      DateTime?
   user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   course       Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
   enrollment   Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  training     Training?   @relation(fields: [trainingId], references: [id], onDelete: SetNull)
   messages     AiMessage[]
 
   @@index([userId])
   @@index([courseId])
+  @@index([trainingId])
 }
 
 model AiMessage {
-  id             Int            @id @default(autoincrement())
-  sessionId      Int
-  role           String
-  content        String         @db.Text
-  tokensUsed     Int?
-  latencyMs      Int?
-  provider       String?
-  model          String?
-  rating         Int?
-  ratingFeedback String?
-  agentAction    String?
-  createdAt      DateTime       @default(now())
-  session        AiTutorSession @relation(fields: [sessionId], references: [id])
+  id               Int            @id @default(autoincrement())
+  sessionId        Int
+  role             String
+  content          String         @db.Text
+  tokensUsed       Int?
+  latencyMs        Int?
+  provider         String?
+  model            String?
+  rating           Int?
+  ratingFeedback   String?
+  agentAction      String?
+  // JSON.stringify(Array<{ type, id, title }>) das fontes da Base de
+  // Conhecimento citadas nesta resposta — ver CLAUDE.md, campos String? de
+  // metadata são sempre JSON.stringify.
+  sourcesConsulted String?        @db.Text
+  createdAt        DateTime       @default(now())
+  session          AiTutorSession @relation(fields: [sessionId], references: [id])
 
   @@index([sessionId])
   @@index([role])
+  @@index([createdAt])
 }
 
 model AiTutorMemory {
@@ -7113,6 +7324,57 @@ model AiTutorMemory {
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
+}
+
+// Regista cada geração de exercícios/conteúdo (secção 5) para alimentar o
+// Histórico (secção 6, "Exercícios") e a métrica "Exercícios realizados" do
+// Analytics (secção 7).
+model AiGeneratedExercise {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      String
+  topic     String?
+  courseId  Int?
+  count     Int?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Regista cada conjunto de recomendações dado (secção 1/6) e se o
+// colaborador aceitou uma delas (secção 7, "Recomendações aceites").
+model AiRecommendationLog {
+  id                 Int       @id @default(autoincrement())
+  userId             Int
+  // JSON.stringify(number[]) — IDs dos cursos recomendados nesta chamada.
+  courseIdsJson      String    @db.Text
+  // JSON.stringify(string[]) — gaps de competência identificados.
+  competencyGapsJson String?   @db.Text
+  acceptedCourseId   Int?
+  acceptedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Configuração global do AI Tutor (secção 8) — singleton (id fixo = 1).
+model AiTutorSettings {
+  id                         Int      @id @default(1)
+  allowOutsideKnowledge      Boolean  @default(true)
+  sourceOnlyMode             Boolean  @default(false)
+  showSources                Boolean  @default(true)
+  temperature                Float    @default(0.7)
+  defaultLanguage            String   @default("pt")
+  dailyMessageLimit          Int?
+  historyRetentionDays       Int?
+  customSystemPromptAddendum String?  @db.Text
+  updatedById                Int?
+  updatedAt                  DateTime @updatedAt
+  createdAt                  DateTime @default(now())
 }
 
 model AvatarScript {

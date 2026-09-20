@@ -75,17 +75,22 @@ export class AiProvidersService {
     this.logger.log(`🤖 Fornecedor de IA activo: ${this.provider.toUpperCase()}`);
   }
 
-  async chat(systemPrompt: string, messages: ChatMessage[], maxTokens = 1024): Promise<AiResponse> {
+  async chat(
+    systemPrompt: string,
+    messages: ChatMessage[],
+    maxTokens = 1024,
+    temperature = 0.7,
+  ): Promise<AiResponse> {
     switch (this.provider) {
       case 'groq':
-        return this.chatGroq(systemPrompt, messages, maxTokens);
+        return this.chatGroq(systemPrompt, messages, maxTokens, temperature);
       case 'gemini':
-        return this.chatGemini(systemPrompt, messages, maxTokens);
+        return this.chatGemini(systemPrompt, messages, maxTokens, temperature);
       case 'ollama':
-        return this.chatOllama(systemPrompt, messages, maxTokens);
+        return this.chatOllama(systemPrompt, messages, maxTokens, temperature);
       default:
         this.logger.warn(`Fornecedor desconhecido: ${this.provider}. A usar Groq.`);
-        return this.chatGroq(systemPrompt, messages, maxTokens);
+        return this.chatGroq(systemPrompt, messages, maxTokens, temperature);
     }
   }
 
@@ -118,6 +123,7 @@ export class AiProvidersService {
     system: string,
     messages: ChatMessage[],
     maxTokens: number,
+    temperature: number,
   ): Promise<AiResponse> {
     if (!this.groqApiKey) {
       throw new InternalServerErrorException(
@@ -128,6 +134,7 @@ export class AiProvidersService {
     const body = {
       model: this.groqModel,
       max_tokens: maxTokens,
+      temperature,
       messages: [{ role: 'system', content: system }, ...messages],
     };
 
@@ -181,6 +188,7 @@ export class AiProvidersService {
     system: string,
     messages: ChatMessage[],
     maxTokens: number,
+    temperature: number,
   ): Promise<AiResponse> {
     if (!this.geminiApiKey) {
       throw new InternalServerErrorException(
@@ -196,7 +204,7 @@ export class AiProvidersService {
     const body = {
       systemInstruction: { parts: [{ text: system }] },
       contents,
-      generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 },
+      generationConfig: { maxOutputTokens: maxTokens, temperature },
     };
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiApiKey}`;
@@ -246,11 +254,12 @@ export class AiProvidersService {
     system: string,
     messages: ChatMessage[],
     maxTokens: number,
+    temperature: number,
   ): Promise<AiResponse> {
     const body = {
       model: this.ollamaModel,
       messages: [{ role: 'system', content: system }, ...messages],
-      options: { num_predict: maxTokens },
+      options: { num_predict: maxTokens, temperature },
       stream: false,
     };
 

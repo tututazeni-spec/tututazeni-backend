@@ -1,35 +1,89 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
+import {
+  Prisma,
+  LiveClassStatus,
+  LiveClassRecurrence,
+  LiveClassType,
+  LiveClassEnrollmentMode,
+  SessionModality,
+  LiveAttendanceStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CourseCompletionService } from '../course-completion/course-completion.service';
 import {
   CreateLiveClassDto,
   UpdateLiveClassDto,
   LiveChatMessageDto,
   PostClassResponseDto,
   LiveClassFilterDto,
+  PostponeLiveClassDto,
+  CancelLiveClassDto,
+  CreateLiveClassSessionDto,
+  UpdateLiveClassSessionDto,
+  RegisterAttendanceDto,
+  UpdateAttendanceDto,
+  ParticipantsFilterDto,
+  MaterialsFilterDto,
+  EvaluationsFilterDto,
+  LiveClassReportFilterDto,
 } from './live-classes.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { buildCsvString } from '../common/utils/csv-export.util';
+
+// Limite de segurança para a expansão de sessões recorrentes — evita um
+// intervalo mal preenchido (ex.: recurrenceEndDate a 10 anos de distância)
+// gerar milhares de linhas numa só criação.
+const MAX_GENERATED_SESSIONS = 200;
+
+const CLASS_INCLUDE = {
+  course: { select: { id: true, title: true } },
+  module: { select: { id: true, title: true } },
+  lesson: { select: { id: true, title: true } },
+  instructor: { select: { id: true, name: true, email: true } },
+  coInstructor: { select: { id: true, name: true, email: true } },
+  _count: { select: { attendances: true, messages: true, sessions: true } },
+  postEvaluation: true,
+} satisfies Prisma.LiveClassInclude;
 
 @Injectable()
 export class LiveClassesService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(LiveClassesService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private readonly courseCompletion: CourseCompletionService,
+  ) {}
 
   async findAll(filters: LiveClassFilterDto) {
-    const { page = 1, limit = 20, courseId } = filters;
+    const { page = 1, limit = 20 } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LiveClassWhereInput = {};
-    if (courseId) where.courseId = courseId;
+    if (filters.courseId) where.courseId = filters.courseId;
+    if (filters.instructorId) where.instructorId = filters.instructorId;
+    if (filters.type) where.type = filters.type;
+    if (filters.status) where.status = filters.status;
+    if (filters.modality) where.modality = filters.modality;
+    if (filters.departmentId) where.targetDeptIds = { has: filters.departmentId };
+    if (filters.unitId) where.targetUnitIds = { has: filters.unitId };
+    if (filters.dateFrom || filters.dateTo) {
+      where.scheduledAt = {
+        ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
+        ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
+      };
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.read.liveClass.findMany({
         where,
         skip,
         take,
-        include: {
-          course: { select: { id: true, title: true } },
-          _count: { select: { attendances: true, messages: true } },
-          postEvaluation: true,
-        },
+        include: CLASS_INCLUDE,
         orderBy: { scheduledAt: 'desc' },
       }),
       this.prisma.read.liveClass.count({ where }),
@@ -41,7 +95,7 @@ export class LiveClassesService {
     const lc = await this.prisma.read.liveClass.findUnique({
       where: { id },
       include: {
-        course: { select: { id: true, title: true } },
+        ...CLASS_INCLUDE,
         attendances: { include: { user: { select: { id: true, fullName: true } } } },
         messages: {
           include: { user: { select: { id: true, fullName: true } } },
@@ -49,24 +103,99 @@ export class LiveClassesService {
           take: 100,
         },
         postEvaluation: { include: { responses: true } },
+        sessions: {
+          include: {
+            instructor: { select: { id: true, name: true } },
+            _count: { select: { attendances: true } },
+          },
+          orderBy: { seq: 'asc' },
+        },
       },
     });
     if (!lc) throw new NotFoundException('Aula ao vivo não encontrada');
     return lc;
   }
 
+  private generateCode(type: string): string {
+    return `${type.slice(0, 3)}-${Date.now().toString(36).toUpperCase()}`;
+  }
+
+  /** Expande a recorrência (etapa 2) em ocorrências LiveClassSession — a
+   *  própria LiveClass continua a ser a 1ª ocorrência para `ONCE`, mantendo
+   *  o fluxo de sala Jitsi/chat/presença ao nível da Aula inalterado. */
+  private buildSessionDates(dto: CreateLiveClassDto, scheduledAt: Date): Date[] {
+    if (!dto.recurrence || dto.recurrence === LiveClassRecurrence.ONCE) return [];
+    if (!dto.recurrenceEndDate) {
+      throw new BadRequestException('Recorrência exige recurrenceEndDate');
+    }
+    const end = new Date(dto.recurrenceEndDate);
+    if (Number.isNaN(end.getTime()) || end < scheduledAt) {
+      throw new BadRequestException('recurrenceEndDate inválida');
+    }
+
+    const dates: Date[] = [];
+    const daysOfWeek = dto.recurrenceDaysOfWeek?.length ? new Set(dto.recurrenceDaysOfWeek) : null;
+    const stepDays =
+      dto.recurrence === LiveClassRecurrence.DAILY && !daysOfWeek ? 1 : daysOfWeek ? 1 : 7;
+
+    const cursor = new Date(scheduledAt);
+    while (cursor <= end) {
+      if (!daysOfWeek || daysOfWeek.has(cursor.getDay())) {
+        dates.push(new Date(cursor));
+        if (dates.length > MAX_GENERATED_SESSIONS) {
+          throw new BadRequestException(
+            `Demasiadas sessões geradas (> ${MAX_GENERATED_SESSIONS}) — encurta o intervalo de recorrência.`,
+          );
+        }
+      }
+      cursor.setDate(cursor.getDate() + stepDays);
+    }
+    return dates;
+  }
+
   async create(dto: CreateLiveClassDto) {
-    return this.prisma.liveClass.create({
-      data: { ...dto, scheduledAt: new Date(dto.scheduledAt) },
-      include: { course: { select: { id: true, title: true } } },
+    const scheduledAt = new Date(dto.scheduledAt);
+    const sessionDates = this.buildSessionDates(dto, scheduledAt);
+
+    const { recurrenceEndDate, recurrenceDaysOfWeek, recordingExpiresAt, notifySettings, ...rest } =
+      dto;
+
+    const lc = await this.prisma.liveClass.create({
+      data: {
+        ...rest,
+        code: dto.code ?? this.generateCode(dto.type ?? 'AULA'),
+        scheduledAt,
+        recurrenceEndDate: recurrenceEndDate ? new Date(recurrenceEndDate) : undefined,
+        recurrenceDaysOfWeek: recurrenceDaysOfWeek ?? [],
+        recordingExpiresAt: recordingExpiresAt ? new Date(recordingExpiresAt) : undefined,
+        notifySettings: notifySettings ?? undefined,
+        sessions: sessionDates.length
+          ? {
+              create: sessionDates.map((sessionDate, i) => ({
+                seq: i + 1,
+                sessionDate,
+                durationMinutes: dto.duration,
+                instructorId: dto.instructorId,
+                location: dto.location,
+                meetingUrl: dto.zoomMeetingId,
+              })),
+            }
+          : undefined,
+      },
+      include: CLASS_INCLUDE,
     });
+    return lc;
   }
 
   async update(id: number, dto: UpdateLiveClassDto) {
     await this.findOne(id);
-    const data: Prisma.LiveClassUpdateInput = { ...dto };
+    const { recurrenceEndDate, recordingExpiresAt, notifySettings, ...rest } = dto;
+    const data: Prisma.LiveClassUpdateInput = { ...rest };
     if (dto.scheduledAt) data.scheduledAt = new Date(dto.scheduledAt);
-    return this.prisma.liveClass.update({ where: { id }, data });
+    if (recurrenceEndDate) data.recurrenceEndDate = new Date(recurrenceEndDate);
+    if (recordingExpiresAt) data.recordingExpiresAt = new Date(recordingExpiresAt);
+    if (notifySettings) data.notifySettings = notifySettings;
+    return this.prisma.liveClass.update({ where: { id }, data, include: CLASS_INCLUDE });
   }
 
   async remove(id: number) {
@@ -75,13 +204,211 @@ export class LiveClassesService {
     return { message: 'Aula removida' };
   }
 
+  // ─── Ações de ciclo de vida (secção 2 — "Ações") ──────────────────────────
+
+  async start(id: number) {
+    const lc = await this.findOne(id);
+    if (lc.status === LiveClassStatus.CANCELADA || lc.status === LiveClassStatus.CONCLUIDA) {
+      throw new ConflictException(`Não é possível iniciar uma aula com estado ${lc.status}`);
+    }
+    return this.prisma.liveClass.update({
+      where: { id },
+      data: { status: LiveClassStatus.EM_CURSO },
+      include: CLASS_INCLUDE,
+    });
+  }
+
+  async postpone(id: number, dto: PostponeLiveClassDto) {
+    const lc = await this.findOne(id);
+    const newDate = new Date(dto.scheduledAt);
+    if (Number.isNaN(newDate.getTime())) throw new BadRequestException('Data inválida');
+    return this.prisma.liveClass.update({
+      where: { id },
+      data: {
+        status: LiveClassStatus.ADIADA,
+        postponedFromAt: lc.scheduledAt,
+        postponeReason: dto.reason,
+        scheduledAt: newDate,
+      },
+      include: CLASS_INCLUDE,
+    });
+  }
+
+  async cancel(id: number, dto: CancelLiveClassDto) {
+    await this.findOne(id);
+    return this.prisma.liveClass.update({
+      where: { id },
+      data: {
+        status: LiveClassStatus.CANCELADA,
+        cancelledAt: new Date(),
+        cancellationReason: dto.reason,
+      },
+      include: CLASS_INCLUDE,
+    });
+  }
+
+  async duplicate(id: number) {
+    const lc = await this.findOne(id);
+    return this.prisma.liveClass.create({
+      data: {
+        courseId: lc.courseId,
+        topic: `${lc.topic} (cópia)`,
+        code: this.generateCode(lc.type),
+        description: lc.description,
+        type: lc.type,
+        status: LiveClassStatus.AGENDADA,
+        moduleId: lc.moduleId,
+        lessonId: lc.lessonId,
+        instructorId: lc.instructorId,
+        coInstructorId: lc.coInstructorId,
+        scheduledAt: lc.scheduledAt,
+        duration: lc.duration,
+        timezone: lc.timezone,
+        recurrence: LiveClassRecurrence.ONCE,
+        modality: lc.modality,
+        zoomMeetingId: lc.zoomMeetingId,
+        location: lc.location,
+        building: lc.building,
+        room: lc.room,
+        capacity: lc.capacity,
+        enrollmentMode: lc.enrollmentMode,
+        maxParticipants: lc.maxParticipants,
+        waitlistEnabled: lc.waitlistEnabled,
+        targetDeptIds: lc.targetDeptIds,
+        targetUnitIds: lc.targetUnitIds,
+        targetPositionIds: lc.targetPositionIds,
+        objectives: lc.objectives,
+        agenda: lc.agenda,
+        topics: lc.topics,
+        materialDocumentIds: lc.materialDocumentIds,
+        attendanceAutoRegister: lc.attendanceAutoRegister,
+        attendanceRequired: lc.attendanceRequired,
+        minAttendancePercent: lc.minAttendancePercent,
+        lateToleranceMinutes: lc.lateToleranceMinutes,
+        recordSession: lc.recordSession,
+        allowRecordingDownload: lc.allowRecordingDownload,
+        evaluationRequired: lc.evaluationRequired,
+        notifySettings: lc.notifySettings ?? undefined,
+      },
+      include: CLASS_INCLUDE,
+    });
+  }
+
+  // ─── Sessões (secção 5) ────────────────────────────────────────────────────
+
+  /** Todas as sessões de todas as aulas — tabela global da aba "Sessões". */
+  async listAllSessions(filters: LiveClassFilterDto) {
+    const { page = 1, limit = 20 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const where: Prisma.LiveClassSessionWhereInput = {};
+    if (filters.instructorId) where.instructorId = filters.instructorId;
+    if (filters.status) where.status = filters.status;
+    if (filters.courseId) where.liveClass = { courseId: filters.courseId };
+    if (filters.dateFrom || filters.dateTo) {
+      where.sessionDate = {
+        ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
+        ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
+      };
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.liveClassSession.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          instructor: { select: { id: true, name: true } },
+          liveClass: {
+            select: {
+              id: true,
+              topic: true,
+              modality: true,
+              course: { select: { id: true, title: true } },
+            },
+          },
+          _count: { select: { attendances: true } },
+        },
+        orderBy: { sessionDate: 'desc' },
+      }),
+      this.prisma.read.liveClassSession.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  async listSessions(liveClassId: number) {
+    await this.findOne(liveClassId);
+    return this.prisma.read.liveClassSession.findMany({
+      where: { liveClassId },
+      include: {
+        instructor: { select: { id: true, name: true } },
+        _count: { select: { attendances: true } },
+      },
+      orderBy: { seq: 'asc' },
+    });
+  }
+
+  async createSession(liveClassId: number, dto: CreateLiveClassSessionDto) {
+    await this.findOne(liveClassId);
+    const last = await this.prisma.read.liveClassSession.findFirst({
+      where: { liveClassId },
+      orderBy: { seq: 'desc' },
+    });
+    return this.prisma.liveClassSession.create({
+      data: {
+        liveClassId,
+        seq: (last?.seq ?? 0) + 1,
+        sessionDate: new Date(dto.sessionDate),
+        durationMinutes: dto.durationMinutes,
+        instructorId: dto.instructorId,
+        location: dto.location,
+        meetingUrl: dto.meetingUrl,
+        notes: dto.notes,
+      },
+      include: { instructor: { select: { id: true, name: true } } },
+    });
+  }
+
+  async updateSession(liveClassId: number, sessionId: number, dto: UpdateLiveClassSessionDto) {
+    const session = await this.prisma.read.liveClassSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session || session.liveClassId !== liveClassId) {
+      throw new NotFoundException('Sessão não encontrada');
+    }
+    const { sessionDate, ...rest } = dto;
+    return this.prisma.liveClassSession.update({
+      where: { id: sessionId },
+      data: { ...rest, ...(sessionDate ? { sessionDate: new Date(sessionDate) } : {}) },
+      include: { instructor: { select: { id: true, name: true } } },
+    });
+  }
+
+  async deleteSession(liveClassId: number, sessionId: number) {
+    const session = await this.prisma.read.liveClassSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session || session.liveClassId !== liveClassId) {
+      throw new NotFoundException('Sessão não encontrada');
+    }
+    await this.prisma.liveClassSession.delete({ where: { id: sessionId } });
+    return { message: 'Sessão removida' };
+  }
+
+  // ─── Sala ao vivo (join/leave/chat) — inalterado, ao nível da Aula ────────
+
+  // Sala ao vivo (Jitsi/chat) continua exclusivamente ao nível da Aula — por
+  // isso sessionId fica sempre null aqui, mesmo para aulas recorrentes (ver
+  // comentário em LiveClassSession no schema). findFirst em vez de
+  // findUnique pelo índice composto: nulls não são únicos em Postgres, por
+  // isso é o próprio código que garante no máximo uma linha "geral" por
+  // (aula, utilizador) — ver nota junto de @@unique em LiveAttendance.
   async joinClass(liveClassId: number, userId: number) {
-    const existing = await this.prisma.liveAttendance.findUnique({
-      where: { liveClassId_userId: { liveClassId, userId } },
+    const existing = await this.prisma.liveAttendance.findFirst({
+      where: { liveClassId, userId, sessionId: null },
     });
     if (existing) {
       return this.prisma.liveAttendance.update({
-        where: { liveClassId_userId: { liveClassId, userId } },
+        where: { id: existing.id },
         data: { joinedAt: new Date(), leftAt: null },
       });
     }
@@ -91,12 +418,12 @@ export class LiveClassesService {
   }
 
   async leaveClass(liveClassId: number, userId: number) {
-    const existing = await this.prisma.liveAttendance.findUnique({
-      where: { liveClassId_userId: { liveClassId, userId } },
+    const existing = await this.prisma.liveAttendance.findFirst({
+      where: { liveClassId, userId, sessionId: null },
     });
     if (!existing) throw new NotFoundException('Não está inscrito nesta aula');
     return this.prisma.liveAttendance.update({
-      where: { liveClassId_userId: { liveClassId, userId } },
+      where: { id: existing.id },
       data: { leftAt: new Date() },
     });
   }
@@ -139,9 +466,22 @@ export class LiveClassesService {
         evaluationId: dto.evaluationId,
         userId,
         rating: dto.rating,
+        instructorRating: dto.instructorRating,
+        contentRating: dto.contentRating,
+        organizationRating: dto.organizationRating,
+        applicabilityRating: dto.applicabilityRating,
+        nps: dto.nps,
         feedback: dto.feedback,
       },
-      update: { rating: dto.rating, feedback: dto.feedback },
+      update: {
+        rating: dto.rating,
+        instructorRating: dto.instructorRating,
+        contentRating: dto.contentRating,
+        organizationRating: dto.organizationRating,
+        applicabilityRating: dto.applicabilityRating,
+        nps: dto.nps,
+        feedback: dto.feedback,
+      },
     });
 
     const avg = await this.prisma.read.postClassResponse.aggregate({
@@ -156,28 +496,1145 @@ export class LiveClassesService {
     return response;
   }
 
+  // ─── Presenças (etapa 6 — regra dos 70%) ──────────────────────────────────
+
+  /** Deriva duração/percentagem/estado a partir de joinedAt/leftAt — mesma
+   *  regra dos 70% usada pelo relatório por aula e pelas tabelas globais de
+   *  Participantes/Presenças (secções 6/10). `status` explícito (registo
+   *  manual) tem sempre prioridade sobre o cálculo automático. */
+  private deriveAttendance(
+    a: { joinedAt: Date | null; leftAt: Date | null; status: LiveAttendanceStatus | null },
+    lc: {
+      scheduledAt: Date;
+      duration: number;
+      minAttendancePercent: number;
+      lateToleranceMinutes: number;
+    },
+  ) {
+    const durationMinutes =
+      a.joinedAt && a.leftAt
+        ? Math.round((a.leftAt.getTime() - a.joinedAt.getTime()) / 60000)
+        : null;
+    const attendancePercent =
+      durationMinutes !== null && lc.duration > 0
+        ? Math.min(100, Math.round((durationMinutes / lc.duration) * 100))
+        : null;
+
+    let computedStatus: LiveAttendanceStatus = 'AUSENTE';
+    if (!a.joinedAt) {
+      computedStatus = 'AUSENTE';
+    } else if (attendancePercent !== null) {
+      const lateMin = Math.round((a.joinedAt.getTime() - lc.scheduledAt.getTime()) / 60000);
+      if (attendancePercent >= lc.minAttendancePercent) {
+        computedStatus = lateMin > lc.lateToleranceMinutes ? 'ATRASADO' : 'PRESENTE';
+      } else if (attendancePercent > 0) {
+        computedStatus = 'PARCIAL';
+      }
+    }
+    return { durationMinutes, attendancePercent, computedStatus: a.status ?? computedStatus };
+  }
+
   async getAttendanceReport(liveClassId: number) {
+    const lc = await this.findOne(liveClassId);
     const attendances = await this.prisma.read.liveAttendance.findMany({
       where: { liveClassId },
       include: { user: { select: { id: true, fullName: true, email: true } } },
     });
-    return attendances.map(a => {
-      const durationMin = a.leftAt
-        ? Math.round((a.leftAt.getTime() - a.joinedAt.getTime()) / 60000)
-        : null;
-      return { ...a, durationMinutes: durationMin };
+    return attendances.map(a => ({ ...a, ...this.deriveAttendance(a, lc) }));
+  }
+
+  // ─── Participantes (secção 6) / Presenças (secção 10) — tabela global ─────
+
+  private readonly PARTICIPANT_INCLUDE = {
+    user: {
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        employeeNumber: true,
+        department: { select: { id: true, name: true } },
+        unit: { select: { id: true, name: true } },
+      },
+    },
+    liveClass: {
+      select: {
+        id: true,
+        topic: true,
+        scheduledAt: true,
+        duration: true,
+        minAttendancePercent: true,
+        lateToleranceMinutes: true,
+        course: { select: { id: true, title: true } },
+        postEvaluation: { select: { averageScore: true } },
+      },
+    },
+    session: { select: { id: true, seq: true, sessionDate: true } },
+  } satisfies Prisma.LiveAttendanceInclude;
+
+  async listParticipants(filters: ParticipantsFilterDto) {
+    const { page = 1, limit = 20 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const userWhere: Prisma.UserWhereInput = {};
+    if (filters.departmentId) userWhere.departmentId = filters.departmentId;
+    if (filters.unitId) userWhere.unitId = filters.unitId;
+    if (filters.search) {
+      userWhere.OR = [
+        { fullName: { contains: filters.search, mode: 'insensitive' } },
+        { employeeNumber: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const liveClassWhere: Prisma.LiveClassWhereInput = {};
+    if (filters.courseId) liveClassWhere.courseId = filters.courseId;
+    if (filters.dateFrom || filters.dateTo) {
+      liveClassWhere.scheduledAt = {
+        ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
+        ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
+      };
+    }
+
+    const where: Prisma.LiveAttendanceWhereInput = {};
+    if (filters.liveClassId) where.liveClassId = filters.liveClassId;
+    if (filters.sessionId) where.sessionId = filters.sessionId;
+    if (Object.keys(liveClassWhere).length) where.liveClass = liveClassWhere;
+    if (Object.keys(userWhere).length) where.user = userWhere;
+
+    const [rows, total] = await Promise.all([
+      this.prisma.read.liveAttendance.findMany({
+        where,
+        skip,
+        take,
+        include: this.PARTICIPANT_INCLUDE,
+        orderBy: { id: 'desc' },
+      }),
+      this.prisma.read.liveAttendance.count({ where }),
+    ]);
+
+    let data = rows.map(a => ({ ...a, ...this.deriveAttendance(a, a.liveClass) }));
+    // status é derivado (não uma coluna filtrável directamente na query acima
+    // porque pode vir de override manual) — filtra-se depois de calcular.
+    if (filters.status) data = data.filter(a => a.computedStatus === filters.status);
+
+    return buildPaginatedResponse(data, filters.status ? data.length : total, page, limit);
+  }
+
+  private async assertLiveAttendance(liveClassId: number, attendanceId: number) {
+    const a = await this.prisma.read.liveAttendance.findUnique({ where: { id: attendanceId } });
+    if (!a || a.liveClassId !== liveClassId) throw new NotFoundException('Presença não encontrada');
+    return a;
+  }
+
+  /** "Adicionar" (secção 6) / registo manual de presença — RH/ADMIN/LIDER. */
+  async registerAttendance(liveClassId: number, dto: RegisterAttendanceDto) {
+    const lc = await this.findOne(liveClassId);
+    if (dto.sessionId) {
+      const session = await this.prisma.read.liveClassSession.findUnique({
+        where: { id: dto.sessionId },
+      });
+      if (!session || session.liveClassId !== liveClassId) {
+        throw new NotFoundException('Sessão não encontrada');
+      }
+    }
+    const sessionId = dto.sessionId ?? null;
+    const existing = await this.prisma.liveAttendance.findFirst({
+      where: { liveClassId, userId: dto.userId, sessionId },
+    });
+    const data = {
+      status: dto.status,
+      joinedAt: dto.joinedAt ? new Date(dto.joinedAt) : undefined,
+      leftAt: dto.leftAt ? new Date(dto.leftAt) : undefined,
+      justification: dto.justification,
+    };
+    const attendance = existing
+      ? await this.prisma.liveAttendance.update({ where: { id: existing.id }, data })
+      : await this.prisma.liveAttendance.create({
+          data: { liveClassId, userId: dto.userId, sessionId, ...data },
+        });
+
+    await this.maybeSyncCourseProgress(
+      lc,
+      dto.userId,
+      attendance.status,
+      attendance.joinedAt,
+      attendance.leftAt,
+    );
+    return { ...attendance, ...this.deriveAttendance(attendance, lc) };
+  }
+
+  /** "Registar presença" / "Justificar ausência" (secções 2/6/10). */
+  async updateAttendance(liveClassId: number, attendanceId: number, dto: UpdateAttendanceDto) {
+    const lc = await this.findOne(liveClassId);
+    await this.assertLiveAttendance(liveClassId, attendanceId);
+    const attendance = await this.prisma.liveAttendance.update({
+      where: { id: attendanceId },
+      data: {
+        status: dto.status,
+        joinedAt: dto.joinedAt ? new Date(dto.joinedAt) : undefined,
+        leftAt: dto.leftAt ? new Date(dto.leftAt) : undefined,
+        justification: dto.justification,
+      },
+    });
+    await this.maybeSyncCourseProgress(
+      lc,
+      attendance.userId,
+      attendance.status,
+      attendance.joinedAt,
+      attendance.leftAt,
+    );
+    return { ...attendance, ...this.deriveAttendance(attendance, lc) };
+  }
+
+  /** "Remover" participante (secção 6). */
+  async removeAttendance(liveClassId: number, attendanceId: number) {
+    await this.assertLiveAttendance(liveClassId, attendanceId);
+    await this.prisma.liveAttendance.delete({ where: { id: attendanceId } });
+    return { message: 'Participante removido' };
+  }
+
+  /**
+   * Secção 10 — "alimentar automaticamente o progresso do curso": quando a
+   * presença (explícita ou calculada) é PRESENTE/ATRASADO e a aula está
+   * ligada a uma Lição (Etapa 1 — "Lição associada"), delega no orquestrador
+   * único de progresso (CourseCompletionModule.markLessonComplete — ver
+   * memory project_innova_course_completion_consolidation_faseA), em vez de
+   * escrever LessonProgress directamente aqui. Best-effort: um utilizador
+   * sem matrícula activa ou bloqueado por drip/pré-requisito não deve
+   * impedir o registo da própria presença, por isso os erros são engolidos.
+   */
+  private async maybeSyncCourseProgress(
+    lc: {
+      lessonId: number | null;
+      scheduledAt: Date;
+      duration: number;
+      minAttendancePercent: number;
+      lateToleranceMinutes: number;
+    },
+    userId: number,
+    status: LiveAttendanceStatus | null,
+    joinedAt: Date | null,
+    leftAt: Date | null,
+  ) {
+    if (!lc.lessonId) return;
+    const { computedStatus } = this.deriveAttendance({ joinedAt, leftAt, status }, lc);
+    if (computedStatus !== 'PRESENTE' && computedStatus !== 'ATRASADO') return;
+    try {
+      await this.courseCompletion.markLessonComplete(userId, lc.lessonId, {});
+    } catch (e) {
+      this.logger.warn(
+        `Não foi possível sincronizar progresso do curso (lessonId=${lc.lessonId}, userId=${userId}): ${e instanceof Error ? e.message : e}`,
+      );
+    }
+  }
+
+  // ─── Formadores (secção 7) — perfil partilhado com Trainings ──────────────
+
+  async listInstructors() {
+    const classes = await this.prisma.read.liveClass.findMany({
+      where: { OR: [{ instructorId: { not: null } }, { coInstructorId: { not: null } }] },
+      select: {
+        instructorId: true,
+        coInstructorId: true,
+        status: true,
+        duration: true,
+        course: { select: { title: true } },
+        postEvaluation: { select: { averageScore: true } },
+        _count: { select: { attendances: true } },
+      },
+    });
+
+    interface Agg {
+      scheduled: number;
+      completed: number;
+      minutes: number;
+      participants: number;
+      scores: number[];
+      courses: Set<string>;
+    }
+    const stats = new Map<number, Agg>();
+    const touch = (id: number): Agg => {
+      let s = stats.get(id);
+      if (!s) {
+        s = {
+          scheduled: 0,
+          completed: 0,
+          minutes: 0,
+          participants: 0,
+          scores: [],
+          courses: new Set(),
+        };
+        stats.set(id, s);
+      }
+      return s;
+    };
+    for (const c of classes) {
+      for (const id of [c.instructorId, c.coInstructorId]) {
+        if (!id) continue;
+        const s = touch(id);
+        if (c.status === 'AGENDADA' || c.status === 'EM_PREPARACAO') s.scheduled++;
+        if (c.status === 'CONCLUIDA') {
+          s.completed++;
+          s.minutes += c.duration;
+        }
+        s.participants += c._count.attendances;
+        if (c.postEvaluation?.averageScore) s.scores.push(c.postEvaluation.averageScore);
+        if (c.course?.title) s.courses.add(c.course.title);
+      }
+    }
+
+    const ids = [...stats.keys()];
+    const profiles = ids.length
+      ? await this.prisma.read.trainingInstructorProfile.findMany({
+          where: { id: { in: ids } },
+          include: { user: { select: { id: true, fullName: true, avatarUrl: true } } },
+        })
+      : [];
+
+    return profiles
+      .map(p => {
+        const s = stats.get(p.id);
+        return {
+          ...p,
+          liveClassStats: {
+            scheduled: s.scheduled,
+            completed: s.completed,
+            hoursMinistered: Math.round((s.minutes / 60) * 10) / 10,
+            participants: s.participants,
+            avgRating: s.scores.length
+              ? Math.round((s.scores.reduce((a, b) => a + b, 0) / s.scores.length) * 10) / 10
+              : 0,
+            courses: [...s.courses],
+          },
+        };
+      })
+      .sort((a, b) => b.liveClassStats.completed - a.liveClassStats.completed);
+  }
+
+  // ─── Salas & Links (secção 8) — "Salas virtuais" derivadas da Aula/Sessão ──
+  // "Gestão operacional" (salas físicas) reutiliza directamente o registo de
+  // TrainingResource (kind=ROOM) do módulo Trainings — GET /training-resources
+  // — não há aqui um modelo próprio para isso, só para o lado "virtual".
+
+  async listVirtualRooms(filters: LiveClassFilterDto) {
+    const { page = 1, limit = 20 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const where: Prisma.LiveClassWhereInput = { modality: { in: ['ONLINE', 'HYBRID'] } };
+    if (filters.courseId) where.courseId = filters.courseId;
+    if (filters.instructorId) where.instructorId = filters.instructorId;
+    if (filters.status) where.status = filters.status;
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.liveClass.findMany({
+        where,
+        skip,
+        take,
+        select: {
+          id: true,
+          topic: true,
+          zoomMeetingId: true,
+          status: true,
+          scheduledAt: true,
+          course: { select: { id: true, title: true } },
+          instructor: { select: { id: true, name: true } },
+          sessions: {
+            select: { id: true, seq: true, meetingUrl: true, sessionDate: true, status: true },
+          },
+        },
+        orderBy: { scheduledAt: 'desc' },
+      }),
+      this.prisma.read.liveClass.count({ where }),
+    ]);
+
+    const rooms = data.map(lc => ({
+      liveClassId: lc.id,
+      topic: lc.topic,
+      course: lc.course,
+      instructor: lc.instructor,
+      status: lc.status,
+      scheduledAt: lc.scheduledAt,
+      platform: lc.zoomMeetingId
+        ? 'Zoom'
+        : lc.sessions.some(s => s.meetingUrl)
+          ? 'Personalizada'
+          : '—',
+      meetingId: lc.zoomMeetingId,
+      link: lc.sessions.find(s => s.meetingUrl)?.meetingUrl ?? null,
+      sessions: lc.sessions,
+    }));
+    return buildPaginatedResponse(rooms, total, page, limit);
+  }
+
+  // ─── Gravações (secção 9) ───────────────────────────────────────────────────
+
+  async listRecordings(filters: LiveClassFilterDto) {
+    const classWhere: Prisma.LiveClassWhereInput = { recordingUrl: { not: null } };
+    if (filters.courseId) classWhere.courseId = filters.courseId;
+    if (filters.instructorId) classWhere.instructorId = filters.instructorId;
+
+    const [classRecordings, sessionRecordings] = await Promise.all([
+      this.prisma.read.liveClass.findMany({
+        where: classWhere,
+        select: {
+          id: true,
+          topic: true,
+          recordingUrl: true,
+          recordingExpiresAt: true,
+          recordingPublishedAt: true,
+          allowRecordingDownload: true,
+          duration: true,
+          scheduledAt: true,
+          course: { select: { id: true, title: true } },
+          instructor: { select: { id: true, name: true } },
+          _count: { select: { attendances: true } },
+        },
+        orderBy: { scheduledAt: 'desc' },
+      }),
+      this.prisma.read.liveClassSession.findMany({
+        where: {
+          recordingUrl: { not: null },
+          ...(filters.instructorId ? { instructorId: filters.instructorId } : {}),
+          ...(filters.courseId ? { liveClass: { courseId: filters.courseId } } : {}),
+        },
+        select: {
+          id: true,
+          seq: true,
+          recordingUrl: true,
+          recordingPublishedAt: true,
+          durationMinutes: true,
+          sessionDate: true,
+          instructor: { select: { id: true, name: true } },
+          liveClass: {
+            select: { id: true, topic: true, course: { select: { id: true, title: true } } },
+          },
+          _count: { select: { attendances: true } },
+        },
+        orderBy: { sessionDate: 'desc' },
+      }),
+    ]);
+
+    const rows = [
+      ...classRecordings.map(lc => ({
+        liveClassId: lc.id,
+        sessionId: null,
+        sessionSeq: null,
+        topic: lc.topic,
+        course: lc.course,
+        instructor: lc.instructor,
+        date: lc.scheduledAt,
+        durationMinutes: lc.duration,
+        participants: lc._count.attendances,
+        recordingUrl: lc.recordingUrl,
+        publishedAt: lc.recordingPublishedAt,
+        expiresAt: lc.recordingExpiresAt,
+        allowDownload: lc.allowRecordingDownload,
+      })),
+      ...sessionRecordings.map(s => ({
+        liveClassId: s.liveClass.id,
+        sessionId: s.id,
+        sessionSeq: s.seq,
+        topic: s.liveClass.topic,
+        course: s.liveClass.course,
+        instructor: s.instructor,
+        date: s.sessionDate,
+        durationMinutes: s.durationMinutes,
+        participants: s._count.attendances,
+        recordingUrl: s.recordingUrl,
+        publishedAt: s.recordingPublishedAt,
+        expiresAt: null,
+        allowDownload: null as boolean | null,
+      })),
+    ].sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    const { page = 1, limit = 20 } = filters;
+    const total = rows.length;
+    const start = (page - 1) * limit;
+    return buildPaginatedResponse(rows.slice(start, start + limit), total, page, limit);
+  }
+
+  async publishRecording(id: number, publish: boolean) {
+    await this.findOne(id);
+    return this.prisma.liveClass.update({
+      where: { id },
+      data: { recordingPublishedAt: publish ? new Date() : null },
+    });
+  }
+
+  async deleteRecording(id: number) {
+    await this.findOne(id);
+    return this.prisma.liveClass.update({
+      where: { id },
+      data: { recordingUrl: null, recordingPublishedAt: null, recordingExpiresAt: null },
+    });
+  }
+
+  async publishSessionRecording(liveClassId: number, sessionId: number, publish: boolean) {
+    const session = await this.prisma.read.liveClassSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session || session.liveClassId !== liveClassId)
+      throw new NotFoundException('Sessão não encontrada');
+    return this.prisma.liveClassSession.update({
+      where: { id: sessionId },
+      data: { recordingPublishedAt: publish ? new Date() : null },
+    });
+  }
+
+  async deleteSessionRecording(liveClassId: number, sessionId: number) {
+    const session = await this.prisma.read.liveClassSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session || session.liveClassId !== liveClassId)
+      throw new NotFoundException('Sessão não encontrada');
+    return this.prisma.liveClassSession.update({
+      where: { id: sessionId },
+      data: { recordingUrl: null, recordingPublishedAt: null },
     });
   }
 
   async getUpcoming() {
     return this.prisma.read.liveClass.findMany({
-      where: { scheduledAt: { gte: new Date() } },
+      where: { scheduledAt: { gte: new Date() }, status: { notIn: [LiveClassStatus.CANCELADA] } },
       include: {
         course: { select: { id: true, title: true } },
+        instructor: { select: { id: true, name: true } },
         _count: { select: { attendances: true } },
       },
       orderBy: { scheduledAt: 'asc' },
       take: 10,
     });
+  }
+
+  // ─── Visão Geral (secção 1) ────────────────────────────────────────────────
+
+  async getDashboard() {
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date(startOfToday);
+    endOfToday.setDate(endOfToday.getDate() + 1);
+    const endOfWeek = new Date(startOfToday);
+    endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+    const [
+      scheduled,
+      inProgress,
+      completed,
+      cancelled,
+      today,
+      week,
+      upcoming,
+      recordingsAvailable,
+      byModality,
+      attendanceAgg,
+    ] = await Promise.all([
+      this.prisma.read.liveClass.count({ where: { status: LiveClassStatus.AGENDADA } }),
+      this.prisma.read.liveClass.count({ where: { status: LiveClassStatus.EM_CURSO } }),
+      this.prisma.read.liveClass.count({ where: { status: LiveClassStatus.CONCLUIDA } }),
+      this.prisma.read.liveClass.count({ where: { status: LiveClassStatus.CANCELADA } }),
+      this.prisma.read.liveClass.count({
+        where: { scheduledAt: { gte: startOfToday, lt: endOfToday } },
+      }),
+      this.prisma.read.liveClass.count({
+        where: { scheduledAt: { gte: startOfToday, lt: endOfWeek } },
+      }),
+      this.prisma.read.liveClass.count({ where: { scheduledAt: { gte: now } } }),
+      this.prisma.read.liveClass.count({ where: { recordingUrl: { not: null } } }),
+      this.prisma.read.liveClass.groupBy({ by: ['modality'], _count: { _all: true } }),
+      this.prisma.read.liveAttendance.aggregate({
+        _avg: { attendancePercent: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const hoursAgg = await this.prisma.read.liveClass.aggregate({
+      where: { status: LiveClassStatus.CONCLUIDA },
+      _sum: { duration: true },
+    });
+
+    const byInstructor = await this.prisma.read.liveClass.groupBy({
+      by: ['instructorId'],
+      where: { instructorId: { not: null } },
+      _count: { _all: true },
+    });
+    const instructorIds = byInstructor
+      .map(b => b.instructorId)
+      .filter((id): id is number => id !== null);
+    const instructors = instructorIds.length
+      ? await this.prisma.read.trainingInstructorProfile.findMany({
+          where: { id: { in: instructorIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const instructorName = new Map(instructors.map(i => [i.id, i.name]));
+
+    return {
+      cards: {
+        scheduled,
+        inProgress,
+        completed,
+        cancelled,
+        today,
+        thisWeek: week,
+        upcoming,
+        recordingsAvailable,
+        totalParticipants: attendanceAgg._count._all,
+        averageAttendancePercent: Math.round(attendanceAgg._avg.attendancePercent ?? 0),
+        hoursDelivered: Math.round(((hoursAgg._sum.duration ?? 0) / 60) * 10) / 10,
+      },
+      byModality: byModality.map(m => ({ modality: m.modality, count: m._count._all })),
+      byInstructor: byInstructor
+        .map(b => ({
+          instructorId: b.instructorId,
+          instructorName: instructorName.get(b.instructorId) ?? '—',
+          count: b._count._all,
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10),
+    };
+  }
+
+  // ─── Calendário (secção 4) ─────────────────────────────────────────────────
+
+  async getCalendar(from: string, to: string) {
+    const start = new Date(from);
+    const end = new Date(to);
+    const [classes, sessions] = await Promise.all([
+      this.prisma.read.liveClass.findMany({
+        where: { scheduledAt: { gte: start, lte: end } },
+        include: {
+          course: { select: { id: true, title: true } },
+          instructor: { select: { id: true, name: true } },
+        },
+      }),
+      this.prisma.read.liveClassSession.findMany({
+        where: { sessionDate: { gte: start, lte: end } },
+        include: {
+          instructor: { select: { id: true, name: true } },
+          liveClass: {
+            select: {
+              id: true,
+              topic: true,
+              modality: true,
+              course: { select: { id: true, title: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const classEvents = classes.map(lc => ({
+      id: `class-${lc.id}`,
+      liveClassId: lc.id,
+      sessionId: null,
+      title: lc.topic,
+      start: lc.scheduledAt,
+      end: new Date(lc.scheduledAt.getTime() + lc.duration * 60_000),
+      modality: lc.modality,
+      status: lc.status,
+      courseTitle: lc.course?.title ?? null,
+      instructorName: lc.instructor?.name ?? null,
+    }));
+
+    const sessionEvents = sessions.map(s => ({
+      id: `session-${s.id}`,
+      liveClassId: s.liveClassId,
+      sessionId: s.id,
+      title: s.liveClass.topic,
+      start: s.sessionDate,
+      end: new Date(s.sessionDate.getTime() + s.durationMinutes * 60_000),
+      modality: s.liveClass.modality,
+      status: s.status,
+      courseTitle: s.liveClass.course?.title ?? null,
+      instructorName: s.instructor?.name ?? s.liveClass.topic,
+    }));
+
+    return [...classEvents, ...sessionEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
+  }
+
+  // ─── Materiais (secção 11) — reúne LiveClass.materialDocumentIds e
+  // LiveClassSession.materialDocumentIds (FK "solta" para a Biblioteca,
+  // mesmo padrão de Training.requiredResources) e resolve contra Document. ──
+
+  async listMaterials(filters: MaterialsFilterDto) {
+    const classWhere: Prisma.LiveClassWhereInput = { materialDocumentIds: { isEmpty: false } };
+    if (filters.courseId) classWhere.courseId = filters.courseId;
+    if (filters.instructorId) classWhere.instructorId = filters.instructorId;
+
+    const sessionWhere: Prisma.LiveClassSessionWhereInput = {
+      materialDocumentIds: { isEmpty: false },
+    };
+    if (filters.courseId || filters.instructorId) {
+      sessionWhere.liveClass = {
+        ...(filters.courseId ? { courseId: filters.courseId } : {}),
+        ...(filters.instructorId ? { instructorId: filters.instructorId } : {}),
+      };
+    }
+
+    const [classes, sessions] = await Promise.all([
+      this.prisma.read.liveClass.findMany({
+        where: classWhere,
+        select: {
+          id: true,
+          topic: true,
+          materialDocumentIds: true,
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      this.prisma.read.liveClassSession.findMany({
+        where: sessionWhere,
+        select: {
+          id: true,
+          seq: true,
+          materialDocumentIds: true,
+          liveClass: {
+            select: { id: true, topic: true, course: { select: { id: true, title: true } } },
+          },
+        },
+      }),
+    ]);
+
+    interface MaterialRef {
+      liveClassId: number;
+      topic: string;
+      course: { id: number; title: string } | null;
+      sessionId: number | null;
+      sessionSeq: number | null;
+    }
+    const refs = new Map<number, MaterialRef[]>();
+    const touch = (docId: number, ref: MaterialRef) => {
+      const arr = refs.get(docId) ?? [];
+      arr.push(ref);
+      refs.set(docId, arr);
+    };
+    for (const c of classes) {
+      for (const docId of c.materialDocumentIds) {
+        touch(docId, {
+          liveClassId: c.id,
+          topic: c.topic,
+          course: c.course,
+          sessionId: null,
+          sessionSeq: null,
+        });
+      }
+    }
+    for (const s of sessions) {
+      for (const docId of s.materialDocumentIds) {
+        touch(docId, {
+          liveClassId: s.liveClass.id,
+          topic: s.liveClass.topic,
+          course: s.liveClass.course,
+          sessionId: s.id,
+          sessionSeq: s.seq,
+        });
+      }
+    }
+
+    const documentIds = [...refs.keys()];
+    const { page = 1, limit = 20 } = filters;
+    if (documentIds.length === 0) return buildPaginatedResponse([], 0, page, limit);
+
+    const documents = await this.prisma.read.document.findMany({
+      where: {
+        id: { in: documentIds },
+        deletedAt: null,
+        ...(filters.search ? { title: { contains: filters.search, mode: 'insensitive' } } : {}),
+      },
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        fileUrl: true,
+        mimeType: true,
+        fileSize: true,
+        tags: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const rows = documents.map(document => ({
+      document,
+      referencedBy: refs.get(document.id) ?? [],
+    }));
+    const total = rows.length;
+    const start = (page - 1) * limit;
+    return buildPaginatedResponse(rows.slice(start, start + limit), total, page, limit);
+  }
+
+  private async assertDocumentExists(documentId: number) {
+    const doc = await this.prisma.read.document.findUnique({ where: { id: documentId } });
+    if (!doc || doc.deletedAt)
+      throw new NotFoundException('Documento não encontrado na Biblioteca');
+    return doc;
+  }
+
+  async addClassMaterial(liveClassId: number, documentId: number) {
+    const lc = await this.findOne(liveClassId);
+    await this.assertDocumentExists(documentId);
+    if (lc.materialDocumentIds.includes(documentId)) return lc;
+    return this.prisma.liveClass.update({
+      where: { id: liveClassId },
+      data: { materialDocumentIds: { push: documentId } },
+      include: CLASS_INCLUDE,
+    });
+  }
+
+  async removeClassMaterial(liveClassId: number, documentId: number) {
+    const lc = await this.findOne(liveClassId);
+    return this.prisma.liveClass.update({
+      where: { id: liveClassId },
+      data: { materialDocumentIds: lc.materialDocumentIds.filter(id => id !== documentId) },
+      include: CLASS_INCLUDE,
+    });
+  }
+
+  async addSessionMaterial(liveClassId: number, sessionId: number, documentId: number) {
+    const session = await this.prisma.read.liveClassSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session || session.liveClassId !== liveClassId)
+      throw new NotFoundException('Sessão não encontrada');
+    await this.assertDocumentExists(documentId);
+    if (session.materialDocumentIds.includes(documentId)) return session;
+    return this.prisma.liveClassSession.update({
+      where: { id: sessionId },
+      data: { materialDocumentIds: { push: documentId } },
+    });
+  }
+
+  async removeSessionMaterial(liveClassId: number, sessionId: number, documentId: number) {
+    const session = await this.prisma.read.liveClassSession.findUnique({
+      where: { id: sessionId },
+    });
+    if (!session || session.liveClassId !== liveClassId)
+      throw new NotFoundException('Sessão não encontrada');
+    return this.prisma.liveClassSession.update({
+      where: { id: sessionId },
+      data: { materialDocumentIds: session.materialDocumentIds.filter(id => id !== documentId) },
+    });
+  }
+
+  // ─── Avaliações (secção 12) — lista agregada + resumo (rubrica detalhada
+  // e NPS) sobre PostClassResponse, cruzando todas as aulas. ─────────────────
+
+  private buildEvaluationWhere(filters: EvaluationsFilterDto): Prisma.PostClassResponseWhereInput {
+    const liveClassWhere: Prisma.LiveClassWhereInput = {};
+    if (filters.courseId) liveClassWhere.courseId = filters.courseId;
+    if (filters.instructorId) liveClassWhere.instructorId = filters.instructorId;
+    if (filters.dateFrom || filters.dateTo) {
+      liveClassWhere.scheduledAt = {
+        ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
+        ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
+      };
+    }
+    const evaluationWhere: Prisma.PostClassEvaluationWhereInput = {};
+    if (filters.liveClassId) evaluationWhere.liveClassId = filters.liveClassId;
+    if (Object.keys(liveClassWhere).length) evaluationWhere.liveClass = liveClassWhere;
+    return Object.keys(evaluationWhere).length ? { evaluation: evaluationWhere } : {};
+  }
+
+  async getEvaluations(filters: EvaluationsFilterDto) {
+    const { page = 1, limit = 20 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const where = this.buildEvaluationWhere(filters);
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.postClassResponse.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          user: { select: { id: true, fullName: true } },
+          evaluation: {
+            select: {
+              id: true,
+              averageScore: true,
+              liveClass: {
+                select: {
+                  id: true,
+                  topic: true,
+                  scheduledAt: true,
+                  course: { select: { id: true, title: true } },
+                  instructor: { select: { id: true, name: true } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.read.postClassResponse.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  async getEvaluationsSummary(filters: EvaluationsFilterDto) {
+    const where = this.buildEvaluationWhere(filters);
+    const responses = await this.prisma.read.postClassResponse.findMany({
+      where,
+      select: {
+        rating: true,
+        instructorRating: true,
+        contentRating: true,
+        organizationRating: true,
+        applicabilityRating: true,
+        nps: true,
+      },
+    });
+
+    const avg = (values: (number | null)[]) => {
+      const nums = values.filter((n): n is number => n != null);
+      return nums.length
+        ? Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10
+        : null;
+    };
+
+    const npsValues = responses.map(r => r.nps).filter((n): n is number => n != null);
+    const promoters = npsValues.filter(n => n >= 9).length;
+    const detractors = npsValues.filter(n => n <= 6).length;
+    const nps = npsValues.length
+      ? Math.round(((promoters - detractors) / npsValues.length) * 100)
+      : null;
+
+    return {
+      responses: responses.length,
+      avgRating: avg(responses.map(r => r.rating)),
+      avgInstructorRating: avg(responses.map(r => r.instructorRating)),
+      avgContentRating: avg(responses.map(r => r.contentRating)),
+      avgOrganizationRating: avg(responses.map(r => r.organizationRating)),
+      avgApplicabilityRating: avg(responses.map(r => r.applicabilityRating)),
+      nps,
+    };
+  }
+
+  // ─── Relatórios (secção 13) ─────────────────────────────────────────────────
+
+  private buildReportClassWhere(filters: LiveClassReportFilterDto): Prisma.LiveClassWhereInput {
+    const where: Prisma.LiveClassWhereInput = {};
+    if (filters.year) {
+      where.scheduledAt = {
+        gte: new Date(filters.year, 0, 1),
+        lt: new Date(filters.year + 1, 0, 1),
+      };
+    }
+    if (filters.courseId) where.courseId = filters.courseId;
+    if (filters.instructorId) where.instructorId = filters.instructorId;
+    if (filters.departmentId) where.targetDeptIds = { has: filters.departmentId };
+    if (filters.unitId) where.targetUnitIds = { has: filters.unitId };
+    return where;
+  }
+
+  async getReports(filters: LiveClassReportFilterDto) {
+    const where = this.buildReportClassWhere(filters);
+
+    const classes = await this.prisma.read.liveClass.findMany({
+      where,
+      select: {
+        id: true,
+        status: true,
+        duration: true,
+        scheduledAt: true,
+        minAttendancePercent: true,
+        lateToleranceMinutes: true,
+        instructorId: true,
+        instructor: { select: { id: true, name: true } },
+        postEvaluation: { select: { averageScore: true } },
+      },
+    });
+    const classIds = classes.map(c => c.id);
+    const classById = new Map(classes.map(c => [c.id, c]));
+
+    const attendances = classIds.length
+      ? await this.prisma.read.liveAttendance.findMany({
+          where: { liveClassId: { in: classIds } },
+          select: {
+            liveClassId: true,
+            joinedAt: true,
+            leftAt: true,
+            status: true,
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                department: { select: { id: true, name: true } },
+                unit: { select: { id: true, name: true } },
+              },
+            },
+          },
+        })
+      : [];
+
+    const derived = attendances.map(a => ({
+      ...a,
+      ...this.deriveAttendance(a, classById.get(a.liveClassId)!),
+    }));
+
+    const presente = derived.filter(a => a.computedStatus === 'PRESENTE').length;
+    const ausente = derived.filter(a => a.computedStatus === 'AUSENTE').length;
+    const atrasado = derived.filter(a => a.computedStatus === 'ATRASADO').length;
+
+    const completed = classes.filter(c => c.status === LiveClassStatus.CONCLUIDA);
+    const cancelled = classes.filter(c => c.status === LiveClassStatus.CANCELADA);
+    const hoursDelivered = completed.reduce((sum, c) => sum + c.duration, 0) / 60;
+
+    const evaluatedScores = classes
+      .map(c => c.postEvaluation?.averageScore)
+      .filter((n): n is number => !!n);
+    const avgEvaluation = evaluatedScores.length
+      ? Math.round((evaluatedScores.reduce((a, b) => a + b, 0) / evaluatedScores.length) * 10) / 10
+      : null;
+
+    // Desempenho por formador
+    interface InstructorAgg {
+      name: string;
+      completed: number;
+      scores: number[];
+    }
+    const byInstructorMap = new Map<number, InstructorAgg>();
+    for (const c of classes) {
+      if (!c.instructorId) continue;
+      const agg = byInstructorMap.get(c.instructorId) ?? {
+        name: c.instructor?.name ?? '—',
+        completed: 0,
+        scores: [],
+      };
+      if (c.status === LiveClassStatus.CONCLUIDA) agg.completed++;
+      if (c.postEvaluation?.averageScore) agg.scores.push(c.postEvaluation.averageScore);
+      byInstructorMap.set(c.instructorId, agg);
+    }
+    const byInstructor = [...byInstructorMap.values()]
+      .map(a => ({
+        instructor: a.name,
+        completed: a.completed,
+        avgRating: a.scores.length
+          ? Math.round((a.scores.reduce((x, y) => x + y, 0) / a.scores.length) * 10) / 10
+          : null,
+      }))
+      .sort((a, b) => b.completed - a.completed);
+
+    // Participação por departamento / unidade
+    const toSortedCount = (values: (string | null | undefined)[], key: string) => {
+      const m = new Map<string, number>();
+      for (const v of values) {
+        const k = v ?? 'Sem atribuição';
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+      return [...m.entries()]
+        .map(([k, count]) => ({ [key]: k, count }))
+        .sort((a, b) => b.count - a.count);
+    };
+    const byDepartment = toSortedCount(
+      attendances.map(a => a.user.department?.name),
+      'department',
+    );
+    const byUnit = toSortedCount(
+      attendances.map(a => a.user.unit?.name),
+      'unit',
+    );
+
+    // Horas de formação por colaborador (participações com presença efectiva)
+    const hoursByUserMap = new Map<number, { name: string; minutes: number }>();
+    for (const a of derived) {
+      if (a.computedStatus !== 'PRESENTE' && a.computedStatus !== 'ATRASADO') continue;
+      if (!a.durationMinutes) continue;
+      const entry = hoursByUserMap.get(a.user.id) ?? { name: a.user.fullName, minutes: 0 };
+      entry.minutes += a.durationMinutes;
+      hoursByUserMap.set(a.user.id, entry);
+    }
+    const hoursByCollaborator = [...hoursByUserMap.entries()]
+      .map(([userId, v]) => ({
+        userId,
+        collaborator: v.name,
+        hours: Math.round((v.minutes / 60) * 10) / 10,
+      }))
+      .sort((a, b) => b.hours - a.hours)
+      .slice(0, 20);
+
+    return {
+      filters,
+      totals: {
+        classes: classes.length,
+        completed: completed.length,
+        cancelled: cancelled.length,
+        hoursDelivered: Math.round(hoursDelivered * 10) / 10,
+      },
+      attendance: {
+        participants: attendances.length,
+        present: presente,
+        absent: ausente,
+        late: atrasado,
+        attendanceRate:
+          attendances.length > 0 ? Math.round((presente / attendances.length) * 100) : 0,
+      },
+      avgEvaluation,
+      byInstructor,
+      byDepartment,
+      byUnit,
+      hoursByCollaborator,
+    };
+  }
+
+  async exportReportsCsv(filters: LiveClassReportFilterDto): Promise<string> {
+    const report = await this.getReports(filters);
+    const rows = [
+      { metrica: 'Aulas (total)', valor: report.totals.classes },
+      { metrica: 'Aulas realizadas', valor: report.totals.completed },
+      { metrica: 'Aulas canceladas', valor: report.totals.cancelled },
+      { metrica: 'Horas ministradas', valor: report.totals.hoursDelivered },
+      { metrica: 'Participantes', valor: report.attendance.participants },
+      { metrica: 'Presenças', valor: report.attendance.present },
+      { metrica: 'Ausências', valor: report.attendance.absent },
+      { metrica: 'Atrasos', valor: report.attendance.late },
+      { metrica: 'Taxa de presença (%)', valor: report.attendance.attendanceRate },
+      { metrica: 'Avaliação média', valor: report.avgEvaluation ?? '' },
+    ];
+    return buildCsvString(rows, ['metrica', 'valor']);
+  }
+
+  // ─── Configurações (secção 14) — vista agregada, só de leitura, sobre os
+  // enums do domínio e os @default reais do schema + os papéis já aplicados
+  // no controller. Não inventa um mecanismo de configuração novo para o que
+  // já é código — mesmo padrão de evaluation.service.ts#getSettings(). ──────
+
+  getSettings() {
+    return {
+      types: Object.values(LiveClassType),
+      statuses: Object.values(LiveClassStatus),
+      modalities: Object.values(SessionModality),
+      recurrences: Object.values(LiveClassRecurrence),
+      enrollmentModes: Object.values(LiveClassEnrollmentMode),
+      attendanceStatuses: Object.values(LiveAttendanceStatus),
+      attendanceDefaults: {
+        minAttendancePercent: 70,
+        lateToleranceMinutes: 10,
+      },
+      recordingDefaults: {
+        recordSession: true,
+        allowRecordingDownload: false,
+      },
+      notifySettingsKeys: [
+        'onEnroll',
+        'reminder24h',
+        'reminder1h',
+        'onStart',
+        'onReschedule',
+        'onCancel',
+        'onRecordingAvailable',
+      ],
+      notificationChannels: ['INNOVA', 'EMAIL', 'PUSH', 'SMS', 'WHATSAPP'],
+      permissions: [
+        { action: 'Criar / editar / cancelar / adiar / duplicar aula', roles: ['ADMIN', 'RH'] },
+        { action: 'Iniciar aula', roles: ['ADMIN', 'RH', 'INSTRUCTOR'] },
+        { action: 'Gerir participantes e presenças', roles: ['ADMIN', 'RH', 'LIDER'] },
+        { action: 'Publicar / eliminar gravações', roles: ['ADMIN', 'RH'] },
+        {
+          action: 'Ver relatório de presença e relatórios agregados',
+          roles: ['ADMIN', 'RH', 'LIDER'],
+        },
+        {
+          action: 'Entrar na aula, usar o chat, responder à avaliação pós-aula',
+          roles: ['Qualquer utilizador autenticado'],
+        },
+      ],
+    };
   }
 }

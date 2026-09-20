@@ -3,6 +3,12 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { AiTutorService } from './ai-tutor.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiProvidersService } from './ai-providers.service';
+import { AiKnowledgeService } from './ai-knowledge.service';
+
+const mockAiKnowledge = {
+  search: jest.fn().mockResolvedValue([]),
+  getSources: jest.fn().mockResolvedValue({}),
+};
 
 const mockAiProviders = {
   chat: jest.fn().mockResolvedValue({
@@ -53,6 +59,14 @@ const mockPrisma: any = {
     groupBy: jest.fn().mockResolvedValue([]),
   },
   userPoints: { upsert: jest.fn().mockResolvedValue({}) },
+  aiTutorSettings: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() },
+  aiGeneratedExercise: { create: jest.fn().mockResolvedValue({}) },
+  aiRecommendationLog: {
+    create: jest.fn().mockResolvedValue({ id: 1 }),
+    findFirst: jest.fn(),
+    update: jest.fn(),
+  },
+  notificationLog: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn() },
 };
 
 const baseSession = {
@@ -80,6 +94,7 @@ describe('AiTutorService (additional)', () => {
         AiTutorService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AiProvidersService, useValue: mockAiProviders },
+        { provide: AiKnowledgeService, useValue: mockAiKnowledge },
       ],
     }).compile();
     service = module.get<AiTutorService>(AiTutorService);
