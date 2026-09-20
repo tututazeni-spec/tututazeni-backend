@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { TalentDevelopmentService } from './talent-development.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { DevelopmentPlansService } from './development-plans.service';
 
 const mockDevelopmentPlans = {
   create: jest.fn(),

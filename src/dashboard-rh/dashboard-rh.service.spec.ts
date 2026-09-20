@@ -331,7 +331,7 @@ describe('DashboardRhService', () => {
           severity: 'MEDIUM',
           message: '5 acção(ões) de PDI em atraso',
           count: 5,
-          actionUrl: '/talent-development/plans',
+          actionUrl: '/development-plans',
           scope: 'organization',
         },
         {
