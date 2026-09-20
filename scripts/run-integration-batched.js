@@ -11,28 +11,14 @@ const path = require('path');
 const jestBin = path.join(__dirname, '..', 'node_modules', 'jest', 'bin', 'jest.js');
 
 const BATCHES = [
-  [
-    'academic',
-    'acl',
-    'ai-tutor',
-    'analytics',
-    'api-integration',
-    'assessments',
-    'attendance',
-    'audit',
-    'auth',
-  ],
-  [
-    'automation',
-    'avatar-training',
-    'career',
-    'career-plans',
-    'certificates',
-    'certification',
-    'competencies',
-    'competency-map',
-    'content-library',
-  ],
+  // Batches 1 e 2 originais (9 módulos cada) eram os últimos que ainda não
+  // tinham sido partidos — o 1 passou a esgotar a heap de 4 GB (OOM
+  // "Ineffective mark-compacts near heap limit" a meio do batch). Mesmo
+  // split preventivo aplicado ao 2, que tinha exactamente o mesmo tamanho.
+  ['academic', 'acl', 'ai-tutor', 'analytics', 'api-integration'],
+  ['assessments', 'attendance', 'audit', 'auth'],
+  ['automation', 'avatar-training', 'career', 'career-plans', 'certificates'],
+  ['certification', 'competencies', 'competency-map', 'content-library'],
   // Batch 3 original (9 módulos) também passou a esgotar a heap de 4 GB — o
   // bootstrap Nest de cada spec ficou mais pesado à medida que app.module.ts
   // acumulou módulos de outras features entretanto integradas. Mesmo split

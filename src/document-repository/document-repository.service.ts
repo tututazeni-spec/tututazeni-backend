@@ -602,56 +602,70 @@ export class DocumentRepositoryService {
       });
   }
 
-  async getReadStatus(documentId: number) {
-    const doc = await this.findOne(documentId);
+  // Máximo de nomes devolvidos em `pendingUsers`. Com ~6000 funcionários, um
+  // documento obrigatório para toda a empresa teria uma lista de milhares de
+  // nomes que nenhuma UI mostra — devolve-se uma amostra + a contagem real.
+  private static readonly PENDING_USERS_SAMPLE = 50;
+
+  /** Contagens de conformidade sem carregar listas de utilizadores. */
+  private async readComplianceCounts(doc: {
+    id: number;
+    version: string;
+    targetAudience: string[];
+  }) {
     const where = await this.eligibleReaderWhere(doc);
-    const [totalRequired, confirmations] = await Promise.all([
+    const [totalRequired, confirmedCount] = await Promise.all([
       this.prisma.read.user.count({ where }),
-      this.prisma.read.docReadConfirmation.findMany({
-        where: { documentId },
-        include: { user: { select: { id: true, fullName: true, email: true } } },
+      this.prisma.read.docReadConfirmation.count({
+        where: { documentId: doc.id, version: doc.version, confirmedAt: { not: null } },
       }),
     ]);
-
-    const confirmedForVersion = confirmations.filter(
-      c => c.confirmedAt && c.version === doc.version,
-    );
-    const eligibleUsers = await this.prisma.read.user.findMany({
-      where,
-      select: { id: true, fullName: true, email: true },
-    });
-    const confirmedIds = new Set(confirmedForVersion.map(c => c.userId));
-    const pendingUsers = eligibleUsers.filter(u => !confirmedIds.has(u.id));
-
     return {
       totalRequired,
-      confirmedCount: confirmedForVersion.length,
-      percentage: totalRequired
-        ? Math.round((confirmedForVersion.length / totalRequired) * 100)
-        : 0,
+      confirmedCount,
+      percentage: totalRequired ? Math.round((confirmedCount / totalRequired) * 100) : 0,
+    };
+  }
+
+  async getReadStatus(documentId: number) {
+    const doc = await this.findOne(documentId);
+    const counts = await this.readComplianceCounts(doc);
+
+    const confirmedIds = (
+      await this.prisma.read.docReadConfirmation.findMany({
+        where: { documentId, version: doc.version, confirmedAt: { not: null } },
+        select: { userId: true },
+      })
+    ).map(c => c.userId);
+
+    const where = await this.eligibleReaderWhere(doc);
+    const pendingUsers = await this.prisma.read.user.findMany({
+      where: { ...where, id: { notIn: confirmedIds } },
+      select: { id: true, fullName: true, email: true },
+      take: DocumentRepositoryService.PENDING_USERS_SAMPLE,
+      orderBy: { fullName: 'asc' },
+    });
+
+    return {
+      ...counts,
+      pendingCount: counts.totalRequired - counts.confirmedCount,
       pendingUsers,
-      confirmations: confirmedForVersion,
     };
   }
 
   async getComplianceOverview() {
     const docs = await this.prisma.read.document.findMany({
       where: { status: DocStatus.ACTIVE, requiresReadConfirmation: true },
-      select: { id: true, title: true, category: true, version: true },
+      select: { id: true, title: true, category: true, version: true, targetAudience: true },
     });
 
     const overview = await Promise.all(
-      docs.map(async d => {
-        const status = await this.getReadStatus(d.id);
-        return {
-          id: d.id,
-          title: d.title,
-          category: d.category,
-          totalRequired: status.totalRequired,
-          confirmedCount: status.confirmedCount,
-          percentage: status.percentage,
-        };
-      }),
+      docs.map(async d => ({
+        id: d.id,
+        title: d.title,
+        category: d.category,
+        ...(await this.readComplianceCounts(d)),
+      })),
     );
 
     return overview.sort((a, b) => a.percentage - b.percentage);
