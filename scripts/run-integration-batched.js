@@ -15,7 +15,11 @@ const BATCHES = [
   // tinham sido partidos — o 1 passou a esgotar a heap de 4 GB (OOM
   // "Ineffective mark-compacts near heap limit" a meio do batch). Mesmo
   // split preventivo aplicado ao 2, que tinha exactamente o mesmo tamanho.
-  ['academic', 'acl', 'ai-tutor', 'analytics', 'api-integration'],
+  // O split para 5 módulos ainda voltou a esgotar a heap em CI (app.module.ts
+  // continua a crescer a cada feature integrada) — partido de novo, agora a
+  // 2-3 módulos por processo.
+  ['academic', 'acl', 'ai-tutor'],
+  ['analytics', 'api-integration'],
   ['assessments', 'attendance', 'audit', 'auth'],
   ['automation', 'avatar-training', 'career', 'career-plans', 'certificates'],
   ['certification', 'competencies', 'competency-map', 'content-library'],
