@@ -1,30 +1,13 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-  ParseIntPipe,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { MonitoringEvalType } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { MonitoringService } from './monitoring.service';
-import {
-  CreateIndicatorDto,
-  CreateRecordDto,
-  CreateEvalCycleDto,
-  MonitoringSubmitEvaluationDto,
-  FilterIndicatorDto,
-} from './dto';
+import { CreateIndicatorDto, CreateRecordDto, FilterIndicatorDto } from './dto';
 import { Role } from '../auth/enums/role.enum';
 
-@ApiTags('Monitoria e Avaliação')
+@ApiTags('Monitoria')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('monitoring')
@@ -35,7 +18,7 @@ export class MonitoringController {
 
   @Get('dashboard')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Dashboard de Monitoria e Avaliação' })
+  @ApiOperation({ summary: 'Dashboard de Monitoria' })
   getDashboard() {
     return this.service.getDashboard();
   }
@@ -70,55 +53,5 @@ export class MonitoringController {
   @ApiOperation({ summary: 'Histórico do indicador' })
   getIndicatorHistory(@Param('id') id: string) {
     return this.service.getIndicatorHistory(id);
-  }
-
-  // ─── AVALIAÇÃO ───────────────────────────────────────
-
-  @Post('evaluation/cycles')
-  @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Criar ciclo de avaliação' })
-  createEvalCycle(@Body() dto: CreateEvalCycleDto, @CurrentUser() user: CurrentUserData) {
-    return this.service.createEvalCycle(dto, user.id);
-  }
-
-  @Post('evaluation/cycles/:cycleId/assign')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Atribuir avaliação' })
-  assignEvaluation(
-    @Param('cycleId') cycleId: string,
-    @Body('userId', ParseIntPipe) userId: number,
-    @Body('evaluatorId', ParseIntPipe) evaluatorId: number,
-    @Body('type') type: MonitoringEvalType,
-    @CurrentUser() user: CurrentUserData,
-  ) {
-    return this.service.assignEvaluation(
-      cycleId,
-      userId,
-      evaluatorId,
-      type || MonitoringEvalType.MANAGER,
-      user.id,
-    );
-  }
-
-  @Put('evaluation/:id/submit')
-  @ApiOperation({ summary: 'Submeter avaliação' })
-  submitEvaluation(
-    @Param('id') id: string,
-    @Body() dto: MonitoringSubmitEvaluationDto,
-    @CurrentUser() user: CurrentUserData,
-  ) {
-    return this.service.submitEvaluation(id, dto, user);
-  }
-
-  @Get('evaluation/my-evaluations')
-  @ApiOperation({ summary: 'As minhas avaliações' })
-  getMyEvaluations(@CurrentUser() user: CurrentUserData) {
-    return this.service.getMyEvaluations(user.id);
-  }
-
-  @Get('evaluation/to-complete')
-  @ApiOperation({ summary: 'Avaliações que tenho de completar' })
-  getEvaluationsToComplete(@CurrentUser() user: CurrentUserData) {
-    return this.service.getEvaluationsToComplete(user.id);
   }
 }

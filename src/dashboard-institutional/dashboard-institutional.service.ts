@@ -22,7 +22,6 @@ import { ProcessStandardService } from '../process-standard/process-standard.ser
 import { LegacyDocumentDeclarationsService } from '../work-declaration/legacy-document-declarations.service';
 import { AutomationService } from '../automation/automation.service';
 import { ScalabilityService } from '../scalability/scalability.service';
-import { MonitoringService } from '../monitoring/monitoring.service';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { DashboardPeriod } from '../dashboard/dashboard.dto';
 
@@ -41,7 +40,6 @@ export class DashboardInstitutionalService {
     private readonly auditStatsService: AuditLogStatsService,
     private readonly automationService: AutomationService,
     private readonly scalabilityService: ScalabilityService,
-    private readonly monitoringService: MonitoringService,
     private readonly dashboardService: DashboardService,
   ) {}
 
@@ -416,27 +414,18 @@ export class DashboardInstitutionalService {
       'dashboard:institutional:modules-overview',
       DASHBOARD_CACHE_TTL,
       async () => {
-        const [
-          onboarding,
-          events,
-          processes,
-          declarations,
-          auditStats,
-          automation,
-          platform,
-          monitoring,
-        ] = await Promise.allSettled([
-          this.onboardingService.getDashboard(),
-          this.eventsService.getStats(),
-          this.processStandardService.getDashboard(),
-          this.declarationsService.getDashboard(),
-          this.auditStatsService.getStats(),
-          this.automationService.getStats(),
-          this.scalabilityService
-            .resolveTenantId()
-            .then(tenantId => this.scalabilityService.getDashboard(tenantId)),
-          this.monitoringService.getDashboard(),
-        ]);
+        const [onboarding, events, processes, declarations, auditStats, automation, platform] =
+          await Promise.allSettled([
+            this.onboardingService.getDashboard(),
+            this.eventsService.getStats(),
+            this.processStandardService.getDashboard(),
+            this.declarationsService.getDashboard(),
+            this.auditStatsService.getStats(),
+            this.automationService.getStats(),
+            this.scalabilityService
+              .resolveTenantId()
+              .then(tenantId => this.scalabilityService.getDashboard(tenantId)),
+          ]);
 
         const results = {
           onboarding,
@@ -446,7 +435,6 @@ export class DashboardInstitutionalService {
           auditStats,
           automation,
           platform,
-          monitoring,
         };
         for (const [name, r] of Object.entries(results)) {
           if (r.status === 'rejected') {
@@ -465,7 +453,6 @@ export class DashboardInstitutionalService {
         const aud = auditStats.status === 'fulfilled' ? auditStats.value : null;
         const auto = automation.status === 'fulfilled' ? automation.value : null;
         const plat = platform.status === 'fulfilled' ? platform.value : null;
-        const mon = monitoring.status === 'fulfilled' ? monitoring.value : null;
 
         return {
           onboarding: onb && {
@@ -503,11 +490,6 @@ export class DashboardInstitutionalService {
             openAlerts: plat.alerts.open,
             criticalAlerts: plat.alerts.critical,
             integrationsWithErrors: plat.integrations.withErrors,
-          },
-          evaluationCycles: mon && {
-            activeCycles: mon.evaluation.activeEvalCycles,
-            pendingEvaluations: mon.evaluation.pendingEvaluations,
-            completionRate: mon.evaluation.evaluationCompletionRate,
           },
         };
       },

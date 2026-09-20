@@ -215,6 +215,10 @@ export class DocumentRepositoryService {
         docCategory: true,
         versions: { orderBy: { versionNumber: 'desc' }, take: 10 },
         permissions: { include: { user: { select: { id: true, fullName: true } } } },
+        elaboratedBy: { select: { id: true, fullName: true } },
+        approver: { select: { id: true, fullName: true } },
+        supersedes: { select: { id: true, title: true, documentCode: true } },
+        relatedDocument: { select: { id: true, title: true, documentCode: true } },
         _count: { select: { downloads: true, versions: true } },
       },
     });
@@ -230,6 +234,16 @@ export class DocumentRepositoryService {
   // ══════════════════════════════════════════════════════════════════
   // DOCUMENTS — CREATE / UPDATE / DELETE
   // ══════════════════════════════════════════════════════════════════
+
+  private async generateDocumentCode(): Promise<string> {
+    const last = await this.prisma.document.findFirst({
+      where: { documentCode: { not: null } },
+      orderBy: { documentCode: 'desc' },
+      select: { documentCode: true },
+    });
+    const num = last?.documentCode ? parseInt(last.documentCode.replace('DOC-', ''), 10) + 1 : 1;
+    return `DOC-${String(num).padStart(5, '0')}`;
+  }
 
   async create(createdById: number, dto: CreateDocumentDto) {
     // DLP: documentos sensíveis não podem ser PUBLIC
@@ -247,14 +261,23 @@ export class DocumentRepositoryService {
     const retentionUntil = new Date();
     retentionUntil.setFullYear(retentionUntil.getFullYear() + retentionYears);
 
+    const documentCode = await this.generateDocumentCode();
+
     const doc = await this.prisma.document.create({
       data: {
         ...dto,
         tags: dto.tags ?? [],
-        status: DocStatus.ACTIVE,
+        targetAudience: dto.targetAudience ?? [],
+        // DRAFT arranca o fluxo de aprovação (docs/biblioteca.md); sem
+        // indicação explícita, o documento continua a publicar-se de
+        // imediato tal como antes desta extensão.
+        status: dto.status ?? DocStatus.ACTIVE,
         origin: dto.origin ?? DocOrigin.UPLOAD,
         version: '1.0',
+        documentCode,
+        elaboratedById: dto.elaboratedById ?? createdById,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+        reviewAt: dto.reviewAt ? new Date(dto.reviewAt) : null,
         retentionUntil,
         createdById,
         // Criar versão inicial
@@ -299,7 +322,7 @@ export class DocumentRepositoryService {
 
     // Protecção: documentos expirados/arquivados não editáveis
     const nonEditableStatuses: DocStatus[] = [DocStatus.ARCHIVED, DocStatus.DELETED];
-    if (nonEditableStatuses.includes(current.status as DocStatus)) {
+    if (nonEditableStatuses.includes(current.status)) {
       throw new BadRequestException('Documento arquivado ou eliminado não pode ser editado');
     }
 
@@ -370,6 +393,331 @@ export class DocumentRepositoryService {
       restored: version.versionNumber,
     });
     return this.findOne(documentId);
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // APPROVAL WORKFLOW (docs/biblioteca.md — "Estados do documento")
+  // ══════════════════════════════════════════════════════════════════
+
+  private async requireStatus(id: number, allowed: DocStatus[]) {
+    const doc = await this.findOne(id);
+    if (!allowed.includes(doc.status)) {
+      throw new BadRequestException(
+        `Transição inválida: documento está em '${doc.status}', esperado um de [${allowed.join(', ')}]`,
+      );
+    }
+    return doc;
+  }
+
+  async submitForReview(id: number, userId: number) {
+    await this.requireStatus(id, [DocStatus.DRAFT]);
+    await this.prisma.document.update({
+      where: { id },
+      data: { status: DocStatus.EM_REVISAO },
+    });
+    await this.logAudit(id, userId, DocAuditAction.UPDATED, { transition: 'EM_REVISAO' });
+    return this.findOne(id);
+  }
+
+  async submitForApproval(id: number, userId: number, approverId?: number) {
+    await this.requireStatus(id, [DocStatus.EM_REVISAO]);
+    await this.prisma.document.update({
+      where: { id },
+      data: { status: DocStatus.PENDENTE_APROVACAO, ...(approverId && { approverId }) },
+    });
+    await this.logAudit(id, userId, DocAuditAction.UPDATED, { transition: 'PENDENTE_APROVACAO' });
+    return this.findOne(id);
+  }
+
+  async approve(id: number, approverId: number) {
+    await this.requireStatus(id, [DocStatus.PENDENTE_APROVACAO]);
+    await this.prisma.document.update({
+      where: { id },
+      data: { status: DocStatus.APROVADO, approverId, approvedAt: new Date() },
+    });
+    await this.logAudit(id, approverId, DocAuditAction.UPDATED, { transition: 'APROVADO' });
+    return this.findOne(id);
+  }
+
+  async reject(id: number, userId: number, reason: string) {
+    const doc = await this.requireStatus(id, [DocStatus.EM_REVISAO, DocStatus.PENDENTE_APROVACAO]);
+    await this.prisma.document.update({
+      where: { id },
+      data: { status: DocStatus.DRAFT },
+    });
+    await this.logAudit(id, userId, DocAuditAction.UPDATED, {
+      transition: 'DRAFT',
+      rejectedFrom: doc.status,
+      reason,
+    });
+    return this.findOne(id);
+  }
+
+  async publish(id: number, userId: number) {
+    await this.requireStatus(id, [DocStatus.APROVADO, DocStatus.DRAFT, DocStatus.SUSPENSO]);
+    const doc = await this.prisma.document.update({
+      where: { id },
+      data: { status: DocStatus.ACTIVE, effectiveAt: new Date() },
+    });
+    await this.logAudit(id, userId, DocAuditAction.UPDATED, { transition: 'ACTIVE' });
+    return this.findOne(doc.id);
+  }
+
+  async suspend(id: number, userId: number, reason?: string) {
+    await this.requireStatus(id, [DocStatus.ACTIVE]);
+    await this.prisma.document.update({
+      where: { id },
+      data: { status: DocStatus.SUSPENSO },
+    });
+    await this.logAudit(id, userId, DocAuditAction.UPDATED, { transition: 'SUSPENSO', reason });
+    return this.findOne(id);
+  }
+
+  async supersede(id: number, supersededDocumentId: number, userId: number) {
+    if (id === supersededDocumentId) {
+      throw new BadRequestException('Um documento não pode substituir-se a si próprio');
+    }
+    await this.findOne(supersededDocumentId);
+    await this.prisma.$transaction([
+      this.prisma.document.update({
+        where: { id: supersededDocumentId },
+        data: { status: DocStatus.SUBSTITUIDO },
+      }),
+      this.prisma.document.update({
+        where: { id },
+        data: { supersedesId: supersededDocumentId },
+      }),
+    ]);
+    await this.logAudit(id, userId, DocAuditAction.UPDATED, {
+      transition: 'SUPERSEDES',
+      supersededDocumentId,
+    });
+    return this.findOne(id);
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // CONFIRMAÇÃO DE LEITURA (docs/biblioteca.md)
+  // ══════════════════════════════════════════════════════════════════
+
+  private async eligibleReaderWhere(doc: {
+    targetAudience: string[];
+  }): Promise<Prisma.UserWhereInput> {
+    if (!doc.targetAudience.length) return { active: true };
+    return {
+      active: true,
+      OR: [
+        { role: { name: { in: doc.targetAudience } } },
+        { department: { name: { in: doc.targetAudience } } },
+      ],
+    };
+  }
+
+  async markRead(documentId: number, userId: number, ipAddress?: string, userAgent?: string) {
+    const doc = await this.findOne(documentId);
+    await this.prisma.docReadConfirmation.upsert({
+      where: { documentId_userId: { documentId, userId } },
+      update: { readAt: new Date(), ipAddress, userAgent },
+      create: {
+        documentId,
+        userId,
+        version: doc.version,
+        readAt: new Date(),
+        ipAddress,
+        userAgent,
+      },
+    });
+    return { message: 'Leitura registada' };
+  }
+
+  async confirmRead(documentId: number, userId: number, ipAddress?: string, userAgent?: string) {
+    const doc = await this.findOne(documentId);
+    const now = new Date();
+    await this.prisma.docReadConfirmation.upsert({
+      where: { documentId_userId: { documentId, userId } },
+      update: {
+        readAt: { set: now },
+        confirmedAt: now,
+        version: doc.version,
+        ipAddress,
+        userAgent,
+      },
+      create: {
+        documentId,
+        userId,
+        version: doc.version,
+        readAt: now,
+        confirmedAt: now,
+        ipAddress,
+        userAgent,
+      },
+    });
+    await this.logAudit(documentId, userId, DocAuditAction.UPDATED, {
+      transition: 'READ_CONFIRMED',
+    });
+    return { message: 'Leitura confirmada' };
+  }
+
+  async getMyPendingReads(userId: number) {
+    const docs = await this.prisma.read.document.findMany({
+      where: { status: DocStatus.ACTIVE, requiresReadConfirmation: true },
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        version: true,
+        effectiveAt: true,
+        readDeadlineDays: true,
+        targetAudience: true,
+      },
+    });
+    if (!docs.length) return [];
+
+    const user = await this.prisma.read.user.findUnique({
+      where: { id: userId },
+      select: { role: { select: { name: true } }, department: { select: { name: true } } },
+    });
+    const userTags = [user?.role?.name, user?.department?.name].filter((v): v is string => !!v);
+
+    const eligible = docs.filter(
+      d => !d.targetAudience.length || d.targetAudience.some(t => userTags.includes(t)),
+    );
+    if (!eligible.length) return [];
+
+    const confirmations = await this.prisma.read.docReadConfirmation.findMany({
+      where: { userId, documentId: { in: eligible.map(d => d.id) } },
+    });
+    const confirmedMap = new Map(confirmations.map(c => [c.documentId, c]));
+
+    return eligible
+      .filter(d => {
+        const c = confirmedMap.get(d.id);
+        return !c?.confirmedAt || c.version !== d.version;
+      })
+      .map(d => {
+        const deadline =
+          d.readDeadlineDays && d.effectiveAt
+            ? new Date(d.effectiveAt.getTime() + d.readDeadlineDays * 86400000)
+            : null;
+        return { ...d, deadline, overdue: deadline ? deadline < new Date() : false };
+      });
+  }
+
+  // Máximo de nomes devolvidos em `pendingUsers`. Com ~6000 funcionários, um
+  // documento obrigatório para toda a empresa teria uma lista de milhares de
+  // nomes que nenhuma UI mostra — devolve-se uma amostra + a contagem real.
+  private static readonly PENDING_USERS_SAMPLE = 50;
+
+  /** Contagens de conformidade sem carregar listas de utilizadores. */
+  private async readComplianceCounts(doc: {
+    id: number;
+    version: string;
+    targetAudience: string[];
+  }) {
+    const where = await this.eligibleReaderWhere(doc);
+    const [totalRequired, confirmedCount] = await Promise.all([
+      this.prisma.read.user.count({ where }),
+      this.prisma.read.docReadConfirmation.count({
+        where: { documentId: doc.id, version: doc.version, confirmedAt: { not: null } },
+      }),
+    ]);
+    return {
+      totalRequired,
+      confirmedCount,
+      percentage: totalRequired ? Math.round((confirmedCount / totalRequired) * 100) : 0,
+    };
+  }
+
+  async getReadStatus(documentId: number) {
+    const doc = await this.findOne(documentId);
+    const counts = await this.readComplianceCounts(doc);
+
+    const confirmedIds = (
+      await this.prisma.read.docReadConfirmation.findMany({
+        where: { documentId, version: doc.version, confirmedAt: { not: null } },
+        select: { userId: true },
+      })
+    ).map(c => c.userId);
+
+    const where = await this.eligibleReaderWhere(doc);
+    const pendingUsers = await this.prisma.read.user.findMany({
+      where: { ...where, id: { notIn: confirmedIds } },
+      select: { id: true, fullName: true, email: true },
+      take: DocumentRepositoryService.PENDING_USERS_SAMPLE,
+      orderBy: { fullName: 'asc' },
+    });
+
+    return {
+      ...counts,
+      pendingCount: counts.totalRequired - counts.confirmedCount,
+      pendingUsers,
+    };
+  }
+
+  async getComplianceOverview() {
+    const docs = await this.prisma.read.document.findMany({
+      where: { status: DocStatus.ACTIVE, requiresReadConfirmation: true },
+      select: { id: true, title: true, category: true, version: true, targetAudience: true },
+    });
+
+    const overview = await Promise.all(
+      docs.map(async d => ({
+        id: d.id,
+        title: d.title,
+        category: d.category,
+        ...(await this.readComplianceCounts(d)),
+      })),
+    );
+
+    return overview.sort((a, b) => a.percentage - b.percentage);
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // FAVORITOS / RECENTES (docs/biblioteca.md)
+  // ══════════════════════════════════════════════════════════════════
+
+  async toggleFavorite(documentId: number, userId: number) {
+    await this.findOne(documentId);
+    const existing = await this.prisma.read.auditLog.findFirst({
+      where: { userId, action: 'DOC_FAVORITE', entity: 'Document', entityId: documentId },
+    });
+
+    if (existing) {
+      await this.prisma.auditLog.delete({ where: { id: existing.id } });
+      return { favorited: false };
+    }
+
+    await this.prisma.auditLog.create({
+      data: { userId, action: 'DOC_FAVORITE', entity: 'Document', entityId: documentId },
+    });
+    return { favorited: true };
+  }
+
+  async getMyFavorites(userId: number) {
+    const logs = await this.prisma.read.auditLog.findMany({
+      where: { userId, action: 'DOC_FAVORITE', entity: 'Document' },
+      orderBy: { timestamp: 'desc' },
+    });
+    const ids = logs.map(l => l.entityId).filter((id): id is number => id !== null);
+    if (!ids.length) return [];
+
+    return this.prisma.read.document.findMany({
+      where: { id: { in: ids }, status: { notIn: [DocStatus.DELETED] } },
+    });
+  }
+
+  async getMyRecent(userId: number, limit = 10) {
+    const logs = await this.prisma.read.docAuditLog.findMany({
+      where: { userId, action: DocAuditAction.VIEWED },
+      orderBy: { createdAt: 'desc' },
+      take: limit * 3,
+      select: { documentId: true },
+    });
+    const ids = [...new Set(logs.map(l => l.documentId))].slice(0, limit);
+    if (!ids.length) return [];
+
+    const docs = await this.prisma.read.document.findMany({ where: { id: { in: ids } } });
+    const docMap = new Map(docs.map(d => [d.id, d]));
+    return ids.map(id => docMap.get(id)).filter((d): d is NonNullable<typeof d> => !!d);
   }
 
   async archive(id: number, archivedById: number, reason?: string) {
@@ -459,7 +807,7 @@ export class DocumentRepositoryService {
 
     // DLP: documentos confidenciais/secretos não compartilháveis externamente
     const noExternalShare: DocSensitivity[] = [DocSensitivity.SECRET, DocSensitivity.RESTRICTED];
-    if (noExternalShare.includes(doc.sensitivity as DocSensitivity)) {
+    if (noExternalShare.includes(doc.sensitivity)) {
       throw new ForbiddenException('Este documento não pode ser partilhado externamente');
     }
 

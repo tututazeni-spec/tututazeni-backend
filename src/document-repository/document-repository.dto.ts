@@ -72,9 +72,50 @@ export class CreateDocumentDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
   @ApiPropertyOptional() @IsOptional() @IsEnum(DocOrigin) origin?: DocOrigin;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() requestSignature?: boolean;
+
+  // ─── docs/biblioteca.md — "Documentos Corporativos" ────────────────────
+  @ApiPropertyOptional() @IsOptional() @IsString() documentNumber?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() elaboratedById?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() approverId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() reviewAt?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) reviewPeriodicityMonths?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() supersedesId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() relatedDocumentId?: number;
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  targetAudience?: string[];
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() requiresReadConfirmation?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() requiresAcknowledgement?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) readDeadlineDays?: number;
+  // Só DRAFT é aceite aqui — o resto do ciclo de vida faz-se pelos
+  // endpoints de transição (submit-review/submit-approval/approve/publish/…),
+  // nunca por escrita directa do campo `status`.
+  @ApiPropertyOptional({ enum: DocStatus })
+  @IsOptional()
+  @IsIn([DocStatus.DRAFT])
+  status?: DocStatus;
 }
 
 export class UpdateDocumentDto extends PartialType(CreateDocumentDto) {}
+
+// ─── Approval workflow ──────────────────────────────────────────────────────
+
+export class RejectDocumentDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1000)
+  reason!: string;
+}
+
+export class SupersedeDocumentDto {
+  @ApiProperty() @IsInt() supersededDocumentId!: number;
+}
+
+export class SubmitForApprovalDto {
+  @ApiPropertyOptional() @IsOptional() @IsInt() approverId?: number;
+}
 
 export class NewVersionDto {
   @ApiProperty() @IsAllowedFileUrl() fileUrl!: string;
@@ -139,6 +180,12 @@ export class DocumentFilterDto extends BaseFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   expired?: boolean;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  requiresReadConfirmation?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsString() sortBy?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() sortOrder?: 'asc' | 'desc';
 }

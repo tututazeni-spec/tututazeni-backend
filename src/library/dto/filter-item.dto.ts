@@ -30,6 +30,18 @@ export class FilterItemDto {
   @IsBoolean()
   isApproved?: boolean;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  mandatory?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @Type(() => Number)

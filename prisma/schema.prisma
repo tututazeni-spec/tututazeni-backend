@@ -361,6 +361,14 @@ enum DocCategoryType {
   CONTRATO
   REGULAMENTO
   COMUNICADO
+  // docs/biblioteca.md — categorias de "Documentos Corporativos" em falta
+  CIRCULAR
+  ORDEM_SERVICO
+  LEGISLACAO
+  INSTRUCAO_TRABALHO
+  MODELO
+  CODIGO
+  DIRETIVA
   OTHER
   OUTRO
 }
@@ -381,8 +389,18 @@ enum DocSensitivity {
 
 enum DocStatus {
   DRAFT
+  // docs/biblioteca.md — fluxo de aprovação de "Documentos Corporativos".
+  // ACTIVE continua a ser o estado "Publicado" (não duplicado por um valor
+  // novo) para não quebrar os `status === ACTIVE` já espalhados por
+  // document-repository.service.ts (findAll default, download, dashboard,
+  // processExpiredDocuments, buildAccessWhere).
+  EM_REVISAO
+  PENDENTE_APROVACAO
+  APROVADO
   ACTIVE
+  SUSPENSO
   EXPIRED
+  SUBSTITUIDO
   ARCHIVED
   DELETED
 }
@@ -867,6 +885,9 @@ model User {
   // ─── Documentos (Repositório) ─────────────────────────────────
   createdDocuments      Document[]      @relation("DocCreator")
   ownedDocuments        Document[]      @relation("DocOwner")
+  elaboratedDocuments   Document[]      @relation("DocElaborator")
+  approvedDocuments     Document[]      @relation("DocApprover")
+  docReadConfirmations  DocReadConfirmation[] @relation("DocReadConfirmationUser")
   uploadedDocVersions   DocVersion[]
   docPermissions        DocPermission[]
   grantedDocPermissions DocPermission[] @relation("PermissionGrantor")
@@ -922,6 +943,7 @@ model User {
   libraryAccesses           LibraryAccess[]     @relation("LibraryAccessUser")
   libraryRatings            LibraryRating[]     @relation("LibraryRatingUser")
   libraryComments           LibraryComment[]    @relation("LibraryCommentUser")
+  libraryItemsToApprove     LibraryItem[]       @relation("LibraryApprover")
 
   // ─── Certificação Digital ─────────────────────────────────────
   createdCertificateTemplates CertificateTemplate[] @relation("TemplateCreator")
@@ -1181,6 +1203,7 @@ model Department {
 
   leadershipPrograms   LeadershipProgram[]
   leadershipTargetings LeadershipProgramTargeting[]
+  libraryItems         LibraryItem[]
 
   @@index([active])
   @@index([parentId])
@@ -1235,6 +1258,7 @@ model Unit {
   operationalMetrics   OperationalMetric[]
   leadershipTargetings LeadershipProgramTargeting[]
   internalVacancies    InternalVacancy[]
+  libraryItems         LibraryItem[]
 }
 
 enum PositionLevel {
@@ -5979,6 +6003,31 @@ model Document {
   deletedAt        DateTime?
   deleteReason     String?
   downloadCount    Int               @default(0)
+
+  // ─── docs/biblioteca.md — "Documentos Corporativos" (fluxo de aprovação,
+  // controlo de versões formal, confirmação de leitura) ──────────────────
+  documentCode            String?    @unique
+  documentNumber          String?
+  elaboratedById          Int?
+  elaboratedBy            User?      @relation("DocElaborator", fields: [elaboratedById], references: [id])
+  approverId              Int?
+  approver                User?      @relation("DocApprover", fields: [approverId], references: [id])
+  approvedAt              DateTime?
+  effectiveAt             DateTime?
+  reviewAt                DateTime?
+  reviewPeriodicityMonths Int?
+  supersedesId            Int?
+  supersedes              Document?  @relation("DocSupersedes", fields: [supersedesId], references: [id])
+  supersededBy            Document[] @relation("DocSupersedes")
+  relatedDocumentId       Int?
+  relatedDocument         Document?  @relation("DocRelated", fields: [relatedDocumentId], references: [id])
+  relatedFrom             Document[] @relation("DocRelated")
+  targetAudience          String[]   @default([])
+  requiresReadConfirmation Boolean   @default(false)
+  requiresAcknowledgement  Boolean   @default(false)
+  readDeadlineDays         Int?
+  readConfirmations       DocReadConfirmation[]
+
   versions         DocVersion[]
   permissions      DocPermission[]
   shareLinks       DocShareLink[]
@@ -5994,6 +6043,27 @@ model Document {
   @@index([department, status])
   @@index([expiresAt, status])
   @@index([sensitivity])
+  @@index([requiresReadConfirmation, status])
+}
+
+model DocReadConfirmation {
+  id          Int       @id @default(autoincrement())
+  documentId  Int
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  userId      Int
+  user        User      @relation("DocReadConfirmationUser", fields: [userId], references: [id])
+  version     String
+  availableAt DateTime  @default(now())
+  readAt      DateTime?
+  confirmedAt DateTime?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([documentId, userId])
+  @@index([userId])
+  @@index([documentId])
 }
 
 model DocVersion {
@@ -9411,6 +9481,18 @@ model LibraryItem {
   updatedAt    DateTime        @updatedAt
   deletedAt    DateTime?
 
+  // ─── docs/biblioteca.md — "Novo Conteúdo": campos em falta ─────────────
+  departmentId     Int?
+  department       Department? @relation(fields: [departmentId], references: [id])
+  unitId           Int?
+  unit             Unit?       @relation(fields: [unitId], references: [id])
+  mandatory        Boolean     @default(false)
+  allowDownload    Boolean     @default(true)
+  allowShare       Boolean     @default(true)
+  requiresApproval Boolean     @default(false)
+  approverId       Int?
+  approver         User?       @relation("LibraryApprover", fields: [approverId], references: [id])
+
   collection LibraryCollection? @relation(fields: [collectionId], references: [id])
   uploadedBy User               @relation("LibraryUploader", fields: [uploadedById], references: [id])
   reviewedBy User?              @relation("LibraryReviewer", fields: [reviewedById], references: [id])
@@ -9424,6 +9506,8 @@ model LibraryItem {
   @@index([isApproved])
   @@index([uploadedById])
   @@index([deletedAt])
+  @@index([departmentId])
+  @@index([mandatory])
 }
 
 model LibraryAccess {
@@ -9489,6 +9573,12 @@ enum LibraryItemType {
   IMAGE
   LINK
   SCORM
+  // docs/biblioteca.md — "Novo Conteúdo": tipos em falta
+  ARTIGO
+  INFOGRAFICO
+  GUIA
+  MATERIAL_FORMACAO
+  FAQ
   OTHER
 }
 

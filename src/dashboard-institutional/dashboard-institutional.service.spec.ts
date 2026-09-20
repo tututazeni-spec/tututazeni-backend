@@ -11,7 +11,6 @@ import { ProcessStandardService } from '../process-standard/process-standard.ser
 import { LegacyDocumentDeclarationsService } from '../work-declaration/legacy-document-declarations.service';
 import { AutomationService } from '../automation/automation.service';
 import { ScalabilityService } from '../scalability/scalability.service';
-import { MonitoringService } from '../monitoring/monitoring.service';
 import { DashboardService } from '../dashboard/dashboard.service';
 
 const mockPrisma = {
@@ -91,16 +90,6 @@ const mockScalability = {
     integrations: { total: 4, active: 3, withErrors: 1 },
   }),
 };
-const mockMonitoring = {
-  getDashboard: jest.fn().mockResolvedValue({
-    evaluation: {
-      activeEvalCycles: 1,
-      pendingEvaluations: 8,
-      completedEvaluations: 32,
-      evaluationCompletionRate: 80,
-    },
-  }),
-};
 const mockDashboard = {
   getExecutiveDashboard: jest.fn().mockResolvedValue({
     kpis: { headcount: { total: 200, active: 190 } },
@@ -134,7 +123,6 @@ describe('DashboardInstitutionalService', () => {
         { provide: AuditLogStatsService, useValue: mockAuditStats },
         { provide: AutomationService, useValue: mockAutomation },
         { provide: ScalabilityService, useValue: mockScalability },
-        { provide: MonitoringService, useValue: mockMonitoring },
         { provide: DashboardService, useValue: mockDashboard },
       ],
     }).compile();
@@ -376,11 +364,6 @@ describe('DashboardInstitutionalService', () => {
         openAlerts: 2,
         criticalAlerts: 0,
         integrationsWithErrors: 1,
-      });
-      expect(result.evaluationCycles).toEqual({
-        activeCycles: 1,
-        pendingEvaluations: 8,
-        completionRate: 80,
       });
       expect(mockScalability.resolveTenantId).toHaveBeenCalled();
       expect(mockScalability.getDashboard).toHaveBeenCalledWith('tenant-1');

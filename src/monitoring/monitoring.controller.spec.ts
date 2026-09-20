@@ -10,11 +10,6 @@ const mockSvc = {
   findAllIndicators: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   addRecord: jest.fn().mockResolvedValue({ id: 1 }),
   getIndicatorHistory: jest.fn().mockResolvedValue([]),
-  createEvalCycle: jest.fn().mockResolvedValue({ id: 1 }),
-  assignEvaluation: jest.fn().mockResolvedValue({ id: 1 }),
-  submitEvaluation: jest.fn().mockResolvedValue({}),
-  getMyEvaluations: jest.fn().mockResolvedValue([]),
-  getEvaluationsToComplete: jest.fn().mockResolvedValue([]),
 };
 
 const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
@@ -65,37 +60,5 @@ describe('MonitoringController', () => {
   it('getIndicatorHistory → getIndicatorHistory(id)', async () => {
     await controller.getIndicatorHistory('ind1');
     expect(mockSvc.getIndicatorHistory).toHaveBeenCalledWith('ind1');
-  });
-
-  it('createEvalCycle → createEvalCycle(dto, userId)', async () => {
-    const dto = {} as any;
-    await controller.createEvalCycle(dto, mockUser as any);
-    expect(mockSvc.createEvalCycle).toHaveBeenCalledWith(dto, 1);
-  });
-
-  it('assignEvaluation com type → assignEvaluation(cycleId, userId, evaluatorId, type, actorId)', async () => {
-    await controller.assignEvaluation('cy1', 2, 3, 'PEER', mockUser as any);
-    expect(mockSvc.assignEvaluation).toHaveBeenCalledWith('cy1', 2, 3, 'PEER', 1);
-  });
-
-  it('assignEvaluation sem type → usa MANAGER por omissão', async () => {
-    await controller.assignEvaluation('cy1', 2, 3, undefined as any, mockUser as any);
-    expect(mockSvc.assignEvaluation).toHaveBeenCalledWith('cy1', 2, 3, 'MANAGER', 1);
-  });
-
-  it('submitEvaluation → submitEvaluation(id, dto, user)', async () => {
-    const dto = {} as any;
-    await controller.submitEvaluation('ev1', dto, mockUser as any);
-    expect(mockSvc.submitEvaluation).toHaveBeenCalledWith('ev1', dto, mockUser);
-  });
-
-  it('getMyEvaluations → getMyEvaluations(userId)', async () => {
-    await controller.getMyEvaluations(mockUser as any);
-    expect(mockSvc.getMyEvaluations).toHaveBeenCalledWith(1);
-  });
-
-  it('getEvaluationsToComplete → getEvaluationsToComplete(userId)', async () => {
-    await controller.getEvaluationsToComplete(mockUser as any);
-    expect(mockSvc.getEvaluationsToComplete).toHaveBeenCalledWith(1);
   });
 });
