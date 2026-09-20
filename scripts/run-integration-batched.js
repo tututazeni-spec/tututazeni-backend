@@ -18,7 +18,9 @@ const BATCHES = [
   // O split para 5 módulos ainda voltou a esgotar a heap em CI (app.module.ts
   // continua a crescer a cada feature integrada) — partido de novo, agora a
   // 2-3 módulos por processo.
-  ['academic', 'acl', 'ai-tutor'],
+  // 'academic' foi removido (módulo eliminado) — já não tem specs; o grupo
+  // ficou de facto só com acl + ai-tutor.
+  ['acl', 'ai-tutor'],
   ['analytics', 'api-integration'],
   ['assessments', 'attendance', 'audit', 'auth'],
   ['automation', 'avatar-training', 'career', 'career-plans', 'certificates'],
@@ -75,8 +77,13 @@ for (const [i, modules] of BATCHES.entries()) {
         NODE_ENV: 'test',
         // Cada spec arranca a sua própria app Nest; num batch grande a heap
         // por omissão (~2 GB) não chega e o processo morre com "exit null".
-        // O runner do GitHub tem RAM de sobra — dá-lhe folga.
-        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=4096`.trim(),
+        // 4096 voltou a esgotar (PR #311) mesmo no batch 1, que já só tem
+        // 2 módulos reais (acl + ai-tutor — 'academic' foi removido e o
+        // pattern já não corresponde a nada) — o bootstrap de uma única app
+        // Nest completa (AppModule já com dezenas de módulos) por si só
+        // aproxima-se do tecto de 4 GB. O runner ubuntu-latest tem 16 GB —
+        // subir para 8192 dá folga sem se aproximar do limite da máquina.
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=8192`.trim(),
       },
     },
   );
