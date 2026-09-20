@@ -10,7 +10,6 @@ import { WorkDeclarationModule } from '../work-declaration/work-declaration.modu
 import { AuditModule } from '../audit/audit.module';
 import { AutomationModule } from '../automation/automation.module';
 import { ScalabilityModule } from '../scalability/scalability.module';
-import { MonitoringModule } from '../monitoring/monitoring.module';
 
 // ─── VISÃO CRUZADA DE MÓDULOS ──────────────────────────
 // dashboard-institutional/modules agrega, por leitura directa dos serviços
@@ -35,7 +34,6 @@ import { MonitoringModule } from '../monitoring/monitoring.module';
     AuditModule,
     AutomationModule,
     ScalabilityModule,
-    MonitoringModule,
   ],
   controllers: [DashboardInstitutionalController],
   providers: [DashboardInstitutionalService],
