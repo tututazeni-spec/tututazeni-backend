@@ -361,7 +361,7 @@ export class SearchService {
         p.name,
         `${p.user?.fullName ?? ''} · ${p.status}`,
         { progress: p.overallProgress },
-        `/talent-development/plans/${p.id}`,
+        `/development-plans/${p.id}`,
       ),
     );
   }

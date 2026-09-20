@@ -1,4 +1,4 @@
-// src/talent-development/talent-development.controller.ts
+// src/development-plans/talent-development.controller.ts
 import {
   Controller,
   Get,
