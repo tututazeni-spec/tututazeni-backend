@@ -64,6 +64,9 @@ export class LibraryService {
         ...(expiresAt && { expiresAt: new Date(expiresAt) }),
         code,
         uploadedById: userId,
+        // Sem aprovação exigida, o item fica disponível de imediato — só os
+        // que pedem `requiresApproval` ficam pendentes até `approveItem()`.
+        isApproved: !dto.requiresApproval,
       },
       include: {
         collection: { select: { name: true } },
@@ -78,7 +81,17 @@ export class LibraryService {
   }
 
   async findAllItems(filters: FilterItemDto) {
-    const { type, collectionId, category, search, isApproved, page = 1, limit = 20 } = filters;
+    const {
+      type,
+      collectionId,
+      category,
+      search,
+      isApproved,
+      mandatory,
+      departmentId,
+      page = 1,
+      limit = 20,
+    } = filters;
     const { skip, take } = calculatePagination(page, limit);
     const where: Prisma.LibraryItemWhereInput = {
       deletedAt: null,
@@ -86,6 +99,8 @@ export class LibraryService {
       ...(collectionId && { collectionId }),
       ...(category && { categories: { has: category } }),
       ...(isApproved !== undefined && { isApproved }),
+      ...(mandatory !== undefined && { mandatory }),
+      ...(departmentId !== undefined && { departmentId }),
       ...(search && {
         OR: [
           { title: { contains: search, mode: 'insensitive' } },

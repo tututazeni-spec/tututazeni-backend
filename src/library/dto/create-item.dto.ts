@@ -153,4 +153,40 @@ export class CreateItemDto {
   @IsOptional()
   @IsDateString()
   expiresAt?: string;
+
+  // ─── docs/biblioteca.md — "Novo Conteúdo": campos em falta ─────────────
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  mandatory?: boolean;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  allowDownload?: boolean;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  allowShare?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  requiresApproval?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  approverId?: number;
 }
