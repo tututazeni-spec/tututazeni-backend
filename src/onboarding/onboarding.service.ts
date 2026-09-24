@@ -876,7 +876,9 @@ export class OnboardingService {
       orderBy: { dueDate: 'asc' },
     });
 
-    const courseIds = [...new Set(tasks.map(t => t.templateTask.courseId).filter((id): id is number => id != null))];
+    const courseIds = [
+      ...new Set(tasks.map(t => t.templateTask.courseId).filter((id): id is number => id != null)),
+    ];
     const userIds = [...new Set(tasks.map(t => t.plan.userId))];
 
     const enrollments =
@@ -1222,7 +1224,10 @@ export class OnboardingService {
     const docsPending = allDocs.filter(d => d.status === 'PENDING').length;
 
     const scores = plans.flatMap(p => p.surveys.map(s => s.score));
-    const avgFeedback = scores.length > 0 ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : 0;
+    const avgFeedback =
+      scores.length > 0
+        ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
+        : 0;
 
     const countBy = (rows: string[]) =>
       rows.reduce<Record<string, number>>((acc, key) => {
@@ -1380,9 +1385,7 @@ export class OnboardingService {
     );
     const byUnit = countBy(breakdownRows.map(r => r.user.unit?.name ?? 'Sem unidade'));
     const byResponsible = countBy(
-      breakdownRows.map(
-        r => r.hrResponsible?.fullName ?? r.manager?.fullName ?? 'Sem responsável',
-      ),
+      breakdownRows.map(r => r.hrResponsible?.fullName ?? r.manager?.fullName ?? 'Sem responsável'),
     );
 
     const completedCount = byStatus.find(s => s.status === 'COMPLETED')?._count ?? 0;

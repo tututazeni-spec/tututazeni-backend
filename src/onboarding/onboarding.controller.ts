@@ -167,7 +167,9 @@ export class OnboardingController {
 
   @Get('tasks')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Tarefas de todos os onboardings, com filtros (docs/onboarding.md ponto 5)' })
+  @ApiOperation({
+    summary: 'Tarefas de todos os onboardings, com filtros (docs/onboarding.md ponto 5)',
+  })
   findAllTasks(@Query() filters: OnboardingTaskFilterDto) {
     return this.svc.findAllTasks(filters);
   }
@@ -188,7 +190,9 @@ export class OnboardingController {
 
   @Get('checkins')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Check-ins de Acompanhamento de todos os onboardings (docs/onboarding.md ponto 8)' })
+  @ApiOperation({
+    summary: 'Check-ins de Acompanhamento de todos os onboardings (docs/onboarding.md ponto 8)',
+  })
   findAllCheckins(@Query() filters: OnboardingCheckinFilterDto) {
     return this.svc.findAllCheckins(filters);
   }
@@ -354,7 +358,9 @@ export class OnboardingController {
 
   @Patch('checkins/:id')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Registar o check-in (dificuldades, pontos positivos, próximas acções...)' })
+  @ApiOperation({
+    summary: 'Registar o check-in (dificuldades, pontos positivos, próximas acções...)',
+  })
   registerCheckin(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: RegisterOnboardingCheckinDto,
