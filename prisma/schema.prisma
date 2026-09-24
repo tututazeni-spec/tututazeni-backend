@@ -752,13 +752,14 @@ model User {
   trainingResourceBookingsCreated TrainingResourceBooking[]  @relation("TrainingResourceBookingCreatedBy")
 
   // ─── Onboarding ───────────────────────────────────────────────
-  onboardingAsUser    OnboardingPlan[]         @relation("OnboardingPlanUser")
-  onboardingAsBuddy   OnboardingPlan[]         @relation("OnboardingBuddy")
-  onboardingAsManager OnboardingPlan[]         @relation("OnboardingManager")
-  onboardingAsHR      OnboardingPlan[]         @relation("OnboardingHR")
-  taskApprovals       OnboardingTaskInstance[] @relation("TaskApprover")
-  documentsUploaded   OnboardingDocument[]     @relation("DocUploader")
-  documentsValidated  OnboardingDocument[]     @relation("DocValidator")
+  onboardingAsUser              OnboardingPlan[]         @relation("OnboardingPlanUser")
+  onboardingAsBuddy             OnboardingPlan[]         @relation("OnboardingBuddy")
+  onboardingAsManager           OnboardingPlan[]         @relation("OnboardingManager")
+  onboardingAsHR                OnboardingPlan[]         @relation("OnboardingHR")
+  taskApprovals                 OnboardingTaskInstance[] @relation("TaskApprover")
+  documentsUploaded             OnboardingDocument[]     @relation("DocUploader")
+  documentsValidated            OnboardingDocument[]     @relation("DocValidator")
+  onboardingCheckinsResponsible OnboardingCheckin[]      @relation("OnboardingCheckinResponsible")
 
   // ─── Conhecimento ─────────────────────────────────────────────
   articles                KnowledgeArticle[]
@@ -883,14 +884,14 @@ model User {
   answers   Answers[]
 
   // ─── Documentos (Repositório) ─────────────────────────────────
-  createdDocuments      Document[]      @relation("DocCreator")
-  ownedDocuments        Document[]      @relation("DocOwner")
-  elaboratedDocuments   Document[]      @relation("DocElaborator")
-  approvedDocuments     Document[]      @relation("DocApprover")
+  createdDocuments      Document[]            @relation("DocCreator")
+  ownedDocuments        Document[]            @relation("DocOwner")
+  elaboratedDocuments   Document[]            @relation("DocElaborator")
+  approvedDocuments     Document[]            @relation("DocApprover")
   docReadConfirmations  DocReadConfirmation[] @relation("DocReadConfirmationUser")
   uploadedDocVersions   DocVersion[]
   docPermissions        DocPermission[]
-  grantedDocPermissions DocPermission[] @relation("PermissionGrantor")
+  grantedDocPermissions DocPermission[]       @relation("PermissionGrantor")
   docShareLinks         DocShareLink[]
   docDownloads          DocDownload[]
   docAuditLogs          DocAuditLog[]
@@ -1259,6 +1260,7 @@ model Unit {
   leadershipTargetings LeadershipProgramTargeting[]
   internalVacancies    InternalVacancy[]
   libraryItems         LibraryItem[]
+  onboardingTemplates  OnboardingTemplate[]
 }
 
 enum PositionLevel {
@@ -2177,6 +2179,7 @@ model Course {
 
   leadershipContents    LeadershipProgramContent[]
   leadershipPlanActions LeadershipParticipantPlanAction[] @relation("LeadershipPlanActionCourse")
+  onboardingTasks       OnboardingTemplateTask[]
 
   @@index([status])
   @@index([category])
@@ -3371,6 +3374,7 @@ model EvaluationRequest {
   evaluated         User                    @relation("RequestEvaluated", fields: [evaluatedId], references: [id])
   cycle             EvaluationCampaign?     @relation(fields: [cycleId], references: [id])
   oneOnOneMeeting   OneOnOneMeeting?        @relation(fields: [oneOnOneMeetingId], references: [id])
+  onboardingPlan    OnboardingPlan? // inverso da FK acima — 1:1 opcional
 
   @@index([evaluatorId])
   @@index([evaluatedId])
@@ -4370,8 +4374,15 @@ enum TaskPhase {
   DAY_1
   WEEK_1
   DAY_30
+  // DAY_60/DAY_90 mantidos só para dados antigos — novos templates usam
+  // INTEGRATION/FOLLOW_UP/CONCLUSION, que espelham as 7 etapas de
+  // docs/onboarding.md ponto 4 (Pré-Onboarding → Primeiro Dia → Primeira
+  // Semana → Primeiro Mês → Integração → Acompanhamento → Conclusão).
   DAY_60
   DAY_90
+  INTEGRATION
+  FOLLOW_UP
+  CONCLUSION
 }
 
 enum ResponsibleRole {
@@ -4389,6 +4400,21 @@ enum DocumentStatus {
   REJECTED
 }
 
+enum OnboardingCheckinType {
+  DAY_1
+  WEEK_1
+  DAY_30
+  DAY_60
+  DAY_90
+  CUSTOM
+}
+
+enum OnboardingCheckinStatus {
+  PENDING
+  COMPLETED
+  SKIPPED
+}
+
 enum SurveyMilestone {
   DAY_1
   DAY_7
@@ -4402,8 +4428,11 @@ model OnboardingTemplate {
   description     String?
   company         String?
   location        String?
+  objective       String?
+  version         Int                      @default(1)
   positionId      Int?
   departmentId    Int?
+  unitId          Int?
   durationDays    Int                      @default(30)
   learningPathId  Int?
   welcomeVideoUrl String?
@@ -4412,6 +4441,7 @@ model OnboardingTemplate {
   updatedAt       DateTime                 @updatedAt
   position        Position?                @relation(fields: [positionId], references: [id])
   department      Department?              @relation(fields: [departmentId], references: [id])
+  unit            Unit?                    @relation(fields: [unitId], references: [id])
   tasks           OnboardingTemplateTask[]
   plans           OnboardingPlan[]
 
@@ -4437,33 +4467,39 @@ model OnboardingTemplateTask {
   requiresEvidence Boolean                  @default(false)
   seq              Int
   template         OnboardingTemplate       @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  course           Course?                  @relation(fields: [courseId], references: [id])
   instances        OnboardingTaskInstance[]
 
   @@index([templateId])
+  @@index([courseId])
 }
 
 model OnboardingPlan {
-  id              Int                      @id @default(autoincrement())
-  userId          Int
-  templateId      Int
-  status          OnboardingStatus         @default(NOT_STARTED)
-  startDate       DateTime                 @default(now())
-  expectedEndDate DateTime?
-  completedAt     DateTime?
-  buddyId         Int?
-  managerId       Int?
-  hrResponsibleId Int?
-  xpEarned        Int                      @default(0)
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
-  user            User                     @relation("OnboardingPlanUser", fields: [userId], references: [id])
-  template        OnboardingTemplate       @relation(fields: [templateId], references: [id])
-  buddy           User?                    @relation("OnboardingBuddy", fields: [buddyId], references: [id])
-  manager         User?                    @relation("OnboardingManager", fields: [managerId], references: [id])
-  hrResponsible   User?                    @relation("OnboardingHR", fields: [hrResponsibleId], references: [id])
-  taskInstances   OnboardingTaskInstance[]
-  documents       OnboardingDocument[]
-  surveys         OnboardingSurvey[]
+  id                       Int                      @id @default(autoincrement())
+  userId                   Int
+  templateId               Int
+  status                   OnboardingStatus         @default(NOT_STARTED)
+  startDate                DateTime                 @default(now())
+  expectedEndDate          DateTime?
+  completedAt              DateTime?
+  buddyId                  Int?
+  managerId                Int?
+  hrResponsibleId          Int?
+  xpEarned                 Int                      @default(0)
+  progress                 Int                      @default(0)
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  user                     User                     @relation("OnboardingPlanUser", fields: [userId], references: [id])
+  template                 OnboardingTemplate       @relation(fields: [templateId], references: [id])
+  buddy                    User?                    @relation("OnboardingBuddy", fields: [buddyId], references: [id])
+  manager                  User?                    @relation("OnboardingManager", fields: [managerId], references: [id])
+  hrResponsible            User?                    @relation("OnboardingHR", fields: [hrResponsibleId], references: [id])
+  taskInstances            OnboardingTaskInstance[]
+  documents                OnboardingDocument[]
+  surveys                  OnboardingSurvey[]
+  checkins                 OnboardingCheckin[]
+  integrationEvalRequestId Int?                     @unique
+  integrationEvalRequest   EvaluationRequest?       @relation(fields: [integrationEvalRequestId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -4519,6 +4555,33 @@ model OnboardingSurvey {
   plan      OnboardingPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@unique([planId, milestone])
+}
+
+// "Acompanhamento" (docs/onboarding.md ponto 8) — check-ins do gestor/
+// mentor com o colaborador, distintos de OnboardingSurvey (que é só uma
+// pulse de satisfação). Seedados automaticamente nos marcos DAY_1/WEEK_1/
+// DAY_30/DAY_60/DAY_90 na criação do plano; CUSTOM cobre check-ins extra
+// criados manualmente.
+model OnboardingCheckin {
+  id               Int                     @id @default(autoincrement())
+  planId           Int
+  type             OnboardingCheckinType
+  status           OnboardingCheckinStatus @default(PENDING)
+  dueDate          DateTime?
+  completedAt      DateTime?
+  responsibleId    Int?
+  difficulties     String?
+  positives        String?
+  supportNeeds     String?
+  managerFeedback  String?
+  employeeFeedback String?
+  nextActions      String?
+  createdAt        DateTime                @default(now())
+  plan             OnboardingPlan          @relation(fields: [planId], references: [id], onDelete: Cascade)
+  responsible      User?                   @relation("OnboardingCheckinResponsible", fields: [responsibleId], references: [id])
+
+  @@index([planId])
+  @@index([status])
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -6006,35 +6069,35 @@ model Document {
 
   // ─── docs/biblioteca.md — "Documentos Corporativos" (fluxo de aprovação,
   // controlo de versões formal, confirmação de leitura) ──────────────────
-  documentCode            String?    @unique
-  documentNumber          String?
-  elaboratedById          Int?
-  elaboratedBy            User?      @relation("DocElaborator", fields: [elaboratedById], references: [id])
-  approverId              Int?
-  approver                User?      @relation("DocApprover", fields: [approverId], references: [id])
-  approvedAt              DateTime?
-  effectiveAt             DateTime?
-  reviewAt                DateTime?
-  reviewPeriodicityMonths Int?
-  supersedesId            Int?
-  supersedes              Document?  @relation("DocSupersedes", fields: [supersedesId], references: [id])
-  supersededBy            Document[] @relation("DocSupersedes")
-  relatedDocumentId       Int?
-  relatedDocument         Document?  @relation("DocRelated", fields: [relatedDocumentId], references: [id])
-  relatedFrom             Document[] @relation("DocRelated")
-  targetAudience          String[]   @default([])
-  requiresReadConfirmation Boolean   @default(false)
-  requiresAcknowledgement  Boolean   @default(false)
+  documentCode             String?               @unique
+  documentNumber           String?
+  elaboratedById           Int?
+  elaboratedBy             User?                 @relation("DocElaborator", fields: [elaboratedById], references: [id])
+  approverId               Int?
+  approver                 User?                 @relation("DocApprover", fields: [approverId], references: [id])
+  approvedAt               DateTime?
+  effectiveAt              DateTime?
+  reviewAt                 DateTime?
+  reviewPeriodicityMonths  Int?
+  supersedesId             Int?
+  supersedes               Document?             @relation("DocSupersedes", fields: [supersedesId], references: [id])
+  supersededBy             Document[]            @relation("DocSupersedes")
+  relatedDocumentId        Int?
+  relatedDocument          Document?             @relation("DocRelated", fields: [relatedDocumentId], references: [id])
+  relatedFrom              Document[]            @relation("DocRelated")
+  targetAudience           String[]              @default([])
+  requiresReadConfirmation Boolean               @default(false)
+  requiresAcknowledgement  Boolean               @default(false)
   readDeadlineDays         Int?
-  readConfirmations       DocReadConfirmation[]
+  readConfirmations        DocReadConfirmation[]
 
-  versions         DocVersion[]
-  permissions      DocPermission[]
-  shareLinks       DocShareLink[]
-  downloads        DocDownload[]
-  auditLogs        DocAuditLog[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  versions    DocVersion[]
+  permissions DocPermission[]
+  shareLinks  DocShareLink[]
+  downloads   DocDownload[]
+  auditLogs   DocAuditLog[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   leadershipProgramDocuments LeadershipProgramDocument[]
 
@@ -10287,6 +10350,7 @@ enum EvalPurpose {
   POST_TRAINING
   COMPETENCY
   GOALS
+  ONBOARDING // NOVO — Avaliação de Integração
 }
 
 // docs/modulo_evaluation.md ponto 2, etapa 2 ("Possibilidade de

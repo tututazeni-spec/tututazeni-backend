@@ -49,14 +49,14 @@ describe('OnboardingController', () => {
     controller = module.get<OnboardingController>(OnboardingController);
   });
 
-  it('dashboard sem managerId → getDashboard(undefined)', async () => {
+  it('dashboard sem filtros → getDashboard(undefined, undefined, undefined)', async () => {
     await controller.dashboard();
-    expect(mockSvc.getDashboard).toHaveBeenCalledWith(undefined);
+    expect(mockSvc.getDashboard).toHaveBeenCalledWith(undefined, undefined, undefined);
   });
 
-  it('dashboard com managerId → getDashboard(parsed)', async () => {
-    await controller.dashboard('3');
-    expect(mockSvc.getDashboard).toHaveBeenCalledWith(3);
+  it('dashboard com managerId/departmentId/unitId → getDashboard(parsed)', async () => {
+    await controller.dashboard('3', '5', '8');
+    expect(mockSvc.getDashboard).toHaveBeenCalledWith(3, 5, 8);
   });
 
   it('findAllTemplates → findAllTemplates', async () => {
