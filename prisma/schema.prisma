@@ -974,6 +974,7 @@ model User {
   // ─── Monitoria e Avaliação ────────────────────────────────────
   createdOkrCycles       OkrCycle[]            @relation("OkrCycleCreator")
   ownedObjectives        Objective[]           @relation("ObjectiveOwner")
+  ownedCompetencies      Competency[]          @relation("CompetencyOwner")
   keyResultUpdates       KeyResultUpdate[]     @relation("KrUpdater")
   createdMonIndicators   MonitoringIndicator[] @relation("IndicatorCreator")
   recordedMonRecords     MonitoringRecord[]    @relation("RecordCreator")
@@ -2908,6 +2909,10 @@ enum CompetencyCategory {
   LANGUAGE
   TOOL
   LEADERSHIP
+  // docs/módulo_competencies.md §1/§2 — "Competências funcionais" no
+  // painel Visão Geral e no catálogo. "Estratégica" não é aqui: é o
+  // booleano Competency.isStrategic, não uma categoria.
+  FUNCTIONAL
 }
 
 enum CompetencyType {
@@ -2923,6 +2928,9 @@ enum CompetencyType {
 enum CompetencyStatus {
   ACTIVE
   INACTIVE
+  // docs/módulo_competencies.md §1 — "Competências em revisão" no painel
+  // Visão Geral.
+  IN_REVIEW
 }
 
 model Competency {
@@ -2938,6 +2946,19 @@ model Competency {
   tenantId                 String?
   scaleMin                 Int                      @default(1)
   scaleMax                 Int                      @default(5)
+  // docs/módulo_competencies.md §2 — campos do catálogo (Fase 1: Geral +
+  // Configuração; Aplicabilidade/Critérios/Desenvolvimento ficam para
+  // fases futuras, ver spec).
+  code                     String?                  @unique
+  family                   String?
+  objective                String?
+  isCritical               Boolean                  @default(false)
+  isStrategic              Boolean                  @default(false)
+  isMandatory              Boolean                  @default(false)
+  isAssessable             Boolean                  @default(true)
+  isDevelopable            Boolean                  @default(true)
+  ownerId                  Int?
+  owner                    User?                    @relation("CompetencyOwner", fields: [ownerId], references: [id])
   createdAt                DateTime                 @default(now())
   updatedAt                DateTime                 @updatedAt
   userCompetencies         UserCompetency[]

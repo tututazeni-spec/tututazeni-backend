@@ -13,6 +13,7 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
+    groupBy: jest.fn(),
   },
   userCompetency: {
     findFirst: jest.fn(),
@@ -20,6 +21,7 @@ const mockPrisma = {
     findMany: jest.fn(),
     update: jest.fn(),
     create: jest.fn(),
+    groupBy: jest.fn(),
   },
   positionCompetency: {
     upsert: jest.fn(),
@@ -186,6 +188,63 @@ describe('CompetenciesService', () => {
       expect(data).not.toHaveProperty('tenantId');
       expect(data).not.toHaveProperty('indicators');
     });
+
+    // docs/módulo_competencies.md §2 — Informações gerais + Configuração (Fase 1).
+    it('grava code/family/objective/isCritical/isStrategic/isMandatory/isAssessable/isDevelopable/ownerId quando presentes', async () => {
+      mockPrisma.competency.findFirst.mockResolvedValue(null);
+      mockPrisma.competency.create.mockResolvedValue(baseCompetency);
+      await service.create({
+        name: 'Gestão de Projetos',
+        category: CompetencyCategory.HARD_SKILL,
+        code: 'COMP-001',
+        family: 'Gestão',
+        objective: 'Planear e entregar projetos',
+        isCritical: true,
+        isStrategic: true,
+        isMandatory: true,
+        isAssessable: false,
+        isDevelopable: false,
+        ownerId: 7,
+      });
+      expect(mockPrisma.competency.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            code: 'COMP-001',
+            family: 'Gestão',
+            objective: 'Planear e entregar projetos',
+            isCritical: true,
+            isStrategic: true,
+            isMandatory: true,
+            isAssessable: false,
+            isDevelopable: false,
+            ownerId: 7,
+          }),
+        }),
+      );
+    });
+
+    it('não envia code/family/ownerId quando ausentes', async () => {
+      mockPrisma.competency.findFirst.mockResolvedValue(null);
+      mockPrisma.competency.create.mockResolvedValue(baseCompetency);
+      await service.create({ name: 'Y', category: CompetencyCategory.HARD_SKILL });
+      const data = mockPrisma.competency.create.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('code');
+      expect(data).not.toHaveProperty('family');
+      expect(data).not.toHaveProperty('ownerId');
+    });
+
+    it('deve lançar ConflictException se código duplicado', async () => {
+      mockPrisma.competency.findFirst
+        .mockResolvedValueOnce(null) // check de nome
+        .mockResolvedValueOnce(baseCompetency); // check de código
+      await expect(
+        service.create({
+          name: 'Nova',
+          category: CompetencyCategory.HARD_SKILL,
+          code: 'COMP-001',
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
   });
 
   describe('update', () => {
@@ -213,6 +272,51 @@ describe('CompetenciesService', () => {
       const data = mockPrisma.competency.update.mock.calls[0][0].data;
       expect(data).not.toHaveProperty('indicators');
       expect(data).toMatchObject({ description: 'nova' });
+    });
+
+    it('deve lançar ConflictException se código duplicado (excluindo a própria)', async () => {
+      mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
+      mockPrisma.competency.findFirst.mockResolvedValueOnce({ ...baseCompetency, id: 2 });
+      await expect(service.update(1, { code: 'COMP-001' } as any)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+  });
+
+  // docs/módulo_competencies.md §1 — Visão Geral (Fase 1).
+  describe('getOverview', () => {
+    it('agrega totais, categorias, críticas/estratégicas, proficiência média e gaps', async () => {
+      mockPrisma.competency.count
+        .mockResolvedValueOnce(10) // total
+        .mockResolvedValueOnce(2) // isCritical
+        .mockResolvedValueOnce(1) // isStrategic
+        .mockResolvedValueOnce(8) // ACTIVE
+        .mockResolvedValueOnce(1); // IN_REVIEW
+      mockPrisma.competency.groupBy.mockResolvedValue([
+        { category: 'HARD_SKILL', _count: { category: 5 } },
+        { category: 'SOFT_SKILL', _count: { category: 3 } },
+      ]);
+      mockPrisma.userCompetency.findMany.mockResolvedValue([
+        { userId: 1, competencyId: 1, currentLevel: 2, targetLevel: 4 },
+        { userId: 2, competencyId: 1, currentLevel: 4, targetLevel: 4 },
+      ]);
+      mockPrisma.competency.findMany.mockResolvedValue([
+        { id: 1, name: 'TypeScript', category: 'HARD_SKILL', isCritical: true },
+      ]);
+      mockPrisma.userCompetency.groupBy.mockResolvedValue([]);
+
+      const result = await service.getOverview();
+
+      expect(result.total).toBe(10);
+      expect(result.critical).toBe(2);
+      expect(result.strategic).toBe(1);
+      expect(result.active).toBe(8);
+      expect(result.inReview).toBe(1);
+      expect(result.byCategory).toMatchObject({ technical: 5, behavioral: 3 });
+      expect(result.evaluatedUsers).toBe(2);
+      expect(result.biggestGaps[0]).toMatchObject({ id: 1, usersWithGap: 1 });
+      expect(result.criticalAlerts).toHaveLength(1);
+      expect(result.pendingEvaluations).toBeNull();
     });
   });
 

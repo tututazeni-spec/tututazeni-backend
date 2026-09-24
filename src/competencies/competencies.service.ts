@@ -31,7 +31,8 @@ export class CompetenciesService {
   // ─── CATÁLOGO ─────────────────────────────────────────────────────────────
 
   async findAll(filters: CompetencyFilterDto) {
-    const { page = 1, limit = 20, search, category, status, tag } = filters;
+    const { page = 1, limit = 20, search, category, status, tag, isCritical, isStrategic } =
+      filters;
     const skip = (page - 1) * limit;
 
     const where: Prisma.CompetencyWhereInput = {};
@@ -43,6 +44,8 @@ export class CompetenciesService {
     if (category) where.category = category;
     if (status) where.status = status;
     if (tag) where.tags = { has: tag };
+    if (isCritical !== undefined) where.isCritical = isCritical;
+    if (isStrategic !== undefined) where.isStrategic = isStrategic;
 
     const [data, total] = await Promise.all([
       this.prisma.read.competency.findMany({
@@ -50,6 +53,7 @@ export class CompetenciesService {
         skip,
         take: limit,
         include: {
+          owner: { select: { id: true, fullName: true } },
           _count: { select: { userCompetencies: true, courses: true, positions: true } },
         },
         orderBy: [{ category: 'asc' }, { name: 'asc' }],
@@ -67,6 +71,7 @@ export class CompetenciesService {
         courses: { include: { course: { select: { id: true, title: true, status: true } } } },
         positions: { include: { position: { select: { id: true, name: true, level: true } } } },
         proficiencyLevels: { orderBy: { value: 'asc' } },
+        owner: { select: { id: true, fullName: true } },
         _count: { select: { userCompetencies: true, endorsements: true } },
       },
     });
@@ -79,6 +84,13 @@ export class CompetenciesService {
       where: { name: { equals: dto.name, mode: 'insensitive' } },
     });
     if (exists) throw new ConflictException(`Competência "${dto.name}" já existe`);
+
+    if (dto.code) {
+      const codeExists = await this.prisma.competency.findFirst({
+        where: { code: { equals: dto.code, mode: 'insensitive' } },
+      });
+      if (codeExists) throw new ConflictException(`Código "${dto.code}" já existe`);
+    }
 
     return this.prisma.competency.create({
       data: {
@@ -96,6 +108,16 @@ export class CompetenciesService {
         // tenantId: vestigial (§7 single-tenant) — encaminhado apenas para
         // preservar o comportamento histórico de /evaluation360/competencies.
         ...(dto.tenantId !== undefined ? { tenantId: dto.tenantId } : {}),
+        // docs/módulo_competencies.md §2 — Informações gerais + Configuração.
+        ...(dto.code !== undefined ? { code: dto.code } : {}),
+        ...(dto.family !== undefined ? { family: dto.family } : {}),
+        ...(dto.objective !== undefined ? { objective: dto.objective } : {}),
+        ...(dto.isCritical !== undefined ? { isCritical: dto.isCritical } : {}),
+        ...(dto.isStrategic !== undefined ? { isStrategic: dto.isStrategic } : {}),
+        ...(dto.isMandatory !== undefined ? { isMandatory: dto.isMandatory } : {}),
+        ...(dto.isAssessable !== undefined ? { isAssessable: dto.isAssessable } : {}),
+        ...(dto.isDevelopable !== undefined ? { isDevelopable: dto.isDevelopable } : {}),
+        ...(dto.ownerId !== undefined ? { ownerId: dto.ownerId } : {}),
         ...(dto.indicators?.length
           ? {
               indicators: {
@@ -120,6 +142,13 @@ export class CompetenciesService {
         where: { name: { equals: dto.name, mode: 'insensitive' }, id: { not: id } },
       });
       if (nameConflict) throw new ConflictException(`Nome "${dto.name}" já existe`);
+    }
+
+    if (dto.code) {
+      const codeConflict = await this.prisma.read.competency.findFirst({
+        where: { code: { equals: dto.code, mode: 'insensitive' }, id: { not: id } },
+      });
+      if (codeConflict) throw new ConflictException(`Código "${dto.code}" já existe`);
     }
 
     // `indicators` é uma relação (create aninhado) — não é atribuível num
@@ -673,6 +702,81 @@ export class CompetenciesService {
         ...c,
         usersWithGap: gapMap[c.id] ?? 0,
       })),
+    };
+  }
+
+  /**
+   * docs/módulo_competencies.md §1 — Visão Geral (tab 1). Agregados
+   * organização-wide, sem filtro de departamento (ao contrário de
+   * getOrgGapDashboard, cujo cálculo de gaps por competência é reaproveitado
+   * aqui, sem o filtro).
+   */
+  async getOverview() {
+    const [total, byCategory, critical, strategic, active, inReview] = await Promise.all([
+      this.prisma.read.competency.count(),
+      this.prisma.read.competency.groupBy({ by: ['category'], _count: { category: true } }),
+      this.prisma.read.competency.count({ where: { isCritical: true } }),
+      this.prisma.read.competency.count({ where: { isStrategic: true } }),
+      this.prisma.read.competency.count({ where: { status: 'ACTIVE' } }),
+      this.prisma.read.competency.count({ where: { status: 'IN_REVIEW' } }),
+    ]);
+
+    const categoryCounts: Record<string, number> = {};
+    for (const c of byCategory) categoryCounts[c.category] = c._count.category;
+
+    const allUC = await this.prisma.read.userCompetency.findMany({
+      select: { userId: true, competencyId: true, currentLevel: true, targetLevel: true },
+    });
+
+    const avgProficiency = allUC.length
+      ? Math.round((allUC.reduce((sum, uc) => sum + uc.currentLevel, 0) / allUC.length) * 10) / 10
+      : 0;
+
+    const gapMap: Record<number, number> = {};
+    for (const uc of allUC) {
+      if ((uc.targetLevel ?? 0) > (uc.currentLevel ?? 0)) {
+        gapMap[uc.competencyId] = (gapMap[uc.competencyId] ?? 0) + 1;
+      }
+    }
+
+    const topGapIds = Object.entries(gapMap)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+      .map(([id]) => parseInt(id));
+
+    const topGapComps = await this.prisma.read.competency.findMany({
+      where: { id: { in: topGapIds } },
+      select: { id: true, name: true, category: true, isCritical: true },
+    });
+
+    const biggestGaps = topGapComps
+      .map(c => ({ ...c, usersWithGap: gapMap[c.id] ?? 0 }))
+      .sort((a, b) => b.usersWithGap - a.usersWithGap);
+
+    const criticalAlerts = biggestGaps.filter(c => c.isCritical);
+
+    return {
+      total,
+      byCategory: {
+        technical: categoryCounts['HARD_SKILL'] ?? 0,
+        behavioral: categoryCounts['SOFT_SKILL'] ?? 0,
+        leadership: categoryCounts['LEADERSHIP'] ?? 0,
+        functional: categoryCounts['FUNCTIONAL'] ?? 0,
+        language: categoryCounts['LANGUAGE'] ?? 0,
+        tool: categoryCounts['TOOL'] ?? 0,
+      },
+      critical,
+      strategic,
+      active,
+      inReview,
+      avgProficiency,
+      evaluatedUsers: new Set(allUC.map(uc => uc.userId)).size,
+      biggestGaps,
+      criticalAlerts,
+      topCompetencies: await this.getTopCompetencies(5),
+      // Depende do tab 6 (Avaliações), ainda não construído neste módulo —
+      // null ≠ 0: a UI mostra "—", nunca afirma "0 pendentes".
+      pendingEvaluations: null as number | null,
     };
   }
 

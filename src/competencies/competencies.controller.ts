@@ -48,6 +48,13 @@ export class CompetenciesController {
     return this.svc.findAll(filters);
   }
 
+  @Get('overview')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Visão Geral — painel de KPIs organizacionais de competências' })
+  overview() {
+    return this.svc.getOverview();
+  }
+
   @Get('top')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Top competências da organização (mais frequentes)' })

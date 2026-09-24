@@ -6,6 +6,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 
 const mockSvc = {
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+  getOverview: jest.fn().mockResolvedValue({}),
   getTopCompetencies: jest.fn().mockResolvedValue([]),
   getSkillMatrix: jest.fn().mockResolvedValue([]),
   getOrgGapDashboard: jest.fn().mockResolvedValue({}),
@@ -53,6 +54,11 @@ describe('CompetenciesController', () => {
     const filters = {} as any;
     await controller.findAll(filters);
     expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
+  });
+
+  it('overview → getOverview()', async () => {
+    await controller.overview();
+    expect(mockSvc.getOverview).toHaveBeenCalledWith();
   });
 
   it('top sem limit → getTopCompetencies(10)', async () => {

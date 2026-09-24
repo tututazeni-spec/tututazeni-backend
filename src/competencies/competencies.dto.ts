@@ -13,7 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import {
   CompetencyCategory,
   CompetencyStatus,
@@ -111,6 +111,55 @@ export class CreateCompetencyDto {
   @ValidateNested({ each: true })
   @Type(() => CompetencyIndicatorInputDto)
   indicators?: CompetencyIndicatorInputDto[];
+
+  // ─── docs/módulo_competencies.md §2 — Informações gerais + Configuração ──
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  family?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  objective?: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isCritical?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isStrategic?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isMandatory?: boolean;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  isAssessable?: boolean;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  isDevelopable?: boolean;
+
+  @ApiPropertyOptional({ description: 'userId do responsável pela competência' })
+  @IsOptional()
+  @IsInt()
+  ownerId?: number;
 }
 
 export class UpdateCompetencyDto extends PartialType(CreateCompetencyDto) {}
@@ -292,6 +341,23 @@ export class CompetencyFilterDto {
   @IsOptional()
   @IsString()
   tag?: string;
+
+  // @Type(() => Boolean) coage '?isCritical=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isCritical?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isStrategic?: boolean;
 
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
