@@ -2161,6 +2161,8 @@ const EventType = {
 
 const EventModalidade = { ONLINE: 'ONLINE', PRESENCIAL: 'PRESENCIAL', HYBRID: 'HYBRID' };
 
+const EventVisibility = { PUBLIC: 'PUBLIC', INTERNAL: 'INTERNAL', RESTRICTED: 'RESTRICTED' };
+
 const EventParticipantStatus = {
   PENDING: 'PENDING',
   CONFIRMED: 'CONFIRMED',
@@ -2500,6 +2502,7 @@ module.exports = {
   AvatarSessionStatus,
   EventType,
   EventModalidade,
+  EventVisibility,
   EventParticipantStatus,
   InstructorType,
   CohortModalidade,

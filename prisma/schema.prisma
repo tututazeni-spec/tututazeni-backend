@@ -830,7 +830,8 @@ model User {
   processAuditLogs      ProcessAuditLog[]
 
   // ─── Eventos & Presença ───────────────────────────────────────
-  events             Event[]
+  events             Event[]              @relation("EventOrganizer")
+  responsibleEvents  Event[]              @relation("EventResponsible")
   liveAttendances    LiveAttendance[]
   liveMessages       LiveChatMessage[]
   postClassResponses PostClassResponse[]
@@ -1205,6 +1206,7 @@ model Department {
   leadershipPrograms   LeadershipProgram[]
   leadershipTargetings LeadershipProgramTargeting[]
   libraryItems         LibraryItem[]
+  events               Event[]
 
   @@index([active])
   @@index([parentId])
@@ -1261,6 +1263,7 @@ model Unit {
   internalVacancies    InternalVacancy[]
   libraryItems         LibraryItem[]
   onboardingTemplates  OnboardingTemplate[]
+  events               Event[]
 }
 
 enum PositionLevel {
@@ -7685,18 +7688,34 @@ enum EventModalidade {
 model Event {
   id                   Int                @id @default(autoincrement())
   title                String
+  code                 String?            @unique
   description          String?            @db.Text
+  objective            String?            @db.Text
   type                 EventType          @default(TRAINING)
+  // Categoria livre (não FK) — mesma convenção de Course.category.
+  category             String?
   modalidade           EventModalidade    @default(ONLINE)
   status               EventStatus        @default(DRAFT)
+  visibility           EventVisibility    @default(INTERNAL)
   startAt              DateTime
   endAt                DateTime
+  timezone             String             @default("Africa/Luanda")
   location             String?
+  address              String?
+  room                 String?
   meetingUrl           String?
   meetingPassword      String?
   maxCapacity          Int                @default(50)
   waitlistEnabled      Boolean            @default(true)
+  requiresApproval     Boolean            @default(false)
+  registrationStartAt  DateTime?
+  registrationEndAt    DateTime?
+  targetAudience       String?
+  allowGuest           Boolean            @default(false)
   certificateEnabled   Boolean            @default(false)
+  evaluationEnabled    Boolean            @default(true)
+  checkinEnabled       Boolean            @default(true)
+  notificationsEnabled Boolean            @default(true)
   minAttendancePercent Int                @default(80)
   tags                 String[]           @default([])
   mandatory            Boolean            @default(false)
@@ -7705,17 +7724,32 @@ model Event {
   restrictedDeptIds    Int[]              @default([])
   courseId             Int?
   organizerId          Int
+  responsibleId        Int?
+  departmentId         Int?
+  unitId               Int?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
-  organizer            User               @relation(fields: [organizerId], references: [id])
+  organizer            User               @relation("EventOrganizer", fields: [organizerId], references: [id])
+  responsible          User?              @relation("EventResponsible", fields: [responsibleId], references: [id])
+  department           Department?        @relation(fields: [departmentId], references: [id])
+  unit                 Unit?              @relation(fields: [unitId], references: [id])
   participants         EventParticipant[]
   feedbacks            EventFeedback[]
   certificates         Certificate[]
 
   @@index([organizerId])
+  @@index([responsibleId])
+  @@index([departmentId])
+  @@index([unitId])
   @@index([status])
   @@index([type])
   @@index([startAt])
+}
+
+enum EventVisibility {
+  PUBLIC
+  INTERNAL
+  RESTRICTED
 }
 
 // Nome distinto de "ParticipantStatus" (já existente para LeadershipParticipant,

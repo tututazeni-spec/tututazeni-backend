@@ -17,6 +17,7 @@ import {
   EventType,
   EventModalidade,
   EventStatus,
+  EventVisibility,
   EventParticipantStatus as ParticipantStatus,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
@@ -26,7 +27,7 @@ import { BaseFilterDto } from '../common/dtos/pagination.dto';
 // local mantido por compatibilidade, distinto do `ParticipantStatus`
 // (LeadershipProgramParticipant, lote 4) e `TrainingParticipantStatus` (lote 5).
 
-export { EventType, EventModalidade, EventStatus, ParticipantStatus };
+export { EventType, EventModalidade, EventStatus, EventVisibility, ParticipantStatus };
 
 // ─── Event ────────────────────────────────────────────────────────────────────
 
@@ -36,19 +37,40 @@ export class CreateEventDto {
   @MaxLength(200)
   title!: string;
 
+  @ApiPropertyOptional({ description: 'Código do evento' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  code?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional({ description: 'Objetivo do evento' })
+  @IsOptional()
+  @IsString()
+  objective?: string;
+
   @ApiProperty({ enum: EventType, default: EventType.TRAINING })
   @IsEnum(EventType)
   type!: EventType;
+
+  @ApiPropertyOptional({ description: 'Categoria livre do evento' })
+  @IsOptional()
+  @IsString()
+  category?: string;
 
   @ApiPropertyOptional({ enum: EventModalidade, default: EventModalidade.ONLINE })
   @IsOptional()
   @IsEnum(EventModalidade)
   modalidade?: EventModalidade;
+
+  @ApiPropertyOptional({ enum: EventVisibility, default: EventVisibility.INTERNAL })
+  @IsOptional()
+  @IsEnum(EventVisibility)
+  visibility?: EventVisibility;
 
   @ApiProperty()
   @IsDateString()
@@ -58,10 +80,25 @@ export class CreateEventDto {
   @IsDateString()
   endAt!: string;
 
+  @ApiPropertyOptional({ description: 'Fuso horário (IANA)', default: 'Africa/Luanda' })
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
   @ApiPropertyOptional({ description: 'Localização física' })
   @IsOptional()
   @IsString()
   location?: string;
+
+  @ApiPropertyOptional({ description: 'Endereço completo do local' })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiPropertyOptional({ description: 'Sala/espaço dentro do local' })
+  @IsOptional()
+  @IsString()
+  room?: string;
 
   @ApiPropertyOptional({ description: 'Link para evento virtual (Zoom, Teams, Meet)' })
   @IsOptional()
@@ -84,10 +121,50 @@ export class CreateEventDto {
   @IsBoolean()
   waitlistEnabled?: boolean;
 
+  @ApiPropertyOptional({ description: 'Inscrições requerem aprovação manual' })
+  @IsOptional()
+  @IsBoolean()
+  requiresApproval?: boolean;
+
+  @ApiPropertyOptional({ description: 'Início do período de inscrições' })
+  @IsOptional()
+  @IsDateString()
+  registrationStartAt?: string;
+
+  @ApiPropertyOptional({ description: 'Fim do período de inscrições' })
+  @IsOptional()
+  @IsDateString()
+  registrationEndAt?: string;
+
+  @ApiPropertyOptional({ description: 'Público-alvo do evento' })
+  @IsOptional()
+  @IsString()
+  targetAudience?: string;
+
+  @ApiPropertyOptional({ description: 'Permitir acompanhante na inscrição' })
+  @IsOptional()
+  @IsBoolean()
+  allowGuest?: boolean;
+
   @ApiPropertyOptional({ description: 'Emitir certificado automático ao concluir' })
   @IsOptional()
   @IsBoolean()
   certificateEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Habilitar avaliação/feedback pós-evento', default: true })
+  @IsOptional()
+  @IsBoolean()
+  evaluationEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Habilitar check-in de presença', default: true })
+  @IsOptional()
+  @IsBoolean()
+  checkinEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Habilitar notificações do evento', default: true })
+  @IsOptional()
+  @IsBoolean()
+  notificationsEnabled?: boolean;
 
   @ApiPropertyOptional({ description: 'Presença mínima para certificado (0-100)', default: 80 })
   @IsOptional()
@@ -117,6 +194,21 @@ export class CreateEventDto {
   @IsOptional()
   @IsInt()
   courseId?: number;
+
+  @ApiPropertyOptional({ description: 'ID do utilizador responsável pelo evento' })
+  @IsOptional()
+  @IsInt()
+  responsibleId?: number;
+
+  @ApiPropertyOptional({ description: 'ID do departamento do evento' })
+  @IsOptional()
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional({ description: 'ID da unidade do evento' })
+  @IsOptional()
+  @IsInt()
+  unitId?: number;
 
   @ApiPropertyOptional({ description: 'URL da imagem/banner' })
   @IsOptional()
