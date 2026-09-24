@@ -975,6 +975,7 @@ model User {
   createdOkrCycles       OkrCycle[]            @relation("OkrCycleCreator")
   ownedObjectives        Objective[]           @relation("ObjectiveOwner")
   ownedCompetencies      Competency[]          @relation("CompetencyOwner")
+  ownedCompetencyModels  CompetencyModel[]     @relation("CompetencyModelOwner")
   keyResultUpdates       KeyResultUpdate[]     @relation("KrUpdater")
   createdMonIndicators   MonitoringIndicator[] @relation("IndicatorCreator")
   recordedMonRecords     MonitoringRecord[]    @relation("RecordCreator")
@@ -1207,6 +1208,7 @@ model Department {
   internalVacancies    InternalVacancy[]
   careerPaths          CareerPath[]
   engagementActions    EngagementAction[]
+  competencyModels     CompetencyModel[]
 
   leadershipPrograms   LeadershipProgram[]
   leadershipTargetings LeadershipProgramTargeting[]
@@ -2973,6 +2975,7 @@ model Competency {
   indicators               CompetencyIndicator[]
   eval360CycleCompetencies Eval360CycleCompetency[]
   eval360Questions         Eval360Question[]        @relation("Eval360QuestionCompetency")
+  modelItems               CompetencyModelItem[]
 
   leadershipProgramCompetencies LeadershipProgramCompetency[]
   leadershipSelectionCriteria   LeadershipSelectionCriterion[]
@@ -3004,9 +3007,62 @@ model ProficiencyLevel {
   name         String
   value        Int
   description  String?
-  competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  // docs/módulo_competencies.md §3 — Níveis de Proficiência (Fase 2). Ver
+  // docs/superpowers/specs/2026-09-25-competencies-fase2-design.md: o nível
+  // continua por-competência (decisão 1/2), só ganha os campos ricos do spec.
+  code                  String?
+  minScore              Int?
+  maxScore              Int?
+  expectedBehaviors     String?          @db.Text
+  knowledgeDemonstrated String?          @db.Text
+  autonomy              String?
+  taskComplexity        String?
+  observableEvidence    String?          @db.Text
+  evaluationCriteria    String?          @db.Text
+  status                CompetencyStatus @default(ACTIVE)
+  competency            Competency       @relation(fields: [competencyId], references: [id], onDelete: Cascade)
 
   @@unique([competencyId, value])
+}
+
+// docs/módulo_competencies.md §4 — Modelos de Competências (Fase 2). Ver
+// docs/superpowers/specs/2026-09-25-competencies-fase2-design.md.
+model CompetencyModel {
+  id             Int                   @id @default(autoincrement())
+  name           String
+  code           String?               @unique
+  description    String?
+  objective      String?
+  type           String?
+  departmentId   Int?
+  positionFamily String?
+  hierarchyLevel SeniorityLevel?
+  status         CompetencyStatus      @default(ACTIVE)
+  version        Int                   @default(1)
+  effectiveDate  DateTime?
+  endDate        DateTime?
+  ownerId        Int?
+  department     Department?           @relation(fields: [departmentId], references: [id])
+  owner          User?                 @relation("CompetencyModelOwner", fields: [ownerId], references: [id])
+  items          CompetencyModelItem[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([departmentId])
+}
+
+model CompetencyModelItem {
+  id            Int             @id @default(autoincrement())
+  modelId       Int
+  competencyId  Int
+  weight        Float           @default(1)
+  expectedLevel Int
+  isMandatory   Boolean         @default(false)
+  isCritical    Boolean         @default(false)
+  model         CompetencyModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  competency    Competency      @relation(fields: [competencyId], references: [id])
+
+  @@unique([modelId, competencyId])
 }
 
 enum CompetencySource {

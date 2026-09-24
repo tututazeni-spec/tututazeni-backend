@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { CompetenciesService } from './competencies.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompetencyCategory } from './competencies.dto';
@@ -46,7 +46,24 @@ const mockPrisma = {
     create: jest.fn(),
     findFirst: jest.fn(),
     findMany: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
     delete: jest.fn(),
+  },
+  competencyModel: {
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+    count: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  },
+  competencyModelItem: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    deleteMany: jest.fn(),
   },
   user: { findUnique: jest.fn() },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
@@ -371,6 +388,149 @@ describe('CompetenciesService', () => {
       });
 
       expect(result).toBeDefined();
+    });
+  });
+
+  // ─── Fase 2: Níveis de Proficiência (§3) + Modelos de Competências (§4) ──
+  // docs/superpowers/specs/2026-09-25-competencies-fase2-design.md
+
+  describe('findAllProficiencyLevels', () => {
+    it('lista níveis sem filtros', async () => {
+      mockPrisma.proficiencyLevel.findMany.mockResolvedValue([{ id: 1, value: 1 }]);
+      const result = await service.findAllProficiencyLevels({});
+      expect(result).toHaveLength(1);
+      expect(mockPrisma.proficiencyLevel.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: {} }),
+      );
+    });
+
+    it('filtra por competencyId', async () => {
+      mockPrisma.proficiencyLevel.findMany.mockResolvedValue([]);
+      await service.findAllProficiencyLevels({ competencyId: 7 });
+      expect(mockPrisma.proficiencyLevel.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { competencyId: 7 } }),
+      );
+    });
+  });
+
+  describe('updateProficiencyLevel', () => {
+    it('lança NotFoundException se o nível não existir', async () => {
+      mockPrisma.proficiencyLevel.findUnique.mockResolvedValue(null);
+      await expect(service.updateProficiencyLevel(99, { name: 'x' } as any)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('lança ConflictException ao trocar para um value já usado nessa competência', async () => {
+      mockPrisma.proficiencyLevel.findUnique.mockResolvedValue({
+        id: 1,
+        competencyId: 1,
+        value: 2,
+      });
+      mockPrisma.proficiencyLevel.findFirst.mockResolvedValue({ id: 2, value: 3 });
+      await expect(
+        service.updateProficiencyLevel(1, { value: 3 } as any),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('actualiza o nível quando não há conflito', async () => {
+      mockPrisma.proficiencyLevel.findUnique.mockResolvedValue({
+        id: 1,
+        competencyId: 1,
+        value: 2,
+      });
+      mockPrisma.proficiencyLevel.update.mockResolvedValue({ id: 1, name: 'Básico' });
+      const result = await service.updateProficiencyLevel(1, { name: 'Básico' } as any);
+      expect(result.name).toBe('Básico');
+    });
+  });
+
+  describe('findAllModels / findOneModel', () => {
+    it('lista modelos paginados', async () => {
+      mockPrisma.competencyModel.findMany.mockResolvedValue([{ id: 1, name: 'Liderança' }]);
+      mockPrisma.competencyModel.count.mockResolvedValue(1);
+      const result = await service.findAllModels({ page: 1, limit: 20 });
+      expect(result.data).toHaveLength(1);
+      expect(result.total).toBe(1);
+    });
+
+    it('lança NotFoundException se o modelo não existir', async () => {
+      mockPrisma.competencyModel.findUnique.mockResolvedValue(null);
+      await expect(service.findOneModel(99)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('createModel', () => {
+    it('lança ConflictException se o código já existir', async () => {
+      mockPrisma.competencyModel.findFirst.mockResolvedValue({ id: 1, code: 'LID' });
+      await expect(
+        service.createModel({ name: 'Liderança', code: 'LID' } as any),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('cria o modelo quando o código é livre', async () => {
+      mockPrisma.competencyModel.findFirst.mockResolvedValue(null);
+      mockPrisma.competencyModel.create.mockResolvedValue({ id: 1, name: 'Liderança' });
+      const result = await service.createModel({ name: 'Liderança' } as any);
+      expect(result.id).toBe(1);
+    });
+  });
+
+  describe('removeModel', () => {
+    it('bloqueia remoção se o modelo tiver itens', async () => {
+      mockPrisma.competencyModel.findUnique.mockResolvedValue({
+        id: 1,
+        _count: { items: 2 },
+      });
+      await expect(service.removeModel(1)).rejects.toThrow(BadRequestException);
+    });
+
+    it('remove o modelo sem itens', async () => {
+      mockPrisma.competencyModel.findUnique.mockResolvedValue({
+        id: 1,
+        _count: { items: 0 },
+      });
+      mockPrisma.competencyModel.delete.mockResolvedValue({});
+      const result = await service.removeModel(1);
+      expect(result.message).toBeDefined();
+    });
+  });
+
+  describe('upsertModelItem', () => {
+    it('cria o item quando ainda não existe', async () => {
+      mockPrisma.competencyModel.findUnique.mockResolvedValue({
+        id: 1,
+        items: [],
+        _count: { items: 0 },
+      });
+      mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
+      mockPrisma.competencyModelItem.findFirst.mockResolvedValue(null);
+      mockPrisma.competencyModelItem.create.mockResolvedValue({ id: 1 });
+
+      const result = await service.upsertModelItem(1, {
+        competencyId: 1,
+        expectedLevel: 3,
+      } as any);
+
+      expect(mockPrisma.competencyModelItem.create).toHaveBeenCalled();
+      expect(result.id).toBe(1);
+    });
+
+    it('actualiza o item quando já existe', async () => {
+      mockPrisma.competencyModel.findUnique.mockResolvedValue({
+        id: 1,
+        items: [],
+        _count: { items: 1 },
+      });
+      mockPrisma.competency.findUnique.mockResolvedValue(baseCompetency);
+      mockPrisma.competencyModelItem.findFirst.mockResolvedValue({ id: 5 });
+      mockPrisma.competencyModelItem.update.mockResolvedValue({ id: 5 });
+
+      await service.upsertModelItem(1, { competencyId: 1, expectedLevel: 4 } as any);
+
+      expect(mockPrisma.competencyModelItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 5 } }),
+      );
     });
   });
 });

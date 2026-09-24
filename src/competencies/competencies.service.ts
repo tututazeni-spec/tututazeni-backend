@@ -18,8 +18,13 @@ import {
   MapCompetencyToPositionDto,
   MapCompetencyToCourseDto,
   CreateProficiencyLevelDto,
+  UpdateProficiencyLevelDto,
   CreateEndorsementDto,
   CompetencySource,
+  CreateCompetencyModelDto,
+  UpdateCompetencyModelDto,
+  CompetencyModelFilterDto,
+  UpsertCompetencyModelItemDto,
 } from './competencies.dto';
 
 @Injectable()
@@ -200,6 +205,26 @@ export class CompetenciesService {
   }
 
   // ─── NÍVEIS DE PROFICIÊNCIA ───────────────────────────────────────────────
+  // docs/módulo_competencies.md §3 (Fase 2) — ver
+  // docs/superpowers/specs/2026-09-25-competencies-fase2-design.md: níveis
+  // continuam por-competência, esta aba só lista/gere o que já existe.
+
+  async findAllProficiencyLevels(params: { competencyId?: number; search?: string }) {
+    const where: Prisma.ProficiencyLevelWhereInput = {};
+    if (params.competencyId) where.competencyId = params.competencyId;
+    if (params.search) {
+      where.OR = [
+        { name: { contains: params.search, mode: 'insensitive' } },
+        { competency: { name: { contains: params.search, mode: 'insensitive' } } },
+      ];
+    }
+
+    return this.prisma.read.proficiencyLevel.findMany({
+      where,
+      include: { competency: { select: { id: true, name: true, category: true } } },
+      orderBy: [{ competencyId: 'asc' }, { value: 'asc' }],
+    });
+  }
 
   async createProficiencyLevel(dto: CreateProficiencyLevelDto) {
     await this.findOne(dto.competencyId);
@@ -211,8 +236,169 @@ export class CompetenciesService {
     return this.prisma.proficiencyLevel.create({ data: dto });
   }
 
+  async updateProficiencyLevel(levelId: number, dto: UpdateProficiencyLevelDto) {
+    const level = await this.prisma.read.proficiencyLevel.findUnique({ where: { id: levelId } });
+    if (!level) throw new NotFoundException('Nível de proficiência não encontrado');
+
+    if (dto.value !== undefined && dto.value !== level.value) {
+      const exists = await this.prisma.proficiencyLevel.findFirst({
+        where: { competencyId: level.competencyId, value: dto.value, id: { not: levelId } },
+      });
+      if (exists) {
+        throw new ConflictException(`Nível ${dto.value} já existe para esta competência`);
+      }
+    }
+
+    return this.prisma.proficiencyLevel.update({ where: { id: levelId }, data: dto });
+  }
+
   async removeProficiencyLevel(levelId: number) {
     return this.prisma.proficiencyLevel.delete({ where: { id: levelId } });
+  }
+
+  // ─── MODELOS DE COMPETÊNCIAS ──────────────────────────────────────────────
+  // docs/módulo_competencies.md §4 (Fase 2) — ver
+  // docs/superpowers/specs/2026-09-25-competencies-fase2-design.md.
+
+  async findAllModels(filters: CompetencyModelFilterDto) {
+    const { page = 1, limit = 20, search, departmentId, status } = filters;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.CompetencyModelWhereInput = {};
+    if (search)
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    if (departmentId) where.departmentId = departmentId;
+    if (status) where.status = status;
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.competencyModel.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          department: { select: { id: true, name: true } },
+          owner: { select: { id: true, fullName: true } },
+          _count: { select: { items: true } },
+        },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.read.competencyModel.count({ where }),
+    ]);
+
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async findOneModel(id: number) {
+    const model = await this.prisma.read.competencyModel.findUnique({
+      where: { id },
+      include: {
+        department: { select: { id: true, name: true } },
+        owner: { select: { id: true, fullName: true } },
+        items: {
+          include: { competency: { select: { id: true, name: true, category: true } } },
+          orderBy: { id: 'asc' },
+        },
+      },
+    });
+    if (!model) throw new NotFoundException('Modelo de competências não encontrado');
+    return model;
+  }
+
+  async createModel(dto: CreateCompetencyModelDto) {
+    if (dto.code) {
+      const codeExists = await this.prisma.competencyModel.findFirst({
+        where: { code: { equals: dto.code, mode: 'insensitive' } },
+      });
+      if (codeExists) throw new ConflictException(`Código "${dto.code}" já existe`);
+    }
+
+    return this.prisma.competencyModel.create({
+      data: {
+        name: dto.name,
+        code: dto.code,
+        description: dto.description,
+        objective: dto.objective,
+        type: dto.type,
+        departmentId: dto.departmentId,
+        positionFamily: dto.positionFamily,
+        hierarchyLevel: dto.hierarchyLevel,
+        status: dto.status ?? 'ACTIVE',
+        version: dto.version ?? 1,
+        effectiveDate: dto.effectiveDate ? new Date(dto.effectiveDate) : undefined,
+        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+        ownerId: dto.ownerId,
+      },
+    });
+  }
+
+  async updateModel(id: number, dto: UpdateCompetencyModelDto) {
+    await this.findOneModel(id);
+
+    if (dto.code) {
+      const codeConflict = await this.prisma.read.competencyModel.findFirst({
+        where: { code: { equals: dto.code, mode: 'insensitive' }, id: { not: id } },
+      });
+      if (codeConflict) throw new ConflictException(`Código "${dto.code}" já existe`);
+    }
+
+    const { effectiveDate, endDate, ...rest } = dto;
+    return this.prisma.competencyModel.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(effectiveDate !== undefined ? { effectiveDate: new Date(effectiveDate) } : {}),
+        ...(endDate !== undefined ? { endDate: new Date(endDate) } : {}),
+      },
+    });
+  }
+
+  async removeModel(id: number) {
+    const model = await this.prisma.read.competencyModel.findUnique({
+      where: { id },
+      include: { _count: { select: { items: true } } },
+    });
+    if (!model) throw new NotFoundException('Modelo de competências não encontrado');
+    if (model._count.items > 0) {
+      throw new BadRequestException(
+        `Modelo tem ${model._count.items} competências associadas. Remova-as primeiro.`,
+      );
+    }
+    await this.prisma.competencyModel.delete({ where: { id } });
+    return { message: 'Modelo de competências eliminado' };
+  }
+
+  // find-then-write: @@unique([modelId, competencyId]) não dá para usar em
+  // upsert() porque o Prisma exige o nome da chave composta no `where`, que
+  // aqui é sempre construído a partir de dois IDs vindos do DTO — mesmo
+  // padrão de mapToPosition acima.
+  async upsertModelItem(modelId: number, dto: UpsertCompetencyModelItemDto) {
+    await this.findOneModel(modelId);
+    await this.findOne(dto.competencyId);
+
+    const existing = await this.prisma.competencyModelItem.findFirst({
+      where: { modelId, competencyId: dto.competencyId },
+    });
+
+    const data = {
+      weight: dto.weight ?? 1,
+      expectedLevel: dto.expectedLevel,
+      isMandatory: dto.isMandatory ?? false,
+      isCritical: dto.isCritical ?? false,
+    };
+
+    if (existing) {
+      return this.prisma.competencyModelItem.update({ where: { id: existing.id }, data });
+    }
+    return this.prisma.competencyModelItem.create({
+      data: { modelId, competencyId: dto.competencyId, ...data },
+    });
+  }
+
+  async removeModelItem(modelId: number, competencyId: number) {
+    return this.prisma.competencyModelItem.deleteMany({ where: { modelId, competencyId } });
   }
 
   // ─── COMPETÊNCIAS DO UTILIZADOR ──────────────────────────────────────────

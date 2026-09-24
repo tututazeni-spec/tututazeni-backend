@@ -15,8 +15,17 @@ const mockSvc = {
   update: jest.fn().mockResolvedValue({ id: 1 }),
   archive: jest.fn().mockResolvedValue({}),
   remove: jest.fn().mockResolvedValue({}),
+  findAllProficiencyLevels: jest.fn().mockResolvedValue([]),
   createProficiencyLevel: jest.fn().mockResolvedValue({ id: 1 }),
+  updateProficiencyLevel: jest.fn().mockResolvedValue({ id: 1 }),
   removeProficiencyLevel: jest.fn().mockResolvedValue({}),
+  findAllModels: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+  findOneModel: jest.fn().mockResolvedValue({ id: 1 }),
+  createModel: jest.fn().mockResolvedValue({ id: 1 }),
+  updateModel: jest.fn().mockResolvedValue({ id: 1 }),
+  removeModel: jest.fn().mockResolvedValue({}),
+  upsertModelItem: jest.fn().mockResolvedValue({ id: 1 }),
+  removeModelItem: jest.fn().mockResolvedValue({}),
   mapToPosition: jest.fn().mockResolvedValue({}),
   unmapFromPosition: jest.fn().mockResolvedValue({}),
   mapToCourse: jest.fn().mockResolvedValue({}),
@@ -118,15 +127,76 @@ describe('CompetenciesController', () => {
     expect(mockSvc.remove).toHaveBeenCalledWith(1);
   });
 
+  it('findAllProficiencyLevels sem params → findAllProficiencyLevels(undefined, undefined)', async () => {
+    await controller.findAllProficiencyLevels();
+    expect(mockSvc.findAllProficiencyLevels).toHaveBeenCalledWith({
+      competencyId: undefined,
+      search: undefined,
+    });
+  });
+
+  it('findAllProficiencyLevels com params → findAllProficiencyLevels(parsed)', async () => {
+    await controller.findAllProficiencyLevels('2', 'lide');
+    expect(mockSvc.findAllProficiencyLevels).toHaveBeenCalledWith({
+      competencyId: 2,
+      search: 'lide',
+    });
+  });
+
   it('createProficiencyLevel → createProficiencyLevel(dto)', async () => {
     const dto = {} as any;
     await controller.createProficiencyLevel(dto);
     expect(mockSvc.createProficiencyLevel).toHaveBeenCalledWith(dto);
   });
 
+  it('updateProficiencyLevel → updateProficiencyLevel(levelId, dto)', async () => {
+    const dto = {} as any;
+    await controller.updateProficiencyLevel(5, dto);
+    expect(mockSvc.updateProficiencyLevel).toHaveBeenCalledWith(5, dto);
+  });
+
   it('removeProficiencyLevel → removeProficiencyLevel(levelId)', async () => {
     await controller.removeProficiencyLevel(5);
     expect(mockSvc.removeProficiencyLevel).toHaveBeenCalledWith(5);
+  });
+
+  it('findAllModels → findAllModels(filters)', async () => {
+    const filters = {} as any;
+    await controller.findAllModels(filters);
+    expect(mockSvc.findAllModels).toHaveBeenCalledWith(filters);
+  });
+
+  it('createModel → createModel(dto)', async () => {
+    const dto = {} as any;
+    await controller.createModel(dto);
+    expect(mockSvc.createModel).toHaveBeenCalledWith(dto);
+  });
+
+  it('findOneModel → findOneModel(id)', async () => {
+    await controller.findOneModel(1);
+    expect(mockSvc.findOneModel).toHaveBeenCalledWith(1);
+  });
+
+  it('updateModel → updateModel(id, dto)', async () => {
+    const dto = {} as any;
+    await controller.updateModel(1, dto);
+    expect(mockSvc.updateModel).toHaveBeenCalledWith(1, dto);
+  });
+
+  it('removeModel → removeModel(id)', async () => {
+    await controller.removeModel(1);
+    expect(mockSvc.removeModel).toHaveBeenCalledWith(1);
+  });
+
+  it('upsertModelItem → upsertModelItem(id, dto)', async () => {
+    const dto = {} as any;
+    await controller.upsertModelItem(1, dto);
+    expect(mockSvc.upsertModelItem).toHaveBeenCalledWith(1, dto);
+  });
+
+  it('removeModelItem → removeModelItem(id, competencyId)', async () => {
+    await controller.removeModelItem(1, 2);
+    expect(mockSvc.removeModelItem).toHaveBeenCalledWith(1, 2);
   });
 
   it('mapToPosition → mapToPosition(dto)', async () => {

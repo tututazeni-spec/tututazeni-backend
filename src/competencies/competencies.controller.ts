@@ -26,7 +26,12 @@ import {
   MapCompetencyToPositionDto,
   MapCompetencyToCourseDto,
   CreateProficiencyLevelDto,
+  UpdateProficiencyLevelDto,
   CreateEndorsementDto,
+  CreateCompetencyModelDto,
+  UpdateCompetencyModelDto,
+  CompetencyModelFilterDto,
+  UpsertCompetencyModelItemDto,
 } from './competencies.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -86,6 +91,77 @@ export class CompetenciesController {
     return this.svc.getOrgGapDashboard(departmentId ? parseInt(departmentId) : undefined);
   }
 
+  // ── Níveis de Proficiência (rotas literais — antes de :id) ────────────────
+
+  @Get('proficiency-levels')
+  @ApiOperation({ summary: 'Listar níveis de proficiência (aba Níveis de Proficiência)' })
+  @ApiQuery({ name: 'competencyId', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  findAllProficiencyLevels(
+    @Query('competencyId') competencyId?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.svc.findAllProficiencyLevels({
+      competencyId: competencyId ? parseInt(competencyId) : undefined,
+      search,
+    });
+  }
+
+  // ── Modelos de Competências (rotas literais — antes de :id) ───────────────
+
+  @Get('models')
+  @ApiOperation({ summary: 'Listar modelos de competências' })
+  findAllModels(@Query() filters: CompetencyModelFilterDto) {
+    return this.svc.findAllModels(filters);
+  }
+
+  @Post('models')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Criar modelo de competências' })
+  createModel(@Body() dto: CreateCompetencyModelDto) {
+    return this.svc.createModel(dto);
+  }
+
+  @Get('models/:id')
+  @ApiOperation({ summary: 'Detalhe de um modelo de competências' })
+  findOneModel(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findOneModel(id);
+  }
+
+  @Put('models/:id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Actualizar modelo de competências' })
+  updateModel(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCompetencyModelDto) {
+    return this.svc.updateModel(id, dto);
+  }
+
+  @Delete('models/:id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Eliminar modelo de competências (só sem competências associadas)' })
+  removeModel(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.removeModel(id);
+  }
+
+  @Post('models/:id/items')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Adicionar/actualizar competência num modelo' })
+  upsertModelItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpsertCompetencyModelItemDto,
+  ) {
+    return this.svc.upsertModelItem(id, dto);
+  }
+
+  @Delete('models/:id/items/:competencyId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Remover competência de um modelo' })
+  removeModelItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('competencyId', ParseIntPipe) competencyId: number,
+  ) {
+    return this.svc.removeModelItem(id, competencyId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe da competência (cursos, cargos, níveis)' })
   findOne(@Param('id', ParseIntPipe) id: number) {
@@ -130,6 +206,16 @@ export class CompetenciesController {
   @ApiOperation({ summary: 'Criar nível de proficiência para uma competência' })
   createProficiencyLevel(@Body() dto: CreateProficiencyLevelDto) {
     return this.svc.createProficiencyLevel(dto);
+  }
+
+  @Patch('proficiency-levels/:levelId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Actualizar nível de proficiência' })
+  updateProficiencyLevel(
+    @Param('levelId', ParseIntPipe) levelId: number,
+    @Body() dto: UpdateProficiencyLevelDto,
+  ) {
+    return this.svc.updateProficiencyLevel(levelId, dto);
   }
 
   @Delete('proficiency-levels/:levelId')

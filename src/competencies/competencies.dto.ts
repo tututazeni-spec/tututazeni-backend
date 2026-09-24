@@ -10,9 +10,10 @@ import {
   Max,
   MaxLength,
   IsNumber,
+  IsDateString,
   ValidateNested,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType, OmitType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
 import {
   CompetencyCategory,
@@ -20,11 +21,19 @@ import {
   CompetencySource,
   CompetencyType,
   MappingPriority,
+  SeniorityLevel,
 } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export { CompetencyCategory, CompetencyStatus, CompetencySource, CompetencyType, MappingPriority };
+export {
+  CompetencyCategory,
+  CompetencyStatus,
+  CompetencySource,
+  CompetencyType,
+  MappingPriority,
+  SeniorityLevel,
+};
 
 // ─── Competency ───────────────────────────────────────────────────────────────
 
@@ -185,7 +194,66 @@ export class CreateProficiencyLevelDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  // ─── docs/módulo_competencies.md §3 — Níveis de Proficiência (Fase 2) ────
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  minScore?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  maxScore?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  expectedBehaviors?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  knowledgeDemonstrated?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  autonomy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  taskComplexity?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  observableEvidence?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  evaluationCriteria?: string;
+
+  @ApiPropertyOptional({ enum: CompetencyStatus, default: CompetencyStatus.ACTIVE })
+  @IsOptional()
+  @IsEnum(CompetencyStatus)
+  status?: CompetencyStatus;
 }
+
+// Não permite mover o nível para outra competência (apaga-se e recria-se em
+// vez disso) — mesma razão de UpdateCompetencyDto não remapear `indicators`.
+export class UpdateProficiencyLevelDto extends PartialType(
+  OmitType(CreateProficiencyLevelDto, ['competencyId'] as const),
+) {}
 
 // ─── User Competency ──────────────────────────────────────────────────────────
 
@@ -372,6 +440,141 @@ export class CompetencyFilterDto {
   @Min(1)
   @Type(() => Number)
   limit?: number;
+}
+
+// ─── Modelos de Competências (docs/módulo_competencies.md §4, Fase 2) ─────────
+
+export class CreateCompetencyModelDto {
+  @ApiProperty({ example: 'Modelo de Competências — Liderança' })
+  @IsString()
+  @MaxLength(120)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  objective?: string;
+
+  @ApiPropertyOptional({ example: 'Liderança' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  type?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  positionFamily?: string;
+
+  @ApiPropertyOptional({ enum: SeniorityLevel })
+  @IsOptional()
+  @IsEnum(SeniorityLevel)
+  hierarchyLevel?: SeniorityLevel;
+
+  @ApiPropertyOptional({ enum: CompetencyStatus, default: CompetencyStatus.ACTIVE })
+  @IsOptional()
+  @IsEnum(CompetencyStatus)
+  status?: CompetencyStatus;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  version?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  effectiveDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiPropertyOptional({ description: 'userId do responsável pelo modelo' })
+  @IsOptional()
+  @IsInt()
+  ownerId?: number;
+}
+
+export class UpdateCompetencyModelDto extends PartialType(CreateCompetencyModelDto) {}
+
+export class CompetencyModelFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional({ enum: CompetencyStatus })
+  @IsOptional()
+  @IsEnum(CompetencyStatus)
+  status?: CompetencyStatus;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 20 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  limit?: number;
+}
+
+export class UpsertCompetencyModelItemDto {
+  @ApiProperty()
+  @IsInt()
+  competencyId!: number;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  weight?: number;
+
+  @ApiProperty({ description: 'Nível esperado (1-5)' })
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  expectedLevel!: number;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isMandatory?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isCritical?: boolean;
 }
 
 // ─── Endorsement ─────────────────────────────────────────────────────────────
