@@ -2171,6 +2171,7 @@ const EventParticipantStatus = {
   ABSENT: 'ABSENT',
   CANCELLED: 'CANCELLED',
   NO_SHOW: 'NO_SHOW',
+  REJECTED: 'REJECTED',
 };
 
 const InstructorType = {

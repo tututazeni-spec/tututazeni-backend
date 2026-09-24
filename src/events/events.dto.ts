@@ -278,6 +278,91 @@ export class SubmitFeedbackDto {
   comment?: string;
 }
 
+// ─── Gestão de participantes (docs/events.md #4) ───────────────────────────────
+
+export class AddParticipantsDto {
+  @ApiProperty({ description: 'IDs dos colaboradores a inscrever (adicionar ou importar)' })
+  @IsArray()
+  @IsInt({ each: true })
+  userIds!: number[];
+}
+
+export class ParticipantActionDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+export class EventParticipantFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional({ enum: ParticipantStatus })
+  @IsOptional()
+  @IsEnum(ParticipantStatus)
+  status?: ParticipantStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional({ description: 'Pesquisa por nome do colaborador' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+// ─── Calendário (docs/events.md #3) ────────────────────────────────────────────
+
+export class EventCalendarFilterDto {
+  @ApiProperty({ description: 'Início do intervalo (ISO)' })
+  @IsDateString()
+  from!: string;
+
+  @ApiProperty({ description: 'Fim do intervalo (ISO)' })
+  @IsDateString()
+  to!: string;
+
+  @ApiPropertyOptional({ enum: EventType })
+  @IsOptional()
+  @IsEnum(EventType)
+  type?: EventType;
+
+  @ApiPropertyOptional({ enum: EventStatus })
+  @IsOptional()
+  @IsEnum(EventStatus)
+  status?: EventStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  responsibleId?: number;
+
+  @ApiPropertyOptional({ description: 'Pesquisa livre no local do evento' })
+  @IsOptional()
+  @IsString()
+  location?: string;
+}
+
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
 export class EventFilterDto extends BaseFilterDto {

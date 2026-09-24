@@ -7763,6 +7763,7 @@ enum EventParticipantStatus {
   ABSENT
   CANCELLED
   NO_SHOW
+  REJECTED
 }
 
 model EventParticipant {
@@ -7772,6 +7773,7 @@ model EventParticipant {
   status       EventParticipantStatus @default(PENDING)
   note         String?
   registeredAt DateTime               @default(now())
+  confirmedAt  DateTime?
   checkedInAt  DateTime?
   checkedOutAt DateTime?
   event        Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)

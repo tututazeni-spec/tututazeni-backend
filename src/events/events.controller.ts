@@ -13,6 +13,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EventsService } from './events.service';
@@ -23,6 +24,10 @@ import {
   UpdateParticipantStatusDto,
   CheckInDto,
   SubmitFeedbackDto,
+  EventCalendarFilterDto,
+  EventParticipantFilterDto,
+  AddParticipantsDto,
+  ParticipantActionDto,
 } from './events.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -70,6 +75,14 @@ export class EventsController {
   @ApiOperation({ summary: 'Dashboard do organizador (métricas, NPS, ocupação)' })
   organizerDashboard(@CurrentUser() user: CurrentUserData) {
     return this.svc.getOrganizerDashboard(user.id);
+  }
+
+  @Get('calendar')
+  @ApiOperation({
+    summary: 'Calendário central de eventos (intervalo de datas + filtros)',
+  })
+  calendar(@Query() filters: EventCalendarFilterDto) {
+    return this.svc.getCalendar(filters);
   }
 
   @Get(':id')
@@ -141,6 +154,73 @@ export class EventsController {
     @Body() dto: UpdateParticipantStatusDto,
   ) {
     return this.svc.updateParticipantStatus(eventId, userId, dto);
+  }
+
+  // ── Gestão de participantes (aba Participantes, docs/events.md #4) ─────────
+
+  @Get(':id/participants')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar/filtrar inscrições de um evento (departamento, unidade, estado, nome)' })
+  listParticipants(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Query() filters: EventParticipantFilterDto,
+  ) {
+    return this.svc.listParticipants(eventId, filters);
+  }
+
+  @Get(':id/participants/export')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="participantes.csv"')
+  @ApiOperation({ summary: 'Exportar lista de participantes do evento como CSV' })
+  exportParticipants(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Query() filters: EventParticipantFilterDto,
+  ) {
+    return this.svc.exportParticipantsCsv(eventId, filters);
+  }
+
+  @Post(':id/participants')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Adicionar/importar participantes (RH/organizador, sem fluxo de aprovação)' })
+  addParticipants(@Param('id', ParseIntPipe) eventId: number, @Body() dto: AddParticipantsDto) {
+    return this.svc.addParticipants(eventId, dto.userIds);
+  }
+
+  @Patch(':id/participants/:userId/approve')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Aprovar inscrição pendente ou promover da lista de espera' })
+  @HttpCode(HttpStatus.OK)
+  approveParticipant(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: ParticipantActionDto,
+  ) {
+    return this.svc.approveParticipant(eventId, userId, dto);
+  }
+
+  @Patch(':id/participants/:userId/reject')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Rejeitar inscrição pendente' })
+  @HttpCode(HttpStatus.OK)
+  rejectParticipant(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: ParticipantActionDto,
+  ) {
+    return this.svc.rejectParticipant(eventId, userId, dto);
+  }
+
+  @Patch(':id/participants/:userId/cancel')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Cancelar inscrição em nome do participante (promove lista de espera)' })
+  @HttpCode(HttpStatus.OK)
+  cancelParticipant(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: ParticipantActionDto,
+  ) {
+    return this.svc.cancelParticipant(eventId, userId, dto);
   }
 
   // ── Check-in ──────────────────────────────────────────────────────────────
