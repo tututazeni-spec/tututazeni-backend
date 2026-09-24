@@ -12,9 +12,13 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Header,
+  StreamableFile,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { OnboardingService } from './onboarding.service';
+import { buildCsvString } from '../common/utils/csv-export.util';
+import { buildXlsxBuffer } from '../common/utils/xlsx-export.util';
 import {
   CreateOnboardingTemplateDto,
   UpdateOnboardingTemplateDto,
@@ -29,6 +33,14 @@ import {
   SubmitOnboardingSurveyDto,
   OnboardingFilterDto,
   TriggerIntegrationEvaluationDto,
+  OnboardingTaskFilterDto,
+  OnboardingDocumentFilterDto,
+  OnboardingTrainingFilterDto,
+  CreateOnboardingCheckinDto,
+  RegisterOnboardingCheckinDto,
+  SubmitCheckinEmployeeFeedbackDto,
+  OnboardingCheckinFilterDto,
+  OnboardingReportFilterDto,
 } from './onboarding.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -48,8 +60,18 @@ export class OnboardingController {
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Dashboard de onboarding (progresso, atrasos, satisfação)' })
   @ApiQuery({ name: 'managerId', required: false })
-  dashboard(@Query('managerId') managerId?: string) {
-    return this.svc.getDashboard(managerId ? parseInt(managerId) : undefined);
+  @ApiQuery({ name: 'departmentId', required: false })
+  @ApiQuery({ name: 'unitId', required: false })
+  dashboard(
+    @Query('managerId') managerId?: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('unitId') unitId?: string,
+  ) {
+    return this.svc.getDashboard(
+      managerId ? parseInt(managerId) : undefined,
+      departmentId ? parseInt(departmentId) : undefined,
+      unitId ? parseInt(unitId) : undefined,
+    );
   }
 
   // ── Templates ─────────────────────────────────────────────────────────────
@@ -64,6 +86,12 @@ export class OnboardingController {
   @ApiOperation({ summary: 'Detalhe do template (com tarefas)' })
   findOneTemplate(@Param('id', ParseIntPipe) id: number) {
     return this.svc.findOneTemplate(id);
+  }
+
+  @Get('templates/:id/stages')
+  @ApiOperation({ summary: 'Etapas do template — tarefas agrupadas por fase' })
+  getTemplateStages(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getTemplateStages(id);
   }
 
   @Post('templates')
@@ -131,6 +159,99 @@ export class OnboardingController {
   @ApiOperation({ summary: 'Plano de onboarding de um colaborador' })
   byUser(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.findByUser(userId);
+  }
+
+  // Registadas antes de `@Get(':id')` de propósito — ':id' apanha qualquer
+  // segmento e "sombrearia" estas rotas se viessem depois (ver memory
+  // project_innova_route_shadowing).
+
+  @Get('tasks')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Tarefas de todos os onboardings, com filtros (docs/onboarding.md ponto 5)' })
+  findAllTasks(@Query() filters: OnboardingTaskFilterDto) {
+    return this.svc.findAllTasks(filters);
+  }
+
+  @Get('documents')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Documentos de todos os onboardings (docs/onboarding.md ponto 6)' })
+  findAllDocuments(@Query() filters: OnboardingDocumentFilterDto) {
+    return this.svc.findAllDocuments(filters);
+  }
+
+  @Get('training')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Formação associada aos onboardings (docs/onboarding.md ponto 7)' })
+  findAllTraining(@Query() filters: OnboardingTrainingFilterDto) {
+    return this.svc.findAllTraining(filters);
+  }
+
+  @Get('checkins')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Check-ins de Acompanhamento de todos os onboardings (docs/onboarding.md ponto 8)' })
+  findAllCheckins(@Query() filters: OnboardingCheckinFilterDto) {
+    return this.svc.findAllCheckins(filters);
+  }
+
+  @Get('integration-evaluations')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Avaliações de Integração já pedidas (docs/onboarding.md ponto 9)' })
+  getIntegrationEvaluations() {
+    return this.svc.getIntegrationEvaluations();
+  }
+
+  @Get('reports/overview')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Relatórios de onboarding — agregados (docs/onboarding.md ponto 10)' })
+  reportsOverview(@Query() filters: OnboardingReportFilterDto) {
+    return this.svc.getReportsOverview(filters);
+  }
+
+  @Get('reports/export.csv')
+  @Roles(Role.ADMIN, Role.RH)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="onboarding.csv"')
+  @ApiOperation({ summary: 'Exportar relatório de onboarding como CSV' })
+  async exportReportsCsv(@Query() filters: OnboardingReportFilterDto) {
+    const rows = await this.svc.getReportsRows(filters);
+    return buildCsvString(rows, [
+      'colaborador',
+      'departamento',
+      'unidade',
+      'planoDeIntegracao',
+      'responsavel',
+      'estado',
+      'progresso',
+      'dataInicio',
+      'dataConclusao',
+      'tarefasConcluidas',
+    ]);
+  }
+
+  @Get('reports/export.xlsx')
+  @Roles(Role.ADMIN, Role.RH)
+  @Header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @Header('Content-Disposition', 'attachment; filename="onboarding.xlsx"')
+  @ApiOperation({ summary: 'Exportar relatório de onboarding como XLSX' })
+  async exportReportsXlsx(@Query() filters: OnboardingReportFilterDto) {
+    const rows = await this.svc.getReportsRows(filters);
+    const buffer = await buildXlsxBuffer(
+      rows,
+      [
+        'colaborador',
+        'departamento',
+        'unidade',
+        'planoDeIntegracao',
+        'responsavel',
+        'estado',
+        'progresso',
+        'dataInicio',
+        'dataConclusao',
+        'tarefasConcluidas',
+      ],
+      'Onboarding',
+    );
+    return new StreamableFile(buffer);
   }
 
   @Get(':id')
@@ -217,6 +338,39 @@ export class OnboardingController {
   @ApiOperation({ summary: 'Submeter pesquisa de satisfação (Dia 1, 7, 30, 90)' })
   submitSurvey(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitOnboardingSurveyDto) {
     return this.svc.submitSurvey(user.id, dto);
+  }
+
+  // ── Acompanhamento ────────────────────────────────────────────────────────
+  // docs/onboarding.md ponto 8 — check-ins DAY_1/WEEK_1/DAY_30/DAY_60/DAY_90
+  // são seedados automaticamente em create(); esta secção cobre CUSTOM,
+  // registo pelo responsável e feedback do próprio colaborador.
+
+  @Post('checkins')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Criar um check-in de acompanhamento avulso (CUSTOM)' })
+  createCheckin(@Body() dto: CreateOnboardingCheckinDto) {
+    return this.svc.createCheckin(dto);
+  }
+
+  @Patch('checkins/:id')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar o check-in (dificuldades, pontos positivos, próximas acções...)' })
+  registerCheckin(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RegisterOnboardingCheckinDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.registerCheckin(id, dto, user);
+  }
+
+  @Post('checkins/:id/employee-feedback')
+  @ApiOperation({ summary: 'O colaborador regista o seu feedback no check-in' })
+  submitCheckinEmployeeFeedback(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SubmitCheckinEmployeeFeedbackDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.submitCheckinEmployeeFeedback(id, dto, user);
   }
 
   // ── Avaliação de Integração ─────────────────────────────────────────────────

@@ -1714,6 +1714,9 @@ const TaskPhase = {
   DAY_30: 'DAY_30',
   DAY_60: 'DAY_60',
   DAY_90: 'DAY_90',
+  INTEGRATION: 'INTEGRATION',
+  FOLLOW_UP: 'FOLLOW_UP',
+  CONCLUSION: 'CONCLUSION',
 };
 
 const ResponsibleRole = {
@@ -1728,6 +1731,20 @@ const ResponsibleRole = {
 const DocumentStatus = { PENDING: 'PENDING', APPROVED: 'APPROVED', REJECTED: 'REJECTED' };
 
 const SurveyMilestone = { DAY_1: 'DAY_1', DAY_7: 'DAY_7', DAY_30: 'DAY_30', DAY_90: 'DAY_90' };
+
+// Distinto do CheckinType (QUICK/STRUCTURED, domínio diferente) já
+// existente acima — ver [[project_innova_onboarding_plan_creation_roles_structure]]
+// sobre esta superfície de drift do mock.
+const OnboardingCheckinType = {
+  DAY_1: 'DAY_1',
+  WEEK_1: 'WEEK_1',
+  DAY_30: 'DAY_30',
+  DAY_60: 'DAY_60',
+  DAY_90: 'DAY_90',
+  CUSTOM: 'CUSTOM',
+};
+
+const OnboardingCheckinStatus = { PENDING: 'PENDING', COMPLETED: 'COMPLETED', SKIPPED: 'SKIPPED' };
 
 const ContentType = {
   VIDEO: 'VIDEO',
@@ -2415,6 +2432,8 @@ module.exports = {
   TaskPhase,
   ResponsibleRole,
   DocumentStatus,
+  OnboardingCheckinType,
+  OnboardingCheckinStatus,
   SurveyMilestone,
   ContentType,
   ContentLevel,
