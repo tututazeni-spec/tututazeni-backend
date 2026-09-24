@@ -52,7 +52,9 @@ export class EventsController {
 
   @Get('stats')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Dashboard de eventos (Visão Geral) — KPIs, breakdowns e próximos eventos' })
+  @ApiOperation({
+    summary: 'Dashboard de eventos (Visão Geral) — KPIs, breakdowns e próximos eventos',
+  })
   stats() {
     return this.svc.getStats();
   }
