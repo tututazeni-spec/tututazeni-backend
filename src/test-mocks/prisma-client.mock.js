@@ -2174,6 +2174,34 @@ const EventParticipantStatus = {
   REJECTED: 'REJECTED',
 };
 
+const EventSessionStatus = {
+  SCHEDULED: 'SCHEDULED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+
+const EventLogisticsStatus = {
+  PLANNED: 'PLANNED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  CONFIRMED: 'CONFIRMED',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+
+const EventEquipmentType = {
+  PROJECTOR: 'PROJECTOR',
+  SCREEN: 'SCREEN',
+  SOUND_SYSTEM: 'SOUND_SYSTEM',
+  MICROPHONES: 'MICROPHONES',
+  CHAIRS: 'CHAIRS',
+  TABLES: 'TABLES',
+  COMPUTERS: 'COMPUTERS',
+  INTERNET: 'INTERNET',
+  MATERIALS: 'MATERIALS',
+  SIGNAGE: 'SIGNAGE',
+};
+
 const InstructorType = {
   MASTER: 'MASTER',
   SENIOR: 'SENIOR',
@@ -2505,6 +2533,9 @@ module.exports = {
   EventModalidade,
   EventVisibility,
   EventParticipantStatus,
+  EventSessionStatus,
+  EventLogisticsStatus,
+  EventEquipmentType,
   InstructorType,
   CohortModalidade,
   CohortStatus,

@@ -28,6 +28,10 @@ import {
   EventParticipantFilterDto,
   AddParticipantsDto,
   ParticipantActionDto,
+  CreateEventSessionDto,
+  UpdateEventSessionDto,
+  EventSessionFilterDto,
+  UpsertEventLogisticsDto,
 } from './events.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -83,6 +87,13 @@ export class EventsController {
   })
   calendar(@Query() filters: EventCalendarFilterDto) {
     return this.svc.getCalendar(filters);
+  }
+
+  @Get('sessions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Todas as sessões/actividades de todos os eventos (aba Programação)' })
+  listAllSessions(@Query() filters: EventSessionFilterDto) {
+    return this.svc.listAllSessions(filters);
   }
 
   @Get(':id')
@@ -242,5 +253,51 @@ export class EventsController {
     @Body() dto: SubmitFeedbackDto,
   ) {
     return this.svc.submitFeedback(id, user.id, dto);
+  }
+
+  // ── Programação (aba, docs/events.md #5) ────────────────────────────────
+
+  @Post(':id/sessions')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Criar sessão/actividade do evento' })
+  createSession(@Param('id', ParseIntPipe) eventId: number, @Body() dto: CreateEventSessionDto) {
+    return this.svc.createSession(eventId, dto);
+  }
+
+  @Put(':id/sessions/:sessionId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar sessão/actividade do evento' })
+  updateSession(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @Body() dto: UpdateEventSessionDto,
+  ) {
+    return this.svc.updateSession(eventId, sessionId, dto);
+  }
+
+  @Delete(':id/sessions/:sessionId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Eliminar sessão/actividade do evento' })
+  deleteSession(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+  ) {
+    return this.svc.deleteSession(eventId, sessionId);
+  }
+
+  // ── Locais & Logística (aba, docs/events.md #6) ─────────────────────────
+
+  @Get(':id/logistics')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Consultar recursos/logística do evento (null se ainda não definido)' })
+  getLogistics(@Param('id', ParseIntPipe) eventId: number) {
+    return this.svc.getLogistics(eventId);
+  }
+
+  @Put(':id/logistics')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Criar/actualizar recursos e logística do evento (upsert)' })
+  upsertLogistics(@Param('id', ParseIntPipe) eventId: number, @Body() dto: UpsertEventLogisticsDto) {
+    return this.svc.upsertLogistics(eventId, dto);
   }
 }

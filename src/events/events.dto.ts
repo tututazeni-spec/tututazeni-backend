@@ -7,6 +7,7 @@ import {
   IsEnum,
   IsBoolean,
   IsArray,
+  IsNumber,
   Min,
   Max,
   MaxLength,
@@ -19,6 +20,9 @@ import {
   EventStatus,
   EventVisibility,
   EventParticipantStatus as ParticipantStatus,
+  EventSessionStatus,
+  EventLogisticsStatus,
+  EventEquipmentType,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
@@ -27,7 +31,16 @@ import { BaseFilterDto } from '../common/dtos/pagination.dto';
 // local mantido por compatibilidade, distinto do `ParticipantStatus`
 // (LeadershipProgramParticipant, lote 4) e `TrainingParticipantStatus` (lote 5).
 
-export { EventType, EventModalidade, EventStatus, EventVisibility, ParticipantStatus };
+export {
+  EventType,
+  EventModalidade,
+  EventStatus,
+  EventVisibility,
+  ParticipantStatus,
+  EventSessionStatus,
+  EventLogisticsStatus,
+  EventEquipmentType,
+};
 
 // ─── Event ────────────────────────────────────────────────────────────────────
 
@@ -420,4 +433,170 @@ export class EventFilterDto extends BaseFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   mandatory?: boolean;
+}
+
+// ─── Programação (docs/events.md #5) ───────────────────────────────────────
+
+export class CreateEventSessionDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  title!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiProperty()
+  @IsDateString()
+  startAt!: string;
+
+  @ApiProperty()
+  @IsDateString()
+  endAt!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  room?: string;
+
+  @ApiPropertyOptional({ description: 'ID do utilizador responsável pela sessão' })
+  @IsOptional()
+  @IsInt()
+  responsibleId?: number;
+
+  @ApiPropertyOptional({ description: 'Orador da sessão (texto livre)' })
+  @IsOptional()
+  @IsString()
+  speaker?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  capacity?: number;
+
+  @ApiPropertyOptional({ enum: EventSessionStatus, default: EventSessionStatus.SCHEDULED })
+  @IsOptional()
+  @IsEnum(EventSessionStatus)
+  status?: EventSessionStatus;
+}
+
+export class UpdateEventSessionDto extends PartialType(CreateEventSessionDto) {}
+
+export class EventSessionFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  eventId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  responsibleId?: number;
+
+  @ApiPropertyOptional({ enum: EventSessionStatus })
+  @IsOptional()
+  @IsEnum(EventSessionStatus)
+  status?: EventSessionStatus;
+
+  @ApiPropertyOptional({ description: 'Início do intervalo de datas (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Fim do intervalo de datas (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
+
+  @ApiPropertyOptional({ description: 'Pesquisa livre no título da sessão' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+// ─── Locais & Logística (docs/events.md #6) ────────────────────────────────
+
+export class UpsertEventLogisticsDto {
+  @ApiPropertyOptional({ description: 'ID do utilizador responsável pela logística' })
+  @IsOptional()
+  @IsInt()
+  responsibleId?: number;
+
+  @ApiPropertyOptional({ enum: EventEquipmentType, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(EventEquipmentType, { each: true })
+  equipment?: EventEquipmentType[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  resourcesNeeded?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  suppliers?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  catering?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  transport?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  accommodation?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  security?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  decoration?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  budget?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  actualCost?: number;
+
+  @ApiPropertyOptional({ enum: EventLogisticsStatus, default: EventLogisticsStatus.PLANNED })
+  @IsOptional()
+  @IsEnum(EventLogisticsStatus)
+  status?: EventLogisticsStatus;
 }

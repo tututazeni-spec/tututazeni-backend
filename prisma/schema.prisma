@@ -830,12 +830,14 @@ model User {
   processAuditLogs      ProcessAuditLog[]
 
   // ─── Eventos & Presença ───────────────────────────────────────
-  events             Event[]              @relation("EventOrganizer")
-  responsibleEvents  Event[]              @relation("EventResponsible")
-  liveAttendances    LiveAttendance[]
-  liveMessages       LiveChatMessage[]
-  postClassResponses PostClassResponse[]
-  userAttendances    UserAttendance[]
+  events                    Event[]             @relation("EventOrganizer")
+  responsibleEvents         Event[]             @relation("EventResponsible")
+  responsibleEventSessions  EventSession[]      @relation("EventSessionResponsible")
+  responsibleEventLogistics EventLogistics[]    @relation("EventLogisticsResponsible")
+  liveAttendances           LiveAttendance[]
+  liveMessages              LiveChatMessage[]
+  postClassResponses        PostClassResponse[]
+  userAttendances           UserAttendance[]
 
   // ─── Documentos & Relatórios ──────────────────────────────────
   companyDocuments  CompanyDocument[]
@@ -7736,6 +7738,8 @@ model Event {
   participants         EventParticipant[]
   feedbacks            EventFeedback[]
   certificates         Certificate[]
+  sessions             EventSession[]
+  logistics            EventLogistics?
 
   @@index([organizerId])
   @@index([responsibleId])
@@ -7799,6 +7803,93 @@ model EventFeedback {
 
   @@unique([eventId, userId])
   @@index([eventId])
+}
+
+// ─── Programação (docs/events.md #5) ───────────────────────────────────────
+// Agenda de sessões/actividades de um evento com várias actividades (ex.:
+// "09:00 — Abertura", "09:30 — Apresentação institucional"…). "Orador" fica
+// texto livre por agora — a secção 7 (Oradores & Convidados) ainda não tem
+// modelo próprio para ligar por FK. "Duração" não é persistida, é sempre
+// calculada de endAt-startAt (mesma convenção de EventsService#getCalendar).
+
+enum EventSessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model EventSession {
+  id            Int                @id @default(autoincrement())
+  eventId       Int
+  title         String
+  description   String?            @db.Text
+  startAt       DateTime
+  endAt         DateTime
+  location      String?
+  room          String?
+  responsibleId Int?
+  speaker       String?
+  capacity      Int?
+  status        EventSessionStatus @default(SCHEDULED)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  event         Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  responsible   User?              @relation("EventSessionResponsible", fields: [responsibleId], references: [id])
+
+  @@index([eventId])
+  @@index([responsibleId])
+  @@index([startAt])
+}
+
+// ─── Locais & Logística (docs/events.md #6) ────────────────────────────────
+// Um registo por evento (relação 1:1) com os recursos necessários para o
+// realizar. Local/sala/capacidade/endereço NÃO são duplicados aqui — já
+// existem em Event (location/room/maxCapacity/address); esta tabela cobre
+// só o que Event ainda não tem (equipamentos, fornecedores, orçamento…).
+
+enum EventLogisticsStatus {
+  PLANNED
+  IN_PROGRESS
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum EventEquipmentType {
+  PROJECTOR
+  SCREEN
+  SOUND_SYSTEM
+  MICROPHONES
+  CHAIRS
+  TABLES
+  COMPUTERS
+  INTERNET
+  MATERIALS
+  SIGNAGE
+}
+
+model EventLogistics {
+  id              Int                  @id @default(autoincrement())
+  eventId         Int                  @unique
+  responsibleId   Int?
+  equipment       EventEquipmentType[] @default([])
+  resourcesNeeded String?              @db.Text
+  suppliers       String?              @db.Text
+  catering        String?
+  transport       String?
+  accommodation   String?
+  security        String?
+  decoration      String?
+  budget          Float?
+  actualCost      Float?
+  status          EventLogisticsStatus @default(PLANNED)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  event           Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  responsible     User?                @relation("EventLogisticsResponsible", fields: [responsibleId], references: [id])
+
+  @@index([responsibleId])
 }
 
 // ══════════════════════════════════════════════════════════════════

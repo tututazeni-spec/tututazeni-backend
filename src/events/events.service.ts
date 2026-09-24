@@ -19,6 +19,10 @@ import {
   EventParticipantFilterDto,
   ParticipantActionDto,
   EventCalendarFilterDto,
+  CreateEventSessionDto,
+  UpdateEventSessionDto,
+  EventSessionFilterDto,
+  UpsertEventLogisticsDto,
 } from './events.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { buildCsvString } from '../common/utils/csv-export.util';
@@ -1099,5 +1103,141 @@ export class EventsService {
       modalidade: e.modalidade,
       participants: e._count.participants,
     }));
+  }
+
+  // ─── PROGRAMAÇÃO (docs/events.md #5) ───────────────────────────────────────
+  // Aba "Programação": ao contrário de Participantes/Locais & Logística, o
+  // spec traz "Evento" como coluna própria (#5 lista "Evento, sessão/
+  // actividade, título…") — por isso a listagem é top-level (todas as
+  // sessões de todos os eventos, com filtro opcional por evento), mesmo
+  // padrão de LiveClassesService#listAllSessions. Criação/edição/eliminação
+  // continuam aninhadas em /events/:id/sessions porque uma sessão pertence
+  // sempre a um evento concreto.
+
+  async listAllSessions(filters: EventSessionFilterDto) {
+    const { page = 1, limit = 20, eventId, departmentId, unitId, responsibleId, status, dateFrom, dateTo, search } =
+      filters;
+    const { skip, take } = calculatePagination(page, limit);
+
+    const where: Prisma.EventSessionWhereInput = {};
+    if (eventId) where.eventId = eventId;
+    if (responsibleId) where.responsibleId = responsibleId;
+    if (status) where.status = status;
+    if (search) where.title = { contains: search, mode: 'insensitive' };
+    if (dateFrom || dateTo) {
+      where.startAt = {
+        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+        ...(dateTo ? { lte: new Date(dateTo) } : {}),
+      };
+    }
+    if (departmentId || unitId) {
+      where.event = {
+        ...(departmentId ? { departmentId } : {}),
+        ...(unitId ? { unitId } : {}),
+      };
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.eventSession.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          event: { select: { id: true, title: true, departmentId: true, unitId: true } },
+          responsible: { select: { id: true, fullName: true } },
+        },
+        orderBy: { startAt: 'asc' },
+      }),
+      this.prisma.read.eventSession.count({ where }),
+    ]);
+
+    const enrichedData = data.map(s => ({
+      ...s,
+      durationMinutes: Math.round((s.endAt.getTime() - s.startAt.getTime()) / 60_000),
+    }));
+
+    return buildPaginatedResponse(enrichedData, total, page, limit);
+  }
+
+  async createSession(eventId: number, dto: CreateEventSessionDto) {
+    await this.assertEventExists(eventId);
+    return this.prisma.eventSession.create({
+      data: {
+        eventId,
+        title: dto.title,
+        description: dto.description,
+        startAt: new Date(dto.startAt),
+        endAt: new Date(dto.endAt),
+        location: dto.location,
+        room: dto.room,
+        responsibleId: dto.responsibleId,
+        speaker: dto.speaker,
+        capacity: dto.capacity,
+        status: dto.status ?? 'SCHEDULED',
+      },
+      include: { responsible: { select: { id: true, fullName: true } } },
+    });
+  }
+
+  async updateSession(eventId: number, sessionId: number, dto: UpdateEventSessionDto) {
+    const session = await this.prisma.read.eventSession.findUnique({ where: { id: sessionId } });
+    if (!session || session.eventId !== eventId) throw new NotFoundException('Sessão não encontrada');
+
+    const { startAt, endAt, ...rest } = dto;
+    return this.prisma.eventSession.update({
+      where: { id: sessionId },
+      data: {
+        ...rest,
+        ...(startAt ? { startAt: new Date(startAt) } : {}),
+        ...(endAt ? { endAt: new Date(endAt) } : {}),
+      },
+      include: { responsible: { select: { id: true, fullName: true } } },
+    });
+  }
+
+  async deleteSession(eventId: number, sessionId: number) {
+    const session = await this.prisma.read.eventSession.findUnique({ where: { id: sessionId } });
+    if (!session || session.eventId !== eventId) throw new NotFoundException('Sessão não encontrada');
+    await this.prisma.eventSession.delete({ where: { id: sessionId } });
+    return { message: 'Sessão removida' };
+  }
+
+  // ─── LOCAIS & LOGÍSTICA (docs/events.md #6) ────────────────────────────────
+  // Um registo por evento (relação 1:1) — sem "Evento" como coluna própria no
+  // spec, tal como Participantes, o contexto é sempre UM evento seleccionado.
+  // GET devolve null quando ainda não há registo (frontend mostra o
+  // formulário vazio); PUT faz upsert — cobre criar e editar com um único
+  // botão "Guardar".
+
+  async getLogistics(eventId: number) {
+    await this.assertEventExists(eventId);
+    return this.prisma.read.eventLogistics.findUnique({
+      where: { eventId },
+      include: { responsible: { select: { id: true, fullName: true } } },
+    });
+  }
+
+  async upsertLogistics(eventId: number, dto: UpsertEventLogisticsDto) {
+    await this.assertEventExists(eventId);
+    const data = {
+      responsibleId: dto.responsibleId,
+      equipment: dto.equipment ?? [],
+      resourcesNeeded: dto.resourcesNeeded,
+      suppliers: dto.suppliers,
+      catering: dto.catering,
+      transport: dto.transport,
+      accommodation: dto.accommodation,
+      security: dto.security,
+      decoration: dto.decoration,
+      budget: dto.budget,
+      actualCost: dto.actualCost,
+      status: dto.status ?? 'PLANNED',
+    };
+    return this.prisma.eventLogistics.upsert({
+      where: { eventId },
+      create: { eventId, ...data },
+      update: data,
+      include: { responsible: { select: { id: true, fullName: true } } },
+    });
   }
 }
