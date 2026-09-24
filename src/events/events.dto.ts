@@ -307,6 +307,18 @@ export class EventFilterDto extends BaseFilterDto {
   @Type(() => Number)
   organizerId?: number;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
   // Os 2 campos abaixo: @Type(() => Boolean) coage '?campo=false' para true —
   // ver [[project-innova-boolean-query-filter-coercion]]. @Type(() => String)
   // + @Transform evita a coerção Boolean automática do class-transformer.

@@ -18,7 +18,10 @@ const mockPrisma = {
     create: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
-    findMany: jest.fn(),
+    // findAll() usa isto para calcular confirmedCount por evento — default []
+    // como qualquer findMany sem correspondências, para não quebrar testes
+    // que não passam por este caminho.
+    findMany: jest.fn().mockResolvedValue([]),
     count: jest.fn(),
     delete: jest.fn(),
   },

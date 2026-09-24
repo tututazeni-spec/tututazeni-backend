@@ -273,12 +273,17 @@ describe('EventsService (additional)', () => {
 
   describe('getStats', () => {
     it('deve retornar estatísticas gerais de eventos', async () => {
-      mockPrisma.event.groupBy = jest.fn().mockResolvedValue([]);
       mockPrisma.event.count.mockResolvedValue(10);
+      mockPrisma.event.findMany.mockResolvedValue([]);
       mockPrisma.eventParticipant.count.mockResolvedValue(100);
-      // Real method: getStats() — no args, returns global stats
+      // O teste de submitFeedback (acima) substitui mockPrisma.eventFeedback
+      // inteiro por { upsert }, sem findMany — repõe a forma original antes
+      // de chamar getStats(), que depende dela para "avaliações pendentes".
+      mockPrisma.eventFeedback = { findMany: jest.fn().mockResolvedValue([]) };
+      // Real method: getStats() — no args, returns global dashboard stats
       const result = await service.getStats();
       expect(result).toBeDefined();
+      expect(result.total).toBe(10);
     });
   });
 });

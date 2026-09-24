@@ -38,6 +38,8 @@ export class EventsService {
       status,
       upcoming,
       mandatory,
+      departmentId,
+      unitId,
     } = filters;
     const { skip, take } = calculatePagination(page, limit);
 
@@ -50,6 +52,8 @@ export class EventsService {
     if (status) where.status = status;
     else where.status = { in: ['PUBLISHED', 'LIVE'] };
     if (upcoming) where.startAt = { gte: new Date() };
+    if (departmentId) where.departmentId = departmentId;
+    if (unitId) where.unitId = unitId;
 
     const [data, total] = await Promise.all([
       this.prisma.read.event.findMany({
@@ -58,6 +62,8 @@ export class EventsService {
         take,
         include: {
           organizer: { select: { id: true, fullName: true, avatarUrl: true } },
+          department: { select: { id: true, name: true } },
+          unit: { select: { id: true, name: true } },
           _count: { select: { participants: true } },
         },
         orderBy: { startAt: 'asc' },
@@ -65,8 +71,23 @@ export class EventsService {
       this.prisma.read.event.count({ where }),
     ]);
 
+    // "Número de confirmados" (docs/events.md #2) — uma leitura só para todos
+    // os eventos da página, em vez de N contagens separadas.
+    const ids = data.map(e => e.id);
+    const confirmedRows = ids.length
+      ? await this.prisma.read.eventParticipant.findMany({
+          where: { eventId: { in: ids }, status: { in: ['CONFIRMED', 'PRESENT'] } },
+          select: { eventId: true },
+        })
+      : [];
+    const confirmedByEvent = confirmedRows.reduce<Record<number, number>>((acc, r) => {
+      acc[r.eventId] = (acc[r.eventId] ?? 0) + 1;
+      return acc;
+    }, {});
+
     const enrichedData = data.map(e => ({
       ...e,
+      confirmedCount: confirmedByEvent[e.id] ?? 0,
       isFull: e.maxCapacity ? e._count.participants >= e.maxCapacity : false,
       occupancyRate:
         e.maxCapacity && e.maxCapacity > 0
@@ -603,27 +624,107 @@ export class EventsService {
     }));
   }
 
-  // ─── STATS ────────────────────────────────────────────────────────────────
+  // ─── STATS / DASHBOARD ──────────────────────────────────────────────────
+  // Alimenta a aba "Visão Geral" (docs/events.md #1). Estende o antigo
+  // getStats (total/totalParticipants/byType/byStatus mantidos por
+  // compatibilidade) com os restantes indicadores do spec: breakdown por
+  // unidade/departamento, inscrições pendentes, check-ins realizados,
+  // avaliações pendentes, taxa de participação e a lista de próximos
+  // eventos. Uma única findMany para os breakdowns por tipo/estado/
+  // departamento/unidade (mesmo padrão de OnboardingService#getDashboard) —
+  // evita groupBy sobre campos de relação, que o Prisma não suporta.
 
   async getStats() {
-    const [byType, byStatus, total, totalParticipants] = await Promise.all([
-      this.prisma.read.event.groupBy({
-        by: ['type'],
-        _count: true,
-        orderBy: { _count: { type: 'desc' } },
-      }),
-      this.prisma.read.event.groupBy({ by: ['status'], _count: true }),
+    const now = new Date();
+
+    const [
+      total,
+      events,
+      registeredParticipants,
+      confirmedParticipants,
+      presentParticipants,
+      pendingRegistrations,
+      feedbacks,
+      upcomingEvents,
+    ] = await Promise.all([
       this.prisma.read.event.count(),
+      this.prisma.read.event.findMany({
+        select: {
+          type: true,
+          status: true,
+          startAt: true,
+          department: { select: { name: true } },
+          unit: { select: { name: true } },
+        },
+      }),
+      this.prisma.read.eventParticipant.count({
+        where: { status: { in: ['PENDING', 'CONFIRMED', 'WAITLIST', 'PRESENT'] } },
+      }),
       this.prisma.read.eventParticipant.count({
         where: { status: { in: ['CONFIRMED', 'PRESENT'] } },
       }),
+      this.prisma.read.eventParticipant.count({ where: { status: 'PRESENT' } }),
+      this.prisma.read.eventParticipant.count({ where: { status: 'PENDING' } }),
+      this.prisma.read.eventFeedback.findMany({ select: { id: true } }),
+      this.prisma.read.event.findMany({
+        where: { startAt: { gte: now }, status: 'PUBLISHED' },
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          status: true,
+          startAt: true,
+          location: true,
+          modalidade: true,
+          _count: { select: { participants: true } },
+        },
+        orderBy: { startAt: 'asc' },
+        take: 8,
+      }),
     ]);
+
+    const countBy = (rows: string[]) =>
+      rows.reduce<Record<string, number>>((acc, key) => {
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {});
+
+    const byType = countBy(events.map(e => e.type));
+    const byStatus = countBy(events.map(e => e.status));
+    const byDepartment = countBy(events.map(e => e.department?.name ?? 'Sem departamento'));
+    const byUnit = countBy(events.map(e => e.unit?.name ?? 'Sem unidade'));
+
+    const upcomingCount = events.filter(
+      e => e.status === 'PUBLISHED' && new Date(e.startAt) >= now,
+    ).length;
+
+    // Aproximação: participantes presentes em qualquer evento menos o total
+    // de avaliações já submetidas — sem cruzar por evento/participante
+    // individual (manter simples para um KPI de dashboard).
+    const pendingEvaluations = Math.max(presentParticipants - feedbacks.length, 0);
+    const participationRate =
+      confirmedParticipants > 0
+        ? Math.round((presentParticipants / confirmedParticipants) * 100)
+        : 0;
 
     return {
       total,
-      totalParticipants,
-      byType: Object.fromEntries(byType.map(t => [t.type, t._count])),
-      byStatus: Object.fromEntries(byStatus.map(s => [s.status, s._count])),
+      byType,
+      byStatus,
+      byDepartment,
+      byUnit,
+      totalParticipants: confirmedParticipants,
+      registeredParticipants,
+      confirmedParticipants,
+      checkinsDone: presentParticipants,
+      pendingRegistrations,
+      pendingEvaluations,
+      participationRate,
+      upcomingCount,
+      liveCount: byStatus.LIVE ?? 0,
+      endedCount: byStatus.ENDED ?? 0,
+      cancelledCount: byStatus.CANCELLED ?? 0,
+      upcomingEvents,
     };
   }
 }
