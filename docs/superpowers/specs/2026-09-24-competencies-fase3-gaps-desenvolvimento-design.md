@@ -71,6 +71,47 @@ one row each rather than exposing the raw array.
   subset is pre-existing drift in a different module, out of scope here.
   This module's own `types.ts`/`constants.ts` define the complete set.
 
+## §9 Relatórios
+
+Also derived at read time, same philosophy as §7/§8 — no new table. All 14
+reports docs/módulo_competencies.md §9 asks for come from one shared pair of
+sets (users matching the filters × competencies matching the filters) and the
+`UserCompetency` rows linking them, computed once in
+`competencies.service.ts#getReports` and sliced 14 ways. The one exception is
+"Impacto das formações", which reads `CompetencyEvolutionLog` directly
+(source `TRAINING`/`COURSE`) since it measures change over time, not current
+state.
+
+- **Departamento/Subdepartamento**: no gap-lifecycle-style enum needed here,
+  just hierarchy resolution — "Departamento" without "Subdepartamento" widens
+  to the department **and its direct children** (`Department.parentId`, one
+  level, not the full subtree) via a `department.findMany({ where: {
+  parentId } })` lookup; "Subdepartamento" alone narrows to exactly that one
+  department. Both ultimately just filter `User.departmentId`.
+- **Unidade**: `User.unitId` directly — `Department.unitId` was not used,
+  since a user's own unit can differ from their department's (matches how
+  `SkillMatrixFilterDto`/`CompetencyGapFilterDto` already only touch
+  `User.departmentId`, not `Department.unitId`, elsewhere in this file).
+- **Estado**: reuses `CompetencyStatus` (Activa/Em revisão/Arquivada, same
+  field as the §2 catalog), not `CompetencyGapStatus` from §7 — §9's "Estado"
+  sits on the competency, not on a gap.
+- **Período**: `from`/`to` on `UserCompetency.evaluatedAt` (and, for the
+  formation-impact report only, on `CompetencyEvolutionLog.createdAt`) —
+  mirrors `ReportFilterDto` in `src/reports/reports.dto.ts` rather than the
+  `year`-only convention `TrainingReportFilterDto` uses, since nothing in
+  this module's date fields lines up with a calendar year the way a
+  training's `startDate` does.
+- **Grouped reports** (por departamento/cargo/unidade/nível hierárquico, and
+  gaps por departamento/cargo) all go through two small generic helpers
+  (`groupCompetencyRows`, `groupGapRows`) instead of six near-identical
+  `reduce` blocks — group by a pre-resolved label, not by re-joining to
+  `userMap` inside each one.
+- **CSV export** (`GET /competencies/reports/export`) only flattens the
+  top-level scalars (`mapaGeral`, `gaps`, `impactoFormacoes` totals), same
+  restraint as `trainings.service.ts#exportReportsCsv` — the ranked/grouped
+  breakdowns stay JSON-only, no attempt to flatten a table-of-tables into one
+  CSV.
+
 ## Remaining
 
-§9 Relatórios — not started.
+None — docs/módulo_competencies.md fully implemented (§1-9).

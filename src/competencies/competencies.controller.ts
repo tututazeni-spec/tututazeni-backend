@@ -13,6 +13,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CompetenciesService } from './competencies.service';
@@ -36,6 +37,7 @@ import {
   CompetencyEvaluationFilterDto,
   CompetencyGapFilterDto,
   DevelopmentActionFilterDto,
+  CompetencyReportFilterDto,
 } from './competencies.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -116,6 +118,29 @@ export class CompetenciesController {
   @ApiQuery({ name: 'departmentId', required: false })
   orgGapDashboard(@Query('departmentId') departmentId?: string) {
     return this.svc.getOrgGapDashboard(departmentId ? parseInt(departmentId) : undefined);
+  }
+
+  // ── Relatórios (docs/módulo_competencies.md §9) ────────────────────────────
+  // Rotas com prefixo fixo ("reports/...") registadas antes de ':id' — mesmo
+  // cuidado de route shadowing de trainings.controller.ts#reports.
+
+  @Get('reports/overview')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary:
+      'Relatórios de competências: mapa geral, por departamento/cargo/unidade/nível hierárquico, gaps, críticas, mais desenvolvidas, maior défice, colaboradores abaixo do esperado, impacto das formações (docs/módulo_competencies.md §9)',
+  })
+  reports(@Query() filters: CompetencyReportFilterDto) {
+    return this.svc.getReports(filters);
+  }
+
+  @Get('reports/export')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="relatorio-competencias.csv"')
+  @ApiOperation({ summary: 'Exportar relatório de competências (filtrado) como CSV' })
+  exportReports(@Query() filters: CompetencyReportFilterDto) {
+    return this.svc.exportReportsCsv(filters);
   }
 
   // ── Níveis de Proficiência (rotas literais — antes de :id) ────────────────

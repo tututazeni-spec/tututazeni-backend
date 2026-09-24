@@ -792,6 +792,71 @@ export class DevelopmentActionFilterDto {
   status?: ActionStatus;
 }
 
+// ─── Relatórios (docs/módulo_competencies.md §9) ────────────────────────────
+// Filtros aplicados sobre UserCompetency (via o utilizador e a competência) —
+// "Estado" aqui é CompetencyStatus (Activa/Em revisão/Arquivada, mesmo campo
+// do catálogo §2), distinto do CompetencyGapStatus derivado em §7.
+// "Subdepartamento" filtra por um Department filho específico; sem ele,
+// "Departamento" abrange o próprio departamento + os seus filhos directos
+// (ver competencies.service.ts#getReports).
+
+export class CompetencyReportFilterDto {
+  @ApiPropertyOptional({ description: 'Período — início (evaluatedAt/createdAt ≥)' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Período — fim (evaluatedAt/createdAt ≤)' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  subDepartmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  positionId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  competencyId?: number;
+
+  @ApiPropertyOptional({ enum: CompetencyCategory })
+  @IsOptional()
+  @IsEnum(CompetencyCategory)
+  category?: CompetencyCategory;
+
+  @ApiPropertyOptional({ enum: PositionLevel })
+  @IsOptional()
+  @IsEnum(PositionLevel)
+  hierarchyLevel?: PositionLevel;
+
+  @ApiPropertyOptional({ enum: CompetencyStatus })
+  @IsOptional()
+  @IsEnum(CompetencyStatus)
+  status?: CompetencyStatus;
+}
+
 // ─── Endorsement ─────────────────────────────────────────────────────────────
 
 export class CreateEndorsementDto {

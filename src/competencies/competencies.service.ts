@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { buildCsvString } from '../common/utils/csv-export.util';
 import {
   CreateCompetencyDto,
   UpdateCompetencyDto,
@@ -33,6 +34,7 @@ import {
   CompetencyGapStatus,
   DevelopmentActionFilterDto,
   DevelopmentResult,
+  CompetencyReportFilterDto,
 } from './competencies.dto';
 
 @Injectable()
@@ -1483,5 +1485,354 @@ export class CompetenciesService {
     }
 
     this.logger.log(`Competências actualizadas para user ${userId} após formação ${trainingId}`);
+  }
+
+  // ─── RELATÓRIOS (docs/módulo_competencies.md §9) ─────────────────────────
+  // Sem tabela própria — os 14 relatórios são todos derivados, no momento da
+  // leitura, do mesmo par de conjuntos (utilizadores que cumprem os filtros ×
+  // competências que cumprem os filtros) e das linhas de UserCompetency que
+  // os ligam. Mesma filosofia de "sem tabela nova" da Decisão 1 do §7/§8 (ver
+  // docs/superpowers/specs/2026-09-24-competencies-fase3-gaps-desenvolvimento-design.md).
+  // "Impacto das formações" é a única secção que sai deste par e vai directo
+  // a CompetencyEvolutionLog (source TRAINING/COURSE), porque mede evolução
+  // no tempo, não o estado actual.
+
+  private static round1(n: number): number {
+    return Math.round(n * 10) / 10;
+  }
+
+  private static avg(values: number[]): number {
+    return values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
+  }
+
+  private static groupCompetencyRows<
+    T extends { userId: number; competencyId: number; currentLevel: number },
+  >(rows: T[], labelFn: (r: T) => string) {
+    const map = new Map<
+      string,
+      { levels: number[]; userIds: Set<number>; competencyIds: Set<number> }
+    >();
+    for (const r of rows) {
+      const label = labelFn(r);
+      let entry = map.get(label);
+      if (!entry) {
+        entry = { levels: [], userIds: new Set(), competencyIds: new Set() };
+        map.set(label, entry);
+      }
+      entry.levels.push(r.currentLevel);
+      entry.userIds.add(r.userId);
+      entry.competencyIds.add(r.competencyId);
+    }
+    return [...map.entries()]
+      .map(([label, e]) => ({
+        label,
+        totalCompetencies: e.competencyIds.size,
+        usersAssessed: e.userIds.size,
+        avgLevel: CompetenciesService.round1(CompetenciesService.avg(e.levels)),
+      }))
+      .sort((a, b) => b.totalCompetencies - a.totalCompetencies);
+  }
+
+  private static groupGapRows<
+    T extends { userId: number; currentLevel: number; targetLevel: number | null },
+  >(rows: T[], labelFn: (r: T) => string) {
+    const map = new Map<string, { gaps: number[]; userIds: Set<number> }>();
+    for (const r of rows) {
+      const label = labelFn(r);
+      let entry = map.get(label);
+      if (!entry) {
+        entry = { gaps: [], userIds: new Set() };
+        map.set(label, entry);
+      }
+      entry.gaps.push((r.targetLevel ?? 0) - r.currentLevel);
+      entry.userIds.add(r.userId);
+    }
+    return [...map.entries()]
+      .map(([label, e]) => ({
+        label,
+        count: e.gaps.length,
+        usersWithGap: e.userIds.size,
+        avgGap: CompetenciesService.round1(CompetenciesService.avg(e.gaps)),
+      }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  /** Departamentos elegíveis para o filtro "Departamento" — o próprio +
+   *  filhos directos — ou só o "Subdepartamento" pedido, quando presente. */
+  private async resolveReportDepartmentIds(filters: CompetencyReportFilterDto) {
+    if (filters.subDepartmentId) return [filters.subDepartmentId];
+    if (!filters.departmentId) return undefined;
+    const children = await this.prisma.read.department.findMany({
+      where: { parentId: filters.departmentId },
+      select: { id: true },
+    });
+    return [filters.departmentId, ...children.map(c => c.id)];
+  }
+
+  async getReports(filters: CompetencyReportFilterDto = {}) {
+    const departmentIds = await this.resolveReportDepartmentIds(filters);
+
+    const userWhere: Prisma.UserWhereInput = { active: true };
+    if (filters.unitId) userWhere.unitId = filters.unitId;
+    if (departmentIds) userWhere.departmentId = { in: departmentIds };
+    if (filters.positionId) userWhere.positionId = filters.positionId;
+    if (filters.hierarchyLevel) userWhere.position = { level: filters.hierarchyLevel };
+
+    const competencyWhere: Prisma.CompetencyWhereInput = {};
+    if (filters.competencyId) competencyWhere.id = filters.competencyId;
+    if (filters.category) competencyWhere.category = filters.category;
+    if (filters.status) competencyWhere.status = filters.status;
+
+    const dateRange: { gte?: Date; lte?: Date } | undefined =
+      filters.from || filters.to
+        ? {
+            ...(filters.from ? { gte: new Date(filters.from) } : {}),
+            ...(filters.to ? { lte: new Date(filters.to) } : {}),
+          }
+        : undefined;
+
+    const [users, competencies] = await Promise.all([
+      this.prisma.read.user.findMany({
+        where: userWhere,
+        select: {
+          id: true,
+          department: { select: { name: true } },
+          position: { select: { name: true, level: true } },
+          unit: { select: { name: true } },
+        },
+      }),
+      this.prisma.read.competency.findMany({
+        where: competencyWhere,
+        select: { id: true, name: true, category: true, isCritical: true, isStrategic: true },
+      }),
+    ]);
+
+    const userIds = users.map(u => u.id);
+    const userMap = new Map(users.map(u => [u.id, u]));
+    const competencyIds = competencies.map(c => c.id);
+    const competencyMap = new Map(competencies.map(c => [c.id, c]));
+
+    const ucWhere: Prisma.UserCompetencyWhereInput = {
+      userId: { in: userIds },
+      competencyId: { in: competencyIds },
+    };
+    if (dateRange) ucWhere.evaluatedAt = dateRange;
+
+    const rows = await this.prisma.read.userCompetency.findMany({
+      where: ucWhere,
+      select: { userId: true, competencyId: true, currentLevel: true, targetLevel: true },
+    });
+
+    // Linhas enriquecidas com o rótulo já resolvido — evita repetir o lookup
+    // em userMap dentro de cada groupBy abaixo.
+    const enriched = rows.map(r => {
+      const u = userMap.get(r.userId);
+      return {
+        ...r,
+        department: u?.department?.name ?? 'Sem departamento',
+        position: u?.position?.name ?? 'Sem cargo',
+        unit: u?.unit?.name ?? 'Sem unidade',
+        hierarchyLevel: u?.position?.level ?? 'Sem nível',
+      };
+    });
+
+    const gapped = enriched.filter(r => (r.targetLevel ?? 0) > r.currentLevel);
+
+    // 1. Mapa geral de competências
+    const byCategoryMap: Record<string, number> = {};
+    for (const c of competencies) byCategoryMap[c.category] = (byCategoryMap[c.category] ?? 0) + 1;
+    const mapaGeral = {
+      totalCompetencies: competencies.length,
+      byCategory: byCategoryMap,
+      critical: competencies.filter(c => c.isCritical).length,
+      strategic: competencies.filter(c => c.isStrategic).length,
+      usersEligible: users.length,
+      usersAssessed: new Set(enriched.map(r => r.userId)).size,
+    };
+
+    // 2/3/4. Competências por departamento / cargo / unidade
+    const porDepartamento = CompetenciesService.groupCompetencyRows(enriched, r => r.department);
+    const porCargo = CompetenciesService.groupCompetencyRows(enriched, r => r.position);
+    const porUnidade = CompetenciesService.groupCompetencyRows(enriched, r => r.unit);
+
+    // 5. Nível médio de proficiência (geral + por categoria)
+    const byCategoryLevels = new Map<string, number[]>();
+    for (const r of enriched) {
+      const comp = competencyMap.get(r.competencyId);
+      if (!comp) continue;
+      const arr = byCategoryLevels.get(comp.category) ?? [];
+      arr.push(r.currentLevel);
+      byCategoryLevels.set(comp.category, arr);
+    }
+    const nivelMedioProficiencia = {
+      geral: CompetenciesService.round1(CompetenciesService.avg(enriched.map(r => r.currentLevel))),
+      porCategoria: [...byCategoryLevels.entries()].map(([category, levels]) => ({
+        category,
+        avgLevel: CompetenciesService.round1(CompetenciesService.avg(levels)),
+        count: levels.length,
+      })),
+    };
+
+    // 6/7/8. Gaps (geral / por departamento / por cargo)
+    const gaps = {
+      total: gapped.length,
+      usersWithGap: new Set(gapped.map(r => r.userId)).size,
+      avgGap: CompetenciesService.round1(
+        CompetenciesService.avg(gapped.map(r => (r.targetLevel ?? 0) - r.currentLevel)),
+      ),
+    };
+    const gapsPorDepartamento = CompetenciesService.groupGapRows(gapped, r => r.department);
+    const gapsPorCargo = CompetenciesService.groupGapRows(gapped, r => r.position);
+
+    // 9. Competências críticas
+    const competenciasCriticas = competencies
+      .filter(c => c.isCritical)
+      .map(c => {
+        const compRows = enriched.filter(r => r.competencyId === c.id);
+        const compGapped = compRows.filter(r => (r.targetLevel ?? 0) > r.currentLevel);
+        return {
+          id: c.id,
+          name: c.name,
+          category: c.category,
+          usersAssessed: compRows.length,
+          usersWithGap: compGapped.length,
+          avgLevel: compRows.length
+            ? CompetenciesService.round1(CompetenciesService.avg(compRows.map(r => r.currentLevel)))
+            : 0,
+        };
+      })
+      .sort((a, b) => b.usersWithGap - a.usersWithGap);
+
+    // 10. Competências mais desenvolvidas (mais colaboradores com registo)
+    const developedCount = new Map<number, number>();
+    for (const r of enriched)
+      developedCount.set(r.competencyId, (developedCount.get(r.competencyId) ?? 0) + 1);
+    const maisDesenvolvidas = [...developedCount.entries()]
+      .map(([id, count]) => ({
+        id,
+        name: competencyMap.get(id)?.name ?? '—',
+        category: competencyMap.get(id)?.category,
+        usersAssessed: count,
+      }))
+      .sort((a, b) => b.usersAssessed - a.usersAssessed)
+      .slice(0, 10);
+
+    // 11. Competências com maior défice (soma dos gaps)
+    const deficitSum = new Map<number, number>();
+    for (const r of gapped) {
+      deficitSum.set(
+        r.competencyId,
+        (deficitSum.get(r.competencyId) ?? 0) + ((r.targetLevel ?? 0) - r.currentLevel),
+      );
+    }
+    const maiorDefice = [...deficitSum.entries()]
+      .map(([id, totalGap]) => ({
+        id,
+        name: competencyMap.get(id)?.name ?? '—',
+        category: competencyMap.get(id)?.category,
+        totalGap,
+      }))
+      .sort((a, b) => b.totalGap - a.totalGap)
+      .slice(0, 10);
+
+    // 12. Colaboradores abaixo do nível esperado
+    const belowByUser = new Map<number, number>();
+    for (const r of gapped) belowByUser.set(r.userId, (belowByUser.get(r.userId) ?? 0) + 1);
+    const colaboradoresAbaixoDoEsperado = [...belowByUser.entries()]
+      .map(([userId, gapsCount]) => {
+        const u = userMap.get(userId);
+        return {
+          userId,
+          department: u?.department?.name ?? null,
+          position: u?.position?.name ?? null,
+          gapsCount,
+        };
+      })
+      .sort((a, b) => b.gapsCount - a.gapsCount);
+
+    // 13. Competências por nível hierárquico
+    const porNivelHierarquico = CompetenciesService.groupCompetencyRows(
+      enriched,
+      r => r.hierarchyLevel,
+    );
+
+    // 14. Impacto das formações na proficiência — evolução atribuída a
+    // CompetencyEvolutionLog com source TRAINING/COURSE (updateFromTraining/
+    // updateFromCourse acima), não ao estado actual de UserCompetency.
+    const evolutionWhere: Prisma.CompetencyEvolutionLogWhereInput = {
+      userId: { in: userIds },
+      competencyId: { in: competencyIds },
+      source: { in: ['TRAINING', 'COURSE'] },
+    };
+    if (dateRange) evolutionWhere.createdAt = dateRange;
+    const evolutionLogs = await this.prisma.read.competencyEvolutionLog.findMany({
+      where: evolutionWhere,
+      select: { source: true, previousLevel: true, newLevel: true },
+    });
+    const deltas = evolutionLogs.map(l => l.newLevel - l.previousLevel);
+    const impactoFormacoes = {
+      events: evolutionLogs.length,
+      improved: deltas.filter(d => d > 0).length,
+      avgLevelIncrease: CompetenciesService.round1(CompetenciesService.avg(deltas)),
+      bySource: (['TRAINING', 'COURSE'] as const).map(source => {
+        const subset = evolutionLogs.filter(l => l.source === source);
+        return {
+          source,
+          events: subset.length,
+          avgLevelIncrease: CompetenciesService.round1(
+            CompetenciesService.avg(subset.map(l => l.newLevel - l.previousLevel)),
+          ),
+        };
+      }),
+    };
+
+    return {
+      filters,
+      mapaGeral,
+      porDepartamento,
+      porCargo,
+      porUnidade,
+      nivelMedioProficiencia,
+      gaps,
+      gapsPorDepartamento,
+      gapsPorCargo,
+      competenciasCriticas,
+      maisDesenvolvidas,
+      maiorDefice,
+      colaboradoresAbaixoDoEsperado: {
+        total: colaboradoresAbaixoDoEsperado.length,
+        items: colaboradoresAbaixoDoEsperado.slice(0, 50),
+      },
+      porNivelHierarquico,
+      impactoFormacoes,
+    };
+  }
+
+  async exportReportsCsv(filters: CompetencyReportFilterDto = {}): Promise<string> {
+    const report = await this.getReports(filters);
+    const rows = [
+      { metrica: 'Total de competências', valor: report.mapaGeral.totalCompetencies },
+      { metrica: 'Competências críticas', valor: report.mapaGeral.critical },
+      { metrica: 'Competências estratégicas', valor: report.mapaGeral.strategic },
+      { metrica: 'Colaboradores elegíveis', valor: report.mapaGeral.usersEligible },
+      { metrica: 'Colaboradores avaliados', valor: report.mapaGeral.usersAssessed },
+      { metrica: 'Nível médio de proficiência', valor: report.nivelMedioProficiencia.geral },
+      { metrica: 'Gaps de competências (total)', valor: report.gaps.total },
+      { metrica: 'Gap médio', valor: report.gaps.avgGap },
+      { metrica: 'Colaboradores com gap', valor: report.gaps.usersWithGap },
+      {
+        metrica: 'Colaboradores abaixo do nível esperado',
+        valor: report.colaboradoresAbaixoDoEsperado.total,
+      },
+      {
+        metrica: 'Eventos de formação com impacto na proficiência',
+        valor: report.impactoFormacoes.events,
+      },
+      {
+        metrica: 'Aumento médio de nível por formação/curso',
+        valor: report.impactoFormacoes.avgLevelIncrease,
+      },
+    ];
+    return buildCsvString(rows, ['metrica', 'valor']);
   }
 }

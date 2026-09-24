@@ -13,6 +13,8 @@ const mockSvc = {
   getGaps: jest.fn().mockResolvedValue([]),
   getDevelopmentActions: jest.fn().mockResolvedValue([]),
   getOrgGapDashboard: jest.fn().mockResolvedValue({}),
+  getReports: jest.fn().mockResolvedValue({}),
+  exportReportsCsv: jest.fn().mockResolvedValue('metrica,valor'),
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
   create: jest.fn().mockResolvedValue({ id: 2 }),
   update: jest.fn().mockResolvedValue({ id: 1 }),
@@ -129,6 +131,23 @@ describe('CompetenciesController', () => {
   it('orgGapDashboard com departmentId → getOrgGapDashboard(parsed)', async () => {
     await controller.orgGapDashboard('4');
     expect(mockSvc.getOrgGapDashboard).toHaveBeenCalledWith(4);
+  });
+
+  it('reports sem filtros → getReports({})', async () => {
+    await controller.reports({});
+    expect(mockSvc.getReports).toHaveBeenCalledWith({});
+  });
+
+  it('reports com filtros → getReports(filters)', async () => {
+    const filters = { departmentId: 2, unitId: 1, status: 'ACTIVE' as any };
+    await controller.reports(filters);
+    expect(mockSvc.getReports).toHaveBeenCalledWith(filters);
+  });
+
+  it('exportReports → exportReportsCsv(filters)', async () => {
+    const filters = { departmentId: 2 };
+    await controller.exportReports(filters);
+    expect(mockSvc.exportReportsCsv).toHaveBeenCalledWith(filters);
   });
 
   it('findOne → findOne(id)', async () => {
