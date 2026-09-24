@@ -68,7 +68,7 @@ export const ALERT_TYPE: Record<AlertRuleKey, string> = {
 const ACTION_URL: Partial<Record<AlertRuleKey, string>> = {
   SURVEYS_PENDING: '/engagement',
   EVAL_360_PENDING: '/evaluations/pending',
-  PDI_ACTIONS_OVERDUE: '/talent-development/plans',
+  PDI_ACTIONS_OVERDUE: '/development-plans',
   MANDATORY_TRAINING_PENDING: '/content-library/mandatory',
   TEAM_PERFORMANCE_AT_RISK: '/evaluations',
 };

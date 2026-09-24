@@ -1,4 +1,4 @@
-﻿// src/talent-development/talent-development.service.ts
+﻿// src/development-plans/talent-development.service.ts
 import {
   Injectable,
   Logger,
@@ -33,7 +33,7 @@ import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
 import type { CurrentUserData } from '../common/types/current-user';
 import { createNotificationSafe } from '../common/helpers/notification.helper';
-import { DevelopmentPlansService } from '../development-plans/development-plans.service';
+import { DevelopmentPlansService } from './development-plans.service';
 import {
   ApprovalDecision,
   CreateDevelopmentPlanDto,

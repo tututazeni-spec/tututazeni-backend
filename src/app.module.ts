@@ -55,7 +55,6 @@ import { DocumentRepositoryModule } from './document-repository/document-reposit
 // CareerModule único junta CareerController (/career) e CareerPlansController
 // (/career-plans) — ex-CareerPlansModule, fundido aqui.
 import { CareerModule } from './career/career.module';
-import { TalentDevelopmentModule } from './talent-development/talent-development.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
 import { Evaluation360Module } from './evaluation360/evaluation360.module';
 
@@ -178,7 +177,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     DeclarationsModule,
     DocumentRepositoryModule,
     CareerModule,
-    TalentDevelopmentModule,
     EvaluationModule,
     Evaluation360Module,
     DashboardModule,

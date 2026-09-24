@@ -1,4 +1,4 @@
-// src/talent-development/talent-development.dto.ts
+// src/development-plans/talent-development.dto.ts
 import {
   IsString,
   IsInt,
