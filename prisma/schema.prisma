@@ -834,6 +834,7 @@ model User {
   responsibleEvents         Event[]             @relation("EventResponsible")
   responsibleEventSessions  EventSession[]      @relation("EventSessionResponsible")
   responsibleEventLogistics EventLogistics[]    @relation("EventLogisticsResponsible")
+  createdEventCommunications EventCommunication[] @relation("EventCommunicationCreatedBy")
   liveAttendances           LiveAttendance[]
   liveMessages              LiveChatMessage[]
   postClassResponses        PostClassResponse[]
@@ -7740,6 +7741,8 @@ model Event {
   certificates         Certificate[]
   sessions             EventSession[]
   logistics            EventLogistics?
+  speakers             EventSpeaker[]
+  communications       EventCommunication[]
 
   @@index([organizerId])
   @@index([responsibleId])
@@ -7836,6 +7839,7 @@ model EventSession {
   updatedAt     DateTime           @updatedAt
   event         Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
   responsible   User?              @relation("EventSessionResponsible", fields: [responsibleId], references: [id])
+  speakers      EventSpeaker[]
 
   @@index([eventId])
   @@index([responsibleId])
@@ -7890,6 +7894,118 @@ model EventLogistics {
   responsible     User?                @relation("EventLogisticsResponsible", fields: [responsibleId], references: [id])
 
   @@index([responsibleId])
+}
+
+// ─── Oradores & Convidados (docs/events.md #7) ─────────────────────────────
+// Pessoas que participam como oradores, convidados ou moderadores — não são
+// necessariamente utilizadores do sistema (por isso Nome/organização/cargo/
+// contacto ficam texto livre, sem FK a User, ao contrário de Responsável em
+// EventSession/EventLogistics). "Sessão" é opcional — cobre tanto eventos
+// com Programação (liga a uma EventSession concreta) como eventos simples
+// (só o evento, sem sessões próprias). "Evento" não é coluna própria no
+// spec (ao contrário de Programação/Comunicação) — mesmo critério de
+// Locais & Logística/Participantes: contexto é sempre UM evento seleccionado.
+
+enum EventSpeakerType {
+  SPEAKER
+  LECTURER
+  MODERATOR
+  GUEST
+  PANELIST
+  FACILITATOR
+  INSTITUTIONAL_REP
+}
+
+enum EventSpeakerStatus {
+  INVITED
+  CONFIRMED
+  DECLINED
+  CANCELLED
+}
+
+model EventSpeaker {
+  id            Int                @id @default(autoincrement())
+  eventId       Int
+  name          String
+  type          EventSpeakerType
+  organization  String?
+  position      String?
+  contact       String?
+  bio           String?            @db.Text
+  photoUrl      String?
+  topic         String?
+  sessionId     Int?
+  schedule      String?
+  specialNeeds  String?
+  fee           Float?
+  transport     String?
+  accommodation String?
+  status        EventSpeakerStatus @default(INVITED)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  event         Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  session       EventSession?      @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
+  @@index([sessionId])
+  @@index([status])
+}
+
+// ─── Comunicação (docs/events.md #8) ───────────────────────────────────────
+// Envio real (não decorativo): INNOVA_NOTIFICATION cria NotificationLog para
+// cada destinatário (NotificationsService#sendBulk), EMAIL/SMS/WHATSAPP
+// despacham via MailService/SmsService já usados por Notifications/
+// Automation — mesmos serviços com degradação graciosa se SMTP/Twilio não
+// estiverem configurados (nunca rebenta a criação do registo). "Evento" É
+// coluna própria no spec (ao contrário de Oradores/Locais & Logística) —
+// listagem cross-evento como Programação (GET /events/communications).
+
+enum EventCommunicationType {
+  INVITATION
+  CONFIRMATION
+  REMINDER
+  TIME_CHANGE
+  LOCATION_CHANGE
+  CANCELLATION
+  INSTRUCTIONS
+  THANK_YOU
+  FOLLOW_UP
+}
+
+enum EventCommunicationChannel {
+  INNOVA_NOTIFICATION
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum EventCommunicationStatus {
+  DRAFT
+  SENT
+  FAILED
+}
+
+model EventCommunication {
+  id             Int                        @id @default(autoincrement())
+  eventId        Int
+  type           EventCommunicationType
+  subject        String
+  message        String                     @db.Text
+  channel        EventCommunicationChannel
+  recipientIds   Int[]                      @default([])
+  recipientCount Int                        @default(0)
+  status         EventCommunicationStatus   @default(DRAFT)
+  sentAt         DateTime?
+  createdById    Int
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  event          Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy      User                       @relation("EventCommunicationCreatedBy", fields: [createdById], references: [id])
+
+  @@index([eventId])
+  @@index([type])
+  @@index([channel])
+  @@index([status])
 }
 
 // ══════════════════════════════════════════════════════════════════

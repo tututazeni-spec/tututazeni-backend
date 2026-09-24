@@ -8,6 +8,9 @@ import {
 } from '@nestjs/common';
 import { Prisma, CertificateType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
+import { SmsService } from '../sms/sms.service';
 import {
   CreateEventDto,
   UpdateEventDto,
@@ -23,6 +26,11 @@ import {
   UpdateEventSessionDto,
   EventSessionFilterDto,
   UpsertEventLogisticsDto,
+  CreateEventSpeakerDto,
+  UpdateEventSpeakerDto,
+  EventSpeakerFilterDto,
+  CreateEventCommunicationDto,
+  EventCommunicationFilterDto,
 } from './events.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { buildCsvString } from '../common/utils/csv-export.util';
@@ -31,7 +39,12 @@ import { buildCsvString } from '../common/utils/csv-export.util';
 export class EventsService {
   private readonly logger = new Logger(EventsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+    private mail: MailService,
+    private sms: SmsService,
+  ) {}
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
 
@@ -564,7 +577,9 @@ export class EventsService {
     });
     if (!participant) throw new NotFoundException('Inscrição não encontrada');
     if (!['PENDING', 'WAITLIST'].includes(participant.status)) {
-      throw new BadRequestException('Só é possível aprovar inscrições pendentes ou em lista de espera');
+      throw new BadRequestException(
+        'Só é possível aprovar inscrições pendentes ou em lista de espera',
+      );
     }
 
     const updated = await this.prisma.eventParticipant.update({
@@ -671,7 +686,10 @@ export class EventsService {
     return updated;
   }
 
-  async exportParticipantsCsv(eventId: number, filters: EventParticipantFilterDto): Promise<string> {
+  async exportParticipantsCsv(
+    eventId: number,
+    filters: EventParticipantFilterDto,
+  ): Promise<string> {
     const { page: _page, limit: _limit, ...rest } = filters;
     const { data } = await this.listParticipants(eventId, { ...rest, page: 1, limit: 100000 });
 
@@ -1115,8 +1133,18 @@ export class EventsService {
   // sempre a um evento concreto.
 
   async listAllSessions(filters: EventSessionFilterDto) {
-    const { page = 1, limit = 20, eventId, departmentId, unitId, responsibleId, status, dateFrom, dateTo, search } =
-      filters;
+    const {
+      page = 1,
+      limit = 20,
+      eventId,
+      departmentId,
+      unitId,
+      responsibleId,
+      status,
+      dateFrom,
+      dateTo,
+      search,
+    } = filters;
     const { skip, take } = calculatePagination(page, limit);
 
     const where: Prisma.EventSessionWhereInput = {};
@@ -1181,7 +1209,8 @@ export class EventsService {
 
   async updateSession(eventId: number, sessionId: number, dto: UpdateEventSessionDto) {
     const session = await this.prisma.read.eventSession.findUnique({ where: { id: sessionId } });
-    if (!session || session.eventId !== eventId) throw new NotFoundException('Sessão não encontrada');
+    if (!session || session.eventId !== eventId)
+      throw new NotFoundException('Sessão não encontrada');
 
     const { startAt, endAt, ...rest } = dto;
     return this.prisma.eventSession.update({
@@ -1197,7 +1226,8 @@ export class EventsService {
 
   async deleteSession(eventId: number, sessionId: number) {
     const session = await this.prisma.read.eventSession.findUnique({ where: { id: sessionId } });
-    if (!session || session.eventId !== eventId) throw new NotFoundException('Sessão não encontrada');
+    if (!session || session.eventId !== eventId)
+      throw new NotFoundException('Sessão não encontrada');
     await this.prisma.eventSession.delete({ where: { id: sessionId } });
     return { message: 'Sessão removida' };
   }
@@ -1239,5 +1269,212 @@ export class EventsService {
       update: data,
       include: { responsible: { select: { id: true, fullName: true } } },
     });
+  }
+
+  // ─── ORADORES & CONVIDADOS (docs/events.md #7) ─────────────────────────────
+  // Sem "Evento" como coluna própria no spec — contexto é sempre UM evento
+  // seleccionado (mesmo critério de Locais & Logística/Participantes),
+  // listagem 100% aninhada em /events/:id/speakers.
+
+  async listSpeakers(eventId: number, filters: EventSpeakerFilterDto) {
+    await this.assertEventExists(eventId);
+    const { page = 1, limit = 20, type, status, sessionId, search } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+
+    const where: Prisma.EventSpeakerWhereInput = { eventId };
+    if (type) where.type = type;
+    if (status) where.status = status;
+    if (sessionId) where.sessionId = sessionId;
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { organization: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.eventSpeaker.findMany({
+        where,
+        skip,
+        take,
+        include: { session: { select: { id: true, title: true, startAt: true, endAt: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.read.eventSpeaker.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  async createSpeaker(eventId: number, dto: CreateEventSpeakerDto) {
+    await this.assertEventExists(eventId);
+    if (dto.sessionId) await this.assertSessionBelongsToEvent(eventId, dto.sessionId);
+    return this.prisma.eventSpeaker.create({
+      data: { eventId, ...dto, status: dto.status ?? 'INVITED' },
+      include: { session: { select: { id: true, title: true, startAt: true, endAt: true } } },
+    });
+  }
+
+  async updateSpeaker(eventId: number, speakerId: number, dto: UpdateEventSpeakerDto) {
+    const speaker = await this.prisma.read.eventSpeaker.findUnique({ where: { id: speakerId } });
+    if (!speaker || speaker.eventId !== eventId)
+      throw new NotFoundException('Orador/convidado não encontrado');
+    if (dto.sessionId) await this.assertSessionBelongsToEvent(eventId, dto.sessionId);
+    return this.prisma.eventSpeaker.update({
+      where: { id: speakerId },
+      data: dto,
+      include: { session: { select: { id: true, title: true, startAt: true, endAt: true } } },
+    });
+  }
+
+  async deleteSpeaker(eventId: number, speakerId: number) {
+    const speaker = await this.prisma.read.eventSpeaker.findUnique({ where: { id: speakerId } });
+    if (!speaker || speaker.eventId !== eventId)
+      throw new NotFoundException('Orador/convidado não encontrado');
+    await this.prisma.eventSpeaker.delete({ where: { id: speakerId } });
+    return { message: 'Orador/convidado removido' };
+  }
+
+  private async assertSessionBelongsToEvent(eventId: number, sessionId: number) {
+    const session = await this.prisma.read.eventSession.findUnique({ where: { id: sessionId } });
+    if (!session || session.eventId !== eventId)
+      throw new BadRequestException('Sessão não pertence a este evento');
+  }
+
+  // ─── COMUNICAÇÃO (docs/events.md #8) ───────────────────────────────────────
+  // "Evento" É coluna própria no spec — listagem cross-evento (mesmo critério
+  // de Programação). Envio real, não decorativo: INNOVA_NOTIFICATION cria um
+  // NotificationLog por destinatário (NotificationsService#sendBulk — só
+  // regista, sem despachar canais externos por si, ver o próprio comentário
+  // do método); EMAIL/SMS/WHATSAPP despacham via MailService/SmsService, os
+  // mesmos serviços já usados por NotificationsService#send e
+  // AutomationService — melhor esforço, nunca bloqueiam a criação do registo
+  // se SMTP/Twilio não estiverem configurados.
+
+  async listAllCommunications(filters: EventCommunicationFilterDto) {
+    const { page = 1, limit = 20, eventId, type, channel, status } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+
+    const where: Prisma.EventCommunicationWhereInput = {};
+    if (eventId) where.eventId = eventId;
+    if (type) where.type = type;
+    if (channel) where.channel = channel;
+    if (status) where.status = status;
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.eventCommunication.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          event: { select: { id: true, title: true } },
+          createdBy: { select: { id: true, fullName: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.read.eventCommunication.count({ where }),
+    ]);
+
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  async createCommunication(
+    eventId: number,
+    createdById: number,
+    dto: CreateEventCommunicationDto,
+  ) {
+    await this.assertEventExists(eventId);
+
+    const participants = await this.prisma.read.eventParticipant.findMany({
+      where: {
+        eventId,
+        ...(dto.participantStatuses?.length ? { status: { in: dto.participantStatuses } } : {}),
+      },
+      select: { userId: true, user: { select: { id: true, email: true, phone: true } } },
+    });
+    if (participants.length === 0) {
+      throw new BadRequestException('Nenhum destinatário corresponde aos filtros indicados');
+    }
+    const recipientIds = participants.map(p => p.userId);
+
+    await this.deliverCommunication(dto.channel, dto.subject, dto.message, participants);
+
+    return this.prisma.eventCommunication.create({
+      data: {
+        eventId,
+        type: dto.type,
+        subject: dto.subject,
+        message: dto.message,
+        channel: dto.channel,
+        recipientIds,
+        recipientCount: recipientIds.length,
+        status: 'SENT',
+        sentAt: new Date(),
+        createdById,
+      },
+      include: {
+        event: { select: { id: true, title: true } },
+        createdBy: { select: { id: true, fullName: true } },
+      },
+    });
+  }
+
+  private async deliverCommunication(
+    channel: CreateEventCommunicationDto['channel'],
+    subject: string,
+    message: string,
+    participants: Array<{
+      userId: number;
+      user: { id: number; email: string; phone: string | null };
+    }>,
+  ): Promise<void> {
+    const onFail = (userId: number, ch: string) => (e: unknown) =>
+      this.logger.warn({
+        userId,
+        channel: ch,
+        err: { message: e instanceof Error ? e.message : String(e) },
+        msg: `Falha ao entregar comunicação de evento por ${ch} — registo interno já será criado`,
+      });
+
+    if (channel === 'INNOVA_NOTIFICATION') {
+      await this.notifications.sendBulk({
+        userIds: participants.map(p => p.userId),
+        type: 'EVENT_COMMUNICATION',
+        title: subject,
+        message,
+        category: 'ENGAGEMENT',
+      });
+      return;
+    }
+
+    if (channel === 'EMAIL') {
+      await Promise.all(
+        participants.map(p =>
+          this.mail
+            .sendNotification(p.user.email, subject, message)
+            .catch(onFail(p.userId, 'email')),
+        ),
+      );
+      return;
+    }
+
+    if (channel === 'SMS') {
+      await Promise.all(
+        participants
+          .filter(p => p.user.phone)
+          .map(p => this.sms.sendSms(p.user.phone, message).catch(onFail(p.userId, 'sms'))),
+      );
+      return;
+    }
+
+    if (channel === 'WHATSAPP') {
+      await Promise.all(
+        participants
+          .filter(p => p.user.phone)
+          .map(p =>
+            this.sms.sendWhatsApp(p.user.phone, message).catch(onFail(p.userId, 'whatsapp')),
+          ),
+      );
+    }
   }
 }

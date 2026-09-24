@@ -11,6 +11,7 @@ import {
   Min,
   Max,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type, Transform } from 'class-transformer';
@@ -23,6 +24,11 @@ import {
   EventSessionStatus,
   EventLogisticsStatus,
   EventEquipmentType,
+  EventSpeakerType,
+  EventSpeakerStatus,
+  EventCommunicationType,
+  EventCommunicationChannel,
+  EventCommunicationStatus,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
@@ -40,6 +46,11 @@ export {
   EventSessionStatus,
   EventLogisticsStatus,
   EventEquipmentType,
+  EventSpeakerType,
+  EventSpeakerStatus,
+  EventCommunicationType,
+  EventCommunicationChannel,
+  EventCommunicationStatus,
 };
 
 // ─── Event ────────────────────────────────────────────────────────────────────
@@ -599,4 +610,166 @@ export class UpsertEventLogisticsDto {
   @IsOptional()
   @IsEnum(EventLogisticsStatus)
   status?: EventLogisticsStatus;
+}
+
+// ─── Oradores & Convidados (docs/events.md #7) ─────────────────────────────
+
+export class CreateEventSpeakerDto {
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  name!: string;
+
+  @ApiProperty({ enum: EventSpeakerType })
+  @IsEnum(EventSpeakerType)
+  type!: EventSpeakerType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  organization?: string;
+
+  @ApiPropertyOptional({ description: 'Cargo' })
+  @IsOptional()
+  @IsString()
+  position?: string;
+
+  @ApiPropertyOptional({ description: 'Contacto (email/telefone, texto livre)' })
+  @IsOptional()
+  @IsString()
+  contact?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bio?: string;
+
+  @ApiPropertyOptional({ description: 'URL da fotografia' })
+  @IsOptional()
+  @IsString()
+  photoUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Tema da participação' })
+  @IsOptional()
+  @IsString()
+  topic?: string;
+
+  @ApiPropertyOptional({
+    description: 'ID da sessão a que fica associado (opcional)',
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  sessionId?: number | null;
+
+  @ApiPropertyOptional({ description: 'Horário (texto livre, ex.: "09:00–09:30")' })
+  @IsOptional()
+  @IsString()
+  schedule?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  specialNeeds?: string;
+
+  @ApiPropertyOptional({ description: 'Honorários' })
+  @IsOptional()
+  @IsNumber()
+  fee?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  transport?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  accommodation?: string;
+
+  @ApiPropertyOptional({ enum: EventSpeakerStatus, default: EventSpeakerStatus.INVITED })
+  @IsOptional()
+  @IsEnum(EventSpeakerStatus)
+  status?: EventSpeakerStatus;
+}
+
+export class UpdateEventSpeakerDto extends PartialType(CreateEventSpeakerDto) {}
+
+export class EventSpeakerFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional({ enum: EventSpeakerType })
+  @IsOptional()
+  @IsEnum(EventSpeakerType)
+  type?: EventSpeakerType;
+
+  @ApiPropertyOptional({ enum: EventSpeakerStatus })
+  @IsOptional()
+  @IsEnum(EventSpeakerStatus)
+  status?: EventSpeakerStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  sessionId?: number;
+
+  @ApiPropertyOptional({ description: 'Pesquisa livre no nome/organização' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+// ─── Comunicação (docs/events.md #8) ───────────────────────────────────────
+
+export class CreateEventCommunicationDto {
+  @ApiProperty({ enum: EventCommunicationType })
+  @IsEnum(EventCommunicationType)
+  type!: EventCommunicationType;
+
+  @ApiProperty()
+  @IsString()
+  @MaxLength(200)
+  subject!: string;
+
+  @ApiProperty()
+  @IsString()
+  message!: string;
+
+  @ApiProperty({ enum: EventCommunicationChannel })
+  @IsEnum(EventCommunicationChannel)
+  channel!: EventCommunicationChannel;
+
+  @ApiPropertyOptional({
+    enum: ParticipantStatus,
+    isArray: true,
+    description:
+      'Filtrar destinatários por estado de inscrição — omitido envia a todos os inscritos',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(ParticipantStatus, { each: true })
+  participantStatuses?: ParticipantStatus[];
+}
+
+export class EventCommunicationFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  eventId?: number;
+
+  @ApiPropertyOptional({ enum: EventCommunicationType })
+  @IsOptional()
+  @IsEnum(EventCommunicationType)
+  type?: EventCommunicationType;
+
+  @ApiPropertyOptional({ enum: EventCommunicationChannel })
+  @IsOptional()
+  @IsEnum(EventCommunicationChannel)
+  channel?: EventCommunicationChannel;
+
+  @ApiPropertyOptional({ enum: EventCommunicationStatus })
+  @IsOptional()
+  @IsEnum(EventCommunicationStatus)
+  status?: EventCommunicationStatus;
 }

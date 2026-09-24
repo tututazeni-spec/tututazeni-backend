@@ -32,6 +32,11 @@ import {
   UpdateEventSessionDto,
   EventSessionFilterDto,
   UpsertEventLogisticsDto,
+  CreateEventSpeakerDto,
+  UpdateEventSpeakerDto,
+  EventSpeakerFilterDto,
+  CreateEventCommunicationDto,
+  EventCommunicationFilterDto,
 } from './events.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -94,6 +99,13 @@ export class EventsController {
   @ApiOperation({ summary: 'Todas as sessões/actividades de todos os eventos (aba Programação)' })
   listAllSessions(@Query() filters: EventSessionFilterDto) {
     return this.svc.listAllSessions(filters);
+  }
+
+  @Get('communications')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Histórico de comunicações de todos os eventos (aba Comunicação)' })
+  listAllCommunications(@Query() filters: EventCommunicationFilterDto) {
+    return this.svc.listAllCommunications(filters);
   }
 
   @Get(':id')
@@ -171,7 +183,9 @@ export class EventsController {
 
   @Get(':id/participants')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Listar/filtrar inscrições de um evento (departamento, unidade, estado, nome)' })
+  @ApiOperation({
+    summary: 'Listar/filtrar inscrições de um evento (departamento, unidade, estado, nome)',
+  })
   listParticipants(
     @Param('id', ParseIntPipe) eventId: number,
     @Query() filters: EventParticipantFilterDto,
@@ -193,7 +207,9 @@ export class EventsController {
 
   @Post(':id/participants')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Adicionar/importar participantes (RH/organizador, sem fluxo de aprovação)' })
+  @ApiOperation({
+    summary: 'Adicionar/importar participantes (RH/organizador, sem fluxo de aprovação)',
+  })
   addParticipants(@Param('id', ParseIntPipe) eventId: number, @Body() dto: AddParticipantsDto) {
     return this.svc.addParticipants(eventId, dto.userIds);
   }
@@ -297,7 +313,66 @@ export class EventsController {
   @Put(':id/logistics')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Criar/actualizar recursos e logística do evento (upsert)' })
-  upsertLogistics(@Param('id', ParseIntPipe) eventId: number, @Body() dto: UpsertEventLogisticsDto) {
+  upsertLogistics(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Body() dto: UpsertEventLogisticsDto,
+  ) {
     return this.svc.upsertLogistics(eventId, dto);
+  }
+
+  // ── Oradores & Convidados (aba, docs/events.md #7) ──────────────────────
+
+  @Get(':id/speakers')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar oradores/convidados do evento' })
+  listSpeakers(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Query() filters: EventSpeakerFilterDto,
+  ) {
+    return this.svc.listSpeakers(eventId, filters);
+  }
+
+  @Post(':id/speakers')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Adicionar orador/convidado/moderador ao evento' })
+  createSpeaker(@Param('id', ParseIntPipe) eventId: number, @Body() dto: CreateEventSpeakerDto) {
+    return this.svc.createSpeaker(eventId, dto);
+  }
+
+  @Put(':id/speakers/:speakerId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Actualizar orador/convidado do evento' })
+  updateSpeaker(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('speakerId', ParseIntPipe) speakerId: number,
+    @Body() dto: UpdateEventSpeakerDto,
+  ) {
+    return this.svc.updateSpeaker(eventId, speakerId, dto);
+  }
+
+  @Delete(':id/speakers/:speakerId')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Remover orador/convidado do evento' })
+  deleteSpeaker(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('speakerId', ParseIntPipe) speakerId: number,
+  ) {
+    return this.svc.deleteSpeaker(eventId, speakerId);
+  }
+
+  // ── Comunicação (aba, docs/events.md #8) ────────────────────────────────
+
+  @Post(':id/communications')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary:
+      'Enviar comunicação a participantes do evento (INNOVA/e-mail/SMS/WhatsApp, conforme integrações)',
+  })
+  createCommunication(
+    @Param('id', ParseIntPipe) eventId: number,
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: CreateEventCommunicationDto,
+  ) {
+    return this.svc.createCommunication(eventId, user.id, dto);
   }
 }

@@ -2,6 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
+import { SmsService } from '../sms/sms.service';
+
+const mockNotifications = { sendBulk: jest.fn().mockResolvedValue({ sent: 0, skipped: 0 }) };
+const mockMail = { sendNotification: jest.fn().mockResolvedValue(undefined) };
+const mockSms = {
+  sendSms: jest.fn().mockResolvedValue(undefined),
+  sendWhatsApp: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockPrisma: any = {
   event: {
@@ -59,7 +69,13 @@ describe('EventsService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EventsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        EventsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: NotificationsService, useValue: mockNotifications },
+        { provide: MailService, useValue: mockMail },
+        { provide: SmsService, useValue: mockSms },
+      ],
     }).compile();
     service = module.get<EventsService>(EventsService);
   });

@@ -2202,6 +2202,48 @@ const EventEquipmentType = {
   SIGNAGE: 'SIGNAGE',
 };
 
+const EventSpeakerType = {
+  SPEAKER: 'SPEAKER',
+  LECTURER: 'LECTURER',
+  MODERATOR: 'MODERATOR',
+  GUEST: 'GUEST',
+  PANELIST: 'PANELIST',
+  FACILITATOR: 'FACILITATOR',
+  INSTITUTIONAL_REP: 'INSTITUTIONAL_REP',
+};
+
+const EventSpeakerStatus = {
+  INVITED: 'INVITED',
+  CONFIRMED: 'CONFIRMED',
+  DECLINED: 'DECLINED',
+  CANCELLED: 'CANCELLED',
+};
+
+const EventCommunicationType = {
+  INVITATION: 'INVITATION',
+  CONFIRMATION: 'CONFIRMATION',
+  REMINDER: 'REMINDER',
+  TIME_CHANGE: 'TIME_CHANGE',
+  LOCATION_CHANGE: 'LOCATION_CHANGE',
+  CANCELLATION: 'CANCELLATION',
+  INSTRUCTIONS: 'INSTRUCTIONS',
+  THANK_YOU: 'THANK_YOU',
+  FOLLOW_UP: 'FOLLOW_UP',
+};
+
+const EventCommunicationChannel = {
+  INNOVA_NOTIFICATION: 'INNOVA_NOTIFICATION',
+  EMAIL: 'EMAIL',
+  SMS: 'SMS',
+  WHATSAPP: 'WHATSAPP',
+};
+
+const EventCommunicationStatus = {
+  DRAFT: 'DRAFT',
+  SENT: 'SENT',
+  FAILED: 'FAILED',
+};
+
 const InstructorType = {
   MASTER: 'MASTER',
   SENIOR: 'SENIOR',
@@ -2535,6 +2577,11 @@ module.exports = {
   EventParticipantStatus,
   EventSessionStatus,
   EventLogisticsStatus,
+  EventSpeakerType,
+  EventSpeakerStatus,
+  EventCommunicationType,
+  EventCommunicationChannel,
+  EventCommunicationStatus,
   EventEquipmentType,
   InstructorType,
   CohortModalidade,
