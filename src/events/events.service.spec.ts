@@ -2,7 +2,17 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
+import { SmsService } from '../sms/sms.service';
 import { EventType } from './events.dto';
+
+const mockNotifications = { sendBulk: jest.fn().mockResolvedValue({ sent: 0, skipped: 0 }) };
+const mockMail = { sendNotification: jest.fn().mockResolvedValue(undefined) };
+const mockSms = {
+  sendSms: jest.fn().mockResolvedValue(undefined),
+  sendWhatsApp: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockPrisma = {
   event: {
@@ -18,7 +28,10 @@ const mockPrisma = {
     create: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
-    findMany: jest.fn(),
+    // findAll() usa isto para calcular confirmedCount por evento — default []
+    // como qualquer findMany sem correspondências, para não quebrar testes
+    // que não passam por este caminho.
+    findMany: jest.fn().mockResolvedValue([]),
     count: jest.fn(),
     delete: jest.fn(),
   },
@@ -60,7 +73,13 @@ describe('EventsService', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EventsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        EventsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: NotificationsService, useValue: mockNotifications },
+        { provide: MailService, useValue: mockMail },
+        { provide: SmsService, useValue: mockSms },
+      ],
     }).compile();
     service = module.get<EventsService>(EventsService);
   });

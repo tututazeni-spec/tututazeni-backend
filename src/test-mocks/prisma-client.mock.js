@@ -2161,6 +2161,8 @@ const EventType = {
 
 const EventModalidade = { ONLINE: 'ONLINE', PRESENCIAL: 'PRESENCIAL', HYBRID: 'HYBRID' };
 
+const EventVisibility = { PUBLIC: 'PUBLIC', INTERNAL: 'INTERNAL', RESTRICTED: 'RESTRICTED' };
+
 const EventParticipantStatus = {
   PENDING: 'PENDING',
   CONFIRMED: 'CONFIRMED',
@@ -2169,6 +2171,84 @@ const EventParticipantStatus = {
   ABSENT: 'ABSENT',
   CANCELLED: 'CANCELLED',
   NO_SHOW: 'NO_SHOW',
+  REJECTED: 'REJECTED',
+};
+
+const EventSessionStatus = {
+  SCHEDULED: 'SCHEDULED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+
+const EventLogisticsStatus = {
+  PLANNED: 'PLANNED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  CONFIRMED: 'CONFIRMED',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+};
+
+const EventEquipmentType = {
+  PROJECTOR: 'PROJECTOR',
+  SCREEN: 'SCREEN',
+  SOUND_SYSTEM: 'SOUND_SYSTEM',
+  MICROPHONES: 'MICROPHONES',
+  CHAIRS: 'CHAIRS',
+  TABLES: 'TABLES',
+  COMPUTERS: 'COMPUTERS',
+  INTERNET: 'INTERNET',
+  MATERIALS: 'MATERIALS',
+  SIGNAGE: 'SIGNAGE',
+};
+
+const EventSpeakerType = {
+  SPEAKER: 'SPEAKER',
+  LECTURER: 'LECTURER',
+  MODERATOR: 'MODERATOR',
+  GUEST: 'GUEST',
+  PANELIST: 'PANELIST',
+  FACILITATOR: 'FACILITATOR',
+  INSTITUTIONAL_REP: 'INSTITUTIONAL_REP',
+};
+
+const EventSpeakerStatus = {
+  INVITED: 'INVITED',
+  CONFIRMED: 'CONFIRMED',
+  DECLINED: 'DECLINED',
+  CANCELLED: 'CANCELLED',
+};
+
+const EventCommunicationType = {
+  INVITATION: 'INVITATION',
+  CONFIRMATION: 'CONFIRMATION',
+  REMINDER: 'REMINDER',
+  TIME_CHANGE: 'TIME_CHANGE',
+  LOCATION_CHANGE: 'LOCATION_CHANGE',
+  CANCELLATION: 'CANCELLATION',
+  INSTRUCTIONS: 'INSTRUCTIONS',
+  THANK_YOU: 'THANK_YOU',
+  FOLLOW_UP: 'FOLLOW_UP',
+};
+
+const EventCommunicationChannel = {
+  INNOVA_NOTIFICATION: 'INNOVA_NOTIFICATION',
+  EMAIL: 'EMAIL',
+  SMS: 'SMS',
+  WHATSAPP: 'WHATSAPP',
+};
+
+const EventCommunicationStatus = {
+  DRAFT: 'DRAFT',
+  SENT: 'SENT',
+  FAILED: 'FAILED',
+};
+
+const EventCheckinMethod = {
+  QR_CODE: 'QR_CODE',
+  MOBILE_APP: 'MOBILE_APP',
+  CODE: 'CODE',
+  MANUAL: 'MANUAL',
 };
 
 const InstructorType = {
@@ -2500,7 +2580,17 @@ module.exports = {
   AvatarSessionStatus,
   EventType,
   EventModalidade,
+  EventVisibility,
   EventParticipantStatus,
+  EventSessionStatus,
+  EventLogisticsStatus,
+  EventSpeakerType,
+  EventSpeakerStatus,
+  EventCommunicationType,
+  EventCommunicationChannel,
+  EventCommunicationStatus,
+  EventEquipmentType,
+  EventCheckinMethod,
   InstructorType,
   CohortModalidade,
   CohortStatus,

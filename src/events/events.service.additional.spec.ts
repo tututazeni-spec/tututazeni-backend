@@ -2,6 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
+import { SmsService } from '../sms/sms.service';
+
+const mockNotifications = { sendBulk: jest.fn().mockResolvedValue({ sent: 0, skipped: 0 }) };
+const mockMail = { sendNotification: jest.fn().mockResolvedValue(undefined) };
+const mockSms = {
+  sendSms: jest.fn().mockResolvedValue(undefined),
+  sendWhatsApp: jest.fn().mockResolvedValue(undefined),
+};
 
 const mockPrisma: any = {
   event: {
@@ -59,7 +69,13 @@ describe('EventsService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EventsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        EventsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: NotificationsService, useValue: mockNotifications },
+        { provide: MailService, useValue: mockMail },
+        { provide: SmsService, useValue: mockSms },
+      ],
     }).compile();
     service = module.get<EventsService>(EventsService);
   });
@@ -273,12 +289,17 @@ describe('EventsService (additional)', () => {
 
   describe('getStats', () => {
     it('deve retornar estatísticas gerais de eventos', async () => {
-      mockPrisma.event.groupBy = jest.fn().mockResolvedValue([]);
       mockPrisma.event.count.mockResolvedValue(10);
+      mockPrisma.event.findMany.mockResolvedValue([]);
       mockPrisma.eventParticipant.count.mockResolvedValue(100);
-      // Real method: getStats() — no args, returns global stats
+      // O teste de submitFeedback (acima) substitui mockPrisma.eventFeedback
+      // inteiro por { upsert }, sem findMany — repõe a forma original antes
+      // de chamar getStats(), que depende dela para "avaliações pendentes".
+      mockPrisma.eventFeedback = { findMany: jest.fn().mockResolvedValue([]) };
+      // Real method: getStats() — no args, returns global dashboard stats
       const result = await service.getStats();
       expect(result).toBeDefined();
+      expect(result.total).toBe(10);
     });
   });
 });

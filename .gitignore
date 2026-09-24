@@ -20,6 +20,7 @@ dist/
 build/
 .next/
 out/
+*.tsbuildinfo
 
 =========================
 Environment variables
@@ -112,3 +113,4 @@ ops/monitoring/metrics_token
 ops/caddy/origin/*.pem
 .superpowers/
 worktrees/
+*.tsbuildinfo

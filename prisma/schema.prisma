@@ -830,11 +830,16 @@ model User {
   processAuditLogs      ProcessAuditLog[]
 
   // ─── Eventos & Presença ───────────────────────────────────────
-  events             Event[]
-  liveAttendances    LiveAttendance[]
-  liveMessages       LiveChatMessage[]
-  postClassResponses PostClassResponse[]
-  userAttendances    UserAttendance[]
+  events                     Event[]                  @relation("EventOrganizer")
+  responsibleEvents          Event[]                  @relation("EventResponsible")
+  responsibleEventSessions   EventSession[]           @relation("EventSessionResponsible")
+  responsibleEventLogistics  EventLogistics[]         @relation("EventLogisticsResponsible")
+  createdEventCommunications EventCommunication[]     @relation("EventCommunicationCreatedBy")
+  eventSessionAttendances    EventSessionAttendance[]
+  liveAttendances            LiveAttendance[]
+  liveMessages               LiveChatMessage[]
+  postClassResponses         PostClassResponse[]
+  userAttendances            UserAttendance[]
 
   // ─── Documentos & Relatórios ──────────────────────────────────
   companyDocuments  CompanyDocument[]
@@ -1205,6 +1210,7 @@ model Department {
   leadershipPrograms   LeadershipProgram[]
   leadershipTargetings LeadershipProgramTargeting[]
   libraryItems         LibraryItem[]
+  events               Event[]
 
   @@index([active])
   @@index([parentId])
@@ -1261,6 +1267,7 @@ model Unit {
   internalVacancies    InternalVacancy[]
   libraryItems         LibraryItem[]
   onboardingTemplates  OnboardingTemplate[]
+  events               Event[]
 }
 
 enum PositionLevel {
@@ -7683,39 +7690,74 @@ enum EventModalidade {
 }
 
 model Event {
-  id                   Int                @id @default(autoincrement())
+  id                   Int                  @id @default(autoincrement())
   title                String
-  description          String?            @db.Text
-  type                 EventType          @default(TRAINING)
-  modalidade           EventModalidade    @default(ONLINE)
-  status               EventStatus        @default(DRAFT)
+  code                 String?              @unique
+  description          String?              @db.Text
+  objective            String?              @db.Text
+  type                 EventType            @default(TRAINING)
+  // Categoria livre (não FK) — mesma convenção de Course.category.
+  category             String?
+  modalidade           EventModalidade      @default(ONLINE)
+  status               EventStatus          @default(DRAFT)
+  visibility           EventVisibility      @default(INTERNAL)
   startAt              DateTime
   endAt                DateTime
+  timezone             String               @default("Africa/Luanda")
   location             String?
+  address              String?
+  room                 String?
   meetingUrl           String?
   meetingPassword      String?
-  maxCapacity          Int                @default(50)
-  waitlistEnabled      Boolean            @default(true)
-  certificateEnabled   Boolean            @default(false)
-  minAttendancePercent Int                @default(80)
-  tags                 String[]           @default([])
-  mandatory            Boolean            @default(false)
+  maxCapacity          Int                  @default(50)
+  waitlistEnabled      Boolean              @default(true)
+  requiresApproval     Boolean              @default(false)
+  registrationStartAt  DateTime?
+  registrationEndAt    DateTime?
+  targetAudience       String?
+  allowGuest           Boolean              @default(false)
+  certificateEnabled   Boolean              @default(false)
+  evaluationEnabled    Boolean              @default(true)
+  checkinEnabled       Boolean              @default(true)
+  notificationsEnabled Boolean              @default(true)
+  minAttendancePercent Int                  @default(80)
+  tags                 String[]             @default([])
+  mandatory            Boolean              @default(false)
   bannerUrl            String?
   // Vazio = visível a todos os departamentos — ver EventsService#applyDeptVisibility.
-  restrictedDeptIds    Int[]              @default([])
+  restrictedDeptIds    Int[]                @default([])
   courseId             Int?
   organizerId          Int
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-  organizer            User               @relation(fields: [organizerId], references: [id])
+  responsibleId        Int?
+  departmentId         Int?
+  unitId               Int?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  organizer            User                 @relation("EventOrganizer", fields: [organizerId], references: [id])
+  responsible          User?                @relation("EventResponsible", fields: [responsibleId], references: [id])
+  department           Department?          @relation(fields: [departmentId], references: [id])
+  unit                 Unit?                @relation(fields: [unitId], references: [id])
   participants         EventParticipant[]
   feedbacks            EventFeedback[]
   certificates         Certificate[]
+  sessions             EventSession[]
+  logistics            EventLogistics?
+  speakers             EventSpeaker[]
+  communications       EventCommunication[]
 
   @@index([organizerId])
+  @@index([responsibleId])
+  @@index([departmentId])
+  @@index([unitId])
   @@index([status])
   @@index([type])
   @@index([startAt])
+}
+
+enum EventVisibility {
+  PUBLIC
+  INTERNAL
+  RESTRICTED
 }
 
 // Nome distinto de "ParticipantStatus" (já existente para LeadershipParticipant,
@@ -7729,19 +7771,23 @@ enum EventParticipantStatus {
   ABSENT
   CANCELLED
   NO_SHOW
+  REJECTED
 }
 
 model EventParticipant {
-  id           Int                    @id @default(autoincrement())
-  eventId      Int
-  userId       Int
-  status       EventParticipantStatus @default(PENDING)
-  note         String?
-  registeredAt DateTime               @default(now())
-  checkedInAt  DateTime?
-  checkedOutAt DateTime?
-  event        Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user         User                   @relation(fields: [userId], references: [id])
+  id            Int                    @id @default(autoincrement())
+  eventId       Int
+  userId        Int
+  status        EventParticipantStatus @default(PENDING)
+  note          String?
+  registeredAt  DateTime               @default(now())
+  confirmedAt   DateTime?
+  checkedInAt   DateTime?
+  checkedOutAt  DateTime?
+  checkinMethod EventCheckinMethod?
+  checkinNote   String?
+  event         Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user          User                   @relation(fields: [userId], references: [id])
 
   @@unique([eventId, userId])
   @@index([eventId])
@@ -7750,19 +7796,268 @@ model EventParticipant {
 }
 
 model EventFeedback {
-  id               Int      @id @default(autoincrement())
-  eventId          Int
-  userId           Int
-  nps              Int
-  rating           Int?
-  instructorRating Int?
-  comment          String?  @db.Text
-  createdAt        DateTime @default(now())
-  event            Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user             User     @relation(fields: [userId], references: [id])
+  id                  Int      @id @default(autoincrement())
+  eventId             Int
+  userId              Int
+  nps                 Int
+  rating              Int?
+  instructorRating    Int?
+  // Avaliação da experiência (docs/events.md #10) — um rating 1-5 por
+  // aspecto listado no spec ("organização, conteúdo, local, oradores,
+  // logística, comunicação"); "recomendação" já é coberta por `nps`.
+  organizationRating  Int?
+  contentRating       Int?
+  locationRating      Int?
+  speakersRating      Int?
+  logisticsRating     Int?
+  communicationRating Int?
+  // "Intenção de participar novamente" (docs/events.md #10, secção "Medir") —
+  // escala 1-5, distinta de `nps` (recomendaria a outros).
+  wouldAttendAgain    Int?
+  comment             String?  @db.Text
+  createdAt           DateTime @default(now())
+  event               Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user                User     @relation(fields: [userId], references: [id])
 
   @@unique([eventId, userId])
   @@index([eventId])
+}
+
+// ─── Programação (docs/events.md #5) ───────────────────────────────────────
+// Agenda de sessões/actividades de um evento com várias actividades (ex.:
+// "09:00 — Abertura", "09:30 — Apresentação institucional"…). "Orador" fica
+// texto livre por agora — a secção 7 (Oradores & Convidados) ainda não tem
+// modelo próprio para ligar por FK. "Duração" não é persistida, é sempre
+// calculada de endAt-startAt (mesma convenção de EventsService#getCalendar).
+
+enum EventSessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model EventSession {
+  id            Int                      @id @default(autoincrement())
+  eventId       Int
+  title         String
+  description   String?                  @db.Text
+  startAt       DateTime
+  endAt         DateTime
+  location      String?
+  room          String?
+  responsibleId Int?
+  speaker       String?
+  capacity      Int?
+  status        EventSessionStatus       @default(SCHEDULED)
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  event         Event                    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  responsible   User?                    @relation("EventSessionResponsible", fields: [responsibleId], references: [id])
+  speakers      EventSpeaker[]
+  attendances   EventSessionAttendance[]
+
+  @@index([eventId])
+  @@index([responsibleId])
+  @@index([startAt])
+}
+
+// ─── Locais & Logística (docs/events.md #6) ────────────────────────────────
+// Um registo por evento (relação 1:1) com os recursos necessários para o
+// realizar. Local/sala/capacidade/endereço NÃO são duplicados aqui — já
+// existem em Event (location/room/maxCapacity/address); esta tabela cobre
+// só o que Event ainda não tem (equipamentos, fornecedores, orçamento…).
+
+enum EventLogisticsStatus {
+  PLANNED
+  IN_PROGRESS
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum EventEquipmentType {
+  PROJECTOR
+  SCREEN
+  SOUND_SYSTEM
+  MICROPHONES
+  CHAIRS
+  TABLES
+  COMPUTERS
+  INTERNET
+  MATERIALS
+  SIGNAGE
+}
+
+model EventLogistics {
+  id              Int                  @id @default(autoincrement())
+  eventId         Int                  @unique
+  responsibleId   Int?
+  equipment       EventEquipmentType[] @default([])
+  resourcesNeeded String?              @db.Text
+  suppliers       String?              @db.Text
+  catering        String?
+  transport       String?
+  accommodation   String?
+  security        String?
+  decoration      String?
+  budget          Float?
+  actualCost      Float?
+  status          EventLogisticsStatus @default(PLANNED)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  event           Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  responsible     User?                @relation("EventLogisticsResponsible", fields: [responsibleId], references: [id])
+
+  @@index([responsibleId])
+}
+
+// ─── Oradores & Convidados (docs/events.md #7) ─────────────────────────────
+// Pessoas que participam como oradores, convidados ou moderadores — não são
+// necessariamente utilizadores do sistema (por isso Nome/organização/cargo/
+// contacto ficam texto livre, sem FK a User, ao contrário de Responsável em
+// EventSession/EventLogistics). "Sessão" é opcional — cobre tanto eventos
+// com Programação (liga a uma EventSession concreta) como eventos simples
+// (só o evento, sem sessões próprias). "Evento" não é coluna própria no
+// spec (ao contrário de Programação/Comunicação) — mesmo critério de
+// Locais & Logística/Participantes: contexto é sempre UM evento seleccionado.
+
+enum EventSpeakerType {
+  SPEAKER
+  LECTURER
+  MODERATOR
+  GUEST
+  PANELIST
+  FACILITATOR
+  INSTITUTIONAL_REP
+}
+
+enum EventSpeakerStatus {
+  INVITED
+  CONFIRMED
+  DECLINED
+  CANCELLED
+}
+
+model EventSpeaker {
+  id            Int                @id @default(autoincrement())
+  eventId       Int
+  name          String
+  type          EventSpeakerType
+  organization  String?
+  position      String?
+  contact       String?
+  bio           String?            @db.Text
+  photoUrl      String?
+  topic         String?
+  sessionId     Int?
+  schedule      String?
+  specialNeeds  String?
+  fee           Float?
+  transport     String?
+  accommodation String?
+  status        EventSpeakerStatus @default(INVITED)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  event         Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  session       EventSession?      @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
+  @@index([sessionId])
+  @@index([status])
+}
+
+// ─── Comunicação (docs/events.md #8) ───────────────────────────────────────
+// Envio real (não decorativo): INNOVA_NOTIFICATION cria NotificationLog para
+// cada destinatário (NotificationsService#sendBulk), EMAIL/SMS/WHATSAPP
+// despacham via MailService/SmsService já usados por Notifications/
+// Automation — mesmos serviços com degradação graciosa se SMTP/Twilio não
+// estiverem configurados (nunca rebenta a criação do registo). "Evento" É
+// coluna própria no spec (ao contrário de Oradores/Locais & Logística) —
+// listagem cross-evento como Programação (GET /events/communications).
+
+enum EventCommunicationType {
+  INVITATION
+  CONFIRMATION
+  REMINDER
+  TIME_CHANGE
+  LOCATION_CHANGE
+  CANCELLATION
+  INSTRUCTIONS
+  THANK_YOU
+  FOLLOW_UP
+}
+
+enum EventCommunicationChannel {
+  INNOVA_NOTIFICATION
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum EventCommunicationStatus {
+  DRAFT
+  SENT
+  FAILED
+}
+
+model EventCommunication {
+  id             Int                       @id @default(autoincrement())
+  eventId        Int
+  type           EventCommunicationType
+  subject        String
+  message        String                    @db.Text
+  channel        EventCommunicationChannel
+  recipientIds   Int[]                     @default([])
+  recipientCount Int                       @default(0)
+  status         EventCommunicationStatus  @default(DRAFT)
+  sentAt         DateTime?
+  createdById    Int
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+  event          Event                     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy      User                      @relation("EventCommunicationCreatedBy", fields: [createdById], references: [id])
+
+  @@index([eventId])
+  @@index([type])
+  @@index([channel])
+  @@index([status])
+}
+
+// ─── Check-in & Presença (docs/events.md #9) ───────────────────────────────
+// "Evento" É coluna própria no spec — listagem cross-evento (mesmo critério
+// de Programação/Comunicação), a partir de EventParticipant (checkedInAt/
+// checkedOutAt já existiam desde o check-in self-service; aqui só se
+// acrescenta o método e a observação do check-in). "Duração" e o "estado"
+// de apresentação (Presente/Ausente/Entrada registada/Saída registada) são
+// sempre calculados, nunca persistidos — o mesmo critério já usado para
+// duração de sessão em EventSession. Presença por sessão (quando o evento
+// tem Programação) é um modelo à parte, EventSessionAttendance, um registo
+// por (sessão, utilizador) — não herda regras de assiduidade de formação
+// (nota explícita do spec), por isso não reutiliza AttendanceRecord.
+
+enum EventCheckinMethod {
+  QR_CODE
+  MOBILE_APP
+  CODE
+  MANUAL
+}
+
+model EventSessionAttendance {
+  id           Int                 @id @default(autoincrement())
+  sessionId    Int
+  userId       Int
+  checkedInAt  DateTime?
+  checkedOutAt DateTime?
+  method       EventCheckinMethod?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  session      EventSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id])
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId])
 }
 
 // ══════════════════════════════════════════════════════════════════
