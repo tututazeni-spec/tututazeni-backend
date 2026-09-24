@@ -480,7 +480,9 @@ export class OnboardingTaskFilterDto extends BaseFilterDto {
   @Type(() => Number)
   planId?: number;
 
-  @ApiPropertyOptional({ description: 'Só tarefas em atraso (prazo passado, ainda não concluídas)' })
+  @ApiPropertyOptional({
+    description: 'Só tarefas em atraso (prazo passado, ainda não concluídas)',
+  })
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
@@ -560,7 +562,10 @@ export class RegisterOnboardingCheckinDto {
   @IsString()
   nextActions?: string;
 
-  @ApiPropertyOptional({ enum: OnboardingCheckinStatus, description: 'Default COMPLETED ao registar' })
+  @ApiPropertyOptional({
+    enum: OnboardingCheckinStatus,
+    description: 'Default COMPLETED ao registar',
+  })
   @IsOptional()
   @IsEnum(OnboardingCheckinStatus)
   status?: OnboardingCheckinStatus;
