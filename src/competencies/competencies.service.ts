@@ -28,6 +28,11 @@ import {
   SkillMatrixFilterDto,
   CompetencyEvaluationFilterDto,
   CompetencyEvaluationStatus,
+  CompetencyGapFilterDto,
+  CompetencyGapPriority,
+  CompetencyGapStatus,
+  DevelopmentActionFilterDto,
+  DevelopmentResult,
 } from './competencies.dto';
 
 @Injectable()
@@ -39,8 +44,16 @@ export class CompetenciesService {
   // ─── CATÁLOGO ─────────────────────────────────────────────────────────────
 
   async findAll(filters: CompetencyFilterDto) {
-    const { page = 1, limit = 20, search, category, status, tag, isCritical, isStrategic } =
-      filters;
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      category,
+      status,
+      tag,
+      isCritical,
+      isStrategic,
+    } = filters;
     const skip = (page - 1) * limit;
 
     const where: Prisma.CompetencyWhereInput = {};
@@ -961,6 +974,294 @@ export class CompetenciesService {
     if (status) results = results.filter(r => r.estado === status);
 
     return results;
+  }
+
+  // ─── GAPS DE COMPETÊNCIAS (docs/módulo_competencies.md §7) ───────────────
+  // Mostra onde existe diferença entre o nível actual e o nível necessário —
+  // reaproveita UserCompetency.currentLevel/targetLevel (mesma fonte de
+  // dados do §6), filtrado a gap > 0. Prioridade e Estado não são
+  // persistidos: prioridade deriva da dimensão do gap (bonificada quando a
+  // competência é crítica); estado deriva do PDI/acção de desenvolvimento
+  // ligado a este par (userId, competencyId), quando existe.
+
+  private static priorityForGap(gap: number, isCritical: boolean): CompetencyGapPriority {
+    const tiers = [
+      CompetencyGapPriority.LOW,
+      CompetencyGapPriority.MEDIUM,
+      CompetencyGapPriority.HIGH,
+      CompetencyGapPriority.CRITICAL,
+    ];
+    const tier = gap >= 4 ? 3 : gap === 3 ? 2 : gap === 2 ? 1 : 0;
+    return tiers[isCritical ? Math.min(3, tier + 1) : tier];
+  }
+
+  private static gapStatusForPlan(planStatus: string): CompetencyGapStatus {
+    switch (planStatus) {
+      case 'ACTIVE':
+        return CompetencyGapStatus.EM_DESENVOLVIMENTO;
+      case 'PAUSED':
+      case 'AT_RISK':
+      case 'OVERDUE':
+      case 'COMPLETED':
+      case 'PARTIALLY_COMPLETED':
+        return CompetencyGapStatus.EM_ACOMPANHAMENTO;
+      case 'CANCELLED':
+        return CompetencyGapStatus.ENCERRADO;
+      default:
+        return CompetencyGapStatus.IDENTIFICADO;
+    }
+  }
+
+  async getGaps(filters: CompetencyGapFilterDto = {}) {
+    const {
+      userId,
+      competencyId,
+      departmentId,
+      positionId,
+      hierarchyLevel,
+      priority,
+      status,
+      isCritical,
+    } = filters;
+
+    const userWhere: Prisma.UserWhereInput = { active: true };
+    if (userId) userWhere.id = userId;
+    if (departmentId) userWhere.departmentId = departmentId;
+    if (positionId) userWhere.positionId = positionId;
+    if (hierarchyLevel) userWhere.position = { level: hierarchyLevel };
+
+    const where: Prisma.UserCompetencyWhereInput = { targetLevel: { not: null }, user: userWhere };
+    if (competencyId) where.competencyId = competencyId;
+    if (isCritical !== undefined) where.competency = { isCritical };
+
+    const rows = await this.prisma.read.userCompetency.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            department: { select: { id: true, name: true } },
+            position: { select: { name: true } },
+          },
+        },
+        competency: {
+          select: { id: true, name: true, category: true, isCritical: true, isStrategic: true },
+        },
+      },
+      orderBy: { evaluatedAt: 'desc' },
+      take: 300,
+    });
+
+    const gapped = rows.filter(uc => (uc.targetLevel ?? 0) > uc.currentLevel);
+    if (!gapped.length) return [];
+
+    // PDIs dos colaboradores com gap — resolvem "Plano de desenvolvimento
+    // associado" e "Estado" via PdiCompetencyGap ou via acção cujo
+    // competencyIds inclua a competência em causa.
+    const plans = await this.prisma.read.developmentPlan.findMany({
+      where: { userId: { in: [...new Set(gapped.map(g => g.userId))] } },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        userId: true,
+        updatedAt: true,
+        competencyGaps: { select: { competencyId: true } },
+        actions: { select: { competencyIds: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const planForGap = (uId: number, cId: number) =>
+      plans.find(
+        p =>
+          p.userId === uId &&
+          (p.competencyGaps.some(g => g.competencyId === cId) ||
+            p.actions.some(a => a.competencyIds.includes(cId))),
+      ) ?? null;
+
+    let results = gapped.map(uc => {
+      const gap = (uc.targetLevel ?? 0) - uc.currentLevel;
+      const plan = planForGap(uc.userId, uc.competencyId);
+      return {
+        id: uc.id,
+        colaborador: uc.user.fullName,
+        colaboradorId: uc.userId,
+        colaboradorAvatarUrl: uc.user.avatarUrl,
+        departamentoId: uc.user.department?.id ?? null,
+        departamento: uc.user.department?.name ?? null,
+        cargo: uc.user.position?.name ?? null,
+        competencia: uc.competency.name,
+        competenciaId: uc.competencyId,
+        categoria: uc.competency.category,
+        nivelAtual: uc.currentLevel,
+        nivelEsperado: uc.targetLevel,
+        gap,
+        prioridade: CompetenciesService.priorityForGap(gap, uc.competency.isCritical),
+        competenciaCritica: uc.competency.isCritical,
+        impacto:
+          uc.competency.isCritical && uc.competency.isStrategic
+            ? 'ALTO'
+            : uc.competency.isCritical || uc.competency.isStrategic
+              ? 'MEDIO'
+              : 'BAIXO',
+        dataIdentificacao: uc.evaluatedAt,
+        planoDesenvolvimentoAssociado: plan ? { id: plan.id, name: plan.name } : null,
+        estado: plan
+          ? CompetenciesService.gapStatusForPlan(plan.status)
+          : CompetencyGapStatus.IDENTIFICADO,
+      };
+    });
+
+    if (priority) results = results.filter(r => r.prioridade === priority);
+    if (status) results = results.filter(r => r.estado === status);
+
+    results.sort((a, b) => b.gap - a.gap);
+    return results;
+  }
+
+  // ─── DESENVOLVIMENTO (docs/módulo_competencies.md §8) ────────────────────
+  // Liga as lacunas de competências às acções de desenvolvimento do PDI
+  // (DevelopmentPlanAction.competencyIds) — integração com Development
+  // Plans/PDI, Trainings e Courses (via action.courseId). Uma acção pode
+  // endereçar várias competências: expandida aqui para uma linha por
+  // (acção, competência), como o Artillery/UI espera consumir.
+
+  async getDevelopmentActions(filters: DevelopmentActionFilterDto = {}) {
+    const { userId, competencyId, planId, departmentId, type, status } = filters;
+
+    const planWhere: Prisma.DevelopmentPlanWhereInput = {};
+    if (userId) planWhere.userId = userId;
+    if (planId) planWhere.id = planId;
+    if (departmentId) planWhere.user = { departmentId };
+
+    const actionWhere: Prisma.DevelopmentPlanActionWhereInput = {
+      competencyIds: { isEmpty: false },
+      plan: planWhere,
+    };
+    if (type) actionWhere.type = type;
+    if (status) actionWhere.status = status;
+    if (competencyId) actionWhere.competencyIds = { has: competencyId };
+
+    const actions = await this.prisma.read.developmentPlanAction.findMany({
+      where: actionWhere,
+      include: {
+        plan: {
+          select: {
+            id: true,
+            name: true,
+            userId: true,
+            startDate: true,
+            activatedAt: true,
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                avatarUrl: true,
+                department: { select: { name: true } },
+              },
+            },
+            manager: { select: { id: true, fullName: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 300,
+    });
+    if (!actions.length) return [];
+
+    const competencyIds = [...new Set(actions.flatMap(a => a.competencyIds))];
+    const courseIds = [
+      ...new Set(actions.map(a => a.courseId).filter((id): id is number => id != null)),
+    ];
+
+    const pairKeys = new Set<string>();
+    const pairConditions: Array<{ userId: number; competencyId: number }> = [];
+    for (const a of actions) {
+      for (const cId of a.competencyIds) {
+        const key = `${a.plan.userId}:${cId}`;
+        if (!pairKeys.has(key)) {
+          pairKeys.add(key);
+          pairConditions.push({ userId: a.plan.userId, competencyId: cId });
+        }
+      }
+    }
+
+    const [competencies, userComps, courses, evolutionLogs] = await Promise.all([
+      this.prisma.read.competency.findMany({
+        where: { id: { in: competencyIds } },
+        select: { id: true, name: true, category: true },
+      }),
+      this.prisma.read.userCompetency.findMany({
+        where: { OR: pairConditions },
+      }),
+      courseIds.length
+        ? this.prisma.read.course.findMany({
+            where: { id: { in: courseIds } },
+            select: { id: true, title: true },
+          })
+        : Promise.resolve([]),
+      this.prisma.read.competencyEvolutionLog.findMany({
+        where: { OR: pairConditions },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const competencyMap = new Map(competencies.map(c => [c.id, c]));
+    const courseMap = new Map(courses.map(c => [c.id, c.title]));
+    const ucMap = new Map(userComps.map(uc => [`${uc.userId}:${uc.competencyId}`, uc]));
+
+    const latestLogByPair = new Map<string, (typeof evolutionLogs)[number]>();
+    for (const log of evolutionLogs) {
+      const key = `${log.userId}:${log.competencyId}`;
+      if (!latestLogByPair.has(key)) latestLogByPair.set(key, log);
+    }
+
+    return actions.flatMap(action =>
+      action.competencyIds
+        .map(cId => {
+          const comp = competencyMap.get(cId);
+          if (!comp) return null;
+
+          const uc = ucMap.get(`${action.plan.userId}:${cId}`);
+          const log = latestLogByPair.get(`${action.plan.userId}:${cId}`);
+          const hasResult = action.status === 'COMPLETED' && log != null;
+
+          return {
+            id: `${action.id}:${cId}`,
+            actionId: action.id,
+            colaborador: action.plan.user.fullName,
+            colaboradorId: action.plan.userId,
+            colaboradorAvatarUrl: action.plan.user.avatarUrl,
+            departamento: action.plan.user.department?.name ?? null,
+            competencia: comp.name,
+            competenciaId: cId,
+            categoria: comp.category,
+            gap: uc?.targetLevel != null ? Math.max(0, uc.targetLevel - uc.currentLevel) : null,
+            nivelAtual: uc?.currentLevel ?? null,
+            nivelObjetivo: uc?.targetLevel ?? null,
+            acao: action.title,
+            tipoAcao: action.type,
+            cursoFormacao: action.courseId ? (courseMap.get(action.courseId) ?? null) : null,
+            cursoFormacaoId: action.courseId,
+            pdiAssociado: { id: action.plan.id, name: action.plan.name },
+            responsavel: action.plan.manager?.fullName ?? null,
+            dataInicio: action.plan.startDate ?? action.plan.activatedAt,
+            dataPrevistaConclusao: action.dueDate,
+            estado: action.status,
+            progresso: action.progress,
+            resultado: hasResult
+              ? log!.newLevel > log!.previousLevel
+                ? DevelopmentResult.MELHOROU
+                : DevelopmentResult.MANTEVE
+              : DevelopmentResult.PENDENTE,
+            nivelAposDesenvolvimento: hasResult ? log!.newLevel : null,
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r != null),
+    );
   }
 
   // ─── ANALYTICS & DASHBOARD ───────────────────────────────────────────────

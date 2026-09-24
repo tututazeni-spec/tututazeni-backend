@@ -23,6 +23,8 @@ import {
   MappingPriority,
   SeniorityLevel,
   PositionLevel,
+  ActionType,
+  ActionStatus,
 } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -35,6 +37,8 @@ export {
   MappingPriority,
   SeniorityLevel,
   PositionLevel,
+  ActionType,
+  ActionStatus,
 };
 
 // ─── Competency ───────────────────────────────────────────────────────────────
@@ -672,6 +676,120 @@ export class CompetencyEvaluationFilterDto {
   @IsOptional()
   @IsEnum(CompetencyEvaluationStatus)
   status?: CompetencyEvaluationStatus;
+}
+
+// ─── Gaps de Competências (docs/módulo_competencies.md §7) ──────────────────
+// Não existe uma tabela de estado próprio para o gap — é derivado a partir de
+// UserCompetency (currentLevel/targetLevel) e do PDI/acções de desenvolvimento
+// ligados ao par (userId, competencyId), ver competencies.service.ts#getGaps.
+
+export enum CompetencyGapPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  CRITICAL = 'CRITICAL',
+}
+
+export enum CompetencyGapStatus {
+  IDENTIFICADO = 'IDENTIFICADO',
+  EM_DESENVOLVIMENTO = 'EM_DESENVOLVIMENTO',
+  EM_ACOMPANHAMENTO = 'EM_ACOMPANHAMENTO',
+  RESOLVIDO = 'RESOLVIDO',
+  ENCERRADO = 'ENCERRADO',
+}
+
+export class CompetencyGapFilterDto {
+  @ApiPropertyOptional({ description: 'ID do colaborador' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  userId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  competencyId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  positionId?: number;
+
+  @ApiPropertyOptional({ enum: PositionLevel })
+  @IsOptional()
+  @IsEnum(PositionLevel)
+  hierarchyLevel?: PositionLevel;
+
+  @ApiPropertyOptional({ enum: CompetencyGapPriority })
+  @IsOptional()
+  @IsEnum(CompetencyGapPriority)
+  priority?: CompetencyGapPriority;
+
+  @ApiPropertyOptional({ enum: CompetencyGapStatus })
+  @IsOptional()
+  @IsEnum(CompetencyGapStatus)
+  status?: CompetencyGapStatus;
+
+  @ApiPropertyOptional({ description: 'Só competências críticas' })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isCritical?: boolean;
+}
+
+// ─── Desenvolvimento (docs/módulo_competencies.md §8) ───────────────────────
+// Liga DevelopmentPlanAction (Development Plans/PDI) às competências que a
+// acção endereça (DevelopmentPlanAction.competencyIds) — ver
+// competencies.service.ts#getDevelopmentActions. Não introduz tabela nova.
+
+export enum DevelopmentResult {
+  MELHOROU = 'MELHOROU',
+  MANTEVE = 'MANTEVE',
+  PENDENTE = 'PENDENTE',
+}
+
+export class DevelopmentActionFilterDto {
+  @ApiPropertyOptional({ description: 'ID do colaborador' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  userId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  competencyId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  planId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional({ enum: ActionType })
+  @IsOptional()
+  @IsEnum(ActionType)
+  type?: ActionType;
+
+  @ApiPropertyOptional({ enum: ActionStatus })
+  @IsOptional()
+  @IsEnum(ActionStatus)
+  status?: ActionStatus;
 }
 
 // ─── Endorsement ─────────────────────────────────────────────────────────────

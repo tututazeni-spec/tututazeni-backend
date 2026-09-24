@@ -34,6 +34,8 @@ import {
   UpsertCompetencyModelItemDto,
   SkillMatrixFilterDto,
   CompetencyEvaluationFilterDto,
+  CompetencyGapFilterDto,
+  DevelopmentActionFilterDto,
 } from './competencies.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -73,8 +75,7 @@ export class CompetenciesController {
   @Get('skill-matrix')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({
-    summary:
-      'Skill Matrix — grid utilizadores × competências (docs/módulo_competencies.md §5)',
+    summary: 'Skill Matrix — grid utilizadores × competências (docs/módulo_competencies.md §5)',
   })
   skillMatrix(@Query() filters: SkillMatrixFilterDto) {
     return this.svc.getSkillMatrix(filters);
@@ -87,6 +88,26 @@ export class CompetenciesController {
   })
   evaluations(@Query() filters: CompetencyEvaluationFilterDto) {
     return this.svc.getEvaluations(filters);
+  }
+
+  @Get('gaps')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary:
+      'Gaps de Competências — diferença entre nível actual e necessário (docs/módulo_competencies.md §7)',
+  })
+  gaps(@Query() filters: CompetencyGapFilterDto) {
+    return this.svc.getGaps(filters);
+  }
+
+  @Get('development')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary:
+      'Desenvolvimento — acções de PDI ligadas às lacunas de competências (docs/módulo_competencies.md §8)',
+  })
+  development(@Query() filters: DevelopmentActionFilterDto) {
+    return this.svc.getDevelopmentActions(filters);
   }
 
   @Get('dashboard/gaps')

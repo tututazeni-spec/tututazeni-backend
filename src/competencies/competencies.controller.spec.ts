@@ -10,6 +10,8 @@ const mockSvc = {
   getTopCompetencies: jest.fn().mockResolvedValue([]),
   getSkillMatrix: jest.fn().mockResolvedValue([]),
   getEvaluations: jest.fn().mockResolvedValue([]),
+  getGaps: jest.fn().mockResolvedValue([]),
+  getDevelopmentActions: jest.fn().mockResolvedValue([]),
   getOrgGapDashboard: jest.fn().mockResolvedValue({}),
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
   create: jest.fn().mockResolvedValue({ id: 2 }),
@@ -95,6 +97,28 @@ describe('CompetenciesController', () => {
   it('evaluations sem filtros → getEvaluations({})', async () => {
     await controller.evaluations({});
     expect(mockSvc.getEvaluations).toHaveBeenCalledWith({});
+  });
+
+  it('gaps sem filtros → getGaps({})', async () => {
+    await controller.gaps({});
+    expect(mockSvc.getGaps).toHaveBeenCalledWith({});
+  });
+
+  it('gaps com filtros → getGaps(filters)', async () => {
+    const filters = { departmentId: 2, priority: 'HIGH' as any };
+    await controller.gaps(filters);
+    expect(mockSvc.getGaps).toHaveBeenCalledWith(filters);
+  });
+
+  it('development sem filtros → getDevelopmentActions({})', async () => {
+    await controller.development({});
+    expect(mockSvc.getDevelopmentActions).toHaveBeenCalledWith({});
+  });
+
+  it('development com filtros → getDevelopmentActions(filters)', async () => {
+    const filters = { userId: 5, type: 'COURSE' as any };
+    await controller.development(filters);
+    expect(mockSvc.getDevelopmentActions).toHaveBeenCalledWith(filters);
   });
 
   it('orgGapDashboard sem departmentId → getOrgGapDashboard(undefined)', async () => {
