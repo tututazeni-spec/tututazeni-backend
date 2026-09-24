@@ -23,6 +23,10 @@ import {
   EventFilterDto,
   UpdateParticipantStatusDto,
   CheckInDto,
+  CheckOutDto,
+  ManualCheckInDto,
+  ManualCheckOutDto,
+  EventCheckinFilterDto,
   SubmitFeedbackDto,
   EventCalendarFilterDto,
   EventParticipantFilterDto,
@@ -106,6 +110,22 @@ export class EventsController {
   @ApiOperation({ summary: 'Histórico de comunicações de todos os eventos (aba Comunicação)' })
   listAllCommunications(@Query() filters: EventCommunicationFilterDto) {
     return this.svc.listAllCommunications(filters);
+  }
+
+  @Get('checkins')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Check-ins/presenças de todos os eventos (aba Check-in & Presença)' })
+  listCheckins(@Query() filters: EventCheckinFilterDto) {
+    return this.svc.listCheckins(filters);
+  }
+
+  @Get('checkins/export')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="checkins.csv"')
+  @ApiOperation({ summary: 'Exportar check-ins/presenças de todos os eventos como CSV' })
+  exportCheckins(@Query() filters: EventCheckinFilterDto) {
+    return this.svc.exportCheckinsCsv(filters);
   }
 
   @Get(':id')
@@ -259,6 +279,37 @@ export class EventsController {
     return this.svc.checkIn(user.id, dto);
   }
 
+  @Post('checkout')
+  @ApiOperation({ summary: 'Fazer check-out de um evento' })
+  @HttpCode(HttpStatus.OK)
+  checkOut(@CurrentUser() user: CurrentUserData, @Body() dto: CheckOutDto) {
+    return this.svc.checkOut(user.id, dto);
+  }
+
+  @Patch(':id/participants/:userId/checkin')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar check-in manual de um participante (aba Check-in & Presença)' })
+  @HttpCode(HttpStatus.OK)
+  manualCheckIn(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: ManualCheckInDto,
+  ) {
+    return this.svc.manualCheckIn(eventId, userId, dto);
+  }
+
+  @Patch(':id/participants/:userId/checkout')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar check-out manual de um participante' })
+  @HttpCode(HttpStatus.OK)
+  manualCheckOut(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: ManualCheckOutDto,
+  ) {
+    return this.svc.manualCheckOut(eventId, userId, dto);
+  }
+
   // ── Feedback ──────────────────────────────────────────────────────────────
 
   @Post(':id/feedback')
@@ -299,6 +350,44 @@ export class EventsController {
     @Param('sessionId', ParseIntPipe) sessionId: number,
   ) {
     return this.svc.deleteSession(eventId, sessionId);
+  }
+
+  // ── Presença por sessão (docs/events.md #9, eventos com Programação) ──────
+
+  @Get(':id/sessions/:sessionId/attendance')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Listar presença por sessão (participantes confirmados/presentes)' })
+  getSessionAttendance(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+  ) {
+    return this.svc.getSessionAttendance(eventId, sessionId);
+  }
+
+  @Patch(':id/sessions/:sessionId/attendance/:userId/checkin')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar check-in de um participante numa sessão' })
+  @HttpCode(HttpStatus.OK)
+  sessionCheckIn(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: ManualCheckInDto,
+  ) {
+    return this.svc.sessionCheckIn(eventId, sessionId, userId, dto);
+  }
+
+  @Patch(':id/sessions/:sessionId/attendance/:userId/checkout')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Registar check-out de um participante numa sessão' })
+  @HttpCode(HttpStatus.OK)
+  sessionCheckOut(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('sessionId', ParseIntPipe) sessionId: number,
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: ManualCheckOutDto,
+  ) {
+    return this.svc.sessionCheckOut(eventId, sessionId, userId, dto);
   }
 
   // ── Locais & Logística (aba, docs/events.md #6) ─────────────────────────

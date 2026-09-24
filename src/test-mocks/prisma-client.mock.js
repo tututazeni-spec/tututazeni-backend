@@ -2244,6 +2244,13 @@ const EventCommunicationStatus = {
   FAILED: 'FAILED',
 };
 
+const EventCheckinMethod = {
+  QR_CODE: 'QR_CODE',
+  MOBILE_APP: 'MOBILE_APP',
+  CODE: 'CODE',
+  MANUAL: 'MANUAL',
+};
+
 const InstructorType = {
   MASTER: 'MASTER',
   SENIOR: 'SENIOR',
@@ -2583,6 +2590,7 @@ module.exports = {
   EventCommunicationChannel,
   EventCommunicationStatus,
   EventEquipmentType,
+  EventCheckinMethod,
   InstructorType,
   CohortModalidade,
   CohortStatus,

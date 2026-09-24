@@ -29,6 +29,7 @@ import {
   EventCommunicationType,
   EventCommunicationChannel,
   EventCommunicationStatus,
+  EventCheckinMethod,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
@@ -51,6 +52,7 @@ export {
   EventCommunicationType,
   EventCommunicationChannel,
   EventCommunicationStatus,
+  EventCheckinMethod,
 };
 
 // ─── Event ────────────────────────────────────────────────────────────────────
@@ -271,6 +273,17 @@ export class CheckInDto {
   @IsOptional()
   @IsString()
   qrCode?: string;
+
+  @ApiPropertyOptional({ enum: EventCheckinMethod })
+  @IsOptional()
+  @IsEnum(EventCheckinMethod)
+  method?: EventCheckinMethod;
+}
+
+export class CheckOutDto {
+  @ApiProperty({ description: 'ID do evento' })
+  @IsInt()
+  eventId!: number;
 }
 
 // ─── Feedback ─────────────────────────────────────────────────────────────────
@@ -772,4 +785,75 @@ export class EventCommunicationFilterDto extends BaseFilterDto {
   @IsOptional()
   @IsEnum(EventCommunicationStatus)
   status?: EventCommunicationStatus;
+}
+
+// ─── Check-in & Presença (docs/events.md #9) ───────────────────────────────
+
+export class ManualCheckInDto {
+  @ApiPropertyOptional({ enum: EventCheckinMethod, default: EventCheckinMethod.MANUAL })
+  @IsOptional()
+  @IsEnum(EventCheckinMethod)
+  method?: EventCheckinMethod;
+
+  @ApiPropertyOptional({ description: 'Observação sobre o check-in' })
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @ApiPropertyOptional({ description: 'Hora de entrada (ISO) — omitido usa o momento actual' })
+  @IsOptional()
+  @IsDateString()
+  at?: string;
+}
+
+export class ManualCheckOutDto {
+  @ApiPropertyOptional({ description: 'Hora de saída (ISO) — omitido usa o momento actual' })
+  @IsOptional()
+  @IsDateString()
+  at?: string;
+}
+
+export class EventCheckinFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  eventId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional({ enum: ParticipantStatus })
+  @IsOptional()
+  @IsEnum(ParticipantStatus)
+  status?: ParticipantStatus;
+
+  @ApiPropertyOptional({ enum: EventCheckinMethod })
+  @IsOptional()
+  @IsEnum(EventCheckinMethod)
+  method?: EventCheckinMethod;
+
+  @ApiPropertyOptional({ description: 'Início do intervalo de datas de entrada (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Fim do intervalo de datas de entrada (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
+
+  @ApiPropertyOptional({ description: 'Pesquisa por nome do colaborador' })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }

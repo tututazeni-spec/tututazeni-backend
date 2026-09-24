@@ -17,6 +17,10 @@ import {
   EventFilterDto,
   UpdateParticipantStatusDto,
   CheckInDto,
+  CheckOutDto,
+  ManualCheckInDto,
+  ManualCheckOutDto,
+  EventCheckinFilterDto,
   SubmitFeedbackDto,
   ParticipantStatus,
   EventParticipantFilterDto,
@@ -737,7 +741,11 @@ export class EventsService {
 
     const updated = await this.prisma.eventParticipant.update({
       where: { eventId_userId: { eventId: dto.eventId, userId } },
-      data: { status: 'PRESENT', checkedInAt: new Date() },
+      data: {
+        status: 'PRESENT',
+        checkedInAt: new Date(),
+        checkinMethod: dto.method ?? (dto.qrCode ? 'QR_CODE' : 'MOBILE_APP'),
+      },
     });
 
     // XP por presença
@@ -758,6 +766,235 @@ export class EventsService {
       });
 
     return updated;
+  }
+
+  async checkOut(userId: number, dto: CheckOutDto) {
+    const participant = await this.prisma.read.eventParticipant.findUnique({
+      where: { eventId_userId: { eventId: dto.eventId, userId } },
+    });
+    if (!participant) throw new BadRequestException('Não inscrito neste evento');
+    if (!participant.checkedInAt)
+      throw new BadRequestException('Check-in ainda não foi realizado');
+
+    return this.prisma.eventParticipant.update({
+      where: { eventId_userId: { eventId: dto.eventId, userId } },
+      data: { checkedOutAt: new Date() },
+    });
+  }
+
+  // ─── Check-in & Presença — gestão administrativa (docs/events.md #9) ──────
+  // "Evento" É coluna própria no spec — listagem cross-evento (mesmo critério
+  // de Programação/Comunicação/Check-in), a partir de EventParticipant.
+
+  private computeCheckinState(p: {
+    status: string;
+    checkedInAt: Date | null;
+    checkedOutAt: Date | null;
+  }): string {
+    if (p.checkedOutAt) return 'SAIDA_REGISTADA';
+    if (p.checkedInAt) return 'ENTRADA_REGISTADA';
+    if (p.status === 'PRESENT') return 'PRESENTE';
+    if (p.status === 'ABSENT' || p.status === 'NO_SHOW') return 'AUSENTE';
+    return 'PENDENTE';
+  }
+
+  private computeDurationMinutes(checkedInAt: Date | null, checkedOutAt: Date | null) {
+    if (!checkedInAt || !checkedOutAt) return null;
+    return Math.round((checkedOutAt.getTime() - checkedInAt.getTime()) / 60_000);
+  }
+
+  private buildCheckinsWhere(filters: EventCheckinFilterDto): Prisma.EventParticipantWhereInput {
+    const { eventId, departmentId, unitId, status, method, dateFrom, dateTo, search } = filters;
+    const where: Prisma.EventParticipantWhereInput = {};
+    if (eventId) where.eventId = eventId;
+    if (status) where.status = status;
+    if (method) where.checkinMethod = method;
+    if (dateFrom || dateTo) {
+      where.checkedInAt = {
+        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+        ...(dateTo ? { lte: new Date(dateTo) } : {}),
+      };
+    }
+    if (departmentId || unitId || search) {
+      where.user = {
+        ...(departmentId ? { departmentId } : {}),
+        ...(unitId ? { unitId } : {}),
+        ...(search ? { fullName: { contains: search, mode: 'insensitive' } } : {}),
+      };
+    }
+    return where;
+  }
+
+  async listCheckins(filters: EventCheckinFilterDto) {
+    const { page = 1, limit = 20 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const where = this.buildCheckinsWhere(filters);
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.eventParticipant.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          event: { select: { id: true, title: true } },
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              department: { select: { id: true, name: true } },
+              unit: { select: { id: true, name: true } },
+            },
+          },
+        },
+        orderBy: [{ checkedInAt: 'desc' }, { registeredAt: 'desc' }],
+      }),
+      this.prisma.read.eventParticipant.count({ where }),
+    ]);
+
+    const enrichedData = data.map(p => ({
+      ...p,
+      checkinState: this.computeCheckinState(p),
+      durationMinutes: this.computeDurationMinutes(p.checkedInAt, p.checkedOutAt),
+    }));
+
+    return buildPaginatedResponse(enrichedData, total, page, limit);
+  }
+
+  async exportCheckinsCsv(filters: EventCheckinFilterDto): Promise<string> {
+    const { page: _page, limit: _limit, ...rest } = filters;
+    const { data } = await this.listCheckins({ ...rest, page: 1, limit: 100000 });
+
+    const rows = data.map(p => ({
+      colaborador: p.user.fullName,
+      departamento: p.user.department?.name ?? '',
+      unidade: p.user.unit?.name ?? '',
+      evento: p.event.title,
+      data: p.registeredAt.toISOString(),
+      entrada: p.checkedInAt ? p.checkedInAt.toISOString() : '',
+      saida: p.checkedOutAt ? p.checkedOutAt.toISOString() : '',
+      duracaoMinutos: p.durationMinutes ?? '',
+      metodo: p.checkinMethod ?? '',
+      estado: p.checkinState,
+      observacao: p.checkinNote ?? '',
+    }));
+
+    return buildCsvString(rows, [
+      'colaborador',
+      'departamento',
+      'unidade',
+      'evento',
+      'data',
+      'entrada',
+      'saida',
+      'duracaoMinutos',
+      'metodo',
+      'estado',
+      'observacao',
+    ]);
+  }
+
+  async manualCheckIn(eventId: number, userId: number, dto: ManualCheckInDto) {
+    const participant = await this.prisma.read.eventParticipant.findUnique({
+      where: { eventId_userId: { eventId, userId } },
+    });
+    if (!participant) throw new NotFoundException('Participante não encontrado neste evento');
+
+    return this.prisma.eventParticipant.update({
+      where: { eventId_userId: { eventId, userId } },
+      data: {
+        status: 'PRESENT',
+        checkedInAt: dto.at ? new Date(dto.at) : new Date(),
+        checkinMethod: dto.method ?? 'MANUAL',
+        checkinNote: dto.note,
+      },
+    });
+  }
+
+  async manualCheckOut(eventId: number, userId: number, dto: ManualCheckOutDto) {
+    const participant = await this.prisma.read.eventParticipant.findUnique({
+      where: { eventId_userId: { eventId, userId } },
+    });
+    if (!participant) throw new NotFoundException('Participante não encontrado neste evento');
+    if (!participant.checkedInAt)
+      throw new BadRequestException('Check-in ainda não foi realizado');
+
+    return this.prisma.eventParticipant.update({
+      where: { eventId_userId: { eventId, userId } },
+      data: { checkedOutAt: dto.at ? new Date(dto.at) : new Date() },
+    });
+  }
+
+  // ─── Presença por sessão (docs/events.md #9, quando o evento tem Programação) ─
+
+  async getSessionAttendance(eventId: number, sessionId: number) {
+    await this.assertSessionBelongsToEvent(eventId, sessionId);
+
+    const [participants, attendances] = await Promise.all([
+      this.prisma.read.eventParticipant.findMany({
+        where: { eventId, status: { in: ['CONFIRMED', 'PRESENT'] } },
+        select: { userId: true, user: { select: { id: true, fullName: true } } },
+        orderBy: { user: { fullName: 'asc' } },
+      }),
+      this.prisma.read.eventSessionAttendance.findMany({ where: { sessionId } }),
+    ]);
+
+    const byUserId = new Map(attendances.map(a => [a.userId, a]));
+
+    return participants.map(p => {
+      const attendance = byUserId.get(p.userId);
+      return {
+        userId: p.userId,
+        user: p.user,
+        checkedInAt: attendance?.checkedInAt ?? null,
+        checkedOutAt: attendance?.checkedOutAt ?? null,
+        method: attendance?.method ?? null,
+        durationMinutes: this.computeDurationMinutes(
+          attendance?.checkedInAt ?? null,
+          attendance?.checkedOutAt ?? null,
+        ),
+      };
+    });
+  }
+
+  async sessionCheckIn(
+    eventId: number,
+    sessionId: number,
+    userId: number,
+    dto: ManualCheckInDto,
+  ) {
+    await this.assertSessionBelongsToEvent(eventId, sessionId);
+    return this.prisma.eventSessionAttendance.upsert({
+      where: { sessionId_userId: { sessionId, userId } },
+      create: {
+        sessionId,
+        userId,
+        checkedInAt: dto.at ? new Date(dto.at) : new Date(),
+        method: dto.method ?? 'MANUAL',
+      },
+      update: {
+        checkedInAt: dto.at ? new Date(dto.at) : new Date(),
+        method: dto.method ?? 'MANUAL',
+      },
+    });
+  }
+
+  async sessionCheckOut(
+    eventId: number,
+    sessionId: number,
+    userId: number,
+    dto: ManualCheckOutDto,
+  ) {
+    await this.assertSessionBelongsToEvent(eventId, sessionId);
+    const attendance = await this.prisma.read.eventSessionAttendance.findUnique({
+      where: { sessionId_userId: { sessionId, userId } },
+    });
+    if (!attendance?.checkedInAt)
+      throw new BadRequestException('Check-in da sessão ainda não foi realizado');
+
+    return this.prisma.eventSessionAttendance.update({
+      where: { sessionId_userId: { sessionId, userId } },
+      data: { checkedOutAt: dto.at ? new Date(dto.at) : new Date() },
+    });
   }
 
   // ─── FEEDBACK / NPS ───────────────────────────────────────────────────────
