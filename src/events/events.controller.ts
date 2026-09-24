@@ -41,6 +41,8 @@ import {
   EventSpeakerFilterDto,
   CreateEventCommunicationDto,
   EventCommunicationFilterDto,
+  EventEvaluationFilterDto,
+  EventReportFilterDto,
 } from './events.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -126,6 +128,41 @@ export class EventsController {
   @ApiOperation({ summary: 'Exportar check-ins/presenças de todos os eventos como CSV' })
   exportCheckins(@Query() filters: EventCheckinFilterDto) {
     return this.svc.exportCheckinsCsv(filters);
+  }
+
+  @Get('evaluations')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Avaliações de todos os eventos (aba Avaliação)' })
+  listEvaluations(@Query() filters: EventEvaluationFilterDto) {
+    return this.svc.listEvaluations(filters);
+  }
+
+  @Get('evaluations/export')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="avaliacoes.csv"')
+  @ApiOperation({ summary: 'Exportar avaliações de todos os eventos como CSV' })
+  exportEvaluations(@Query() filters: EventEvaluationFilterDto) {
+    return this.svc.exportEvaluationsCsv(filters);
+  }
+
+  @Get('reports/overview')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary:
+      'Relatórios (aba Relatórios): execução, participantes, check-ins, custos, satisfação, NPS',
+  })
+  reports(@Query() filters: EventReportFilterDto) {
+    return this.svc.getReports(filters);
+  }
+
+  @Get('reports/export')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="relatorio-eventos.csv"')
+  @ApiOperation({ summary: 'Exportar relatório de eventos filtrado como CSV' })
+  exportReports(@Query() filters: EventReportFilterDto) {
+    return this.svc.exportReportsCsv(filters);
   }
 
   @Get(':id')
@@ -288,7 +325,9 @@ export class EventsController {
 
   @Patch(':id/participants/:userId/checkin')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Registar check-in manual de um participante (aba Check-in & Presença)' })
+  @ApiOperation({
+    summary: 'Registar check-in manual de um participante (aba Check-in & Presença)',
+  })
   @HttpCode(HttpStatus.OK)
   manualCheckIn(
     @Param('id', ParseIntPipe) eventId: number,

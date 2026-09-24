@@ -35,6 +35,8 @@ import {
   EventSpeakerFilterDto,
   CreateEventCommunicationDto,
   EventCommunicationFilterDto,
+  EventEvaluationFilterDto,
+  EventReportFilterDto,
 } from './events.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 import { buildCsvString } from '../common/utils/csv-export.util';
@@ -773,8 +775,7 @@ export class EventsService {
       where: { eventId_userId: { eventId: dto.eventId, userId } },
     });
     if (!participant) throw new BadRequestException('Não inscrito neste evento');
-    if (!participant.checkedInAt)
-      throw new BadRequestException('Check-in ainda não foi realizado');
+    if (!participant.checkedInAt) throw new BadRequestException('Check-in ainda não foi realizado');
 
     return this.prisma.eventParticipant.update({
       where: { eventId_userId: { eventId: dto.eventId, userId } },
@@ -915,8 +916,7 @@ export class EventsService {
       where: { eventId_userId: { eventId, userId } },
     });
     if (!participant) throw new NotFoundException('Participante não encontrado neste evento');
-    if (!participant.checkedInAt)
-      throw new BadRequestException('Check-in ainda não foi realizado');
+    if (!participant.checkedInAt) throw new BadRequestException('Check-in ainda não foi realizado');
 
     return this.prisma.eventParticipant.update({
       where: { eventId_userId: { eventId, userId } },
@@ -956,12 +956,7 @@ export class EventsService {
     });
   }
 
-  async sessionCheckIn(
-    eventId: number,
-    sessionId: number,
-    userId: number,
-    dto: ManualCheckInDto,
-  ) {
+  async sessionCheckIn(eventId: number, sessionId: number, userId: number, dto: ManualCheckInDto) {
     await this.assertSessionBelongsToEvent(eventId, sessionId);
     return this.prisma.eventSessionAttendance.upsert({
       where: { sessionId_userId: { sessionId, userId } },
@@ -1040,6 +1035,122 @@ export class EventsService {
     });
 
     return feedback;
+  }
+
+  // ─── AVALIAÇÃO (docs/events.md #10) ────────────────────────────────────────
+  // Cross-evento, mesmo critério de Check-in/Comunicação ("Evento" É coluna
+  // própria no spec: "Evento, participante, data, avaliação geral…"). Base é
+  // EventParticipant (todos os inscritos, não só quem já avaliou) para que
+  // o "estado" Avaliado/Pendente seja visível por linha — mesmo padrão de
+  // computeCheckinState, `evaluation`/`status` calculados, nunca persistidos.
+
+  private buildEvaluationsWhere(
+    filters: EventEvaluationFilterDto,
+  ): Prisma.EventParticipantWhereInput {
+    const { eventId, departmentId, unitId, search } = filters;
+    const where: Prisma.EventParticipantWhereInput = {};
+    if (eventId) where.eventId = eventId;
+    if (departmentId || unitId || search) {
+      where.user = {
+        ...(departmentId ? { departmentId } : {}),
+        ...(unitId ? { unitId } : {}),
+        ...(search ? { fullName: { contains: search, mode: 'insensitive' } } : {}),
+      };
+    }
+    return where;
+  }
+
+  async listEvaluations(filters: EventEvaluationFilterDto) {
+    const { page = 1, limit = 20 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const where = this.buildEvaluationsWhere(filters);
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.eventParticipant.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          event: { select: { id: true, title: true } },
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              department: { select: { id: true, name: true } },
+              unit: { select: { id: true, name: true } },
+            },
+          },
+        },
+        orderBy: { registeredAt: 'desc' },
+      }),
+      this.prisma.read.eventParticipant.count({ where }),
+    ]);
+
+    // Uma leitura extra para todos os pares evento/participante da página,
+    // em vez de N consultas por linha (mesmo padrão de listParticipants).
+    const pairs = data.map(p => ({ eventId: p.eventId, userId: p.userId }));
+    const feedbacks = pairs.length
+      ? await this.prisma.read.eventFeedback.findMany({
+          where: { OR: pairs.map(p => ({ eventId: p.eventId, userId: p.userId })) },
+        })
+      : [];
+    const feedbackMap = new Map(feedbacks.map(f => [`${f.eventId}:${f.userId}`, f]));
+
+    const enrichedData = data.map(p => {
+      const evaluation = feedbackMap.get(`${p.eventId}:${p.userId}`) ?? null;
+      return {
+        ...p,
+        evaluation,
+        // Distinto de `status` (estado da inscrição, já em `p`) — nunca
+        // persistido, mesma convenção de computeCheckinState.
+        evaluationStatus: evaluation ? ('AVALIADO' as const) : ('PENDENTE' as const),
+      };
+    });
+
+    return buildPaginatedResponse(enrichedData, total, page, limit);
+  }
+
+  async exportEvaluationsCsv(filters: EventEvaluationFilterDto): Promise<string> {
+    const { page: _page, limit: _limit, ...rest } = filters;
+    const { data } = await this.listEvaluations({ ...rest, page: 1, limit: 100000 });
+
+    const rows = data.map(p => ({
+      colaborador: p.user.fullName,
+      departamento: p.user.department?.name ?? '',
+      unidade: p.user.unit?.name ?? '',
+      evento: p.event.title,
+      data: p.evaluation?.createdAt ? p.evaluation.createdAt.toISOString() : '',
+      avaliacaoGeral: p.evaluation?.rating ?? '',
+      organizacao: p.evaluation?.organizationRating ?? '',
+      conteudo: p.evaluation?.contentRating ?? '',
+      local: p.evaluation?.locationRating ?? '',
+      oradores: p.evaluation?.speakersRating ?? '',
+      logistica: p.evaluation?.logisticsRating ?? '',
+      comunicacao: p.evaluation?.communicationRating ?? '',
+      recomendacaoNps: p.evaluation?.nps ?? '',
+      participariaNovamente: p.evaluation?.wouldAttendAgain ?? '',
+      comentario: p.evaluation?.comment ?? '',
+      estado: p.evaluationStatus,
+    }));
+
+    return buildCsvString(rows, [
+      'colaborador',
+      'departamento',
+      'unidade',
+      'evento',
+      'data',
+      'avaliacaoGeral',
+      'organizacao',
+      'conteudo',
+      'local',
+      'oradores',
+      'logistica',
+      'comunicacao',
+      'recomendacaoNps',
+      'participariaNovamente',
+      'comentario',
+      'estado',
+    ]);
   }
 
   // ─── CERTIFICADOS ─────────────────────────────────────────────────────────
@@ -1304,6 +1415,235 @@ export class EventsService {
       cancelledCount: byStatus.CANCELLED ?? 0,
       upcomingEvents,
     };
+  }
+
+  // ─── RELATÓRIOS (docs/events.md #11) ───────────────────────────────────────
+  // Um `event.findMany` (select mínimo) + 3 leituras batched (participantes/
+  // feedback/presença-por-sessão dos eventos filtrados) computam localmente
+  // todos os breakdowns — mesmo padrão de getStats/TrainingsService#getReports,
+  // sem groupBy através de relações (Prisma não suporta).
+
+  private buildReportsWhere(filters: EventReportFilterDto): Prisma.EventWhereInput {
+    const where: Prisma.EventWhereInput = {};
+    if (filters.year) {
+      where.startAt = {
+        gte: new Date(filters.year, 0, 1),
+        lt: new Date(filters.year + 1, 0, 1),
+      };
+    }
+    if (filters.eventId) where.id = filters.eventId;
+    if (filters.type) where.type = filters.type;
+    if (filters.departmentId) where.departmentId = filters.departmentId;
+    if (filters.unitId) where.unitId = filters.unitId;
+    if (filters.responsibleId) where.responsibleId = filters.responsibleId;
+    if (filters.status) where.status = filters.status;
+    if (filters.location) where.location = { contains: filters.location, mode: 'insensitive' };
+    return where;
+  }
+
+  async getReports(filters: EventReportFilterDto) {
+    const where = this.buildReportsWhere(filters);
+
+    const events = await this.prisma.read.event.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        status: true,
+        modalidade: true,
+        startAt: true,
+        maxCapacity: true,
+        department: { select: { name: true } },
+        unit: { select: { name: true } },
+        logistics: { select: { budget: true, actualCost: true } },
+      },
+    });
+    const eventIds = events.map(e => e.id);
+
+    // `in: []` devolve sempre [] no Prisma — sem ternário condicional, evita
+    // que o tipo da tupla do Promise.all fique em união com `never[]` (isso
+    // faz o TS escolher a sobrecarga errada de .reduce() mais abaixo).
+    const [participants, feedbacks, sessions] = await Promise.all([
+      this.prisma.read.eventParticipant.findMany({
+        where: { eventId: { in: eventIds } },
+        select: { eventId: true, status: true, checkedInAt: true },
+      }),
+      this.prisma.read.eventFeedback.findMany({
+        where: { eventId: { in: eventIds } },
+        select: { eventId: true, rating: true, nps: true, speakersRating: true },
+      }),
+      this.prisma.read.eventSession.findMany({
+        where: { eventId: { in: eventIds } },
+        select: { id: true, attendances: { select: { checkedInAt: true } } },
+      }),
+    ]);
+
+    const countBy = <T extends string>(rows: T[]) =>
+      rows.reduce<Record<string, number>>((acc, key) => {
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {});
+
+    const byPeriodMap = new Map<string, number>();
+    for (const e of events) {
+      const d = new Date(e.startAt);
+      const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      byPeriodMap.set(period, (byPeriodMap.get(period) ?? 0) + 1);
+    }
+    const byPeriod = Array.from(byPeriodMap.entries())
+      .map(([period, count]) => ({ period, count }))
+      .sort((a, b) => a.period.localeCompare(b.period));
+
+    const toSortedArray = (m: Record<string, number>, key: string) =>
+      Object.entries(m)
+        .map(([k, count]) => ({ [key]: k, count }))
+        .sort((a, b) => b.count - a.count);
+
+    const byUnit = toSortedArray(countBy(events.map(e => e.unit?.name ?? 'Sem unidade')), 'unit');
+    const byDepartment = toSortedArray(
+      countBy(events.map(e => e.department?.name ?? 'Sem departamento')),
+      'department',
+    );
+    const byModality = toSortedArray(countBy(events.map(e => e.modalidade)), 'modalidade');
+
+    const registered = participants.filter(p =>
+      ['PENDING', 'CONFIRMED', 'WAITLIST', 'PRESENT', 'ABSENT', 'NO_SHOW'].includes(p.status),
+    );
+    const confirmed = participants.filter(p => ['CONFIRMED', 'PRESENT'].includes(p.status));
+    const present = participants.filter(p => p.status === 'PRESENT' || p.checkedInAt);
+    const absences = participants.filter(p => ['ABSENT', 'NO_SHOW'].includes(p.status));
+    const totalCapacity = events.reduce((sum, e) => sum + e.maxCapacity, 0);
+
+    const participantsByEvent = new Map<number, number>();
+    for (const p of registered) {
+      participantsByEvent.set(p.eventId, (participantsByEvent.get(p.eventId) ?? 0) + 1);
+    }
+    const topEventsByParticipants = events
+      .map(e => ({
+        eventId: e.id,
+        title: e.title,
+        participants: participantsByEvent.get(e.id) ?? 0,
+      }))
+      .sort((a, b) => b.participants - a.participants)
+      .slice(0, 10);
+
+    const totalBudget = events.reduce((sum, e) => sum + (e.logistics?.budget ?? 0), 0);
+    const totalActualCost = events.reduce((sum, e) => sum + (e.logistics?.actualCost ?? 0), 0);
+    const costsByEvent = events
+      .filter(e => e.logistics?.budget != null || e.logistics?.actualCost != null)
+      .map(e => ({
+        eventId: e.id,
+        title: e.title,
+        budget: e.logistics?.budget ?? 0,
+        actualCost: e.logistics?.actualCost ?? 0,
+      }))
+      .sort((a, b) => b.actualCost - a.actualCost)
+      .slice(0, 10);
+
+    const ratedFeedbacks = feedbacks.filter(f => f.rating != null);
+    const avgRating =
+      ratedFeedbacks.length > 0
+        ? Math.round(
+            (ratedFeedbacks.reduce((s, f) => s + (f.rating ?? 0), 0) / ratedFeedbacks.length) * 10,
+          ) / 10
+        : null;
+    const avgNps =
+      feedbacks.length > 0
+        ? Math.round((feedbacks.reduce((s, f) => s + f.nps, 0) / feedbacks.length) * 10) / 10
+        : null;
+    const speakerFeedbacks = feedbacks.filter(f => f.speakersRating != null);
+    const avgSpeakersRating =
+      speakerFeedbacks.length > 0
+        ? Math.round(
+            (speakerFeedbacks.reduce((s, f) => s + (f.speakersRating ?? 0), 0) /
+              speakerFeedbacks.length) *
+              10,
+          ) / 10
+        : null;
+
+    const allAttendances = sessions.flatMap(s => s.attendances);
+    const sessionCheckedIn = allAttendances.filter(a => a.checkedInAt).length;
+
+    return {
+      filters,
+      totals: {
+        events: events.length,
+        draft: events.filter(e => e.status === 'DRAFT').length,
+        published: events.filter(e => e.status === 'PUBLISHED').length,
+        live: events.filter(e => e.status === 'LIVE').length,
+        ended: events.filter(e => e.status === 'ENDED').length,
+        cancelled: events.filter(e => e.status === 'CANCELLED').length,
+      },
+      byPeriod,
+      byUnit,
+      byDepartment,
+      byModality,
+      topEventsByParticipants,
+      registration: {
+        registered: registered.length,
+        capacity: totalCapacity,
+        rate: totalCapacity > 0 ? Math.round((registered.length / totalCapacity) * 100) : 0,
+      },
+      confirmation: {
+        confirmed: confirmed.length,
+        registered: registered.length,
+        rate: registered.length > 0 ? Math.round((confirmed.length / registered.length) * 100) : 0,
+      },
+      participation: {
+        present: present.length,
+        confirmed: confirmed.length,
+        rate: confirmed.length > 0 ? Math.round((present.length / confirmed.length) * 100) : 0,
+        absences: absences.length,
+      },
+      checkins: { total: present.length },
+      sessionAttendance: {
+        total: allAttendances.length,
+        checkedIn: sessionCheckedIn,
+        rate:
+          allAttendances.length > 0
+            ? Math.round((sessionCheckedIn / allAttendances.length) * 100)
+            : 0,
+      },
+      costs: {
+        budget: Math.round(totalBudget * 100) / 100,
+        actualCost: Math.round(totalActualCost * 100) / 100,
+        budgetExecutionRate:
+          totalBudget > 0 ? Math.round((totalActualCost / totalBudget) * 100) : 0,
+        byEvent: costsByEvent,
+      },
+      satisfaction: { avgRating, responses: ratedFeedbacks.length },
+      speakers: { avgRating: avgSpeakersRating },
+      nps: { avg: avgNps, responses: feedbacks.length },
+    };
+  }
+
+  async exportReportsCsv(filters: EventReportFilterDto): Promise<string> {
+    const report = await this.getReports(filters);
+    const rows = [
+      { metrica: 'Eventos (total)', valor: report.totals.events },
+      { metrica: 'Eventos publicados', valor: report.totals.published },
+      { metrica: 'Eventos ao vivo', valor: report.totals.live },
+      { metrica: 'Eventos concluídos', valor: report.totals.ended },
+      { metrica: 'Eventos cancelados', valor: report.totals.cancelled },
+      { metrica: 'Inscritos', valor: report.registration.registered },
+      { metrica: 'Taxa de inscrição (%)', valor: report.registration.rate },
+      { metrica: 'Confirmados', valor: report.confirmation.confirmed },
+      { metrica: 'Taxa de confirmação (%)', valor: report.confirmation.rate },
+      { metrica: 'Presentes', valor: report.participation.present },
+      { metrica: 'Taxa de participação (%)', valor: report.participation.rate },
+      { metrica: 'Ausências', valor: report.participation.absences },
+      { metrica: 'Check-ins realizados', valor: report.checkins.total },
+      { metrica: 'Presenças por sessão (registadas)', valor: report.sessionAttendance.total },
+      { metrica: 'Presenças por sessão (check-in)', valor: report.sessionAttendance.checkedIn },
+      { metrica: 'Orçamento (total)', valor: report.costs.budget },
+      { metrica: 'Custo real (total)', valor: report.costs.actualCost },
+      { metrica: 'Execução orçamental (%)', valor: report.costs.budgetExecutionRate },
+      { metrica: 'Satisfação média (1-5)', valor: report.satisfaction.avgRating ?? '' },
+      { metrica: 'NPS médio', valor: report.nps.avg ?? '' },
+      { metrica: 'Avaliação média dos oradores (1-5)', valor: report.speakers.avgRating ?? '' },
+    ];
+    return buildCsvString(rows, ['metrica', 'valor']);
   }
 
   // ─── CALENDÁRIO (docs/events.md #3) ────────────────────────────────────────

@@ -309,6 +309,55 @@ export class SubmitFeedbackDto {
   @Max(5)
   instructorRating?: number;
 
+  @ApiPropertyOptional({ description: 'Satisfação com a organização 1-5' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  organizationRating?: number;
+
+  @ApiPropertyOptional({ description: 'Satisfação com o conteúdo 1-5' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  contentRating?: number;
+
+  @ApiPropertyOptional({ description: 'Satisfação com o local 1-5' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  locationRating?: number;
+
+  @ApiPropertyOptional({ description: 'Avaliação dos oradores 1-5' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  speakersRating?: number;
+
+  @ApiPropertyOptional({ description: 'Avaliação da logística 1-5' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  logisticsRating?: number;
+
+  @ApiPropertyOptional({ description: 'Avaliação da comunicação 1-5' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  communicationRating?: number;
+
+  @ApiPropertyOptional({ description: 'Intenção de participar novamente 1-5' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  wouldAttendAgain?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -856,4 +905,82 @@ export class EventCheckinFilterDto extends BaseFilterDto {
   @IsOptional()
   @IsString()
   search?: string;
+}
+
+// ─── Avaliação (docs/events.md #10) ────────────────────────────────────────
+
+export class EventEvaluationFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  eventId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional({ description: 'Pesquisa por nome do colaborador' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+// ─── Relatórios (docs/events.md #11) ───────────────────────────────────────
+// Rotas com prefixo fixo ("reports/...") registadas ANTES de ':id' no
+// controller, mesmo motivo do route-shadowing evitado em Programação.
+
+export class EventReportFilterDto {
+  @ApiPropertyOptional({ description: 'Ano (filtra por startAt), ex.: 2026' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  year?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  eventId?: number;
+
+  @ApiPropertyOptional({ enum: EventType })
+  @IsOptional()
+  @IsEnum(EventType)
+  type?: EventType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional({ description: 'Pesquisa livre no local do evento' })
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  responsibleId?: number;
+
+  @ApiPropertyOptional({ enum: EventStatus })
+  @IsOptional()
+  @IsEnum(EventStatus)
+  status?: EventStatus;
 }

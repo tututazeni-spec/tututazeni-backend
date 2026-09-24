@@ -7796,16 +7796,28 @@ model EventParticipant {
 }
 
 model EventFeedback {
-  id               Int      @id @default(autoincrement())
-  eventId          Int
-  userId           Int
-  nps              Int
-  rating           Int?
-  instructorRating Int?
-  comment          String?  @db.Text
-  createdAt        DateTime @default(now())
-  event            Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user             User     @relation(fields: [userId], references: [id])
+  id                  Int      @id @default(autoincrement())
+  eventId             Int
+  userId              Int
+  nps                 Int
+  rating              Int?
+  instructorRating    Int?
+  // Avaliação da experiência (docs/events.md #10) — um rating 1-5 por
+  // aspecto listado no spec ("organização, conteúdo, local, oradores,
+  // logística, comunicação"); "recomendação" já é coberta por `nps`.
+  organizationRating  Int?
+  contentRating       Int?
+  locationRating      Int?
+  speakersRating      Int?
+  logisticsRating     Int?
+  communicationRating Int?
+  // "Intenção de participar novamente" (docs/events.md #10, secção "Medir") —
+  // escala 1-5, distinta de `nps` (recomendaria a outros).
+  wouldAttendAgain    Int?
+  comment             String?  @db.Text
+  createdAt           DateTime @default(now())
+  event               Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user                User     @relation(fields: [userId], references: [id])
 
   @@unique([eventId, userId])
   @@index([eventId])
