@@ -428,9 +428,9 @@ describe('CompetenciesService', () => {
         value: 2,
       });
       mockPrisma.proficiencyLevel.findFirst.mockResolvedValue({ id: 2, value: 3 });
-      await expect(
-        service.updateProficiencyLevel(1, { value: 3 } as any),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.updateProficiencyLevel(1, { value: 3 } as any)).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('actualiza o nível quando não há conflito', async () => {
@@ -463,9 +463,9 @@ describe('CompetenciesService', () => {
   describe('createModel', () => {
     it('lança ConflictException se o código já existir', async () => {
       mockPrisma.competencyModel.findFirst.mockResolvedValue({ id: 1, code: 'LID' });
-      await expect(
-        service.createModel({ name: 'Liderança', code: 'LID' } as any),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.createModel({ name: 'Liderança', code: 'LID' } as any)).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('cria o modelo quando o código é livre', async () => {
