@@ -28,6 +28,7 @@ import {
   ValidateDocumentDto,
   SubmitOnboardingSurveyDto,
   OnboardingFilterDto,
+  TriggerIntegrationEvaluationDto,
 } from './onboarding.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -216,5 +217,18 @@ export class OnboardingController {
   @ApiOperation({ summary: 'Submeter pesquisa de satisfação (Dia 1, 7, 30, 90)' })
   submitSurvey(@CurrentUser() user: CurrentUserData, @Body() dto: SubmitOnboardingSurveyDto) {
     return this.svc.submitSurvey(user.id, dto);
+  }
+
+  // ── Avaliação de Integração ─────────────────────────────────────────────────
+
+  @Post(':id/trigger-evaluation')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Despoletar Avaliação de Integração (integra com o módulo Evaluation)' })
+  triggerIntegrationEvaluation(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: TriggerIntegrationEvaluationDto,
+  ) {
+    return this.svc.triggerIntegrationEvaluation(id, dto, user);
   }
 }

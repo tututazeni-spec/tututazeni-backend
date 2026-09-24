@@ -3371,7 +3371,7 @@ model EvaluationRequest {
   evaluated         User                    @relation("RequestEvaluated", fields: [evaluatedId], references: [id])
   cycle             EvaluationCampaign?     @relation(fields: [cycleId], references: [id])
   oneOnOneMeeting   OneOnOneMeeting?        @relation(fields: [oneOnOneMeetingId], references: [id])
-
+  onboardingPlan OnboardingPlan?   // inverso da FK acima — 1:1 opcional
   @@index([evaluatorId])
   @@index([evaluatedId])
   @@index([cycleId])
@@ -4464,6 +4464,8 @@ model OnboardingPlan {
   taskInstances   OnboardingTaskInstance[]
   documents       OnboardingDocument[]
   surveys         OnboardingSurvey[]
+  integrationEvalRequestId Int?                @unique
+  integrationEvalRequest   EvaluationRequest?   @relation(fields: [integrationEvalRequestId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -10287,6 +10289,7 @@ enum EvalPurpose {
   POST_TRAINING
   COMPETENCY
   GOALS
+  ONBOARDING   // NOVO — Avaliação de Integração
 }
 
 // docs/modulo_evaluation.md ponto 2, etapa 2 ("Possibilidade de

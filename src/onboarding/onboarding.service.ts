@@ -6,7 +6,7 @@
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, EvalType, EvalPurpose, EvalStage } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateOnboardingTemplateDto,
@@ -21,6 +21,7 @@ import {
   ValidateDocumentDto,
   SubmitOnboardingSurveyDto,
   OnboardingFilterDto,
+  TriggerIntegrationEvaluationDto,
 } from './onboarding.dto';
 import { assertCanAccess } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -636,6 +637,82 @@ export class OnboardingService {
         comment: dto.comment,
       },
     });
+  }
+
+  // ─── AVALIAÇÃO DE INTEGRAÇÃO ────────────────────────────────────────────────
+  // docs/onboarding.md ponto 9 — em vez de duplicar um sistema de avaliação,
+  // despoleta um EvaluationRequest (purpose=ONBOARDING) no módulo Evaluation
+  // e guarda a ligação 1:1 em OnboardingPlan.integrationEvalRequestId.
+
+  async triggerIntegrationEvaluation(
+    planId: number,
+    dto: TriggerIntegrationEvaluationDto,
+    user: CurrentUserData,
+  ) {
+    const plan = await this.prisma.read.onboardingPlan.findUnique({
+      where: { id: planId },
+      select: {
+        id: true,
+        userId: true,
+        managerId: true,
+        hrResponsibleId: true,
+        integrationEvalRequestId: true,
+      },
+    });
+    if (!plan) throw new NotFoundException('Plano não encontrado');
+
+    // Só quem gere a integração (o gestor do plano, RH ou ADMIN) despoleta a
+    // avaliação — nunca o próprio colaborador integrado.
+    assertCanAccess(plan, plan.managerId ?? -1, user, [Role.ADMIN, Role.RH, Role.GESTOR]);
+
+    if (plan.integrationEvalRequestId) {
+      throw new ConflictException('Avaliação de integração já foi despoletada para este plano');
+    }
+
+    const evaluatorId = dto.evaluatorId ?? plan.managerId ?? plan.hrResponsibleId;
+    if (!evaluatorId) {
+      throw new BadRequestException(
+        'Não é possível determinar o avaliador: o plano não tem gestor nem responsável de RH',
+      );
+    }
+
+    const request = await this.prisma.evaluationRequest.create({
+      data: {
+        evaluatorId,
+        evaluatedId: plan.userId,
+        type: EvalType.MANAGER,
+        purpose: EvalPurpose.ONBOARDING,
+        stage: EvalStage.MANAGER_EVAL,
+        dueDate: new Date(Date.now() + 14 * 86400000),
+        name: 'Avaliação de Integração',
+      },
+    });
+
+    await this.prisma.onboardingPlan.update({
+      where: { id: planId },
+      data: { integrationEvalRequestId: request.id },
+    });
+
+    await this.prisma.notificationLog
+      .create({
+        data: {
+          userId: evaluatorId,
+          type: 'ONBOARDING_EVALUATION_REQUESTED',
+          message: 'Foi-te pedida uma Avaliação de Integração de um colaborador',
+          metadata: JSON.stringify({ planId, requestId: request.id }),
+        },
+      })
+      .catch(e => {
+        this.logger.warn({
+          userId: evaluatorId,
+          action: 'ONBOARDING_EVALUATION_REQUESTED',
+          planId,
+          err: { message: e instanceof Error ? e.message : String(e) },
+          msg: 'Falha ao criar notificação de avaliação de integração',
+        });
+      });
+
+    return request;
   }
 
   // ─── DASHBOARD ────────────────────────────────────────────────────────────

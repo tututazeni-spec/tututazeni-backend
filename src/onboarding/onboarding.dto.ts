@@ -356,6 +356,21 @@ export class SubmitOnboardingSurveyDto {
   comment?: string;
 }
 
+// ─── Avaliação de Integração (onboarding.md ponto 9) ───────────────────────
+// Reaproveita EvaluationRequest do módulo Evaluation (purpose=ONBOARDING) em
+// vez de duplicar um sistema de avaliação — só o "gatilho" fica aqui.
+
+export class TriggerIntegrationEvaluationDto {
+  @ApiPropertyOptional({
+    description:
+      'ID do avaliador (gestor/RH). Por omissão usa o managerId do plano, ' +
+      'ou o hrResponsibleId se não houver gestor.',
+  })
+  @IsOptional()
+  @IsInt()
+  evaluatorId?: number;
+}
+
 // ─── Filters ──────────────────────────────────────────────────────────────────
 
 export class OnboardingFilterDto extends BaseFilterDto {
