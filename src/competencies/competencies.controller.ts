@@ -32,6 +32,8 @@ import {
   UpdateCompetencyModelDto,
   CompetencyModelFilterDto,
   UpsertCompetencyModelItemDto,
+  SkillMatrixFilterDto,
+  CompetencyEvaluationFilterDto,
 } from './competencies.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -70,17 +72,21 @@ export class CompetenciesController {
 
   @Get('skill-matrix')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Skill Matrix — grid utilizadores × competências' })
-  @ApiQuery({ name: 'departmentId', required: false })
-  @ApiQuery({ name: 'positionId', required: false })
-  skillMatrix(
-    @Query('departmentId') departmentId?: string,
-    @Query('positionId') positionId?: string,
-  ) {
-    return this.svc.getSkillMatrix(
-      departmentId ? parseInt(departmentId) : undefined,
-      positionId ? parseInt(positionId) : undefined,
-    );
+  @ApiOperation({
+    summary:
+      'Skill Matrix — grid utilizadores × competências (docs/módulo_competencies.md §5)',
+  })
+  skillMatrix(@Query() filters: SkillMatrixFilterDto) {
+    return this.svc.getSkillMatrix(filters);
+  }
+
+  @Get('evaluations')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary: 'Avaliações de competências — lista consolidada (docs/módulo_competencies.md §6)',
+  })
+  evaluations(@Query() filters: CompetencyEvaluationFilterDto) {
+    return this.svc.getEvaluations(filters);
   }
 
   @Get('dashboard/gaps')

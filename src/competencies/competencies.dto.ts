@@ -22,6 +22,7 @@ import {
   CompetencyType,
   MappingPriority,
   SeniorityLevel,
+  PositionLevel,
 } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ export {
   CompetencyType,
   MappingPriority,
   SeniorityLevel,
+  PositionLevel,
 };
 
 // ─── Competency ───────────────────────────────────────────────────────────────
@@ -575,6 +577,101 @@ export class UpsertCompetencyModelItemDto {
   @IsOptional()
   @IsBoolean()
   isCritical?: boolean;
+}
+
+// ─── Matriz de Competências (docs/módulo_competencies.md §5) ─────────────────
+// "Permanece como está feita atualmente; acrescentar filtros por: Departamento,
+// cargo, competência, nível hierárquico, colaborador, nível atual." Nível
+// hierárquico usa Position.level (PositionLevel) — é o campo alcançável a
+// partir de User que representa hierarquia, ao contrário de SeniorityLevel
+// (só existe em CompetencyModel/CareerRole, não em User).
+
+export class SkillMatrixFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  positionId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  competencyId?: number;
+
+  @ApiPropertyOptional({ enum: PositionLevel })
+  @IsOptional()
+  @IsEnum(PositionLevel)
+  hierarchyLevel?: PositionLevel;
+
+  @ApiPropertyOptional({ description: 'ID do colaborador' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  userId?: number;
+
+  @ApiPropertyOptional({ description: 'Nível actual (0-5)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(5)
+  currentLevel?: number;
+}
+
+// ─── Avaliações (docs/módulo_competencies.md §6) ──────────────────────────────
+
+export enum CompetencyEvaluationStatus {
+  ATINGIDO = 'ATINGIDO',
+  ABAIXO_DO_ESPERADO = 'ABAIXO_DO_ESPERADO',
+  SEM_META = 'SEM_META',
+}
+
+export class CompetencyEvaluationFilterDto {
+  @ApiPropertyOptional({ description: 'ID do colaborador' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  userId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  competencyId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  positionId?: number;
+
+  @ApiPropertyOptional({ enum: PositionLevel })
+  @IsOptional()
+  @IsEnum(PositionLevel)
+  hierarchyLevel?: PositionLevel;
+
+  @ApiPropertyOptional({ enum: CompetencySource, description: 'Tipo de avaliação (origem)' })
+  @IsOptional()
+  @IsEnum(CompetencySource)
+  source?: CompetencySource;
+
+  @ApiPropertyOptional({ enum: CompetencyEvaluationStatus })
+  @IsOptional()
+  @IsEnum(CompetencyEvaluationStatus)
+  status?: CompetencyEvaluationStatus;
 }
 
 // ─── Endorsement ─────────────────────────────────────────────────────────────

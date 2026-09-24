@@ -9,6 +9,7 @@ const mockSvc = {
   getOverview: jest.fn().mockResolvedValue({}),
   getTopCompetencies: jest.fn().mockResolvedValue([]),
   getSkillMatrix: jest.fn().mockResolvedValue([]),
+  getEvaluations: jest.fn().mockResolvedValue([]),
   getOrgGapDashboard: jest.fn().mockResolvedValue({}),
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
   create: jest.fn().mockResolvedValue({ id: 2 }),
@@ -80,14 +81,20 @@ describe('CompetenciesController', () => {
     expect(mockSvc.getTopCompetencies).toHaveBeenCalledWith(5);
   });
 
-  it('skillMatrix sem params → getSkillMatrix(undefined, undefined)', async () => {
-    await controller.skillMatrix();
-    expect(mockSvc.getSkillMatrix).toHaveBeenCalledWith(undefined, undefined);
+  it('skillMatrix sem filtros → getSkillMatrix({})', async () => {
+    await controller.skillMatrix({});
+    expect(mockSvc.getSkillMatrix).toHaveBeenCalledWith({});
   });
 
-  it('skillMatrix com params → getSkillMatrix(parsed, parsed)', async () => {
-    await controller.skillMatrix('2', '3');
-    expect(mockSvc.getSkillMatrix).toHaveBeenCalledWith(2, 3);
+  it('skillMatrix com filtros → getSkillMatrix(filters)', async () => {
+    const filters = { departmentId: 2, positionId: 3, competencyId: 7 };
+    await controller.skillMatrix(filters);
+    expect(mockSvc.getSkillMatrix).toHaveBeenCalledWith(filters);
+  });
+
+  it('evaluations sem filtros → getEvaluations({})', async () => {
+    await controller.evaluations({});
+    expect(mockSvc.getEvaluations).toHaveBeenCalledWith({});
   });
 
   it('orgGapDashboard sem departmentId → getOrgGapDashboard(undefined)', async () => {

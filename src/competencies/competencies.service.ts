@@ -25,6 +25,9 @@ import {
   UpdateCompetencyModelDto,
   CompetencyModelFilterDto,
   UpsertCompetencyModelItemDto,
+  SkillMatrixFilterDto,
+  CompetencyEvaluationFilterDto,
+  CompetencyEvaluationStatus,
 } from './competencies.dto';
 
 @Injectable()
@@ -774,10 +777,15 @@ export class CompetenciesService {
 
   // ─── SKILL MATRIX ─────────────────────────────────────────────────────────
 
-  async getSkillMatrix(departmentId?: number, positionId?: number) {
+  async getSkillMatrix(filters: SkillMatrixFilterDto = {}) {
+    const { departmentId, positionId, competencyId, hierarchyLevel, userId, currentLevel } =
+      filters;
+
     const userWhere: Prisma.UserWhereInput = { active: true };
     if (departmentId) userWhere.departmentId = departmentId;
     if (positionId) userWhere.positionId = positionId;
+    if (userId) userWhere.id = userId;
+    if (hierarchyLevel) userWhere.position = { level: hierarchyLevel };
 
     const [users, competencies] = await Promise.all([
       this.prisma.read.user.findMany({
@@ -786,13 +794,13 @@ export class CompetenciesService {
           id: true,
           fullName: true,
           avatarUrl: true,
-          position: { select: { name: true } },
+          position: { select: { name: true, level: true } },
           department: { select: { name: true } },
         },
         take: 50,
       }),
       this.prisma.read.competency.findMany({
-        where: { status: 'ACTIVE' },
+        where: { status: 'ACTIVE', ...(competencyId ? { id: competencyId } : {}) },
         select: { id: true, name: true, category: true },
         orderBy: [{ category: 'asc' }, { name: 'asc' }],
       }),
@@ -804,7 +812,7 @@ export class CompetenciesService {
     });
 
     // Montar grid
-    const matrix = users.map(user => {
+    let matrix = users.map(user => {
       const userUC = allUC.filter(uc => uc.userId === user.id);
       const levels = competencies.map(comp => {
         const uc = userUC.find(u => u.competencyId === comp.id);
@@ -813,7 +821,146 @@ export class CompetenciesService {
       return { user, levels };
     });
 
-    return { users, competencies, matrix };
+    // Filtro por nível actual — mantém apenas colaboradores com pelo menos
+    // uma competência (entre as filtradas) no nível pedido.
+    if (currentLevel !== undefined) {
+      matrix = matrix.filter(row => row.levels.some(l => l.level === currentLevel));
+    }
+
+    const filteredUserIds = new Set(matrix.map(row => row.user.id));
+    return {
+      users: users.filter(u => filteredUserIds.has(u.id)),
+      competencies,
+      matrix,
+    };
+  }
+
+  // ─── AVALIAÇÕES (docs/módulo_competencies.md §6) ─────────────────────────
+  // A avaliação em si acontece nos módulos Evaluation/Evaluation360 — aqui
+  // apresentamos o resultado já gravado em UserCompetency (via selfAssess /
+  // managerAssess / upsertUserCompetency / updateFromCourse), enriquecido com
+  // o avaliador resolvido a partir do CompetencyEvolutionLog mais recente.
+
+  private static readonly EVALUATION_TYPE_LABELS: Record<CompetencySource, string> = {
+    MANUAL: 'Autoavaliação',
+    MANAGER: 'Avaliação do gestor',
+    ASSESSMENT: 'Avaliação técnica',
+    COURSE: 'Avaliação de certificação',
+    TRAINING: 'Avaliação de formação',
+    HRIS: 'Importação HRIS',
+  };
+
+  async getEvaluations(filters: CompetencyEvaluationFilterDto = {}) {
+    const { userId, competencyId, departmentId, positionId, hierarchyLevel, source, status } =
+      filters;
+
+    const userWhere: Prisma.UserWhereInput = {};
+    if (userId) userWhere.id = userId;
+    if (departmentId) userWhere.departmentId = departmentId;
+    if (positionId) userWhere.positionId = positionId;
+    if (hierarchyLevel) userWhere.position = { level: hierarchyLevel };
+
+    const where: Prisma.UserCompetencyWhereInput = {};
+    if (competencyId) where.competencyId = competencyId;
+    if (source) where.source = source;
+    if (Object.keys(userWhere).length) where.user = userWhere;
+
+    const rows = await this.prisma.read.userCompetency.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            department: { select: { name: true } },
+            position: { select: { name: true } },
+          },
+        },
+        competency: { select: { id: true, name: true, category: true } },
+      },
+      orderBy: { evaluatedAt: 'desc' },
+      take: 200,
+    });
+
+    // Resolver avaliador via log de evolução mais recente de cada par
+    // (userId, competencyId) — UserCompetency não guarda o avaliador.
+    const evolutionLogs = rows.length
+      ? await this.prisma.read.competencyEvolutionLog.findMany({
+          where: {
+            OR: rows.map(r => ({ userId: r.userId, competencyId: r.competencyId })),
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { userId: true, competencyId: true, updatedById: true },
+        })
+      : [];
+
+    const latestLogByPair = new Map<string, (typeof evolutionLogs)[number]>();
+    for (const log of evolutionLogs) {
+      const key = `${log.userId}:${log.competencyId}`;
+      if (!latestLogByPair.has(key)) latestLogByPair.set(key, log);
+    }
+
+    const evaluatorIds = [
+      ...new Set(
+        [...latestLogByPair.values()]
+          .map(l => l.updatedById)
+          .filter((id): id is number => id != null),
+      ),
+    ];
+    const evaluators = evaluatorIds.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: evaluatorIds } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const evaluatorMap = new Map(evaluators.map(e => [e.id, e.fullName]));
+
+    let results = rows.map(uc => {
+      const gap = uc.targetLevel != null ? Math.max(0, uc.targetLevel - uc.currentLevel) : null;
+      const evalStatus: CompetencyEvaluationStatus =
+        uc.targetLevel == null
+          ? CompetencyEvaluationStatus.SEM_META
+          : gap === 0
+            ? CompetencyEvaluationStatus.ATINGIDO
+            : CompetencyEvaluationStatus.ABAIXO_DO_ESPERADO;
+
+      const log = latestLogByPair.get(`${uc.userId}:${uc.competencyId}`);
+      const evaluatorId = log?.updatedById ?? null;
+      const evaluator =
+        evaluatorId === uc.userId
+          ? uc.user.fullName
+          : evaluatorId != null
+            ? (evaluatorMap.get(evaluatorId) ?? null)
+            : null;
+
+      return {
+        id: uc.id,
+        colaborador: uc.user.fullName,
+        colaboradorId: uc.userId,
+        colaboradorAvatarUrl: uc.user.avatarUrl,
+        departamento: uc.user.department?.name ?? null,
+        cargo: uc.user.position?.name ?? null,
+        avaliador: evaluator,
+        competencia: uc.competency.name,
+        competenciaId: uc.competencyId,
+        categoria: uc.competency.category,
+        tipoAvaliacao: CompetenciesService.EVALUATION_TYPE_LABELS[uc.source],
+        source: uc.source,
+        nivelObtido: uc.currentLevel,
+        nivelEsperado: uc.targetLevel,
+        gap,
+        data: uc.evaluatedAt,
+        estado: evalStatus,
+        comentarios: uc.notes,
+        evidencias: uc.evidenceUrl,
+        proximaAvaliacao: null as Date | null,
+      };
+    });
+
+    if (status) results = results.filter(r => r.estado === status);
+
+    return results;
   }
 
   // ─── ANALYTICS & DASHBOARD ───────────────────────────────────────────────
