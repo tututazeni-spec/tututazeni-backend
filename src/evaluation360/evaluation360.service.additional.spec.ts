@@ -153,7 +153,14 @@ describe('Evaluation360Service (additional)', () => {
     it('deve criar ciclo com competências', async () => {
       cycleMock.create.mockResolvedValue({
         ...baseCycle,
-        competencies: [{ competencyId: 'c1', weight: 1 }],
+        // Espelha o `include: { competencies: { include: { competency: true } } }`
+        // real do create() — sem o objecto `competency` aninhado,
+        // attachDefaultQuestions() (chamado quando `dto.competencies` vem
+        // preenchido) não tem o nome da competência para gerar a questão
+        // por omissão.
+        competencies: [
+          { competencyId: 'c1', weight: 1, order: 1, competency: { id: 'c1', name: 'Competência C1' } },
+        ],
       });
       const result = await service.createCycle(
         {

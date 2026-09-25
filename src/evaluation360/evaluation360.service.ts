@@ -240,6 +240,14 @@ export class Evaluation360Service {
     if (!dto.competencies?.length) {
       const attached = await this.attachStandardCompetencies(cycle.id);
       finalCycle = { ...cycle, competencies: attached };
+    } else {
+      // Competências escolhidas explicitamente (docs/evaluation360.md §3):
+      // o `create` aninhado acima só grava Eval360CycleCompetency — sem isto
+      // o ciclo fica sem nenhuma Eval360Question e o formulário do avaliador
+      // (GET /cycles/:id/form) sai vazio. Gera a mesma questão FREQUENCY
+      // por omissão que attachStandardCompetencies usa para as 8 fixas; RH
+      // pode substituir/complementar depois via POST /evaluation360/questions.
+      await this.attachDefaultQuestions(cycle.id, cycle.competencies);
     }
 
     await this.audit.log({
@@ -289,6 +297,41 @@ export class Evaluation360Service {
       created.push({ ...cycleCompetency, competency });
     }
     return created;
+  }
+
+  // Mesma questão FREQUENCY por omissão que attachStandardCompetencies cria,
+  // aplicada às competências explicitamente escolhidas em createCycle (em
+  // vez das 8 fixas). Não recria questão para uma competência que já a
+  // tenha (ex.: updateCycle a adicionar competências a um ciclo existente).
+  private async attachDefaultQuestions(
+    cycleId: string,
+    cycleCompetencies: { competencyId: number; order: number; competency: { name: string } }[],
+  ) {
+    if (!cycleCompetencies.length) return;
+    const existing = await this.prisma.eval360Question.findMany({
+      where: { cycleId, competencyId: { in: cycleCompetencies.map(c => c.competencyId) } },
+      select: { competencyId: true },
+    });
+    const existingIds = new Set(existing.map(q => q.competencyId));
+    for (const cc of cycleCompetencies) {
+      if (existingIds.has(cc.competencyId)) continue;
+      await this.prisma.eval360Question.create({
+        data: {
+          cycleId,
+          competencyId: cc.competencyId,
+          text:
+            STANDARD_EVAL360_QUESTIONS[cc.competency.name] ??
+            `Com que frequência este colaborador demonstra a competência "${cc.competency.name}"?`,
+          type: 'FREQUENCY',
+          isRequired: true,
+          order: cc.order,
+          scaleMin: 1,
+          scaleMax: 5,
+          scaleLabels: 'Nunca,Raramente,Às vezes,Frequentemente,Sempre',
+          applicableTo: [],
+        },
+      });
+    }
   }
 
   async updateCycle(id: string, dto: UpdateEvaluationCycleDto, actorId: string) {
