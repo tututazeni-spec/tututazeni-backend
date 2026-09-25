@@ -1015,6 +1015,7 @@ model User {
   createdRoiEvaluationModels RoiEvaluationModel[]
   createdCostEntries        CostEntry[]
   createdKpiDefinitions     KpiDefinition[]
+  createdCorrelations       Correlation[]
 
   @@index([accountStatus])
   @@index([departmentId])
@@ -1224,6 +1225,7 @@ model Department {
   events               Event[]
   roiAnalyses          RoiAnalysis[]
   impactRecords        ImpactRecord[]
+  correlations         Correlation[]
 
   @@index([active])
   @@index([parentId])
@@ -7822,6 +7824,60 @@ model KpiDefinition {
 
   @@index([category])
   @@index([status])
+}
+
+// docs/roi-impact.md §7 — Correlações. Explora relações estatísticas entre
+// investimento em desenvolvimento e resultados de negócio, sempre a partir
+// de dados reais já existentes noutros módulos — nunca inventa pares nem
+// guarda um coeficiente sem amostra suficiente (ver CorrelationService,
+// mesma disciplina de RoiAnalysisService.computeResult devolver
+// DADOS_INSUFICIENTES em vez de um número definitivo sem dados fiáveis).
+// `dataPoints` é só a amostra usada nesta execução (para o gráfico de
+// dispersão) — recalculada do zero de cada vez que a análise corre de novo,
+// nunca uma fonte de verdade paralela às tabelas de origem.
+enum CorrelationType {
+  HORAS_FORMACAO_DESEMPENHO
+  COMPETENCIAS_PRODUTIVIDADE
+  PDI_RETENCAO
+  INVESTIMENTO_ROTATIVIDADE
+  ONBOARDING_TEMPO_PRODUTIVIDADE
+  MENTORIA_PROGRESSAO_CARREIRA
+  LIDERANCA_ENGAGEMENT_EQUIPA
+}
+
+model Correlation {
+  id           Int              @id @default(autoincrement())
+  type         CorrelationType
+  departmentId Int?
+  department   Department?      @relation(fields: [departmentId], references: [id])
+
+  periodStart DateTime?
+  periodEnd   DateTime?
+
+  xLabel String
+  yLabel String
+
+  sampleSize  Int
+  coefficient Float?
+  pValue      Float?
+  significant Boolean?
+
+  // [{x: number, y: number, label?: string}] — amostra usada nesta
+  // execução, só para o gráfico de dispersão (ver nota acima).
+  dataPoints Json
+
+  // Preenchido quando a amostra é insuficiente (sampleSize < mínimo) ou
+  // quando a variável usada é uma aproximação (ex.: Pair 5 usa a primeira
+  // avaliação de desempenho como proxy de "produtividade plena", por não
+  // existir um campo dedicado) — nunca escondido do RH que lê o resultado.
+  note String?
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([type])
+  @@index([departmentId])
 }
 
 // ══════════════════════════════════════════════════════════════════

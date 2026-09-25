@@ -13,6 +13,8 @@ import { CostEntryService } from './cost-entry.service';
 import { CostEntryController } from './cost-entry.controller';
 import { KpiDefinitionService } from './kpi-definition.service';
 import { KpiDefinitionController } from './kpi-definition.controller';
+import { CorrelationService } from './correlation.service';
+import { CorrelationController } from './correlation.controller';
 import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggregation.module';
 
 @Module({
@@ -24,6 +26,7 @@ import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggrega
     RoiEvaluationModelService,
     CostEntryService,
     KpiDefinitionService,
+    CorrelationService,
   ],
   controllers: [
     RoiImpactController,
@@ -32,6 +35,7 @@ import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggrega
     RoiEvaluationModelController,
     CostEntryController,
     KpiDefinitionController,
+    CorrelationController,
   ],
   exports: [
     RoiImpactService,
@@ -40,6 +44,7 @@ import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggrega
     RoiEvaluationModelService,
     CostEntryService,
     KpiDefinitionService,
+    CorrelationService,
   ],
 })
 export class RoiImpactModule {}

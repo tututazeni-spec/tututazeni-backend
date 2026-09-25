@@ -27,6 +27,7 @@ import {
   KpiCategory,
   KpiFrequency,
   KpiDefinitionStatus,
+  CorrelationType,
 } from '@prisma/client';
 
 export {
@@ -41,6 +42,7 @@ export {
   KpiCategory,
   KpiFrequency,
   KpiDefinitionStatus,
+  CorrelationType,
 };
 
 export enum RoiConfidence {
@@ -429,4 +431,23 @@ export class UpdateKpiDefinitionDto {
   @IsOptional()
   @IsEnum(KpiDefinitionStatus)
   status?: KpiDefinitionStatus;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CORRELAÇÕES (docs/roi-impact.md §7)
+// ─────────────────────────────────────────────────────────────────
+
+export class RunCorrelationDto {
+  @ApiProperty({ enum: CorrelationType }) @IsEnum(CorrelationType) type!: CorrelationType;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() periodStart?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() periodEnd?: string;
+}
+
+export class CorrelationFilterDto {
+  @ApiPropertyOptional({ enum: CorrelationType })
+  @IsOptional()
+  @IsEnum(CorrelationType)
+  type?: CorrelationType;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
 }
