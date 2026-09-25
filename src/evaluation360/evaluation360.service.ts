@@ -1671,6 +1671,21 @@ export class Evaluation360Service {
     const cycleIds = cycles.map(c => c.id);
     const countByStatus = (status: Eval360CycleStatus) =>
       cycles.filter(c => c.status === status).length;
+    // "Encerradas" (docs/evaluation360.md §1) não é o enum CANCELLED — esse
+    // mapeia para "Arquivada" no vocabulário de 8 estados apresentáveis
+    // (ver cycleStatusDisplay no frontend, components/evaluation360/colors.ts).
+    // Aqui significa um ciclo cujo prazo já passou mas que ainda não foi
+    // processado/concluído — mesma semântica derivada de data, não um valor
+    // de BD próprio. "Abertas"/"Em preenchimento" excluem estes casos para
+    // não contar o mesmo ciclo em dois baldes.
+    const now = new Date();
+    const isPastDeadline = (c: { status: string; endDate: Date }) =>
+      (c.status === 'PUBLISHED' || c.status === 'IN_PROGRESS') && c.endDate < now;
+    const openCount = cycles.filter(c => c.status === 'PUBLISHED' && !isPastDeadline(c)).length;
+    const inProgressCount = cycles.filter(
+      c => c.status === 'IN_PROGRESS' && !isPastDeadline(c),
+    ).length;
+    const closedCount = cycles.filter(isPastDeadline).length;
 
     const [participants, assignments, results] = await Promise.all([
       this.prisma.cycleParticipant.findMany({
@@ -1706,7 +1721,6 @@ export class Evaluation360Service {
       (a, b) => b.average - a.average,
     );
 
-    const now = new Date();
     const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     const upcomingDeadline = cycles
       .filter(
@@ -1733,10 +1747,10 @@ export class Evaluation360Service {
     return {
       totalCycles: cycles.length,
       inPreparation: countByStatus('DRAFT'),
-      open: countByStatus('PUBLISHED'),
-      inProgress: countByStatus('IN_PROGRESS'),
+      open: openCount,
+      inProgress: inProgressCount,
       completed: countByStatus('COMPLETED'),
-      closed: countByStatus('CANCELLED'),
+      closed: closedCount,
       evaluatedCount: evaluatedUserIds.size,
       invitedEvaluatorsCount: invitedEvaluatorIds.size,
       respondedEvaluatorsCount: respondedEvaluatorIds.size,
