@@ -305,3 +305,25 @@ export class Evaluation360PaginationDto {
   @ApiPropertyOptional({ enum: ['asc', 'desc'] }) @IsOptional() @IsString() sortOrder?:
     'asc' | 'desc';
 }
+
+// ─── LISTAGEM DE CICLOS (aba "Avaliações 360°") ────────────────
+// Filtros pedidos em docs/evaluation360.md §2: Estado, Período, Departamento,
+// Unidade, Cargo, Responsável, Data, Tipo de avaliação.
+export class ListEvaluationCyclesDto extends Evaluation360PaginationDto {
+  @ApiPropertyOptional({ enum: Eval360CycleStatus })
+  @IsOptional()
+  @IsEnum(Eval360CycleStatus)
+  status?: Eval360CycleStatus;
+  @ApiPropertyOptional({ enum: Eval360CycleType }) @IsOptional() @IsEnum(Eval360CycleType) type?:
+    Eval360CycleType;
+  // Departamento/Unidade/Cargo: filtram ciclos com pelo menos um avaliado
+  // (CycleParticipant) cujo User pertença a essa entidade — não são campos
+  // do próprio Eval360Cycle.
+  @ApiPropertyOptional() @IsOptional() @IsString() departmentId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() unitId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() positionId?: string;
+  // "Responsável" — Eval360Cycle.createdBy.
+  @ApiPropertyOptional() @IsOptional() @IsString() createdBy?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+}

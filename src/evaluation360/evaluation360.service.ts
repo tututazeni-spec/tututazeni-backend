@@ -42,6 +42,7 @@ import {
   GenerateReportDto,
   SendRemindersDto,
   Evaluation360PaginationDto,
+  ListEvaluationCyclesDto,
   EvaluatorRole,
   Eval360CycleStatus,
   AnonymityMode,
@@ -357,12 +358,35 @@ export class Evaluation360Service {
     return updated;
   }
 
-  async listCycles(tenantId: string, query: Evaluation360PaginationDto) {
+  async listCycles(tenantId: string, query: ListEvaluationCyclesDto) {
     // deletedAt: null — ciclos eliminados (soft delete, ver deleteCycle) saem
     // da listagem normal; continuam acessíveis só via listDeletedCycles
     // (separador "Apagados" do módulo de auditoria).
     const where: Prisma.Eval360CycleWhereInput = { tenantId, deletedAt: null };
     if (query.search) where.name = { contains: query.search };
+    if (query.status) where.status = query.status;
+    if (query.type) where.type = query.type;
+    if (query.createdBy) where.createdBy = query.createdBy;
+    if (query.from || query.to) {
+      where.startDate = {
+        ...(query.from ? { gte: new Date(query.from) } : {}),
+        ...(query.to ? { lte: new Date(query.to) } : {}),
+      };
+    }
+    // Departamento/Unidade/Cargo não são campos do ciclo — filtram pelos
+    // avaliados (CycleParticipant.userId) cujo User pertença a essa entidade.
+    if (query.departmentId || query.unitId || query.positionId) {
+      const userWhere: Prisma.UserWhereInput = {};
+      if (query.departmentId) userWhere.departmentId = Number(query.departmentId);
+      if (query.unitId) userWhere.unitId = Number(query.unitId);
+      if (query.positionId) userWhere.positionId = Number(query.positionId);
+      const matchingUsers = await this.prisma.user.findMany({
+        where: userWhere,
+        select: { id: true },
+      });
+      where.participants = { some: { userId: { in: matchingUsers.map(u => String(u.id)) } } };
+    }
+
     const [data, total] = await Promise.all([
       this.prisma.eval360Cycle.findMany({
         where,
@@ -375,18 +399,72 @@ export class Evaluation360Service {
       }),
       this.prisma.eval360Cycle.count({ where }),
     ]);
+
     // _count.participants é o total; o frontend também precisa de quantos já
-    // concluíram para a barra de progresso (Visão Geral/separador Ciclos).
-    const completedCounts = await Promise.all(
-      data.map(c =>
-        this.prisma.cycleParticipant.count({ where: { cycleId: c.id, status: 'COMPLETED' } }),
+    // concluíram para a barra de progresso, de quantos avaliadores distintos
+    // (não atribuições) e de quantos já responderam para a Taxa de
+    // Participação pedida em docs/evaluation360.md §2.
+    const [completedCounts, evaluatorSets, respondedCounts] = await Promise.all([
+      Promise.all(
+        data.map(c =>
+          this.prisma.cycleParticipant.count({ where: { cycleId: c.id, status: 'COMPLETED' } }),
+        ),
       ),
-    );
-    const withCompleted = data.map((c, i) => ({
-      ...c,
-      completedParticipants: completedCounts[i],
-    }));
-    return { data: withCompleted, total };
+      Promise.all(
+        data.map(c =>
+          this.prisma.evaluatorAssignment.findMany({
+            where: { cycleId: c.id },
+            select: { evaluatorId: true },
+            distinct: ['evaluatorId'],
+          }),
+        ),
+      ),
+      Promise.all(
+        data.map(c =>
+          this.prisma.evaluationResponse.count({ where: { cycleId: c.id, status: 'SUBMITTED' } }),
+        ),
+      ),
+    ]);
+    const createdByNames = await this.resolveActorNames(data.map(c => c.createdBy));
+
+    const withDetails = data.map((c, i) => {
+      const evaluatorsCount = evaluatorSets[i].length;
+      const respondedCount = respondedCounts[i];
+      return {
+        ...c,
+        code: this.buildCycleCode(c),
+        createdByName: createdByNames.get(c.createdBy) ?? c.createdBy,
+        completedParticipants: completedCounts[i],
+        evaluatorsCount,
+        respondedCount,
+        participationRate: evaluatorsCount
+          ? Math.round((respondedCount / evaluatorsCount) * 100)
+          : 0,
+      };
+    });
+    return { data: withDetails, total };
+  }
+
+  // "Código" pedido em docs/evaluation360.md §2 — o schema não tem um campo
+  // dedicado (Eval360Cycle.id é um cuid não amigável), por isso é derivado
+  // do ano de criação + sufixo do id, nunca persistido.
+  private buildCycleCode(cycle: { id: string; createdAt: Date }): string {
+    return `C360-${cycle.createdAt.getFullYear()}-${cycle.id.slice(-6).toUpperCase()}`;
+  }
+
+  // Resolve ids de actor "soltos" (String, ver comentário em createdBy/
+  // deletedById no schema) para fullName — usado por listCycles/getOverview
+  // para mostrar "Criado por" e "Últimas avaliações realizadas".
+  private async resolveActorNames(actorIds: string[]): Promise<Map<string, string>> {
+    const numericIds = [
+      ...new Set(actorIds.map(id => Number(id)).filter(id => !Number.isNaN(id))),
+    ];
+    if (!numericIds.length) return new Map();
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: numericIds } },
+      select: { id: true, fullName: true },
+    });
+    return new Map(users.map(u => [String(u.id), u.fullName]));
   }
 
   async getCycleDetail(id: string) {
@@ -1549,6 +1627,133 @@ export class Evaluation360Service {
       competencyId,
       average: scores.reduce((s, v) => s + v, 0) / scores.length,
     }));
+  }
+
+  // Variante de averageCompetencyScores() que preserva o nome (a versão
+  // simples só guarda o id) — usado por getOverview() para "Competências com
+  // maior/menor pontuação" (docs/evaluation360.md §1), que precisam de um
+  // rótulo apresentável, não só o id interno.
+  private averageCompetencyScoresNamed(
+    results: { scoresByCompetency: string | null }[],
+  ): { competencyId: string; name: string; average: number }[] {
+    const compScores: Record<string, { name: string; scores: number[] }> = {};
+    for (const r of results) {
+      const sc: Record<string, CompetencyScoreEntry> = JSON.parse(r.scoresByCompetency ?? '{}');
+      for (const [cId, data] of Object.entries(sc)) {
+        if (!compScores[cId]) compScores[cId] = { name: data.name, scores: [] };
+        if (data.score !== null) compScores[cId].scores.push(data.score);
+      }
+    }
+    return Object.entries(compScores)
+      .filter(([, v]) => v.scores.length > 0)
+      .map(([competencyId, v]) => ({
+        competencyId,
+        name: v.name,
+        average: v.scores.reduce((s, x) => s + x, 0) / v.scores.length,
+      }));
+  }
+
+  // Painel geral (docs/evaluation360.md §1) — visão agregada de todos os
+  // ciclos 360° de um tenant, sem identificar ninguém individualmente (mesma
+  // regra de getTeamAnalytics/getOrganizationalAnalytics).
+  async getOverview(tenantId?: string) {
+    const cycles = await this.prisma.eval360Cycle.findMany({
+      where: { deletedAt: null, ...(tenantId ? { tenantId } : {}) },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        endDate: true,
+        updatedAt: true,
+        createdBy: true,
+      },
+    });
+    const cycleIds = cycles.map(c => c.id);
+    const countByStatus = (status: Eval360CycleStatus) =>
+      cycles.filter(c => c.status === status).length;
+
+    const [participants, assignments, results] = await Promise.all([
+      this.prisma.cycleParticipant.findMany({
+        where: { cycleId: { in: cycleIds } },
+        select: { userId: true, status: true },
+      }),
+      this.prisma.evaluatorAssignment.findMany({
+        where: { cycleId: { in: cycleIds } },
+        select: { evaluatorId: true, invitedAt: true, status: true },
+      }),
+      this.prisma.evaluationResult.findMany({
+        where: { cycleId: { in: cycleIds } },
+        select: { overallScore: true, scoresByCompetency: true },
+      }),
+    ]);
+
+    const evaluatedUserIds = new Set(participants.map(p => p.userId));
+    const invitedEvaluatorIds = new Set(
+      assignments.filter(a => a.invitedAt !== null).map(a => a.evaluatorId),
+    );
+    const respondedEvaluatorIds = new Set(
+      assignments.filter(a => a.status === 'COMPLETED').map(a => a.evaluatorId),
+    );
+    const pendingAssignments = assignments.filter(
+      a => a.status === 'PENDING' || a.status === 'INVITED' || a.status === 'IN_PROGRESS',
+    ).length;
+    const completedParticipants = participants.filter(p => p.status === 'COMPLETED').length;
+
+    const avgOverall = results.length
+      ? results.reduce((s, r) => s + (r.overallScore ?? 0), 0) / results.length
+      : 0;
+    const competencyAverages = this.averageCompetencyScoresNamed(results).sort(
+      (a, b) => b.average - a.average,
+    );
+
+    const now = new Date();
+    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const upcomingDeadline = cycles
+      .filter(
+        c =>
+          (c.status === 'PUBLISHED' || c.status === 'IN_PROGRESS') &&
+          c.endDate >= now &&
+          c.endDate <= in7Days,
+      )
+      .sort((a, b) => a.endDate.getTime() - b.endDate.getTime())
+      .map(c => ({ id: c.id, name: c.name, endDate: c.endDate }));
+
+    const recentCompletedCycles = cycles
+      .filter(c => c.status === 'COMPLETED')
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      .slice(0, 5);
+    const creatorNames = await this.resolveActorNames(recentCompletedCycles.map(c => c.createdBy));
+    const recentCompleted = recentCompletedCycles.map(c => ({
+      id: c.id,
+      name: c.name,
+      endDate: c.endDate,
+      createdByName: creatorNames.get(c.createdBy) ?? c.createdBy,
+    }));
+
+    return {
+      totalCycles: cycles.length,
+      inPreparation: countByStatus('DRAFT'),
+      open: countByStatus('PUBLISHED'),
+      inProgress: countByStatus('IN_PROGRESS'),
+      completed: countByStatus('COMPLETED'),
+      closed: countByStatus('CANCELLED'),
+      evaluatedCount: evaluatedUserIds.size,
+      invitedEvaluatorsCount: invitedEvaluatorIds.size,
+      respondedEvaluatorsCount: respondedEvaluatorIds.size,
+      participationRate: invitedEvaluatorIds.size
+        ? Math.round((respondedEvaluatorIds.size / invitedEvaluatorIds.size) * 100)
+        : 0,
+      completionRate: participants.length
+        ? Math.round((completedParticipants / participants.length) * 100)
+        : 0,
+      avgOverall,
+      competencyAverages,
+      topCompetencies: competencyAverages.slice(0, 3),
+      bottomCompetencies: competencyAverages.slice(-3).reverse(),
+      pendingAssignments,
+      upcomingDeadline,
+      recentCompleted,
+    };
   }
 
   // Nine-Box agregado — regra "ninguém vê o resultado de outro" (a mesma já

@@ -40,6 +40,7 @@ import {
   GenerateReportDto,
   SendRemindersDto,
   Evaluation360PaginationDto,
+  ListEvaluationCyclesDto,
 } from './evaluation360.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -148,13 +149,29 @@ export class Evaluation360Controller {
   // frontend precisa de listar ciclos para QUALQUER utilizador descobrir o
   // ciclo activo e preencher a sua auto-avaliação — só a criação/distribuição
   // é restrita.
-  @ApiOperation({ summary: 'Listar ciclos de avaliação' })
+  @ApiOperation({
+    summary:
+      'Listar ciclos de avaliação (aba "Avaliações 360°" — nome, código, tipo, período, ' +
+      'nº de avaliados/avaliadores, taxa de participação, criado por)',
+  })
   @ApiQuery({ name: 'tenantId', required: true })
   async listCycles(
     @Query('tenantId') tenantId: string,
-    @Query() query: Evaluation360PaginationDto,
+    @Query() query: ListEvaluationCyclesDto,
   ) {
     return this.service.listCycles(tenantId, query);
+  }
+
+  @Get('overview')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR)
+  @ApiOperation({
+    summary:
+      'Painel geral das avaliações 360° (docs/evaluation360.md §1) — contagens por estado, ' +
+      'participação/conclusão, médias por competência, prazos próximos e últimas avaliações',
+  })
+  @ApiQuery({ name: 'tenantId', required: false })
+  async getOverview(@Query('tenantId') tenantId?: string) {
+    return this.service.getOverview(tenantId);
   }
 
   // Rota literal 'cycles/deleted' TEM de vir antes de 'cycles/:id' — caso
