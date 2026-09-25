@@ -158,6 +158,17 @@ export class AddParticipantsDto {
   @ApiProperty({ type: [String] }) @IsArray() @IsString({ each: true }) userIds: string[];
 }
 
+export class AddParticipantsByDepartmentDto {
+  @ApiProperty({
+    type: [String],
+    description:
+      'IDs de Department (todos os utilizadores activos destes departamentos entram como participantes)',
+  })
+  @IsArray()
+  @IsString({ each: true })
+  departmentIds: string[];
+}
+
 export class ConsentDto {
   @ApiProperty() @IsBoolean() consent: boolean;
 }
@@ -261,11 +272,8 @@ export class GenerateReportDto {
 }
 
 // ─── CALIBRATION ─────────────────────────────────────────────
-export class Evaluation360CalibrateScoreDto {
-  @ApiProperty() @IsString() participantId: string;
-  @ApiProperty() @IsNumber() @Min(0) @Max(10) calibratedScore: number;
-  @ApiProperty() @IsString() @IsNotEmpty() justification: string;
-}
+// Nota: Evaluation360CalibrateScoreDto (matriz de calibração RH) foi
+// removido junto com calibrateScore() — ver evaluation360.service.ts.
 
 // ─── REMINDERS ───────────────────────────────────────────────
 export class SendRemindersDto {
@@ -287,6 +295,9 @@ export class Evaluation360PaginationDto {
   // — tem de estar aqui também, senão o forbidNonWhitelisted do ValidationPipe
   // rejeita o pedido inteiro por "property tenantId should not exist".
   @ApiPropertyOptional() @IsOptional() @IsString() tenantId?: string;
+  // GET /evaluation360/competencies?tag=... (mesma armadilha do tenantId
+  // acima) — banco curado do modal "Dar Feedback" contínuo.
+  @ApiPropertyOptional() @IsOptional() @IsString() tag?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(200) limit?: number = 20;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) offset?: number = 0;
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;

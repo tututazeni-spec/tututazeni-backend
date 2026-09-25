@@ -367,6 +367,16 @@ describe('CompetenciesService', () => {
         }),
       );
     });
+
+    it('com tag filtra pelo array `tags` (banco curado do feedback contínuo)', async () => {
+      mockPrisma.competency.findMany.mockResolvedValue([]);
+      await service.listCatalogue({ tag: 'FEEDBACK' });
+      expect(mockPrisma.competency.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tags: { has: 'FEEDBACK' } }),
+        }),
+      );
+    });
   });
 
   describe('upsertUserCompetency', () => {

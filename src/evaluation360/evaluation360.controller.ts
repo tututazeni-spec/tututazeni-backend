@@ -8,6 +8,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -25,6 +26,7 @@ import {
   PublishCycleDto,
   Evaluation360CreateQuestionDto,
   AddParticipantsDto,
+  AddParticipantsByDepartmentDto,
   ConsentDto,
   SuggestEvaluatorsDto,
   BulkAssignEvaluatorsDto,
@@ -36,7 +38,6 @@ import {
   AnalyticsQueryDto,
   NineBoxQueryDto,
   GenerateReportDto,
-  Evaluation360CalibrateScoreDto,
   SendRemindersDto,
   Evaluation360PaginationDto,
 } from './evaluation360.dto';
@@ -47,6 +48,18 @@ import { Role } from '../auth/enums/role.enum';
 import { assertCanAccess } from '../common/authz/ownership';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CurrentUserData } from '../common/types/current-user';
+
+// Quem pode criar/publicar questionários 360º e distribuí-los automaticamente
+// — mesmo grupo de EVAL_CREATOR_ROLES em src/assessments/assessments.controller.ts
+// e frontend/lib/roles.ts. O banco de competências (createCompetency)
+// continua ADMIN/RH só — não é "criar questionário".
+const EVAL_CREATOR_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR, Role.LIDER] as const;
+
+// Quem pode eliminar/restaurar um ciclo — mais restrito que EVAL_CREATOR_ROLES:
+// eliminar é uma acção destrutiva (mesmo sendo soft delete e reversível via o
+// separador "Apagados" da auditoria), por isso fica só para ADMIN/DIRECTOR,
+// espelhado em frontend/lib/roles.ts (EVAL_CYCLE_DELETE_ROLES).
+const EVAL_CYCLE_DELETE_ROLES = [Role.ADMIN, Role.DIRECTOR] as const;
 
 @ApiTags('Avaliação 360°')
 @ApiBearerAuth()
@@ -83,11 +96,17 @@ export class Evaluation360Controller {
   @Get('competencies')
   @ApiOperation({ summary: 'Listar banco de competências' })
   @ApiQuery({ name: 'tenantId', required: false })
+  @ApiQuery({
+    name: 'tag',
+    required: false,
+    description: 'Filtra pelo array `tags` (ex.: FEEDBACK — banco curado do feedback contínuo)',
+  })
   async listCompetencies(
     @Query('tenantId') tenantId?: string,
     @Query() query?: Evaluation360PaginationDto,
+    @Query('tag') tag?: string,
   ) {
-    return this.service.listCompetencies(tenantId, query);
+    return this.service.listCompetencies(tenantId, query, tag);
   }
 
   // ============================================================
@@ -95,14 +114,14 @@ export class Evaluation360Controller {
   // ============================================================
 
   @Post('cycles')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Criar ciclo de avaliação 360°' })
   async createCycle(@Body() dto: CreateEvaluationCycleDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createCycle(dto, String(user.id));
   }
 
   @Patch('cycles/:id')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Actualizar ciclo (apenas em DRAFT)' })
   async updateCycle(
     @Param('id') id: string,
@@ -113,7 +132,7 @@ export class Evaluation360Controller {
   }
 
   @Post('cycles/:id/publish')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Publicar ciclo (DRAFT → PUBLISHED)' })
   async publishCycle(
@@ -125,7 +144,10 @@ export class Evaluation360Controller {
   }
 
   @Get('cycles')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  // Leitura aberta a todos os autenticados (não só EVAL_CREATOR_ROLES): o
+  // frontend precisa de listar ciclos para QUALQUER utilizador descobrir o
+  // ciclo activo e preencher a sua auto-avaliação — só a criação/distribuição
+  // é restrita.
   @ApiOperation({ summary: 'Listar ciclos de avaliação' })
   @ApiQuery({ name: 'tenantId', required: true })
   async listCycles(
@@ -135,11 +157,39 @@ export class Evaluation360Controller {
     return this.service.listCycles(tenantId, query);
   }
 
+  // Rota literal 'cycles/deleted' TEM de vir antes de 'cycles/:id' — caso
+  // contrário 'deleted' seria capturado pelo :id e esta rota ficaria
+  // inalcançável (mesma classe de bug de project_innova_route_shadowing).
+  @Get('cycles/deleted')
+  @Roles(...EVAL_CYCLE_DELETE_ROLES)
+  @ApiOperation({
+    summary: 'Listar ciclos eliminados (soft delete) — separador Apagados da auditoria',
+  })
+  @ApiQuery({ name: 'tenantId', required: false })
+  async listDeletedCycles(@Query('tenantId') tenantId?: string) {
+    return this.service.listDeletedCycles(tenantId);
+  }
+
   @Get('cycles/:id')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Detalhe completo do ciclo (competências, questões, stats)' })
   async getCycleDetail(@Param('id') id: string) {
     return this.service.getCycleDetail(id);
+  }
+
+  @Delete('cycles/:id')
+  @Roles(...EVAL_CYCLE_DELETE_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Eliminar ciclo (soft delete, auditável e restaurável)' })
+  async deleteCycle(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.deleteCycle(id, String(user.id));
+  }
+
+  @Post('cycles/:id/restore')
+  @Roles(...EVAL_CYCLE_DELETE_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Restaurar ciclo eliminado' })
+  async restoreCycle(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.restoreCycle(id, String(user.id));
   }
 
   @Post('cycles/:id/calculate')
@@ -155,7 +205,7 @@ export class Evaluation360Controller {
   // ============================================================
 
   @Post('questions')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Criar questão (global ou vinculada a ciclo/competência)' })
   async createQuestion(
     @Body() dto: Evaluation360CreateQuestionDto,
@@ -165,7 +215,6 @@ export class Evaluation360Controller {
   }
 
   @Get('questions')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Listar questões' })
   @ApiQuery({ name: 'cycleId', required: false })
   @ApiQuery({ name: 'competencyId', required: false })
@@ -181,7 +230,7 @@ export class Evaluation360Controller {
   // ============================================================
 
   @Post('cycles/:id/participants')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Adicionar participantes (avaliados) ao ciclo' })
   async addParticipants(
     @Param('id') id: string,
@@ -189,6 +238,19 @@ export class Evaluation360Controller {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.addParticipants(id, dto, String(user.id));
+  }
+
+  @Post('cycles/:id/participants/by-department')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({
+    summary: 'Adicionar todos os utilizadores activos de departamentos como participantes',
+  })
+  async addParticipantsByDepartment(
+    @Param('id') id: string,
+    @Body() dto: AddParticipantsByDepartmentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addParticipantsByDepartment(id, dto, String(user.id));
   }
 
   @Post('cycles/:cycleId/participants/:userId/consent')
@@ -206,6 +268,14 @@ export class Evaluation360Controller {
     return this.service.giveConsent(cycleId, userId, dto);
   }
 
+  @Get('cycles/:cycleId/my-assignments')
+  @ApiOperation({
+    summary: 'As minhas atribuições de avaliador neste ciclo (quem tenho de avaliar)',
+  })
+  async getMyAssignments(@Param('cycleId') cycleId: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.listMyAssignments(cycleId, String(user.id));
+  }
+
   @Get('cycles/:cycleId/participants/:userId/progress')
   @ApiOperation({ summary: 'Progresso do participante no ciclo' })
   async getProgress(@Param('cycleId') cycleId: string, @Param('userId') userId: string) {
@@ -217,14 +287,14 @@ export class Evaluation360Controller {
   // ============================================================
 
   @Post('cycles/:id/evaluators/suggest')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Sugestão automática de avaliadores baseada em hierarquia' })
   async suggestEvaluators(@Param('id') id: string, @Body() dto: SuggestEvaluatorsDto) {
     return this.service.suggestEvaluators(id, dto);
   }
 
   @Post('cycles/:id/evaluators')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...EVAL_CREATOR_ROLES)
   @ApiOperation({ summary: 'Atribuir avaliadores (bulk)' })
   async assignEvaluators(
     @Param('id') id: string,
@@ -235,7 +305,7 @@ export class Evaluation360Controller {
   }
 
   @Post('cycles/:id/evaluators/approve')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Roles(...EVAL_CREATOR_ROLES)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Aprovar avaliadores e enviar convites' })
   async approveEvaluators(
@@ -247,7 +317,7 @@ export class Evaluation360Controller {
   }
 
   @Post('cycles/:id/invites/send')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Enviar convites para todos os avaliadores pendentes' })
   async sendInvites(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
@@ -255,7 +325,7 @@ export class Evaluation360Controller {
   }
 
   @Post('cycles/:id/reminders')
-  @Roles(Role.ADMIN, Role.RH)
+  @Roles(...EVAL_CREATOR_ROLES)
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Enviar lembretes para avaliadores pendentes' })
   async sendReminders(
@@ -264,6 +334,18 @@ export class Evaluation360Controller {
     @CurrentUser() user: CurrentUserData,
   ) {
     return this.service.sendReminders(id, dto, String(user.id));
+  }
+
+  @Post('cycles/:id/distribute')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Distribuir automaticamente: sugere+atribui avaliadores (self/gestor/pares do ' +
+      'departamento/subordinados) a todos os participantes, publica o ciclo e envia convites',
+  })
+  async distributeCycle(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.distributeCycle(id, String(user.id));
   }
 
   // ============================================================
@@ -305,12 +387,7 @@ export class Evaluation360Controller {
     @Param('participantId') participantId: string,
     @CurrentUser() user: CurrentUserData,
   ) {
-    return this.service.getParticipantResult(
-      cycleId,
-      participantId,
-      String(user.id),
-      user.role?.name,
-    );
+    return this.service.getParticipantResult(cycleId, participantId, String(user.id));
   }
 
   @Get('cycles/:cycleId/analytics/team')
@@ -327,9 +404,18 @@ export class Evaluation360Controller {
     return this.service.getOrganizationalAnalytics(query);
   }
 
+  // GESTOR removido: a matriz mostrava nome+score reais por pessoa a quem a
+  // pedisse, incluindo o gestor sobre os seus subordinados — a mesma
+  // violação de "ninguém vê o resultado de outro" já corrigida em
+  // getTeamAnalytics/calibrateScore. Ver getNineBox() para a versão
+  // agregada (contagens por box, sem identificar ninguém) que substituiu a
+  // anterior; ADMIN/RH continuam a poder vê-la para planeamento de sucessão
+  // ao nível organizacional, nunca ao nível de um indivíduo.
   @Get('analytics/nine-box')
-  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Matriz Nine Box (Performance vs Potencial)' })
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary: 'Matriz Nine Box agregada (contagens por quadrante, sem identificar ninguém)',
+  })
   async getNineBox(@Query() query: NineBoxQueryDto) {
     return this.service.getNineBox(query);
   }
@@ -346,20 +432,9 @@ export class Evaluation360Controller {
     return this.service.generateReport(dto, String(user.id));
   }
 
-  // ============================================================
-  // CALIBRAÇÃO
-  // ============================================================
-
-  @Post('cycles/:cycleId/calibrate')
-  @Roles(Role.ADMIN, Role.RH)
-  @ApiOperation({ summary: 'Calibrar score de participante (matriz de calibração RH)' })
-  async calibrateScore(
-    @Param('cycleId') cycleId: string,
-    @Body() dto: Evaluation360CalibrateScoreDto,
-    @CurrentUser() user: CurrentUserData,
-  ) {
-    return this.service.calibrateScore(cycleId, dto, String(user.id));
-  }
+  // Nota: POST cycles/:cycleId/calibrate (matriz de calibração RH) foi
+  // removido — ver evaluation360.service.ts, secção de comentário no lugar
+  // de calibrateScore().
 
   // ============================================================
   // FEEDBACK CONTÍNUO

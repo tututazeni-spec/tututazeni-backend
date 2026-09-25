@@ -191,11 +191,15 @@ export class CompetenciesService {
     search?: string;
     offset?: number;
     limit?: number;
+    /** Filtra pelo array `tags` (ex.: 'FEEDBACK' — banco curado do modal
+     * "Dar Feedback" contínuo, ver seedFeedbackTagCompetencies em seed.ts). */
+    tag?: string;
   }) {
     const where: Prisma.CompetencyWhereInput = { isActive: true };
     if (params.tenantId) where.OR = [{ isGlobal: true }, { tenantId: params.tenantId }];
     else where.isGlobal = true;
     if (params.search) where.name = { contains: params.search };
+    if (params.tag) where.tags = { has: params.tag };
 
     return this.prisma.read.competency.findMany({
       where,
