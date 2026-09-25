@@ -153,7 +153,19 @@ describe('Evaluation360Service (additional)', () => {
     it('deve criar ciclo com competências', async () => {
       cycleMock.create.mockResolvedValue({
         ...baseCycle,
-        competencies: [{ competencyId: 'c1', weight: 1 }],
+        // Espelha o `include: { competencies: { include: { competency: true } } }`
+        // real do create() — sem o objecto `competency` aninhado,
+        // attachDefaultQuestions() (chamado quando `dto.competencies` vem
+        // preenchido) não tem o nome da competência para gerar a questão
+        // por omissão.
+        competencies: [
+          {
+            competencyId: 'c1',
+            weight: 1,
+            order: 1,
+            competency: { id: 'c1', name: 'Competência C1' },
+          },
+        ],
       });
       const result = await service.createCycle(
         {
@@ -683,6 +695,54 @@ describe('Evaluation360Service (additional)', () => {
     });
   });
 
+  // ─── listMyAssignments ────────────────────────────────────────────────────
+
+  describe('listMyAssignments', () => {
+    it('deve resolver nome, departamento e fotografia do avaliado', async () => {
+      mockPrisma.evaluatorAssignment = {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ id: 'a1', evaluateeId: '2', role: 'PEER', status: 'PENDING' }]),
+      };
+      mockPrisma.user.findMany.mockResolvedValue([
+        {
+          id: 2,
+          fullName: 'Ana Silva',
+          avatarUrl: 'data:image/png;base64,xyz',
+          department: { name: 'Comercial' },
+        },
+      ]);
+      const result = await service.listMyAssignments('cycle-1', 'user-1');
+      expect(result).toEqual([
+        expect.objectContaining({
+          id: 'a1',
+          evaluateeName: 'Ana Silva',
+          evaluateeDepartment: 'Comercial',
+          evaluateeAvatarUrl: 'data:image/png;base64,xyz',
+        }),
+      ]);
+    });
+
+    it('deve usar valores por omissão quando o utilizador avaliado já não existe', async () => {
+      mockPrisma.evaluatorAssignment = {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 'a1', evaluateeId: '99', role: 'SUBORDINATE', status: 'PENDING' },
+          ]),
+      };
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      const result = await service.listMyAssignments('cycle-1', 'user-1');
+      expect(result[0]).toEqual(
+        expect.objectContaining({
+          evaluateeName: 'Colaborador',
+          evaluateeDepartment: null,
+          evaluateeAvatarUrl: null,
+        }),
+      );
+    });
+  });
+
   // ─── calculateCycleResults ────────────────────────────────────────────────
 
   describe('calculateCycleResults', () => {
@@ -708,12 +768,63 @@ describe('Evaluation360Service (additional)', () => {
       expect(result.processed).toBe(0);
       expect(mockEvents.emit).toHaveBeenCalledWith('cycle.results.ready', expect.any(Object));
     });
+
+    // Regressão: o peerScore agregado (cartão "Pares") já ficava null abaixo
+    // do quorumMinimum, mas o peerScore POR COMPETÊNCIA (usado no radar/
+    // heatmap) não tinha a mesma protecção — com 1 só par a responder,
+    // expunha directamente a resposta individual desse par por competência,
+    // quebrando o anonimato que o resto do módulo garante.
+    it('deve ocultar peerScore por competência quando os pares ficam abaixo do quorum', async () => {
+      const cycleWithCompetency = {
+        ...baseCycle,
+        quorumMinimum: 3,
+        competencies: [
+          {
+            competencyId: 'comp-1',
+            competency: {
+              id: 'comp-1',
+              name: 'Liderança',
+              category: 'LEADERSHIP',
+              type: 'LEADERSHIP',
+            },
+          },
+        ],
+      };
+      cycleMock.findUnique.mockResolvedValue(cycleWithCompetency);
+      cycleMock.update.mockResolvedValue({ ...cycleWithCompetency, status: 'COMPLETED' });
+      mockPrisma.cycleParticipant = {
+        findMany: jest.fn().mockResolvedValue([{ userId: 'user-1' }]),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      };
+      mockPrisma.evaluationAnswer = { findMany: jest.fn().mockResolvedValue([]) };
+      const upsert = jest.fn().mockResolvedValue({});
+      mockPrisma.evaluationResult = { upsert };
+      mockPrisma.evaluationResponse = {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            evaluatorRole: 'PEER',
+            answers: [{ numericValue: 5, question: { competencyId: 'comp-1' } }],
+          },
+        ]),
+      };
+
+      await service.calculateCycleResults('cycle-1', 'admin-1');
+
+      expect(upsert).toHaveBeenCalledTimes(1);
+      const scoresByCompetency = JSON.parse(upsert.mock.calls[0][0].create.scoresByCompetency);
+      expect(scoresByCompetency['comp-1'].peerScore).toBeNull();
+    });
   });
 
   // ─── getParticipantResult ─────────────────────────────────────────────────
 
   describe('getParticipantResult', () => {
-    it('deve retornar resultado para ADMIN', async () => {
+    // Regra do produto: ninguém vê o resultado de outro utilizador — nem
+    // ADMIN nem RH têm excepção aqui (só getTeamAnalytics/
+    // getOrganizationalAnalytics continuam agregados, sem identificar
+    // ninguém, a esses papéis). Cobria antes um "canSeeFull" que foi
+    // removido.
+    it('deve lançar ForbiddenException mesmo para ADMIN a ver resultado de outro', async () => {
       mockPrisma.evaluationResult = {
         findUnique: jest.fn().mockResolvedValue({
           id: 'r1',
@@ -731,12 +842,12 @@ describe('Evaluation360Service (additional)', () => {
         findMany: jest.fn().mockResolvedValue([]),
       };
       cycleMock.findUnique.mockResolvedValue(baseCycle);
-      const result = await service.getParticipantResult('cycle-1', 'user-2', 'admin-1', 'ADMIN');
-      expect(result.overallScore).toBe(4.2);
-      expect(result.rawByEvaluator).toBeDefined();
+      await expect(service.getParticipantResult('cycle-1', 'user-2', 'admin-1')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
-    it('deve retornar resultado para o próprio utilizador', async () => {
+    it('deve retornar resultado para o próprio utilizador, sem dados por avaliador', async () => {
       mockPrisma.evaluationResult = {
         findUnique: jest.fn().mockResolvedValue({
           id: 'r1',
@@ -754,7 +865,7 @@ describe('Evaluation360Service (additional)', () => {
         findMany: jest.fn().mockResolvedValue([]),
       };
       cycleMock.findUnique.mockResolvedValue(baseCycle);
-      const result = await service.getParticipantResult('cycle-1', 'user-1', 'user-1', 'EMPLOYEE');
+      const result = await service.getParticipantResult('cycle-1', 'user-1', 'user-1');
       expect(result).toBeDefined();
       expect(result.rawByEvaluator).toBeNull();
     });
@@ -777,39 +888,35 @@ describe('Evaluation360Service (additional)', () => {
         findMany: jest.fn().mockResolvedValue([]),
       };
       cycleMock.findUnique.mockResolvedValue(baseCycle);
-      await expect(
-        service.getParticipantResult('cycle-1', 'user-2', 'user-3', 'EMPLOYEE'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.getParticipantResult('cycle-1', 'user-2', 'user-3')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 
   // ─── getTeamAnalytics ─────────────────────────────────────────────────────
 
   describe('getTeamAnalytics', () => {
-    it('deve retornar analytics de equipa com scores', async () => {
-      mockPrisma.user.findMany.mockResolvedValue([
-        { id: 'u1', fullName: 'Alice' },
-        { id: 'u2', fullName: 'Bob' },
-      ]);
+    // Regra "ninguém vê o resultado de outro": devolve só agregados da
+    // equipa (médias/contagens), nunca participantId/participantName/score
+    // por pessoa — ver comentário em cima de getTeamAnalytics().
+    it('deve retornar agregados de equipa sem identificar ninguém', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([{ id: 'u1' }, { id: 'u2' }]);
       mockPrisma.evaluationResult = {
         findMany: jest.fn().mockResolvedValue([
           {
-            participantId: 'u1',
             weightedScore: 4.0,
             overallScore: 3.8,
             isEligiblePromotion: true,
             isEligibleBonus: false,
-            gaps: '[]',
-            strengths: '[]',
+            scoresByCompetency: '{}',
           },
           {
-            participantId: 'u2',
             weightedScore: 3.2,
             overallScore: 3.5,
             isEligiblePromotion: false,
             isEligibleBonus: true,
-            gaps: '[]',
-            strengths: '[]',
+            scoresByCompetency: '{}',
           },
         ]),
         findUnique: jest.fn().mockResolvedValue(null),
@@ -818,8 +925,13 @@ describe('Evaluation360Service (additional)', () => {
         update: jest.fn().mockResolvedValue({}),
       };
       const result = await service.getTeamAnalytics('cycle-1', 'mgr-1');
-      expect(result).toHaveLength(2);
-      expect(result[0].participantName).toBe('Alice');
+      expect(result).not.toHaveProperty('participantId');
+      expect(result).not.toHaveProperty('participantName');
+      expect(result.teamSize).toBe(2);
+      expect(result.evaluatedCount).toBe(2);
+      expect(result.eligiblePromotionCount).toBe(1);
+      expect(result.eligibleBonusCount).toBe(1);
+      expect(result.avgWeighted).toBeCloseTo(3.6);
     });
   });
 
@@ -870,70 +982,35 @@ describe('Evaluation360Service (additional)', () => {
   // ─── getNineBox ───────────────────────────────────────────────────────────
 
   describe('getNineBox', () => {
-    it('deve classificar participantes no nine-box', async () => {
+    // Regra "ninguém vê o resultado de outro": devolve sempre os 9
+    // quadrantes com uma contagem, nunca participantId/name/score
+    // individuais — ver comentário em cima de getNineBox().
+    it('deve devolver contagens por quadrante, sem identificar ninguém', async () => {
       mockPrisma.evaluationResult = {
-        findMany: jest
-          .fn()
-          .mockResolvedValueOnce([
-            { participantId: 'u1', weightedScore: 4.5 },
-            { participantId: 'u2', weightedScore: 2.0 },
-          ])
-          .mockResolvedValueOnce([
-            { participantId: 'u1', weightedScore: 4.5, selfScore: 4.0 },
-            { participantId: 'u2', weightedScore: 2.0, selfScore: 2.5 },
-          ]),
+        findMany: jest.fn().mockResolvedValue([
+          { weightedScore: 4.5, selfScore: 4.0 },
+          { weightedScore: 2.0, selfScore: 2.5 },
+        ]),
         findUnique: jest.fn().mockResolvedValue(null),
         findFirst: jest.fn().mockResolvedValue(null),
         upsert: jest.fn().mockResolvedValue({}),
         update: jest.fn().mockResolvedValue({}),
       };
       const result = await service.getNineBox({ cycleId: 'cycle-1' } as any);
-      expect(result).toHaveLength(2);
-      expect(result[0]).toHaveProperty('box');
+      expect(result).toHaveLength(9);
+      expect(result.every((r: any) => !('participantId' in r) && !('name' in r))).toBe(true);
+      expect(result.reduce((s: number, r: any) => s + r.count, 0)).toBe(2);
     });
   });
 
-  // ─── calibrateScore ───────────────────────────────────────────────────────
-
-  describe('calibrateScore', () => {
-    it('deve calibrar score com sucesso', async () => {
-      mockPrisma.evaluationResult = {
-        findFirst: jest.fn().mockResolvedValue({ id: 'r1', weightedScore: 3.5 }),
-        update: jest.fn().mockResolvedValue({ id: 'r1', weightedScore: 4.0 }),
-        findMany: jest.fn().mockResolvedValue([]),
-        findUnique: jest.fn().mockResolvedValue(null),
-        upsert: jest.fn().mockResolvedValue({}),
-      };
-      const result = await service.calibrateScore(
-        'cycle-1',
-        { participantId: 'user-1', calibratedScore: 4.0, justification: 'Boa performance' },
-        'rh-1',
-      );
-      expect(result.newScore).toBe(4.0);
-    });
-
-    it('deve lançar NotFoundException se resultado não existe', async () => {
-      mockPrisma.evaluationResult = {
-        findFirst: jest.fn().mockResolvedValue(null),
-        update: jest.fn(),
-        findMany: jest.fn().mockResolvedValue([]),
-        findUnique: jest.fn().mockResolvedValue(null),
-        upsert: jest.fn().mockResolvedValue({}),
-      };
-      await expect(
-        service.calibrateScore(
-          'cycle-1',
-          { participantId: 'ghost', calibratedScore: 4.0, justification: 'N/A' },
-          'rh-1',
-        ),
-      ).rejects.toThrow(NotFoundException);
-    });
-  });
+  // calibrateScore (matriz de calibração RH) foi removido — calibrar era,
+  // por definição, ler/substituir o resultado individual de outra pessoa,
+  // o que a regra "ninguém vê o resultado de outro" já não permite.
 
   // ─── generateReport ───────────────────────────────────────────────────────
 
   describe('generateReport', () => {
-    it('deve gerar relatório individual', async () => {
+    it('deve gerar relatório individual para o próprio utilizador', async () => {
       cycleMock.findUnique.mockResolvedValue({ ...baseCycle, name: 'Ciclo Q1' });
       mockPrisma.evaluationResult = {
         findUnique: jest.fn().mockResolvedValue({
@@ -954,9 +1031,36 @@ describe('Evaluation360Service (additional)', () => {
           participantId: 'user-1',
           includeAiInsights: false,
         },
-        'admin-1',
+        'user-1',
       );
       expect(result).toHaveProperty('scope', 'INDIVIDUAL');
+    });
+
+    // Mesma regra de getParticipantResult: este endpoint tinha ficado de
+    // fora dessa auditoria e devolvia o resultado individual de qualquer
+    // participantId a quem tivesse role ADMIN/RH/GESTOR — encontrado ao
+    // rever a solicitação original, não fazia parte da série de fixes já
+    // aplicada (b9d087c e seguintes).
+    it('deve lançar ForbiddenException mesmo para ADMIN/GESTOR a gerar relatório individual de outro', async () => {
+      cycleMock.findUnique.mockResolvedValue({ ...baseCycle, name: 'Ciclo Q1' });
+      mockPrisma.evaluationResult = {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'r1',
+          scoresByCompetency: '{}',
+          gaps: '[]',
+          strengths: '[]',
+        }),
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        upsert: jest.fn().mockResolvedValue({}),
+        update: jest.fn().mockResolvedValue({}),
+      };
+      await expect(
+        service.generateReport(
+          { cycleId: 'cycle-1', scope: 'INDIVIDUAL', participantId: 'user-2' },
+          'admin-1',
+        ),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('deve gerar relatório organizacional por omissão', async () => {
@@ -984,7 +1088,7 @@ describe('Evaluation360Service (additional)', () => {
       await expect(
         service.generateReport(
           { cycleId: 'cycle-1', scope: 'INDIVIDUAL', participantId: 'ghost' },
-          'admin-1',
+          'ghost',
         ),
       ).rejects.toThrow(NotFoundException);
     });
@@ -1010,7 +1114,7 @@ describe('Evaluation360Service (additional)', () => {
           participantId: 'user-1',
           includeAiInsights: true,
         },
-        'admin-1',
+        'user-1',
       );
       expect(result).toHaveProperty('aiInsights');
       expect(typeof (result as any).aiInsights).toBe('string');

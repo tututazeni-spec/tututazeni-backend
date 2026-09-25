@@ -6,16 +6,31 @@ import { RolesGuard } from '../common/guards/roles.guard';
 
 const mockSvc = {
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+  getOverview: jest.fn().mockResolvedValue({}),
   getTopCompetencies: jest.fn().mockResolvedValue([]),
   getSkillMatrix: jest.fn().mockResolvedValue([]),
+  getEvaluations: jest.fn().mockResolvedValue([]),
+  getGaps: jest.fn().mockResolvedValue([]),
+  getDevelopmentActions: jest.fn().mockResolvedValue([]),
   getOrgGapDashboard: jest.fn().mockResolvedValue({}),
+  getReports: jest.fn().mockResolvedValue({}),
+  exportReportsCsv: jest.fn().mockResolvedValue('metrica,valor'),
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
   create: jest.fn().mockResolvedValue({ id: 2 }),
   update: jest.fn().mockResolvedValue({ id: 1 }),
   archive: jest.fn().mockResolvedValue({}),
   remove: jest.fn().mockResolvedValue({}),
+  findAllProficiencyLevels: jest.fn().mockResolvedValue([]),
   createProficiencyLevel: jest.fn().mockResolvedValue({ id: 1 }),
+  updateProficiencyLevel: jest.fn().mockResolvedValue({ id: 1 }),
   removeProficiencyLevel: jest.fn().mockResolvedValue({}),
+  findAllModels: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+  findOneModel: jest.fn().mockResolvedValue({ id: 1 }),
+  createModel: jest.fn().mockResolvedValue({ id: 1 }),
+  updateModel: jest.fn().mockResolvedValue({ id: 1 }),
+  removeModel: jest.fn().mockResolvedValue({}),
+  upsertModelItem: jest.fn().mockResolvedValue({ id: 1 }),
+  removeModelItem: jest.fn().mockResolvedValue({}),
   mapToPosition: jest.fn().mockResolvedValue({}),
   unmapFromPosition: jest.fn().mockResolvedValue({}),
   mapToCourse: jest.fn().mockResolvedValue({}),
@@ -55,6 +70,11 @@ describe('CompetenciesController', () => {
     expect(mockSvc.findAll).toHaveBeenCalledWith(filters);
   });
 
+  it('overview → getOverview()', async () => {
+    await controller.overview();
+    expect(mockSvc.getOverview).toHaveBeenCalledWith();
+  });
+
   it('top sem limit → getTopCompetencies(10)', async () => {
     await controller.top();
     expect(mockSvc.getTopCompetencies).toHaveBeenCalledWith(10);
@@ -65,14 +85,42 @@ describe('CompetenciesController', () => {
     expect(mockSvc.getTopCompetencies).toHaveBeenCalledWith(5);
   });
 
-  it('skillMatrix sem params → getSkillMatrix(undefined, undefined)', async () => {
-    await controller.skillMatrix();
-    expect(mockSvc.getSkillMatrix).toHaveBeenCalledWith(undefined, undefined);
+  it('skillMatrix sem filtros → getSkillMatrix({})', async () => {
+    await controller.skillMatrix({});
+    expect(mockSvc.getSkillMatrix).toHaveBeenCalledWith({});
   });
 
-  it('skillMatrix com params → getSkillMatrix(parsed, parsed)', async () => {
-    await controller.skillMatrix('2', '3');
-    expect(mockSvc.getSkillMatrix).toHaveBeenCalledWith(2, 3);
+  it('skillMatrix com filtros → getSkillMatrix(filters)', async () => {
+    const filters = { departmentId: 2, positionId: 3, competencyId: 7 };
+    await controller.skillMatrix(filters);
+    expect(mockSvc.getSkillMatrix).toHaveBeenCalledWith(filters);
+  });
+
+  it('evaluations sem filtros → getEvaluations({})', async () => {
+    await controller.evaluations({});
+    expect(mockSvc.getEvaluations).toHaveBeenCalledWith({});
+  });
+
+  it('gaps sem filtros → getGaps({})', async () => {
+    await controller.gaps({});
+    expect(mockSvc.getGaps).toHaveBeenCalledWith({});
+  });
+
+  it('gaps com filtros → getGaps(filters)', async () => {
+    const filters = { departmentId: 2, priority: 'HIGH' as any };
+    await controller.gaps(filters);
+    expect(mockSvc.getGaps).toHaveBeenCalledWith(filters);
+  });
+
+  it('development sem filtros → getDevelopmentActions({})', async () => {
+    await controller.development({});
+    expect(mockSvc.getDevelopmentActions).toHaveBeenCalledWith({});
+  });
+
+  it('development com filtros → getDevelopmentActions(filters)', async () => {
+    const filters = { userId: 5, type: 'COURSE' as any };
+    await controller.development(filters);
+    expect(mockSvc.getDevelopmentActions).toHaveBeenCalledWith(filters);
   });
 
   it('orgGapDashboard sem departmentId → getOrgGapDashboard(undefined)', async () => {
@@ -83,6 +131,23 @@ describe('CompetenciesController', () => {
   it('orgGapDashboard com departmentId → getOrgGapDashboard(parsed)', async () => {
     await controller.orgGapDashboard('4');
     expect(mockSvc.getOrgGapDashboard).toHaveBeenCalledWith(4);
+  });
+
+  it('reports sem filtros → getReports({})', async () => {
+    await controller.reports({});
+    expect(mockSvc.getReports).toHaveBeenCalledWith({});
+  });
+
+  it('reports com filtros → getReports(filters)', async () => {
+    const filters = { departmentId: 2, unitId: 1, status: 'ACTIVE' as any };
+    await controller.reports(filters);
+    expect(mockSvc.getReports).toHaveBeenCalledWith(filters);
+  });
+
+  it('exportReports → exportReportsCsv(filters)', async () => {
+    const filters = { departmentId: 2 };
+    await controller.exportReports(filters);
+    expect(mockSvc.exportReportsCsv).toHaveBeenCalledWith(filters);
   });
 
   it('findOne → findOne(id)', async () => {
@@ -112,15 +177,76 @@ describe('CompetenciesController', () => {
     expect(mockSvc.remove).toHaveBeenCalledWith(1);
   });
 
+  it('findAllProficiencyLevels sem params → findAllProficiencyLevels(undefined, undefined)', async () => {
+    await controller.findAllProficiencyLevels();
+    expect(mockSvc.findAllProficiencyLevels).toHaveBeenCalledWith({
+      competencyId: undefined,
+      search: undefined,
+    });
+  });
+
+  it('findAllProficiencyLevels com params → findAllProficiencyLevels(parsed)', async () => {
+    await controller.findAllProficiencyLevels('2', 'lide');
+    expect(mockSvc.findAllProficiencyLevels).toHaveBeenCalledWith({
+      competencyId: 2,
+      search: 'lide',
+    });
+  });
+
   it('createProficiencyLevel → createProficiencyLevel(dto)', async () => {
     const dto = {} as any;
     await controller.createProficiencyLevel(dto);
     expect(mockSvc.createProficiencyLevel).toHaveBeenCalledWith(dto);
   });
 
+  it('updateProficiencyLevel → updateProficiencyLevel(levelId, dto)', async () => {
+    const dto = {} as any;
+    await controller.updateProficiencyLevel(5, dto);
+    expect(mockSvc.updateProficiencyLevel).toHaveBeenCalledWith(5, dto);
+  });
+
   it('removeProficiencyLevel → removeProficiencyLevel(levelId)', async () => {
     await controller.removeProficiencyLevel(5);
     expect(mockSvc.removeProficiencyLevel).toHaveBeenCalledWith(5);
+  });
+
+  it('findAllModels → findAllModels(filters)', async () => {
+    const filters = {} as any;
+    await controller.findAllModels(filters);
+    expect(mockSvc.findAllModels).toHaveBeenCalledWith(filters);
+  });
+
+  it('createModel → createModel(dto)', async () => {
+    const dto = {} as any;
+    await controller.createModel(dto);
+    expect(mockSvc.createModel).toHaveBeenCalledWith(dto);
+  });
+
+  it('findOneModel → findOneModel(id)', async () => {
+    await controller.findOneModel(1);
+    expect(mockSvc.findOneModel).toHaveBeenCalledWith(1);
+  });
+
+  it('updateModel → updateModel(id, dto)', async () => {
+    const dto = {} as any;
+    await controller.updateModel(1, dto);
+    expect(mockSvc.updateModel).toHaveBeenCalledWith(1, dto);
+  });
+
+  it('removeModel → removeModel(id)', async () => {
+    await controller.removeModel(1);
+    expect(mockSvc.removeModel).toHaveBeenCalledWith(1);
+  });
+
+  it('upsertModelItem → upsertModelItem(id, dto)', async () => {
+    const dto = {} as any;
+    await controller.upsertModelItem(1, dto);
+    expect(mockSvc.upsertModelItem).toHaveBeenCalledWith(1, dto);
+  });
+
+  it('removeModelItem → removeModelItem(id, competencyId)', async () => {
+    await controller.removeModelItem(1, 2);
+    expect(mockSvc.removeModelItem).toHaveBeenCalledWith(1, 2);
   });
 
   it('mapToPosition → mapToPosition(dto)', async () => {

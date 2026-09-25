@@ -13,6 +13,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CompetenciesService } from './competencies.service';
@@ -26,7 +27,17 @@ import {
   MapCompetencyToPositionDto,
   MapCompetencyToCourseDto,
   CreateProficiencyLevelDto,
+  UpdateProficiencyLevelDto,
   CreateEndorsementDto,
+  CreateCompetencyModelDto,
+  UpdateCompetencyModelDto,
+  CompetencyModelFilterDto,
+  UpsertCompetencyModelItemDto,
+  SkillMatrixFilterDto,
+  CompetencyEvaluationFilterDto,
+  CompetencyGapFilterDto,
+  DevelopmentActionFilterDto,
+  CompetencyReportFilterDto,
 } from './competencies.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -48,6 +59,13 @@ export class CompetenciesController {
     return this.svc.findAll(filters);
   }
 
+  @Get('overview')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({ summary: 'Visão Geral — painel de KPIs organizacionais de competências' })
+  overview() {
+    return this.svc.getOverview();
+  }
+
   @Get('top')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Top competências da organização (mais frequentes)' })
@@ -58,17 +76,40 @@ export class CompetenciesController {
 
   @Get('skill-matrix')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Skill Matrix — grid utilizadores × competências' })
-  @ApiQuery({ name: 'departmentId', required: false })
-  @ApiQuery({ name: 'positionId', required: false })
-  skillMatrix(
-    @Query('departmentId') departmentId?: string,
-    @Query('positionId') positionId?: string,
-  ) {
-    return this.svc.getSkillMatrix(
-      departmentId ? parseInt(departmentId) : undefined,
-      positionId ? parseInt(positionId) : undefined,
-    );
+  @ApiOperation({
+    summary: 'Skill Matrix — grid utilizadores × competências (docs/módulo_competencies.md §5)',
+  })
+  skillMatrix(@Query() filters: SkillMatrixFilterDto) {
+    return this.svc.getSkillMatrix(filters);
+  }
+
+  @Get('evaluations')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary: 'Avaliações de competências — lista consolidada (docs/módulo_competencies.md §6)',
+  })
+  evaluations(@Query() filters: CompetencyEvaluationFilterDto) {
+    return this.svc.getEvaluations(filters);
+  }
+
+  @Get('gaps')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary:
+      'Gaps de Competências — diferença entre nível actual e necessário (docs/módulo_competencies.md §7)',
+  })
+  gaps(@Query() filters: CompetencyGapFilterDto) {
+    return this.svc.getGaps(filters);
+  }
+
+  @Get('development')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary:
+      'Desenvolvimento — acções de PDI ligadas às lacunas de competências (docs/módulo_competencies.md §8)',
+  })
+  development(@Query() filters: DevelopmentActionFilterDto) {
+    return this.svc.getDevelopmentActions(filters);
   }
 
   @Get('dashboard/gaps')
@@ -77,6 +118,100 @@ export class CompetenciesController {
   @ApiQuery({ name: 'departmentId', required: false })
   orgGapDashboard(@Query('departmentId') departmentId?: string) {
     return this.svc.getOrgGapDashboard(departmentId ? parseInt(departmentId) : undefined);
+  }
+
+  // ── Relatórios (docs/módulo_competencies.md §9) ────────────────────────────
+  // Rotas com prefixo fixo ("reports/...") registadas antes de ':id' — mesmo
+  // cuidado de route shadowing de trainings.controller.ts#reports.
+
+  @Get('reports/overview')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @ApiOperation({
+    summary:
+      'Relatórios de competências: mapa geral, por departamento/cargo/unidade/nível hierárquico, gaps, críticas, mais desenvolvidas, maior défice, colaboradores abaixo do esperado, impacto das formações (docs/módulo_competencies.md §9)',
+  })
+  reports(@Query() filters: CompetencyReportFilterDto) {
+    return this.svc.getReports(filters);
+  }
+
+  @Get('reports/export')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="relatorio-competencias.csv"')
+  @ApiOperation({ summary: 'Exportar relatório de competências (filtrado) como CSV' })
+  exportReports(@Query() filters: CompetencyReportFilterDto) {
+    return this.svc.exportReportsCsv(filters);
+  }
+
+  // ── Níveis de Proficiência (rotas literais — antes de :id) ────────────────
+
+  @Get('proficiency-levels')
+  @ApiOperation({ summary: 'Listar níveis de proficiência (aba Níveis de Proficiência)' })
+  @ApiQuery({ name: 'competencyId', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  findAllProficiencyLevels(
+    @Query('competencyId') competencyId?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.svc.findAllProficiencyLevels({
+      competencyId: competencyId ? parseInt(competencyId) : undefined,
+      search,
+    });
+  }
+
+  // ── Modelos de Competências (rotas literais — antes de :id) ───────────────
+
+  @Get('models')
+  @ApiOperation({ summary: 'Listar modelos de competências' })
+  findAllModels(@Query() filters: CompetencyModelFilterDto) {
+    return this.svc.findAllModels(filters);
+  }
+
+  @Post('models')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Criar modelo de competências' })
+  createModel(@Body() dto: CreateCompetencyModelDto) {
+    return this.svc.createModel(dto);
+  }
+
+  @Get('models/:id')
+  @ApiOperation({ summary: 'Detalhe de um modelo de competências' })
+  findOneModel(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.findOneModel(id);
+  }
+
+  @Put('models/:id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Actualizar modelo de competências' })
+  updateModel(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCompetencyModelDto) {
+    return this.svc.updateModel(id, dto);
+  }
+
+  @Delete('models/:id')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Eliminar modelo de competências (só sem competências associadas)' })
+  removeModel(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.removeModel(id);
+  }
+
+  @Post('models/:id/items')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Adicionar/actualizar competência num modelo' })
+  upsertModelItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpsertCompetencyModelItemDto,
+  ) {
+    return this.svc.upsertModelItem(id, dto);
+  }
+
+  @Delete('models/:id/items/:competencyId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Remover competência de um modelo' })
+  removeModelItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('competencyId', ParseIntPipe) competencyId: number,
+  ) {
+    return this.svc.removeModelItem(id, competencyId);
   }
 
   @Get(':id')
@@ -123,6 +258,16 @@ export class CompetenciesController {
   @ApiOperation({ summary: 'Criar nível de proficiência para uma competência' })
   createProficiencyLevel(@Body() dto: CreateProficiencyLevelDto) {
     return this.svc.createProficiencyLevel(dto);
+  }
+
+  @Patch('proficiency-levels/:levelId')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Actualizar nível de proficiência' })
+  updateProficiencyLevel(
+    @Param('levelId', ParseIntPipe) levelId: number,
+    @Body() dto: UpdateProficiencyLevelDto,
+  ) {
+    return this.svc.updateProficiencyLevel(levelId, dto);
   }
 
   @Delete('proficiency-levels/:levelId')

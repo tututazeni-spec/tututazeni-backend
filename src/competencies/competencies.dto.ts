@@ -10,21 +10,36 @@ import {
   Max,
   MaxLength,
   IsNumber,
+  IsDateString,
   ValidateNested,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional, PartialType, OmitType } from '@nestjs/swagger';
+import { Type, Transform } from 'class-transformer';
 import {
   CompetencyCategory,
   CompetencyStatus,
   CompetencySource,
   CompetencyType,
   MappingPriority,
+  SeniorityLevel,
+  PositionLevel,
+  ActionType,
+  ActionStatus,
 } from '@prisma/client';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
-export { CompetencyCategory, CompetencyStatus, CompetencySource, CompetencyType, MappingPriority };
+export {
+  CompetencyCategory,
+  CompetencyStatus,
+  CompetencySource,
+  CompetencyType,
+  MappingPriority,
+  SeniorityLevel,
+  PositionLevel,
+  ActionType,
+  ActionStatus,
+};
 
 // ─── Competency ───────────────────────────────────────────────────────────────
 
@@ -111,6 +126,55 @@ export class CreateCompetencyDto {
   @ValidateNested({ each: true })
   @Type(() => CompetencyIndicatorInputDto)
   indicators?: CompetencyIndicatorInputDto[];
+
+  // ─── docs/módulo_competencies.md §2 — Informações gerais + Configuração ──
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  family?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  objective?: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isCritical?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isStrategic?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isMandatory?: boolean;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  isAssessable?: boolean;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  isDevelopable?: boolean;
+
+  @ApiPropertyOptional({ description: 'userId do responsável pela competência' })
+  @IsOptional()
+  @IsInt()
+  ownerId?: number;
 }
 
 export class UpdateCompetencyDto extends PartialType(CreateCompetencyDto) {}
@@ -136,7 +200,66 @@ export class CreateProficiencyLevelDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  // ─── docs/módulo_competencies.md §3 — Níveis de Proficiência (Fase 2) ────
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  minScore?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  maxScore?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  expectedBehaviors?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  knowledgeDemonstrated?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  autonomy?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  taskComplexity?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  observableEvidence?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  evaluationCriteria?: string;
+
+  @ApiPropertyOptional({ enum: CompetencyStatus, default: CompetencyStatus.ACTIVE })
+  @IsOptional()
+  @IsEnum(CompetencyStatus)
+  status?: CompetencyStatus;
 }
+
+// Não permite mover o nível para outra competência (apaga-se e recria-se em
+// vez disso) — mesma razão de UpdateCompetencyDto não remapear `indicators`.
+export class UpdateProficiencyLevelDto extends PartialType(
+  OmitType(CreateProficiencyLevelDto, ['competencyId'] as const),
+) {}
 
 // ─── User Competency ──────────────────────────────────────────────────────────
 
@@ -293,6 +416,23 @@ export class CompetencyFilterDto {
   @IsString()
   tag?: string;
 
+  // @Type(() => Boolean) coage '?isCritical=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isCritical?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isStrategic?: boolean;
+
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
   @IsInt()
@@ -306,6 +446,415 @@ export class CompetencyFilterDto {
   @Min(1)
   @Type(() => Number)
   limit?: number;
+}
+
+// ─── Modelos de Competências (docs/módulo_competencies.md §4, Fase 2) ─────────
+
+export class CreateCompetencyModelDto {
+  @ApiProperty({ example: 'Modelo de Competências — Liderança' })
+  @IsString()
+  @MaxLength(120)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  objective?: string;
+
+  @ApiPropertyOptional({ example: 'Liderança' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  type?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  positionFamily?: string;
+
+  @ApiPropertyOptional({ enum: SeniorityLevel })
+  @IsOptional()
+  @IsEnum(SeniorityLevel)
+  hierarchyLevel?: SeniorityLevel;
+
+  @ApiPropertyOptional({ enum: CompetencyStatus, default: CompetencyStatus.ACTIVE })
+  @IsOptional()
+  @IsEnum(CompetencyStatus)
+  status?: CompetencyStatus;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  version?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  effectiveDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiPropertyOptional({ description: 'userId do responsável pelo modelo' })
+  @IsOptional()
+  @IsInt()
+  ownerId?: number;
+}
+
+export class UpdateCompetencyModelDto extends PartialType(CreateCompetencyModelDto) {}
+
+export class CompetencyModelFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional({ enum: CompetencyStatus })
+  @IsOptional()
+  @IsEnum(CompetencyStatus)
+  status?: CompetencyStatus;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @ApiPropertyOptional({ default: 20 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  limit?: number;
+}
+
+export class UpsertCompetencyModelItemDto {
+  @ApiProperty()
+  @IsInt()
+  competencyId!: number;
+
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  weight?: number;
+
+  @ApiProperty({ description: 'Nível esperado (1-5)' })
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  expectedLevel!: number;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isMandatory?: boolean;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isCritical?: boolean;
+}
+
+// ─── Matriz de Competências (docs/módulo_competencies.md §5) ─────────────────
+// "Permanece como está feita atualmente; acrescentar filtros por: Departamento,
+// cargo, competência, nível hierárquico, colaborador, nível atual." Nível
+// hierárquico usa Position.level (PositionLevel) — é o campo alcançável a
+// partir de User que representa hierarquia, ao contrário de SeniorityLevel
+// (só existe em CompetencyModel/CareerRole, não em User).
+
+export class SkillMatrixFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  positionId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  competencyId?: number;
+
+  @ApiPropertyOptional({ enum: PositionLevel })
+  @IsOptional()
+  @IsEnum(PositionLevel)
+  hierarchyLevel?: PositionLevel;
+
+  @ApiPropertyOptional({ description: 'ID do colaborador' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  userId?: number;
+
+  @ApiPropertyOptional({ description: 'Nível actual (0-5)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(5)
+  currentLevel?: number;
+}
+
+// ─── Avaliações (docs/módulo_competencies.md §6) ──────────────────────────────
+
+export enum CompetencyEvaluationStatus {
+  ATINGIDO = 'ATINGIDO',
+  ABAIXO_DO_ESPERADO = 'ABAIXO_DO_ESPERADO',
+  SEM_META = 'SEM_META',
+}
+
+export class CompetencyEvaluationFilterDto {
+  @ApiPropertyOptional({ description: 'ID do colaborador' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  userId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  competencyId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  positionId?: number;
+
+  @ApiPropertyOptional({ enum: PositionLevel })
+  @IsOptional()
+  @IsEnum(PositionLevel)
+  hierarchyLevel?: PositionLevel;
+
+  @ApiPropertyOptional({ enum: CompetencySource, description: 'Tipo de avaliação (origem)' })
+  @IsOptional()
+  @IsEnum(CompetencySource)
+  source?: CompetencySource;
+
+  @ApiPropertyOptional({ enum: CompetencyEvaluationStatus })
+  @IsOptional()
+  @IsEnum(CompetencyEvaluationStatus)
+  status?: CompetencyEvaluationStatus;
+}
+
+// ─── Gaps de Competências (docs/módulo_competencies.md §7) ──────────────────
+// Não existe uma tabela de estado próprio para o gap — é derivado a partir de
+// UserCompetency (currentLevel/targetLevel) e do PDI/acções de desenvolvimento
+// ligados ao par (userId, competencyId), ver competencies.service.ts#getGaps.
+
+export enum CompetencyGapPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  CRITICAL = 'CRITICAL',
+}
+
+export enum CompetencyGapStatus {
+  IDENTIFICADO = 'IDENTIFICADO',
+  EM_DESENVOLVIMENTO = 'EM_DESENVOLVIMENTO',
+  EM_ACOMPANHAMENTO = 'EM_ACOMPANHAMENTO',
+  RESOLVIDO = 'RESOLVIDO',
+  ENCERRADO = 'ENCERRADO',
+}
+
+export class CompetencyGapFilterDto {
+  @ApiPropertyOptional({ description: 'ID do colaborador' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  userId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  competencyId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  positionId?: number;
+
+  @ApiPropertyOptional({ enum: PositionLevel })
+  @IsOptional()
+  @IsEnum(PositionLevel)
+  hierarchyLevel?: PositionLevel;
+
+  @ApiPropertyOptional({ enum: CompetencyGapPriority })
+  @IsOptional()
+  @IsEnum(CompetencyGapPriority)
+  priority?: CompetencyGapPriority;
+
+  @ApiPropertyOptional({ enum: CompetencyGapStatus })
+  @IsOptional()
+  @IsEnum(CompetencyGapStatus)
+  status?: CompetencyGapStatus;
+
+  @ApiPropertyOptional({ description: 'Só competências críticas' })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  isCritical?: boolean;
+}
+
+// ─── Desenvolvimento (docs/módulo_competencies.md §8) ───────────────────────
+// Liga DevelopmentPlanAction (Development Plans/PDI) às competências que a
+// acção endereça (DevelopmentPlanAction.competencyIds) — ver
+// competencies.service.ts#getDevelopmentActions. Não introduz tabela nova.
+
+export enum DevelopmentResult {
+  MELHOROU = 'MELHOROU',
+  MANTEVE = 'MANTEVE',
+  PENDENTE = 'PENDENTE',
+}
+
+export class DevelopmentActionFilterDto {
+  @ApiPropertyOptional({ description: 'ID do colaborador' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  userId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  competencyId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  planId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional({ enum: ActionType })
+  @IsOptional()
+  @IsEnum(ActionType)
+  type?: ActionType;
+
+  @ApiPropertyOptional({ enum: ActionStatus })
+  @IsOptional()
+  @IsEnum(ActionStatus)
+  status?: ActionStatus;
+}
+
+// ─── Relatórios (docs/módulo_competencies.md §9) ────────────────────────────
+// Filtros aplicados sobre UserCompetency (via o utilizador e a competência) —
+// "Estado" aqui é CompetencyStatus (Activa/Em revisão/Arquivada, mesmo campo
+// do catálogo §2), distinto do CompetencyGapStatus derivado em §7.
+// "Subdepartamento" filtra por um Department filho específico; sem ele,
+// "Departamento" abrange o próprio departamento + os seus filhos directos
+// (ver competencies.service.ts#getReports).
+
+export class CompetencyReportFilterDto {
+  @ApiPropertyOptional({ description: 'Período — início (evaluatedAt/createdAt ≥)' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Período — fim (evaluatedAt/createdAt ≤)' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  unitId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  subDepartmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  positionId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  competencyId?: number;
+
+  @ApiPropertyOptional({ enum: CompetencyCategory })
+  @IsOptional()
+  @IsEnum(CompetencyCategory)
+  category?: CompetencyCategory;
+
+  @ApiPropertyOptional({ enum: PositionLevel })
+  @IsOptional()
+  @IsEnum(PositionLevel)
+  hierarchyLevel?: PositionLevel;
+
+  @ApiPropertyOptional({ enum: CompetencyStatus })
+  @IsOptional()
+  @IsEnum(CompetencyStatus)
+  status?: CompetencyStatus;
 }
 
 // ─── Endorsement ─────────────────────────────────────────────────────────────

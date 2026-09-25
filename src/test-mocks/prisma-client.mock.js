@@ -476,6 +476,12 @@ const Eval360FeedbackType = {
   PULSE: 'PULSE',
 };
 
+const Eval360QuestionnaireStatus = {
+  DRAFT: 'DRAFT',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+};
+
 const LeadershipClassification = {
   CRITICAL: 'CRITICAL',
   BELOW_AVERAGE: 'BELOW_AVERAGE',
@@ -2337,6 +2343,7 @@ module.exports = {
   Eval360QuestionType,
   EvaluationResponseStatus,
   Eval360FeedbackType,
+  Eval360QuestionnaireStatus,
   LeadershipClassification,
   CourseLevel,
   CourseStatus,

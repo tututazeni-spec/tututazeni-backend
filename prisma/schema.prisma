@@ -974,6 +974,8 @@ model User {
   // ─── Monitoria e Avaliação ────────────────────────────────────
   createdOkrCycles       OkrCycle[]            @relation("OkrCycleCreator")
   ownedObjectives        Objective[]           @relation("ObjectiveOwner")
+  ownedCompetencies      Competency[]          @relation("CompetencyOwner")
+  ownedCompetencyModels  CompetencyModel[]     @relation("CompetencyModelOwner")
   keyResultUpdates       KeyResultUpdate[]     @relation("KrUpdater")
   createdMonIndicators   MonitoringIndicator[] @relation("IndicatorCreator")
   recordedMonRecords     MonitoringRecord[]    @relation("RecordCreator")
@@ -1206,6 +1208,7 @@ model Department {
   internalVacancies    InternalVacancy[]
   careerPaths          CareerPath[]
   engagementActions    EngagementAction[]
+  competencyModels     CompetencyModel[]
 
   leadershipPrograms   LeadershipProgram[]
   leadershipTargetings LeadershipProgramTargeting[]
@@ -2908,6 +2911,10 @@ enum CompetencyCategory {
   LANGUAGE
   TOOL
   LEADERSHIP
+  // docs/módulo_competencies.md §1/§2 — "Competências funcionais" no
+  // painel Visão Geral e no catálogo. "Estratégica" não é aqui: é o
+  // booleano Competency.isStrategic, não uma categoria.
+  FUNCTIONAL
 }
 
 enum CompetencyType {
@@ -2923,35 +2930,54 @@ enum CompetencyType {
 enum CompetencyStatus {
   ACTIVE
   INACTIVE
+  // docs/módulo_competencies.md §1 — "Competências em revisão" no painel
+  // Visão Geral.
+  IN_REVIEW
 }
 
 model Competency {
-  id                       Int                      @id @default(autoincrement())
-  name                     String                   @unique
-  description              String?
-  category                 CompetencyCategory       @default(HARD_SKILL)
-  type                     CompetencyType           @default(BEHAVIORAL)
-  tags                     String[]
-  status                   CompetencyStatus         @default(ACTIVE)
-  isActive                 Boolean                  @default(true)
-  isGlobal                 Boolean                  @default(true)
-  tenantId                 String?
-  scaleMin                 Int                      @default(1)
-  scaleMax                 Int                      @default(5)
-  createdAt                DateTime                 @default(now())
-  updatedAt                DateTime                 @updatedAt
-  userCompetencies         UserCompetency[]
-  courses                  CourseCompetency[]
-  modules                  ModuleCompetency[]
-  positions                PositionCompetency[]
-  proficiencyLevels        ProficiencyLevel[]
-  endorsements             CompetencyEndorsement[]
-  evolutionLogs            CompetencyEvolutionLog[]
-  competencyMaps           CompetencyMap[]
-  avatarScenarios          AvatarScenario[]
-  indicators               CompetencyIndicator[]
-  eval360CycleCompetencies Eval360CycleCompetency[]
-  eval360Questions         Eval360Question[]        @relation("Eval360QuestionCompetency")
+  id                               Int                              @id @default(autoincrement())
+  name                             String                           @unique
+  description                      String?
+  category                         CompetencyCategory               @default(HARD_SKILL)
+  type                             CompetencyType                   @default(BEHAVIORAL)
+  tags                             String[]
+  status                           CompetencyStatus                 @default(ACTIVE)
+  isActive                         Boolean                          @default(true)
+  isGlobal                         Boolean                          @default(true)
+  tenantId                         String?
+  scaleMin                         Int                              @default(1)
+  scaleMax                         Int                              @default(5)
+  // docs/módulo_competencies.md §2 — campos do catálogo (Fase 1: Geral +
+  // Configuração; Aplicabilidade/Critérios/Desenvolvimento ficam para
+  // fases futuras, ver spec).
+  code                             String?                          @unique
+  family                           String?
+  objective                        String?
+  isCritical                       Boolean                          @default(false)
+  isStrategic                      Boolean                          @default(false)
+  isMandatory                      Boolean                          @default(false)
+  isAssessable                     Boolean                          @default(true)
+  isDevelopable                    Boolean                          @default(true)
+  ownerId                          Int?
+  owner                            User?                            @relation("CompetencyOwner", fields: [ownerId], references: [id])
+  createdAt                        DateTime                         @default(now())
+  updatedAt                        DateTime                         @updatedAt
+  userCompetencies                 UserCompetency[]
+  courses                          CourseCompetency[]
+  modules                          ModuleCompetency[]
+  positions                        PositionCompetency[]
+  proficiencyLevels                ProficiencyLevel[]
+  endorsements                     CompetencyEndorsement[]
+  evolutionLogs                    CompetencyEvolutionLog[]
+  competencyMaps                   CompetencyMap[]
+  avatarScenarios                  AvatarScenario[]
+  indicators                       CompetencyIndicator[]
+  eval360CycleCompetencies         Eval360CycleCompetency[]
+  eval360Questions                 Eval360Question[]                @relation("Eval360QuestionCompetency")
+  eval360QuestionnaireCompetencies Eval360QuestionnaireCompetency[]
+  eval360QuestionnaireQuestions    Eval360QuestionnaireQuestion[]
+  modelItems                       CompetencyModelItem[]
 
   leadershipProgramCompetencies LeadershipProgramCompetency[]
   leadershipSelectionCriteria   LeadershipSelectionCriterion[]
@@ -2978,14 +3004,67 @@ model CompetencyIndicator {
 }
 
 model ProficiencyLevel {
-  id           Int        @id @default(autoincrement())
-  competencyId Int
-  name         String
-  value        Int
-  description  String?
-  competency   Competency @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  id                    Int              @id @default(autoincrement())
+  competencyId          Int
+  name                  String
+  value                 Int
+  description           String?
+  // docs/módulo_competencies.md §3 — Níveis de Proficiência (Fase 2). Ver
+  // docs/superpowers/specs/2026-09-25-competencies-fase2-design.md: o nível
+  // continua por-competência (decisão 1/2), só ganha os campos ricos do spec.
+  code                  String?
+  minScore              Int?
+  maxScore              Int?
+  expectedBehaviors     String?          @db.Text
+  knowledgeDemonstrated String?          @db.Text
+  autonomy              String?
+  taskComplexity        String?
+  observableEvidence    String?          @db.Text
+  evaluationCriteria    String?          @db.Text
+  status                CompetencyStatus @default(ACTIVE)
+  competency            Competency       @relation(fields: [competencyId], references: [id], onDelete: Cascade)
 
   @@unique([competencyId, value])
+}
+
+// docs/módulo_competencies.md §4 — Modelos de Competências (Fase 2). Ver
+// docs/superpowers/specs/2026-09-25-competencies-fase2-design.md.
+model CompetencyModel {
+  id             Int                   @id @default(autoincrement())
+  name           String
+  code           String?               @unique
+  description    String?
+  objective      String?
+  type           String?
+  departmentId   Int?
+  positionFamily String?
+  hierarchyLevel SeniorityLevel?
+  status         CompetencyStatus      @default(ACTIVE)
+  version        Int                   @default(1)
+  effectiveDate  DateTime?
+  endDate        DateTime?
+  ownerId        Int?
+  department     Department?           @relation(fields: [departmentId], references: [id])
+  owner          User?                 @relation("CompetencyModelOwner", fields: [ownerId], references: [id])
+  items          CompetencyModelItem[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([departmentId])
+}
+
+model CompetencyModelItem {
+  id            Int             @id @default(autoincrement())
+  modelId       Int
+  competencyId  Int
+  weight        Float           @default(1)
+  expectedLevel Int
+  isMandatory   Boolean         @default(false)
+  isCritical    Boolean         @default(false)
+  model         CompetencyModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  competency    Competency      @relation(fields: [competencyId], references: [id])
+
+  @@unique([modelId, competencyId])
 }
 
 enum CompetencySource {
@@ -11090,32 +11169,32 @@ enum ActionPlanStatus {
 // ══════════════════════════════════════════════════════════════════
 
 model Eval360Cycle {
-  id                String             @id @default(cuid())
+  id                String                @id @default(cuid())
   tenantId          String?
   name              String
-  description       String?            @db.Text
-  model             EvaluationModel    @default(DEG_360)
-  type              Eval360CycleType   @default(ANUAL)
+  description       String?               @db.Text
+  model             EvaluationModel       @default(DEG_360)
+  type              Eval360CycleType      @default(ANUAL)
   startDate         DateTime
   endDate           DateTime
-  gracePeriodDays   Int                @default(3)
-  status            Eval360CycleStatus @default(DRAFT)
-  anonymityMode     AnonymityMode      @default(ANONYMOUS)
-  quorumMinimum     Int                @default(3)
-  weightSelf        Float              @default(10)
-  weightManager     Float              @default(40)
-  weightPeer        Float              @default(30)
-  weightSubordinate Float              @default(20)
-  weightExternal    Float              @default(0)
+  gracePeriodDays   Int                   @default(3)
+  status            Eval360CycleStatus    @default(DRAFT)
+  anonymityMode     AnonymityMode         @default(ANONYMOUS)
+  quorumMinimum     Int                   @default(3)
+  weightSelf        Float                 @default(10)
+  weightManager     Float                 @default(40)
+  weightPeer        Float                 @default(30)
+  weightSubordinate Float                 @default(20)
+  weightExternal    Float                 @default(0)
   cutoffPromotion   Float?
   cutoffBonus       Float?
   cutoffProgram     Float?
-  linkedToPdi       Boolean            @default(true)
-  linkedToBonus     Boolean            @default(false)
-  linkedToOkrs      Boolean            @default(false)
+  linkedToPdi       Boolean               @default(true)
+  linkedToBonus     Boolean               @default(false)
+  linkedToOkrs      Boolean               @default(false)
   createdBy         String
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
   // Soft delete: ADMIN/DIRECTOR podem eliminar um ciclo (evaluation360.service.ts#deleteCycle),
   // mas a linha nunca é apagada da BD — fica escondida de listCycles/getCycleDetail
   // e pode ser restaurada (restoreCycle) a partir do separador "Apagados" do módulo
@@ -11123,6 +11202,12 @@ model Eval360Cycle {
   // acima — não é uma relação FK.
   deletedAt         DateTime?
   deletedById       String?
+  // Questionário (docs/evaluation360.md §6) usado para semear as competências
+  // e questões deste ciclo em createCycle() — opcional: um ciclo pode
+  // continuar a ser criado com competências avulsas/doutrina-padrão, sem
+  // passar por um questionário reutilizável.
+  questionnaireId   String?
+  questionnaire     Eval360Questionnaire? @relation(fields: [questionnaireId], references: [id], onDelete: SetNull)
 
   competencies Eval360CycleCompetency[]
   assignments  EvaluatorAssignment[]
@@ -11134,20 +11219,90 @@ model Eval360Cycle {
   @@index([status])
   @@index([tenantId])
   @@index([deletedAt])
+  @@index([questionnaireId])
 }
 
 model Eval360CycleCompetency {
-  id           String       @id @default(cuid())
-  cycleId      String
-  competencyId Int
-  weight       Float        @default(1)
-  isRequired   Boolean      @default(true)
-  order        Int          @default(0)
-  cycle        Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  competency   Competency   @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  id            String       @id @default(cuid())
+  cycleId       String
+  competencyId  Int
+  weight        Float        @default(1)
+  isRequired    Boolean      @default(true)
+  order         Int          @default(0)
+  // "Nível esperado" (docs/evaluation360.md §3/§7) — patamar de referência
+  // usado no separador Resultados para calcular o gap da competência face ao
+  // esperado (distinto do gap auto vs. outros, já calculado em scoresByCompetency).
+  expectedLevel Float?
+  cycle         Eval360Cycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  competency    Competency   @relation(fields: [competencyId], references: [id], onDelete: Cascade)
 
   @@unique([cycleId, competencyId])
   @@index([cycleId])
+}
+
+// ─── QUESTIONÁRIOS 360° (docs/evaluation360.md §6) ──────────────────────
+// Banco reutilizável de questionários — distinto das Eval360Question, que
+// pertencem sempre a um ciclo concreto. Um questionário é um molde
+// versionado (nome, código, escala, competências, perguntas) que RH/ADMIN
+// preparam antes de existir qualquer ciclo; ao criar um ciclo com
+// `questionnaireId`, createCycle() clona as suas competências+perguntas
+// para o novo ciclo (Eval360CycleCompetency/Eval360Question), tal como já
+// fazia para a doutrina-padrão de 8 competências.
+model Eval360Questionnaire {
+  id           String                     @id @default(cuid())
+  tenantId     String?
+  name         String
+  code         String                     @unique
+  description  String?                    @db.Text
+  instructions String?                    @db.Text
+  version      Int                        @default(1)
+  scaleMin     Int                        @default(1)
+  scaleMax     Int                        @default(5)
+  scaleLabels  String?
+  status       Eval360QuestionnaireStatus @default(DRAFT)
+  createdBy    String
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @updatedAt
+
+  competencies Eval360QuestionnaireCompetency[]
+  questions    Eval360QuestionnaireQuestion[]
+  cycles       Eval360Cycle[]
+
+  @@index([tenantId])
+  @@index([status])
+}
+
+model Eval360QuestionnaireCompetency {
+  id              String               @id @default(cuid())
+  questionnaireId String
+  competencyId    Int
+  order           Int                  @default(0)
+  questionnaire   Eval360Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+  competency      Competency           @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@unique([questionnaireId, competencyId])
+  @@index([questionnaireId])
+}
+
+model Eval360QuestionnaireQuestion {
+  id              String               @id @default(cuid())
+  questionnaireId String
+  competencyId    Int?
+  text            String               @db.Text
+  type            Eval360QuestionType
+  isRequired      Boolean              @default(true)
+  allowComment    Boolean              @default(true)
+  order           Int                  @default(0)
+  scaleMin        Int?
+  scaleMax        Int?
+  scaleLabels     String?
+  options         String?
+  createdAt       DateTime             @default(now())
+  questionnaire   Eval360Questionnaire @relation(fields: [questionnaireId], references: [id], onDelete: Cascade)
+  competency      Competency?          @relation(fields: [competencyId], references: [id], onDelete: SetNull)
+
+  @@index([questionnaireId])
+  @@index([competencyId])
 }
 
 model EvaluatorAssignment {
@@ -11391,6 +11546,12 @@ enum Eval360QuestionType {
 enum EvaluationResponseStatus {
   DRAFT
   SUBMITTED
+}
+
+enum Eval360QuestionnaireStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
 }
 
 enum Eval360FeedbackType {

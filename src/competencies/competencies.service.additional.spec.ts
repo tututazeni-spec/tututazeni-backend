@@ -50,7 +50,11 @@ const mockPrisma: any = {
     findMany: jest.fn().mockResolvedValue([]),
   },
   position: { findMany: jest.fn().mockResolvedValue([]) },
-  competencyEvolutionLog: { create: jest.fn().mockResolvedValue({}) },
+  department: { findMany: jest.fn().mockResolvedValue([]) },
+  competencyEvolutionLog: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   proficiencyLevel: {
     findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn().mockResolvedValue({ id: 1, competencyId: 1, value: 3 }),
@@ -341,6 +345,101 @@ describe('CompetenciesService (additional)', () => {
       mockPrisma.userCompetency.findMany.mockResolvedValue([]);
       const result = await service.getOrgGapDashboard();
       expect(result).toBeDefined();
+    });
+  });
+
+  // ─── getReports (docs/módulo_competencies.md §9) ─────────────────
+
+  describe('getReports', () => {
+    const users = [
+      {
+        id: 1,
+        department: { name: 'Vendas' },
+        position: { name: 'Vendedor', level: 'JUNIOR' },
+        unit: { name: 'Luanda' },
+      },
+      {
+        id: 2,
+        department: { name: 'RH' },
+        position: { name: 'Analista', level: 'MID' },
+        unit: { name: 'Benguela' },
+      },
+    ];
+    const competencies = [
+      { id: 10, name: 'Comunicação', category: 'SOFT_SKILL', isCritical: true, isStrategic: false },
+      { id: 20, name: 'SQL', category: 'HARD_SKILL', isCritical: false, isStrategic: true },
+    ];
+    const userCompetencies = [
+      { userId: 1, competencyId: 10, currentLevel: 2, targetLevel: 4 },
+      { userId: 2, competencyId: 20, currentLevel: 3, targetLevel: 3 },
+    ];
+
+    beforeEach(() => {
+      mockPrisma.user.findMany.mockResolvedValue(users);
+      mockPrisma.competency.findMany.mockResolvedValue(competencies);
+      mockPrisma.userCompetency.findMany.mockResolvedValue(userCompetencies);
+      mockPrisma.competencyEvolutionLog.findMany.mockResolvedValue([
+        { source: 'TRAINING', previousLevel: 1, newLevel: 2 },
+      ]);
+    });
+
+    it('deve agregar os 14 relatórios a partir das linhas de UserCompetency', async () => {
+      const result = await service.getReports({});
+
+      expect(result.mapaGeral.totalCompetencies).toBe(2);
+      expect(result.mapaGeral.critical).toBe(1);
+      expect(result.mapaGeral.usersAssessed).toBe(2);
+      expect(result.porDepartamento).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ label: 'Vendas', usersAssessed: 1 }),
+          expect.objectContaining({ label: 'RH', usersAssessed: 1 }),
+        ]),
+      );
+      expect(result.gaps).toEqual({ total: 1, usersWithGap: 1, avgGap: 2 });
+      expect(result.gapsPorDepartamento).toEqual([
+        { label: 'Vendas', count: 1, usersWithGap: 1, avgGap: 2 },
+      ]);
+      expect(result.competenciasCriticas).toEqual([
+        expect.objectContaining({ id: 10, usersWithGap: 1 }),
+      ]);
+      expect(result.colaboradoresAbaixoDoEsperado.total).toBe(1);
+      expect(result.impactoFormacoes.events).toBe(1);
+      expect(result.impactoFormacoes.avgLevelIncrease).toBe(1);
+    });
+
+    it('subDepartmentId restringe user.departmentId ao próprio filho, sem consultar os irmãos', async () => {
+      await service.getReports({ subDepartmentId: 5 } as any);
+      expect(mockPrisma.department.findMany).not.toHaveBeenCalled();
+      expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ departmentId: { in: [5] } }) }),
+      );
+    });
+
+    it('departmentId sem subDepartmentId inclui os filhos directos', async () => {
+      mockPrisma.department.findMany.mockResolvedValueOnce([{ id: 7 }, { id: 8 }]);
+      await service.getReports({ departmentId: 3 } as any);
+      expect(mockPrisma.department.findMany).toHaveBeenCalledWith({
+        where: { parentId: 3 },
+        select: { id: true },
+      });
+      expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ departmentId: { in: [3, 7, 8] } }),
+        }),
+      );
+    });
+  });
+
+  describe('exportReportsCsv', () => {
+    it('deve gerar CSV com as métricas resumo', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      mockPrisma.competency.findMany.mockResolvedValue([]);
+      mockPrisma.userCompetency.findMany.mockResolvedValue([]);
+      mockPrisma.competencyEvolutionLog.findMany.mockResolvedValue([]);
+
+      const csv = await service.exportReportsCsv({});
+      expect(csv).toContain('metrica,valor');
+      expect(csv).toContain('Total de competências');
     });
   });
 });
