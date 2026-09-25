@@ -530,6 +530,35 @@ async function main() {
 
   await seedFeedbackTagCompetencies(prisma);
 
+  // docs/roi-impact.md §4 — modelo de avaliação por omissão do sistema
+  // (Kirkpatrick 4 níveis + extensão Phillips). Sem @@unique em
+  // RoiEvaluationModel.name (não é um campo de negócio único, só o modelo
+  // "de sistema" que aqui se semeia é), por isso findFirst+create em vez de
+  // upsert — reexecutar o seed não deve duplicar nem apagar edições do RH.
+  const defaultRoiModel = await prisma.roiEvaluationModel.findFirst({
+    where: { name: 'Kirkpatrick + Phillips (padrão)' },
+  });
+  if (!defaultRoiModel) {
+    await prisma.roiEvaluationModel.create({
+      data: {
+        name: 'Kirkpatrick + Phillips (padrão)',
+        description:
+          'Modelo de 5 níveis recomendado pelo spec: Reação/Aprendizagem/Comportamento ' +
+          'obrigatórios para todas as formações; Resultados/ROI só acima do limiar de ' +
+          'custo/criticidade (ver Configurações).',
+        levels: [
+          { level: 1, name: 'Reação', mandatory: true, weight: 10 },
+          { level: 2, name: 'Aprendizagem', mandatory: true, weight: 20 },
+          { level: 3, name: 'Comportamento', mandatory: true, weight: 25 },
+          { level: 4, name: 'Resultados', mandatory: false, weight: 25 },
+          { level: 5, name: 'ROI', mandatory: false, weight: 20 },
+        ],
+        createdById: admin.id,
+      },
+    });
+    console.log('✅ Modelo de avaliação padrão criado: Kirkpatrick + Phillips');
+  }
+
   console.log('🎉 Seed concluído!');
 }
 

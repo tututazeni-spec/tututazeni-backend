@@ -7,15 +7,31 @@ import {
   IsString,
   IsBoolean,
   IsEnum,
+  IsArray,
+  ValidateNested,
   MaxLength,
   Min,
   Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { RoiInitiativeType, RoiAnalysisStatus, RoiBenefitType } from '@prisma/client';
+import {
+  RoiInitiativeType,
+  RoiAnalysisStatus,
+  RoiBenefitType,
+  ImpactSubjectType,
+  ImpactCategory,
+  RoiModelStatus,
+} from '@prisma/client';
 
-export { RoiInitiativeType, RoiAnalysisStatus, RoiBenefitType };
+export {
+  RoiInitiativeType,
+  RoiAnalysisStatus,
+  RoiBenefitType,
+  ImpactSubjectType,
+  ImpactCategory,
+  RoiModelStatus,
+};
 
 export enum RoiConfidence {
   HIGH = 'HIGH',
@@ -141,4 +157,159 @@ export class ApproveRoiAnalysisDto {
   status!: RoiAnalysisStatus;
   @ApiProperty() @IsInt() @Type(() => Number) approvedById!: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) observations?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// IMPACTO NO NEGÓCIO (docs/roi-impact.md §3)
+// ─────────────────────────────────────────────────────────────────
+
+export class ImpactRecordFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional({ enum: ImpactCategory })
+  @IsOptional()
+  @IsEnum(ImpactCategory)
+  category?: ImpactCategory;
+  @ApiPropertyOptional({ enum: RoiInitiativeType })
+  @IsOptional()
+  @IsEnum(RoiInitiativeType)
+  initiativeType?: RoiInitiativeType;
+  @ApiPropertyOptional({ enum: ImpactSubjectType })
+  @IsOptional()
+  @IsEnum(ImpactSubjectType)
+  subjectType?: ImpactSubjectType;
+}
+
+export class CreateImpactRecordDto {
+  @ApiProperty({ enum: ImpactSubjectType })
+  @IsEnum(ImpactSubjectType)
+  subjectType!: ImpactSubjectType;
+  // Só um dos três deve vir preenchido, conforme subjectType — o backend
+  // não valida a exclusividade, quem preenche o formulário é o wizard/UI.
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) team?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+
+  @ApiProperty({ enum: RoiInitiativeType })
+  @IsEnum(RoiInitiativeType)
+  initiativeType!: RoiInitiativeType;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) initiativeId?: number;
+
+  @ApiProperty({ enum: ImpactCategory }) @IsEnum(ImpactCategory) category!: ImpactCategory;
+  @ApiProperty() @IsString() @MaxLength(200) indicatorName!: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsNumber() valueBefore?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() valueAfter?: number;
+
+  @ApiPropertyOptional() @IsOptional() @IsDateString() observationPeriodStart?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() observationPeriodEnd?: string;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 100 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  attributionPercent?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) dataSource?: string;
+}
+
+export class UpdateImpactRecordDto {
+  @ApiPropertyOptional({ enum: ImpactSubjectType })
+  @IsOptional()
+  @IsEnum(ImpactSubjectType)
+  subjectType?: ImpactSubjectType;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) userId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) team?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+
+  @ApiPropertyOptional({ enum: RoiInitiativeType })
+  @IsOptional()
+  @IsEnum(RoiInitiativeType)
+  initiativeType?: RoiInitiativeType;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) initiativeId?: number;
+
+  @ApiPropertyOptional({ enum: ImpactCategory })
+  @IsOptional()
+  @IsEnum(ImpactCategory)
+  category?: ImpactCategory;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) indicatorName?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsNumber() valueBefore?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() valueAfter?: number;
+
+  @ApiPropertyOptional() @IsOptional() @IsDateString() observationPeriodStart?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() observationPeriodEnd?: string;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 100 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  attributionPercent?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) dataSource?: string;
+}
+
+export class ValidateImpactRecordDto {
+  @ApiProperty() @IsInt() @Type(() => Number) validatedById!: number;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// MODELOS DE AVALIAÇÃO (docs/roi-impact.md §4)
+// ─────────────────────────────────────────────────────────────────
+
+export class RoiEvaluationLevelDto {
+  @ApiProperty({ minimum: 1, maximum: 5 }) @IsInt() @Min(1) @Max(5) level!: number;
+  @ApiProperty() @IsString() @MaxLength(120) name!: string;
+  @ApiProperty() @IsBoolean() mandatory!: boolean;
+  @ApiProperty({ minimum: 0, maximum: 100 }) @IsNumber() @Min(0) @Max(100) weight!: number;
+}
+
+export class RoiEvaluationApplicabilityDto {
+  @ApiPropertyOptional({ enum: RoiInitiativeType, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(RoiInitiativeType, { each: true })
+  initiativeTypes?: RoiInitiativeType[];
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  criticality?: string[];
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) minCost?: number;
+}
+
+export class CreateRoiEvaluationModelDto {
+  @ApiProperty() @IsString() @MaxLength(150) name!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) description?: string;
+  @ApiProperty({ type: [RoiEvaluationLevelDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RoiEvaluationLevelDto)
+  levels!: RoiEvaluationLevelDto[];
+  @ApiPropertyOptional({ type: RoiEvaluationApplicabilityDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RoiEvaluationApplicabilityDto)
+  applicability?: RoiEvaluationApplicabilityDto;
+}
+
+export class UpdateRoiEvaluationModelDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(150) name?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) description?: string;
+  @ApiPropertyOptional({ type: [RoiEvaluationLevelDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RoiEvaluationLevelDto)
+  levels?: RoiEvaluationLevelDto[];
+  @ApiPropertyOptional({ type: RoiEvaluationApplicabilityDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RoiEvaluationApplicabilityDto)
+  applicability?: RoiEvaluationApplicabilityDto;
+  @ApiPropertyOptional({ enum: RoiModelStatus })
+  @IsOptional()
+  @IsEnum(RoiModelStatus)
+  status?: RoiModelStatus;
 }

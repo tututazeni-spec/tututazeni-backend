@@ -2315,6 +2315,33 @@ const RoiBenefitType = {
   OUTRO: 'OUTRO',
 };
 
+// docs/roi-impact.md §3 — "Impacto no Negócio"
+const ImpactSubjectType = {
+  COLABORADOR: 'COLABORADOR',
+  EQUIPA: 'EQUIPA',
+  DEPARTAMENTO: 'DEPARTAMENTO',
+};
+const ImpactCategory = {
+  PRODUTIVIDADE: 'PRODUTIVIDADE',
+  QUALIDADE: 'QUALIDADE',
+  ROTATIVIDADE: 'ROTATIVIDADE',
+  ABSENTISMO: 'ABSENTISMO',
+  SEGURANCA: 'SEGURANCA',
+  VENDAS_RECEITA: 'VENDAS_RECEITA',
+  SATISFACAO_CLIENTE: 'SATISFACAO_CLIENTE',
+  SATISFACAO_COLABORADOR: 'SATISFACAO_COLABORADOR',
+  TEMPO_RESPOSTA: 'TEMPO_RESPOSTA',
+  CUMPRIMENTO_SLA: 'CUMPRIMENTO_SLA',
+  COMPLIANCE: 'COMPLIANCE',
+  CUSTO_EVITADO: 'CUSTO_EVITADO',
+};
+
+// docs/roi-impact.md §4 — "Modelos de Avaliação"
+const RoiModelStatus = {
+  ACTIVO: 'ACTIVO',
+  INACTIVO: 'INACTIVO',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -2350,6 +2377,9 @@ module.exports = {
   RoiInitiativeType,
   RoiAnalysisStatus,
   RoiBenefitType,
+  ImpactSubjectType,
+  ImpactCategory,
+  RoiModelStatus,
   LeadershipContentType,
   LeadershipMethodologyType,
   LeadershipAdvisorRole,

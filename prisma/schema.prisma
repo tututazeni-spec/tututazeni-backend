@@ -1009,7 +1009,10 @@ model User {
   refreshTokens       RefreshToken[]
 
   // ─── ROI & Impact ─────────────────────────────────────────────
-  createdRoiAnalyses RoiAnalysis[]
+  createdRoiAnalyses  RoiAnalysis[]
+  impactRecords       ImpactRecord[]       @relation("ImpactRecordSubject")
+  createdImpactRecords ImpactRecord[]      @relation("ImpactRecordCreatedBy")
+  createdRoiEvaluationModels RoiEvaluationModel[]
 
   @@index([accountStatus])
   @@index([departmentId])
@@ -1218,6 +1221,7 @@ model Department {
   libraryItems         LibraryItem[]
   events               Event[]
   roiAnalyses          RoiAnalysis[]
+  impactRecords        ImpactRecord[]
 
   @@index([active])
   @@index([parentId])
@@ -7591,6 +7595,110 @@ model RoiAnalysis {
 
   @@index([initiativeType, initiativeId])
   @@index([departmentId])
+  @@index([status])
+}
+
+// docs/roi-impact.md §3 — Impacto no Negócio. Liga uma iniciativa (mesma FK
+// solta initiativeType/initiativeId de RoiAnalysis, acima) a um indicador de
+// negócio real — nunca aos indicadores de formação em si (isso já é o que
+// RoiAnalysis/getImpactMetrics fazem). O sujeito do impacto é sempre um dos
+// três (Colaborador via userId, Equipa via team em texto livre — não há
+// modelo de "equipa" formal no schema, Departamento via departmentId).
+enum ImpactSubjectType {
+  COLABORADOR
+  EQUIPA
+  DEPARTAMENTO
+}
+
+enum ImpactCategory {
+  PRODUTIVIDADE
+  QUALIDADE
+  ROTATIVIDADE
+  ABSENTISMO
+  SEGURANCA
+  VENDAS_RECEITA
+  SATISFACAO_CLIENTE
+  SATISFACAO_COLABORADOR
+  TEMPO_RESPOSTA
+  CUMPRIMENTO_SLA
+  COMPLIANCE
+  CUSTO_EVITADO
+}
+
+model ImpactRecord {
+  id          Int               @id @default(autoincrement())
+  subjectType ImpactSubjectType
+  userId      Int?
+  user        User?             @relation("ImpactRecordSubject", fields: [userId], references: [id])
+  team        String?
+  departmentId Int?
+  department  Department?       @relation(fields: [departmentId], references: [id])
+
+  initiativeType RoiInitiativeType
+  initiativeId   Int?
+
+  category      ImpactCategory
+  indicatorName String
+
+  valueBefore Float?
+  valueAfter  Float?
+
+  observationPeriodStart DateTime?
+  observationPeriodEnd   DateTime?
+
+  // % atribuível à iniciativa (0–100) — o valor atribuído
+  // (variação × attributionPercent/100) é calculado em runtime, nunca
+  // guardado, para nunca divergir se a % de atribuição for revista.
+  attributionPercent Float?
+  dataSource         String?
+
+  // FK solta para User (padrão PayslipAccessLog.userId) — sem @relation
+  // para não multiplicar back-relations em User.
+  validatedById Int?
+  validatedAt   DateTime?
+
+  createdById Int
+  createdBy   User     @relation("ImpactRecordCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([initiativeType, initiativeId])
+  @@index([departmentId])
+  @@index([category])
+  @@index([userId])
+}
+
+// docs/roi-impact.md §4 — Modelos de Avaliação. Configuração da metodologia
+// (Kirkpatrick 4 níveis + extensão Phillips) usada para medir impacto/ROI.
+// Nome "RoiEvaluationModel" (não "EvaluationModel") para não colidir com o
+// enum EvaluationModel já usado por Evaluation360 (DEG_360/...).
+enum RoiModelStatus {
+  ACTIVO
+  INACTIVO
+}
+
+model RoiEvaluationModel {
+  id          Int     @id @default(autoincrement())
+  name        String
+  description String?
+
+  // Array de níveis incluídos — cada item:
+  // {level: 1-5, name, mandatory: boolean, weight: number}.
+  // Ver RoiEvaluationModelService.DEFAULT_LEVELS para a estrutura
+  // Kirkpatrick (1 Reação/2 Aprendizagem/3 Comportamento/4 Resultados) +
+  // extensão Phillips (5 ROI).
+  levels Json
+
+  // {initiativeTypes?: RoiInitiativeType[], criticality?: string[], minCost?: number}
+  applicability Json?
+
+  status RoiModelStatus @default(ACTIVO)
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   @@index([status])
 }
 
