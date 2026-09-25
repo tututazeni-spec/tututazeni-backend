@@ -7975,6 +7975,41 @@ model Benchmark {
   @@index([referenceYear])
 }
 
+// docs/roi-impact.md §11 — "Configurações". Singleton (id fixo = 1), mesmo
+// padrão de AiTutorSettings: getConfig() devolve a linha ou os defaults,
+// updateConfig() faz upsert. defaultIsolationFactorsJson e
+// benefitConversionFormulasJson guardam mapas por RoiInitiativeType/
+// RoiBenefitType como JSON (sempre JSON.stringify ao escrever — mesma regra
+// de NotificationLog.metadata); defaultBenefitValidatorIds são FKs soltas
+// para User (sem @relation, para não multiplicar back-relations em User —
+// mesmo padrão de Benchmark.kpiDefinitionId).
+model RoiConfig {
+  id       Int    @id @default(1)
+  currency String @default("AOA")
+
+  discountRatePercent Float?
+
+  defaultIsolationFactorsJson String? @db.Text
+
+  level45CostThreshold Float?
+
+  defaultMeasurementPeriods Int[] @default([30, 60, 90, 180])
+
+  defaultBenefitValidatorIds Int[] @default([])
+
+  benefitConversionFormulasJson String? @db.Text
+
+  financialAccessRoles String[] @default(["ADMIN", "RH", "DIRECTOR"])
+  operationalOnlyRoles String[] @default(["GESTOR", "LIDER"])
+
+  alertNoMeasurementDays       Int?
+  alertRoiBelowExpectedPercent Float?
+
+  updatedById Int?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
 // ══════════════════════════════════════════════════════════════════
 // AI & AVATAR
 // ══════════════════════════════════════════════════════════════════

@@ -21,6 +21,8 @@ import { BenchmarkService } from './benchmark.service';
 import { BenchmarkController } from './benchmark.controller';
 import { RoiReportsService } from './roi-reports.service';
 import { RoiReportsController } from './roi-reports.controller';
+import { RoiConfigService } from './roi-config.service';
+import { RoiConfigController } from './roi-config.controller';
 import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggregation.module';
 import { TrainingModule } from '../trainings/trainings.module';
 
@@ -37,6 +39,7 @@ import { TrainingModule } from '../trainings/trainings.module';
     ScenarioService,
     BenchmarkService,
     RoiReportsService,
+    RoiConfigService,
   ],
   controllers: [
     RoiImpactController,
@@ -49,6 +52,7 @@ import { TrainingModule } from '../trainings/trainings.module';
     ScenarioController,
     BenchmarkController,
     RoiReportsController,
+    RoiConfigController,
   ],
   exports: [
     RoiImpactService,
@@ -61,6 +65,7 @@ import { TrainingModule } from '../trainings/trainings.module';
     ScenarioService,
     BenchmarkService,
     RoiReportsService,
+    RoiConfigService,
   ],
 })
 export class RoiImpactModule {}

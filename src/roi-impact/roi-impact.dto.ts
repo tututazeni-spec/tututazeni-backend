@@ -8,6 +8,7 @@ import {
   IsBoolean,
   IsEnum,
   IsArray,
+  IsObject,
   ValidateNested,
   MaxLength,
   Min,
@@ -585,4 +586,60 @@ export class TopInitiativesReportFilterDto extends RoiReportFilterDto {
   @Min(1)
   @Type(() => Number)
   limit?: number;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CONFIGURAÇÕES (docs/roi-impact.md §11)
+// ─────────────────────────────────────────────────────────────────
+
+export class UpdateRoiConfigDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(10) currency?: string;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() discountRatePercent?: number;
+
+  // Record<RoiInitiativeType, number 0-1> — serializado com JSON.stringify
+  // pelo serviço antes de escrever em defaultIsolationFactorsJson.
+  @ApiPropertyOptional() @IsOptional() @IsObject() defaultIsolationFactors?: Record<string, number>;
+
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) level45CostThreshold?: number;
+
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Type(() => Number)
+  defaultMeasurementPeriods?: number[];
+
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Type(() => Number)
+  defaultBenefitValidatorIds?: number[];
+
+  // Record<RoiBenefitType, string> — serializado com JSON.stringify pelo
+  // serviço antes de escrever em benefitConversionFormulasJson.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsObject()
+  benefitConversionFormulas?: Record<string, string>;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  financialAccessRoles?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  operationalOnlyRoles?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  alertNoMeasurementDays?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() alertRoiBelowExpectedPercent?: number;
 }
