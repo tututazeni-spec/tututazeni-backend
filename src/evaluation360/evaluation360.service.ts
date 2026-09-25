@@ -43,6 +43,8 @@ import {
   SendRemindersDto,
   Evaluation360PaginationDto,
   ListEvaluationCyclesDto,
+  ListCycleParticipantsDto,
+  ListCycleEvaluatorsDto,
   EvaluatorRole,
   Eval360CycleStatus,
   AnonymityMode,
@@ -499,9 +501,7 @@ export class Evaluation360Service {
   // deletedById no schema) para fullName — usado por listCycles/getOverview
   // para mostrar "Criado por" e "Últimas avaliações realizadas".
   private async resolveActorNames(actorIds: string[]): Promise<Map<string, string>> {
-    const numericIds = [
-      ...new Set(actorIds.map(id => Number(id)).filter(id => !Number.isNaN(id))),
-    ];
+    const numericIds = [...new Set(actorIds.map(id => Number(id)).filter(id => !Number.isNaN(id)))];
     if (!numericIds.length) return new Map();
     const users = await this.prisma.user.findMany({
       where: { id: { in: numericIds } },
@@ -785,6 +785,230 @@ export class Evaluation360Service {
     };
   }
 
+  // Separador "Avaliados" (docs/evaluation360.md §4) — tabela de gestão dos
+  // participantes de um ciclo, distinta de listMyAssignments (que é "quem eu
+  // avalio") e getParticipantProgress (só a % de um participante). ADMIN/RH/
+  // DIRECTOR vêem todo o ciclo; GESTOR/LIDER só a sua equipa directa
+  // (managerId = actor), mesmo âmbito usado em assignEvaluators/
+  // approveEvaluators. "Resultado final" só é devolvido a ADMIN/RH — decisão
+  // explícita desta sessão: a regra "ninguém vê o resultado de outro"
+  // (getParticipantResult) protege o colaborador de colegas/gestores, não de
+  // quem administra o módulo; a identidade de avaliador individual por
+  // resposta continua sempre oculta (isso não mudou).
+  async listCycleParticipants(
+    cycleId: string,
+    query: ListCycleParticipantsDto,
+    user: CurrentUserData,
+  ) {
+    await this.findCycleOrFail(cycleId);
+    const fullAccess = isPrivileged(user, [Role.ADMIN, Role.RH, Role.DIRECTOR]);
+    const canSeeScore = isPrivileged(user, [Role.ADMIN, Role.RH]);
+
+    const where: Prisma.CycleParticipantWhereInput = { cycleId };
+    if (query.status) where.status = query.status;
+
+    const userWhere: Prisma.UserWhereInput = {};
+    if (query.departmentId) userWhere.departmentId = Number(query.departmentId);
+    if (!fullAccess) userWhere.managerId = user.id;
+    if (Object.keys(userWhere).length) {
+      const allowedUsers = await this.prisma.read.user.findMany({
+        where: userWhere,
+        select: { id: true },
+      });
+      where.userId = { in: allowedUsers.map(u => String(u.id)) };
+    }
+
+    const [participants, total] = await Promise.all([
+      this.prisma.read.cycleParticipant.findMany({
+        where,
+        skip: query.offset ?? 0,
+        take: query.limit ?? 20,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.read.cycleParticipant.count({ where }),
+    ]);
+
+    const userIds = participants.map(p => Number(p.userId));
+    const users = userIds.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: userIds } },
+          select: {
+            id: true,
+            fullName: true,
+            employeeNumber: true,
+            avatarUrl: true,
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+            unit: { select: { name: true } },
+            manager: { select: { fullName: true } },
+          },
+        })
+      : [];
+    const byId = new Map(users.map(u => [u.id, u]));
+
+    const [assignmentsByParticipant, responseCounts] = await Promise.all([
+      Promise.all(
+        participants.map(p =>
+          this.prisma.read.evaluatorAssignment.findMany({
+            where: { cycleId, evaluateeId: p.userId },
+            select: { status: true },
+          }),
+        ),
+      ),
+      Promise.all(
+        participants.map(p =>
+          this.prisma.read.evaluationResponse.count({
+            where: { cycleId, evaluateeId: p.userId, status: 'SUBMITTED' },
+          }),
+        ),
+      ),
+    ]);
+
+    return {
+      data: participants.map((p, i) => {
+        const u = byId.get(Number(p.userId));
+        const assignments = assignmentsByParticipant[i];
+        const confirmedEvaluators = assignments.filter(a => a.status !== 'PENDING').length;
+        return {
+          userId: p.userId,
+          fullName: u?.fullName ?? 'Colaborador',
+          employeeNumber: u?.employeeNumber ?? null,
+          position: u?.position?.name ?? null,
+          department: u?.department?.name ?? null,
+          unit: u?.unit?.name ?? null,
+          managerName: u?.manager?.fullName ?? null,
+          avatarUrl: u?.avatarUrl ?? null,
+          evaluatorsCount: assignments.length,
+          confirmedEvaluators,
+          responsesReceived: responseCounts[i],
+          progressPercent: assignments.length
+            ? Math.round((responseCounts[i] / assignments.length) * 100)
+            : 0,
+          status: p.status,
+          finalScore: canSeeScore ? p.finalScore : null,
+          completedAt: p.completedAt,
+        };
+      }),
+      total,
+    };
+  }
+
+  // "Ao abrir um colaborador" (docs/evaluation360.md §4): perfil, competências
+  // avaliadas, avaliadores atribuídos, progresso, resultados e comentários.
+  // Ownership igual a listCycleParticipants (equipa directa para GESTOR/LIDER);
+  // `result`/comparação entre perspectivas só sai preenchido para ADMIN/RH —
+  // mesma decisão desta sessão sobre visibilidade de resultado agregado.
+  // Nunca liga um comentário/resposta a um avaliador identificável — só ao
+  // papel (SELF/MANAGER/PEER/...), preservando a garantia de anonimato que
+  // getParticipantResult já aplica à vista pessoal.
+  async getParticipantDetailForAdmin(cycleId: string, userId: string, user: CurrentUserData) {
+    await this.findCycleOrFail(cycleId);
+    const participant = await this.prisma.read.cycleParticipant.findUnique({
+      where: { cycleId_userId: { cycleId, userId } },
+    });
+    if (!participant) throw new NotFoundException('Participante não encontrado neste ciclo.');
+
+    const fullAccess = isPrivileged(user, [Role.ADMIN, Role.RH, Role.DIRECTOR]);
+    if (!fullAccess) {
+      const isTeamMember = await this.prisma.read.user.count({
+        where: { id: Number(userId), managerId: user.id },
+      });
+      if (!isTeamMember) throw new NotFoundException('Avaliado não encontrado na sua equipa.');
+    }
+    const canSeeScore = isPrivileged(user, [Role.ADMIN, Role.RH]);
+
+    const [profileUser, assignments, progress, result] = await Promise.all([
+      this.prisma.read.user.findUnique({
+        where: { id: Number(userId) },
+        select: {
+          id: true,
+          fullName: true,
+          employeeNumber: true,
+          avatarUrl: true,
+          position: { select: { name: true } },
+          department: { select: { name: true } },
+          unit: { select: { name: true } },
+          manager: { select: { fullName: true } },
+        },
+      }),
+      this.prisma.read.evaluatorAssignment.findMany({ where: { cycleId, evaluateeId: userId } }),
+      this.getParticipantProgress(cycleId, userId),
+      this.prisma.read.evaluationResult.findUnique({
+        where: { cycleId_participantId: { cycleId, participantId: userId } },
+      }),
+    ]);
+
+    const evaluatorIds = [...new Set(assignments.map(a => Number(a.evaluatorId)))];
+    const evaluators = evaluatorIds.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: evaluatorIds } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const evaluatorById = new Map(evaluators.map(e => [e.id, e]));
+
+    // Comentários abertos (Eval360Question.type OPEN_TEXT) das respostas já
+    // submetidas para este avaliado — por papel do avaliador, nunca por
+    // identidade individual.
+    const comments = await this.prisma.read.evaluationAnswer.findMany({
+      where: {
+        textValue: { not: null },
+        response: { cycleId, evaluateeId: userId, status: 'SUBMITTED' },
+      },
+      select: {
+        textValue: true,
+        response: { select: { evaluatorRole: true } },
+        question: { select: { text: true } },
+      },
+    });
+
+    return {
+      profile: {
+        userId,
+        fullName: profileUser?.fullName ?? 'Colaborador',
+        employeeNumber: profileUser?.employeeNumber ?? null,
+        position: profileUser?.position?.name ?? null,
+        department: profileUser?.department?.name ?? null,
+        unit: profileUser?.unit?.name ?? null,
+        managerName: profileUser?.manager?.fullName ?? null,
+        avatarUrl: profileUser?.avatarUrl ?? null,
+      },
+      competencies: result ? JSON.parse(result.scoresByCompetency ?? '{}') : {},
+      evaluators: assignments.map(a => ({
+        id: a.id,
+        evaluatorId: a.evaluatorId,
+        evaluatorName: evaluatorById.get(Number(a.evaluatorId))?.fullName ?? 'Colaborador',
+        role: a.role,
+        status: a.status,
+        invitedAt: a.invitedAt,
+        completedAt: a.completedAt,
+      })),
+      progress,
+      status: participant.status,
+      // Comparação entre perspectivas (docs/evaluation360.md §4/§7): auto vs.
+      // gestor vs. pares vs. subordinados vs. global — só ADMIN/RH.
+      result:
+        result && canSeeScore
+          ? {
+              overallScore: result.overallScore,
+              weightedScore: result.weightedScore,
+              selfScore: result.selfScore,
+              managerScore: result.managerScore,
+              peerScore: result.peerScore,
+              subordinateScore: result.subordinateScore,
+              externalScore: result.externalScore,
+              gaps: result.gaps ? JSON.parse(result.gaps) : [],
+              strengths: result.strengths ? JSON.parse(result.strengths) : [],
+            }
+          : null,
+      comments: comments.map(c => ({
+        text: c.textValue,
+        evaluatorRole: c.response.evaluatorRole,
+        question: c.question.text,
+      })),
+    };
+  }
+
   // ============================================================
   // MOTOR DE AVALIADORES
   // ============================================================
@@ -956,6 +1180,110 @@ export class Evaluation360Service {
       if (assign) this.events.emit('evaluation.invitation.send', { assignment: assign });
     }
     return { approved: updated.count };
+  }
+
+  // Separador "Avaliadores" (docs/evaluation360.md §5) — tabela de gestão das
+  // atribuições de um ciclo, uma linha por EvaluatorAssignment (avaliador +
+  // avaliado). Mesmo âmbito de acesso de listCycleParticipants: ADMIN/RH/
+  // DIRECTOR vêem tudo, GESTOR/LIDER só atribuições cujo avaliado é da sua
+  // equipa directa. "Relação com o avaliado" e "Tipo de avaliador" pedidos
+  // como colunas separadas no documento mapeiam para o mesmo campo `role` —
+  // o schema não guarda um segundo campo distinto (o `reason` textual usado
+  // em buildEvaluatorSuggestions é só efémero, nunca persistido); cabe ao
+  // frontend apresentar os dois rótulos a partir do mesmo valor.
+  async listCycleEvaluators(cycleId: string, query: ListCycleEvaluatorsDto, user: CurrentUserData) {
+    await this.findCycleOrFail(cycleId);
+    const fullAccess = isPrivileged(user, [Role.ADMIN, Role.RH, Role.DIRECTOR]);
+
+    const where: Prisma.EvaluatorAssignmentWhereInput = { cycleId };
+    if (query.status) where.status = query.status;
+    if (query.role) where.role = query.role;
+    if (query.evaluateeId) where.evaluateeId = query.evaluateeId;
+
+    if (!fullAccess) {
+      const teamMembers = await this.prisma.read.user.findMany({
+        where: { managerId: user.id },
+        select: { id: true },
+      });
+      const teamIds = teamMembers.map(u => String(u.id));
+      where.evaluateeId = query.evaluateeId
+        ? teamIds.includes(query.evaluateeId)
+          ? query.evaluateeId
+          : '__none__'
+        : { in: teamIds };
+    }
+
+    const [assignments, total] = await Promise.all([
+      this.prisma.read.evaluatorAssignment.findMany({
+        where,
+        skip: query.offset ?? 0,
+        take: query.limit ?? 20,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.read.evaluatorAssignment.count({ where }),
+    ]);
+
+    const userIds = [
+      ...new Set([
+        ...assignments.map(a => Number(a.evaluatorId)),
+        ...assignments.map(a => Number(a.evaluateeId)),
+      ]),
+    ];
+    const users = userIds.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: userIds } },
+          select: {
+            id: true,
+            fullName: true,
+            position: { select: { name: true } },
+            department: { select: { name: true } },
+          },
+        })
+      : [];
+    const byId = new Map(users.map(u => [u.id, u]));
+
+    // Progresso do avaliador: quantas das SUAS atribuições neste ciclo
+    // (não só a desta linha) já estão concluídas — pedido explicitamente
+    // como coluna "Progresso" em docs/evaluation360.md §5.
+    const evaluatorIds = [...new Set(assignments.map(a => a.evaluatorId))];
+    const allAssignmentsByEvaluator = evaluatorIds.length
+      ? await this.prisma.read.evaluatorAssignment.findMany({
+          where: { cycleId, evaluatorId: { in: evaluatorIds } },
+          select: { evaluatorId: true, status: true },
+        })
+      : [];
+    const progressByEvaluator = new Map<string, { total: number; completed: number }>();
+    for (const a of allAssignmentsByEvaluator) {
+      const entry = progressByEvaluator.get(a.evaluatorId) ?? { total: 0, completed: 0 };
+      entry.total++;
+      if (a.status === 'COMPLETED') entry.completed++;
+      progressByEvaluator.set(a.evaluatorId, entry);
+    }
+
+    return {
+      data: assignments.map(a => {
+        const evaluator = byId.get(Number(a.evaluatorId));
+        const evaluatee = byId.get(Number(a.evaluateeId));
+        const progress = progressByEvaluator.get(a.evaluatorId) ?? { total: 0, completed: 0 };
+        return {
+          id: a.id,
+          evaluatorId: a.evaluatorId,
+          evaluatorName: evaluator?.fullName ?? 'Colaborador',
+          position: evaluator?.position?.name ?? null,
+          department: evaluator?.department?.name ?? null,
+          role: a.role,
+          evaluateeId: a.evaluateeId,
+          evaluateeName: evaluatee?.fullName ?? 'Colaborador',
+          invitedAt: a.invitedAt,
+          respondedAt: a.completedAt,
+          status: a.status,
+          progressPercent: progress.total
+            ? Math.round((progress.completed / progress.total) * 100)
+            : 0,
+        };
+      }),
+      total,
+    };
   }
 
   // ============================================================

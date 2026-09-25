@@ -30,6 +30,8 @@ import {
   EvaluatorRole,
   Eval360QuestionType,
   Eval360FeedbackType,
+  CycleParticipantStatus,
+  EvaluatorAssignmentStatus,
 } from '@prisma/client';
 
 // ─── ENUMS ───────────────────────────────────────────────────
@@ -42,6 +44,8 @@ export {
   EvaluatorRole,
   Eval360QuestionType,
   Eval360FeedbackType,
+  CycleParticipantStatus,
+  EvaluatorAssignmentStatus,
 };
 
 // ─── COMPETENCY ──────────────────────────────────────────────
@@ -314,8 +318,10 @@ export class ListEvaluationCyclesDto extends Evaluation360PaginationDto {
   @IsOptional()
   @IsEnum(Eval360CycleStatus)
   status?: Eval360CycleStatus;
-  @ApiPropertyOptional({ enum: Eval360CycleType }) @IsOptional() @IsEnum(Eval360CycleType) type?:
-    Eval360CycleType;
+  @ApiPropertyOptional({ enum: Eval360CycleType })
+  @IsOptional()
+  @IsEnum(Eval360CycleType)
+  type?: Eval360CycleType;
   // Departamento/Unidade/Cargo: filtram ciclos com pelo menos um avaliado
   // (CycleParticipant) cujo User pertença a essa entidade — não são campos
   // do próprio Eval360Cycle.
@@ -326,4 +332,33 @@ export class ListEvaluationCyclesDto extends Evaluation360PaginationDto {
   @ApiPropertyOptional() @IsOptional() @IsString() createdBy?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+}
+
+// ─── LISTAGEM DE AVALIADOS (aba "Avaliados") ───────────────────
+// docs/evaluation360.md §4 — não lista filtros explícitos; Estado e
+// Departamento são os únicos dois que fazem sentido sobre CycleParticipant
+// (as restantes colunas do §4 — cargo, unidade, gestor — vêm do User
+// relacionado, sem filtro pedido para eles).
+export class ListCycleParticipantsDto extends Evaluation360PaginationDto {
+  @ApiPropertyOptional({ enum: CycleParticipantStatus })
+  @IsOptional()
+  @IsEnum(CycleParticipantStatus)
+  status?: CycleParticipantStatus;
+  @ApiPropertyOptional() @IsOptional() @IsString() departmentId?: string;
+}
+
+// ─── LISTAGEM DE AVALIADORES (aba "Avaliadores") ───────────────
+// docs/evaluation360.md §5 — idem, sem filtros explícitos no documento;
+// Estado, Tipo de avaliador e Avaliado são os campos com sentido de filtro
+// directo sobre EvaluatorAssignment.
+export class ListCycleEvaluatorsDto extends Evaluation360PaginationDto {
+  @ApiPropertyOptional({ enum: EvaluatorAssignmentStatus })
+  @IsOptional()
+  @IsEnum(EvaluatorAssignmentStatus)
+  status?: EvaluatorAssignmentStatus;
+  @ApiPropertyOptional({ enum: EvaluatorRole })
+  @IsOptional()
+  @IsEnum(EvaluatorRole)
+  role?: EvaluatorRole;
+  @ApiPropertyOptional() @IsOptional() @IsString() evaluateeId?: string;
 }

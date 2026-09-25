@@ -41,6 +41,8 @@ import {
   SendRemindersDto,
   Evaluation360PaginationDto,
   ListEvaluationCyclesDto,
+  ListCycleParticipantsDto,
+  ListCycleEvaluatorsDto,
 } from './evaluation360.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -155,10 +157,7 @@ export class Evaluation360Controller {
       'nº de avaliados/avaliadores, taxa de participação, criado por)',
   })
   @ApiQuery({ name: 'tenantId', required: true })
-  async listCycles(
-    @Query('tenantId') tenantId: string,
-    @Query() query: ListEvaluationCyclesDto,
-  ) {
+  async listCycles(@Query('tenantId') tenantId: string, @Query() query: ListEvaluationCyclesDto) {
     return this.service.listCycles(tenantId, query);
   }
 
@@ -299,9 +298,45 @@ export class Evaluation360Controller {
     return this.service.getParticipantProgress(cycleId, userId);
   }
 
+  @Get('cycles/:cycleId/participants')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({ summary: 'Listar avaliados do ciclo (docs/evaluation360.md §4)' })
+  async listParticipants(
+    @Param('cycleId') cycleId: string,
+    @Query() query: ListCycleParticipantsDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.listCycleParticipants(cycleId, query, user);
+  }
+
+  @Get('cycles/:cycleId/participants/:userId/detail')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({
+    summary:
+      'Detalhe de um avaliado: perfil, competências, avaliadores, progresso, resultados e comentários',
+  })
+  async getParticipantDetail(
+    @Param('cycleId') cycleId: string,
+    @Param('userId') userId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.getParticipantDetailForAdmin(cycleId, userId, user);
+  }
+
   // ============================================================
   // AVALIADORES
   // ============================================================
+
+  @Get('cycles/:cycleId/evaluators')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({ summary: 'Listar avaliadores do ciclo (docs/evaluation360.md §5)' })
+  async listEvaluators(
+    @Param('cycleId') cycleId: string,
+    @Query() query: ListCycleEvaluatorsDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.listCycleEvaluators(cycleId, query, user);
+  }
 
   @Post('cycles/:id/evaluators/suggest')
   @Roles(...EVAL_CREATOR_ROLES)
