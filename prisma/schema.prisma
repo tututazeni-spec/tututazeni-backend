@@ -1013,6 +1013,8 @@ model User {
   impactRecords       ImpactRecord[]       @relation("ImpactRecordSubject")
   createdImpactRecords ImpactRecord[]      @relation("ImpactRecordCreatedBy")
   createdRoiEvaluationModels RoiEvaluationModel[]
+  createdCostEntries        CostEntry[]
+  createdKpiDefinitions     KpiDefinition[]
 
   @@index([accountStatus])
   @@index([departmentId])
@@ -7699,6 +7701,126 @@ model RoiEvaluationModel {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([status])
+}
+
+// docs/roi-impact.md §5 — Custos & Investimento. Consolida o custo real de
+// cada iniciativa (mesma FK solta initiativeType/initiativeId de
+// RoiAnalysis) sem duplicar Payroll/Trainings — CostEntry regista apenas
+// linhas de custo introduzidas manualmente pelo RH (ou o resultado pontual
+// de um cálculo de apoio, ex. "custo de horas perdidas" a partir do
+// salário/hora de Payroll) e o próprio valor de origem de Payroll/Trainings
+// nunca é copiado para aqui, só lido em runtime — ver
+// CostEntryService#estimateLaborCost / #getConsolidation.
+enum CostSubCategory {
+  // Custos diretos
+  FORMADOR_CONSULTOR
+  MATERIAL_DIDATICO
+  PLATAFORMA_LICENCAS
+  SALA_LOGISTICA
+  DESLOCACAO_ALOJAMENTO
+  CERTIFICACAO
+  // Custos indiretos
+  HORAS_TRABALHO_PERDIDAS
+  SUBSTITUICAO_COBERTURA
+  COORDENACAO_GESTAO_RH
+  // Custos de oportunidade
+  PRODUCAO_NAO_REALIZADA
+  ATRASO_PROJETOS
+}
+
+enum CostCategory {
+  DIRETO
+  INDIRETO
+  OPORTUNIDADE
+}
+
+model CostEntry {
+  id             Int               @id @default(autoincrement())
+  initiativeType RoiInitiativeType
+  initiativeId   Int?
+
+  // `category` é sempre derivado de `subCategory` (CostEntryService.CATEGORY_BY_SUBCATEGORY)
+  // no momento da criação — nunca aceite directamente do cliente — para as
+  // duas colunas nunca divergirem uma da outra.
+  category    CostCategory
+  subCategory CostSubCategory
+
+  description String?
+  amount      Float
+  // Preenchido quando o valor vem de um cálculo de apoio sobre dados de
+  // outro módulo (ex. "Payroll — salário/hora × horas de formação"), em vez
+  // de introduzido manualmente — nunca um valor copiado do módulo de
+  // origem, só uma nota da proveniência.
+  source      String?
+  incurredAt  DateTime?
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([initiativeType, initiativeId])
+  @@index([category])
+  @@index([subCategory])
+}
+
+// docs/roi-impact.md §6 — Indicadores & KPIs. Biblioteca central de KPIs que
+// o RH pode associar a qualquer iniciativa — puramente uma definição
+// (nome/fórmula/fonte/meta); a recolha real do valor não é modelada aqui
+// (fica para ImpactRecord.indicatorName quando o KPI é usado numa análise
+// concreta), à semelhança de RoiEvaluationModel ser só a metodologia, não a
+// medição em si.
+enum KpiCategory {
+  PRODUTIVIDADE
+  QUALIDADE
+  PESSOAS
+  FINANCEIRO
+  CLIENTE
+  SEGURANCA
+  COMPLIANCE
+}
+
+enum KpiFrequency {
+  DIARIA
+  SEMANAL
+  MENSAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+}
+
+// Nome distinto de "KpiStatus" (já existente para ExecutiveReport, com
+// valores diferentes: GREEN/YELLOW/RED — semáforo de um KPI medido, não o
+// ciclo de vida da própria definição na biblioteca).
+enum KpiDefinitionStatus {
+  ACTIVO
+  INACTIVO
+}
+
+model KpiDefinition {
+  id          Int         @id @default(autoincrement())
+  name        String
+  code        String      @unique
+  category    KpiCategory
+  description String?
+  unit        String
+  formula     String?
+  dataSource  String?
+  frequency   KpiFrequency
+  targetValue Float?
+  benchmarkNote String?
+  // FK solta para User (padrão PayslipAccessLog.userId/RoiAnalysis.responsibleId)
+  // — sem @relation para não multiplicar back-relations em User.
+  responsibleId Int?
+  status      KpiDefinitionStatus   @default(ACTIVO)
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
   @@index([status])
 }
 

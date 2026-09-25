@@ -2342,6 +2342,49 @@ const RoiModelStatus = {
   INACTIVO: 'INACTIVO',
 };
 
+// docs/roi-impact.md §5 — "Custos & Investimento"
+const CostSubCategory = {
+  FORMADOR_CONSULTOR: 'FORMADOR_CONSULTOR',
+  MATERIAL_DIDATICO: 'MATERIAL_DIDATICO',
+  PLATAFORMA_LICENCAS: 'PLATAFORMA_LICENCAS',
+  SALA_LOGISTICA: 'SALA_LOGISTICA',
+  DESLOCACAO_ALOJAMENTO: 'DESLOCACAO_ALOJAMENTO',
+  CERTIFICACAO: 'CERTIFICACAO',
+  HORAS_TRABALHO_PERDIDAS: 'HORAS_TRABALHO_PERDIDAS',
+  SUBSTITUICAO_COBERTURA: 'SUBSTITUICAO_COBERTURA',
+  COORDENACAO_GESTAO_RH: 'COORDENACAO_GESTAO_RH',
+  PRODUCAO_NAO_REALIZADA: 'PRODUCAO_NAO_REALIZADA',
+  ATRASO_PROJETOS: 'ATRASO_PROJETOS',
+};
+const CostCategory = {
+  DIRETO: 'DIRETO',
+  INDIRETO: 'INDIRETO',
+  OPORTUNIDADE: 'OPORTUNIDADE',
+};
+
+// docs/roi-impact.md §6 — "Indicadores & KPIs"
+const KpiCategory = {
+  PRODUTIVIDADE: 'PRODUTIVIDADE',
+  QUALIDADE: 'QUALIDADE',
+  PESSOAS: 'PESSOAS',
+  FINANCEIRO: 'FINANCEIRO',
+  CLIENTE: 'CLIENTE',
+  SEGURANCA: 'SEGURANCA',
+  COMPLIANCE: 'COMPLIANCE',
+};
+const KpiFrequency = {
+  DIARIA: 'DIARIA',
+  SEMANAL: 'SEMANAL',
+  MENSAL: 'MENSAL',
+  TRIMESTRAL: 'TRIMESTRAL',
+  SEMESTRAL: 'SEMESTRAL',
+  ANUAL: 'ANUAL',
+};
+const KpiDefinitionStatus = {
+  ACTIVO: 'ACTIVO',
+  INACTIVO: 'INACTIVO',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -2380,6 +2423,11 @@ module.exports = {
   ImpactSubjectType,
   ImpactCategory,
   RoiModelStatus,
+  CostSubCategory,
+  CostCategory,
+  KpiCategory,
+  KpiFrequency,
+  KpiDefinitionStatus,
   LeadershipContentType,
   LeadershipMethodologyType,
   LeadershipAdvisorRole,

@@ -22,6 +22,11 @@ import {
   ImpactSubjectType,
   ImpactCategory,
   RoiModelStatus,
+  CostCategory,
+  CostSubCategory,
+  KpiCategory,
+  KpiFrequency,
+  KpiDefinitionStatus,
 } from '@prisma/client';
 
 export {
@@ -31,6 +36,11 @@ export {
   ImpactSubjectType,
   ImpactCategory,
   RoiModelStatus,
+  CostCategory,
+  CostSubCategory,
+  KpiCategory,
+  KpiFrequency,
+  KpiDefinitionStatus,
 };
 
 export enum RoiConfidence {
@@ -312,4 +322,111 @@ export class UpdateRoiEvaluationModelDto {
   @IsOptional()
   @IsEnum(RoiModelStatus)
   status?: RoiModelStatus;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CUSTOS & INVESTIMENTO (docs/roi-impact.md §5)
+// ─────────────────────────────────────────────────────────────────
+
+export class CostEntryFilterDto {
+  @ApiPropertyOptional({ enum: RoiInitiativeType })
+  @IsOptional()
+  @IsEnum(RoiInitiativeType)
+  initiativeType?: RoiInitiativeType;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) initiativeId?: number;
+  @ApiPropertyOptional({ enum: CostCategory })
+  @IsOptional()
+  @IsEnum(CostCategory)
+  category?: CostCategory;
+  @ApiPropertyOptional({ enum: CostSubCategory })
+  @IsOptional()
+  @IsEnum(CostSubCategory)
+  subCategory?: CostSubCategory;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+}
+
+export class CreateCostEntryDto {
+  @ApiProperty({ enum: RoiInitiativeType })
+  @IsEnum(RoiInitiativeType)
+  initiativeType!: RoiInitiativeType;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) initiativeId?: number;
+  @ApiProperty({ enum: CostSubCategory })
+  @IsEnum(CostSubCategory)
+  subCategory!: CostSubCategory;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) description?: string;
+  @ApiProperty() @IsNumber() @Min(0) amount!: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) source?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() incurredAt?: string;
+}
+
+export class UpdateCostEntryDto {
+  @ApiPropertyOptional({ enum: CostSubCategory })
+  @IsOptional()
+  @IsEnum(CostSubCategory)
+  subCategory?: CostSubCategory;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) description?: string;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) amount?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) source?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() incurredAt?: string;
+}
+
+// "Custo de horas perdidas" (Fontes → Payroll) — estimativa de apoio, nunca
+// persistida directamente: devolve um valor sugerido que o RH confirma e
+// submete como CreateCostEntryDto(subCategory: HORAS_TRABALHO_PERDIDAS).
+export class EstimateLaborCostDto {
+  @ApiProperty({ type: [Number] }) @IsArray() @Type(() => Number) userIds!: number[];
+  @ApiProperty() @IsNumber() @Min(0) hours!: number;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// INDICADORES & KPIS (docs/roi-impact.md §6)
+// ─────────────────────────────────────────────────────────────────
+
+export class KpiDefinitionFilterDto {
+  @ApiPropertyOptional({ enum: KpiCategory })
+  @IsOptional()
+  @IsEnum(KpiCategory)
+  category?: KpiCategory;
+  @ApiPropertyOptional({ enum: KpiDefinitionStatus })
+  @IsOptional()
+  @IsEnum(KpiDefinitionStatus)
+  status?: KpiDefinitionStatus;
+}
+
+export class CreateKpiDefinitionDto {
+  @ApiProperty() @IsString() @MaxLength(150) name!: string;
+  @ApiProperty() @IsString() @MaxLength(40) code!: string;
+  @ApiProperty({ enum: KpiCategory }) @IsEnum(KpiCategory) category!: KpiCategory;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) description?: string;
+  @ApiProperty() @IsString() @MaxLength(60) unit!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) formula?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) dataSource?: string;
+  @ApiProperty({ enum: KpiFrequency }) @IsEnum(KpiFrequency) frequency!: KpiFrequency;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() targetValue?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) benchmarkNote?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) responsibleId?: number;
+}
+
+export class UpdateKpiDefinitionDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(150) name?: string;
+  @ApiPropertyOptional({ enum: KpiCategory })
+  @IsOptional()
+  @IsEnum(KpiCategory)
+  category?: KpiCategory;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) description?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) unit?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) formula?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) dataSource?: string;
+  @ApiPropertyOptional({ enum: KpiFrequency })
+  @IsOptional()
+  @IsEnum(KpiFrequency)
+  frequency?: KpiFrequency;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() targetValue?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) benchmarkNote?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) responsibleId?: number;
+  @ApiPropertyOptional({ enum: KpiDefinitionStatus })
+  @IsOptional()
+  @IsEnum(KpiDefinitionStatus)
+  status?: KpiDefinitionStatus;
 }
