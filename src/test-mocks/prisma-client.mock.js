@@ -2285,6 +2285,36 @@ const CourseCohortStatus = {
   CANCELLED: 'CANCELLED',
 };
 
+// docs/roi-impact.md §2 — "ROI da Formação"
+const RoiInitiativeType = {
+  CURSO: 'CURSO',
+  FORMACAO: 'FORMACAO',
+  PERCURSO: 'PERCURSO',
+  PDI: 'PDI',
+  MENTORIA: 'MENTORIA',
+  EVENTO: 'EVENTO',
+};
+const RoiAnalysisStatus = {
+  EM_PREPARACAO: 'EM_PREPARACAO',
+  EM_MEDICAO: 'EM_MEDICAO',
+  DADOS_INSUFICIENTES: 'DADOS_INSUFICIENTES',
+  CALCULADO: 'CALCULADO',
+  VALIDADO: 'VALIDADO',
+  REVISTO: 'REVISTO',
+  ARQUIVADO: 'ARQUIVADO',
+};
+const RoiBenefitType = {
+  PRODUTIVIDADE: 'PRODUTIVIDADE',
+  QUALIDADE: 'QUALIDADE',
+  REDUCAO_ERROS: 'REDUCAO_ERROS',
+  REDUCAO_ROTATIVIDADE: 'REDUCAO_ROTATIVIDADE',
+  REDUCAO_ACIDENTES: 'REDUCAO_ACIDENTES',
+  AUMENTO_VENDAS: 'AUMENTO_VENDAS',
+  REDUCAO_TEMPO_CICLO: 'REDUCAO_TEMPO_CICLO',
+  SATISFACAO_CLIENTE: 'SATISFACAO_CLIENTE',
+  OUTRO: 'OUTRO',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -2317,6 +2347,9 @@ module.exports = {
   LeadershipTargetingScope,
   LeadershipCriterionSource,
   LeadershipObjectiveType,
+  RoiInitiativeType,
+  RoiAnalysisStatus,
+  RoiBenefitType,
   LeadershipContentType,
   LeadershipMethodologyType,
   LeadershipAdvisorRole,

@@ -1008,6 +1008,9 @@ model User {
   passwordResetTokens PasswordResetToken[]
   refreshTokens       RefreshToken[]
 
+  // ─── ROI & Impact ─────────────────────────────────────────────
+  createdRoiAnalyses RoiAnalysis[]
+
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -1214,6 +1217,7 @@ model Department {
   leadershipTargetings LeadershipProgramTargeting[]
   libraryItems         LibraryItem[]
   events               Event[]
+  roiAnalyses          RoiAnalysis[]
 
   @@index([active])
   @@index([parentId])
@@ -7485,6 +7489,109 @@ model TrainingImpact {
   impactRate   Float
   calculatedAt DateTime @default(now())
   course       Course   @relation(fields: [courseId], references: [id])
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ROI & IMPACT (docs/roi-impact.md)
+// ══════════════════════════════════════════════════════════════════
+// Módulo transversal — lê Trainings/Courses/Evaluation/Competencies/
+// Development Plans/Payroll/Departments/Processes sem duplicar os dados de
+// origem. `initiativeType` + `initiativeId` seguem o mesmo padrão "FK solta"
+// de AuditLog.entity/entityId: a iniciativa continua a viver na sua própria
+// tabela (Course/Training/LearningPath/LegacyPdi/Mentoring/Event), aqui só
+// se guarda a referência, nunca uma cópia dos seus dados.
+
+enum RoiInitiativeType {
+  CURSO
+  FORMACAO
+  PERCURSO
+  PDI
+  MENTORIA
+  EVENTO
+}
+
+enum RoiAnalysisStatus {
+  EM_PREPARACAO
+  EM_MEDICAO
+  DADOS_INSUFICIENTES
+  CALCULADO
+  VALIDADO
+  REVISTO
+  ARQUIVADO
+}
+
+enum RoiBenefitType {
+  PRODUTIVIDADE
+  QUALIDADE
+  REDUCAO_ERROS
+  REDUCAO_ROTATIVIDADE
+  REDUCAO_ACIDENTES
+  AUMENTO_VENDAS
+  REDUCAO_TEMPO_CICLO
+  SATISFACAO_CLIENTE
+  OUTRO
+}
+
+model RoiAnalysis {
+  id             Int               @id @default(autoincrement())
+  name           String
+  initiativeType RoiInitiativeType
+  // FK solta para Course/Training/LearningPath/LegacyPdi/Mentoring/Event,
+  // conforme initiativeType — resolvida em runtime, nunca copiada.
+  initiativeId   Int?
+  departmentId   Int?
+  department     Department?       @relation(fields: [departmentId], references: [id])
+  unit           String?
+  // "Responsável" da análise — FK solta para User, sem @relation (padrão
+  // PayslipAccessLog.userId) para não multiplicar back-relations em User.
+  responsibleId  Int?
+
+  referencePeriodStart  DateTime?
+  referencePeriodEnd    DateTime?
+  measurementPeriodDays Int?
+
+  // Etapa 2 — Custos (consolidados manualmente nesta fase; a leitura
+  // automática de Payroll/Trainings fica para a secção 5, futura).
+  costDirect      Float?
+  costIndirect    Float?
+  costOpportunity Float?
+
+  // Etapa 3 — Benefícios esperados
+  benefitType           RoiBenefitType?
+  benefitIndicator      String?
+  benefitBaselineValue  Float?
+  benefitExpectedValue  Float?
+  benefitConversionNote String?
+  benefitValidatorId    Int?
+
+  // Etapa 4 — Metodologia (modelo de avaliação configurável fica para a
+  // secção 4, futura; aqui regista-se só o nome usado nesta análise)
+  evaluationModelUsed String?
+  isolationFactor     Float?
+  dataSource          String?
+  hasControlGroup     Boolean @default(false)
+  assumptions         String?
+
+  // Etapa 5 — Resultado
+  status          RoiAnalysisStatus @default(EM_PREPARACAO)
+  computedBenefit Float?
+  computedCost    Float?
+  roiPercent      Float?
+  bcr             Float?
+  paybackMonths   Float?
+  confidenceLevel String?
+  observations    String?
+  approvedById    Int?
+  approvedAt      DateTime?
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([initiativeType, initiativeId])
+  @@index([departmentId])
+  @@index([status])
 }
 
 // ══════════════════════════════════════════════════════════════════
