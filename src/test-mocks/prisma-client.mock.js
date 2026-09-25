@@ -2396,6 +2396,12 @@ const CorrelationType = {
   LIDERANCA_ENGAGEMENT_EQUIPA: 'LIDERANCA_ENGAGEMENT_EQUIPA',
 };
 
+// docs/roi-impact.md §9 — "Benchmarks"
+const BenchmarkType = {
+  INTERNO: 'INTERNO',
+  EXTERNO: 'EXTERNO',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -2440,6 +2446,7 @@ module.exports = {
   KpiFrequency,
   KpiDefinitionStatus,
   CorrelationType,
+  BenchmarkType,
   LeadershipContentType,
   LeadershipMethodologyType,
   LeadershipAdvisorRole,

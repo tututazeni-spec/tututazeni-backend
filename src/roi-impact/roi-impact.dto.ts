@@ -28,6 +28,7 @@ import {
   KpiFrequency,
   KpiDefinitionStatus,
   CorrelationType,
+  BenchmarkType,
 } from '@prisma/client';
 
 export {
@@ -43,6 +44,7 @@ export {
   KpiFrequency,
   KpiDefinitionStatus,
   CorrelationType,
+  BenchmarkType,
 };
 
 export enum RoiConfidence {
@@ -500,4 +502,87 @@ export class CompareScenariosDto {
   @IsInt({ each: true })
   @Type(() => Number)
   ids!: number[];
+}
+
+// ─────────────────────────────────────────────────────────────────
+// BENCHMARKS (docs/roi-impact.md §9)
+// ─────────────────────────────────────────────────────────────────
+
+export class BenchmarkFilterDto {
+  @ApiPropertyOptional({ enum: BenchmarkType })
+  @IsOptional()
+  @IsEnum(BenchmarkType)
+  type?: BenchmarkType;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) kpiDefinitionId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) referenceYear?: number;
+}
+
+export class BenchmarkComparisonFilterDto {
+  @ApiPropertyOptional({ enum: RoiInitiativeType })
+  @IsOptional()
+  @IsEnum(RoiInitiativeType)
+  initiativeType?: RoiInitiativeType;
+}
+
+export class CreateBenchmarkDto {
+  @ApiProperty() @IsString() @MaxLength(200) name!: string;
+  @ApiProperty({ enum: BenchmarkType }) @IsEnum(BenchmarkType) type!: BenchmarkType;
+  @ApiProperty() @IsString() @MaxLength(200) source!: string;
+  @ApiProperty() @IsInt() @Type(() => Number) referenceYear!: number;
+  @ApiProperty() @IsNumber() value!: number;
+  @ApiProperty() @IsString() @MaxLength(60) unit!: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) kpiDefinitionId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) indicatorName?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) observations?: string;
+}
+
+export class UpdateBenchmarkDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) name?: string;
+  @ApiPropertyOptional({ enum: BenchmarkType })
+  @IsOptional()
+  @IsEnum(BenchmarkType)
+  type?: BenchmarkType;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) source?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) referenceYear?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() value?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) unit?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) kpiDefinitionId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) indicatorName?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) observations?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// RELATÓRIOS (docs/roi-impact.md §10)
+// ─────────────────────────────────────────────────────────────────
+
+export class RoiReportFilterDto {
+  @ApiPropertyOptional() @IsOptional() @IsDateString() from?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() to?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) unit?: string;
+  @ApiPropertyOptional({ enum: RoiInitiativeType })
+  @IsOptional()
+  @IsEnum(RoiInitiativeType)
+  initiativeType?: RoiInitiativeType;
+  // Nome do modelo de avaliação usado na análise (RoiAnalysis.evaluationModelUsed
+  // é uma String livre, não uma FK — ver comentário no schema) — filtro por
+  // correspondência exacta ao valor registado pelo RH na Etapa 4 do wizard.
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(120) evaluationModelUsed?: string;
+  @ApiPropertyOptional({ enum: RoiAnalysisStatus })
+  @IsOptional()
+  @IsEnum(RoiAnalysisStatus)
+  status?: RoiAnalysisStatus;
+  // "Nível hierárquico" do spec — sem um enum formal no schema para isto, usa
+  // o roleCode do responsável pela análise (ex. "GESTOR", "DIRECTOR"), tal
+  // como o RH o conhece (ver CLAUDE.md — nunca usar `role` como string).
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) hierarchyLevel?: string;
+}
+
+export class TopInitiativesReportFilterDto extends RoiReportFilterDto {
+  @ApiPropertyOptional({ default: 10 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  limit?: number;
 }

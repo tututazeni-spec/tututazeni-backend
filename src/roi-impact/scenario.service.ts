@@ -122,7 +122,7 @@ export class ScenarioService {
       note = resolved.note;
 
       const built = this.buildProjections(estimatedCost, expectedBenefit);
-      projections = built.projections;
+      projections = built.projections as unknown as Prisma.InputJsonValue | null;
       roiPercent = built.roiPercent;
       paybackMonths = built.paybackMonths;
     }

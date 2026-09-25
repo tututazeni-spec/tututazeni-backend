@@ -1017,6 +1017,7 @@ model User {
   createdKpiDefinitions     KpiDefinition[]
   createdCorrelations       Correlation[]
   createdScenarios          Scenario[]
+  createdBenchmarks         Benchmark[]
 
   @@index([accountStatus])
   @@index([departmentId])
@@ -7933,6 +7934,45 @@ model Scenario {
   @@index([initiativeType])
   @@index([departmentId])
   @@index([basedOnAnalysisId])
+}
+
+// docs/roi-impact.md §9 — Benchmarks. Referências para contextualizar
+// resultados: `type` distingue INTERNO (meta/referência que o RH regista
+// explicitamente, ex. "meta interna do departamento X para 2026") de
+// EXTERNO (benchmark de mercado/sector, sempre com fonte registada, nunca
+// inventado). As comparações "entre departamentos/unidades/ciclos" e
+// "melhor/pior por tipo de iniciativa" do spec são computadas em runtime a
+// partir de RoiAnalysis (ver BenchmarkService#getInternalComparisons) —
+// nunca guardadas aqui, para nunca divergirem das análises reais.
+enum BenchmarkType {
+  INTERNO
+  EXTERNO
+}
+
+model Benchmark {
+  id            Int           @id @default(autoincrement())
+  name          String
+  type          BenchmarkType
+  source        String
+  referenceYear Int
+  value         Float
+  unit          String
+  // "Aplicável a" — FK solta para KpiDefinition (mesmo padrão de
+  // Scenario.basedOnAnalysisId, sem @relation, para não multiplicar
+  // back-relations em KpiDefinition); indicatorName cobre o indicador livre
+  // sem KPI formal correspondente na biblioteca.
+  kpiDefinitionId Int?
+  indicatorName   String?
+  observations    String?
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([kpiDefinitionId])
+  @@index([referenceYear])
 }
 
 // ══════════════════════════════════════════════════════════════════

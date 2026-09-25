@@ -263,4 +263,183 @@ describe('Roi Impact Integration', () => {
         .expect(400);
     });
   });
+
+  describe('Benchmarks (docs/roi-impact.md §9)', () => {
+    let benchmarkId: number;
+
+    it('cria um benchmark EXTERNO com fonte registada', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/roi-impact/benchmarks')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({
+          name: 'ROI médio do setor de formação — Angola',
+          type: 'EXTERNO',
+          source: 'Associação Angolana de RH (teste de integração)',
+          referenceYear: 2025,
+          value: 120,
+          unit: '%',
+          indicatorName: 'ROI médio anual',
+        })
+        .expect(201);
+      benchmarkId = res.body.id;
+      expect(res.body.type).toBe('EXTERNO');
+    });
+
+    it('lista e edita o benchmark criado', async () => {
+      const list = await request(app.getHttpServer())
+        .get('/roi-impact/benchmarks')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(list.body.benchmarks.some((b: any) => b.id === benchmarkId)).toBe(true);
+
+      const updated = await request(app.getHttpServer())
+        .patch(`/roi-impact/benchmarks/${benchmarkId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({ value: 125 })
+        .expect(200);
+      expect(updated.body.value).toBe(125);
+    });
+
+    it('internal-comparisons não rebenta sem análises de ROI', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/roi-impact/benchmarks/internal-comparisons')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(Array.isArray(res.body.byDepartment)).toBe(true);
+      expect(Array.isArray(res.body.bestWorstByType)).toBe(true);
+    });
+
+    it('sector-roi-comparison encontra o benchmark EXTERNO de ROI criado', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/roi-impact/benchmarks/sector-roi-comparison')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.externalBenchmarks.some((b: any) => b.id === benchmarkId)).toBe(true);
+    });
+
+    it('remove o benchmark', async () => {
+      await request(app.getHttpServer())
+        .delete(`/roi-impact/benchmarks/${benchmarkId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+    });
+
+    it('colaborador não acede aos benchmarks', async () => {
+      await request(app.getHttpServer())
+        .get('/roi-impact/benchmarks')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+  });
+
+  describe('Relatórios (docs/roi-impact.md §10)', () => {
+    it('roi-consolidated devolve estrutura sem 500', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/roi-impact/reports/roi-consolidated')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.totalAnalyses).toEqual(expect.any(Number));
+      expect(Array.isArray(res.body.byStatus)).toBe(true);
+    });
+
+    it('roi-by-dimension devolve as três dimensões', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/roi-impact/reports/roi-by-dimension')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(Array.isArray(res.body.byDepartment)).toBe(true);
+      expect(Array.isArray(res.body.byUnit)).toBe(true);
+      expect(Array.isArray(res.body.byInitiativeType)).toBe(true);
+    });
+
+    it('impact-by-indicator', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/roi-impact/reports/impact-by-indicator')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(Array.isArray(res.body.indicators)).toBe(true);
+    });
+
+    it('training-cost-vs-budget e budget-execution não rebentam sem planos de formação', async () => {
+      const res1 = await request(app.getHttpServer())
+        .get('/roi-impact/reports/training-cost-vs-budget')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(Array.isArray(res1.body.plans)).toBe(true);
+
+      const res2 = await request(app.getHttpServer())
+        .get('/roi-impact/reports/budget-execution')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(Array.isArray(res2.body.plans)).toBe(true);
+    });
+
+    it('top-initiatives respeita o limit', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/roi-impact/reports/top-initiatives')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .query({ limit: 3 })
+        .expect(200);
+      expect(res.body.top.length).toBeLessThanOrEqual(3);
+    });
+
+    it('insufficient-data e roi-evolution', async () => {
+      const res1 = await request(app.getHttpServer())
+        .get('/roi-impact/reports/insufficient-data')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(Array.isArray(res1.body.initiatives)).toBe(true);
+
+      const res2 = await request(app.getHttpServer())
+        .get('/roi-impact/reports/roi-evolution')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(Array.isArray(res2.body.years)).toBe(true);
+    });
+
+    it('onboarding-retention e leadership-engagement', async () => {
+      const res1 = await request(app.getHttpServer())
+        .get('/roi-impact/reports/onboarding-retention')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res1.body.completedCohort).toBeDefined();
+
+      const res2 = await request(app.getHttpServer())
+        .get('/roi-impact/reports/leadership-engagement')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(Array.isArray(res2.body.leaders)).toBe(true);
+    });
+
+    it('executive-summary reutiliza o dashboard executivo', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/roi-impact/reports/executive-summary')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.headline.overallRoi).toEqual(expect.any(Number));
+    });
+
+    it('export/pdf da síntese executiva devolve um PDF', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/roi-impact/reports/executive-summary/export/pdf')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.headers['content-type']).toContain('application/pdf');
+    });
+
+    it('export/xlsx de top-initiatives devolve um XLSX', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/roi-impact/reports/top-initiatives/export/xlsx')
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.headers['content-type']).toContain('spreadsheetml');
+    });
+
+    it('colaborador não acede aos relatórios', async () => {
+      await request(app.getHttpServer())
+        .get('/roi-impact/reports/roi-consolidated')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+  });
 });

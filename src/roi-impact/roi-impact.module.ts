@@ -17,10 +17,15 @@ import { CorrelationService } from './correlation.service';
 import { CorrelationController } from './correlation.controller';
 import { ScenarioService } from './scenario.service';
 import { ScenarioController } from './scenario.controller';
+import { BenchmarkService } from './benchmark.service';
+import { BenchmarkController } from './benchmark.controller';
+import { RoiReportsService } from './roi-reports.service';
+import { RoiReportsController } from './roi-reports.controller';
 import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggregation.module';
+import { TrainingModule } from '../trainings/trainings.module';
 
 @Module({
-  imports: [PrismaModule, MetricsAggregationModule],
+  imports: [PrismaModule, MetricsAggregationModule, TrainingModule],
   providers: [
     RoiImpactService,
     RoiAnalysisService,
@@ -30,6 +35,8 @@ import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggrega
     KpiDefinitionService,
     CorrelationService,
     ScenarioService,
+    BenchmarkService,
+    RoiReportsService,
   ],
   controllers: [
     RoiImpactController,
@@ -40,6 +47,8 @@ import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggrega
     KpiDefinitionController,
     CorrelationController,
     ScenarioController,
+    BenchmarkController,
+    RoiReportsController,
   ],
   exports: [
     RoiImpactService,
@@ -50,6 +59,8 @@ import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggrega
     KpiDefinitionService,
     CorrelationService,
     ScenarioService,
+    BenchmarkService,
+    RoiReportsService,
   ],
 })
 export class RoiImpactModule {}
