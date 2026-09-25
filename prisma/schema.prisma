@@ -1016,6 +1016,7 @@ model User {
   createdCostEntries        CostEntry[]
   createdKpiDefinitions     KpiDefinition[]
   createdCorrelations       Correlation[]
+  createdScenarios          Scenario[]
 
   @@index([accountStatus])
   @@index([departmentId])
@@ -1226,6 +1227,7 @@ model Department {
   roiAnalyses          RoiAnalysis[]
   impactRecords        ImpactRecord[]
   correlations         Correlation[]
+  scenarios            Scenario[]
 
   @@index([active])
   @@index([parentId])
@@ -7878,6 +7880,59 @@ model Correlation {
 
   @@index([type])
   @@index([departmentId])
+}
+
+// docs/roi-impact.md §8 — Cenários & Simulações. Simula o impacto financeiro
+// de uma iniciativa FUTURA ainda não executada — ao contrário de RoiAnalysis
+// (mede uma iniciativa real já decorrida), aqui não há dados de execução
+// para ler; o benefício esperado vem OU de uma RoiAnalysis semelhante já
+// medida (basedOnAnalysisId, mesma FK solta "nunca copiada" do resto do
+// módulo — resolvida em runtime via ScenarioService) OU de uma premissa
+// manual do RH (expectedBenefit). `projections` guarda os três casos do
+// spec (Otimista/Realista/Pessimista), sempre recalculados a partir de
+// estimatedCost/expectedBenefit — nunca editáveis directamente. `roiPercent`
+// e `paybackMonths` ao nível do registo replicam sempre o caso Realista, só
+// para ordenar/comparar cenários sem ter de ler o JSON.
+model Scenario {
+  id             Int               @id @default(autoincrement())
+  name           String
+  initiativeType RoiInitiativeType
+  description    String?
+
+  departmentId        Int?
+  department          Department? @relation(fields: [departmentId], references: [id])
+  targetAudienceCount Int?
+
+  estimatedCost Float
+
+  // Benefício esperado: `basedOnAnalysisId` referencia uma RoiAnalysis já
+  // CALCULADA/VALIDADA/REVISTA (FK solta, sem @relation — mesmo padrão de
+  // RoiAnalysis.responsibleId — para não multiplicar back-relations em
+  // RoiAnalysis); quando presente, `expectedBenefit` é sempre DERIVADO do
+  // BCR dessa análise × estimatedCost, nunca introduzido à mão em paralelo.
+  basedOnAnalysisId Int?
+  expectedBenefit   Float?
+  assumptions       String?
+
+  // Preenchido quando a análise de origem ainda não tem resultado calculado,
+  // ou quando não há premissa manual nem análise de referência — nunca
+  // escondido do RH (mesmo padrão de Correlation.note).
+  note String?
+
+  roiPercent    Float?
+  paybackMonths Float?
+
+  // {OTIMISTA: {cost, benefit, roiPercent, paybackMonths}, REALISTA: {...}, PESSIMISTA: {...}}
+  projections Json?
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([initiativeType])
+  @@index([departmentId])
+  @@index([basedOnAnalysisId])
 }
 
 // ══════════════════════════════════════════════════════════════════

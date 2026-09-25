@@ -15,6 +15,8 @@ import { KpiDefinitionService } from './kpi-definition.service';
 import { KpiDefinitionController } from './kpi-definition.controller';
 import { CorrelationService } from './correlation.service';
 import { CorrelationController } from './correlation.controller';
+import { ScenarioService } from './scenario.service';
+import { ScenarioController } from './scenario.controller';
 import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggregation.module';
 
 @Module({
@@ -27,6 +29,7 @@ import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggrega
     CostEntryService,
     KpiDefinitionService,
     CorrelationService,
+    ScenarioService,
   ],
   controllers: [
     RoiImpactController,
@@ -36,6 +39,7 @@ import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggrega
     CostEntryController,
     KpiDefinitionController,
     CorrelationController,
+    ScenarioController,
   ],
   exports: [
     RoiImpactService,
@@ -45,6 +49,7 @@ import { MetricsAggregationModule } from '../metrics-aggregation/metrics-aggrega
     CostEntryService,
     KpiDefinitionService,
     CorrelationService,
+    ScenarioService,
   ],
 })
 export class RoiImpactModule {}

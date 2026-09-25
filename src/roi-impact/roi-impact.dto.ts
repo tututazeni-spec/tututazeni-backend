@@ -451,3 +451,53 @@ export class CorrelationFilterDto {
   type?: CorrelationType;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
 }
+
+// ─────────────────────────────────────────────────────────────────
+// CENÁRIOS & SIMULAÇÕES (docs/roi-impact.md §8)
+// ─────────────────────────────────────────────────────────────────
+
+export class ScenarioFilterDto {
+  @ApiPropertyOptional({ enum: RoiInitiativeType })
+  @IsOptional()
+  @IsEnum(RoiInitiativeType)
+  initiativeType?: RoiInitiativeType;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+}
+
+export class CreateScenarioDto {
+  @ApiProperty() @IsString() @MaxLength(200) name!: string;
+  @ApiProperty({ enum: RoiInitiativeType })
+  @IsEnum(RoiInitiativeType)
+  initiativeType!: RoiInitiativeType;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) description?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) targetAudienceCount?: number;
+  @ApiProperty() @IsNumber() @Min(0) estimatedCost!: number;
+  // Benefício esperado: preencher OU basedOnAnalysisId (deriva o benefício do
+  // BCR de uma RoiAnalysis semelhante já medida) OU expectedBenefit
+  // (premissa manual do RH) — nunca os dois ao mesmo tempo (ver
+  // ScenarioService#resolveExpectedBenefit: expectedBenefit manual tem
+  // sempre prioridade quando ambos vêm preenchidos).
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) basedOnAnalysisId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) expectedBenefit?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) assumptions?: string;
+}
+
+export class UpdateScenarioDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(200) name?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) description?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) departmentId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) targetAudienceCount?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) estimatedCost?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Type(() => Number) basedOnAnalysisId?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) expectedBenefit?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1000) assumptions?: string;
+}
+
+export class CompareScenariosDto {
+  @ApiProperty({ type: [Number], minItems: 2 })
+  @IsArray()
+  @IsInt({ each: true })
+  @Type(() => Number)
+  ids!: number[];
+}

@@ -2385,6 +2385,17 @@ const KpiDefinitionStatus = {
   INACTIVO: 'INACTIVO',
 };
 
+// docs/roi-impact.md §7 — "Correlações"
+const CorrelationType = {
+  HORAS_FORMACAO_DESEMPENHO: 'HORAS_FORMACAO_DESEMPENHO',
+  COMPETENCIAS_PRODUTIVIDADE: 'COMPETENCIAS_PRODUTIVIDADE',
+  PDI_RETENCAO: 'PDI_RETENCAO',
+  INVESTIMENTO_ROTATIVIDADE: 'INVESTIMENTO_ROTATIVIDADE',
+  ONBOARDING_TEMPO_PRODUTIVIDADE: 'ONBOARDING_TEMPO_PRODUTIVIDADE',
+  MENTORIA_PROGRESSAO_CARREIRA: 'MENTORIA_PROGRESSAO_CARREIRA',
+  LIDERANCA_ENGAGEMENT_EQUIPA: 'LIDERANCA_ENGAGEMENT_EQUIPA',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -2428,6 +2439,7 @@ module.exports = {
   KpiCategory,
   KpiFrequency,
   KpiDefinitionStatus,
+  CorrelationType,
   LeadershipContentType,
   LeadershipMethodologyType,
   LeadershipAdvisorRole,
