@@ -283,6 +283,10 @@ export class SendRemindersDto {
 
 // ─── PAGINATION ───────────────────────────────────────────────
 export class Evaluation360PaginationDto {
+  // Também recebido via @Query('tenantId') separado no controller (listCycles)
+  // — tem de estar aqui também, senão o forbidNonWhitelisted do ValidationPipe
+  // rejeita o pedido inteiro por "property tenantId should not exist".
+  @ApiPropertyOptional() @IsOptional() @IsString() tenantId?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(200) limit?: number = 20;
   @ApiPropertyOptional() @IsOptional() @IsInt() @Min(0) offset?: number = 0;
   @ApiPropertyOptional() @IsOptional() @IsString() search?: string;
