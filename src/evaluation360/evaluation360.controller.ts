@@ -38,11 +38,18 @@ import {
   AnalyticsQueryDto,
   NineBoxQueryDto,
   GenerateReportDto,
+  CycleReportQueryDto,
+  CycleEvolutionQueryDto,
+  CycleFeedbackQueryDto,
   SendRemindersDto,
   Evaluation360PaginationDto,
   ListEvaluationCyclesDto,
   ListCycleParticipantsDto,
   ListCycleEvaluatorsDto,
+  CreateEvaluationQuestionnaireDto,
+  UpdateEvaluationQuestionnaireDto,
+  ListQuestionnairesDto,
+  QuestionnaireQuestionDto,
 } from './evaluation360.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -242,6 +249,92 @@ export class Evaluation360Controller {
   }
 
   // ============================================================
+  // QUESTIONÁRIOS (docs/evaluation360.md §6)
+  // ============================================================
+
+  @Post('questionnaires')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({
+    summary: 'Criar questionário reutilizável (nome, escala, competências, perguntas)',
+  })
+  async createQuestionnaire(
+    @Body() dto: CreateEvaluationQuestionnaireDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.createQuestionnaire(dto, String(user.id));
+  }
+
+  @Get('questionnaires')
+  @ApiOperation({ summary: 'Listar questionários (aba "Questionários")' })
+  async listQuestionnaires(@Query() query: ListQuestionnairesDto) {
+    return this.service.listQuestionnaires(query);
+  }
+
+  @Get('questionnaires/:id')
+  @ApiOperation({ summary: 'Detalhe do questionário (competências + perguntas)' })
+  async getQuestionnaireDetail(@Param('id') id: string) {
+    return this.service.getQuestionnaireDetail(id);
+  }
+
+  @Patch('questionnaires/:id')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({ summary: 'Actualizar questionário (apenas em rascunho)' })
+  async updateQuestionnaire(
+    @Param('id') id: string,
+    @Body() dto: UpdateEvaluationQuestionnaireDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateQuestionnaire(id, dto, String(user.id));
+  }
+
+  @Post('questionnaires/:id/publish')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Publicar questionário (DRAFT → PUBLISHED)' })
+  async publishQuestionnaire(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.publishQuestionnaire(id, String(user.id));
+  }
+
+  @Post('questionnaires/:id/archive')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Arquivar questionário' })
+  async archiveQuestionnaire(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.archiveQuestionnaire(id, String(user.id));
+  }
+
+  @Delete('questionnaires/:id')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Eliminar questionário (só se nunca usado por um ciclo)' })
+  async deleteQuestionnaire(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.deleteQuestionnaire(id, String(user.id));
+  }
+
+  @Post('questionnaires/:id/questions')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({ summary: 'Adicionar pergunta ao questionário' })
+  async addQuestionnaireQuestion(
+    @Param('id') id: string,
+    @Body() dto: QuestionnaireQuestionDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.addQuestionnaireQuestion(id, dto, String(user.id));
+  }
+
+  @Delete('questionnaires/:id/questions/:questionId')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remover pergunta do questionário' })
+  async removeQuestionnaireQuestion(
+    @Param('id') id: string,
+    @Param('questionId') questionId: string,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.removeQuestionnaireQuestion(id, questionId, String(user.id));
+  }
+
+  // ============================================================
   // PARTICIPANTES
   // ============================================================
 
@@ -432,6 +525,19 @@ export class Evaluation360Controller {
   // RESULTADOS E ANALYTICS
   // ============================================================
 
+  @Get('cycles/:cycleId/results')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary:
+      'Separador "Resultados" (docs/evaluation360.md §7) — uma linha por avaliado × ' +
+      'competência do ciclo (auto/gestor/pares/subordinados/outras, média, nível ' +
+      'esperado, gap, nº de respostas). Só ADMIN/RH — ninguém vê o resultado de ' +
+      'outro utilizador fora daqui (ver getParticipantResult).',
+  })
+  async getCycleResults(@Param('cycleId') cycleId: string) {
+    return this.service.getCycleResultsMatrix(cycleId);
+  }
+
   @Get('cycles/:cycleId/results/:participantId')
   @ApiOperation({ summary: 'Resultado individual (radar, gaps, forças)' })
   async getResult(
@@ -484,9 +590,51 @@ export class Evaluation360Controller {
     return this.service.generateReport(dto, String(user.id));
   }
 
+  // Separador "Relatórios" (docs/evaluation360.md §9) — mesmo grupo de
+  // papéis que já vê o Painel Geral agregado (adminOverview no frontend,
+  // EVAL_OVERVIEW_ROLES): resultado geral, por competência/departamento/
+  // cargo/unidade/grupo de avaliador, comparações, pontos fortes/gaps,
+  // taxas, avaliadores pendentes e competências críticas — tudo à escala de
+  // UM ciclo.
+  @Get('cycles/:cycleId/reports')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR)
+  @ApiOperation({ summary: 'Relatório completo de um ciclo (docs/evaluation360.md §9)' })
+  async getCycleReport(@Param('cycleId') cycleId: string, @Query() query: CycleReportQueryDto) {
+    return this.service.getCycleReport(cycleId, query);
+  }
+
+  // "Evolução entre ciclos"/"Comparação entre ciclos" (§9) — mesma rota,
+  // `cycleIds` restringe a comparação a ciclos escolhidos.
+  @Get('reports/evolution')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR)
+  @ApiOperation({ summary: 'Evolução/comparação de métricas agregadas entre ciclos' })
+  async getCycleEvolution(@Query() query: CycleEvolutionQueryDto) {
+    return this.service.getCycleEvolution(query);
+  }
+
   // Nota: POST cycles/:cycleId/calibrate (matriz de calibração RH) foi
   // removido — ver evaluation360.service.ts, secção de comentário no lugar
   // de calibrateScore().
+
+  // ============================================================
+  // FEEDBACK (docs/evaluation360.md §8)
+  // ============================================================
+
+  // Comentários qualitativos das respostas já submetidas num ciclo —
+  // distinto do feedback contínuo abaixo (esse é sempre "recebido por mim",
+  // fora de qualquer ciclo). Mesmo grupo de papéis que já gere
+  // participantes/avaliadores (EVAL_CREATOR_ROLES); GESTOR/LIDER só veem a
+  // sua equipa directa (ownership resolvida no service).
+  @Get('cycles/:cycleId/feedback')
+  @Roles(...EVAL_CREATOR_ROLES)
+  @ApiOperation({ summary: 'Feedback qualitativo de um ciclo (docs/evaluation360.md §8)' })
+  async getCycleFeedback(
+    @Param('cycleId') cycleId: string,
+    @Query() query: CycleFeedbackQueryDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.getCycleFeedback(cycleId, query, user);
+  }
 
   // ============================================================
   // FEEDBACK CONTÍNUO

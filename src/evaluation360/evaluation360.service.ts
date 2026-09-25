@@ -40,11 +40,18 @@ import {
   AnalyticsQueryDto,
   NineBoxQueryDto,
   GenerateReportDto,
+  CycleReportQueryDto,
+  CycleEvolutionQueryDto,
+  CycleFeedbackQueryDto,
   SendRemindersDto,
   Evaluation360PaginationDto,
   ListEvaluationCyclesDto,
   ListCycleParticipantsDto,
   ListCycleEvaluatorsDto,
+  CreateEvaluationQuestionnaireDto,
+  UpdateEvaluationQuestionnaireDto,
+  ListQuestionnairesDto,
+  QuestionnaireQuestionDto,
   EvaluatorRole,
   Eval360CycleStatus,
   AnonymityMode,
@@ -68,11 +75,25 @@ interface CompetencyScoreEntry {
   othersScore: number | null;
   managerScore: number | null;
   peerScore: number | null;
+  // "Avaliação dos subordinados"/"Outras avaliações" (docs/evaluation360.md
+  // §7) — subordinateScore e externalScore não tinham breakdown por
+  // competência, só ao nível do resultado global (selfScore/managerScore/...
+  // em EvaluationResult); precisos para a tabela de Resultados.
+  subordinateScore: number | null;
+  externalScore: number | null;
+  // Nº de respostas numéricas consideradas nesta competência (todos os
+  // grupos, já com o quorum de pares aplicado) — coluna "Nº de respostas".
+  responseCount: number;
   gap: number | null;
   // Média de todas as respostas submetidas no ciclo para esta competência
   // (todos os participantes) — referência comparativa real, não um
   // "benchmark de cargo" fabricado (o schema não tem dados de mercado).
   benchmark: number | null;
+  // "Nível esperado"/"Gap" face ao esperado (docs/evaluation360.md §3/§7) —
+  // vem de Eval360CycleCompetency.expectedLevel quando configurado; gapToExpected
+  // é distinto do `gap` acima (que é auto vs. outros).
+  expectedLevel: number | null;
+  gapToExpected: number | null;
 }
 
 export interface CompetencyGapEntry {
@@ -195,6 +216,20 @@ export class Evaluation360Service {
     this.validateWeights(dto);
     this.validateDates(dto.startDate, dto.endDate);
 
+    // Questionário (docs/evaluation360.md §6) — quando indicado, sobrepõe-se
+    // a `dto.competencies`/doutrina-padrão: fornece já competências +
+    // perguntas curadas e reutilizáveis entre ciclos.
+    let questionnaire: Prisma.Eval360QuestionnaireGetPayload<{
+      include: { competencies: true; questions: true };
+    }> | null = null;
+    if (dto.questionnaireId) {
+      questionnaire = await this.prisma.eval360Questionnaire.findUnique({
+        where: { id: dto.questionnaireId },
+        include: { competencies: true, questions: true },
+      });
+      if (!questionnaire) throw new NotFoundException('Questionário não encontrado.');
+    }
+
     const cycle = await this.prisma.eval360Cycle.create({
       data: {
         tenantId: dto.tenantId,
@@ -221,25 +256,58 @@ export class Evaluation360Service {
         linkedToBonus: dto.linkedToBonus ?? false,
         linkedToOkrs: dto.linkedToOkrs ?? false,
         createdBy: actorId,
-        competencies: dto.competencies?.length
+        questionnaireId: questionnaire?.id,
+        competencies: questionnaire
           ? {
-              create: dto.competencies.map(c => ({
-                competencyId: +c.competencyId,
-                weight: c.weight ?? 1,
-                isRequired: c.isRequired ?? true,
-                order: c.order ?? 0,
+              create: questionnaire.competencies.map(c => ({
+                competencyId: c.competencyId,
+                weight: 1,
+                isRequired: true,
+                order: c.order,
               })),
             }
-          : undefined,
+          : dto.competencies?.length
+            ? {
+                create: dto.competencies.map(c => ({
+                  competencyId: +c.competencyId,
+                  weight: c.weight ?? 1,
+                  isRequired: c.isRequired ?? true,
+                  order: c.order ?? 0,
+                  expectedLevel: c.expectedLevel,
+                })),
+              }
+            : undefined,
       },
       include: { competencies: { include: { competency: true } } },
     });
 
-    // Sem competências explícitas: aplica-se sempre a doutrina fixa de
-    // avaliação 360º da INNOVA (8 competências + 1 questão cada) em vez de
-    // deixar o ciclo sem nada para publicar (publishCycle exige >=1 questão).
+    // Sem competências explícitas nem questionário: aplica-se sempre a
+    // doutrina fixa de avaliação 360º da INNOVA (8 competências + 1 questão
+    // cada) em vez de deixar o ciclo sem nada para publicar (publishCycle
+    // exige >=1 questão).
     let finalCycle = cycle;
-    if (!dto.competencies?.length) {
+    if (questionnaire) {
+      // Clona as perguntas do questionário para este ciclo — âmbito próprio,
+      // tal como as questões geradas pela doutrina-padrão/attachDefaultQuestions;
+      // o questionário em si permanece intacto e reutilizável noutros ciclos.
+      for (const q of questionnaire.questions) {
+        await this.prisma.eval360Question.create({
+          data: {
+            cycleId: cycle.id,
+            competencyId: q.competencyId ?? undefined,
+            text: q.text,
+            type: q.type,
+            isRequired: q.isRequired,
+            order: q.order,
+            scaleMin: q.scaleMin ?? questionnaire.scaleMin,
+            scaleMax: q.scaleMax ?? questionnaire.scaleMax,
+            scaleLabels: q.scaleLabels ?? questionnaire.scaleLabels ?? undefined,
+            options: q.options ?? undefined,
+            applicableTo: [],
+          },
+        });
+      }
+    } else if (!dto.competencies?.length) {
       const attached = await this.attachStandardCompetencies(cycle.id);
       finalCycle = { ...cycle, competencies: attached };
     } else {
@@ -660,6 +728,266 @@ export class Evaluation360Service {
   }
 
   // ============================================================
+  // QUESTIONÁRIOS (docs/evaluation360.md §6) — banco reutilizável, distinto
+  // das Eval360Question (sempre presas a um ciclo concreto). createCycle()
+  // clona competências+perguntas daqui para o ciclo quando questionnaireId
+  // é indicado — ver comentário nesse método.
+  // ============================================================
+
+  private async findQuestionnaireOrFail(id: string) {
+    const questionnaire = await this.prisma.eval360Questionnaire.findUnique({ where: { id } });
+    if (!questionnaire) throw new NotFoundException('Questionário não encontrado.');
+    return questionnaire;
+  }
+
+  async createQuestionnaire(dto: CreateEvaluationQuestionnaireDto, actorId: string) {
+    const existing = await this.prisma.eval360Questionnaire.findUnique({
+      where: { code: dto.code },
+    });
+    if (existing) throw new BadRequestException('Já existe um questionário com este código.');
+
+    const questionnaire = await this.prisma.eval360Questionnaire.create({
+      data: {
+        tenantId: dto.tenantId,
+        name: dto.name,
+        code: dto.code,
+        description: dto.description,
+        instructions: dto.instructions,
+        scaleMin: dto.scaleMin ?? 1,
+        scaleMax: dto.scaleMax ?? 5,
+        scaleLabels: dto.scaleLabels,
+        createdBy: actorId,
+        competencies: dto.competencies?.length
+          ? {
+              create: dto.competencies.map((c, i) => ({
+                competencyId: +c.competencyId,
+                order: c.order ?? i,
+              })),
+            }
+          : undefined,
+        questions: dto.questions?.length
+          ? {
+              create: dto.questions.map((q, i) => ({
+                competencyId: q.competencyId ? +q.competencyId : undefined,
+                text: q.text,
+                type: q.type,
+                isRequired: q.isRequired ?? true,
+                allowComment: q.allowComment ?? true,
+                order: q.order ?? i,
+                scaleMin: q.scaleMin,
+                scaleMax: q.scaleMax,
+                scaleLabels: q.scaleLabels,
+                options: q.options,
+              })),
+            }
+          : undefined,
+      },
+      include: { competencies: { include: { competency: true } }, questions: true },
+    });
+    await this.audit.log({
+      entity: 'Eval360Questionnaire',
+      entityId: questionnaire.id,
+      action: 'CREATE',
+      userId: actorId,
+      details: { name: dto.name, code: dto.code },
+    });
+    return questionnaire;
+  }
+
+  async updateQuestionnaire(id: string, dto: UpdateEvaluationQuestionnaireDto, actorId: string) {
+    const questionnaire = await this.findQuestionnaireOrFail(id);
+    if (questionnaire.status !== 'DRAFT') {
+      throw new BadRequestException(
+        'Apenas questionários em rascunho podem ser editados — publique uma nova versão.',
+      );
+    }
+    // competencies/questions são relações geridas pelos endpoints dedicados
+    // (addQuestionnaireQuestion/removeQuestionnaireQuestion), tal como
+    // updateCycle() já faz para Eval360CycleCompetency.
+    const { competencies, questions, ...data } = dto;
+    const updated = await this.prisma.eval360Questionnaire.update({ where: { id }, data });
+    await this.audit.log({
+      entity: 'Eval360Questionnaire',
+      entityId: id,
+      action: 'UPDATE',
+      userId: actorId,
+      details: data,
+    });
+    return updated;
+  }
+
+  async listQuestionnaires(query: ListQuestionnairesDto) {
+    const where: Prisma.Eval360QuestionnaireWhereInput = {};
+    if (query.tenantId) where.tenantId = query.tenantId;
+    if (query.status) where.status = query.status;
+    if (query.search) where.name = { contains: query.search, mode: 'insensitive' };
+
+    const [data, total] = await Promise.all([
+      this.prisma.eval360Questionnaire.findMany({
+        where,
+        skip: query.offset ?? 0,
+        take: query.limit ?? 20,
+        orderBy: { createdAt: 'desc' },
+        include: { _count: { select: { competencies: true, questions: true } } },
+      }),
+      this.prisma.eval360Questionnaire.count({ where }),
+    ]);
+
+    return {
+      data: data.map(q => ({
+        id: q.id,
+        name: q.name,
+        code: q.code,
+        description: q.description,
+        version: q.version,
+        scaleMin: q.scaleMin,
+        scaleMax: q.scaleMax,
+        questionCount: q._count.questions,
+        competencyCount: q._count.competencies,
+        status: q.status,
+        createdBy: q.createdBy,
+        createdAt: q.createdAt,
+        updatedAt: q.updatedAt,
+      })),
+      total,
+    };
+  }
+
+  async getQuestionnaireDetail(id: string) {
+    const questionnaire = await this.prisma.eval360Questionnaire.findUnique({
+      where: { id },
+      include: {
+        competencies: { include: { competency: true }, orderBy: { order: 'asc' } },
+        questions: { orderBy: { order: 'asc' } },
+      },
+    });
+    if (!questionnaire) throw new NotFoundException('Questionário não encontrado.');
+    return questionnaire;
+  }
+
+  async publishQuestionnaire(id: string, actorId: string) {
+    const questionnaire = await this.findQuestionnaireOrFail(id);
+    if (questionnaire.status !== 'DRAFT')
+      throw new BadRequestException('Apenas questionários em rascunho podem ser publicados.');
+
+    const questionCount = await this.prisma.eval360QuestionnaireQuestion.count({
+      where: { questionnaireId: id },
+    });
+    if (questionCount === 0)
+      throw new BadRequestException(
+        'O questionário precisa de pelo menos 1 pergunta antes de ser publicado.',
+      );
+
+    const published = await this.prisma.eval360Questionnaire.update({
+      where: { id },
+      data: { status: 'PUBLISHED' },
+    });
+    await this.audit.log({
+      entity: 'Eval360Questionnaire',
+      entityId: id,
+      action: 'PUBLISH',
+      userId: actorId,
+      details: {},
+    });
+    return published;
+  }
+
+  async archiveQuestionnaire(id: string, actorId: string) {
+    await this.findQuestionnaireOrFail(id);
+    const archived = await this.prisma.eval360Questionnaire.update({
+      where: { id },
+      data: { status: 'ARCHIVED' },
+    });
+    await this.audit.log({
+      entity: 'Eval360Questionnaire',
+      entityId: id,
+      action: 'ARCHIVE',
+      userId: actorId,
+      details: {},
+    });
+    return archived;
+  }
+
+  async deleteQuestionnaire(id: string, actorId: string) {
+    const questionnaire = await this.findQuestionnaireOrFail(id);
+    if (questionnaire.status !== 'DRAFT')
+      throw new BadRequestException(
+        'Apenas questionários em rascunho podem ser eliminados — arquive-o se já foi usado.',
+      );
+    const inUse = await this.prisma.eval360Cycle.count({ where: { questionnaireId: id } });
+    if (inUse > 0)
+      throw new BadRequestException('Este questionário já foi usado por um ciclo — arquive-o.');
+
+    await this.prisma.eval360Questionnaire.delete({ where: { id } });
+    await this.audit.log({
+      entity: 'Eval360Questionnaire',
+      entityId: id,
+      action: 'DELETE',
+      userId: actorId,
+      details: { name: questionnaire.name },
+    });
+    return { id };
+  }
+
+  async addQuestionnaireQuestion(
+    questionnaireId: string,
+    dto: QuestionnaireQuestionDto,
+    actorId: string,
+  ) {
+    const questionnaire = await this.findQuestionnaireOrFail(questionnaireId);
+    if (questionnaire.status !== 'DRAFT')
+      throw new BadRequestException(
+        'Apenas questionários em rascunho podem receber novas perguntas.',
+      );
+
+    const question = await this.prisma.eval360QuestionnaireQuestion.create({
+      data: {
+        questionnaireId,
+        competencyId: dto.competencyId ? +dto.competencyId : undefined,
+        text: dto.text,
+        type: dto.type,
+        isRequired: dto.isRequired ?? true,
+        allowComment: dto.allowComment ?? true,
+        order: dto.order ?? 0,
+        scaleMin: dto.scaleMin,
+        scaleMax: dto.scaleMax,
+        scaleLabels: dto.scaleLabels,
+        options: dto.options,
+      },
+    });
+    await this.audit.log({
+      entity: 'Eval360QuestionnaireQuestion',
+      entityId: question.id,
+      action: 'CREATE',
+      userId: actorId,
+      details: { text: dto.text },
+    });
+    return question;
+  }
+
+  async removeQuestionnaireQuestion(questionnaireId: string, questionId: string, actorId: string) {
+    const questionnaire = await this.findQuestionnaireOrFail(questionnaireId);
+    if (questionnaire.status !== 'DRAFT')
+      throw new BadRequestException(
+        'Apenas questionários em rascunho podem ter perguntas removidas.',
+      );
+    const question = await this.prisma.eval360QuestionnaireQuestion.findFirst({
+      where: { id: questionId, questionnaireId },
+    });
+    if (!question) throw new NotFoundException('Pergunta não encontrada neste questionário.');
+
+    await this.prisma.eval360QuestionnaireQuestion.delete({ where: { id: questionId } });
+    await this.audit.log({
+      entity: 'Eval360QuestionnaireQuestion',
+      entityId: questionId,
+      action: 'DELETE',
+      userId: actorId,
+      details: {},
+    });
+    return { id: questionId };
+  }
+
+  // ============================================================
   // PARTICIPANTES
   // ============================================================
 
@@ -958,7 +1286,9 @@ export class Evaluation360Service {
       select: {
         textValue: true,
         response: { select: { evaluatorRole: true } },
-        question: { select: { text: true } },
+        question: {
+          select: { text: true, competencyId: true, competency: { select: { name: true } } },
+        },
       },
     });
 
@@ -1005,8 +1335,191 @@ export class Evaluation360Service {
         text: c.textValue,
         evaluatorRole: c.response.evaluatorRole,
         question: c.question.text,
+        competencyId: c.question.competencyId,
+        competencyName: c.question.competency?.name ?? null,
       })),
     };
+  }
+
+  // Separador "Resultados" (docs/evaluation360.md §7) para quem gere o
+  // módulo: uma linha por (avaliado × competência) do ciclo, com a mesma
+  // comparação self/gestor/pares/subordinados/outras já calculada em
+  // scoresByCompetency (calculateParticipantResult). Só ADMIN/RH — mesma
+  // regra de canSeeScore em getParticipantDetailForAdmin; ninguém mais vê o
+  // resultado de outro utilizador (getParticipantResult continua a ser a
+  // única via de acesso para o próprio colaborador ver o seu).
+  async getCycleResultsMatrix(cycleId: string) {
+    await this.findCycleOrFail(cycleId);
+
+    const results = await this.prisma.read.evaluationResult.findMany({ where: { cycleId } });
+    if (results.length === 0) return { data: [] };
+
+    const userIds = results.map(r => Number(r.participantId));
+    const users = await this.prisma.read.user.findMany({
+      where: { id: { in: userIds } },
+      select: {
+        id: true,
+        fullName: true,
+        position: { select: { name: true } },
+        department: { select: { name: true } },
+      },
+    });
+    const userById = new Map(users.map(u => [u.id, u]));
+
+    const data: Array<{
+      userId: string;
+      fullName: string;
+      position: string | null;
+      department: string | null;
+      competencyId: string;
+      competencyName: string;
+      selfScore: number | null;
+      managerScore: number | null;
+      peerScore: number | null;
+      subordinateScore: number | null;
+      externalScore: number | null;
+      overallScore: number | null;
+      expectedLevel: number | null;
+      gap: number | null;
+      responseCount: number;
+    }> = [];
+
+    for (const r of results) {
+      const u = userById.get(Number(r.participantId));
+      const scoresByCompetency: Record<string, CompetencyScoreEntry> = JSON.parse(
+        r.scoresByCompetency ?? '{}',
+      );
+      for (const [competencyId, v] of Object.entries(scoresByCompetency)) {
+        data.push({
+          userId: r.participantId,
+          fullName: u?.fullName ?? 'Colaborador',
+          position: u?.position?.name ?? null,
+          department: u?.department?.name ?? null,
+          competencyId,
+          competencyName: v.name,
+          selfScore: v.selfScore,
+          managerScore: v.managerScore,
+          peerScore: v.peerScore,
+          subordinateScore: v.subordinateScore,
+          externalScore: v.externalScore,
+          overallScore: v.score,
+          expectedLevel: v.expectedLevel,
+          gap: v.gapToExpected ?? v.gap,
+          responseCount: v.responseCount,
+        });
+      }
+    }
+    return { data };
+  }
+
+  // Separador "Feedback" (docs/evaluation360.md §8) — todos os comentários
+  // qualitativos (Eval360Question.type OPEN_TEXT) já submetidos num ciclo,
+  // distinto do feedback contínuo (Eval360Feedback, sempre "recebido por
+  // mim" fora de qualquer ciclo). Mesma regra de anonimato de
+  // getParticipantDetailForAdmin: nunca liga um comentário à identidade do
+  // avaliador, só ao papel — `visibility` reflecte o anonymityMode
+  // configurado no ciclo, não uma identidade real exposta.
+  // Ownership: ADMIN/RH/DIRECTOR veem tudo; GESTOR/LIDER só os avaliados da
+  // sua equipa directa (mesmo critério de getParticipantDetailForAdmin).
+  async getCycleFeedback(cycleId: string, query: CycleFeedbackQueryDto, user: CurrentUserData) {
+    const cycle = await this.findCycleOrFail(cycleId);
+    const fullAccess = isPrivileged(user, [Role.ADMIN, Role.RH, Role.DIRECTOR]);
+
+    let evaluateeScope: string[] | undefined;
+    if (!fullAccess) {
+      const team = await this.prisma.read.user.findMany({
+        where: { managerId: user.id },
+        select: { id: true },
+      });
+      evaluateeScope = team.map(u => String(u.id));
+      if (query.evaluateeId && !evaluateeScope.includes(query.evaluateeId)) {
+        throw new ForbiddenException('Sem permissão para ver o feedback deste avaliado.');
+      }
+    }
+    if (query.evaluateeId) evaluateeScope = [query.evaluateeId];
+    // GESTOR/LIDER sem equipa e sem evaluateeId pedido explícito: nada a
+    // devolver (não é "sem filtro" — é "ninguém no alcance").
+    if (!fullAccess && (!evaluateeScope || evaluateeScope.length === 0))
+      return { data: [], total: 0 };
+
+    const answers = await this.prisma.read.evaluationAnswer.findMany({
+      where: {
+        textValue: { not: null },
+        response: {
+          cycleId,
+          status: 'SUBMITTED',
+          ...(evaluateeScope ? { evaluateeId: { in: evaluateeScope } } : {}),
+          ...(query.evaluatorRole ? { evaluatorRole: query.evaluatorRole } : {}),
+        },
+        ...(query.competencyId ? { question: { competencyId: Number(query.competencyId) } } : {}),
+      },
+      select: {
+        textValue: true,
+        response: { select: { evaluateeId: true, evaluatorRole: true, submittedAt: true } },
+        question: {
+          select: { competencyId: true, competency: { select: { name: true } } },
+        },
+      },
+      orderBy: { response: { submittedAt: 'desc' } },
+      take: 300,
+    });
+
+    const evaluateeIds = [...new Set(answers.map(a => Number(a.response.evaluateeId)))];
+    const [evaluatees, results] = await Promise.all([
+      this.prisma.read.user.findMany({
+        where: { id: { in: evaluateeIds } },
+        select: { id: true, fullName: true },
+      }),
+      this.prisma.read.evaluationResult.findMany({
+        where: { cycleId, participantId: { in: evaluateeIds.map(String) } },
+        select: { participantId: true, scoresByCompetency: true },
+      }),
+    ]);
+    const evaluateeById = new Map(evaluatees.map(u => [u.id, u]));
+    const scoresByParticipant = new Map(
+      results.map(r => [
+        r.participantId,
+        JSON.parse(r.scoresByCompetency ?? '{}') as Record<string, CompetencyScoreEntry>,
+      ]),
+    );
+
+    const visibilityLabel: Record<AnonymityMode, string> = {
+      ANONYMOUS: 'Anónimo',
+      SEMI_ANONYMOUS: 'Semi-anónimo',
+      OPEN: 'Identificado',
+    };
+
+    const data = answers.map(a => {
+      const competencyScore = a.question.competencyId
+        ? scoresByParticipant.get(a.response.evaluateeId)?.[String(a.question.competencyId)]?.score
+        : null;
+      // "Pode separar: pontos fortes / oportunidades de melhoria" (§8) — sem
+      // um campo de categoria próprio no schema, deriva-se da pontuação já
+      // calculada para a mesma competência deste avaliado (>=4 ponto forte,
+      // <=2.5 oportunidade de melhoria), nunca inventado a partir do texto.
+      const category =
+        competencyScore == null
+          ? null
+          : competencyScore >= 4
+            ? 'STRENGTH'
+            : competencyScore <= 2.5
+              ? 'IMPROVEMENT'
+              : null;
+      return {
+        evaluateeId: a.response.evaluateeId,
+        evaluateeName: evaluateeById.get(Number(a.response.evaluateeId))?.fullName ?? 'Colaborador',
+        competencyId: a.question.competencyId ? String(a.question.competencyId) : null,
+        competencyName: a.question.competency?.name ?? null,
+        comment: a.textValue,
+        evaluatorRole: a.response.evaluatorRole,
+        date: a.response.submittedAt,
+        status: 'SUBMITTED' as const,
+        visibility: visibilityLabel[cycle.anonymityMode],
+        category,
+      };
+    });
+
+    return { data, total: data.length };
   }
 
   // ============================================================
@@ -1690,9 +2203,12 @@ export class Evaluation360Service {
 
     // Score por competência
     const scoresByCompetency: Record<string, CompetencyScoreEntry> = {};
-    const allCompetencies = cycle.competencies.map(c => c.competency);
+    const expectedLevelByCompetency = new Map(
+      cycle.competencies.map(c => [c.competencyId, c.expectedLevel ?? null]),
+    );
 
-    for (const comp of allCompetencies) {
+    for (const cc of cycle.competencies) {
+      const comp = cc.competency;
       const compAnswers = responses.flatMap(r =>
         r.answers
           .filter(a => a.question?.competencyId === comp.id && a.numericValue !== null)
@@ -1703,6 +2219,8 @@ export class Evaluation360Service {
       const otherVals = compAnswers.filter(a => a.role !== 'SELF').map(a => a.value);
       const managerVals = compAnswers.filter(a => a.role === 'MANAGER').map(a => a.value);
       const peerVals = compAnswers.filter(a => a.role === 'PEER').map(a => a.value);
+      const subVals = compAnswers.filter(a => a.role === 'SUBORDINATE').map(a => a.value);
+      const extVals = compAnswers.filter(a => a.role === 'EXTERNAL').map(a => a.value);
 
       const avg = (arr: number[]) =>
         arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
@@ -1717,6 +2235,17 @@ export class Evaluation360Service {
       // resposta individual desse par (n=1 ou 2) no radar/heatmap. A
       // anonimato é por definição do produto, não só no resumo.
       const peerCompScore = peerResponses.length >= cycle.quorumMinimum ? avg(peerVals) : null;
+      // Nº de respostas efectivamente contabilizadas nesta competência —
+      // exclui os valores de pares escondidos pelo quorum, tal como
+      // peerCompScore acima (docs/evaluation360.md §7 "Nº de respostas").
+      const responseCount =
+        selfVals.length +
+        managerVals.length +
+        (peerResponses.length >= cycle.quorumMinimum ? peerVals.length : 0) +
+        subVals.length +
+        extVals.length;
+      const expectedLevel = expectedLevelByCompetency.get(comp.id) ?? null;
+      const gapToExpected = score !== null && expectedLevel !== null ? score - expectedLevel : null;
 
       scoresByCompetency[comp.id] = {
         name: comp.name,
@@ -1727,8 +2256,13 @@ export class Evaluation360Service {
         othersScore: othersCompScore,
         managerScore: avg(managerVals),
         peerScore: peerCompScore,
+        subordinateScore: avg(subVals),
+        externalScore: avg(extVals),
+        responseCount,
         gap,
         benchmark: benchmarks[comp.id] ?? null,
+        expectedLevel,
+        gapToExpected,
       };
     }
 
@@ -2475,6 +3009,341 @@ export class Evaluation360Service {
       ? JSON.parse(result.strengths)
       : [];
     return `Pontos fortes identificados: ${strengths.map(s => s.name).join(', ')}. Áreas prioritárias para desenvolvimento: ${gaps.map(g => g.name).join(', ')}.`;
+  }
+
+  // Relatório completo de um ciclo (docs/evaluation360.md §9) — cobre todos
+  // os relatórios pedidos no documento que fazem sentido para UM ciclo
+  // concreto (resultado geral, por competência/departamento/cargo/unidade/
+  // grupo de avaliador, comparações, pontos fortes/gaps agregados, taxas,
+  // avaliadores pendentes, competências críticas). "Evolução"/"Comparação
+  // entre ciclos" ficam em getCycleEvolution(), que atravessa vários ciclos.
+  async getCycleReport(cycleId: string, query: CycleReportQueryDto) {
+    const cycle = await this.findCycleOrFail(cycleId);
+
+    let participantScope: string[] | undefined;
+    if (query.departmentId || query.unitId || query.positionId) {
+      const userWhere: Prisma.UserWhereInput = {};
+      if (query.departmentId) userWhere.departmentId = Number(query.departmentId);
+      if (query.unitId) userWhere.unitId = Number(query.unitId);
+      if (query.positionId) userWhere.positionId = Number(query.positionId);
+      const matching = await this.prisma.read.user.findMany({
+        where: userWhere,
+        select: { id: true },
+      });
+      participantScope = matching.map(u => String(u.id));
+    }
+
+    const results = await this.prisma.read.evaluationResult.findMany({
+      where: {
+        cycleId,
+        ...(participantScope ? { participantId: { in: participantScope } } : {}),
+      },
+      select: {
+        participantId: true,
+        overallScore: true,
+        weightedScore: true,
+        selfScore: true,
+        managerScore: true,
+        peerScore: true,
+        subordinateScore: true,
+        externalScore: true,
+        scoresByCompetency: true,
+        gaps: true,
+        strengths: true,
+        isEligiblePromotion: true,
+      },
+    });
+
+    const participantIds = results.map(r => Number(r.participantId));
+    const users = participantIds.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: participantIds } },
+          select: {
+            id: true,
+            position: { select: { id: true, name: true } },
+            department: { select: { id: true, name: true } },
+            unit: { select: { id: true, name: true } },
+          },
+        })
+      : [];
+    const userById = new Map(users.map(u => [u.id, u]));
+
+    const avg = (values: (number | null | undefined)[]): number | null => {
+      const v = values.filter((x): x is number => x !== null && x !== undefined);
+      return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null;
+    };
+
+    // Resultado geral 360°
+    const overall = {
+      totalParticipants: results.length,
+      avgOverall: avg(results.map(r => r.overallScore)) ?? 0,
+      avgWeighted: avg(results.map(r => r.weightedScore)) ?? 0,
+      eligiblePromotion: results.filter(r => r.isEligiblePromotion).length,
+    };
+
+    // Resultados por competência (filtrável por uma competência específica)
+    let byCompetency = this.averageCompetencyScoresNamed(results);
+    if (query.competencyId)
+      byCompetency = byCompetency.filter(c => c.competencyId === query.competencyId);
+
+    // Resultados por departamento/cargo/unidade — agrupa pela dimensão do
+    // avaliado (não da competência), média do overallScore por grupo.
+    const groupBy = (
+      pick: (u: {
+        id: number;
+        position: { id: number; name: string } | null;
+        department: { id: number; name: string } | null;
+        unit: { id: number; name: string } | null;
+      }) => { id: number; name: string } | null,
+    ) => {
+      const buckets = new Map<number, { name: string; scores: number[] }>();
+      for (const r of results) {
+        const u = userById.get(Number(r.participantId));
+        const dim = u ? pick(u) : null;
+        if (!dim || r.overallScore === null) continue;
+        if (!buckets.has(dim.id)) buckets.set(dim.id, { name: dim.name, scores: [] });
+        buckets.get(dim.id)?.scores.push(r.overallScore);
+      }
+      return [...buckets.entries()]
+        .map(([id, v]) => ({
+          id: String(id),
+          name: v.name,
+          average: v.scores.reduce((s, x) => s + x, 0) / v.scores.length,
+          count: v.scores.length,
+        }))
+        .sort((a, b) => b.average - a.average);
+    };
+    const byDepartment = groupBy(u => u.department);
+    const byPosition = groupBy(u => u.position);
+    const byUnit = groupBy(u => u.unit);
+
+    // Resultados por grupo de avaliadores + comparações pedidas em §9
+    const byEvaluatorGroup = {
+      self: avg(results.map(r => r.selfScore)),
+      manager: avg(results.map(r => r.managerScore)),
+      peer: avg(results.map(r => r.peerScore)),
+      subordinate: avg(results.map(r => r.subordinateScore)),
+      external: avg(results.map(r => r.externalScore)),
+    };
+    const compare = (a: number | null, b: number | null) => ({
+      a,
+      b,
+      diff: a !== null && b !== null ? a - b : null,
+    });
+    const selfVsExternal = compare(byEvaluatorGroup.self, byEvaluatorGroup.external);
+    const managerVsPeer = compare(byEvaluatorGroup.manager, byEvaluatorGroup.peer);
+    const managerVsSubordinate = compare(byEvaluatorGroup.manager, byEvaluatorGroup.subordinate);
+
+    // Principais pontos fortes / principais gaps — agregados a partir de
+    // EvaluationResult.strengths/gaps (já calculados por participante em
+    // calculateParticipantResult), contados por competência em todo o ciclo.
+    const aggregateNamed = (field: 'strengths' | 'gaps') => {
+      const buckets = new Map<string, { name: string; scores: number[]; count: number }>();
+      for (const r of results) {
+        const list: (CompetencyStrengthEntry | CompetencyGapEntry)[] = r[field]
+          ? JSON.parse(r[field])
+          : [];
+        for (const entry of list) {
+          if (!buckets.has(entry.competencyId))
+            buckets.set(entry.competencyId, { name: entry.name, scores: [], count: 0 });
+          const b = buckets.get(entry.competencyId);
+          if (!b) continue;
+          b.count += 1;
+          if (entry.score !== null) b.scores.push(entry.score);
+        }
+      }
+      return [...buckets.entries()]
+        .map(([competencyId, v]) => ({
+          competencyId,
+          name: v.name,
+          occurrences: v.count,
+          avgScore: v.scores.length ? v.scores.reduce((s, x) => s + x, 0) / v.scores.length : null,
+        }))
+        .sort((a, b) => b.occurrences - a.occurrences)
+        .slice(0, 10);
+    };
+    const topStrengths = aggregateNamed('strengths');
+    const topGaps = aggregateNamed('gaps');
+
+    // Taxa de participação / taxa de conclusão — mesmo cálculo de
+    // getOverview(), mas restrito a este ciclo.
+    const [assignments, participants] = await Promise.all([
+      this.prisma.read.evaluatorAssignment.findMany({
+        where: { cycleId },
+        select: { evaluatorId: true, evaluateeId: true, status: true, role: true },
+      }),
+      this.prisma.read.cycleParticipant.findMany({ where: { cycleId }, select: { status: true } }),
+    ]);
+    const invitedEvaluatorIds = new Set(assignments.map(a => a.evaluatorId));
+    const respondedEvaluatorIds = new Set(
+      assignments.filter(a => a.status === 'COMPLETED').map(a => a.evaluatorId),
+    );
+    const participationRate = invitedEvaluatorIds.size
+      ? Math.round((respondedEvaluatorIds.size / invitedEvaluatorIds.size) * 100)
+      : 0;
+    const completionRate = participants.length
+      ? Math.round(
+          (participants.filter(p => p.status === 'COMPLETED').length / participants.length) * 100,
+        )
+      : 0;
+
+    // Avaliadores pendentes — lista + contagem, filtrável por grupo de
+    // avaliador (query.evaluatorRole aplica-se aqui, é o único ponto do
+    // relatório onde "Grupo de avaliador" filtra uma lista e não uma média).
+    const pendingAssignments = await this.prisma.read.evaluatorAssignment.findMany({
+      where: {
+        cycleId,
+        status: { in: ['PENDING', 'INVITED', 'IN_PROGRESS'] },
+        ...(query.evaluatorRole ? { role: query.evaluatorRole } : {}),
+      },
+      select: { evaluatorId: true, evaluateeId: true, role: true, status: true, invitedAt: true },
+      take: 200,
+    });
+    const pendingUserIds = [
+      ...new Set(pendingAssignments.flatMap(a => [Number(a.evaluatorId), Number(a.evaluateeId)])),
+    ];
+    const pendingUsers = pendingUserIds.length
+      ? await this.prisma.read.user.findMany({
+          where: { id: { in: pendingUserIds } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const pendingUserById = new Map(pendingUsers.map(u => [u.id, u.fullName]));
+    const pendingEvaluators = {
+      count: pendingAssignments.length,
+      list: pendingAssignments.map(a => ({
+        evaluatorId: a.evaluatorId,
+        evaluatorName: pendingUserById.get(Number(a.evaluatorId)) ?? 'Colaborador',
+        evaluateeId: a.evaluateeId,
+        evaluateeName: pendingUserById.get(Number(a.evaluateeId)) ?? 'Colaborador',
+        role: a.role,
+        status: a.status,
+        invitedAt: a.invitedAt,
+      })),
+    };
+
+    // Competências críticas — média abaixo do nível esperado configurado no
+    // ciclo (Eval360CycleCompetency.expectedLevel), ordenadas pelo maior gap.
+    const cycleCompetencies = await this.prisma.read.eval360CycleCompetency.findMany({
+      where: { cycleId },
+      select: { competencyId: true, expectedLevel: true },
+    });
+    const expectedById = new Map(
+      cycleCompetencies.map(c => [String(c.competencyId), c.expectedLevel]),
+    );
+    const criticalCompetencies = byCompetency
+      .map(c => {
+        const expectedLevel = expectedById.get(c.competencyId) ?? null;
+        return {
+          ...c,
+          expectedLevel,
+          gapToExpected: expectedLevel !== null ? c.average - expectedLevel : null,
+        };
+      })
+      .filter(c => c.gapToExpected !== null && c.gapToExpected < 0)
+      .sort((a, b) => (a.gapToExpected ?? 0) - (b.gapToExpected ?? 0));
+
+    return {
+      cycle: {
+        id: cycle.id,
+        name: cycle.name,
+        status: cycle.status,
+        startDate: cycle.startDate,
+        endDate: cycle.endDate,
+      },
+      overall,
+      byCompetency,
+      byDepartment,
+      byPosition,
+      byUnit,
+      byEvaluatorGroup,
+      selfVsExternal,
+      managerVsPeer,
+      managerVsSubordinate,
+      topStrengths,
+      topGaps,
+      participationRate,
+      completionRate,
+      pendingEvaluators,
+      criticalCompetencies,
+    };
+  }
+
+  // "Evolução entre ciclos"/"Comparação entre ciclos" (docs/evaluation360.md
+  // §9) — uma série de métricas agregadas por ciclo, ordenada por data de
+  // início. `cycleIds` restringe a comparação a ciclos escolhidos; sem ele,
+  // devolve a evolução completa (filtrável por tipo/estado/período, os
+  // mesmos filtros de listCycles).
+  async getCycleEvolution(query: CycleEvolutionQueryDto) {
+    const where: Prisma.Eval360CycleWhereInput = { deletedAt: null };
+    if (query.cycleIds)
+      where.id = {
+        in: query.cycleIds
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean),
+      };
+    if (query.type) where.type = query.type;
+    if (query.status) where.status = query.status;
+    if (query.from || query.to) {
+      where.startDate = {
+        ...(query.from ? { gte: new Date(query.from) } : {}),
+        ...(query.to ? { lte: new Date(query.to) } : {}),
+      };
+    }
+
+    const cycles = await this.prisma.read.eval360Cycle.findMany({
+      where,
+      orderBy: { startDate: 'asc' },
+      select: { id: true, name: true, type: true, status: true, startDate: true, endDate: true },
+    });
+
+    const series = await Promise.all(
+      cycles.map(async c => {
+        const [results, assignments, participants] = await Promise.all([
+          this.prisma.read.evaluationResult.findMany({
+            where: { cycleId: c.id },
+            select: { overallScore: true, weightedScore: true },
+          }),
+          this.prisma.read.evaluatorAssignment.findMany({
+            where: { cycleId: c.id },
+            select: { evaluatorId: true, status: true },
+          }),
+          this.prisma.read.cycleParticipant.findMany({
+            where: { cycleId: c.id },
+            select: { status: true },
+          }),
+        ]);
+        const invited = new Set(assignments.map(a => a.evaluatorId));
+        const responded = new Set(
+          assignments.filter(a => a.status === 'COMPLETED').map(a => a.evaluatorId),
+        );
+        return {
+          cycleId: c.id,
+          name: c.name,
+          type: c.type,
+          status: c.status,
+          startDate: c.startDate,
+          endDate: c.endDate,
+          totalParticipants: results.length,
+          avgOverall: results.length
+            ? results.reduce((s, r) => s + (r.overallScore ?? 0), 0) / results.length
+            : 0,
+          avgWeighted: results.length
+            ? results.reduce((s, r) => s + (r.weightedScore ?? 0), 0) / results.length
+            : 0,
+          participationRate: invited.size ? Math.round((responded.size / invited.size) * 100) : 0,
+          completionRate: participants.length
+            ? Math.round(
+                (participants.filter(p => p.status === 'COMPLETED').length / participants.length) *
+                  100,
+              )
+            : 0,
+        };
+      }),
+    );
+
+    return { data: series };
   }
 
   // ============================================================
