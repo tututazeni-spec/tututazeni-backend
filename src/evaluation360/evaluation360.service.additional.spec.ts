@@ -159,7 +159,12 @@ describe('Evaluation360Service (additional)', () => {
         // preenchido) não tem o nome da competência para gerar a questão
         // por omissão.
         competencies: [
-          { competencyId: 'c1', weight: 1, order: 1, competency: { id: 'c1', name: 'Competência C1' } },
+          {
+            competencyId: 'c1',
+            weight: 1,
+            order: 1,
+            competency: { id: 'c1', name: 'Competência C1' },
+          },
         ],
       });
       const result = await service.createCycle(
