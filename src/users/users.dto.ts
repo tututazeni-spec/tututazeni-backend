@@ -6,6 +6,7 @@ import {
   IsInt,
   IsEnum,
   IsArray,
+  ValidateNested,
   MaxLength,
   IsDateString,
 } from 'class-validator';
@@ -498,4 +499,109 @@ export class UserChangePasswordDto {
   @IsString()
   @IsStrongPassword()
   newPassword!: string;
+}
+
+// ─── Importação (docs/modulo_users.md Ponto 5) ──────────────────────────────
+// Linha já mapeada pelo frontend (colunas do CSV → estes campos) — o
+// mapeamento em si é só de apresentação, não precisa de viajar até ao
+// backend. departmentName/positionName são resolvidos por nome (findFirst
+// case-insensitive) porque uma folha de Excel/CSV não traz o id interno.
+
+export class ImportUserRowDto {
+  // @IsString() em vez de @IsEmail() de propósito: uma linha com email mal
+  // formado não deve rejeitar o pedido inteiro com 400 — o formato é
+  // validado dentro de importUsers() e devolvido como erro por linha no
+  // relatório (Ponto 5, "Erros de importação"), tal como
+  // scalability.service.ts#validateUserRow já faz para o import de tenants.
+  @ApiProperty()
+  @IsString()
+  email!: string;
+
+  @ApiProperty()
+  @IsString()
+  @MaxLength(120)
+  fullName!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  @MaxLength(30)
+  employeeNumber?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+
+  @ApiPropertyOptional({ description: 'Nome do departamento — resolvido por nome, não por id' })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  departmentName?: string;
+
+  @ApiPropertyOptional({ description: 'Nome do cargo — resolvido por nome, não por id' })
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsString()
+  positionName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsDateString()
+  hireDate?: string;
+}
+
+export class ImportUsersDto {
+  @ApiProperty({ type: [ImportUserRowDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ImportUserRowDto)
+  rows!: ImportUserRowDto[];
+
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Actualizar utilizadores já existentes (por email) em vez de saltar',
+  })
+  @IsOptional()
+  @IsBoolean()
+  updateExisting?: boolean;
+
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Só valida e devolve o relatório — não escreve nada na BD',
+  })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+}
+
+// ─── Histórico & Auditoria (docs/modulo_users.md Ponto 6) ───────────────────
+
+export class ModuleAuditLogFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  action?: string;
+
+  @ApiPropertyOptional({ description: 'Filtrar pelo utilizador visado (não quem executou)' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  userId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @EmptyStringToUndefined()
+  @IsDateString()
+  to?: string;
 }

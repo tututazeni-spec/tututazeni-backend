@@ -23,6 +23,8 @@ import {
   InviteUserDto,
   UserChangePasswordDto,
   AccountStatus,
+  ImportUsersDto,
+  ModuleAuditLogFilterDto,
 } from './users.dto';
 
 // Campos base a incluir em todas as queries (sem password)
@@ -422,9 +424,51 @@ export class UsersService {
       include: USER_INCLUDE_BASIC,
     });
 
+    await this.logFieldChanges(id, updatedById ?? id, existing, dto, user);
     await this.writeAuditLog(id, updatedById ?? id, 'USER_UPDATED', { fields: Object.keys(dto) });
 
     return this.sanitize(user);
+  }
+
+  // Regista os eventos granulares do Ponto 6 (Departamento/Cargo/Gestor/Perfil
+  // alterado, MFA activado/desactivado) além do USER_UPDATED genérico — só
+  // quando o campo realmente muda de valor. `existing`/`updated` já trazem as
+  // relações (USER_INCLUDE_BASIC), por isso o "de"/"para" fica com o nome
+  // legível em vez do id em bruto.
+  private async logFieldChanges(
+    userId: number,
+    actorId: number,
+    existing: { departmentId?: number | null; positionId?: number | null; managerId?: number | null; roleId?: number | null; mfaEnabled?: boolean; department?: { name: string } | null; position?: { name: string } | null; manager?: { fullName: string } | null; role?: { name: string } | null },
+    dto: UpdateUserDto,
+    updated: { department?: { name: string } | null; position?: { name: string } | null; manager?: { fullName: string } | null; role?: { name: string } | null },
+  ) {
+    if (dto.departmentId !== undefined && dto.departmentId !== existing.departmentId) {
+      await this.writeAuditLog(userId, actorId, 'DEPARTMENT_CHANGED', {
+        from: existing.department?.name ?? null,
+        to: updated.department?.name ?? null,
+      });
+    }
+    if (dto.positionId !== undefined && dto.positionId !== existing.positionId) {
+      await this.writeAuditLog(userId, actorId, 'POSITION_CHANGED', {
+        from: existing.position?.name ?? null,
+        to: updated.position?.name ?? null,
+      });
+    }
+    if (dto.managerId !== undefined && dto.managerId !== existing.managerId) {
+      await this.writeAuditLog(userId, actorId, 'MANAGER_CHANGED', {
+        from: existing.manager?.fullName ?? null,
+        to: updated.manager?.fullName ?? null,
+      });
+    }
+    if (dto.roleId !== undefined && dto.roleId !== existing.roleId) {
+      await this.writeAuditLog(userId, actorId, 'PROFILE_CHANGED', {
+        from: existing.role?.name ?? null,
+        to: updated.role?.name ?? null,
+      });
+    }
+    if (dto.mfaEnabled !== undefined && dto.mfaEnabled !== existing.mfaEnabled) {
+      await this.writeAuditLog(userId, actorId, dto.mfaEnabled ? 'MFA_ENABLED' : 'MFA_DISABLED');
+    }
   }
 
   // ─── PERFIL ───────────────────────────────────────────────────────────────
@@ -707,6 +751,135 @@ export class UsersService {
     };
   }
 
+  // ─── IMPORTAÇÃO (docs/modulo_users.md Ponto 5) ─────────────────────────────
+  // Excel/CSV → mapeamento de colunas → validação/duplicados feitos no
+  // frontend antes de chegar aqui (ImportUserRowDto já é a linha mapeada).
+  // Este serviço só faz a parte que precisa da BD: detectar duplicados
+  // reais (nesta remessa e contra utilizadores existentes), resolver
+  // departamento/cargo por nome, e criar ou actualizar. `dryRun` devolve o
+  // mesmo relatório sem escrever nada — é a pré-visualização.
+  async importUsers(dto: ImportUsersDto, actorId: number) {
+    const dryRun = dto.dryRun ?? true;
+    const updateExisting = dto.updateExisting ?? false;
+
+    const report = {
+      total: dto.rows.length,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [] as Array<{ line: number; email: string; error: string }>,
+      rows: [] as Array<{
+        line: number;
+        email: string;
+        outcome: 'create' | 'update' | 'skip-duplicate' | 'skip-existing' | 'error';
+        detail?: string;
+      }>,
+    };
+
+    const seenInFile = new Set<string>();
+
+    for (let i = 0; i < dto.rows.length; i++) {
+      const line = i + 1;
+      const row = dto.rows[i];
+      const email = row.email?.trim().toLowerCase();
+
+      try {
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          throw new Error('Email inválido ou em falta');
+        }
+        if (!row.fullName || row.fullName.trim().length < 2) {
+          throw new Error('Nome completo inválido ou em falta');
+        }
+
+        // Duplicado dentro do próprio ficheiro — não deixar a 2ª ocorrência
+        // pisar a 1ª silenciosamente.
+        if (seenInFile.has(email)) {
+          report.skipped++;
+          report.rows.push({ line, email, outcome: 'skip-duplicate', detail: 'Email repetido no ficheiro' });
+          continue;
+        }
+        seenInFile.add(email);
+
+        const [department, position, existing] = await Promise.all([
+          row.departmentName
+            ? this.prisma.department.findFirst({
+                where: { name: { equals: row.departmentName, mode: 'insensitive' } },
+              })
+            : Promise.resolve(null),
+          row.positionName
+            ? this.prisma.position.findFirst({
+                where: { name: { equals: row.positionName, mode: 'insensitive' } },
+              })
+            : Promise.resolve(null),
+          this.prisma.user.findUnique({ where: { email } }),
+        ]);
+
+        if (row.departmentName && !department) throw new Error(`Departamento "${row.departmentName}" não existe`);
+        if (row.positionName && !position) throw new Error(`Cargo "${row.positionName}" não existe`);
+
+        if (existing) {
+          if (!updateExisting) {
+            report.skipped++;
+            report.rows.push({ line, email, outcome: 'skip-existing', detail: 'Já existe — actualização não pedida' });
+            continue;
+          }
+          if (!dryRun) {
+            await this.update(
+              existing.id,
+              {
+                fullName: row.fullName,
+                employeeNumber: row.employeeNumber,
+                phone: row.phone,
+                departmentId: department?.id,
+                positionId: position?.id,
+                hireDate: row.hireDate,
+              },
+              actorId,
+            );
+          }
+          report.updated++;
+          report.rows.push({ line, email, outcome: 'update' });
+        } else {
+          if (!dryRun) {
+            await this.create(
+              {
+                email,
+                fullName: row.fullName,
+                employeeNumber: row.employeeNumber,
+                phone: row.phone,
+                departmentId: department?.id,
+                positionId: position?.id,
+                hireDate: row.hireDate,
+                accountStatus: AccountStatus.PENDING,
+              },
+              actorId,
+            );
+          }
+          report.created++;
+          report.rows.push({ line, email, outcome: 'create' });
+        }
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        report.errors.push({ line, email: email ?? row.email, error: message });
+        report.rows.push({ line, email: email ?? row.email, outcome: 'error', detail: message });
+      }
+    }
+
+    // Relatório de importação (Histórico de importações) — só regista quando
+    // é uma escrita real; uma pré-visualização (dryRun) não é um evento.
+    if (!dryRun) {
+      await this.writeAuditLog(actorId, actorId, 'BULK_IMPORT', {
+        total: report.total,
+        created: report.created,
+        updated: report.updated,
+        skipped: report.skipped,
+        errors: report.errors.length,
+      });
+    }
+
+    return { ...report, dryRun };
+  }
+
   // ─── CONVIDAR UTILIZADOR ──────────────────────────────────────────────────
 
   async invite(dto: InviteUserDto) {
@@ -869,6 +1042,43 @@ export class UsersService {
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.read.userAuditLog.count({ where: { userId } }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  // ─── HISTÓRICO & AUDITORIA — nível de módulo (docs/modulo_users.md Ponto 6) ─
+  // Mesma tabela UserAuditLog do separador "Histórico" do perfil individual
+  // (getAuditLogs acima), aqui sem filtrar por um único utilizador — cobre
+  // todas as acções da lista do Ponto 6 (criado, dados/departamento/cargo/
+  // gestor/perfil alterado, conta activada/desactivada, password alterada,
+  // MFA, login, logout, importações) porque write AuditLog() e o login/logout
+  // do AuthService escrevem todos na mesma tabela.
+  async getModuleAuditLogs(filters: ModuleAuditLogFilterDto) {
+    const { page = 1, limit = 30, action, userId, from, to } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+
+    const where: Prisma.UserAuditLogWhereInput = {};
+    if (action) where.action = action;
+    if (userId) where.userId = userId;
+    if (from || to) {
+      where.createdAt = {
+        ...(from ? { gte: new Date(from) } : {}),
+        ...(to ? { lte: new Date(to) } : {}),
+      };
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.userAuditLog.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          user: { select: { id: true, fullName: true, email: true } },
+          performedBy: { select: { id: true, fullName: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.read.userAuditLog.count({ where }),
     ]);
     return buildPaginatedResponse(data, total, page, limit);
   }

@@ -71,6 +71,20 @@ export class AuthService {
         }),
       );
 
+    // Também na UserAuditLog — é essa tabela que alimenta o separador
+    // "Histórico & Auditoria" do módulo Users (docs/modulo_users.md Ponto 6,
+    // que pede explicitamente Login/Logout na lista de eventos).
+    this.prisma.userAuditLog
+      .create({ data: { userId: user.id, performedById: user.id, action: 'LOGIN' } })
+      .catch((err: unknown) =>
+        this.logger.warn({
+          userId: user.id,
+          action: 'LOGIN',
+          err: { message: err instanceof Error ? err.message : String(err) },
+          msg: 'Falha ao registar UserAuditLog de login',
+        }),
+      );
+
     const { password: _, ...rest } = user;
     const safeUser = { ...rest, role: withFlatPermissions(user.role) };
     return { user: safeUser, ...tokens };
@@ -245,10 +259,26 @@ export class AuthService {
 
   async revokeRefreshToken(presented: string): Promise<void> {
     const hash = crypto.createHash('sha256').update(presented).digest('hex');
+    // Lido antes de revogar só para saber de quem é a sessão — o logout em
+    // si não depende deste registo (ver LOGIN acima, mesma tabela).
+    const record = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hash } });
     await this.prisma.refreshToken.updateMany({
       where: { tokenHash: hash, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+
+    if (record) {
+      this.prisma.userAuditLog
+        .create({ data: { userId: record.userId, performedById: record.userId, action: 'LOGOUT' } })
+        .catch((err: unknown) =>
+          this.logger.warn({
+            userId: record.userId,
+            action: 'LOGOUT',
+            err: { message: err instanceof Error ? err.message : String(err) },
+            msg: 'Falha ao registar UserAuditLog de logout',
+          }),
+        );
+    }
   }
 
   private async generateTokens(userId: number, email: string) {
