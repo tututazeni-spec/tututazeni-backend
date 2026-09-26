@@ -639,11 +639,21 @@ model User {
   avatarUrl      String?
 
   // ─── Perfil Pessoal ───────────────────────────────────────────
-  phone     String?
-  birthDate DateTime?
-  gender    String?
-  country   String?
-  city      String?
+  phone                String?
+  birthDate            DateTime?
+  gender               String?
+  country              String?
+  city                 String?
+  preferredName        String?
+  nationality          String?
+  identificationNumber String?
+
+  // ─── Contacto (docs/modulo_users.md Ponto 2) ───────────────────
+  personalEmail         String?
+  alternatePhone        String?
+  address               String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
 
   // ─── Preferências ─────────────────────────────────────────────
   language String @default("pt")
@@ -659,6 +669,31 @@ model User {
   exitDate DateTime?
   nif      String? // Número de Identificação Fiscal — usado no processamento de recibos de vencimento
   nib      String? // Número de Identificação Bancária — conta para pagamento de salário
+
+  // ─── Dados Profissionais (docs/modulo_users.md Ponto 2) ────────
+  // Empresa/área/função/categoria/localização/centro de custo/horário: sem
+  // modelo dedicado hoje (não existe Company; Unit/Department cobrem só
+  // parte) — ficam aqui como campo livre do utilizador, não substituem
+  // Department/Position.
+  companyName          String?
+  area                 String?
+  jobFunction          String?
+  professionalCategory String?
+  workLocation         String?
+  contractType         ContractType?
+  workMode             WorkMode?
+  costCenter           String?
+  workSchedule         String?
+
+  // ─── Conta de Acesso (extra, docs/modulo_users.md Ponto 2) ─────
+  username           String? @unique
+  systemFunction     String?
+  mfaEnabled         Boolean @default(false)
+  contentAccessLevel String?
+  // Flag leve para filtros/directório — distinto de InstructorProfile
+  // (perfil completo de instrutor, com expertiseArea obrigatório e fluxo
+  // próprio de aprovação); esse fluxo fica fora do Ponto 2.
+  isInstructor       Boolean @default(false)
 
   // ─── Timestamps ───────────────────────────────────────────────
   createdAt DateTime @default(now())
@@ -700,6 +735,9 @@ model User {
   createdVacancies        InternalVacancy[]       @relation("VacancyCreator")
   managedVacancies        InternalVacancy[]       @relation("VacancyResponsibleManager")
   vacancyApplications     InternalApplication[]
+
+  // ─── Permissões Adicionais (docs/modulo_users.md Ponto 2) ──────
+  additionalPermissions UserPermission[]
 
   // ─── Perfil & Gamificação ─────────────────────────────────────
   profile        Profile?
@@ -1028,13 +1066,16 @@ model User {
 }
 
 model Profile {
-  id          Int      @id @default(autoincrement())
-  userId      Int      @unique
-  bio         String?  @db.Text
-  interests   String[]
-  careerGoals String?
-  linkedinUrl String?
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              Int      @id @default(autoincrement())
+  userId          Int      @unique
+  bio             String?  @db.Text
+  interests       String[]
+  careerGoals     String?
+  linkedinUrl     String?
+  // Academia (docs/modulo_users.md Ponto 2) — "Perfil de aprendizagem"; área
+  // de interesse já coberta por `interests`.
+  learningProfile String?
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model UserAuditLog {
@@ -1133,6 +1174,7 @@ model Permission {
   action          PermissionAction
   subject         PermissionSubject
   rolePermissions RolePermission[]
+  userPermissions UserPermission[]
 
   @@index([action])
   @@index([subject])
@@ -1146,6 +1188,21 @@ model RolePermission {
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, permissionId])
+}
+
+// Permissões concedidas directamente a um utilizador, além das do seu Role
+// (docs/modulo_users.md Ponto 2, "Permissões adicionais"). Independente de
+// RolePermission — nunca revoga nem substitui o que o Role já concede.
+model UserPermission {
+  id           Int        @id @default(autoincrement())
+  userId       Int
+  permissionId Int
+  grantedAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionId])
+  @@index([userId])
 }
 
 model RoleTemplate {

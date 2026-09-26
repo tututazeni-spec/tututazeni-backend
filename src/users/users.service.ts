@@ -199,9 +199,22 @@ export class UsersService {
     return user;
   }
 
+  // ─── LOOKUPS (formulário "Novo Utilizador") ───────────────────────────────
+
+  // Não existe endpoint de catálogo para LearningPath fora deste módulo (ver
+  // docs/modulo_users.md Ponto 2, "Percursos atribuídos") — findMany directo
+  // só com o essencial para o picker.
+  async getLearningPathLookups() {
+    return this.prisma.learningPath.findMany({
+      where: { status: 'PUBLISHED' },
+      select: { id: true, title: true },
+      orderBy: { title: 'asc' },
+    });
+  }
+
   // ─── CRIAR ────────────────────────────────────────────────────────────────
 
-  async create(dto: CreateUserDto) {
+  async create(dto: CreateUserDto, createdById?: number) {
     // Guards de unicidade antes da escrita: força primary para não validar contra réplica atrasada.
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email já registado');
@@ -214,36 +227,138 @@ export class UsersService {
         throw new ConflictException(`Número de funcionário ${dto.employeeNumber} já existe`);
     }
 
+    if (dto.username) {
+      const usernameExists = await this.prisma.user.findFirst({
+        where: { username: dto.username },
+      });
+      if (usernameExists) throw new ConflictException(`Username ${dto.username} já existe`);
+    }
+
     const hashed = dto.password ? await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR) : null;
 
-    const user = await this.prisma.user.create({
-      data: {
-        fullName: dto.fullName,
-        email: dto.email,
-        password: hashed,
-        // Nunca gravar "" num campo `@unique` — colidiria no 2.º utilizador
-        // sem nº de funcionário (P2002 -> 500). O DTO já normaliza "" -> undefined;
-        // este `|| null` protege chamadores directos do serviço.
-        employeeNumber: dto.employeeNumber || null,
-        phone: dto.phone,
-        birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
-        gender: dto.gender,
-        language: dto.language ?? 'pt',
-        timezone: dto.timezone ?? 'Africa/Luanda',
-        country: dto.country,
-        city: dto.city,
-        departmentId: dto.departmentId,
-        positionId: dto.positionId,
-        unitId: dto.unitId,
-        managerId: dto.managerId,
-        roleId: dto.roleId,
-        hireDate: dto.hireDate ? new Date(dto.hireDate) : null,
-        hrStatus: dto.hrStatus ?? 'ACTIVE',
-        accountStatus: dto.accountStatus ?? 'PENDING',
-        active: true,
-      },
-      include: USER_INCLUDE_BASIC,
-    });
+    let user: Prisma.UserGetPayload<{ include: typeof USER_INCLUDE_BASIC }>;
+    try {
+      user = await this.prisma.$transaction(async tx => {
+        const created = await tx.user.create({
+          data: {
+            fullName: dto.fullName,
+            email: dto.email,
+            password: hashed,
+            // Nunca gravar "" num campo `@unique` — colidiria no 2.º utilizador
+            // sem nº de funcionário (P2002 -> 500). O DTO já normaliza "" -> undefined;
+            // este `|| null` protege chamadores directos do serviço.
+            employeeNumber: dto.employeeNumber || null,
+            username: dto.username || null,
+            phone: dto.phone,
+            birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
+            gender: dto.gender,
+            language: dto.language ?? 'pt',
+            timezone: dto.timezone ?? 'Africa/Luanda',
+            country: dto.country,
+            city: dto.city,
+            preferredName: dto.preferredName,
+            nationality: dto.nationality,
+            identificationNumber: dto.identificationNumber,
+            nif: dto.nif,
+            personalEmail: dto.personalEmail,
+            alternatePhone: dto.alternatePhone,
+            address: dto.address,
+            emergencyContactName: dto.emergencyContactName,
+            emergencyContactPhone: dto.emergencyContactPhone,
+            departmentId: dto.departmentId,
+            positionId: dto.positionId,
+            unitId: dto.unitId,
+            managerId: dto.managerId,
+            roleId: dto.roleId,
+            hireDate: dto.hireDate ? new Date(dto.hireDate) : null,
+            hrStatus: dto.hrStatus ?? 'ACTIVE',
+            accountStatus: dto.accountStatus ?? 'PENDING',
+            companyName: dto.companyName,
+            area: dto.area,
+            jobFunction: dto.jobFunction,
+            professionalCategory: dto.professionalCategory,
+            workLocation: dto.workLocation,
+            contractType: dto.contractType,
+            workMode: dto.workMode,
+            costCenter: dto.costCenter,
+            workSchedule: dto.workSchedule,
+            systemFunction: dto.systemFunction,
+            mfaEnabled: dto.mfaEnabled ?? false,
+            contentAccessLevel: dto.contentAccessLevel,
+            isInstructor: dto.isInstructor ?? false,
+            active: true,
+            // Nested create (não uma 2.ª chamada depois): USER_INCLUDE_BASIC
+            // já pede `profile` neste mesmo create — uma criação em separado
+            // deixaria o `include` desta chamada ver o Profile como
+            // inexistente e devolver `profile: null` ao próprio criador.
+            ...(dto.interests?.length || dto.learningProfile
+              ? {
+                  profile: {
+                    create: {
+                      interests: dto.interests ?? [],
+                      learningProfile: dto.learningProfile,
+                    },
+                  },
+                }
+              : {}),
+          },
+          include: USER_INCLUDE_BASIC,
+        });
+
+        if (dto.courseIds?.length) {
+          await tx.enrollment.createMany({
+            data: dto.courseIds.map(courseId => ({
+              userId: created.id,
+              courseId,
+              origin: 'MANUAL' as const,
+              assignedById: createdById,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        if (dto.learningPathIds?.length) {
+          await tx.learningPathEnrollment.createMany({
+            data: dto.learningPathIds.map(learningPathId => ({
+              userId: created.id,
+              learningPathId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        if (dto.competencyIds?.length) {
+          await tx.userCompetency.createMany({
+            data: dto.competencyIds.map(competencyId => ({
+              userId: created.id,
+              competencyId,
+              source: 'MANUAL' as const,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        if (dto.additionalPermissionIds?.length) {
+          await tx.userPermission.createMany({
+            data: dto.additionalPermissionIds.map(permissionId => ({
+              userId: created.id,
+              permissionId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        return created;
+      });
+    } catch (e: unknown) {
+      // P2003 = FK inválida (curso/percurso/competência/permissão inexistente).
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+        throw new ConflictException(
+          'Um dos IDs indicados (curso, percurso, competência ou permissão) não existe',
+        );
+      }
+      throw e;
+    }
 
     // Inicializar pontos
     await this.prisma.userPoints.create({ data: { userId: user.id, points: 0 } });
@@ -267,7 +382,9 @@ export class UsersService {
       });
 
     // Registar auditoria
-    await this.writeAuditLog(user.id, user.id, 'USER_CREATED', { email: user.email });
+    await this.writeAuditLog(user.id, createdById ?? user.id, 'USER_CREATED', {
+      email: user.email,
+    });
 
     return this.sanitize(user);
   }

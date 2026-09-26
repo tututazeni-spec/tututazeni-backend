@@ -146,7 +146,14 @@ export class UsersController {
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar utilizador' })
   create(@CurrentUser() admin: CurrentUserData, @Body() dto: CreateUserDto) {
-    return this.svc.create(dto);
+    return this.svc.create(dto, admin.id);
+  }
+
+  @Get('lookups/learning-paths')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Percursos de aprendizagem publicados (picker "Novo Utilizador")' })
+  learningPathLookups() {
+    return this.svc.getLearningPathLookups();
   }
 
   @Post('invite')
