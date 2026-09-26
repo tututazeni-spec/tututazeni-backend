@@ -198,19 +198,28 @@ export class DepartmentsService {
     type DepartmentNode = (typeof all)[number] & {
       positionsCount: number;
       level: number;
+      parent: { id: number; name: string; code: string } | null;
       children: DepartmentNode[];
     };
-    const buildTree = (parentId: number | null, level: number): DepartmentNode[] =>
+    // findMany não fez include de `parent` (seria redundante — já percorremos
+    // a árvore de pai para filho): propaga-se o próprio nó, achatado, como
+    // "parent" dos seus filhos durante a recursão.
+    const buildTree = (
+      parentId: number | null,
+      level: number,
+      parent: { id: number; name: string; code: string } | null,
+    ): DepartmentNode[] =>
       all
         .filter(d => d.parentId === parentId)
         .map(d => ({
           ...d,
           positionsCount: positionsByDept.get(d.id) ?? 0,
           level,
-          children: buildTree(d.id, level + 1),
+          parent,
+          children: buildTree(d.id, level + 1, { id: d.id, name: d.name, code: d.code }),
         }));
 
-    return buildTree(null, 1);
+    return buildTree(null, 1, null);
   }
 
   async findOne(id: number) {
