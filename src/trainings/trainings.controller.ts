@@ -97,7 +97,10 @@ export class TrainingController {
 
   @Get('user/:userId')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Treinamentos de um utilizador (inscrições e histórico) — separador Formação do perfil' })
+  @ApiOperation({
+    summary:
+      'Treinamentos de um utilizador (inscrições e histórico) — separador Formação do perfil',
+  })
   userTrainings(@Param('userId', ParseIntPipe) userId: number) {
     return this.svc.getMyTrainings(userId);
   }

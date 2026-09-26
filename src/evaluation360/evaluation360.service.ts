@@ -1361,7 +1361,16 @@ export class Evaluation360Service {
     const participations = await this.prisma.read.cycleParticipant.findMany({
       where: { userId, cycle: { deletedAt: null } },
       include: {
-        cycle: { select: { id: true, name: true, type: true, status: true, startDate: true, endDate: true } },
+        cycle: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            status: true,
+            startDate: true,
+            endDate: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });

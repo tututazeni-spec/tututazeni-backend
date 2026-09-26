@@ -438,9 +438,24 @@ export class UsersService {
   private async logFieldChanges(
     userId: number,
     actorId: number,
-    existing: { departmentId?: number | null; positionId?: number | null; managerId?: number | null; roleId?: number | null; mfaEnabled?: boolean; department?: { name: string } | null; position?: { name: string } | null; manager?: { fullName: string } | null; role?: { name: string } | null },
+    existing: {
+      departmentId?: number | null;
+      positionId?: number | null;
+      managerId?: number | null;
+      roleId?: number | null;
+      mfaEnabled?: boolean;
+      department?: { name: string } | null;
+      position?: { name: string } | null;
+      manager?: { fullName: string } | null;
+      role?: { name: string } | null;
+    },
     dto: UpdateUserDto,
-    updated: { department?: { name: string } | null; position?: { name: string } | null; manager?: { fullName: string } | null; role?: { name: string } | null },
+    updated: {
+      department?: { name: string } | null;
+      position?: { name: string } | null;
+      manager?: { fullName: string } | null;
+      role?: { name: string } | null;
+    },
   ) {
     if (dto.departmentId !== undefined && dto.departmentId !== existing.departmentId) {
       await this.writeAuditLog(userId, actorId, 'DEPARTMENT_CHANGED', {
@@ -795,7 +810,12 @@ export class UsersService {
         // pisar a 1ª silenciosamente.
         if (seenInFile.has(email)) {
           report.skipped++;
-          report.rows.push({ line, email, outcome: 'skip-duplicate', detail: 'Email repetido no ficheiro' });
+          report.rows.push({
+            line,
+            email,
+            outcome: 'skip-duplicate',
+            detail: 'Email repetido no ficheiro',
+          });
           continue;
         }
         seenInFile.add(email);
@@ -814,13 +834,20 @@ export class UsersService {
           this.prisma.user.findUnique({ where: { email } }),
         ]);
 
-        if (row.departmentName && !department) throw new Error(`Departamento "${row.departmentName}" não existe`);
-        if (row.positionName && !position) throw new Error(`Cargo "${row.positionName}" não existe`);
+        if (row.departmentName && !department)
+          throw new Error(`Departamento "${row.departmentName}" não existe`);
+        if (row.positionName && !position)
+          throw new Error(`Cargo "${row.positionName}" não existe`);
 
         if (existing) {
           if (!updateExisting) {
             report.skipped++;
-            report.rows.push({ line, email, outcome: 'skip-existing', detail: 'Já existe — actualização não pedida' });
+            report.rows.push({
+              line,
+              email,
+              outcome: 'skip-existing',
+              detail: 'Já existe — actualização não pedida',
+            });
             continue;
           }
           if (!dryRun) {
