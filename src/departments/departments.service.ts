@@ -192,6 +192,7 @@ export class DepartmentsService {
         directManager: { select: { id: true, fullName: true, email: true } },
         unit: { select: { id: true, name: true, code: true } },
         parent: { select: { id: true, name: true, code: true } },
+        processOwnerDepartment: { select: { id: true, name: true, code: true } },
         children: {
           where: { active: true },
           include: {
@@ -265,8 +266,15 @@ export class DepartmentsService {
         objective: dto.objective,
         mainResponsibilities: dto.mainResponsibilities,
         functionalArea: dto.functionalArea,
+        businessArea: dto.businessArea,
         isStrategic: dto.isStrategic ?? false,
         notes: dto.notes,
+        expectedEmployees: dto.expectedEmployees,
+        institutionalContact: dto.institutionalContact,
+        dataVisibility: dto.dataVisibility,
+        approvalRequired: dto.approvalRequired ?? false,
+        approverIds: dto.approverIds ?? [],
+        processOwnerDepartmentId: dto.processOwnerDepartmentId,
         active,
         status: active ? 'ACTIVE' : 'INACTIVE',
       },
@@ -562,6 +570,111 @@ export class DepartmentsService {
       avgPerformanceScore: avgScore._avg.score,
       recentActivity,
       alerts,
+    };
+  }
+
+  // "Estrutura de um departamento" (docs/modulo_departments.md Ponto 2) —
+  // Departamento → Subdepartamentos → Equipas → Responsável → Colaboradores →
+  // Cargos → Posições. Equipas não tem modelo próprio: agrupa-se os membros
+  // activos pelo seu gestor directo (User.managerId), que é a única noção de
+  // "equipa" que já existe no schema (ver [[project-innova-leader-module-team-search]]).
+  async getStructure(id: number) {
+    await this.findOne(id);
+
+    const [members, positions, vacancies, documents, goals] = await Promise.all([
+      this.prisma.read.user.findMany({
+        where: { departmentId: id, active: true },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          managerId: true,
+          manager: { select: { id: true, fullName: true } },
+          position: { select: { id: true, name: true } },
+        },
+        orderBy: { fullName: 'asc' },
+      }),
+      this.prisma.read.position.findMany({
+        where: { departmentId: id },
+        include: { _count: { select: { users: true } } },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.read.internalVacancy.findMany({
+        where: { departmentId: id },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          slots: true,
+          closingDate: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      this.prisma.read.companyDocument.findMany({
+        where: { departmentId: id, active: true },
+        select: {
+          id: true,
+          title: true,
+          category: true,
+          fileUrl: true,
+          fileType: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      this.prisma.read.performanceGoal.findMany({
+        where: { user: { departmentId: id } },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          progress: true,
+          dueDate: true,
+          user: { select: { id: true, fullName: true } },
+        },
+        orderBy: { dueDate: 'asc' },
+        take: 30,
+      }),
+    ]);
+
+    // Equipas: agrupar por gestor directo. Quem não tem manager (ou cujo
+    // manager está fora do departamento) fica em "Sem equipa atribuída".
+    const teamsByManager = new Map<
+      number,
+      { manager: { id: number; fullName: string }; members: typeof members }
+    >();
+    const noTeam: typeof members = [];
+    for (const m of members) {
+      if (m.manager && m.managerId !== m.id) {
+        const entry = teamsByManager.get(m.manager.id);
+        if (entry) entry.members.push(m);
+        else teamsByManager.set(m.manager.id, { manager: m.manager, members: [m] });
+      } else {
+        noTeam.push(m);
+      }
+    }
+    const teams = [
+      ...Array.from(teamsByManager.values()),
+      ...(noTeam.length ? [{ manager: null, members: noTeam }] : []),
+    ];
+
+    return {
+      departmentId: id,
+      teams,
+      positions: positions.map(p => ({
+        id: p.id,
+        name: p.name,
+        code: p.code,
+        level: p.level,
+        headcountPlanned: p.headcountPlanned ?? 0,
+        headcountOccupied: p._count.users,
+      })),
+      vacancies,
+      documents,
+      goals,
     };
   }
 

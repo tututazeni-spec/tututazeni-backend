@@ -730,7 +730,13 @@ const PermissionSubject = {
   HR: 'HR',
 };
 
-const DepartmentStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE' };
+const DepartmentStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE', ARCHIVED: 'ARCHIVED' };
+
+const DepartmentVisibility = {
+  PUBLIC: 'PUBLIC',
+  DEPARTMENT_ONLY: 'DEPARTMENT_ONLY',
+  RESTRICTED: 'RESTRICTED',
+};
 
 const UnitType = {
   HEADQUARTERS: 'HEADQUARTERS',
@@ -2509,6 +2515,7 @@ module.exports = {
   PermissionAction,
   PermissionSubject,
   DepartmentStatus,
+  DepartmentVisibility,
   UnitType,
   PositionLevel,
   OrgChangeType,
