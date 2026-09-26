@@ -1008,6 +1008,17 @@ model User {
   passwordResetTokens PasswordResetToken[]
   refreshTokens       RefreshToken[]
 
+  // ─── ROI & Impact ─────────────────────────────────────────────
+  createdRoiAnalyses  RoiAnalysis[]
+  impactRecords       ImpactRecord[]       @relation("ImpactRecordSubject")
+  createdImpactRecords ImpactRecord[]      @relation("ImpactRecordCreatedBy")
+  createdRoiEvaluationModels RoiEvaluationModel[]
+  createdCostEntries        CostEntry[]
+  createdKpiDefinitions     KpiDefinition[]
+  createdCorrelations       Correlation[]
+  createdScenarios          Scenario[]
+  createdBenchmarks         Benchmark[]
+
   @@index([accountStatus])
   @@index([departmentId])
   @@index([managerId])
@@ -1214,6 +1225,10 @@ model Department {
   leadershipTargetings LeadershipProgramTargeting[]
   libraryItems         LibraryItem[]
   events               Event[]
+  roiAnalyses          RoiAnalysis[]
+  impactRecords        ImpactRecord[]
+  correlations         Correlation[]
+  scenarios            Scenario[]
 
   @@index([active])
   @@index([parentId])
@@ -7485,6 +7500,514 @@ model TrainingImpact {
   impactRate   Float
   calculatedAt DateTime @default(now())
   course       Course   @relation(fields: [courseId], references: [id])
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ROI & IMPACT (docs/roi-impact.md)
+// ══════════════════════════════════════════════════════════════════
+// Módulo transversal — lê Trainings/Courses/Evaluation/Competencies/
+// Development Plans/Payroll/Departments/Processes sem duplicar os dados de
+// origem. `initiativeType` + `initiativeId` seguem o mesmo padrão "FK solta"
+// de AuditLog.entity/entityId: a iniciativa continua a viver na sua própria
+// tabela (Course/Training/LearningPath/LegacyPdi/Mentoring/Event), aqui só
+// se guarda a referência, nunca uma cópia dos seus dados.
+
+enum RoiInitiativeType {
+  CURSO
+  FORMACAO
+  PERCURSO
+  PDI
+  MENTORIA
+  EVENTO
+}
+
+enum RoiAnalysisStatus {
+  EM_PREPARACAO
+  EM_MEDICAO
+  DADOS_INSUFICIENTES
+  CALCULADO
+  VALIDADO
+  REVISTO
+  ARQUIVADO
+}
+
+enum RoiBenefitType {
+  PRODUTIVIDADE
+  QUALIDADE
+  REDUCAO_ERROS
+  REDUCAO_ROTATIVIDADE
+  REDUCAO_ACIDENTES
+  AUMENTO_VENDAS
+  REDUCAO_TEMPO_CICLO
+  SATISFACAO_CLIENTE
+  OUTRO
+}
+
+model RoiAnalysis {
+  id             Int               @id @default(autoincrement())
+  name           String
+  initiativeType RoiInitiativeType
+  // FK solta para Course/Training/LearningPath/LegacyPdi/Mentoring/Event,
+  // conforme initiativeType — resolvida em runtime, nunca copiada.
+  initiativeId   Int?
+  departmentId   Int?
+  department     Department?       @relation(fields: [departmentId], references: [id])
+  unit           String?
+  // "Responsável" da análise — FK solta para User, sem @relation (padrão
+  // PayslipAccessLog.userId) para não multiplicar back-relations em User.
+  responsibleId  Int?
+
+  referencePeriodStart  DateTime?
+  referencePeriodEnd    DateTime?
+  measurementPeriodDays Int?
+
+  // Etapa 2 — Custos (consolidados manualmente nesta fase; a leitura
+  // automática de Payroll/Trainings fica para a secção 5, futura).
+  costDirect      Float?
+  costIndirect    Float?
+  costOpportunity Float?
+
+  // Etapa 3 — Benefícios esperados
+  benefitType           RoiBenefitType?
+  benefitIndicator      String?
+  benefitBaselineValue  Float?
+  benefitExpectedValue  Float?
+  benefitConversionNote String?
+  benefitValidatorId    Int?
+
+  // Etapa 4 — Metodologia (modelo de avaliação configurável fica para a
+  // secção 4, futura; aqui regista-se só o nome usado nesta análise)
+  evaluationModelUsed String?
+  isolationFactor     Float?
+  dataSource          String?
+  hasControlGroup     Boolean @default(false)
+  assumptions         String?
+
+  // Etapa 5 — Resultado
+  status          RoiAnalysisStatus @default(EM_PREPARACAO)
+  computedBenefit Float?
+  computedCost    Float?
+  roiPercent      Float?
+  bcr             Float?
+  paybackMonths   Float?
+  confidenceLevel String?
+  observations    String?
+  approvedById    Int?
+  approvedAt      DateTime?
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([initiativeType, initiativeId])
+  @@index([departmentId])
+  @@index([status])
+}
+
+// docs/roi-impact.md §3 — Impacto no Negócio. Liga uma iniciativa (mesma FK
+// solta initiativeType/initiativeId de RoiAnalysis, acima) a um indicador de
+// negócio real — nunca aos indicadores de formação em si (isso já é o que
+// RoiAnalysis/getImpactMetrics fazem). O sujeito do impacto é sempre um dos
+// três (Colaborador via userId, Equipa via team em texto livre — não há
+// modelo de "equipa" formal no schema, Departamento via departmentId).
+enum ImpactSubjectType {
+  COLABORADOR
+  EQUIPA
+  DEPARTAMENTO
+}
+
+enum ImpactCategory {
+  PRODUTIVIDADE
+  QUALIDADE
+  ROTATIVIDADE
+  ABSENTISMO
+  SEGURANCA
+  VENDAS_RECEITA
+  SATISFACAO_CLIENTE
+  SATISFACAO_COLABORADOR
+  TEMPO_RESPOSTA
+  CUMPRIMENTO_SLA
+  COMPLIANCE
+  CUSTO_EVITADO
+}
+
+model ImpactRecord {
+  id          Int               @id @default(autoincrement())
+  subjectType ImpactSubjectType
+  userId      Int?
+  user        User?             @relation("ImpactRecordSubject", fields: [userId], references: [id])
+  team        String?
+  departmentId Int?
+  department  Department?       @relation(fields: [departmentId], references: [id])
+
+  initiativeType RoiInitiativeType
+  initiativeId   Int?
+
+  category      ImpactCategory
+  indicatorName String
+
+  valueBefore Float?
+  valueAfter  Float?
+
+  observationPeriodStart DateTime?
+  observationPeriodEnd   DateTime?
+
+  // % atribuível à iniciativa (0–100) — o valor atribuído
+  // (variação × attributionPercent/100) é calculado em runtime, nunca
+  // guardado, para nunca divergir se a % de atribuição for revista.
+  attributionPercent Float?
+  dataSource         String?
+
+  // FK solta para User (padrão PayslipAccessLog.userId) — sem @relation
+  // para não multiplicar back-relations em User.
+  validatedById Int?
+  validatedAt   DateTime?
+
+  createdById Int
+  createdBy   User     @relation("ImpactRecordCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([initiativeType, initiativeId])
+  @@index([departmentId])
+  @@index([category])
+  @@index([userId])
+}
+
+// docs/roi-impact.md §4 — Modelos de Avaliação. Configuração da metodologia
+// (Kirkpatrick 4 níveis + extensão Phillips) usada para medir impacto/ROI.
+// Nome "RoiEvaluationModel" (não "EvaluationModel") para não colidir com o
+// enum EvaluationModel já usado por Evaluation360 (DEG_360/...).
+enum RoiModelStatus {
+  ACTIVO
+  INACTIVO
+}
+
+model RoiEvaluationModel {
+  id          Int     @id @default(autoincrement())
+  name        String
+  description String?
+
+  // Array de níveis incluídos — cada item:
+  // {level: 1-5, name, mandatory: boolean, weight: number}.
+  // Ver RoiEvaluationModelService.DEFAULT_LEVELS para a estrutura
+  // Kirkpatrick (1 Reação/2 Aprendizagem/3 Comportamento/4 Resultados) +
+  // extensão Phillips (5 ROI).
+  levels Json
+
+  // {initiativeTypes?: RoiInitiativeType[], criticality?: string[], minCost?: number}
+  applicability Json?
+
+  status RoiModelStatus @default(ACTIVO)
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+}
+
+// docs/roi-impact.md §5 — Custos & Investimento. Consolida o custo real de
+// cada iniciativa (mesma FK solta initiativeType/initiativeId de
+// RoiAnalysis) sem duplicar Payroll/Trainings — CostEntry regista apenas
+// linhas de custo introduzidas manualmente pelo RH (ou o resultado pontual
+// de um cálculo de apoio, ex. "custo de horas perdidas" a partir do
+// salário/hora de Payroll) e o próprio valor de origem de Payroll/Trainings
+// nunca é copiado para aqui, só lido em runtime — ver
+// CostEntryService#estimateLaborCost / #getConsolidation.
+enum CostSubCategory {
+  // Custos diretos
+  FORMADOR_CONSULTOR
+  MATERIAL_DIDATICO
+  PLATAFORMA_LICENCAS
+  SALA_LOGISTICA
+  DESLOCACAO_ALOJAMENTO
+  CERTIFICACAO
+  // Custos indiretos
+  HORAS_TRABALHO_PERDIDAS
+  SUBSTITUICAO_COBERTURA
+  COORDENACAO_GESTAO_RH
+  // Custos de oportunidade
+  PRODUCAO_NAO_REALIZADA
+  ATRASO_PROJETOS
+}
+
+enum CostCategory {
+  DIRETO
+  INDIRETO
+  OPORTUNIDADE
+}
+
+model CostEntry {
+  id             Int               @id @default(autoincrement())
+  initiativeType RoiInitiativeType
+  initiativeId   Int?
+
+  // `category` é sempre derivado de `subCategory` (CostEntryService.CATEGORY_BY_SUBCATEGORY)
+  // no momento da criação — nunca aceite directamente do cliente — para as
+  // duas colunas nunca divergirem uma da outra.
+  category    CostCategory
+  subCategory CostSubCategory
+
+  description String?
+  amount      Float
+  // Preenchido quando o valor vem de um cálculo de apoio sobre dados de
+  // outro módulo (ex. "Payroll — salário/hora × horas de formação"), em vez
+  // de introduzido manualmente — nunca um valor copiado do módulo de
+  // origem, só uma nota da proveniência.
+  source      String?
+  incurredAt  DateTime?
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([initiativeType, initiativeId])
+  @@index([category])
+  @@index([subCategory])
+}
+
+// docs/roi-impact.md §6 — Indicadores & KPIs. Biblioteca central de KPIs que
+// o RH pode associar a qualquer iniciativa — puramente uma definição
+// (nome/fórmula/fonte/meta); a recolha real do valor não é modelada aqui
+// (fica para ImpactRecord.indicatorName quando o KPI é usado numa análise
+// concreta), à semelhança de RoiEvaluationModel ser só a metodologia, não a
+// medição em si.
+enum KpiCategory {
+  PRODUTIVIDADE
+  QUALIDADE
+  PESSOAS
+  FINANCEIRO
+  CLIENTE
+  SEGURANCA
+  COMPLIANCE
+}
+
+enum KpiFrequency {
+  DIARIA
+  SEMANAL
+  MENSAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+}
+
+// Nome distinto de "KpiStatus" (já existente para ExecutiveReport, com
+// valores diferentes: GREEN/YELLOW/RED — semáforo de um KPI medido, não o
+// ciclo de vida da própria definição na biblioteca).
+enum KpiDefinitionStatus {
+  ACTIVO
+  INACTIVO
+}
+
+model KpiDefinition {
+  id          Int         @id @default(autoincrement())
+  name        String
+  code        String      @unique
+  category    KpiCategory
+  description String?
+  unit        String
+  formula     String?
+  dataSource  String?
+  frequency   KpiFrequency
+  targetValue Float?
+  benchmarkNote String?
+  // FK solta para User (padrão PayslipAccessLog.userId/RoiAnalysis.responsibleId)
+  // — sem @relation para não multiplicar back-relations em User.
+  responsibleId Int?
+  status      KpiDefinitionStatus   @default(ACTIVO)
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([status])
+}
+
+// docs/roi-impact.md §7 — Correlações. Explora relações estatísticas entre
+// investimento em desenvolvimento e resultados de negócio, sempre a partir
+// de dados reais já existentes noutros módulos — nunca inventa pares nem
+// guarda um coeficiente sem amostra suficiente (ver CorrelationService,
+// mesma disciplina de RoiAnalysisService.computeResult devolver
+// DADOS_INSUFICIENTES em vez de um número definitivo sem dados fiáveis).
+// `dataPoints` é só a amostra usada nesta execução (para o gráfico de
+// dispersão) — recalculada do zero de cada vez que a análise corre de novo,
+// nunca uma fonte de verdade paralela às tabelas de origem.
+enum CorrelationType {
+  HORAS_FORMACAO_DESEMPENHO
+  COMPETENCIAS_PRODUTIVIDADE
+  PDI_RETENCAO
+  INVESTIMENTO_ROTATIVIDADE
+  ONBOARDING_TEMPO_PRODUTIVIDADE
+  MENTORIA_PROGRESSAO_CARREIRA
+  LIDERANCA_ENGAGEMENT_EQUIPA
+}
+
+model Correlation {
+  id           Int              @id @default(autoincrement())
+  type         CorrelationType
+  departmentId Int?
+  department   Department?      @relation(fields: [departmentId], references: [id])
+
+  periodStart DateTime?
+  periodEnd   DateTime?
+
+  xLabel String
+  yLabel String
+
+  sampleSize  Int
+  coefficient Float?
+  pValue      Float?
+  significant Boolean?
+
+  // [{x: number, y: number, label?: string}] — amostra usada nesta
+  // execução, só para o gráfico de dispersão (ver nota acima).
+  dataPoints Json
+
+  // Preenchido quando a amostra é insuficiente (sampleSize < mínimo) ou
+  // quando a variável usada é uma aproximação (ex.: Pair 5 usa a primeira
+  // avaliação de desempenho como proxy de "produtividade plena", por não
+  // existir um campo dedicado) — nunca escondido do RH que lê o resultado.
+  note String?
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([type])
+  @@index([departmentId])
+}
+
+// docs/roi-impact.md §8 — Cenários & Simulações. Simula o impacto financeiro
+// de uma iniciativa FUTURA ainda não executada — ao contrário de RoiAnalysis
+// (mede uma iniciativa real já decorrida), aqui não há dados de execução
+// para ler; o benefício esperado vem OU de uma RoiAnalysis semelhante já
+// medida (basedOnAnalysisId, mesma FK solta "nunca copiada" do resto do
+// módulo — resolvida em runtime via ScenarioService) OU de uma premissa
+// manual do RH (expectedBenefit). `projections` guarda os três casos do
+// spec (Otimista/Realista/Pessimista), sempre recalculados a partir de
+// estimatedCost/expectedBenefit — nunca editáveis directamente. `roiPercent`
+// e `paybackMonths` ao nível do registo replicam sempre o caso Realista, só
+// para ordenar/comparar cenários sem ter de ler o JSON.
+model Scenario {
+  id             Int               @id @default(autoincrement())
+  name           String
+  initiativeType RoiInitiativeType
+  description    String?
+
+  departmentId        Int?
+  department          Department? @relation(fields: [departmentId], references: [id])
+  targetAudienceCount Int?
+
+  estimatedCost Float
+
+  // Benefício esperado: `basedOnAnalysisId` referencia uma RoiAnalysis já
+  // CALCULADA/VALIDADA/REVISTA (FK solta, sem @relation — mesmo padrão de
+  // RoiAnalysis.responsibleId — para não multiplicar back-relations em
+  // RoiAnalysis); quando presente, `expectedBenefit` é sempre DERIVADO do
+  // BCR dessa análise × estimatedCost, nunca introduzido à mão em paralelo.
+  basedOnAnalysisId Int?
+  expectedBenefit   Float?
+  assumptions       String?
+
+  // Preenchido quando a análise de origem ainda não tem resultado calculado,
+  // ou quando não há premissa manual nem análise de referência — nunca
+  // escondido do RH (mesmo padrão de Correlation.note).
+  note String?
+
+  roiPercent    Float?
+  paybackMonths Float?
+
+  // {OTIMISTA: {cost, benefit, roiPercent, paybackMonths}, REALISTA: {...}, PESSIMISTA: {...}}
+  projections Json?
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([initiativeType])
+  @@index([departmentId])
+  @@index([basedOnAnalysisId])
+}
+
+// docs/roi-impact.md §9 — Benchmarks. Referências para contextualizar
+// resultados: `type` distingue INTERNO (meta/referência que o RH regista
+// explicitamente, ex. "meta interna do departamento X para 2026") de
+// EXTERNO (benchmark de mercado/sector, sempre com fonte registada, nunca
+// inventado). As comparações "entre departamentos/unidades/ciclos" e
+// "melhor/pior por tipo de iniciativa" do spec são computadas em runtime a
+// partir de RoiAnalysis (ver BenchmarkService#getInternalComparisons) —
+// nunca guardadas aqui, para nunca divergirem das análises reais.
+enum BenchmarkType {
+  INTERNO
+  EXTERNO
+}
+
+model Benchmark {
+  id            Int           @id @default(autoincrement())
+  name          String
+  type          BenchmarkType
+  source        String
+  referenceYear Int
+  value         Float
+  unit          String
+  // "Aplicável a" — FK solta para KpiDefinition (mesmo padrão de
+  // Scenario.basedOnAnalysisId, sem @relation, para não multiplicar
+  // back-relations em KpiDefinition); indicatorName cobre o indicador livre
+  // sem KPI formal correspondente na biblioteca.
+  kpiDefinitionId Int?
+  indicatorName   String?
+  observations    String?
+
+  createdById Int
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([kpiDefinitionId])
+  @@index([referenceYear])
+}
+
+// docs/roi-impact.md §11 — "Configurações". Singleton (id fixo = 1), mesmo
+// padrão de AiTutorSettings: getConfig() devolve a linha ou os defaults,
+// updateConfig() faz upsert. defaultIsolationFactorsJson e
+// benefitConversionFormulasJson guardam mapas por RoiInitiativeType/
+// RoiBenefitType como JSON (sempre JSON.stringify ao escrever — mesma regra
+// de NotificationLog.metadata); defaultBenefitValidatorIds são FKs soltas
+// para User (sem @relation, para não multiplicar back-relations em User —
+// mesmo padrão de Benchmark.kpiDefinitionId).
+model RoiConfig {
+  id       Int    @id @default(1)
+  currency String @default("AOA")
+
+  discountRatePercent Float?
+
+  defaultIsolationFactorsJson String? @db.Text
+
+  level45CostThreshold Float?
+
+  defaultMeasurementPeriods Int[] @default([30, 60, 90, 180])
+
+  defaultBenefitValidatorIds Int[] @default([])
+
+  benefitConversionFormulasJson String? @db.Text
+
+  financialAccessRoles String[] @default(["ADMIN", "RH", "DIRECTOR"])
+  operationalOnlyRoles String[] @default(["GESTOR", "LIDER"])
+
+  alertNoMeasurementDays       Int?
+  alertRoiBelowExpectedPercent Float?
+
+  updatedById Int?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
 }
 
 // ══════════════════════════════════════════════════════════════════

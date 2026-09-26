@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RoiImpactService } from './roi-impact.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MetricsAggregationService } from '../metrics-aggregation/metrics-aggregation.service';
+import { RoiAnalysisService } from './roi-analysis.service';
 
 const DEFAULT_TRAINING_ROI = {
   enrollments: 0,
@@ -55,6 +56,11 @@ const mockPrisma = {
   lessonProgress: { count: makeCount() },
   leaveRequest: { count: makeCount() },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
+  roiAnalysis: { findMany: jest.fn().mockResolvedValue([]) },
+};
+
+const mockAnalysisSvc = {
+  resolveInitiative: jest.fn().mockResolvedValue(null),
 };
 
 describe('RoiImpactService', () => {
@@ -74,6 +80,7 @@ describe('RoiImpactService', () => {
         RoiImpactService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: MetricsAggregationService, useValue: mockMetrics },
+        { provide: RoiAnalysisService, useValue: mockAnalysisSvc },
       ],
     }).compile();
     service = module.get<RoiImpactService>(RoiImpactService);

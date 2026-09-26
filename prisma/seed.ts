@@ -530,6 +530,144 @@ async function main() {
 
   await seedFeedbackTagCompetencies(prisma);
 
+  // docs/roi-impact.md §4 — modelo de avaliação por omissão do sistema
+  // (Kirkpatrick 4 níveis + extensão Phillips). Sem @@unique em
+  // RoiEvaluationModel.name (não é um campo de negócio único, só o modelo
+  // "de sistema" que aqui se semeia é), por isso findFirst+create em vez de
+  // upsert — reexecutar o seed não deve duplicar nem apagar edições do RH.
+  const defaultRoiModel = await prisma.roiEvaluationModel.findFirst({
+    where: { name: 'Kirkpatrick + Phillips (padrão)' },
+  });
+  if (!defaultRoiModel) {
+    await prisma.roiEvaluationModel.create({
+      data: {
+        name: 'Kirkpatrick + Phillips (padrão)',
+        description:
+          'Modelo de 5 níveis recomendado pelo spec: Reação/Aprendizagem/Comportamento ' +
+          'obrigatórios para todas as formações; Resultados/ROI só acima do limiar de ' +
+          'custo/criticidade (ver Configurações).',
+        levels: [
+          { level: 1, name: 'Reação', mandatory: true, weight: 10 },
+          { level: 2, name: 'Aprendizagem', mandatory: true, weight: 20 },
+          { level: 3, name: 'Comportamento', mandatory: true, weight: 25 },
+          { level: 4, name: 'Resultados', mandatory: false, weight: 25 },
+          { level: 5, name: 'ROI', mandatory: false, weight: 20 },
+        ],
+        createdById: admin.id,
+      },
+    });
+    console.log('✅ Modelo de avaliação padrão criado: Kirkpatrick + Phillips');
+  }
+
+  // docs/roi-impact.md §6 — biblioteca central de KPIs, exemplos do spec.
+  // `code` é @unique, por isso upsert directo (reexecutar o seed não deve
+  // duplicar nem apagar edições do RH nos campos não semeados aqui).
+  const defaultKpis = [
+    {
+      code: 'TURNOVER_VOLUNTARIO',
+      name: 'Taxa de rotatividade voluntária',
+      category: 'PESSOAS' as const,
+      unit: '%',
+      formula: '(Saídas voluntárias ÷ Efetivo médio) × 100',
+      frequency: 'MENSAL' as const,
+      description: 'Percentagem de colaboradores que saem da empresa por iniciativa própria.',
+    },
+    {
+      code: 'CUSTO_SUBSTITUICAO_SAIDA',
+      name: 'Custo de substituição por saída',
+      category: 'FINANCEIRO' as const,
+      unit: 'AOA',
+      formula: 'Custo de recrutamento + integração + perda de produtividade até substituição',
+      frequency: 'TRIMESTRAL' as const,
+      description: 'Custo médio de substituir um colaborador que saiu.',
+    },
+    {
+      code: 'PRODUTIVIDADE_COLABORADOR',
+      name: 'Produtividade por colaborador',
+      category: 'PRODUTIVIDADE' as const,
+      unit: 'output/colaborador',
+      formula: 'Output total ÷ Nº de colaboradores',
+      frequency: 'MENSAL' as const,
+      description: 'Output médio gerado por colaborador no período.',
+    },
+    {
+      code: 'TAXA_PROMOCAO_INTERNA',
+      name: 'Taxa de promoção interna',
+      category: 'PESSOAS' as const,
+      unit: '%',
+      formula: '(Promoções internas ÷ Vagas preenchidas) × 100',
+      frequency: 'TRIMESTRAL' as const,
+      description: 'Percentagem de vagas preenchidas por promoção interna vs. contratação externa.',
+    },
+    {
+      code: 'TEMPO_PRODUTIVIDADE_PLENA',
+      name: 'Tempo médio até produtividade plena (onboarding)',
+      category: 'PRODUTIVIDADE' as const,
+      unit: 'dias',
+      formula: 'Média de dias entre admissão e produtividade plena',
+      frequency: 'MENSAL' as const,
+      dataSource: 'Onboarding',
+      description: 'Tempo médio até um novo colaborador atingir produtividade plena.',
+    },
+    {
+      code: 'CONCLUSAO_FORMACAO_OBRIGATORIA',
+      name: 'Taxa de conclusão de formação obrigatória',
+      category: 'QUALIDADE' as const,
+      unit: '%',
+      formula: '(Formações obrigatórias concluídas ÷ Formações obrigatórias atribuídas) × 100',
+      frequency: 'MENSAL' as const,
+      dataSource: 'Trainings/Courses',
+      description: 'Conformidade com formações de carácter obrigatório.',
+    },
+    {
+      code: 'CUSTO_HORA_FORMACAO',
+      name: 'Custo por hora de formação',
+      category: 'FINANCEIRO' as const,
+      unit: 'AOA/hora',
+      formula: 'Custo total da formação ÷ Total de horas de formação',
+      frequency: 'MENSAL' as const,
+      dataSource: 'Custos & Investimento',
+      description: 'Custo médio de cada hora de formação ministrada.',
+    },
+    {
+      code: 'NPS_INTERNO',
+      name: 'NPS interno',
+      category: 'CLIENTE' as const,
+      unit: 'pontos',
+      formula: '% Promotores − % Detratores',
+      frequency: 'SEMESTRAL' as const,
+      description: 'Net Promoter Score interno (satisfação/engagement do colaborador).',
+    },
+    {
+      code: 'TAXA_ABSENTISMO',
+      name: 'Taxa de absentismo',
+      category: 'PESSOAS' as const,
+      unit: '%',
+      formula: '(Dias de ausência ÷ Dias úteis totais) × 100',
+      frequency: 'MENSAL' as const,
+      dataSource: 'Attendance',
+      description: 'Percentagem de dias úteis perdidos por ausência.',
+    },
+    {
+      code: 'TAXA_ACIDENTES_TRABALHO',
+      name: 'Taxa de acidentes de trabalho',
+      category: 'SEGURANCA' as const,
+      unit: 'acidentes/1000 colaboradores',
+      formula: '(Nº de acidentes ÷ Efetivo) × 1000',
+      frequency: 'TRIMESTRAL' as const,
+      description: 'Frequência de acidentes de trabalho por 1000 colaboradores.',
+    },
+  ];
+
+  for (const kpi of defaultKpis) {
+    await prisma.kpiDefinition.upsert({
+      where: { code: kpi.code },
+      update: {},
+      create: { ...kpi, createdById: admin.id },
+    });
+  }
+  console.log('✅ Biblioteca de KPIs padrão criada:', defaultKpis.map(k => k.code).join(', '));
+
   console.log('🎉 Seed concluído!');
 }
 
