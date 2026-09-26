@@ -13,6 +13,7 @@ import { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { flattenRolePermissions } from '../common/utils/role-permissions';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -749,6 +750,84 @@ export class UsersService {
       });
 
     return { message: 'Convite enviado', userId: user.id };
+  }
+
+  // ─── ACESSO & PERMISSÕES (docs/modulo_users.md Ponto 4) ────────────────────
+  // Campos sem dados reais na plataforma hoje (dispositivos, tentativas de
+  // login, histórico de bloqueios) voltam explicitamente `null` — ver
+  // memory project_innova_acl_permission_ownership: não fabricar dados,
+  // sinalizar a lacuna para o frontend em vez de inventar histórico.
+  async getAccessOverview(id: number) {
+    const user = await this.prisma.read.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        accountStatus: true,
+        mfaEnabled: true,
+        systemFunction: true,
+        contentAccessLevel: true,
+        createdAt: true,
+        unit: { select: { id: true, name: true } },
+        department: { select: { id: true, name: true } },
+        role: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            rolePermissions: { include: { permission: true } },
+          },
+        },
+        additionalPermissions: {
+          select: { grantedAt: true, permission: true },
+        },
+      },
+    });
+    if (!user) throw new NotFoundException(`Utilizador #${id} não encontrado`);
+
+    const rolePermissions = user.role ? flattenRolePermissions(user.role.rolePermissions) : [];
+    const specialPermissions = user.additionalPermissions.map(p => ({
+      ...p.permission,
+      grantedAt: p.grantedAt,
+    }));
+    const authorizedModules = Array.from(
+      new Set([...rolePermissions, ...specialPermissions].map(p => p.subject)),
+    );
+
+    const now = new Date();
+    const [lastToken, activeSessions] = await Promise.all([
+      this.prisma.read.refreshToken.findFirst({
+        where: { userId: id },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }),
+      this.prisma.read.refreshToken.count({
+        where: { userId: id, revokedAt: null, expiresAt: { gt: now } },
+      }),
+    ]);
+
+    return {
+      userId: id,
+      accountStatus: user.accountStatus,
+      accountCreatedAt: user.createdAt,
+      profile: user.role ? { id: user.role.id, name: user.role.name, code: user.role.code } : null,
+      systemFunction: user.systemFunction,
+      contentAccessLevel: user.contentAccessLevel,
+      permissions: rolePermissions,
+      specialPermissions,
+      authorizedModules,
+      authorizedUnit: user.unit,
+      authorizedDepartment: user.department,
+      mfaEnabled: user.mfaEnabled,
+      lastLoginAt: lastToken?.createdAt ?? null,
+      activeSessions,
+      // Não existe modelo/registo de dispositivos, tentativas de login ou
+      // histórico de bloqueios nesta plataforma — ver relatório de research
+      // desta funcionalidade. Devolvido explicitamente para o frontend
+      // assinalar "não disponível" em vez de omitir a secção.
+      devices: null,
+      loginAttempts: null,
+      blockHistory: null,
+    };
   }
 
   // ─── AUDIT LOGS ───────────────────────────────────────────────────────────

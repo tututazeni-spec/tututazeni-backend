@@ -140,6 +140,13 @@ export class UsersController {
     return this.svc.getAuditLogs(id, page ? parseInt(page) : 1);
   }
 
+  @Get(':id/access')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Acesso & Permissões de um utilizador (docs/modulo_users.md Ponto 4)' })
+  accessOverview(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getAccessOverview(id);
+  }
+
   // ── Gestão (Admin/RH) ────────────────────────────────────────────────────
 
   @Post()
