@@ -141,10 +141,10 @@ describe('UsersController', () => {
     expect(mockSvc.getAuditLogs).toHaveBeenCalledWith(3, 2);
   });
 
-  it('create → create(dto)', async () => {
+  it('create → create(dto, admin.id)', async () => {
     const dto = {} as any;
     await controller.create(mockUser as any, dto);
-    expect(mockSvc.create).toHaveBeenCalledWith(dto);
+    expect(mockSvc.create).toHaveBeenCalledWith(dto, mockUser.id);
   });
 
   it('invite → invite(dto)', async () => {
