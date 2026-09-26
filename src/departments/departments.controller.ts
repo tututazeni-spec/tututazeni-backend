@@ -13,6 +13,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -29,6 +30,7 @@ import {
   CreateDepartmentDto,
   UpdateDepartmentDto,
   DepartmentFilterDto,
+  ArchiveDepartmentDto,
   TransferMemberDto,
   BulkTransferDto,
   CreateUnitDto,
@@ -75,6 +77,16 @@ export class DepartmentsController {
   @ApiOperation({ summary: 'Dashboard comparativo de departamentos' })
   comparativeDashboard() {
     return this.svc.getComparativeDashboard();
+  }
+
+  // Rota literal — tem de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
+  @Get('export')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="departamentos.csv"')
+  @ApiOperation({ summary: 'Exportar lista de departamentos (filtrada) como CSV' })
+  exportCsv(@Query() filters: DepartmentFilterDto) {
+    return this.svc.exportCsv(filters);
   }
 
   // Detalhe e métricas: mesmo nível de acesso que GET /departments e
@@ -132,6 +144,21 @@ export class DepartmentsController {
   @HttpCode(HttpStatus.OK)
   activate(@Param('id', ParseIntPipe) id: number) {
     return this.svc.activate(id);
+  }
+
+  @Patch(':id/archive')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Arquivar departamento (regista data/motivo de encerramento)' })
+  @HttpCode(HttpStatus.OK)
+  archive(@Param('id', ParseIntPipe) id: number, @Body() dto: ArchiveDepartmentDto) {
+    return this.svc.archive(id, dto.reason);
+  }
+
+  @Delete(':id')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Eliminar departamento (só sem colaboradores nem sub-departamentos)' })
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.remove(id);
   }
 
   @Post('members/transfer')

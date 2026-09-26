@@ -37,6 +37,12 @@ export class CreateDepartmentDto {
   @MaxLength(30)
   code: string;
 
+  @ApiPropertyOptional({ example: 'RH', description: 'Sigla do departamento' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(15)
+  acronym?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -187,6 +193,45 @@ export class DepartmentFilterDto extends BaseFilterDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   rootOnly?: boolean;
+
+  @ApiPropertyOptional({ enum: DepartmentStatus, description: 'Estado exacto (inclui ARCHIVED)' })
+  @IsOptional()
+  @IsEnum(DepartmentStatus)
+  status?: DepartmentStatus;
+
+  @ApiPropertyOptional({ description: 'Unidade/empresa' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional({ description: 'Responsável pelo departamento' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  headId?: number;
+
+  @ApiPropertyOptional({ description: 'Localização (correspondência parcial)' })
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({ description: 'Criados a partir desta data (inclusive)' })
+  @IsOptional()
+  @IsDateString()
+  createdFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Criados até esta data (inclusive)' })
+  @IsOptional()
+  @IsDateString()
+  createdTo?: string;
+}
+
+export class ArchiveDepartmentDto {
+  @ApiPropertyOptional({ description: 'Motivo do arquivamento/encerramento' })
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 
 // ─── Member Transfer ──────────────────────────────────────────────────────────

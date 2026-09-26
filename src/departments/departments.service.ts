@@ -48,21 +48,50 @@ export class DepartmentsService {
     return false;
   }
 
-  async findAll(filters: DepartmentFilterDto) {
-    const { page = 1, limit = 30, search, active, parentId, rootOnly } = filters;
-    const { skip, take } = calculatePagination(page, limit);
+  // Partilhado por findAll() e exportCsv() — mesmos filtros, com ou sem paginação.
+  private buildWhere(filters: DepartmentFilterDto): Prisma.DepartmentWhereInput {
+    const {
+      search,
+      active,
+      parentId,
+      rootOnly,
+      status,
+      unitId,
+      headId,
+      location,
+      createdFrom,
+      createdTo,
+    } = filters;
 
     const where: Prisma.DepartmentWhereInput = {};
     if (active !== undefined) where.active = active;
     if (parentId !== undefined) where.parentId = parentId;
     if (rootOnly) where.parentId = null;
+    if (status !== undefined) where.status = status;
+    if (unitId !== undefined) where.unitId = unitId;
+    if (headId !== undefined) where.headId = headId;
+    if (location) where.location = { contains: location, mode: 'insensitive' };
+    if (createdFrom || createdTo) {
+      where.createdAt = {
+        ...(createdFrom ? { gte: new Date(createdFrom) } : {}),
+        ...(createdTo ? { lte: new Date(createdTo) } : {}),
+      };
+    }
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { code: { contains: search, mode: 'insensitive' } },
+        { acronym: { contains: search, mode: 'insensitive' } },
         { head: { fullName: { contains: search, mode: 'insensitive' } } },
       ];
     }
+    return where;
+  }
+
+  async findAll(filters: DepartmentFilterDto) {
+    const { page = 1, limit = 30 } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+    const where = this.buildWhere(filters);
 
     const [data, total] = await Promise.all([
       this.prisma.read.department.findMany({
@@ -72,6 +101,7 @@ export class DepartmentsService {
         include: {
           head: { select: { id: true, fullName: true, email: true } },
           parent: { select: { id: true, name: true, code: true } },
+          unit: { select: { id: true, name: true, code: true } },
           children: { select: { id: true, name: true, code: true, active: true } },
           _count: { select: { users: true, children: true } },
         },
@@ -81,6 +111,58 @@ export class DepartmentsService {
     ]);
 
     return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  // Tabela "Departamentos" (docs/modulo_departments.md Ponto 2) exportada como
+  // CSV — mesmos filtros de findAll(), sem paginação.
+  async exportCsv(filters: DepartmentFilterDto) {
+    const where = this.buildWhere(filters);
+    const rows = await this.prisma.read.department.findMany({
+      where,
+      include: {
+        head: { select: { fullName: true } },
+        parent: { select: { name: true } },
+        unit: { select: { name: true } },
+        _count: { select: { users: true, children: true } },
+      },
+      orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
+    });
+
+    const headers = [
+      'Nome',
+      'Código',
+      'Sigla',
+      'Departamento superior',
+      'Unidade/empresa',
+      'Responsável',
+      'N.º de colaboradores',
+      'N.º de subdepartamentos',
+      'Localização',
+      'Estado',
+      'Data de criação',
+      'Última atualização',
+    ];
+    const escape = (v: string) =>
+      v.includes(',') || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v;
+    const lines = rows.map(d =>
+      [
+        d.name,
+        d.code,
+        d.acronym ?? '',
+        d.parent?.name ?? '',
+        d.unit?.name ?? '',
+        d.head?.fullName ?? '',
+        String(d._count.users),
+        String(d._count.children),
+        d.location ?? '',
+        d.status,
+        d.createdAt.toISOString().slice(0, 10),
+        d.updatedAt.toISOString().slice(0, 10),
+      ]
+        .map(escape)
+        .join(','),
+    );
+    return [headers.join(','), ...lines].join('\n');
   }
 
   // Árvore hierárquica completa (para org chart)
@@ -161,6 +243,7 @@ export class DepartmentsService {
       data: {
         name: dto.name,
         code,
+        acronym: dto.acronym,
         description: dto.description,
         parentId: dto.parentId,
         headId: dto.headId,
@@ -277,7 +360,29 @@ export class DepartmentsService {
     await this.findOne(id);
     return this.prisma.department.update({
       where: { id },
-      data: { active: true, status: 'ACTIVE' },
+      data: { active: true, status: 'ACTIVE', closedAt: null, closureReason: null },
+    });
+  }
+
+  // Arquivar — mais forte que desactivar: regista data/motivo de
+  // encerramento (docs/modulo_departments.md Ponto 2, secção "Estado").
+  // Reactiva-se com activate(), que limpa closedAt/closureReason.
+  async archive(id: number, reason?: string) {
+    const d = await this.findOne(id);
+    const activeUsers = d._count.users;
+    if (activeUsers > 0) {
+      throw new BadRequestException(
+        `Departamento tem ${activeUsers} colaboradores activos. Transfira-os primeiro.`,
+      );
+    }
+    return this.prisma.department.update({
+      where: { id },
+      data: {
+        active: false,
+        status: 'ARCHIVED',
+        closedAt: new Date(),
+        closureReason: reason,
+      },
     });
   }
 
