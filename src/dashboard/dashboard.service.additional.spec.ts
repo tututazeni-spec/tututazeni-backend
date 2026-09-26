@@ -329,7 +329,7 @@ describe('DashboardService (additional)', () => {
           severity: 'MEDIUM',
           message: '3 formação(ões) obrigatória(s) por concluir',
           count: 3,
-          actionUrl: '/content-library/mandatory',
+          actionUrl: '/courses',
           scope: 'user',
         },
       ]);
@@ -351,7 +351,7 @@ describe('DashboardService (additional)', () => {
           type: 'TRAINING',
           message: '3 formação(ões) obrigatória(s) por concluir',
           priority: 'ATTENTION',
-          actionUrl: '/content-library/mandatory',
+          actionUrl: '/courses',
         },
       ]);
     });
