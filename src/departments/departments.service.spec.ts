@@ -55,6 +55,7 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   careerPosition: { create: jest.fn(), findMany: jest.fn() },
   auditLog: { create: jest.fn().mockResolvedValue({}) },

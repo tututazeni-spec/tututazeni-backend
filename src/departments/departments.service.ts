@@ -165,23 +165,52 @@ export class DepartmentsService {
     return [headers.join(','), ...lines].join('\n');
   }
 
-  // Árvore hierárquica completa (para org chart)
+  // Árvore hierárquica completa (para org chart e para a aba "Estrutura
+  // Organizacional", docs/modulo_departments.md Ponto 3 — árvore, organograma
+  // e lista hierárquica partilham este único endpoint)
   async getTree() {
-    const all = await this.prisma.read.department.findMany({
-      where: { active: true },
-      include: {
-        head: { select: { id: true, fullName: true, email: true } },
-        _count: { select: { users: true, children: true } },
-      },
-      orderBy: { name: 'asc' },
-    });
+    const [all, positionCounts] = await Promise.all([
+      this.prisma.read.department.findMany({
+        where: { active: true },
+        include: {
+          head: { select: { id: true, fullName: true, email: true } },
+          unit: { select: { id: true, name: true, code: true } },
+          _count: { select: { users: true, children: true } },
+        },
+        orderBy: { name: 'asc' },
+      }),
+      // Position.departmentId não é uma relação Prisma declarada em
+      // Department (só o inteiro) — sem _count.select possível, agrega-se
+      // à parte.
+      this.prisma.read.position.groupBy({
+        by: ['departmentId'],
+        _count: { _all: true },
+      }),
+    ]);
+    const positionsByDept = new Map(
+      positionCounts
+        .filter(p => p.departmentId != null)
+        .map(p => [p.departmentId as number, p._count._all]),
+    );
 
-    // Construir árvore recursivamente
-    type DepartmentNode = (typeof all)[number] & { children: DepartmentNode[] };
-    const buildTree = (parentId: number | null): DepartmentNode[] =>
-      all.filter(d => d.parentId === parentId).map(d => ({ ...d, children: buildTree(d.id) }));
+    // Construir árvore recursivamente, calculando o nível hierárquico
+    // (raiz = 1, igual ao critério usado em buildBreadcrumb/getMetrics)
+    type DepartmentNode = (typeof all)[number] & {
+      positionsCount: number;
+      level: number;
+      children: DepartmentNode[];
+    };
+    const buildTree = (parentId: number | null, level: number): DepartmentNode[] =>
+      all
+        .filter(d => d.parentId === parentId)
+        .map(d => ({
+          ...d,
+          positionsCount: positionsByDept.get(d.id) ?? 0,
+          level,
+          children: buildTree(d.id, level + 1),
+        }));
 
-    return buildTree(null);
+    return buildTree(null, 1);
   }
 
   async findOne(id: number) {
