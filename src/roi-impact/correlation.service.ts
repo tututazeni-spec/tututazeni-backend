@@ -55,7 +55,11 @@ function dateRange(f: PeriodFilter): { gte?: Date; lte?: Date } | undefined {
   };
 }
 
-function sumByKey<T>(rows: T[], keyOf: (r: T) => number, valOf: (r: T) => number): Map<number, number> {
+function sumByKey<T>(
+  rows: T[],
+  keyOf: (r: T) => number,
+  valOf: (r: T) => number,
+): Map<number, number> {
   const map = new Map<number, number>();
   for (const r of rows) {
     const k = keyOf(r);
@@ -64,7 +68,11 @@ function sumByKey<T>(rows: T[], keyOf: (r: T) => number, valOf: (r: T) => number
   return map;
 }
 
-function avgByKey<T>(rows: T[], keyOf: (r: T) => number, valOf: (r: T) => number): Map<number, number> {
+function avgByKey<T>(
+  rows: T[],
+  keyOf: (r: T) => number,
+  valOf: (r: T) => number,
+): Map<number, number> {
   const sums = new Map<number, { total: number; count: number }>();
   for (const r of rows) {
     const k = keyOf(r);
@@ -105,13 +113,15 @@ const DEFINITIONS: Record<CorrelationType, Omit<CorrelationDefinition, 'type'>> 
     label: 'Participação em PDI × retenção do colaborador',
     xLabel: 'Progresso médio do PDI (%)',
     yLabel: 'Retenção (1 = activo, 0 = saído)',
-    description: 'Progresso nos planos de desenvolvimento individual vs. permanência do colaborador na empresa.',
+    description:
+      'Progresso nos planos de desenvolvimento individual vs. permanência do colaborador na empresa.',
   },
   INVESTIMENTO_ROTATIVIDADE: {
     label: 'Investimento em formação × rotatividade por departamento',
     xLabel: 'Investimento em formação (departamento)',
     yLabel: 'Taxa de rotatividade (%)',
-    description: 'Investimento total em formação por departamento vs. taxa de rotatividade do mesmo departamento.',
+    description:
+      'Investimento total em formação por departamento vs. taxa de rotatividade do mesmo departamento.',
   },
   ONBOARDING_TEMPO_PRODUTIVIDADE: {
     label: 'Onboarding estruturado × tempo até produtividade plena',
@@ -124,7 +134,8 @@ const DEFINITIONS: Record<CorrelationType, Omit<CorrelationDefinition, 'type'>> 
     label: 'Mentoria/coaching × progressão de carreira',
     xLabel: 'Nº de mentorias como mentorado',
     yLabel: 'Progressão de carreira (1 = promovido, 0 = não)',
-    description: 'Participação em mentoria/coaching (como mentorado) vs. promoções aprovadas/executadas.',
+    description:
+      'Participação em mentoria/coaching (como mentorado) vs. promoções aprovadas/executadas.',
   },
   LIDERANCA_ENGAGEMENT_EQUIPA: {
     label: 'Formação de liderança × engagement da equipa liderada',
@@ -280,8 +291,16 @@ export class CorrelationService {
       select: { userId: true, score: true },
     });
 
-    const hoursByUser = sumByKey(hoursRows, r => r.userId, r => r.attendedHours ?? 0);
-    const scoreByUser = avgByKey(scoreRows, r => r.userId, r => r.score ?? 0);
+    const hoursByUser = sumByKey(
+      hoursRows,
+      r => r.userId,
+      r => r.attendedHours ?? 0,
+    );
+    const scoreByUser = avgByKey(
+      scoreRows,
+      r => r.userId,
+      r => r.score ?? 0,
+    );
 
     const points: CorrelationPoint[] = [];
     for (const [userId, x] of hoursByUser) {
@@ -362,7 +381,11 @@ export class CorrelationService {
       where: { ...(range ? { startDate: range } : {}) },
       select: { employeeId: true, progressPercent: true },
     });
-    const progressByEmployee = avgByKey(pdiRows, r => r.employeeId, r => r.progressPercent);
+    const progressByEmployee = avgByKey(
+      pdiRows,
+      r => r.employeeId,
+      r => r.progressPercent,
+    );
 
     const employeeIds = Array.from(progressByEmployee.keys());
     const employees = await this.prisma.read.employee.findMany({
@@ -381,8 +404,7 @@ export class CorrelationService {
       xLabel: def.xLabel,
       yLabel: def.yLabel,
       points,
-      note:
-        'PDI liga-se a "Employee" (ficha de RH), não directamente a "User" — a retenção usa Employee.status, não dados de sessão.',
+      note: 'PDI liga-se a "Employee" (ficha de RH), não directamente a "User" — a retenção usa Employee.status, não dados de sessão.',
     };
   }
 
@@ -426,14 +448,16 @@ export class CorrelationService {
       ]);
       if (headcount === 0) continue;
       const turnoverRate = (exits / headcount) * 100;
-      points.push({ x: +(investmentByDept.get(departmentId) ?? 0).toFixed(2), y: +turnoverRate.toFixed(1) });
+      points.push({
+        x: +(investmentByDept.get(departmentId) ?? 0).toFixed(2),
+        y: +turnoverRate.toFixed(1),
+      });
     }
     return {
       xLabel: def.xLabel,
       yLabel: def.yLabel,
       points,
-      note:
-        'Só inclui custos cuja iniciativa tem departamento resolvível (Curso/Evento) — Formação (turma/sessão) ainda não guarda departamento de origem.',
+      note: 'Só inclui custos cuja iniciativa tem departamento resolvível (Curso/Evento) — Formação (turma/sessão) ainda não guarda departamento de origem.',
     };
   }
 
@@ -452,7 +476,11 @@ export class CorrelationService {
       },
       select: { userId: true, progress: true },
     });
-    const progressByUser = avgByKey(plans, r => r.userId, r => r.progress);
+    const progressByUser = avgByKey(
+      plans,
+      r => r.userId,
+      r => r.progress,
+    );
     const userIds = Array.from(progressByUser.keys());
 
     const users = await this.prisma.read.user.findMany({
@@ -484,8 +512,7 @@ export class CorrelationService {
       xLabel: def.xLabel,
       yLabel: def.yLabel,
       points,
-      note:
-        'Sem um indicador dedicado de "produtividade plena" no schema, o eixo Y aproxima-se pelos dias até à primeira avaliação de desempenho submetida.',
+      note: 'Sem um indicador dedicado de "produtividade plena" no schema, o eixo Y aproxima-se pelos dias até à primeira avaliação de desempenho submetida.',
     };
   }
 
@@ -504,7 +531,11 @@ export class CorrelationService {
       },
       select: { menteeId: true },
     });
-    const countByMentee = sumByKey(mentorships, r => r.menteeId, () => 1);
+    const countByMentee = sumByKey(
+      mentorships,
+      r => r.menteeId,
+      () => 1,
+    );
     const menteeIds = Array.from(countByMentee.keys());
 
     const promotions = await this.prisma.read.promotionRequest.findMany({
@@ -535,7 +566,11 @@ export class CorrelationService {
     const leaders = await this.prisma.read.leadershipProgramParticipant.findMany({
       select: { userId: true, progress: true },
     });
-    const progressByLeader = avgByKey(leaders, r => r.userId, r => r.progress);
+    const progressByLeader = avgByKey(
+      leaders,
+      r => r.userId,
+      r => r.progress,
+    );
     const leaderIds = Array.from(progressByLeader.keys());
 
     const reports = await this.prisma.read.user.findMany({
@@ -574,8 +609,7 @@ export class CorrelationService {
       xLabel: def.xLabel,
       yLabel: def.yLabel,
       points,
-      note:
-        'Engagement aproximado pela média de respostas a inquéritos (SurveyResponse) dos subordinados directos — o schema tem um modelo TeamHealth dedicado mas nenhum serviço o alimenta ainda.',
+      note: 'Engagement aproximado pela média de respostas a inquéritos (SurveyResponse) dos subordinados directos — o schema tem um modelo TeamHealth dedicado mas nenhum serviço o alimenta ainda.',
     };
   }
 }
