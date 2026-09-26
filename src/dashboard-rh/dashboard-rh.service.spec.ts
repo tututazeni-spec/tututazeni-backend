@@ -314,7 +314,7 @@ describe('DashboardRhService', () => {
           severity: 'HIGH',
           message: '3 formação(ões) obrigatória(s) por concluir',
           count: 3,
-          actionUrl: '/content-library/mandatory',
+          actionUrl: '/courses',
           scope: 'organization',
         },
         {
