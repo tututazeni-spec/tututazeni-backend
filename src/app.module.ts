@@ -66,7 +66,6 @@ import { RoiImpactModule } from './roi-impact/roi-impact.module';
 import { HistoryModule } from './history/history.module';
 
 // MÓDULOS NOVOS — ORGANIZAÇÃO E ACESSOS
-import { OrganizationModule } from './organization/organization.module';
 import { AclModule } from './acl/acl.module';
 
 // MÓDULOS NOVOS — PROCESSOS E INTEGRAÇÃO
@@ -183,7 +182,6 @@ import { RolesGuard } from './common/guards/roles.guard';
     ReportsModule,
     RoiImpactModule,
     HistoryModule,
-    OrganizationModule,
     AclModule,
     ProcessStandardModule,
     ApiIntegrationModule,
