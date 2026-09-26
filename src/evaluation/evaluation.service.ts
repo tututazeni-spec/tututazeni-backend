@@ -1389,7 +1389,7 @@ export class EvaluationService {
         department: { select: { name: true } },
       },
     });
-    if (!evaluated) throw new NotFoundException('Utilizador não encontrado');
+    if (!evaluated) throw new NotFoundException(`Utilizador #${evaluatedId} não encontrado`);
 
     const where: Prisma.PerformanceEvaluationWhereInput = { evaluatedId };
     if (cycleId) where.cycleId = cycleId;

@@ -717,7 +717,7 @@ export class CareerPlansService {
         include: { steps: { orderBy: { order: 'asc' }, include: { role: true } } },
       }),
     ]);
-    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (!user) throw new NotFoundException(`Utilizador #${dto.userId} não encontrado`);
 
     const readiness = await this.calculateReadiness(dto.userId, dto.targetRoleId);
 

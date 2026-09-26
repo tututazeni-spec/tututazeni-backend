@@ -302,7 +302,7 @@ export class DepartmentsService {
   // Transferir membro entre departamentos
   async transferMember(dto: TransferMemberDto) {
     const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
-    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (!user) throw new NotFoundException(`Utilizador #${dto.userId} não encontrado`);
 
     const target = await this.prisma.department.findUnique({
       where: { id: dto.targetDepartmentId },

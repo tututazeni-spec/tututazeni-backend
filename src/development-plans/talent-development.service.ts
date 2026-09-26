@@ -790,7 +790,7 @@ export class TalentDevelopmentService {
         role: { select: { id: true, name: true } },
       },
     });
-    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (!user) throw new NotFoundException(`Utilizador #${userId} não encontrado`);
 
     // User skills — using legacyEmployeeSkill (userId-based)
     const userSkills = await this.prisma.read.legacyEmployeeSkill.findMany({
@@ -1129,7 +1129,7 @@ export class TalentDevelopmentService {
         userCompetencies: { select: { competencyId: true, currentLevel: true, targetLevel: true } },
       },
     });
-    if (!mentee) throw new NotFoundException('Utilizador não encontrado');
+    if (!mentee) throw new NotFoundException(`Utilizador #${menteeId} não encontrado`);
 
     const activeIds = await this.prisma.mentoring
       .findMany({ where: { menteeId, status: 'ACTIVE' }, select: { mentorId: true } })
@@ -1324,7 +1324,7 @@ export class TalentDevelopmentService {
       where: { id: userId },
       select: { id: true, fullName: true, avatarUrl: true, createdAt: true },
     });
-    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (!user) throw new NotFoundException(`Utilizador #${userId} não encontrado`);
 
     const [plans, skills, reviews, badges, points] = await Promise.all([
       this.prisma.read.developmentPlan.findMany({
@@ -1483,7 +1483,7 @@ export class TalentDevelopmentService {
       this.getUserSkillGaps(userId),
     ]);
 
-    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (!user) throw new NotFoundException(`Utilizador #${userId} não encontrado`);
     if (!targetRole) throw new NotFoundException('Cargo alvo não encontrado');
 
     const critical = gapData.criticalGaps;
