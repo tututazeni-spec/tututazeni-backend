@@ -51,7 +51,12 @@ export const envValidationSchema = Joi.object({
   // Um refresh token não usado há mais tempo do que isto é tratado como
   // sessão inactiva: a cadeia é revogada e o utilizador tem de voltar a
   // autenticar-se, mesmo que o refresh token ainda não tenha expirado.
-  SESSION_IDLE_TIMEOUT_MS: Joi.number().default(1_800_000),
+  // 25 min (requisito de produto) — tem de ficar igual ao fallback interno
+  // em auth.service.ts#sessionIdleTimeoutMs: o ConfigModule aplica este
+  // default a process.env antes de qualquer handler correr, por isso é
+  // este valor (não o fallback do próprio auth.service.ts) que rege em
+  // runtime sempre que a env var não é definida explicitamente.
+  SESSION_IDLE_TIMEOUT_MS: Joi.number().default(1_500_000),
 
   // SMTP — opcionais (sem SMTP_HOST, emails não são enviados; app arranca na mesma)
   SMTP_HOST: Joi.string().optional(),

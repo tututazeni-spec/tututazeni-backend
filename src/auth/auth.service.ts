@@ -15,12 +15,16 @@ import { withFlatPermissions } from '../common/utils/role-permissions';
 
 // A10-24: um refresh token não usado há mais tempo do que isto é tratado
 // como sessão inactiva — a cadeia é revogada mesmo que o token em si ainda
-// não tenha expirado. 30 min por omissão; configurável via env.
+// não tenha expirado. 25 min por omissão (requisito de produto: sessão
+// expira ao fim de 25 min de inactividade do utilizador); configurável via
+// env. O frontend renova o access token em segundo plano enquanto houver
+// actividade (rato/teclado/toque) dentro desta janela — ver
+// frontend/lib/sessionActivity.ts.
 export function sessionIdleTimeoutMs(
   env: string | undefined = process.env.SESSION_IDLE_TIMEOUT_MS,
 ): number {
   const parsed = env ? Number(env) : NaN;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1_800_000;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1_500_000;
 }
 
 @Injectable()

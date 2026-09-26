@@ -5,8 +5,8 @@ import { AuthService, sessionIdleTimeoutMs } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 describe('sessionIdleTimeoutMs', () => {
-  it('devolve 30 minutos por omissão quando a env var não está definida', () => {
-    expect(sessionIdleTimeoutMs(undefined)).toBe(1_800_000);
+  it('devolve 25 minutos por omissão quando a env var não está definida', () => {
+    expect(sessionIdleTimeoutMs(undefined)).toBe(1_500_000);
   });
 
   it('usa o valor da env var quando é um número válido', () => {
@@ -14,9 +14,9 @@ describe('sessionIdleTimeoutMs', () => {
   });
 
   it('cai no valor por omissão para valores inválidos ou não positivos', () => {
-    expect(sessionIdleTimeoutMs('não-é-um-número')).toBe(1_800_000);
-    expect(sessionIdleTimeoutMs('0')).toBe(1_800_000);
-    expect(sessionIdleTimeoutMs('-5')).toBe(1_800_000);
+    expect(sessionIdleTimeoutMs('não-é-um-número')).toBe(1_500_000);
+    expect(sessionIdleTimeoutMs('0')).toBe(1_500_000);
+    expect(sessionIdleTimeoutMs('-5')).toBe(1_500_000);
   });
 });
 
