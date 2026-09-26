@@ -107,6 +107,8 @@ export class DepartmentsService {
       where: { id },
       include: {
         head: { select: { id: true, fullName: true, email: true, position: true } },
+        directManager: { select: { id: true, fullName: true, email: true } },
+        unit: { select: { id: true, name: true, code: true } },
         parent: { select: { id: true, name: true, code: true } },
         children: {
           where: { active: true },
@@ -362,19 +364,82 @@ export class DepartmentsService {
     return results;
   }
 
-  // Métricas do departamento
+  // Métricas do departamento — inclui os indicadores da "Visão Geral"
+  // (docs/modulo_departments.md Ponto 1), mostrados embutidos em cada
+  // departamento (lista/organograma/dashboard), não numa aba nova.
   async getMetrics(id: number) {
-    await this.findOne(id);
+    const dept = await this.findOne(id);
 
-    const [totalUsers, activeUsers, transfersIn, transfersOut] = await Promise.all([
+    const [
+      totalUsers,
+      activeUsers,
+      transfersIn,
+      transfersOut,
+      activePositions,
+      coursesInProgress,
+      pendingEvaluations,
+      activeGoals,
+      avgScore,
+      recentTransfers,
+    ] = await Promise.all([
       this.prisma.read.user.count({ where: { departmentId: id } }),
       this.prisma.read.user.count({ where: { departmentId: id, active: true } }),
       this.prisma.read.departmentTransferLog.count({ where: { toDepartmentId: id } }),
       this.prisma.read.departmentTransferLog.count({ where: { fromDepartmentId: id } }),
+      this.prisma.read.position.count({ where: { departmentId: id } }),
+      this.prisma.read.course.count({ where: { departmentId: id, status: 'PUBLISHED' } }),
+      this.prisma.read.performanceReview.count({
+        where: { user: { departmentId: id }, status: { notIn: ['FINALIZED', 'PUBLISHED'] } },
+      }),
+      this.prisma.read.performanceGoal.count({
+        where: { user: { departmentId: id }, status: { not: 'COMPLETED' } },
+      }),
+      this.prisma.read.performanceReview.aggregate({
+        where: { user: { departmentId: id }, score: { not: null } },
+        _avg: { score: true },
+      }),
+      this.prisma.read.departmentTransferLog.findMany({
+        where: { OR: [{ toDepartmentId: id }, { fromDepartmentId: id }] },
+        include: {
+          user: { select: { id: true, fullName: true } },
+          fromDepartment: { select: { id: true, name: true } },
+          toDepartment: { select: { id: true, name: true } },
+        },
+        orderBy: { transferredAt: 'desc' },
+        take: 5,
+      }),
     ]);
 
-    // Breadcrumb da hierarquia
+    // Breadcrumb da hierarquia (também dá o nível hierárquico: raiz = 1)
     const breadcrumb = await this.buildBreadcrumb(id);
+
+    const recentActivity = [
+      ...recentTransfers.map(t => ({
+        date: t.transferredAt,
+        description:
+          t.toDepartmentId === id
+            ? `${t.user.fullName} entrou vindo de ${t.fromDepartment?.name ?? 'fora da empresa'}`
+            : `${t.user.fullName} saiu para ${t.toDepartment.name}`,
+      })),
+      ...dept.headHistory.slice(0, 5).map(h => ({
+        date: h.startedAt,
+        description: `${h.head.fullName} tornou-se responsável do departamento`,
+      })),
+    ]
+      .sort((a, b) => b.date.getTime() - a.date.getTime())
+      .slice(0, 5);
+
+    const alerts: string[] = [];
+    if (!dept.headId) alerts.push('Departamento sem responsável definido');
+    if (!dept.active) alerts.push('Departamento inactivo');
+    if (dept.maxEmployees != null && totalUsers > dept.maxEmployees) {
+      alerts.push(
+        `Lotação excedida: ${totalUsers} colaboradores para ${dept.maxEmployees} previstos`,
+      );
+    }
+    if (dept._count.children === 0 && totalUsers === 0) {
+      alerts.push('Departamento sem colaboradores nem sub-departamentos');
+    }
 
     return {
       departmentId: id,
@@ -383,6 +448,15 @@ export class DepartmentsService {
       inactiveUsers: totalUsers - activeUsers,
       transfers: { in: transfersIn, out: transfersOut },
       breadcrumb,
+      hierarchyLevel: breadcrumb.length,
+      activePositions,
+      subdepartments: dept._count.children,
+      coursesInProgress,
+      pendingEvaluations,
+      activeGoals,
+      avgPerformanceScore: avgScore._avg.score,
+      recentActivity,
+      alerts,
     };
   }
 
