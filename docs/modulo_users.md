@@ -1,11 +1,15 @@
 # Módulo Users
 
-## Ponto 1 — Abas principais a acrescentar
+## Ponto 1 — Abas e Dashboard
 
-Acessos & Contas, Perfis & Permissões, Importação, Utilizadores Inativos, Histórico & Auditoria
+### Acrescentar às abas principais existentes
+- Acessos & Contas
+- Perfis & Permissões
+- Importação
+- Utilizadores Inativos
+- Histórico & Auditoria
 
-**Acrescentar na aba Dashboard:**
-
+### Acrescentar à aba Dashboard
 - Total de utilizadores
 - Convites enviados
 - Contas bloqueadas
@@ -15,12 +19,13 @@ Acessos & Contas, Perfis & Permissões, Importação, Utilizadores Inativos, His
 - Utilizadores por cargo
 - Utilizadores por perfil de acesso
 
-## Ponto 2 — Trocar "Novo Colaborador" por "Novo Utilizador"
+## Ponto 2 — Novo Utilizador
+
+Trocar **"Novo colaborador"** por **"Novo utilizador"**.
 
 Ao clicar em "Novo Utilizador", acrescentar ao que já existe:
 
 ### Dados pessoais
-
 - Nome completo
 - Nome preferencial
 - Fotografia
@@ -32,7 +37,6 @@ Ao clicar em "Novo Utilizador", acrescentar ao que já existe:
 - NIF
 
 ### Dados profissionais
-
 - Número de colaborador
 - Unidade
 - Empresa
@@ -49,7 +53,6 @@ Ao clicar em "Novo Utilizador", acrescentar ao que já existe:
 - Estado do colaborador
 
 ### Dados de contacto
-
 - Email profissional
 - Email pessoal
 - Telefone
@@ -58,7 +61,6 @@ Ao clicar em "Novo Utilizador", acrescentar ao que já existe:
 - Contacto de emergência
 
 ### Conta de acesso
-
 - Email de login
 - Username
 - Perfil de acesso
@@ -70,7 +72,6 @@ Ao clicar em "Novo Utilizador", acrescentar ao que já existe:
 - Fuso horário
 
 ### Academia
-
 - Perfil de aprendizagem
 - Área de interesse
 - Cursos atribuídos
@@ -80,7 +81,6 @@ Ao clicar em "Novo Utilizador", acrescentar ao que já existe:
 - Nível de acesso aos conteúdos
 
 ### RH
-
 - Número de identificação interna
 - Centro de custo
 - Código da posição
@@ -91,16 +91,31 @@ Ao clicar em "Novo Utilizador", acrescentar ao que já existe:
 - Regime de trabalho
 
 ### Estado do utilizador
+`Ativo` · `Pendente` · `Suspenso` · `Bloqueado` · `Inativo` · `Desativado`
 
-Ativo, Pendente, Suspenso, Bloqueado, Inativo, Desativado
-
-Quando alguém sai da empresa, o ideal é desativar a conta, preservando: avaliações, formações, cursos concluídos, certificados, presenças, feedback, histórico profissional, documentos, atividades e auditoria.
+> Quando alguém sai da empresa, o ideal é **desativar** a conta, preservando: avaliações, formações, cursos concluídos, certificados, presenças, feedback, histórico profissional, documentos, atividades e auditoria.
 
 ## Ponto 3 — Perfil do colaborador
 
 Ao abrir um utilizador, deve ter estas abas:
 
-Resumo, Dados Pessoais, Dados Profissionais, Organização, Acesso & Permissões, Formação, Cursos, Competências, Desempenho, Avaliações, PDI, Carreira, Documentos, Férias & Licenças, Presenças, Histórico, Atividade
+1. Resumo
+2. Dados Pessoais
+3. Dados Profissionais
+4. Organização
+5. Acesso & Permissões
+6. Formação
+7. Cursos
+8. Competências
+9. Desempenho
+10. Avaliações
+11. PDI
+12. Carreira
+13. Documentos
+14. Férias & Licenças
+15. Presenças
+16. Histórico
+17. Atividade
 
 ## Ponto 4 — Acessos & Permissões
 
@@ -138,14 +153,29 @@ Para uma plataforma com milhares de colaboradores:
 
 ## Ponto 6 — Histórico & Auditoria
 
-**Registar alterações como:**
+### Registar alterações como
+- Utilizador criado
+- Dados alterados
+- Departamento alterado
+- Cargo alterado
+- Gestor alterado
+- Perfil alterado
+- Permissão concedida
+- Permissão removida
+- Conta ativada
+- Conta desativada
+- Password alterada
+- MFA ativado/desativado
+- Login
+- Logout
+- Bloqueio
+- Desbloqueio
 
-Utilizador criado, dados alterados, departamento alterado, cargo alterado, gestor alterado, perfil alterado, permissão concedida, permissão removida, conta ativada, conta desativada, password alterada, MFA ativado/desativado, login, logout, bloqueio, desbloqueio
-
-**Para cada registo:** quem fez, o que alterou, valor anterior, novo valor, data/hora, origem e motivo (quando aplicável)
+### Para cada registo
+Quem fez, o que alterou, valor anterior, novo valor, data/hora, origem e motivo (quando aplicável).
 
 ## Regra de arquitetura
 
-O Users não deve ser responsável por tudo o que pertence ao RH.
+O **Users** não deve ser responsável por tudo o que pertence ao RH. Por exemplo:
 
-> Users → apenas: identidade, conta, cadastro base e acesso.
+> **Users →** apenas: identidade, conta, cadastro base e acesso.

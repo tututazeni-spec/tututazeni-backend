@@ -13,6 +13,7 @@ import { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 import { BCRYPT_COST_FACTOR } from '../common/config/security.config';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
+import { flattenRolePermissions } from '../common/utils/role-permissions';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -22,6 +23,8 @@ import {
   InviteUserDto,
   UserChangePasswordDto,
   AccountStatus,
+  ImportUsersDto,
+  ModuleAuditLogFilterDto,
 } from './users.dto';
 
 // Campos base a incluir em todas as queries (sem password)
@@ -195,13 +198,26 @@ export class UsersService {
         },
       },
     });
-    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (!user) throw new NotFoundException(`Utilizador #${id} não encontrado`);
     return user;
+  }
+
+  // ─── LOOKUPS (formulário "Novo Utilizador") ───────────────────────────────
+
+  // Não existe endpoint de catálogo para LearningPath fora deste módulo (ver
+  // docs/modulo_users.md Ponto 2, "Percursos atribuídos") — findMany directo
+  // só com o essencial para o picker.
+  async getLearningPathLookups() {
+    return this.prisma.learningPath.findMany({
+      where: { status: 'PUBLISHED' },
+      select: { id: true, title: true },
+      orderBy: { title: 'asc' },
+    });
   }
 
   // ─── CRIAR ────────────────────────────────────────────────────────────────
 
-  async create(dto: CreateUserDto) {
+  async create(dto: CreateUserDto, createdById?: number) {
     // Guards de unicidade antes da escrita: força primary para não validar contra réplica atrasada.
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email já registado');
@@ -214,36 +230,138 @@ export class UsersService {
         throw new ConflictException(`Número de funcionário ${dto.employeeNumber} já existe`);
     }
 
+    if (dto.username) {
+      const usernameExists = await this.prisma.user.findFirst({
+        where: { username: dto.username },
+      });
+      if (usernameExists) throw new ConflictException(`Username ${dto.username} já existe`);
+    }
+
     const hashed = dto.password ? await bcrypt.hash(dto.password, BCRYPT_COST_FACTOR) : null;
 
-    const user = await this.prisma.user.create({
-      data: {
-        fullName: dto.fullName,
-        email: dto.email,
-        password: hashed,
-        // Nunca gravar "" num campo `@unique` — colidiria no 2.º utilizador
-        // sem nº de funcionário (P2002 -> 500). O DTO já normaliza "" -> undefined;
-        // este `|| null` protege chamadores directos do serviço.
-        employeeNumber: dto.employeeNumber || null,
-        phone: dto.phone,
-        birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
-        gender: dto.gender,
-        language: dto.language ?? 'pt',
-        timezone: dto.timezone ?? 'Africa/Luanda',
-        country: dto.country,
-        city: dto.city,
-        departmentId: dto.departmentId,
-        positionId: dto.positionId,
-        unitId: dto.unitId,
-        managerId: dto.managerId,
-        roleId: dto.roleId,
-        hireDate: dto.hireDate ? new Date(dto.hireDate) : null,
-        hrStatus: dto.hrStatus ?? 'ACTIVE',
-        accountStatus: dto.accountStatus ?? 'PENDING',
-        active: true,
-      },
-      include: USER_INCLUDE_BASIC,
-    });
+    let user: Prisma.UserGetPayload<{ include: typeof USER_INCLUDE_BASIC }>;
+    try {
+      user = await this.prisma.$transaction(async tx => {
+        const created = await tx.user.create({
+          data: {
+            fullName: dto.fullName,
+            email: dto.email,
+            password: hashed,
+            // Nunca gravar "" num campo `@unique` — colidiria no 2.º utilizador
+            // sem nº de funcionário (P2002 -> 500). O DTO já normaliza "" -> undefined;
+            // este `|| null` protege chamadores directos do serviço.
+            employeeNumber: dto.employeeNumber || null,
+            username: dto.username || null,
+            phone: dto.phone,
+            birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
+            gender: dto.gender,
+            language: dto.language ?? 'pt',
+            timezone: dto.timezone ?? 'Africa/Luanda',
+            country: dto.country,
+            city: dto.city,
+            preferredName: dto.preferredName,
+            nationality: dto.nationality,
+            identificationNumber: dto.identificationNumber,
+            nif: dto.nif,
+            personalEmail: dto.personalEmail,
+            alternatePhone: dto.alternatePhone,
+            address: dto.address,
+            emergencyContactName: dto.emergencyContactName,
+            emergencyContactPhone: dto.emergencyContactPhone,
+            departmentId: dto.departmentId,
+            positionId: dto.positionId,
+            unitId: dto.unitId,
+            managerId: dto.managerId,
+            roleId: dto.roleId,
+            hireDate: dto.hireDate ? new Date(dto.hireDate) : null,
+            hrStatus: dto.hrStatus ?? 'ACTIVE',
+            accountStatus: dto.accountStatus ?? 'PENDING',
+            companyName: dto.companyName,
+            area: dto.area,
+            jobFunction: dto.jobFunction,
+            professionalCategory: dto.professionalCategory,
+            workLocation: dto.workLocation,
+            contractType: dto.contractType,
+            workMode: dto.workMode,
+            costCenter: dto.costCenter,
+            workSchedule: dto.workSchedule,
+            systemFunction: dto.systemFunction,
+            mfaEnabled: dto.mfaEnabled ?? false,
+            contentAccessLevel: dto.contentAccessLevel,
+            isInstructor: dto.isInstructor ?? false,
+            active: true,
+            // Nested create (não uma 2.ª chamada depois): USER_INCLUDE_BASIC
+            // já pede `profile` neste mesmo create — uma criação em separado
+            // deixaria o `include` desta chamada ver o Profile como
+            // inexistente e devolver `profile: null` ao próprio criador.
+            ...(dto.interests?.length || dto.learningProfile
+              ? {
+                  profile: {
+                    create: {
+                      interests: dto.interests ?? [],
+                      learningProfile: dto.learningProfile,
+                    },
+                  },
+                }
+              : {}),
+          },
+          include: USER_INCLUDE_BASIC,
+        });
+
+        if (dto.courseIds?.length) {
+          await tx.enrollment.createMany({
+            data: dto.courseIds.map(courseId => ({
+              userId: created.id,
+              courseId,
+              origin: 'MANUAL' as const,
+              assignedById: createdById,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        if (dto.learningPathIds?.length) {
+          await tx.learningPathEnrollment.createMany({
+            data: dto.learningPathIds.map(learningPathId => ({
+              userId: created.id,
+              learningPathId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        if (dto.competencyIds?.length) {
+          await tx.userCompetency.createMany({
+            data: dto.competencyIds.map(competencyId => ({
+              userId: created.id,
+              competencyId,
+              source: 'MANUAL' as const,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        if (dto.additionalPermissionIds?.length) {
+          await tx.userPermission.createMany({
+            data: dto.additionalPermissionIds.map(permissionId => ({
+              userId: created.id,
+              permissionId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        return created;
+      });
+    } catch (e: unknown) {
+      // P2003 = FK inválida (curso/percurso/competência/permissão inexistente).
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+        throw new ConflictException(
+          'Um dos IDs indicados (curso, percurso, competência ou permissão) não existe',
+        );
+      }
+      throw e;
+    }
 
     // Inicializar pontos
     await this.prisma.userPoints.create({ data: { userId: user.id, points: 0 } });
@@ -267,7 +385,9 @@ export class UsersService {
       });
 
     // Registar auditoria
-    await this.writeAuditLog(user.id, user.id, 'USER_CREATED', { email: user.email });
+    await this.writeAuditLog(user.id, createdById ?? user.id, 'USER_CREATED', {
+      email: user.email,
+    });
 
     return this.sanitize(user);
   }
@@ -304,9 +424,66 @@ export class UsersService {
       include: USER_INCLUDE_BASIC,
     });
 
+    await this.logFieldChanges(id, updatedById ?? id, existing, dto, user);
     await this.writeAuditLog(id, updatedById ?? id, 'USER_UPDATED', { fields: Object.keys(dto) });
 
     return this.sanitize(user);
+  }
+
+  // Regista os eventos granulares do Ponto 6 (Departamento/Cargo/Gestor/Perfil
+  // alterado, MFA activado/desactivado) além do USER_UPDATED genérico — só
+  // quando o campo realmente muda de valor. `existing`/`updated` já trazem as
+  // relações (USER_INCLUDE_BASIC), por isso o "de"/"para" fica com o nome
+  // legível em vez do id em bruto.
+  private async logFieldChanges(
+    userId: number,
+    actorId: number,
+    existing: {
+      departmentId?: number | null;
+      positionId?: number | null;
+      managerId?: number | null;
+      roleId?: number | null;
+      mfaEnabled?: boolean;
+      department?: { name: string } | null;
+      position?: { name: string } | null;
+      manager?: { fullName: string } | null;
+      role?: { name: string } | null;
+    },
+    dto: UpdateUserDto,
+    updated: {
+      department?: { name: string } | null;
+      position?: { name: string } | null;
+      manager?: { fullName: string } | null;
+      role?: { name: string } | null;
+    },
+  ) {
+    if (dto.departmentId !== undefined && dto.departmentId !== existing.departmentId) {
+      await this.writeAuditLog(userId, actorId, 'DEPARTMENT_CHANGED', {
+        from: existing.department?.name ?? null,
+        to: updated.department?.name ?? null,
+      });
+    }
+    if (dto.positionId !== undefined && dto.positionId !== existing.positionId) {
+      await this.writeAuditLog(userId, actorId, 'POSITION_CHANGED', {
+        from: existing.position?.name ?? null,
+        to: updated.position?.name ?? null,
+      });
+    }
+    if (dto.managerId !== undefined && dto.managerId !== existing.managerId) {
+      await this.writeAuditLog(userId, actorId, 'MANAGER_CHANGED', {
+        from: existing.manager?.fullName ?? null,
+        to: updated.manager?.fullName ?? null,
+      });
+    }
+    if (dto.roleId !== undefined && dto.roleId !== existing.roleId) {
+      await this.writeAuditLog(userId, actorId, 'PROFILE_CHANGED', {
+        from: existing.role?.name ?? null,
+        to: updated.role?.name ?? null,
+      });
+    }
+    if (dto.mfaEnabled !== undefined && dto.mfaEnabled !== existing.mfaEnabled) {
+      await this.writeAuditLog(userId, actorId, dto.mfaEnabled ? 'MFA_ENABLED' : 'MFA_DISABLED');
+    }
   }
 
   // ─── PERFIL ───────────────────────────────────────────────────────────────
@@ -589,6 +766,147 @@ export class UsersService {
     };
   }
 
+  // ─── IMPORTAÇÃO (docs/modulo_users.md Ponto 5) ─────────────────────────────
+  // Excel/CSV → mapeamento de colunas → validação/duplicados feitos no
+  // frontend antes de chegar aqui (ImportUserRowDto já é a linha mapeada).
+  // Este serviço só faz a parte que precisa da BD: detectar duplicados
+  // reais (nesta remessa e contra utilizadores existentes), resolver
+  // departamento/cargo por nome, e criar ou actualizar. `dryRun` devolve o
+  // mesmo relatório sem escrever nada — é a pré-visualização.
+  async importUsers(dto: ImportUsersDto, actorId: number) {
+    const dryRun = dto.dryRun ?? true;
+    const updateExisting = dto.updateExisting ?? false;
+
+    const report = {
+      total: dto.rows.length,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [] as Array<{ line: number; email: string; error: string }>,
+      rows: [] as Array<{
+        line: number;
+        email: string;
+        outcome: 'create' | 'update' | 'skip-duplicate' | 'skip-existing' | 'error';
+        detail?: string;
+      }>,
+    };
+
+    const seenInFile = new Set<string>();
+
+    for (let i = 0; i < dto.rows.length; i++) {
+      const line = i + 1;
+      const row = dto.rows[i];
+      const email = row.email?.trim().toLowerCase();
+
+      try {
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          throw new Error('Email inválido ou em falta');
+        }
+        if (!row.fullName || row.fullName.trim().length < 2) {
+          throw new Error('Nome completo inválido ou em falta');
+        }
+
+        // Duplicado dentro do próprio ficheiro — não deixar a 2ª ocorrência
+        // pisar a 1ª silenciosamente.
+        if (seenInFile.has(email)) {
+          report.skipped++;
+          report.rows.push({
+            line,
+            email,
+            outcome: 'skip-duplicate',
+            detail: 'Email repetido no ficheiro',
+          });
+          continue;
+        }
+        seenInFile.add(email);
+
+        const [department, position, existing] = await Promise.all([
+          row.departmentName
+            ? this.prisma.department.findFirst({
+                where: { name: { equals: row.departmentName, mode: 'insensitive' } },
+              })
+            : Promise.resolve(null),
+          row.positionName
+            ? this.prisma.position.findFirst({
+                where: { name: { equals: row.positionName, mode: 'insensitive' } },
+              })
+            : Promise.resolve(null),
+          this.prisma.user.findUnique({ where: { email } }),
+        ]);
+
+        if (row.departmentName && !department)
+          throw new Error(`Departamento "${row.departmentName}" não existe`);
+        if (row.positionName && !position)
+          throw new Error(`Cargo "${row.positionName}" não existe`);
+
+        if (existing) {
+          if (!updateExisting) {
+            report.skipped++;
+            report.rows.push({
+              line,
+              email,
+              outcome: 'skip-existing',
+              detail: 'Já existe — actualização não pedida',
+            });
+            continue;
+          }
+          if (!dryRun) {
+            await this.update(
+              existing.id,
+              {
+                fullName: row.fullName,
+                employeeNumber: row.employeeNumber,
+                phone: row.phone,
+                departmentId: department?.id,
+                positionId: position?.id,
+                hireDate: row.hireDate,
+              },
+              actorId,
+            );
+          }
+          report.updated++;
+          report.rows.push({ line, email, outcome: 'update' });
+        } else {
+          if (!dryRun) {
+            await this.create(
+              {
+                email,
+                fullName: row.fullName,
+                employeeNumber: row.employeeNumber,
+                phone: row.phone,
+                departmentId: department?.id,
+                positionId: position?.id,
+                hireDate: row.hireDate,
+                accountStatus: AccountStatus.PENDING,
+              },
+              actorId,
+            );
+          }
+          report.created++;
+          report.rows.push({ line, email, outcome: 'create' });
+        }
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        report.errors.push({ line, email: email ?? row.email, error: message });
+        report.rows.push({ line, email: email ?? row.email, outcome: 'error', detail: message });
+      }
+    }
+
+    // Relatório de importação (Histórico de importações) — só regista quando
+    // é uma escrita real; uma pré-visualização (dryRun) não é um evento.
+    if (!dryRun) {
+      await this.writeAuditLog(actorId, actorId, 'BULK_IMPORT', {
+        total: report.total,
+        created: report.created,
+        updated: report.updated,
+        skipped: report.skipped,
+        errors: report.errors.length,
+      });
+    }
+
+    return { ...report, dryRun };
+  }
+
   // ─── CONVIDAR UTILIZADOR ──────────────────────────────────────────────────
 
   async invite(dto: InviteUserDto) {
@@ -634,6 +952,84 @@ export class UsersService {
     return { message: 'Convite enviado', userId: user.id };
   }
 
+  // ─── ACESSO & PERMISSÕES (docs/modulo_users.md Ponto 4) ────────────────────
+  // Campos sem dados reais na plataforma hoje (dispositivos, tentativas de
+  // login, histórico de bloqueios) voltam explicitamente `null` — ver
+  // memory project_innova_acl_permission_ownership: não fabricar dados,
+  // sinalizar a lacuna para o frontend em vez de inventar histórico.
+  async getAccessOverview(id: number) {
+    const user = await this.prisma.read.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        accountStatus: true,
+        mfaEnabled: true,
+        systemFunction: true,
+        contentAccessLevel: true,
+        createdAt: true,
+        unit: { select: { id: true, name: true } },
+        department: { select: { id: true, name: true } },
+        role: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            rolePermissions: { include: { permission: true } },
+          },
+        },
+        additionalPermissions: {
+          select: { grantedAt: true, permission: true },
+        },
+      },
+    });
+    if (!user) throw new NotFoundException(`Utilizador #${id} não encontrado`);
+
+    const rolePermissions = user.role ? flattenRolePermissions(user.role.rolePermissions) : [];
+    const specialPermissions = user.additionalPermissions.map(p => ({
+      ...p.permission,
+      grantedAt: p.grantedAt,
+    }));
+    const authorizedModules = Array.from(
+      new Set([...rolePermissions, ...specialPermissions].map(p => p.subject)),
+    );
+
+    const now = new Date();
+    const [lastToken, activeSessions] = await Promise.all([
+      this.prisma.read.refreshToken.findFirst({
+        where: { userId: id },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }),
+      this.prisma.read.refreshToken.count({
+        where: { userId: id, revokedAt: null, expiresAt: { gt: now } },
+      }),
+    ]);
+
+    return {
+      userId: id,
+      accountStatus: user.accountStatus,
+      accountCreatedAt: user.createdAt,
+      profile: user.role ? { id: user.role.id, name: user.role.name, code: user.role.code } : null,
+      systemFunction: user.systemFunction,
+      contentAccessLevel: user.contentAccessLevel,
+      permissions: rolePermissions,
+      specialPermissions,
+      authorizedModules,
+      authorizedUnit: user.unit,
+      authorizedDepartment: user.department,
+      mfaEnabled: user.mfaEnabled,
+      lastLoginAt: lastToken?.createdAt ?? null,
+      activeSessions,
+      // Não existe modelo/registo de dispositivos, tentativas de login ou
+      // histórico de bloqueios nesta plataforma — ver relatório de research
+      // desta funcionalidade. Devolvido explicitamente para o frontend
+      // assinalar "não disponível" em vez de omitir a secção.
+      devices: null,
+      loginAttempts: null,
+      blockHistory: null,
+    };
+  }
+
   // ─── AUDIT LOGS ───────────────────────────────────────────────────────────
 
   private async writeAuditLog(
@@ -673,6 +1069,43 @@ export class UsersService {
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.read.userAuditLog.count({ where: { userId } }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
+  }
+
+  // ─── HISTÓRICO & AUDITORIA — nível de módulo (docs/modulo_users.md Ponto 6) ─
+  // Mesma tabela UserAuditLog do separador "Histórico" do perfil individual
+  // (getAuditLogs acima), aqui sem filtrar por um único utilizador — cobre
+  // todas as acções da lista do Ponto 6 (criado, dados/departamento/cargo/
+  // gestor/perfil alterado, conta activada/desactivada, password alterada,
+  // MFA, login, logout, importações) porque write AuditLog() e o login/logout
+  // do AuthService escrevem todos na mesma tabela.
+  async getModuleAuditLogs(filters: ModuleAuditLogFilterDto) {
+    const { page = 1, limit = 30, action, userId, from, to } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+
+    const where: Prisma.UserAuditLogWhereInput = {};
+    if (action) where.action = action;
+    if (userId) where.userId = userId;
+    if (from || to) {
+      where.createdAt = {
+        ...(from ? { gte: new Date(from) } : {}),
+        ...(to ? { lte: new Date(to) } : {}),
+      };
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.read.userAuditLog.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          user: { select: { id: true, fullName: true, email: true } },
+          performedBy: { select: { id: true, fullName: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.read.userAuditLog.count({ where }),
     ]);
     return buildPaginatedResponse(data, total, page, limit);
   }

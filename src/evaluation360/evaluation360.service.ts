@@ -1341,6 +1341,53 @@ export class Evaluation360Service {
     };
   }
 
+  // Separador "Avaliações" do perfil do utilizador (docs/modulo_users.md
+  // Ponto 3): histórico de ciclos 360° em que o utilizador foi avaliado.
+  // `finalScore` só sai preenchido para ADMIN/RH ou para o próprio dono —
+  // mesma regra de canSeeScore em getParticipantDetailForAdmin/
+  // getCycleResultsMatrix; GESTOR/DIRECTOR vêem o histórico (ciclo, período,
+  // estado) sem o valor, e só da sua equipa directa.
+  async getUserCyclesHistory(userId: string, requester: CurrentUserData) {
+    const fullAccess = isPrivileged(requester, [Role.ADMIN, Role.RH, Role.DIRECTOR]);
+    if (!fullAccess) {
+      const isTeamMember = await this.prisma.read.user.count({
+        where: { id: Number(userId), managerId: requester.id },
+      });
+      if (!isTeamMember) throw new NotFoundException('Utilizador não encontrado na sua equipa.');
+    }
+    const canSeeScore =
+      isPrivileged(requester, [Role.ADMIN, Role.RH]) || String(requester.id) === userId;
+
+    const participations = await this.prisma.read.cycleParticipant.findMany({
+      where: { userId, cycle: { deletedAt: null } },
+      include: {
+        cycle: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            status: true,
+            startDate: true,
+            endDate: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return participations.map(p => ({
+      cycleId: p.cycle.id,
+      cycleName: p.cycle.name,
+      cycleType: p.cycle.type,
+      cycleStatus: p.cycle.status,
+      startDate: p.cycle.startDate,
+      endDate: p.cycle.endDate,
+      participantStatus: p.status,
+      completedAt: p.completedAt,
+      finalScore: canSeeScore ? p.finalScore : null,
+    }));
+  }
+
   // Separador "Resultados" (docs/evaluation360.md §7) para quem gere o
   // módulo: uma linha por (avaliado × competência) do ciclo, com a mesma
   // comparação self/gestor/pares/subordinados/outras já calculada em

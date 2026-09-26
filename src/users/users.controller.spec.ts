@@ -19,6 +19,8 @@ const mockSvc = {
   create: jest.fn().mockResolvedValue({ id: 2 }),
   invite: jest.fn().mockResolvedValue({ message: 'ok' }),
   bulkImport: jest.fn().mockResolvedValue({ created: 0, errors: [] }),
+  importUsers: jest.fn().mockResolvedValue({ total: 0, created: 0, errors: [] }),
+  getModuleAuditLogs: jest.fn().mockResolvedValue({ data: [], total: 0 }),
   bulkAction: jest.fn().mockResolvedValue({ affected: 0 }),
   update: jest.fn().mockResolvedValue({ id: 1 }),
   activate: jest.fn().mockResolvedValue({ message: 'ok' }),
@@ -141,10 +143,10 @@ describe('UsersController', () => {
     expect(mockSvc.getAuditLogs).toHaveBeenCalledWith(3, 2);
   });
 
-  it('create → create(dto)', async () => {
+  it('create → create(dto, admin.id)', async () => {
     const dto = {} as any;
     await controller.create(mockUser as any, dto);
-    expect(mockSvc.create).toHaveBeenCalledWith(dto);
+    expect(mockSvc.create).toHaveBeenCalledWith(dto, mockUser.id);
   });
 
   it('invite → invite(dto)', async () => {
@@ -156,6 +158,18 @@ describe('UsersController', () => {
   it('bulkImport → bulkImport', async () => {
     await controller.bulkImport([]);
     expect(mockSvc.bulkImport).toHaveBeenCalledWith([]);
+  });
+
+  it('importUsers → importUsers(dto, admin.id)', async () => {
+    const dto = { rows: [] } as any;
+    await controller.importUsers(mockUser as any, dto);
+    expect(mockSvc.importUsers).toHaveBeenCalledWith(dto, mockUser.id);
+  });
+
+  it('moduleAuditLogs → getModuleAuditLogs(filters)', async () => {
+    const filters = { action: 'LOGIN' } as any;
+    await controller.moduleAuditLogs(filters);
+    expect(mockSvc.getModuleAuditLogs).toHaveBeenCalledWith(filters);
   });
 
   it('bulkAction → bulkAction', async () => {

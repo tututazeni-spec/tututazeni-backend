@@ -30,6 +30,23 @@ const mockPrismaBase = {
     findMany: jest.fn().mockResolvedValue([]),
     count: jest.fn().mockResolvedValue(0),
   },
+  userAuditLog: {
+    create: jest.fn().mockResolvedValue({}),
+    findMany: jest.fn().mockResolvedValue([]),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  department: {
+    findFirst: jest.fn().mockResolvedValue(null),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+    count: jest.fn().mockResolvedValue(0),
+  },
+  position: {
+    findFirst: jest.fn().mockResolvedValue(null),
+    findMany: jest.fn().mockResolvedValue([]),
+    findUnique: jest.fn().mockResolvedValue(null),
+    count: jest.fn().mockResolvedValue(0),
+  },
   badgeAward: {
     findMany: jest.fn().mockResolvedValue([]),
     count: jest.fn().mockResolvedValue(0),
@@ -40,9 +57,14 @@ const mockPrismaBase = {
   },
   userCompetency: { count: jest.fn().mockResolvedValue(0) },
   refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
-  // changePassword corre as escritas dentro de $transaction — mock executa-as
-  // sequencialmente, tal como o Prisma real faz dentro da transacção.
-  $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+  // changePassword usa $transaction([...]) (array de promises); create() usa
+  // $transaction(async tx => ...) (estilo interactivo) — o mock suporta ambos.
+  $transaction: jest.fn((arg: unknown) => {
+    if (typeof arg === 'function') {
+      return (arg as (tx: unknown) => Promise<unknown>)(mockPrisma);
+    }
+    return Promise.all(arg as Promise<unknown>[]);
+  }),
 };
 
 const mockPrisma = new Proxy(mockPrismaBase, {
@@ -67,6 +89,12 @@ const baseUser = {
   password: 'hashed',
   active: true,
   employeeNumber: 'EMP001',
+  mfaEnabled: false,
+  roleId: 1,
+  departmentId: 1,
+  positionId: 1,
+  unitId: null,
+  managerId: null,
   role: { id: 1, name: 'COLABORADOR' },
   department: { id: 1, name: 'TI', code: 'TI' },
   position: { id: 1, name: 'Dev', level: 1 },
@@ -394,6 +422,173 @@ describe('UsersService', () => {
         }),
       ).rejects.toThrow(ConflictException);
       expect(mockEmailQueue.add).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── importUsers (docs/modulo_users.md Ponto 5) ────────────────────────────
+
+  describe('importUsers', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      mockPrisma.department.findFirst.mockResolvedValue(null);
+      mockPrisma.position.findFirst.mockResolvedValue(null);
+    });
+
+    it('dryRun (por omissão) reporta "create" sem escrever nada na BD', async () => {
+      userMock.findUnique.mockResolvedValue(null);
+
+      const result = await service.importUsers(
+        { rows: [{ email: 'novo@innova.com', fullName: 'Novo' }] },
+        1,
+      );
+
+      expect(result.dryRun).toBe(true);
+      expect(result.created).toBe(1);
+      expect(result.rows[0]).toMatchObject({ outcome: 'create' });
+      expect(userMock.create).not.toHaveBeenCalled();
+    });
+
+    it('commit (dryRun: false) cria de facto o utilizador em falta', async () => {
+      userMock.findUnique.mockResolvedValue(null);
+      userMock.findFirst.mockResolvedValue(null);
+      userMock.create.mockResolvedValue({ ...baseUser, id: 5, email: 'novo@innova.com' });
+
+      const result = await service.importUsers(
+        { rows: [{ email: 'novo@innova.com', fullName: 'Novo' }], dryRun: false },
+        1,
+      );
+
+      expect(result.created).toBe(1);
+      expect(userMock.create).toHaveBeenCalled();
+    });
+
+    it('detecta duplicado dentro do próprio ficheiro (2ª ocorrência do mesmo email)', async () => {
+      userMock.findUnique.mockResolvedValue(null);
+
+      const result = await service.importUsers(
+        {
+          rows: [
+            { email: 'dup@innova.com', fullName: 'Um' },
+            { email: 'dup@innova.com', fullName: 'Outro' },
+          ],
+        },
+        1,
+      );
+
+      expect(result.created).toBe(1);
+      expect(result.skipped).toBe(1);
+      expect(result.rows[1]).toMatchObject({ outcome: 'skip-duplicate' });
+    });
+
+    it('utilizador já existente sem updateExisting → skip-existing', async () => {
+      userMock.findUnique.mockResolvedValue(baseUser);
+
+      const result = await service.importUsers(
+        { rows: [{ email: baseUser.email, fullName: baseUser.fullName }] },
+        1,
+      );
+
+      expect(result.skipped).toBe(1);
+      expect(result.rows[0]).toMatchObject({ outcome: 'skip-existing' });
+    });
+
+    it('utilizador já existente com updateExisting → actualiza', async () => {
+      userMock.findUnique.mockResolvedValue(baseUser);
+      userMock.findFirst.mockResolvedValue(null);
+      userMock.update.mockResolvedValue({ ...baseUser, fullName: 'Actualizado' });
+
+      const result = await service.importUsers(
+        {
+          rows: [{ email: baseUser.email, fullName: 'Actualizado' }],
+          updateExisting: true,
+          dryRun: false,
+        },
+        1,
+      );
+
+      expect(result.updated).toBe(1);
+      expect(userMock.update).toHaveBeenCalled();
+    });
+
+    it('departamento indicado que não existe → linha de erro (não pára o resto da importação)', async () => {
+      userMock.findUnique.mockResolvedValue(null);
+      mockPrisma.department.findFirst.mockResolvedValue(null);
+
+      const result = await service.importUsers(
+        {
+          rows: [
+            { email: 'a@innova.com', fullName: 'Ana', departmentName: 'Inexistente' },
+            { email: 'b@innova.com', fullName: 'Bruno' },
+          ],
+        },
+        1,
+      );
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toMatchObject({ line: 1, email: 'a@innova.com' });
+      expect(result.created).toBe(1); // a 2ª linha continua a ser processada
+    });
+  });
+
+  // ─── getModuleAuditLogs (docs/modulo_users.md Ponto 6) ─────────────────────
+
+  describe('getModuleAuditLogs', () => {
+    it('devolve lista paginada sem filtrar por utilizador', async () => {
+      mockPrisma.userAuditLog.findMany.mockResolvedValue([]);
+      mockPrisma.userAuditLog.count.mockResolvedValue(0);
+
+      const result = await service.getModuleAuditLogs({});
+
+      expect(result).toBeDefined();
+      expect(mockPrisma.userAuditLog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: {} }),
+      );
+    });
+
+    it('filtra por action e por userId quando indicados', async () => {
+      mockPrisma.userAuditLog.findMany.mockResolvedValue([]);
+      mockPrisma.userAuditLog.count.mockResolvedValue(0);
+
+      await service.getModuleAuditLogs({ action: 'LOGIN', userId: 7 });
+
+      expect(mockPrisma.userAuditLog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { action: 'LOGIN', userId: 7 } }),
+      );
+    });
+  });
+
+  // ─── update() — eventos granulares do Ponto 6 ──────────────────────────────
+
+  describe('update — eventos granulares de auditoria', () => {
+    it('regista DEPARTMENT_CHANGED quando o departamento muda', async () => {
+      userMock.findUnique.mockResolvedValue(baseUser);
+      userMock.findFirst.mockResolvedValue(null);
+      userMock.update.mockResolvedValue({
+        ...baseUser,
+        departmentId: 2,
+        department: { id: 2, name: 'RH', code: 'RH' },
+      });
+      const spy = jest.spyOn(service as any, 'writeAuditLog').mockResolvedValue(undefined);
+
+      await service.update(1, { departmentId: 2 }, 1);
+
+      expect(spy).toHaveBeenCalledWith(
+        1,
+        1,
+        'DEPARTMENT_CHANGED',
+        expect.objectContaining({ from: 'TI', to: 'RH' }),
+      );
+    });
+
+    it('não regista nada quando o campo enviado é igual ao actual', async () => {
+      userMock.findUnique.mockResolvedValue(baseUser);
+      userMock.findFirst.mockResolvedValue(null);
+      userMock.update.mockResolvedValue(baseUser);
+      const spy = jest.spyOn(service as any, 'writeAuditLog').mockResolvedValue(undefined);
+
+      await service.update(1, { departmentId: baseUser.department.id }, 1);
+
+      expect(spy).not.toHaveBeenCalledWith(1, 1, 'DEPARTMENT_CHANGED', expect.anything());
     });
   });
 });

@@ -537,7 +537,7 @@ export class OrganizationService {
         },
       },
     });
-    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (!user) throw new NotFoundException(`Utilizador #${userId} não encontrado`);
 
     const history = await this.getUserOrgHistory(userId);
 

@@ -101,7 +101,7 @@ export class CareerService {
         },
       },
     });
-    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (!user) throw new NotFoundException(`Utilizador #${userId} não encontrado`);
 
     // Calcular gap de competências para o cargo atual
     const competencyGaps = await this.getCompetencyGapsForUser(userId);
@@ -200,7 +200,7 @@ export class CareerService {
       where: { id: userId },
       select: { positionId: true, hireDate: true },
     });
-    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (!user) throw new NotFoundException(`Utilizador #${userId} não encontrado`);
 
     const targetPosition = await this.prisma.read.position.findUnique({
       where: { id: targetPositionId },
@@ -986,7 +986,7 @@ export class CareerService {
       where: { id: userId },
       select: { fullName: true, managerId: true },
     });
-    if (!user) throw new NotFoundException('Utilizador não encontrado');
+    if (!user) throw new NotFoundException(`Utilizador #${userId} não encontrado`);
 
     // Notificar gestor
     if (user.managerId) {

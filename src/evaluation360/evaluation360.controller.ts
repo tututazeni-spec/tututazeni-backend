@@ -548,6 +548,17 @@ export class Evaluation360Controller {
     return this.service.getParticipantResult(cycleId, participantId, String(user.id));
   }
 
+  @Get('user/:userId/cycles')
+  @Roles(Role.ADMIN, Role.RH, Role.GESTOR, Role.DIRECTOR)
+  @ApiOperation({
+    summary:
+      'Histórico de ciclos 360° de um utilizador — separador Avaliações do perfil ' +
+      '(docs/modulo_users.md Ponto 3). finalScore só sai para ADMIN/RH/próprio dono.',
+  })
+  async getUserCycles(@Param('userId') userId: string, @CurrentUser() user: CurrentUserData) {
+    return this.service.getUserCyclesHistory(userId, user);
+  }
+
   @Get('cycles/:cycleId/analytics/team')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Analytics da equipa (heatmap de competências)' })

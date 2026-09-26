@@ -24,6 +24,8 @@ import {
   BulkActionDto,
   InviteUserDto,
   UserChangePasswordDto,
+  ImportUsersDto,
+  ModuleAuditLogFilterDto,
 } from './users.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -113,6 +115,15 @@ export class UsersController {
     return this.svc.getAdminDashboard();
   }
 
+  // Rota estática — tem de vir antes de ':id', senão "audit-logs" seria
+  // capturado como o parâmetro :id.
+  @Get('audit-logs')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Histórico & Auditoria do módulo (docs/modulo_users.md Ponto 6)' })
+  moduleAuditLogs(@Query() filters: ModuleAuditLogFilterDto) {
+    return this.svc.getModuleAuditLogs(filters);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Perfil completo de um utilizador' })
   findOne(@Param('id', ParseIntPipe) id: number) {
@@ -140,13 +151,27 @@ export class UsersController {
     return this.svc.getAuditLogs(id, page ? parseInt(page) : 1);
   }
 
+  @Get(':id/access')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Acesso & Permissões de um utilizador (docs/modulo_users.md Ponto 4)' })
+  accessOverview(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getAccessOverview(id);
+  }
+
   // ── Gestão (Admin/RH) ────────────────────────────────────────────────────
 
   @Post()
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar utilizador' })
   create(@CurrentUser() admin: CurrentUserData, @Body() dto: CreateUserDto) {
-    return this.svc.create(dto);
+    return this.svc.create(dto, admin.id);
+  }
+
+  @Get('lookups/learning-paths')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({ summary: 'Percursos de aprendizagem publicados (picker "Novo Utilizador")' })
+  learningPathLookups() {
+    return this.svc.getLearningPathLookups();
   }
 
   @Post('invite')
@@ -161,6 +186,17 @@ export class UsersController {
   @ApiOperation({ summary: 'Importação em massa (com relatório de erros por linha)' })
   bulkImport(@Body() dto: CreateUserDto[]) {
     return this.svc.bulkImport(dto);
+  }
+
+  @Post('import')
+  @Roles(Role.ADMIN, Role.RH)
+  @ApiOperation({
+    summary:
+      'Importação Excel/CSV (docs/modulo_users.md Ponto 5) — mapeamento já feito pelo frontend; ' +
+      'dryRun devolve a pré-visualização sem escrever',
+  })
+  importUsers(@CurrentUser() admin: CurrentUserData, @Body() dto: ImportUsersDto) {
+    return this.svc.importUsers(dto, admin.id);
   }
 
   @Post('bulk-action')

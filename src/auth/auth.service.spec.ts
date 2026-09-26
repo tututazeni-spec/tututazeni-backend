@@ -36,6 +36,7 @@ const mockPrisma = {
   },
   role: { findFirst: jest.fn() },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
+  userAuditLog: { create: jest.fn().mockResolvedValue({}) },
   userPoints: { create: jest.fn().mockResolvedValue({}) },
   notificationLog: { create: jest.fn().mockResolvedValue({}) },
   refreshToken: {

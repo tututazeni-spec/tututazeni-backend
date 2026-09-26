@@ -636,7 +636,7 @@ export class RolesPermissionsService {
       where: { id: dto.userId },
       include: { role: { include: { rolePermissions: { include: { permission: true } } } } },
     });
-    if (!raw) throw new NotFoundException('Utilizador não encontrado');
+    if (!raw) throw new NotFoundException(`Utilizador #${dto.userId} não encontrado`);
     const user = { ...raw, role: withFlatPermissions(raw.role) };
 
     const rolePerms = user.role?.permissions ?? [];
