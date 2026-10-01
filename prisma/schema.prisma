@@ -1225,15 +1225,19 @@ model RoleTemplate {
 enum DepartmentStatus {
   ACTIVE
   INACTIVE
+  ARCHIVED
 }
 
 model Department {
   id                   Int                     @id @default(autoincrement())
   code                 String                  @unique
   name                 String
+  acronym              String?
   description          String?
   active               Boolean                 @default(true)
   status               DepartmentStatus        @default(ACTIVE)
+  closedAt             DateTime?
+  closureReason        String?
   color                String?
   icon                 String?
   costCenter           String?
