@@ -18,7 +18,9 @@ import {
   UpdateUnitDto,
   CreatePositionDto,
   UpdatePositionDto,
+  PositionFilterDto,
   CreateCareerPositionDto,
+  EmployeeFilterDto,
 } from './departments.dto';
 import { calculatePagination, buildPaginatedResponse } from '../common/helpers/pagination.helper';
 
@@ -177,8 +179,8 @@ export class DepartmentsService {
         },
         orderBy: { name: 'asc' },
       }),
-      // Position.departmentId não tem relação Prisma declarada (ver docs/modulo_departments.md
-      // "Modelos principais") — contagem por groupBy em vez de include/_count.
+      // groupBy em vez de include/_count — mantém a árvore como uma única
+      // query independente da lista de posições.
       this.prisma.read.position.groupBy({
         by: ['departmentId'],
         _count: { _all: true },
@@ -761,6 +763,250 @@ export class DepartmentsService {
     return result.sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
   }
 
+  // Colaboradores alocados aos departamentos, agregado entre toda a
+  // organização (docs/modulo_departments.md Ponto 5 — "Colaboradores").
+  // Mostra apenas os dados necessários à gestão departamental — os dados
+  // completos do colaborador continuam no módulo Users.
+  async getEmployees(filters: EmployeeFilterDto) {
+    const {
+      page = 1,
+      limit = 30,
+      search,
+      departmentId,
+      positionId,
+      location,
+      contractType,
+      active,
+    } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+
+    // "Departamento" no filtro inclui sub-departamentos: resolve-se a árvore
+    // completa de ids antes de filtrar os colaboradores.
+    let departmentIds: number[] | undefined;
+    if (departmentId !== undefined) {
+      const allDepts = await this.prisma.read.department.findMany({
+        select: { id: true, parentId: true },
+      });
+      departmentIds = this.collectDescendantIds(allDepts, departmentId);
+    }
+
+    const where: Prisma.UserWhereInput = {
+      ...(departmentIds ? { departmentId: { in: departmentIds } } : {}),
+      ...(positionId !== undefined ? { positionId } : {}),
+      ...(contractType !== undefined ? { contractType } : {}),
+      ...(active !== undefined ? { active } : {}),
+      ...(location
+        ? { department: { location: { contains: location, mode: 'insensitive' } } }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              { fullName: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+              { employeeNumber: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const select = {
+      id: true,
+      fullName: true,
+      employeeNumber: true,
+      avatarUrl: true,
+      email: true,
+      phone: true,
+      gender: true,
+      birthDate: true,
+      active: true,
+      contractType: true,
+      hireDate: true,
+      department: {
+        select: {
+          id: true,
+          name: true,
+          location: true,
+          parentId: true,
+          parent: { select: { id: true, name: true } },
+        },
+      },
+      manager: { select: { id: true, fullName: true } },
+      position: { select: { id: true, name: true } },
+    } satisfies Prisma.UserSelect;
+
+    const [rows, total, indicatorRows] = await Promise.all([
+      this.prisma.read.user.findMany({
+        where,
+        select,
+        skip,
+        take,
+        orderBy: { fullName: 'asc' },
+      }),
+      this.prisma.read.user.count({ where }),
+      // Indicadores calculados sobre o universo filtrado (sem paginação).
+      this.prisma.read.user.findMany({
+        where,
+        select: {
+          active: true,
+          gender: true,
+          birthDate: true,
+          contractType: true,
+          position: { select: { name: true } },
+          department: { select: { location: true } },
+        },
+      }),
+    ]);
+
+    const data = rows.map(u => ({
+      id: u.id,
+      fullName: u.fullName,
+      employeeNumber: u.employeeNumber,
+      avatarUrl: u.avatarUrl,
+      email: u.email,
+      phone: u.phone,
+      position: u.position,
+      department: u.department
+        ? { id: u.department.id, name: u.department.parent?.name ?? u.department.name }
+        : null,
+      subdepartment: u.department?.parent ? u.department.name : null,
+      location: u.department?.location ?? null,
+      manager: u.manager,
+      hireDate: u.hireDate,
+      active: u.active,
+      contractType: u.contractType,
+    }));
+
+    const ageBracket = (birthDate: Date | null): string => {
+      if (!birthDate) return 'Não informado';
+      const age = Math.floor((Date.now() - birthDate.getTime()) / (365.25 * 24 * 3600 * 1000));
+      if (age < 25) return '< 25';
+      if (age < 35) return '25-34';
+      if (age < 45) return '35-44';
+      if (age < 55) return '45-54';
+      return '55+';
+    };
+    const countBy = <T>(items: T[], key: (item: T) => string | null | undefined) => {
+      const map = new Map<string, number>();
+      for (const item of items) {
+        const k = key(item) ?? 'Não informado';
+        map.set(k, (map.get(k) ?? 0) + 1);
+      }
+      return Array.from(map.entries()).map(([label, count]) => ({ label, count }));
+    };
+
+    const indicators = {
+      total: indicatorRows.length,
+      active: indicatorRows.filter(u => u.active).length,
+      inactive: indicatorRows.filter(u => !u.active).length,
+      byGender: countBy(indicatorRows, u => u.gender),
+      byAgeBracket: countBy(indicatorRows, u => ageBracket(u.birthDate)),
+      byPosition: countBy(indicatorRows, u => u.position?.name),
+      byLocation: countBy(indicatorRows, u => u.department?.location),
+      byContractType: countBy(indicatorRows, u => u.contractType),
+    };
+
+    return { ...buildPaginatedResponse(data, total, page, limit), indicators };
+  }
+
+  // Catálogo de cargos (docs/modulo_departments.md Ponto 6 — "Cargos &
+  // Funções"), com filtros, paginação e indicadores — distinto do picker
+  // simples em GET /positions (usado por outros módulos, ver PositionsService.findAll).
+  async getPositionsCatalog(filters: PositionFilterDto) {
+    const { page = 1, limit = 30, search, departmentId, level, jobFamily, active } = filters;
+    const { skip, take } = calculatePagination(page, limit);
+
+    const where: Prisma.PositionWhereInput = {
+      ...(departmentId !== undefined ? { departmentId } : {}),
+      ...(level !== undefined ? { level } : {}),
+      ...(jobFamily ? { jobFamily: { contains: jobFamily, mode: 'insensitive' } } : {}),
+      ...(active !== undefined ? { active } : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { code: { contains: search, mode: 'insensitive' } },
+              { jobFunction: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [rows, total, indicatorRows] = await Promise.all([
+      this.prisma.read.position.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          department: { select: { id: true, name: true } },
+          reportsTo: { select: { id: true, name: true } },
+          _count: { select: { users: true, internalVacancies: true } },
+        },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.read.position.count({ where }),
+      this.prisma.read.position.findMany({
+        where,
+        select: { active: true, jobFamily: true, level: true },
+      }),
+    ]);
+
+    const data = rows.map(p => ({
+      id: p.id,
+      name: p.name,
+      code: p.code,
+      jobFunction: p.jobFunction,
+      jobFamily: p.jobFamily,
+      level: p.level,
+      department: p.department,
+      reportsTo: p.reportsTo,
+      headcountPlanned: p.headcountPlanned ?? 0,
+      headcountOccupied: p._count.users,
+      vacancies: Math.max((p.headcountPlanned ?? 0) - p._count.users, 0),
+      active: p.active,
+      createdAt: p.createdAt,
+    }));
+
+    const countBy = (
+      items: typeof indicatorRows,
+      key: (i: (typeof indicatorRows)[number]) => string | null | undefined,
+    ) => {
+      const map = new Map<string, number>();
+      for (const item of items) {
+        const k = key(item) ?? 'Não informado';
+        map.set(k, (map.get(k) ?? 0) + 1);
+      }
+      return Array.from(map.entries()).map(([label, count]) => ({ label, count }));
+    };
+
+    const indicators = {
+      total: indicatorRows.length,
+      active: indicatorRows.filter(p => p.active).length,
+      inactive: indicatorRows.filter(p => !p.active).length,
+      byJobFamily: countBy(indicatorRows, p => p.jobFamily),
+      byLevel: countBy(indicatorRows, p => p.level),
+    };
+
+    return { ...buildPaginatedResponse(data, total, page, limit), indicators };
+  }
+
+  private collectDescendantIds(
+    all: Array<{ id: number; parentId: number | null }>,
+    rootId: number,
+  ): number[] {
+    const result = [rootId];
+    const queue = [rootId];
+    while (queue.length) {
+      const current = queue.shift();
+      for (const d of all) {
+        if (d.parentId === current) {
+          result.push(d.id);
+          queue.push(d.id);
+        }
+      }
+    }
+    return result;
+  }
+
   // Histórico de transferências de um departamento
   async getTransferHistory(id: number, page = 1, limit = 20) {
     const skip = (page - 1) * limit;
@@ -879,6 +1125,11 @@ export class UnitsService {
 export class PositionsService {
   constructor(private prisma: PrismaService) {}
 
+  // Picker leve usado por outros módulos (ex.: wizard de aulas ao vivo,
+  // formulário de formações) — devolve sempre um array simples. O catálogo
+  // enriquecido do Ponto 6 (filtros/paginação/indicadores) vive em
+  // DepartmentsService.getPositionsCatalog(), exposto em
+  // GET /departments/positions, para não quebrar estes consumidores.
   async findAll() {
     return this.prisma.read.position.findMany({
       include: {
@@ -888,15 +1139,30 @@ export class PositionsService {
     });
   }
 
+  // Detalhe de um cargo — "Ao abrir um cargo" (docs/modulo_departments.md
+  // Ponto 6): descrição, responsabilidades, requisitos, competências,
+  // formação/experiência necessárias, colaboradores, estrutura salarial, vagas.
   async findOne(id: number) {
     const p = await this.prisma.read.position.findUnique({
       where: { id },
       include: {
-        users: { select: { id: true, fullName: true, email: true } },
+        department: { select: { id: true, name: true } },
+        reportsTo: { select: { id: true, name: true } },
+        subordinates: { select: { id: true, name: true } },
+        users: { select: { id: true, fullName: true, email: true, active: true } },
+        competencies: { include: { competency: { select: { id: true, name: true } } } },
+        internalVacancies: {
+          select: { id: true, title: true, status: true, slots: true, closingDate: true },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
     if (!p) throw new NotFoundException('Posição não encontrada');
-    return p;
+    return {
+      ...p,
+      headcountOccupied: p.users.length,
+      vacancies: Math.max((p.headcountPlanned ?? 0) - p.users.length, 0),
+    };
   }
 
   async create(dto: CreatePositionDto) {

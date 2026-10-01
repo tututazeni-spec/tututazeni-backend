@@ -315,6 +315,101 @@ describe('Departments Integration', () => {
     });
   });
 
+  describe('Colaboradores — docs/modulo_departments.md Ponto 5 (GET /departments/employees)', () => {
+    it('colaborador → 403 (módulo oculto para COLABORADOR)', async () => {
+      await request(app.getHttpServer())
+        .get('/departments/employees')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+
+    it('RH → 200, inclui o colaborador transferido para o departamento e indicadores agregados', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/departments/employees')
+        .query({ departmentId, limit: 50 })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.data.some((e: any) => e.id === employeeId)).toBe(true);
+      expect(res.body.indicators.total).toBeGreaterThanOrEqual(1);
+      expect(Array.isArray(res.body.indicators.byContractType)).toBe(true);
+
+      const row = res.body.data.find((e: any) => e.id === employeeId);
+      expect(row.department.id).toBe(departmentId);
+    });
+
+    it('filtro por contractType inexistente → 200 com lista vazia', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/departments/employees')
+        .query({ departmentId, contractType: 'APPRENTICESHIP' })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.data.some((e: any) => e.id === employeeId)).toBe(false);
+    });
+  });
+
+  describe('Cargos & Funções — docs/modulo_departments.md Ponto 6 (GET /departments/positions)', () => {
+    it('colaborador → 403 (módulo oculto para COLABORADOR)', async () => {
+      await request(app.getHttpServer())
+        .get('/departments/positions')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(403);
+    });
+
+    it('RH actualiza o cargo com os campos do Ponto 6 (função, família, responsabilidades, reporte)', async () => {
+      const res = await request(app.getHttpServer())
+        .put(`/positions/${positionId}`)
+        .set('Authorization', `Bearer ${rhToken}`)
+        .send({
+          jobFunction: 'Gestão administrativa',
+          jobFamily: 'Recursos Humanos',
+          responsibilities: 'Acompanhar processos de RH',
+          requiredExperience: '2 anos',
+        })
+        .expect(200);
+      expect(res.body.jobFunction).toBe('Gestão administrativa');
+      expect(res.body.jobFamily).toBe('Recursos Humanos');
+      expect(res.body.active).toBe(true);
+    });
+
+    it('RH → 200, catálogo inclui o cargo actualizado com headcount e indicadores', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/departments/positions')
+        .query({ departmentId })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      const row = res.body.data.find((p: any) => p.id === positionId);
+      expect(row).toBeDefined();
+      expect(row.jobFamily).toBe('Recursos Humanos');
+      expect(row.headcountPlanned).toBe(1);
+      expect(row.headcountOccupied).toBe(0);
+      expect(row.vacancies).toBe(1);
+      expect(res.body.indicators.byJobFamily.some((b: any) => b.label === 'Recursos Humanos')).toBe(
+        true,
+      );
+    });
+
+    it('filtro jobFamily inexistente → 200 com lista vazia', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/departments/positions')
+        .query({ jobFamily: 'Família Inexistente XYZ' })
+        .set('Authorization', `Bearer ${rhToken}`)
+        .expect(200);
+      expect(res.body.data).toHaveLength(0);
+    });
+
+    it('GET /positions/:id — detalhe inclui responsabilidades e estrutura salarial', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/positions/${positionId}`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      expect(res.body.responsibilities).toBe('Acompanhar processos de RH');
+      expect(res.body.salaryMin).toBe(1000);
+      expect(res.body.salaryMax).toBe(2000);
+      expect(res.body.headcountOccupied).toBe(0);
+      expect(res.body.vacancies).toBe(1);
+    });
+  });
+
   describe('Roles & Permissions — verifica correcção (assignPermissionToRole sem @@unique)', () => {
     it('RH não pode criar role → 403', async () => {
       await request(app.getHttpServer())

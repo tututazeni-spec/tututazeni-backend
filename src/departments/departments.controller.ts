@@ -40,7 +40,9 @@ import {
   DepartmentsCreatePermissionDto,
   CreatePositionDto,
   UpdatePositionDto,
+  PositionFilterDto,
   CreateCareerPositionDto,
+  EmployeeFilterDto,
 } from './departments.dto';
 import { Role, AUTHENTICATED_ROLES } from '../auth/enums/role.enum';
 
@@ -104,6 +106,25 @@ export class DepartmentsController {
     return this.svc.getHeadHistory();
   }
 
+  // Rota literal — tem de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
+  @Get('employees')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @ApiOperation({
+    summary: 'Colaboradores alocados aos departamentos, com filtros e indicadores',
+  })
+  getEmployees(@Query() filters: EmployeeFilterDto) {
+    return this.svc.getEmployees(filters);
+  }
+
+  // Rota literal — tem de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
+  // Distinto de GET /positions (picker simples usado por outros módulos).
+  @Get('positions')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @ApiOperation({ summary: 'Catálogo de cargos & funções, com filtros e indicadores' })
+  getPositionsCatalog(@Query() filters: PositionFilterDto) {
+    return this.svc.getPositionsCatalog(filters);
+  }
+
   // Detalhe e métricas: mesmo nível de acesso que GET /departments e
   // /departments/tree (DEPARTMENTS_VIEW_ROLES). O organograma e a lista já são
   // visíveis a qualquer autenticado não-COLABORADOR; se o detalhe fosse mais
@@ -126,8 +147,7 @@ export class DepartmentsController {
   @Get(':id/structure')
   @Roles(...DEPARTMENTS_VIEW_ROLES)
   @ApiOperation({
-    summary:
-      'Estrutura do departamento: equipas, cargos & posições, vagas, objectivos, documentos',
+    summary: 'Estrutura do departamento: equipas, cargos & posições, vagas, objectivos, documentos',
   })
   structure(@Param('id', ParseIntPipe) id: number) {
     return this.svc.getStructure(id);

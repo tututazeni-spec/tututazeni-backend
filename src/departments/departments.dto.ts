@@ -22,6 +22,7 @@ import {
   SeniorityLevel,
   DepartmentStatus,
   DepartmentVisibility,
+  ContractType,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
@@ -192,7 +193,10 @@ export class CreateDepartmentDto {
   @IsEnum(DepartmentVisibility)
   dataVisibility?: DepartmentVisibility;
 
-  @ApiPropertyOptional({ description: 'Exige aprovação para processos deste departamento', default: false })
+  @ApiPropertyOptional({
+    description: 'Exige aprovação para processos deste departamento',
+    default: false,
+  })
   @IsOptional()
   @IsBoolean()
   approvalRequired?: boolean;
@@ -443,9 +447,129 @@ export class CreatePositionDto {
   @IsArray()
   @IsInt({ each: true })
   competencyIds?: number[];
+
+  // ─── docs/modulo_departments.md Ponto 6 — Cargos & Funções ─────────────────
+
+  @ApiPropertyOptional({ description: 'Função — distinta do nome do cargo' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  jobFunction?: string;
+
+  @ApiPropertyOptional({ description: 'Família profissional' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  jobFamily?: string;
+
+  @ApiPropertyOptional({ description: 'Responsabilidades do cargo' })
+  @IsOptional()
+  @IsString()
+  responsibilities?: string;
+
+  @ApiPropertyOptional({ description: 'Requisitos do cargo' })
+  @IsOptional()
+  @IsString()
+  requirements?: string;
+
+  @ApiPropertyOptional({ description: 'Formação necessária' })
+  @IsOptional()
+  @IsString()
+  requiredTraining?: string;
+
+  @ApiPropertyOptional({ description: 'Experiência necessária' })
+  @IsOptional()
+  @IsString()
+  requiredExperience?: string;
+
+  @ApiPropertyOptional({ description: 'Cargo ao qual este reporta hierarquicamente' })
+  @IsOptional()
+  @IsInt()
+  reportsToPositionId?: number;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  active?: boolean;
 }
 
 export class UpdatePositionDto extends PartialType(CreatePositionDto) {}
+
+export class PositionFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional({ enum: PositionLevel })
+  @IsOptional()
+  @IsEnum(PositionLevel)
+  level?: PositionLevel;
+
+  @ApiPropertyOptional({ description: 'Família profissional' })
+  @IsOptional()
+  @IsString()
+  jobFamily?: string;
+
+  // @Type(() => Boolean) coage '?active=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  active?: boolean;
+}
+
+// ─── Employees (docs/modulo_departments.md Ponto 5 — Colaboradores) ────────────
+
+export class EmployeeFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ description: 'Departamento (inclui sub-departamentos)' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  positionId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiPropertyOptional({ enum: ContractType })
+  @IsOptional()
+  @IsEnum(ContractType)
+  contractType?: ContractType;
+
+  // @Type(() => Boolean) coage '?active=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  active?: boolean;
+}
 
 // ─── Career ───────────────────────────────────────────────────────────────────
 

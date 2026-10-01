@@ -1287,6 +1287,7 @@ model Department {
   processOwnerDepartment   Department?             @relation("DeptProcessOwner", fields: [processOwnerDepartmentId], references: [id])
   processOwnerFor          Department[]            @relation("DeptProcessOwner")
   users                    User[]                  @relation("DeptMembers")
+  positions                Position[]
   headHistory              DepartmentHeadHistory[]
   transfersIn              DepartmentTransferLog[] @relation("TransferTo")
   transfersOut             DepartmentTransferLog[] @relation("TransferFrom")
@@ -1394,6 +1395,19 @@ model Position {
   salaryMin           Float?
   salaryMax           Float?
   headcountPlanned    Int?                 @default(1)
+  // ─── docs/modulo_departments.md Ponto 6 — Cargos & Funções ───────────────
+  jobFunction         String? // "Função" — distinta do nome do cargo
+  jobFamily           String? // Família profissional
+  active              Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  responsibilities    String?              @db.Text
+  requirements        String?              @db.Text
+  requiredTraining    String?
+  requiredExperience  String?
+  reportsToPositionId Int?
+  department          Department?          @relation(fields: [departmentId], references: [id])
+  reportsTo           Position?            @relation("PositionHierarchy", fields: [reportsToPositionId], references: [id])
+  subordinates        Position[]           @relation("PositionHierarchy")
   users               User[]               @relation("PositionUsers")
   successionPlans     SuccessionPlan[]
   competencies        PositionCompetency[]
@@ -1406,6 +1420,8 @@ model Position {
   roleTemplates       RoleTemplate[]
 
   leadershipTargetings LeadershipProgramTargeting[]
+
+  @@index([departmentId])
 }
 
 enum OrgChangeType {
