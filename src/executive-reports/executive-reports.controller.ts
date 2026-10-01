@@ -27,6 +27,10 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles, CurrentUserData } from '../common/decorators';
 import { Role } from '../auth/enums/role.enum';
+import { ExecutiveFiltersDto } from './dto/executive-filters.dto';
+
+const EXEC_FULL = [Role.ADMIN, Role.RH, Role.DIRECTOR] as const;
+const EXEC_MGMT = [...EXEC_FULL, Role.GESTOR, Role.LIDER] as const;
 
 @ApiTags('Executive Reports')
 @ApiBearerAuth()
@@ -35,6 +39,37 @@ import { Role } from '../auth/enums/role.enum';
 @Controller('executive-reports')
 export class ExecutiveReportsController {
   constructor(private readonly svc: ExecutiveReportsService) {}
+
+  // ── Dashboard executivo (docs/Executive_Reports.md §1-3) ──────────────────
+  // Declarados antes de `:id` para não serem apanhados pelo ParseIntPipe.
+
+  @Get('tabs')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Separadores visíveis para o papel do utilizador' })
+  tabs(@CurrentUser() user: CurrentUserData) {
+    return this.svc.getTabs(user);
+  }
+
+  @Get('overview')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Visão Executiva — KPIs, indicadores complementares e alertas' })
+  overview(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.svc.getOverview(user, filters);
+  }
+
+  @Get('kpis')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'KPIs executivos com meta, variação, tendência e fonte' })
+  kpis(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.svc.getKpis(user, filters);
+  }
+
+  @Get('kpis/definitions')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Definições dos KPIs (fórmula, fonte, meta, limiares)' })
+  kpiDefinitions() {
+    return this.svc.getKpiDefinitions();
+  }
 
   // ── Listagem ──────────────────────────────────────────────────────────────
 

@@ -2,11 +2,12 @@
 import { Module } from '@nestjs/common';
 import { ExecutiveReportsService } from './executive-reports.service';
 import { ExecutiveReportsController } from './executive-reports.controller';
+import { ExecutiveReportsMetricsService } from './executive-reports.metrics.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [PrismaModule],
-  providers: [ExecutiveReportsService],
+  providers: [ExecutiveReportsService, ExecutiveReportsMetricsService],
   controllers: [ExecutiveReportsController],
   exports: [ExecutiveReportsService],
 })

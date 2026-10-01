@@ -7,6 +7,11 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ExecutiveReportsMetricsService } from './executive-reports.metrics.service';
+import { EXECUTIVE_TABS, KPI_CATALOG, PRIMARY_KPI_CODES } from './executive-reports.kpi-catalog';
+import type { KpiCode } from './executive-reports.kpi-catalog';
+import type { ExecutiveFiltersDto } from './dto/executive-filters.dto';
+import type { CurrentUserData } from '../common/decorators';
 import { ApprovalDecision, Prisma } from '@prisma/client';
 import {
   CreateExecutiveReportDto,
@@ -21,7 +26,94 @@ import {
 export class ExecutiveReportsService {
   private readonly logger = new Logger(ExecutiveReportsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private metrics: ExecutiveReportsMetricsService,
+  ) {}
+
+  // ─── DASHBOARD EXECUTIVO (docs/Executive_Reports.md §1-3) ─────────────────
+
+  /** Separadores visíveis para o papel do utilizador (§2: visibilidade por permissões). */
+  getTabs(user: CurrentUserData) {
+    const role = user.role?.name ?? '';
+    return EXECUTIVE_TABS.filter(t => t.roles.includes(role)).map(({ roles: _roles, ...t }) => t);
+  }
+
+  /**
+   * Gestores/líderes só vêem o seu departamento — o filtro não pode ser usado
+   * para contornar as permissões (§5).
+   */
+  private async scopeFilters(user: CurrentUserData, filters: ExecutiveFiltersDto) {
+    const role = user.role?.name ?? '';
+    const resolved = this.metrics.resolveFilters(filters);
+    if (role === 'GESTOR' || role === 'LIDER') {
+      const me = await this.prisma.read.user.findUnique({
+        where: { id: user.id },
+        select: { departmentId: true },
+      });
+      if (!me?.departmentId) {
+        throw new ForbiddenException(
+          'Sem departamento associado para consultar relatórios executivos',
+        );
+      }
+      resolved.departmentId = me.departmentId;
+      resolved.unitId = undefined;
+    }
+    return resolved;
+  }
+
+  private contextOf(f: Awaited<ReturnType<ExecutiveReportsService['scopeFilters']>>) {
+    return {
+      period: f.period,
+      compareWith: f.compareWith,
+      unitId: f.unitId ?? null,
+      departmentId: f.departmentId ?? null,
+      current: { start: f.current.start.toISOString(), end: f.current.end.toISOString() },
+      comparison: f.comparison
+        ? { start: f.comparison.start.toISOString(), end: f.comparison.end.toISOString() }
+        : null,
+    };
+  }
+
+  /** KPIs com valor, comparação, meta, variação, fonte e data de actualização (§3.1). */
+  async getKpis(user: CurrentUserData, filters: ExecutiveFiltersDto) {
+    const f = await this.scopeFilters(user, filters);
+    const kpis = await this.metrics.computeKpis(f, PRIMARY_KPI_CODES, { withTrend: true });
+    return { context: this.contextOf(f), kpis };
+  }
+
+  /** Catálogo de definições (fórmula, fonte, meta e limiares) — definição única por KPI. */
+  getKpiDefinitions() {
+    return Object.values(KPI_CATALOG);
+  }
+
+  /** Visão Executiva: KPIs + indicadores complementares + alertas derivados dos KPIs. */
+  async getOverview(user: CurrentUserData, filters: ExecutiveFiltersDto) {
+    const f = await this.scopeFilters(user, filters);
+    const [kpis, supplementary] = await Promise.all([
+      this.metrics.computeKpis(f, PRIMARY_KPI_CODES, { withTrend: true }),
+      this.metrics.computeSupplementary(f),
+    ]);
+
+    const alerts = kpis
+      .filter(k => k.state === 'WARNING' || k.state === 'CRITICAL')
+      .map(k => ({
+        code: k.code,
+        severity: k.state === 'CRITICAL' ? ('HIGH' as const) : ('MEDIUM' as const),
+        message: `${k.name}: ${k.value}${k.unit === '%' ? '%' : ''} (meta ${k.target}${k.unit === '%' ? '%' : ''})`,
+        sourceModules: k.sourceModules,
+      }));
+    if (supplementary.pending.overdueMandatoryTraining > 0) {
+      alerts.push({
+        code: 'MANDATORY_TRAINING_OVERDUE' as KpiCode,
+        severity: 'HIGH',
+        message: `${supplementary.pending.overdueMandatoryTraining} formações obrigatórias com prazo ultrapassado`,
+        sourceModules: ['enrollments'],
+      });
+    }
+
+    return { context: this.contextOf(f), kpis, ...supplementary, alerts };
+  }
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
 
