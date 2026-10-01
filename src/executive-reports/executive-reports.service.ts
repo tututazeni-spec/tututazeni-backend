@@ -45,7 +45,7 @@ export class ExecutiveReportsService {
    * Gestores/líderes só vêem o seu departamento — o filtro não pode ser usado
    * para contornar as permissões (§5).
    */
-  private async scopeFilters(user: CurrentUserData, filters: ExecutiveFiltersDto) {
+  async scopeFilters(user: CurrentUserData, filters: ExecutiveFiltersDto) {
     const role = user.role?.name ?? '';
     const resolved = this.metrics.resolveFilters(filters);
     if (role === 'GESTOR' || role === 'LIDER') {
@@ -64,7 +64,7 @@ export class ExecutiveReportsService {
     return resolved;
   }
 
-  private contextOf(f: Awaited<ReturnType<ExecutiveReportsService['scopeFilters']>>) {
+  contextOf(f: Awaited<ReturnType<ExecutiveReportsService['scopeFilters']>>) {
     return {
       period: f.period,
       compareWith: f.compareWith,
@@ -186,6 +186,7 @@ export class ExecutiveReportsService {
         where,
         skip,
         take: limit,
+        omit: { content: true },
         include: {
           generatedBy: { select: { id: true, fullName: true, avatarUrl: true } },
           department: { select: { id: true, name: true } },
@@ -202,8 +203,11 @@ export class ExecutiveReportsService {
   }
 
   async findOne(id: number, userId?: number) {
+    // `content` (conteúdo gerado, pode incluir secções restritas) só sai pelo
+    // endpoint dedicado, que filtra pelas permissões do utilizador.
     const r = await this.prisma.read.executiveReport.findUnique({
       where: { id },
+      omit: { content: true },
       include: {
         generatedBy: { select: { id: true, fullName: true, avatarUrl: true } },
         department: { select: { id: true, name: true } },

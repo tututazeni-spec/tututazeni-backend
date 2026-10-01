@@ -4,6 +4,9 @@ import { ExecutiveReportsService } from './executive-reports.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { ReportType } from './executive-reports.dto';
+import { ExecutiveReportsGenerationService } from './executive-reports.generation.service';
+import { ExecutiveReportsSchedulerService } from './executive-reports.scheduler.service';
+import { ExecutiveReportsAlertsService } from './executive-reports.alerts.service';
 
 const mockSvc = {
   findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
@@ -30,7 +33,12 @@ describe('ExecutiveReportsController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ExecutiveReportsController],
-      providers: [{ provide: ExecutiveReportsService, useValue: mockSvc }],
+      providers: [
+        { provide: ExecutiveReportsService, useValue: mockSvc },
+        { provide: ExecutiveReportsGenerationService, useValue: {} },
+        { provide: ExecutiveReportsSchedulerService, useValue: {} },
+        { provide: ExecutiveReportsAlertsService, useValue: {} },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
