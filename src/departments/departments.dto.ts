@@ -21,6 +21,7 @@ import {
   PermissionSubject,
   SeniorityLevel,
   DepartmentStatus,
+  DepartmentVisibility,
 } from '@prisma/client';
 import { BaseFilterDto } from '../common/dtos/pagination.dto';
 
@@ -57,6 +58,11 @@ export class CreateDepartmentDto {
   @IsOptional()
   @IsInt()
   headId?: number;
+
+  @ApiPropertyOptional({ description: 'ID do substituto do responsável' })
+  @IsOptional()
+  @IsInt()
+  deputyHeadId?: number;
 
   @ApiPropertyOptional({ description: 'Cor do departamento (hex)' })
   @IsOptional()
@@ -149,6 +155,12 @@ export class CreateDepartmentDto {
   @MaxLength(120)
   functionalArea?: string;
 
+  @ApiPropertyOptional({ description: 'Área de negócio' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  businessArea?: string;
+
   @ApiPropertyOptional({ description: 'Departamento estratégico', default: false })
   @IsOptional()
   @IsBoolean()
@@ -158,6 +170,43 @@ export class CreateDepartmentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Número de colaboradores previsto (headcount planeado)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedEmployees?: number;
+
+  @ApiPropertyOptional({ description: 'Contacto institucional (nome/descrição geral)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  institutionalContact?: string;
+
+  @ApiPropertyOptional({
+    enum: DepartmentVisibility,
+    default: DepartmentVisibility.DEPARTMENT_ONLY,
+    description: 'Visibilidade dos dados do departamento',
+  })
+  @IsOptional()
+  @IsEnum(DepartmentVisibility)
+  dataVisibility?: DepartmentVisibility;
+
+  @ApiPropertyOptional({ description: 'Exige aprovação para processos deste departamento', default: false })
+  @IsOptional()
+  @IsBoolean()
+  approvalRequired?: boolean;
+
+  @ApiPropertyOptional({ description: 'IDs dos aprovadores', type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  approverIds?: number[];
+
+  @ApiPropertyOptional({ description: 'Departamento responsável por processos (ex.: RH central)' })
+  @IsOptional()
+  @IsInt()
+  processOwnerDepartmentId?: number;
 }
 
 export class UpdateDepartmentDto extends PartialType(CreateDepartmentDto) {}

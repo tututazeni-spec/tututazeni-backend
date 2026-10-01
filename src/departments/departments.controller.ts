@@ -108,6 +108,16 @@ export class DepartmentsController {
     return this.svc.getMetrics(id);
   }
 
+  @Get(':id/structure')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @ApiOperation({
+    summary:
+      'Estrutura do departamento: equipas, cargos & posições, vagas, objectivos, documentos',
+  })
+  structure(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.getStructure(id);
+  }
+
   @Get(':id/transfer-history')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
   @ApiOperation({ summary: 'Histórico de transferências do departamento' })
