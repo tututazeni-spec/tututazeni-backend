@@ -8,11 +8,12 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExecutiveReportsMetricsService } from './executive-reports.metrics.service';
+import { ExecutiveReportsChartsService } from './executive-reports.charts.service';
 import { EXECUTIVE_TABS, KPI_CATALOG, PRIMARY_KPI_CODES } from './executive-reports.kpi-catalog';
 import type { KpiCode } from './executive-reports.kpi-catalog';
-import type { ExecutiveFiltersDto } from './dto/executive-filters.dto';
+import { EXECUTIVE_KPI_STATES, type ExecutiveFiltersDto } from './dto/executive-filters.dto';
 import type { CurrentUserData } from '../common/decorators';
-import { ApprovalDecision, Prisma } from '@prisma/client';
+import { ApprovalDecision, ContractType, Prisma } from '@prisma/client';
 import {
   CreateExecutiveReportDto,
   UpdateExecutiveReportDto,
@@ -29,6 +30,7 @@ export class ExecutiveReportsService {
   constructor(
     private prisma: PrismaService,
     private metrics: ExecutiveReportsMetricsService,
+    private charts: ExecutiveReportsChartsService,
   ) {}
 
   // ─── DASHBOARD EXECUTIVO (docs/Executive_Reports.md §1-3) ─────────────────
@@ -68,6 +70,10 @@ export class ExecutiveReportsService {
       compareWith: f.compareWith,
       unitId: f.unitId ?? null,
       departmentId: f.departmentId ?? null,
+      positionId: f.positionId ?? null,
+      contractType: f.contractType ?? null,
+      courseId: f.courseId ?? null,
+      kpiState: f.kpiState ?? null,
       current: { start: f.current.start.toISOString(), end: f.current.end.toISOString() },
       comparison: f.comparison
         ? { start: f.comparison.start.toISOString(), end: f.comparison.end.toISOString() }
@@ -78,7 +84,8 @@ export class ExecutiveReportsService {
   /** KPIs com valor, comparação, meta, variação, fonte e data de actualização (§3.1). */
   async getKpis(user: CurrentUserData, filters: ExecutiveFiltersDto) {
     const f = await this.scopeFilters(user, filters);
-    const kpis = await this.metrics.computeKpis(f, PRIMARY_KPI_CODES, { withTrend: true });
+    const all = await this.metrics.computeKpis(f, PRIMARY_KPI_CODES, { withTrend: true });
+    const kpis = f.kpiState ? all.filter(k => k.state === f.kpiState) : all;
     return { context: this.contextOf(f), kpis };
   }
 
@@ -90,12 +97,14 @@ export class ExecutiveReportsService {
   /** Visão Executiva: KPIs + indicadores complementares + alertas derivados dos KPIs. */
   async getOverview(user: CurrentUserData, filters: ExecutiveFiltersDto) {
     const f = await this.scopeFilters(user, filters);
-    const [kpis, supplementary] = await Promise.all([
+    const [allKpis, supplementary] = await Promise.all([
       this.metrics.computeKpis(f, PRIMARY_KPI_CODES, { withTrend: true }),
       this.metrics.computeSupplementary(f),
     ]);
+    // Os alertas derivam sempre de todos os KPIs; o filtro de estado só afecta os cartões.
+    const kpis = f.kpiState ? allKpis.filter(k => k.state === f.kpiState) : allKpis;
 
-    const alerts = kpis
+    const alerts = allKpis
       .filter(k => k.state === 'WARNING' || k.state === 'CRITICAL')
       .map(k => ({
         code: k.code,
@@ -113,6 +122,52 @@ export class ExecutiveReportsService {
     }
 
     return { context: this.contextOf(f), kpis, ...supplementary, alerts };
+  }
+
+  // ─── GRÁFICOS (§6) E INTEGRAÇÃO (§4) ──────────────────────────────────────
+
+  async getDepartmentCharts(user: CurrentUserData, filters: ExecutiveFiltersDto) {
+    const f = await this.scopeFilters(user, filters);
+    return { context: this.contextOf(f), ...(await this.charts.departments(f)) };
+  }
+
+  async getGoalCharts(user: CurrentUserData, filters: ExecutiveFiltersDto) {
+    const f = await this.scopeFilters(user, filters);
+    return { context: this.contextOf(f), ...(await this.charts.goals(f)) };
+  }
+
+  async getRiskCharts(user: CurrentUserData, filters: ExecutiveFiltersDto) {
+    const f = await this.scopeFilters(user, filters);
+    return { context: this.contextOf(f), ...(await this.charts.risks(f)) };
+  }
+
+  /** Matriz de integração; dados sensíveis só para ADMIN/DIRECTOR (§4.1). */
+  async getSources(user: CurrentUserData, filters: ExecutiveFiltersDto) {
+    const f = await this.scopeFilters(user, filters);
+    const role = user.role?.name ?? '';
+    return this.charts.sources(f, role === 'ADMIN' || role === 'DIRECTOR');
+  }
+
+  /** Opções dos filtros adicionais (§5): cargos, vínculos e cursos. */
+  async getFilterOptions() {
+    const [positions, courses] = await Promise.all([
+      this.prisma.read.position.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+        take: 300,
+      }),
+      this.prisma.read.course.findMany({
+        select: { id: true, title: true },
+        orderBy: { title: 'asc' },
+        take: 300,
+      }),
+    ]);
+    return {
+      positions,
+      courses,
+      contractTypes: Object.values(ContractType),
+      kpiStates: EXECUTIVE_KPI_STATES,
+    };
   }
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────

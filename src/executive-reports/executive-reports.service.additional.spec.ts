@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { ExecutiveReportsService } from './executive-reports.service';
+import { ExecutiveReportsMetricsService } from './executive-reports.metrics.service';
+import { ExecutiveReportsChartsService } from './executive-reports.charts.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const mockPrisma: any = {
@@ -70,7 +72,12 @@ describe('ExecutiveReportsService (additional)', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ExecutiveReportsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        ExecutiveReportsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: ExecutiveReportsMetricsService, useValue: {} },
+        { provide: ExecutiveReportsChartsService, useValue: {} },
+      ],
     }).compile();
     service = module.get<ExecutiveReportsService>(ExecutiveReportsService);
   });

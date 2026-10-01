@@ -64,6 +64,41 @@ export class ExecutiveReportsController {
     return this.svc.getKpis(user, filters);
   }
 
+  @Get('charts/departments')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Comparação entre departamentos + composição (§6.2/6.3)' })
+  chartsDepartments(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.svc.getDepartmentCharts(user, filters);
+  }
+
+  @Get('charts/goals')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Realizado vs. meta e execução de planos (§6.4)' })
+  chartsGoals(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.svc.getGoalCharts(user, filters);
+  }
+
+  @Get('charts/risks')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Mapa de calor e listas de excepções (§6.5)' })
+  chartsRisks(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.svc.getRiskCharts(user, filters);
+  }
+
+  @Get('sources')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Matriz de integração por módulo (§4.1)' })
+  sources(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.svc.getSources(user, filters);
+  }
+
+  @Get('filter-options')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Opções dos filtros adicionais (cargo, vínculo, curso, estado)' })
+  filterOptions() {
+    return this.svc.getFilterOptions();
+  }
+
   @Get('kpis/definitions')
   @Roles(...EXEC_MGMT)
   @ApiOperation({ summary: 'Definições dos KPIs (fórmula, fonte, meta, limiares)' })

@@ -3,7 +3,7 @@
 // Todos os valores vêm dos registos reais dos módulos de origem; quando não há
 // dados devolve `null` ("Sem dados"), nunca 0 (regra §12.3).
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { ContractType, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   KPI_CATALOG,
@@ -13,7 +13,7 @@ import {
   type KpiDefinition,
   type KpiState,
 } from './executive-reports.kpi-catalog';
-import type { ExecutiveFiltersDto } from './dto/executive-filters.dto';
+import type { ExecutiveFiltersDto, ExecutiveKpiStateFilter } from './dto/executive-filters.dto';
 
 export interface DateRange {
   start: Date;
@@ -25,6 +25,10 @@ export interface ResolvedFilters {
   compareWith: 'previous' | 'previous_year' | 'target';
   unitId?: number;
   departmentId?: number;
+  positionId?: number;
+  contractType?: ContractType;
+  courseId?: number;
+  kpiState?: ExecutiveKpiStateFilter;
   current: DateRange;
   comparison: DateRange | null;
 }
@@ -123,6 +127,10 @@ export class ExecutiveReportsMetricsService {
       compareWith,
       unitId: f.unitId,
       departmentId: f.departmentId,
+      positionId: f.positionId,
+      contractType: f.contractType,
+      courseId: f.courseId,
+      kpiState: f.kpiState,
       current: { start, end },
       comparison,
     };
@@ -141,9 +149,13 @@ export class ExecutiveReportsMetricsService {
 
   // ─── Âmbito (unidade/departamento) ────────────────────────────────────────
 
-  userScope(f: Pick<ResolvedFilters, 'unitId' | 'departmentId'>): Prisma.UserWhereInput {
+  userScope(
+    f: Pick<ResolvedFilters, 'unitId' | 'departmentId' | 'positionId' | 'contractType'>,
+  ): Prisma.UserWhereInput {
     const where: Prisma.UserWhereInput = {};
     if (f.departmentId) where.departmentId = f.departmentId;
+    if (f.positionId) where.positionId = f.positionId;
+    if (f.contractType) where.contractType = f.contractType;
     if (f.unitId) where.OR = [{ unitId: f.unitId }, { department: { unitId: f.unitId } }];
     return where;
   }
@@ -182,6 +194,7 @@ export class ExecutiveReportsMetricsService {
     code: KpiCode,
     range: DateRange,
     scope: Prisma.UserWhereInput,
+    courseId?: number,
   ): Promise<number | null> {
     const end = this.asOf(range.end);
     switch (code) {
@@ -216,6 +229,7 @@ export class ExecutiveReportsMetricsService {
           user: scope,
           enrolledAt: { gte: range.start, lte: range.end },
           status: { notIn: ['CANCELLED', 'PENDING_APPROVAL'] },
+          ...(courseId ? { courseId } : {}),
         };
         const [eligible, completed] = await Promise.all([
           this.prisma.read.enrollment.count({ where: base }),
@@ -282,13 +296,15 @@ export class ExecutiveReportsMetricsService {
       codes.map(async code => {
         const def = KPI_CATALOG[code];
         const [value, previousValue, trend] = await Promise.all([
-          this.computeValue(code, f.current, scope),
-          f.comparison ? this.computeValue(code, f.comparison, scope) : Promise.resolve(null),
+          this.computeValue(code, f.current, scope, f.courseId),
+          f.comparison
+            ? this.computeValue(code, f.comparison, scope, f.courseId)
+            : Promise.resolve(null),
           opts.withTrend
             ? Promise.all(
                 months.map(async m => ({
                   label: m.label,
-                  value: await this.computeValue(code, m.range, scope),
+                  value: await this.computeValue(code, m.range, scope, f.courseId),
                 })),
               )
             : Promise.resolve(null),
@@ -330,6 +346,7 @@ export class ExecutiveReportsMetricsService {
 
   async computeSupplementary(f: ResolvedFilters) {
     const scope = this.userScope(f);
+    const enr = f.courseId ? { courseId: f.courseId } : {};
     const now = new Date();
     const end = this.asOf(f.current.end, now);
     const range = { start: f.current.start, end };
@@ -382,6 +399,7 @@ export class ExecutiveReportsMetricsService {
       this.prisma.read.enrollment.count({
         where: {
           user: scope,
+          ...enr,
           enrolledAt: { gte: range.start, lte: range.end },
           status: { notIn: ['CANCELLED', 'PENDING_APPROVAL'] },
         },
@@ -389,6 +407,7 @@ export class ExecutiveReportsMetricsService {
       this.prisma.read.enrollment.count({
         where: {
           user: scope,
+          ...enr,
           enrolledAt: { gte: range.start, lte: range.end },
           status: 'COMPLETED',
         },
@@ -397,6 +416,7 @@ export class ExecutiveReportsMetricsService {
         by: ['userId'],
         where: {
           user: scope,
+          ...enr,
           enrolledAt: { gte: range.start, lte: range.end },
           status: { notIn: ['CANCELLED', 'PENDING_APPROVAL'] },
         },
@@ -404,6 +424,7 @@ export class ExecutiveReportsMetricsService {
       this.prisma.read.enrollment.findMany({
         where: {
           user: scope,
+          ...enr,
           status: 'COMPLETED',
           completedAt: { gte: range.start, lte: range.end },
         },
@@ -452,6 +473,7 @@ export class ExecutiveReportsMetricsService {
       this.prisma.read.enrollment.count({
         where: {
           user: scope,
+          ...enr,
           mandatory: true,
           status: { notIn: ['COMPLETED', 'CANCELLED', 'PENDING_APPROVAL'] },
           deadline: { lt: now },
