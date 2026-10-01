@@ -167,21 +167,47 @@ export class DepartmentsService {
 
   // Árvore hierárquica completa (para org chart)
   async getTree() {
-    const all = await this.prisma.read.department.findMany({
-      where: { active: true },
-      include: {
-        head: { select: { id: true, fullName: true, email: true } },
-        _count: { select: { users: true, children: true } },
-      },
-      orderBy: { name: 'asc' },
-    });
+    const [all, positionCounts] = await Promise.all([
+      this.prisma.read.department.findMany({
+        where: { active: true },
+        include: {
+          head: { select: { id: true, fullName: true, email: true } },
+          unit: { select: { id: true, name: true } },
+          _count: { select: { users: true, children: true } },
+        },
+        orderBy: { name: 'asc' },
+      }),
+      // Position.departmentId não tem relação Prisma declarada (ver docs/modulo_departments.md
+      // "Modelos principais") — contagem por groupBy em vez de include/_count.
+      this.prisma.read.position.groupBy({
+        by: ['departmentId'],
+        _count: { _all: true },
+      }),
+    ]);
+    const positionsByDept = new Map(
+      positionCounts
+        .filter((p): p is typeof p & { departmentId: number } => p.departmentId !== null)
+        .map(p => [p.departmentId, p._count._all]),
+    );
 
-    // Construir árvore recursivamente
-    type DepartmentNode = (typeof all)[number] & { children: DepartmentNode[] };
-    const buildTree = (parentId: number | null): DepartmentNode[] =>
-      all.filter(d => d.parentId === parentId).map(d => ({ ...d, children: buildTree(d.id) }));
+    // Construir árvore recursivamente, anotando nível hierárquico e nº de cargos
+    // (docs/modulo_departments.md Ponto 3 — Estrutura Organizacional)
+    type DepartmentNode = (typeof all)[number] & {
+      children: DepartmentNode[];
+      level: number;
+      positionsCount: number;
+    };
+    const buildTree = (parentId: number | null, level: number): DepartmentNode[] =>
+      all
+        .filter(d => d.parentId === parentId)
+        .map(d => ({
+          ...d,
+          level,
+          positionsCount: positionsByDept.get(d.id) ?? 0,
+          children: buildTree(d.id, level + 1),
+        }));
 
-    return buildTree(null);
+    return buildTree(null, 0);
   }
 
   async findOne(id: number) {
@@ -294,7 +320,7 @@ export class DepartmentsService {
     return dept;
   }
 
-  async update(id: number, dto: UpdateDepartmentDto) {
+  async update(id: number, dto: UpdateDepartmentDto, changedById?: number) {
     const existing = await this.findOne(id);
 
     // Validar código único (case-insensitive; persistido em UPPERCASE)
@@ -322,12 +348,24 @@ export class DepartmentsService {
         data: { endedAt: new Date() },
       });
       await this.prisma.departmentHeadHistory.create({
-        data: { departmentId: id, headId: dto.headId, startedAt: new Date() },
+        data: {
+          departmentId: id,
+          headId: dto.headId,
+          startedAt: new Date(),
+          reason: dto.headChangeReason,
+          changedById,
+        },
       });
     }
 
     // active é a fonte de verdade; se o DTO trouxer status, espelha-se em active
-    const { status, code: _code, operationalStartDate, ...rest } = dto;
+    const {
+      status,
+      code: _code,
+      operationalStartDate,
+      headChangeReason: _headChangeReason,
+      ...rest
+    } = dto;
     const data: Prisma.DepartmentUncheckedUpdateInput = { ...rest };
     if (nextCode) data.code = nextCode;
     if (status !== undefined) {
@@ -642,6 +680,85 @@ export class DepartmentsService {
       totalMembers: d._count.users,
       active: d.active,
     }));
+  }
+
+  // Responsáveis de todos os departamentos (docs/modulo_departments.md Ponto 4)
+  async getHeads() {
+    const depts = await this.prisma.read.department.findMany({
+      where: { active: true },
+      include: {
+        head: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            position: { select: { name: true } },
+          },
+        },
+        deputyHead: { select: { id: true, fullName: true } },
+        _count: { select: { users: true, children: true } },
+        headHistory: {
+          where: { endedAt: null },
+          orderBy: { startedAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return depts.map(d => ({
+      departmentId: d.id,
+      departmentName: d.name,
+      departmentCode: d.code,
+      head: d.head,
+      position: d.head?.position?.name ?? null,
+      deputyHead: d.deputyHead,
+      startedAt: d.headHistory[0]?.startedAt ?? null,
+      status: d.status,
+      active: d.active,
+      contact: d.head?.email ?? d.institutionalEmail ?? null,
+      usersUnderResponsibility: d._count.users,
+      subdepartmentsUnderResponsibility: d._count.children,
+    }));
+  }
+
+  // Histórico de alterações de responsável, agregado entre todos os
+  // departamentos (docs/modulo_departments.md Ponto 4 — "Histórico").
+  // Distinto do histórico por departamento já devolvido em findOne()/headHistory.
+  async getHeadHistory() {
+    const entries = await this.prisma.read.departmentHeadHistory.findMany({
+      include: {
+        department: { select: { id: true, name: true, code: true } },
+        head: { select: { id: true, fullName: true } },
+        changedBy: { select: { id: true, fullName: true } },
+      },
+      orderBy: [{ departmentId: 'asc' }, { startedAt: 'asc' }],
+    });
+
+    const byDept = new Map<number, typeof entries>();
+    for (const e of entries) {
+      const arr = byDept.get(e.departmentId) ?? [];
+      arr.push(e);
+      byDept.set(e.departmentId, arr);
+    }
+
+    const result = entries.map(e => {
+      const deptEntries = byDept.get(e.departmentId) ?? [];
+      const idx = deptEntries.findIndex(x => x.id === e.id);
+      const previous = idx > 0 ? deptEntries[idx - 1] : null;
+      return {
+        id: e.id,
+        department: e.department,
+        previousHead: previous?.head ?? null,
+        newHead: e.head,
+        changedAt: e.startedAt,
+        endedAt: e.endedAt,
+        reason: e.reason,
+        changedBy: e.changedBy,
+      };
+    });
+
+    return result.sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
   }
 
   // Histórico de transferências de um departamento

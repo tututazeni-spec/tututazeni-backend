@@ -16,6 +16,7 @@ const mockPrisma = {
   departmentHeadHistory: {
     create: jest.fn().mockResolvedValue({}),
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+    findMany: jest.fn().mockResolvedValue([]),
   },
   user: {
     findMany: jest.fn(),
@@ -55,6 +56,7 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
+    groupBy: jest.fn().mockResolvedValue([]),
   },
   careerPosition: { create: jest.fn(), findMany: jest.fn() },
   auditLog: { create: jest.fn().mockResolvedValue({}) },
@@ -145,6 +147,80 @@ describe('DepartmentsService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].children).toHaveLength(1);
+    });
+
+    it('anota nível hierárquico e nº de cargos (docs Ponto 3)', async () => {
+      mockPrisma.department.findMany.mockResolvedValue([
+        { ...baseDept, id: 1, parentId: null },
+        { ...baseDept, id: 2, parentId: 1 },
+      ]);
+      mockPrisma.position.groupBy.mockResolvedValue([
+        { departmentId: 1, _count: { _all: 3 } },
+      ]);
+
+      const result = await service.getTree();
+
+      expect(result[0].level).toBe(0);
+      expect(result[0].positionsCount).toBe(3);
+      expect(result[0].children[0].level).toBe(1);
+      expect(result[0].children[0].positionsCount).toBe(0);
+    });
+  });
+
+  // ─── getHeads / getHeadHistory ────────────────────────────────────────────
+
+  describe('getHeads', () => {
+    it('devolve responsáveis de todos os departamentos activos (docs Ponto 4)', async () => {
+      mockPrisma.department.findMany.mockResolvedValue([
+        {
+          ...baseDept,
+          head: { id: 10, fullName: 'Ana', email: 'ana@innova.com', position: { name: 'Directora' } },
+          deputyHead: { id: 11, fullName: 'Bruno' },
+          headHistory: [{ startedAt: new Date('2026-01-01') }],
+        },
+      ]);
+
+      const result = await service.getHeads();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].position).toBe('Directora');
+      expect(result[0].usersUnderResponsibility).toBe(5);
+      expect(result[0].subdepartmentsUnderResponsibility).toBe(2);
+    });
+  });
+
+  describe('getHeadHistory', () => {
+    it('agrega histórico entre departamentos com responsável anterior/novo', async () => {
+      mockPrisma.departmentHeadHistory.findMany.mockResolvedValue([
+        {
+          id: 1,
+          departmentId: 1,
+          department: { id: 1, name: 'TI', code: 'TI' },
+          head: { id: 10, fullName: 'Ana' },
+          startedAt: new Date('2026-01-01'),
+          endedAt: new Date('2026-06-01'),
+          reason: null,
+          changedBy: null,
+        },
+        {
+          id: 2,
+          departmentId: 1,
+          department: { id: 1, name: 'TI', code: 'TI' },
+          head: { id: 12, fullName: 'Carla' },
+          startedAt: new Date('2026-06-01'),
+          endedAt: null,
+          reason: 'Promoção',
+          changedBy: { id: 5, fullName: 'RH Admin' },
+        },
+      ]);
+
+      const result = await service.getHeadHistory();
+
+      expect(result).toHaveLength(2);
+      const latest = result[0];
+      expect(latest.newHead.fullName).toBe('Carla');
+      expect(latest.previousHead?.fullName).toBe('Ana');
+      expect(latest.reason).toBe('Promoção');
     });
   });
 

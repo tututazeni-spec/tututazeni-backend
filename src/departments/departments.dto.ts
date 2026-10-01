@@ -209,7 +209,14 @@ export class CreateDepartmentDto {
   processOwnerDepartmentId?: number;
 }
 
-export class UpdateDepartmentDto extends PartialType(CreateDepartmentDto) {}
+export class UpdateDepartmentDto extends PartialType(CreateDepartmentDto) {
+  @ApiPropertyOptional({
+    description: 'Motivo da alteração de responsável (registado no histórico quando headId muda)',
+  })
+  @IsOptional()
+  @IsString()
+  headChangeReason?: string;
+}
 
 export class DepartmentFilterDto extends BaseFilterDto {
   @ApiPropertyOptional()

@@ -89,6 +89,21 @@ export class DepartmentsController {
     return this.svc.exportCsv(filters);
   }
 
+  // Rotas literais — têm de vir antes de ':id' (ver [[project_innova_route_shadowing]]).
+  @Get('heads')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @ApiOperation({ summary: 'Responsáveis de todos os departamentos' })
+  getHeads() {
+    return this.svc.getHeads();
+  }
+
+  @Get('heads/history')
+  @Roles(...DEPARTMENTS_VIEW_ROLES)
+  @ApiOperation({ summary: 'Histórico de alterações de responsável (todos os departamentos)' })
+  getHeadsHistory() {
+    return this.svc.getHeadHistory();
+  }
+
   // Detalhe e métricas: mesmo nível de acesso que GET /departments e
   // /departments/tree (DEPARTMENTS_VIEW_ROLES). O organograma e a lista já são
   // visíveis a qualquer autenticado não-COLABORADOR; se o detalhe fosse mais
@@ -136,8 +151,12 @@ export class DepartmentsController {
   @Put(':id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar departamento' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDepartmentDto) {
-    return this.svc.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDepartmentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.update(id, dto, user.id);
   }
 
   @Patch(':id/deactivate')

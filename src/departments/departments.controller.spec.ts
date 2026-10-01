@@ -23,6 +23,8 @@ const mockUser = { id: 1, email: 'test@innova.com', role: { name: 'ADMIN' } };
 const mockDeptSvc = {
   findAll: jest.fn().mockResolvedValue([]),
   getTree: jest.fn().mockResolvedValue([]),
+  getHeads: jest.fn().mockResolvedValue([]),
+  getHeadHistory: jest.fn().mockResolvedValue([]),
   getComparativeDashboard: jest.fn().mockResolvedValue({}),
   findOne: jest.fn().mockResolvedValue({ id: 1 }),
   getMetrics: jest.fn().mockResolvedValue({}),
@@ -62,6 +64,16 @@ describe('DepartmentsController', () => {
     expect(mockDeptSvc.getTree).toHaveBeenCalled();
   });
 
+  it('getHeads', async () => {
+    await controller.getHeads();
+    expect(mockDeptSvc.getHeads).toHaveBeenCalled();
+  });
+
+  it('getHeadsHistory', async () => {
+    await controller.getHeadsHistory();
+    expect(mockDeptSvc.getHeadHistory).toHaveBeenCalled();
+  });
+
   it('comparativeDashboard', async () => {
     await controller.comparativeDashboard();
     expect(mockDeptSvc.getComparativeDashboard).toHaveBeenCalled();
@@ -93,8 +105,8 @@ describe('DepartmentsController', () => {
   });
 
   it('update', async () => {
-    await controller.update(1, {} as any);
-    expect(mockDeptSvc.update).toHaveBeenCalled();
+    await controller.update(1, {} as any, mockUser as any);
+    expect(mockDeptSvc.update).toHaveBeenCalledWith(1, {}, mockUser.id);
   });
 
   it('deactivate', async () => {

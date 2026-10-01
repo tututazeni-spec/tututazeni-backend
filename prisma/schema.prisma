@@ -717,6 +717,7 @@ model User {
   departmentDeputyHead    Department[]            @relation("DeptDeputyHead")
   departmentDirectManager Department[]            @relation("DeptDirectManager")
   departmentHeadHistory   DepartmentHeadHistory[]
+  departmentHeadChangesMade DepartmentHeadHistory[] @relation("HeadHistoryChangedBy")
   departmentTransferLogs  DepartmentTransferLog[]
   orgChanges              OrgChangeLog[]          @relation("OrgChangeUser")
   orgChangesPerformed     OrgChangeLog[]          @relation("OrgChangePerformer")
@@ -1321,8 +1322,11 @@ model DepartmentHeadHistory {
   headId       Int
   startedAt    DateTime   @default(now())
   endedAt      DateTime?
+  reason       String?
+  changedById  Int?
   department   Department @relation(fields: [departmentId], references: [id])
   head         User       @relation(fields: [headId], references: [id])
+  changedBy    User?      @relation("HeadHistoryChangedBy", fields: [changedById], references: [id])
 }
 
 model DepartmentTransferLog {
