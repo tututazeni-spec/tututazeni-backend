@@ -186,8 +186,8 @@ describe('OrganizationService — additional coverage', () => {
     it('delega em DepartmentsService.create com o DTO recebido', async () => {
       mockDepartments.create.mockResolvedValue({ id: 1, code: 'ENG' });
       const dto = { name: 'Eng', code: 'eng', unitId: 4, annualBudget: 1000, status: 'ACTIVE' };
-      const res = await service.createDepartment(dto as any);
-      expect(mockDepartments.create).toHaveBeenCalledWith(dto);
+      const res = await service.createDepartment(dto as any, 1);
+      expect(mockDepartments.create).toHaveBeenCalledWith(dto, 1);
       expect(res).toEqual({ id: 1, code: 'ENG' });
     });
   });
@@ -196,16 +196,16 @@ describe('OrganizationService — additional coverage', () => {
     it('delega em DepartmentsService.update(id, dto)', async () => {
       mockDepartments.update.mockResolvedValue({ id: 5 });
       const dto = { name: 'Novo Nome', status: 'INACTIVE' };
-      await service.updateDepartment(5, dto as any);
-      expect(mockDepartments.update).toHaveBeenCalledWith(5, dto);
+      await service.updateDepartment(5, dto as any, 1);
+      expect(mockDepartments.update).toHaveBeenCalledWith(5, dto, 1);
     });
   });
 
   describe('deleteDepartment', () => {
     it('delega em DepartmentsService.remove(id)', async () => {
       mockDepartments.remove.mockResolvedValue({ message: 'Departamento eliminado' });
-      const res = await service.deleteDepartment(5);
-      expect(mockDepartments.remove).toHaveBeenCalledWith(5);
+      const res = await service.deleteDepartment(5, 1);
+      expect(mockDepartments.remove).toHaveBeenCalledWith(5, 1);
       expect(res).toEqual({ message: 'Departamento eliminado' });
     });
   });

@@ -263,16 +263,16 @@ export class OrganizationService {
   // Escrita consolidada na Fase C: delega no serviço canónico de `departments`
   // (que absorveu a UNIÃO das validações dos dois lados). As rotas
   // /organization/departments não mudam.
-  async createDepartment(dto: CreateOrgDepartmentDto) {
-    return this.departments.create(dto);
+  async createDepartment(dto: CreateOrgDepartmentDto, createdById: number) {
+    return this.departments.create(dto, createdById);
   }
 
-  async updateDepartment(id: number, dto: UpdateOrgDepartmentDto) {
-    return this.departments.update(id, dto);
+  async updateDepartment(id: number, dto: UpdateOrgDepartmentDto, changedById: number) {
+    return this.departments.update(id, dto, changedById);
   }
 
-  async deleteDepartment(id: number) {
-    return this.departments.remove(id);
+  async deleteDepartment(id: number, performedById: number) {
+    return this.departments.remove(id, performedById);
   }
 
   // ─── POSIÇÕES ─────────────────────────────────────────────────────────────

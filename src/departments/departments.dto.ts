@@ -571,6 +571,78 @@ export class EmployeeFilterDto extends BaseFilterDto {
   active?: boolean;
 }
 
+// ─── Hierarquia (docs/modulo_departments.md Ponto 7) ───────────────────────────
+
+export class HierarchyFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ description: 'Departamento (inclui sub-departamentos)' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  positionId?: number;
+}
+
+// ─── Histórico (docs/modulo_departments.md Ponto 8) ────────────────────────────
+
+export class HistoryFilterDto extends BaseFilterDto {
+  @ApiPropertyOptional({ description: 'Filtrar por um departamento específico' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+}
+
+// ─── Relatórios (docs/modulo_departments.md Ponto 9) ───────────────────────────
+
+export class ReportsFilterDto {
+  @ApiPropertyOptional({ description: 'Departamento (inclui sub-departamentos)' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  // @Type(() => Boolean) coage '?active=false' para true — ver
+  // [[project-innova-boolean-query-filter-coercion]]. @Type(() => String) +
+  // @Transform evita a coerção Boolean automática do class-transformer.
+  @ApiPropertyOptional({ description: 'Estado do colaborador' })
+  @IsOptional()
+  @Type(() => String)
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  active?: boolean;
+
+  @ApiPropertyOptional({ description: 'Admissões/saídas a partir desta data (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Admissões/saídas até esta data (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+}
+
 // ─── Career ───────────────────────────────────────────────────────────────────
 
 export class CreateCareerPositionDto {

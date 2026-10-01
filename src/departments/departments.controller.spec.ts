@@ -100,8 +100,8 @@ describe('DepartmentsController', () => {
   });
 
   it('create', async () => {
-    await controller.create({} as any);
-    expect(mockDeptSvc.create).toHaveBeenCalled();
+    await controller.create({} as any, mockUser as any);
+    expect(mockDeptSvc.create).toHaveBeenCalledWith({}, mockUser.id);
   });
 
   it('update', async () => {
@@ -110,13 +110,13 @@ describe('DepartmentsController', () => {
   });
 
   it('deactivate', async () => {
-    await controller.deactivate(1);
-    expect(mockDeptSvc.deactivate).toHaveBeenCalledWith(1);
+    await controller.deactivate(1, mockUser as any);
+    expect(mockDeptSvc.deactivate).toHaveBeenCalledWith(1, mockUser.id);
   });
 
   it('activate', async () => {
-    await controller.activate(1);
-    expect(mockDeptSvc.activate).toHaveBeenCalledWith(1);
+    await controller.activate(1, mockUser as any);
+    expect(mockDeptSvc.activate).toHaveBeenCalledWith(1, mockUser.id);
   });
 
   it('transferMember', async () => {

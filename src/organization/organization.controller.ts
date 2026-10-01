@@ -123,22 +123,26 @@ export class OrganizationController {
   @Post('departments')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Criar departamento' })
-  createDepartment(@Body() dto: CreateOrgDepartmentDto) {
-    return this.svc.createDepartment(dto);
+  createDepartment(@Body() dto: CreateOrgDepartmentDto, @CurrentUser() user: CurrentUserData) {
+    return this.svc.createDepartment(dto, user.id);
   }
 
   @Put('departments/:id')
   @Roles(Role.ADMIN, Role.RH)
   @ApiOperation({ summary: 'Actualizar departamento' })
-  updateDepartment(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOrgDepartmentDto) {
-    return this.svc.updateDepartment(id, dto);
+  updateDepartment(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateOrgDepartmentDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.svc.updateDepartment(id, dto, user.id);
   }
 
   @Delete('departments/:id')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar departamento (apenas sem colaboradores)' })
-  deleteDepartment(@Param('id', ParseIntPipe) id: number) {
-    return this.svc.deleteDepartment(id);
+  deleteDepartment(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
+    return this.svc.deleteDepartment(id, user.id);
   }
 
   // ── Posições ──────────────────────────────────────────────────────────────

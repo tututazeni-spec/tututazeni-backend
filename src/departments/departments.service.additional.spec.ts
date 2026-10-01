@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { DepartmentsService } from './departments.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../common/services/audit.service';
+
+const mockAudit = { log: jest.fn().mockResolvedValue(undefined) };
 
 const makeFind = (val: any = null) => jest.fn().mockResolvedValue(val);
 const makeFindMany = (data: any[] = []) => jest.fn().mockResolvedValue(data);
@@ -95,7 +98,11 @@ describe('DepartmentsService — additional coverage', () => {
       configurable: true,
     });
     const module: TestingModule = await Test.createTestingModule({
-      providers: [DepartmentsService, { provide: PrismaService, useValue: mockPrisma }],
+      providers: [
+        DepartmentsService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: AuditService, useValue: mockAudit },
+      ],
     }).compile();
     service = module.get<DepartmentsService>(DepartmentsService);
   });
@@ -145,7 +152,7 @@ describe('DepartmentsService — additional coverage', () => {
       });
       mockPrisma.department.update.mockResolvedValue({ ...baseDept, active: false });
 
-      const result = await service.deactivate(1);
+      const result = await service.deactivate(1, 1);
       expect(result).toBeDefined();
     });
 
@@ -155,7 +162,7 @@ describe('DepartmentsService — additional coverage', () => {
         _count: { users: 5, children: 0 },
       });
 
-      await expect(service.deactivate(1)).rejects.toThrow(BadRequestException);
+      await expect(service.deactivate(1, 1)).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -166,7 +173,7 @@ describe('DepartmentsService — additional coverage', () => {
       mockPrisma.department.findUnique.mockResolvedValue({ ...baseDept, active: false });
       mockPrisma.department.update.mockResolvedValue({ ...baseDept, active: true });
 
-      const result = await service.activate(1);
+      const result = await service.activate(1, 1);
       expect(result).toBeDefined();
     });
   });

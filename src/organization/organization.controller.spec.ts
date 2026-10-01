@@ -113,21 +113,21 @@ describe('OrganizationController', () => {
     expect(mockSvc.getDepartmentDetails).toHaveBeenCalledWith(2);
   });
 
-  it('createDepartment → createDepartment(dto)', async () => {
+  it('createDepartment → createDepartment(dto, userId)', async () => {
     const dto = {} as any;
-    await controller.createDepartment(dto);
-    expect(mockSvc.createDepartment).toHaveBeenCalledWith(dto);
+    await controller.createDepartment(dto, mockUser as any);
+    expect(mockSvc.createDepartment).toHaveBeenCalledWith(dto, mockUser.id);
   });
 
-  it('updateDepartment → updateDepartment(id, dto)', async () => {
+  it('updateDepartment → updateDepartment(id, dto, userId)', async () => {
     const dto = {} as any;
-    await controller.updateDepartment(1, dto);
-    expect(mockSvc.updateDepartment).toHaveBeenCalledWith(1, dto);
+    await controller.updateDepartment(1, dto, mockUser as any);
+    expect(mockSvc.updateDepartment).toHaveBeenCalledWith(1, dto, mockUser.id);
   });
 
-  it('deleteDepartment → deleteDepartment(id)', async () => {
-    await controller.deleteDepartment(1);
-    expect(mockSvc.deleteDepartment).toHaveBeenCalledWith(1);
+  it('deleteDepartment → deleteDepartment(id, userId)', async () => {
+    await controller.deleteDepartment(1, mockUser as any);
+    expect(mockSvc.deleteDepartment).toHaveBeenCalledWith(1, mockUser.id);
   });
 
   it('getPositions → getPositions(filters)', async () => {
