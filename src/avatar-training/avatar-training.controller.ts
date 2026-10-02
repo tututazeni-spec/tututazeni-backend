@@ -23,8 +23,10 @@ import { isPrivileged } from '../common/authz/ownership';
 import { AvatarTrainingService } from './avatar-training.service';
 import { AvatarTrainingProgramsService } from './avatar-training-programs.service';
 import { AvatarTrainingAttemptsService } from './avatar-training-attempts.service';
+import { AvatarTrainingAiTutorService } from './avatar-training-ai-tutor.service';
 import {
   AddKnowledgeSourceDto,
+  AskTutorDto,
   AssignAvatarSessionDto,
   AvatarFilterDto,
   AvatarProgramFilterDto,
@@ -58,6 +60,7 @@ export class AvatarTrainingController {
     private readonly avatars: AvatarTrainingService,
     private readonly programs: AvatarTrainingProgramsService,
     private readonly attempts: AvatarTrainingAttemptsService,
+    private readonly aiTutor: AvatarTrainingAiTutorService,
   ) {}
 
   // ── Avatares (fase 1) ──────────────────────────────────────────────────────
@@ -291,6 +294,34 @@ export class AvatarTrainingController {
     @Body() dto: RecordInteractionDto,
   ) {
     return this.attempts.record(user, id, dto);
+  }
+
+  // ── AI-Tutor (fase 4) ──────────────────────────────────────────────────────
+
+  @Get('ai-tutor/status')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Estado do AI-Tutor (sem segredos)' })
+  tutorStatus() {
+    return this.aiTutor.status();
+  }
+
+  @Post('attempts/:id/tutor')
+  @HttpCode(HttpStatus.OK)
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Perguntar ao AI-Tutor sem sair da sala' })
+  askTutor(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AskTutorDto,
+  ) {
+    return this.aiTutor.ask(user, id, dto);
+  }
+
+  @Get('attempts/:id/tutor')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Conversa com o AI-Tutor nesta tentativa' })
+  tutorTranscript(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
+    return this.aiTutor.transcript(user, id);
   }
 
   @Post('attempts/:id/pause')

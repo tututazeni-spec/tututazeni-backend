@@ -8,10 +8,13 @@ import { AvatarTrainingProgramsService } from './avatar-training-programs.servic
 import { AvatarTrainingAttemptsService } from './avatar-training-attempts.service';
 import { AvatarTrainingAssessmentsService } from './avatar-training-assessments.service';
 import { AvatarTrainingIntegrationsService } from './avatar-training-integrations.service';
+import { AvatarTrainingAiTutorService } from './avatar-training-ai-tutor.service';
+import { AiTutorModule } from '../ai-tutor/ai-tutor.module';
 
 @Module({
-  imports: [PrismaModule, AuditModule],
+  imports: [PrismaModule, AuditModule, AiTutorModule],
   providers: [
+    AvatarTrainingAiTutorService,
     AvatarTrainingService,
     AvatarTrainingProgramsService,
     AvatarTrainingAttemptsService,

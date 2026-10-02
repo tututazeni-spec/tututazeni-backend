@@ -16,7 +16,7 @@ export interface KnowledgeSource {
 
 // Categorias de Document consideradas conteúdo institucional partilhável —
 // exclui PERSONAL/PAYROLL/HEALTH/CONTRATO/RECRUITMENT/LEAVE/FORMULARIO/OTHER.
-const AUTHORIZED_DOC_CATEGORIES = [
+export const AUTHORIZED_DOC_CATEGORIES = [
   'LEARNING',
   'CORPORATE',
   'COMPLIANCE',
@@ -59,7 +59,7 @@ const STOPWORDS = new Set([
 export class AiKnowledgeService {
   constructor(private prisma: PrismaService) {}
 
-  private extractKeywords(text: string, max = 6): string[] {
+  extractKeywords(text: string, max = 6): string[] {
     const words = text
       .toLowerCase()
       .normalize('NFD')
@@ -69,7 +69,7 @@ export class AiKnowledgeService {
     return [...new Set(words)].slice(0, max);
   }
 
-  private buildSnippet(text: string, keywords: string[], radius = 110): string {
+  buildSnippet(text: string, keywords: string[], radius = 110): string {
     const clean = text.replace(/\s+/g, ' ').trim();
     const lower = clean.toLowerCase();
     let idx = -1;
@@ -85,7 +85,7 @@ export class AiKnowledgeService {
     return `${start > 0 ? '…' : ''}${clean.slice(start, end).trim()}${end < clean.length ? '…' : ''}`;
   }
 
-  private score(text: string, keywords: string[]): number {
+  score(text: string, keywords: string[]): number {
     const lower = text.toLowerCase();
     return keywords.reduce((acc, kw) => acc + (lower.includes(kw) ? 1 : 0), 0);
   }

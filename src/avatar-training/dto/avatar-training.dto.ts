@@ -543,6 +543,34 @@ export class RecordInteractionDto {
   metadata?: Record<string, unknown>;
 }
 
+// ─── AI-Tutor (fase 4) ───────────────────────────────────────────────────────
+
+export enum TutorRequestMode {
+  ASK = 'ASK',
+  EXPLAIN_DIFFERENTLY = 'EXPLAIN_DIFFERENTLY',
+  EXAMPLE = 'EXAMPLE',
+  PRACTICE_EXERCISE = 'PRACTICE_EXERCISE',
+}
+
+export class AskTutorDto {
+  @ApiPropertyOptional({ description: 'Dúvida do formando (obrigatória no modo ASK)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  question?: string;
+
+  @ApiPropertyOptional({ description: 'Etapa actual — único contexto de sessão enviado ao tutor' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  stepKey?: string;
+
+  @ApiPropertyOptional({ enum: TutorRequestMode, default: TutorRequestMode.ASK })
+  @IsOptional()
+  @IsEnum(TutorRequestMode)
+  mode?: TutorRequestMode;
+}
+
 export class SubmitAnswerDto {
   @ApiProperty()
   @IsString()
