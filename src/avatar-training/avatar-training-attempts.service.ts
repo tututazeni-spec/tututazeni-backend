@@ -225,6 +225,8 @@ export class AvatarTrainingAttemptsService {
           userId: user.id,
           attemptNumber: used + 1,
           textOnly: dto.textOnly ?? true,
+          sessionVersion: session.version,
+          rubricVersion: config.rubricVersion,
         },
       });
       await this.appendInteraction(tx, created.id, {
@@ -664,6 +666,17 @@ export class AvatarTrainingAttemptsService {
       score: attempt.score,
       passed: attempt.passed,
       passingScore: config.passingScore,
+      versions: {
+        session: attempt.sessionVersion,
+        currentSession: attempt.assignment.session.version,
+        rubric: attempt.rubricVersion,
+        currentRubric: config.rubricVersion,
+        // A rubrica/conteúdo mudou depois desta tentativa — a nota reflecte a versão antiga.
+        outdated:
+          (attempt.sessionVersion != null &&
+            attempt.sessionVersion !== attempt.assignment.session.version) ||
+          (attempt.rubricVersion != null && attempt.rubricVersion !== config.rubricVersion),
+      },
       feedback: attempt.feedback,
       startedAt: attempt.startedAt,
       completedAt: attempt.completedAt,

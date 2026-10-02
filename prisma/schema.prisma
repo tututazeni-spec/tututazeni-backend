@@ -12591,6 +12591,8 @@ model AvatarTrainingAttempt {
   attemptNumber     Int
   status            AvatarTrainingAttemptStatus      @default(IN_PROGRESS)
   textOnly          Boolean                          @default(true)
+  sessionVersion    Int? // versão do conteúdo da sessão no início da tentativa (§15)
+  rubricVersion     Int? // versão da rubrica no início da tentativa (§15)
   currentStep       Int                              @default(0)
   progress          Int                              @default(0)
   score             Float?
@@ -12636,6 +12638,7 @@ model AvatarTrainingAssessment {
   requireFormalAssessment Boolean               @default(false)
   rubricValidatedById     Int? // responsável pedagógico que validou a rubrica (§10); limpo ao alterar a rubrica
   rubricValidatedAt       DateTime?
+  rubricVersion           Int                   @default(1) // incrementa sempre que a rubrica muda (§15)
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
   session                 AvatarTrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)

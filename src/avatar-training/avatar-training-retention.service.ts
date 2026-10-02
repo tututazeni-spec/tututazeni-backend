@@ -59,6 +59,28 @@ export class AvatarTrainingRetentionService {
     return { enabled: true, retentionDays: days, cutoff, redacted: result.count };
   }
 
+  /**
+   * Eliminação a pedido (§15): anonimiza o texto livre das tentativas fechadas de
+   * um utilizador, sem esperar pelo prazo de retenção. Tentativas em curso ficam.
+   */
+  async eraseUserTranscripts(actorId: number, targetUserId: number) {
+    const result = await this.prisma.avatarTrainingInteraction.updateMany({
+      where: {
+        interactionType: { in: [...FREE_TEXT_TYPES] },
+        content: { not: REDACTED_CONTENT },
+        attempt: { userId: targetUserId, status: { notIn: [...OPEN_STATES] } },
+      },
+      data: { content: REDACTED_CONTENT, metadata: null },
+    });
+    await this.audit.log({
+      userId: actorId,
+      action: 'DELETE',
+      entity: 'AvatarTrainingInteraction',
+      metadata: { policy: 'ERASURE_REQUEST', targetUserId, redacted: result.count },
+    });
+    return { redacted: result.count };
+  }
+
   @Cron('0 3 * * *')
   async scheduledPurge() {
     try {

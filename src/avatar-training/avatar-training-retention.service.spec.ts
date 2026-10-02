@@ -32,6 +32,18 @@ describe('AvatarTrainingRetentionService', () => {
     expect(svc.retentionDays()).toBe(365);
   });
 
+  it('eliminação a pedido anonimiza só o utilizador indicado, fora de tentativas abertas, e audita', async () => {
+    const r = await svc.eraseUserTranscripts(1, 42);
+    const arg = prisma.avatarTrainingInteraction.updateMany.mock.calls[0][0];
+    expect(arg.where.attempt.userId).toBe(42);
+    expect(arg.where.attempt.status.notIn).toEqual(['IN_PROGRESS', 'PAUSED']);
+    expect(arg.data.content).toBe(REDACTED_CONTENT);
+    expect(r).toEqual({ redacted: 3 });
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ policy: 'ERASURE_REQUEST' }) }),
+    );
+  });
+
   it('0 desactiva a retenção e não toca na BD', async () => {
     process.env.AVATAR_TRAINING_RETENTION_DAYS = '0';
     const r = await svc.purgeExpiredTranscripts(1, NOW);

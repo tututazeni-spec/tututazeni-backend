@@ -268,10 +268,7 @@ export class AvatarTrainingController {
   @Roles(...AVATAR_AUTHOR_ROLES)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Validação da rubrica pelo responsável pedagógico (§10)' })
-  validateRubric(
-    @CurrentUser() user: CurrentUserData,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  validateRubric(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
     return this.programs.validateRubric(user, id);
   }
 
@@ -589,7 +586,9 @@ export class AvatarTrainingController {
 
   @Get('reports/export')
   @Roles(...AVATAR_PROGRESS_ROLES)
-  @ApiOperation({ summary: 'Exporta um relatório em CSV (mesmas permissões e âmbito do relatório)' })
+  @ApiOperation({
+    summary: 'Exporta um relatório em CSV (mesmas permissões e âmbito do relatório)',
+  })
   async exportReport(
     @CurrentUser() user: CurrentUserData,
     @Query() query: AvatarReportQueryDto,
@@ -611,5 +610,21 @@ export class AvatarTrainingController {
   })
   purgeTranscripts(@CurrentUser() user: CurrentUserData) {
     return this.retention.purgeExpiredTranscripts(user.id);
+  }
+
+  @Delete('my/transcripts')
+  @ApiOperation({ summary: 'Elimina (anonimiza) as minhas transcrições de tentativas fechadas' })
+  eraseMyTranscripts(@CurrentUser() user: CurrentUserData) {
+    return this.retention.eraseUserTranscripts(user.id, user.id);
+  }
+
+  @Delete('users/:userId/transcripts')
+  @Roles(...AVATAR_ADMIN_ROLES)
+  @ApiOperation({ summary: 'Elimina (anonimiza) as transcrições de um utilizador a pedido' })
+  eraseUserTranscripts(
+    @CurrentUser() user: CurrentUserData,
+    @Param('userId', ParseIntPipe) userId: number,
+  ) {
+    return this.retention.eraseUserTranscripts(user.id, userId);
   }
 }

@@ -8,6 +8,7 @@ import { CriterionScoreDto, RubricCriterionDto } from './dto/avatar-training.dto
 import { StoredStep, isGradedStep, normalizeAnswer, parseJson } from './avatar-training.helpers';
 
 export interface SessionAssessmentConfig {
+  rubricVersion: number;
   assessmentId: number | null;
   rubric: RubricCriterionDto[];
   passingScore: number;
@@ -36,6 +37,7 @@ export class AvatarTrainingAssessmentsService {
       passingScore: row?.passingScore ?? DEFAULT_PASSING_SCORE,
       maxAttempts: row?.maxAttempts ?? 0,
       requireFormalAssessment: row?.requireFormalAssessment ?? false,
+      rubricVersion: row?.rubricVersion ?? 1,
     };
   }
 

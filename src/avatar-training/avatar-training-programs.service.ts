@@ -616,7 +616,11 @@ export class AvatarTrainingProgramsService {
         select: { rubricConfig: true },
       });
       if (JSON.stringify(parseJson(current?.rubricConfig, [])) !== JSON.stringify(dto.rubric)) {
-        rubricReset = { rubricValidatedById: null, rubricValidatedAt: null };
+        rubricReset = {
+          rubricValidatedById: null,
+          rubricValidatedAt: null,
+          rubricVersion: { increment: 1 },
+        };
       }
     }
     const data = {
