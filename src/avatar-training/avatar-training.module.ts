@@ -17,6 +17,7 @@ import { OnboardingModule } from '../onboarding/onboarding.module';
 import { AvatarTrainingDevelopmentService } from './avatar-training-development.service';
 import { AvatarTrainingNotificationsService } from './avatar-training-notifications.service';
 import { AvatarTrainingReportsService } from './avatar-training-reports.service';
+import { AvatarTrainingRetentionService } from './avatar-training-retention.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
@@ -40,6 +41,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     AvatarTrainingDevelopmentService,
     AvatarTrainingNotificationsService,
     AvatarTrainingReportsService,
+    AvatarTrainingRetentionService,
   ],
   controllers: [AvatarTrainingController],
   exports: [AvatarTrainingService, AvatarTrainingProgramsService, AvatarTrainingAttemptsService],

@@ -29,6 +29,7 @@ import { AvatarTrainingAttemptsService } from './avatar-training-attempts.servic
 import { AvatarTrainingProvidersService } from './avatar-training-providers.service';
 import { AvatarTrainingAiTutorService } from './avatar-training-ai-tutor.service';
 import { AvatarTrainingDevelopmentService } from './avatar-training-development.service';
+import { AvatarTrainingRetentionService } from './avatar-training-retention.service';
 import { AvatarTrainingReportsService } from './avatar-training-reports.service';
 import {
   AddKnowledgeSourceDto,
@@ -81,6 +82,7 @@ export class AvatarTrainingController {
     private readonly providers: AvatarTrainingProvidersService,
     private readonly development: AvatarTrainingDevelopmentService,
     private readonly reports: AvatarTrainingReportsService,
+    private readonly retention: AvatarTrainingRetentionService,
   ) {}
 
   // ── Avatares (fase 1) ──────────────────────────────────────────────────────
@@ -538,5 +540,16 @@ export class AvatarTrainingController {
   report(@CurrentUser() user: CurrentUserData, @Query() query: AvatarReportQueryDto) {
     if (!query.type) return this.reports.catalog(user);
     return this.reports.report(user, query.type, query);
+  }
+
+  // ── Privacidade (fase 8) ───────────────────────────────────────────────────
+
+  @Post('retention/purge')
+  @Roles(...AVATAR_ADMIN_ROLES)
+  @ApiOperation({
+    summary: 'Anonimiza transcrições além do prazo de retenção (AVATAR_TRAINING_RETENTION_DAYS)',
+  })
+  purgeTranscripts(@CurrentUser() user: CurrentUserData) {
+    return this.retention.purgeExpiredTranscripts(user.id);
   }
 }
