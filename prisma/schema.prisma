@@ -630,13 +630,15 @@ enum HrStatus {
 }
 
 model User {
+  avatarTrainingAssignments AvatarTrainingAssignment[]
+  avatarTrainingAttempts    AvatarTrainingAttempt[]
   // ─── Identidade ───────────────────────────────────────────────
-  id             Int     @id @default(autoincrement())
-  fullName       String  @db.Text
-  email          String  @unique
-  password       String?
-  employeeNumber String? @unique
-  avatarUrl      String?
+  id                        Int                        @id @default(autoincrement())
+  fullName                  String                     @db.Text
+  email                     String                     @unique
+  password                  String?
+  employeeNumber            String?                    @unique
+  avatarUrl                 String?
 
   // ─── Perfil Pessoal ───────────────────────────────────────────
   phone                String?
@@ -2252,10 +2254,11 @@ enum CourseModality {
 }
 
 model Course {
-  id                      Int                   @id @default(autoincrement())
+  avatarTrainingPrograms  AvatarTrainingProgram[]
+  id                      Int                     @id @default(autoincrement())
   title                   String
   shortDescription        String?
-  description             String?               @db.Text
+  description             String?                 @db.Text
   category                String?
   knowledgeArea           String?
   tags                    String[]
@@ -2263,36 +2266,36 @@ model Course {
   introVideoUrl           String?
   workloadHours           Int?
   estimatedDurationDays   Int?
-  language                String                @default("pt")
-  level                   CourseLevel           @default(BEGINNER)
-  status                  CourseStatus          @default(DRAFT)
-  visibility              CourseVisibility      @default(PUBLIC)
-  mandatory               Boolean               @default(false)
+  language                String                  @default("pt")
+  level                   CourseLevel             @default(BEGINNER)
+  status                  CourseStatus            @default(DRAFT)
+  visibility              CourseVisibility        @default(PUBLIC)
+  mandatory               Boolean                 @default(false)
   type                    CourseType?
   modality                CourseModality?
-  internalCode            String?               @unique
+  internalCode            String?                 @unique
   departmentId            Int?
   unit                    String?
-  targetAudience          String[]              @default([])
+  targetAudience          String[]                @default([])
   learningObjectives      String[]
   startDate               DateTime?
   endDate                 DateTime?
-  requiresApproval        Boolean               @default(false)
+  requiresApproval        Boolean                 @default(false)
   passingScore            Int?
   minCompletionPercent    Int?
-  certificateEnabled      Boolean               @default(false)
-  certificateCriteria     String?               @db.Text
+  certificateEnabled      Boolean                 @default(false)
+  certificateCriteria     String?                 @db.Text
   certificateValidityDays Int?
-  allowDownload           Boolean               @default(false)
+  allowDownload           Boolean                 @default(false)
   primaryInstructorId     Int?
   requiredCourseId        Int?
   publishedAt             DateTime?
-  createdAt               DateTime              @default(now())
-  updatedAt               DateTime              @updatedAt
-  department              Department?           @relation(fields: [departmentId], references: [id])
-  primaryInstructor       User?                 @relation("CoursePrimaryInstructor", fields: [primaryInstructorId], references: [id], onDelete: SetNull)
-  requiredCourse          Course?               @relation("CoursePrerequisite", fields: [requiredCourseId], references: [id], onDelete: SetNull)
-  unlocks                 Course[]              @relation("CoursePrerequisite")
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  department              Department?             @relation(fields: [departmentId], references: [id])
+  primaryInstructor       User?                   @relation("CoursePrimaryInstructor", fields: [primaryInstructorId], references: [id], onDelete: SetNull)
+  requiredCourse          Course?                 @relation("CoursePrerequisite", fields: [requiredCourseId], references: [id], onDelete: SetNull)
+  unlocks                 Course[]                @relation("CoursePrerequisite")
   instructors             CourseInstructor[]
   audienceGroups          CourseAudienceGroup[]
   modules                 CourseModule[]
@@ -2585,28 +2588,29 @@ enum EnrollmentOrigin {
 }
 
 model Enrollment {
-  id             Int                 @id @default(autoincrement())
-  courseId       Int
-  userId         Int
-  status         EnrollmentStatus    @default(NOT_STARTED)
-  origin         EnrollmentOrigin    @default(MANUAL)
-  mandatory      Boolean             @default(false)
-  learningPathId Int?
-  assignedById   Int?
-  deadline       DateTime?
-  enrolledAt     DateTime            @default(now())
-  startedAt      DateTime?
-  completedAt    DateTime?
-  cancelledAt    DateTime?
-  cancelReason   String?
-  pausedAt       DateTime?
-  progress       Int                 @default(0)
-  course         Course              @relation(fields: [courseId], references: [id])
-  user           User                @relation(fields: [userId], references: [id])
-  certificate    Certificate?
-  progresses     LessonProgress[]
-  attempts       EvaluationAttempt[] @relation("EnrollmentAttempts")
-  aiSessions     AiTutorSession[]
+  avatarTrainingAssignments AvatarTrainingAssignment[]
+  id                        Int                        @id @default(autoincrement())
+  courseId                  Int
+  userId                    Int
+  status                    EnrollmentStatus           @default(NOT_STARTED)
+  origin                    EnrollmentOrigin           @default(MANUAL)
+  mandatory                 Boolean                    @default(false)
+  learningPathId            Int?
+  assignedById              Int?
+  deadline                  DateTime?
+  enrolledAt                DateTime                   @default(now())
+  startedAt                 DateTime?
+  completedAt               DateTime?
+  cancelledAt               DateTime?
+  cancelReason              String?
+  pausedAt                  DateTime?
+  progress                  Int                        @default(0)
+  course                    Course                     @relation(fields: [courseId], references: [id])
+  user                      User                       @relation(fields: [userId], references: [id])
+  certificate               Certificate?
+  progresses                LessonProgress[]
+  attempts                  EvaluationAttempt[]        @relation("EnrollmentAttempts")
+  aiSessions                AiTutorSession[]
 
   @@unique([courseId, userId])
   @@index([userId])
@@ -2907,30 +2911,31 @@ enum FeedbackMode {
 }
 
 model Assessment {
-  id                  Int                  @id @default(autoincrement())
+  avatarTrainingLinks AvatarTrainingAssessment[]
+  id                  Int                        @id @default(autoincrement())
   title               String
   description         String?
-  type                AssessmentType       @default(QUIZ)
-  status              AssessmentStatus     @default(DRAFT)
+  type                AssessmentType             @default(QUIZ)
+  status              AssessmentStatus           @default(DRAFT)
   courseId            Int?
   moduleId            Int?
   learningPathId      Int?
-  passingScore        Int                  @default(70)
-  maxAttempts         Int                  @default(0)
-  cooldownHours       Int                  @default(0)
-  timeLimitMinutes    Int                  @default(0)
-  feedbackMode        FeedbackMode         @default(ON_SUBMIT)
-  randomizeQuestions  Boolean              @default(false)
-  randomizeOptions    Boolean              @default(false)
-  allowReview         Boolean              @default(true)
-  targetDepartmentIds Int[]                @default([])
+  passingScore        Int                        @default(70)
+  maxAttempts         Int                        @default(0)
+  cooldownHours       Int                        @default(0)
+  timeLimitMinutes    Int                        @default(0)
+  feedbackMode        FeedbackMode               @default(ON_SUBMIT)
+  randomizeQuestions  Boolean                    @default(false)
+  randomizeOptions    Boolean                    @default(false)
+  allowReview         Boolean                    @default(true)
+  targetDepartmentIds Int[]                      @default([])
   availableFrom       DateTime?
   availableUntil      DateTime?
-  maxGrade            Float                @default(20)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  course              Course?              @relation(fields: [courseId], references: [id])
-  module              CourseModule?        @relation(fields: [moduleId], references: [id])
+  maxGrade            Float                      @default(20)
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  course              Course?                    @relation(fields: [courseId], references: [id])
+  module              CourseModule?              @relation(fields: [moduleId], references: [id])
   questions           AssessmentQuestion[]
   attempts            AssessmentAttempt[]
 
@@ -12382,4 +12387,257 @@ enum Eval360FeedbackType {
   DEVELOPMENT
   CHECK_IN
   PULSE
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AVATAR TRAINING (docs/Avatar_Training.md — fases 1-3)
+// Nomes com prefixo próprio: AvatarScenario/AvatarSession/AvatarScript são
+// resíduos do módulo legado removido em #295 e não são reutilizados.
+// ═══════════════════════════════════════════════════════════════════
+
+enum AvatarTrainingAvatarType {
+  IMAGE
+  AVATAR_2D
+  AVATAR_3D
+  VIDEO
+}
+
+enum AvatarTrainingAvatarStatus {
+  ACTIVE
+  TESTING
+  INACTIVE
+  ARCHIVED
+}
+
+enum AvatarTrainingStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AvatarTrainingExperienceType {
+  GUIDED_LESSON
+  Q_AND_A
+  ROLE_PLAY
+  PROCEDURE_DEMO
+  PRACTICAL_ASSESSMENT
+  PERSONALIZED_REVIEW
+}
+
+enum AvatarTrainingAssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+  CANCELLED
+}
+
+enum AvatarTrainingAttemptStatus {
+  IN_PROGRESS
+  PAUSED
+  SUBMITTED
+  COMPLETED
+  FAILED
+  ABANDONED
+}
+
+enum AvatarTrainingInteractionType {
+  AVATAR_MESSAGE
+  USER_MESSAGE
+  USER_ANSWER
+  STEP_ADVANCE
+  FEEDBACK
+  PAUSE
+  RESUME
+  HELP_REQUEST
+  SYSTEM
+}
+
+enum AvatarTrainingSourceType {
+  COURSE
+  LESSON
+  DOCUMENT
+  LIBRARY_ITEM
+}
+
+model TrainingAvatar {
+  id              Int                        @id @default(autoincrement())
+  name            String
+  description     String?                    @db.Text
+  avatarType      AvatarTrainingAvatarType   @default(IMAGE)
+  imageUrl        String?                    @db.Text
+  voiceConfig     String?                    @db.Text // JSON.stringify
+  language        String                     @default("pt")
+  languageVariant String?
+  tone            String?
+  specialty       String?
+  provider        String?
+  providerModel   String?
+  status          AvatarTrainingAvatarStatus @default(TESTING)
+  responsibleId   Int?
+  createdById     Int?
+  lastTestedAt    DateTime?
+  deactivatedAt   DateTime?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  programs        AvatarTrainingProgram[]
+  sessions        AvatarTrainingSession[]
+
+  @@index([status])
+  @@index([language])
+}
+
+model AvatarTrainingProgram {
+  id                    Int                          @id @default(autoincrement())
+  code                  String                       @unique
+  title                 String
+  description           String?                      @db.Text
+  objectives            String[]
+  category              String?
+  difficulty            Difficulty                   @default(BEGINNER)
+  experienceType        AvatarTrainingExperienceType @default(GUIDED_LESSON)
+  courseId              Int?
+  moduleId              Int?
+  avatarId              Int?
+  responsibleId         Int?
+  targetDepartmentIds   Int[]                        @default([])
+  targetRoleNames       String[]                     @default([])
+  language              String                       @default("pt")
+  durationMinutes       Int?
+  prerequisiteCourseIds Int[]                        @default([])
+  certificateEnabled    Boolean                      @default(false)
+  status                AvatarTrainingStatus         @default(DRAFT)
+  version               Int                          @default(1)
+  reviewSubmittedAt     DateTime?
+  approvedById          Int?
+  approvedAt            DateTime?
+  publishedAt           DateTime?
+  createdById           Int?
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  course                Course?                      @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  avatar                TrainingAvatar?              @relation(fields: [avatarId], references: [id], onDelete: SetNull)
+  sessions              AvatarTrainingSession[]
+
+  @@index([status])
+  @@index([courseId])
+  @@index([avatarId])
+}
+
+model AvatarTrainingSession {
+  id               Int                             @id @default(autoincrement())
+  programId        Int
+  title            String
+  avatarId         Int?
+  position         Int                             @default(1)
+  experienceType   AvatarTrainingExperienceType    @default(GUIDED_LESSON)
+  objectives       String[]
+  welcomeMessage   String?                         @db.Text
+  contentConfig    String?                         @db.Text // JSON.stringify: { steps: [...] }
+  durationMinutes  Int?
+  mandatory        Boolean                         @default(true)
+  status           AvatarTrainingStatus            @default(DRAFT)
+  version          Int                             @default(1)
+  createdAt        DateTime                        @default(now())
+  updatedAt        DateTime                        @updatedAt
+  program          AvatarTrainingProgram           @relation(fields: [programId], references: [id], onDelete: Cascade)
+  avatar           TrainingAvatar?                 @relation(fields: [avatarId], references: [id], onDelete: SetNull)
+  assignments      AvatarTrainingAssignment[]
+  assessment       AvatarTrainingAssessment?
+  knowledgeSources AvatarTrainingKnowledgeSource[]
+
+  @@index([programId])
+  @@index([status])
+}
+
+model AvatarTrainingAssignment {
+  id           Int                            @id @default(autoincrement())
+  sessionId    Int
+  userId       Int
+  enrollmentId Int?
+  assignedById Int?
+  mandatory    Boolean                        @default(false)
+  dueDate      DateTime?
+  status       AvatarTrainingAssignmentStatus @default(ASSIGNED)
+  assignedAt   DateTime                       @default(now())
+  completedAt  DateTime?
+  session      AvatarTrainingSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user         User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollment   Enrollment?                    @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  attempts     AvatarTrainingAttempt[]
+
+  @@unique([sessionId, userId])
+  @@index([userId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model AvatarTrainingAttempt {
+  id            Int                         @id @default(autoincrement())
+  assignmentId  Int
+  userId        Int
+  attemptNumber Int
+  status        AvatarTrainingAttemptStatus @default(IN_PROGRESS)
+  textOnly      Boolean                     @default(true)
+  currentStep   Int                         @default(0)
+  progress      Int                         @default(0)
+  score         Float?
+  passed        Boolean?
+  feedback      String?                     @db.Text
+  reviewedById  Int?
+  startedAt     DateTime                    @default(now())
+  pausedAt      DateTime?
+  pausedSeconds Int                         @default(0)
+  submittedAt   DateTime?
+  completedAt   DateTime?
+  assignment    AvatarTrainingAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  user          User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interactions  AvatarTrainingInteraction[]
+
+  @@unique([assignmentId, attemptNumber])
+  @@index([userId])
+  @@index([status])
+}
+
+model AvatarTrainingInteraction {
+  id              Int                           @id @default(autoincrement())
+  attemptId       Int
+  sequence        Int
+  interactionType AvatarTrainingInteractionType
+  stepKey         String?
+  content         String                        @db.Text
+  metadata        String?                       @db.Text // JSON.stringify
+  createdAt       DateTime                      @default(now())
+  attempt         AvatarTrainingAttempt         @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, sequence])
+}
+
+model AvatarTrainingAssessment {
+  id                      Int                   @id @default(autoincrement())
+  sessionId               Int                   @unique
+  assessmentId            Int?
+  rubricConfig            String?               @db.Text // JSON.stringify: [{ key, label, weight }]
+  passingScore            Int                   @default(70)
+  maxAttempts             Int                   @default(0)
+  requireFormalAssessment Boolean               @default(false)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  session                 AvatarTrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  assessment              Assessment?           @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+}
+
+model AvatarTrainingKnowledgeSource {
+  id         Int                      @id @default(autoincrement())
+  sessionId  Int
+  sourceType AvatarTrainingSourceType
+  sourceId   String
+  title      String?
+  version    Int                      @default(1)
+  status     String                   @default("APPROVED")
+  createdAt  DateTime                 @default(now())
+  session    AvatarTrainingSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, sourceType, sourceId])
 }
