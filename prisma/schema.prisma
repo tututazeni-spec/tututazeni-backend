@@ -5733,6 +5733,7 @@ model ProcessInstance {
   completedAt    DateTime?
   cancelledAt    DateTime?
   slaDeadline    DateTime?
+  sourceModule   String?
   process        ProcessStandard @relation(fields: [processId], references: [id])
   initiatedBy    User            @relation("InstanceInitiator", fields: [initiatedById], references: [id])
   targetUser     User            @relation("InstanceTarget", fields: [targetUserId], references: [id])
@@ -5740,6 +5741,7 @@ model ProcessInstance {
 
   @@index([status])
   @@index([processId])
+  @@index([sourceModule])
 }
 
 model StepProgress {

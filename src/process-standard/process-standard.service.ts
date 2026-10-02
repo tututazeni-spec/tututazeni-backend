@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { buildOverview } from './process-overview';
 import { createHash } from 'crypto';
 import { isPrivileged } from '../common/authz/ownership';
 import { Role } from '../auth/enums/role.enum';
@@ -23,6 +24,7 @@ import {
   CompleteStepDto,
   RejectStepDto,
   ApprovalActionDto,
+  ProcessDashboardFilterDto,
 } from './process-standard.dto';
 
 const PROCESS_PRIVILEGED_ROLES = [Role.ADMIN, Role.RH, Role.GESTOR];
@@ -438,6 +440,7 @@ export class ProcessStandardService {
         targetUserId: dto.targetUserId,
         status: 'IN_PROGRESS',
         notes: dto.notes,
+        sourceModule: dto.sourceModule?.trim() || null,
         startedAt: new Date(),
         slaDeadline: process.defaultSlaHours
           ? new Date(Date.now() + process.defaultSlaHours * 3600 * 1000)
@@ -731,7 +734,7 @@ export class ProcessStandardService {
 
   // ─── DASHBOARD / MÉTRICAS ─────────────────────────────────────────────────
 
-  async getDashboard() {
+  async getDashboard(filters: ProcessDashboardFilterDto = {}) {
     const [
       totalActive,
       totalDraft,
@@ -759,11 +762,117 @@ export class ProcessStandardService {
       },
     });
 
+    const overview = await this.getOverview(filters, totalReview);
+
     return {
       processes: { active: totalActive, draft: totalDraft, inReview: totalReview },
       instances: { inProgress: instancesInProgress, completed: instancesCompleted },
       compliance: { overdueSteps, slaComplianceRate: overdueSteps === 0 ? 100 : null },
       recentInstances,
+      // docs/Modulo_Processes.md §3 — filtrável; as chaves acima mantêm-se
+      // porque o dashboard institucional as consome.
+      ...overview,
+    };
+  }
+
+  // Visão Geral (§3): KPIs + gráficos sobre as instâncias que cumprem os
+  // filtros. Tecto de 5000 linhas (mais recentes) para limitar a agregação
+  // em memória — `truncated` avisa a UI quando é atingido.
+  private async getOverview(filters: ProcessDashboardFilterDto, pendingTemplateReviews: number) {
+    const { from, to, departmentId, unitId, responsibleId, category, status } = filters;
+    const LIMIT = 5000;
+
+    const startedAt: Prisma.DateTimeFilter = {};
+    if (from) startedAt.gte = new Date(from);
+    if (to) {
+      // `to` inclusivo: um YYYY-MM-DD sem hora vira o fim desse dia.
+      const end = new Date(to);
+      if (!to.includes('T')) end.setUTCHours(23, 59, 59, 999);
+      startedAt.lte = end;
+    }
+
+    const processWhere: Prisma.ProcessStandardWhereInput = {};
+    if (departmentId) processWhere.departmentId = departmentId;
+    if (unitId) processWhere.department = { unitId };
+    if (category) processWhere.category = category;
+
+    const where: Prisma.ProcessInstanceWhereInput = {};
+    if (from || to) where.startedAt = startedAt;
+    if (status) where.status = status;
+    if (Object.keys(processWhere).length) where.process = processWhere;
+    if (responsibleId) {
+      where.stepProgress = { some: { step: { responsibleId } } };
+    }
+
+    const [instances, steps, departments, units, categories, responsibles] = await Promise.all([
+      this.prisma.read.processInstance.findMany({
+        where,
+        take: LIMIT,
+        orderBy: { startedAt: 'desc' },
+        select: {
+          status: true,
+          startedAt: true,
+          completedAt: true,
+          slaDeadline: true,
+          sourceModule: true,
+          process: {
+            select: { category: true, department: { select: { id: true, name: true } } },
+          },
+        },
+      }),
+      this.prisma.read.stepProgress.findMany({
+        where: {
+          instance: where,
+          ...(responsibleId ? { step: { responsibleId } } : {}),
+        },
+        take: LIMIT,
+        orderBy: { id: 'desc' },
+        select: {
+          status: true,
+          slaDeadline: true,
+          completedAt: true,
+          step: {
+            select: {
+              id: true,
+              title: true,
+              type: true,
+              responsible: { select: { id: true, fullName: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.read.department.findMany({
+        where: { processStandards: { some: {} } },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.read.unit.findMany({
+        where: { departments: { some: { processStandards: { some: {} } } } },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.read.processStandard.findMany({
+        where: { category: { not: null } },
+        distinct: ['category'],
+        select: { category: true },
+        orderBy: { category: 'asc' },
+      }),
+      this.prisma.read.user.findMany({
+        where: { processStepsOwned: { some: {} } },
+        select: { id: true, fullName: true },
+        orderBy: { fullName: 'asc' },
+      }),
+    ]);
+
+    return {
+      ...buildOverview(instances, steps, pendingTemplateReviews),
+      truncated: instances.length >= LIMIT,
+      filterOptions: {
+        departments,
+        units,
+        categories: categories.map(c => c.category).filter((c): c is string => !!c),
+        responsibles,
+      },
     };
   }
 

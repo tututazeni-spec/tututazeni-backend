@@ -20,6 +20,7 @@ import {
   CreateProcessDto,
   UpdateProcessDto,
   ProcessFilterDto,
+  ProcessDashboardFilterDto,
   StartInstanceDto,
   CompleteStepDto,
   RejectStepDto,
@@ -47,9 +48,12 @@ export class ProcessStandardController {
 
   @Get('dashboard')
   @Roles(Role.ADMIN, Role.RH, Role.GESTOR)
-  @ApiOperation({ summary: 'Dashboard operacional de processos' })
-  dashboard() {
-    return this.svc.getDashboard();
+  @ApiOperation({
+    summary:
+      'Visão Geral: indicadores, gráficos e filtros (período, departamento, responsável, tipo, estado)',
+  })
+  dashboard(@Query() filters: ProcessDashboardFilterDto) {
+    return this.svc.getDashboard(filters);
   }
 
   @Get('my-tasks')

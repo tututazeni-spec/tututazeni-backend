@@ -11,6 +11,7 @@ import {
   IsBoolean,
   Min,
   Max,
+  MaxLength,
   ArrayMinSize,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
@@ -213,6 +214,47 @@ export class ProcessFilterDto {
   limit?: number;
 }
 
+// ─── Dashboard (Visão Geral) ──────────────────────────────────────────────────
+export class ProcessDashboardFilterDto {
+  @ApiPropertyOptional({ description: 'Início do período (data de início da instância)' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Fim do período (inclusivo)' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  departmentId?: number;
+
+  @ApiPropertyOptional({ description: 'Unidade organizacional (via departamento do modelo)' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  unitId?: number;
+
+  @ApiPropertyOptional({ description: 'Responsável de etapa' })
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  responsibleId?: number;
+
+  @ApiPropertyOptional({ description: 'Tipo de processo (categoria do modelo)' })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({ enum: InstanceStatus })
+  @IsOptional()
+  @IsEnum(InstanceStatus)
+  status?: InstanceStatus;
+}
+
 // ─── Start Instance ──────────────────────────────────────────────────────────
 export class StartInstanceDto {
   @ApiProperty({ description: 'ID do colaborador alvo' })
@@ -223,6 +265,12 @@ export class StartInstanceDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Módulo que originou o processo (ex.: Users, Onboarding)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  sourceModule?: string;
 }
 
 // ─── Complete Step ──────────────────────────────────────────────────────────
