@@ -614,7 +614,8 @@ export class AvatarTrainingReportsService {
     const columns = [...new Set(rows.flatMap(r => Object.keys(r)))];
     const esc = (v: unknown) => {
       if (v === null || v === undefined) return '';
-      let s = v instanceof Date ? v.toISOString() : typeof v === 'object' ? JSON.stringify(v) : String(v);
+      let s =
+        v instanceof Date ? v.toISOString() : typeof v === 'object' ? JSON.stringify(v) : String(v);
       // Evita injecção de fórmulas em folhas de cálculo.
       if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
       return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -626,7 +627,7 @@ export class AvatarTrainingReportsService {
     const day = (d: string) => d.slice(0, 10);
     return {
       filename: `avatar-training-${type.toLowerCase()}-${day(report.period.from)}_${day(report.period.to)}.csv`,
-      content: `﻿${lines.join('\r\n')}\r\n`,
+      content: `\uFEFF${lines.join('\r\n')}\r\n`,
     };
   }
 

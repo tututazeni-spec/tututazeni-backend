@@ -16,7 +16,11 @@ import {
 import { parseJson } from './avatar-training.helpers';
 
 type AvatarRow = Prisma.TrainingAvatarGetPayload<object>;
-type StoredKnowledgeItem = { sourceType: string; sourceId: string; title: string };
+interface StoredKnowledgeItem {
+  sourceType: string;
+  sourceId: string;
+  title: string;
+}
 
 @Injectable()
 export class AvatarTrainingService {
