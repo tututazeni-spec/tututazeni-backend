@@ -44,6 +44,17 @@ export {
 
 // ─── Avatares ────────────────────────────────────────────────────────────────
 
+export class AvatarKnowledgeItemDto {
+  @ApiProperty({ enum: AvatarTrainingSourceType })
+  @IsEnum(AvatarTrainingSourceType)
+  sourceType: AvatarTrainingSourceType;
+
+  @ApiProperty({ description: 'Id do curso, lição, documento ou item da biblioteca' })
+  @IsString()
+  @MaxLength(60)
+  sourceId: string;
+}
+
 export class CreateTrainingAvatarDto {
   @ApiProperty()
   @IsString()
@@ -112,6 +123,17 @@ export class CreateTrainingAvatarDto {
   @IsOptional()
   @IsInt()
   responsibleId?: number;
+
+  @ApiPropertyOptional({
+    type: [AvatarKnowledgeItemDto],
+    description: 'Base de conhecimento: fontes autorizadas para as respostas do avatar',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => AvatarKnowledgeItemDto)
+  knowledgeBase?: AvatarKnowledgeItemDto[];
 }
 
 export class UpdateTrainingAvatarDto extends PartialType(CreateTrainingAvatarDto) {}
@@ -244,6 +266,29 @@ export class CreateAvatarProgramDto {
   @IsOptional()
   @IsBoolean()
   certificateEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Variante do idioma (ex.: PT-AO, PT-PT)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  languageVariant?: string;
+
+  @ApiPropertyOptional({
+    description: 'Nota média mínima (0-100) para elegibilidade ao certificado',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  certificateMinScore?: number;
+
+  @ApiPropertyOptional({
+    description: 'Exige todas as sessões obrigatórias concluídas',
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  certificateRequireAllSessions?: boolean;
 }
 
 export class UpdateAvatarProgramDto extends PartialType(CreateAvatarProgramDto) {}

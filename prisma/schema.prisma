@@ -12468,6 +12468,7 @@ model TrainingAvatar {
   avatarType      AvatarTrainingAvatarType   @default(IMAGE)
   imageUrl        String?                    @db.Text
   voiceConfig     String?                    @db.Text // JSON.stringify
+  knowledgeBase   String?                    @db.Text // JSON.stringify: [{ sourceType, sourceId, title }] — fontes autorizadas
   language        String                     @default("pt")
   languageVariant String?
   tone            String?
@@ -12504,10 +12505,14 @@ model AvatarTrainingProgram {
   targetDepartmentIds   Int[]                        @default([])
   targetRoleNames       String[]                     @default([])
   language              String                       @default("pt")
+  languageVariant       String?
   durationMinutes       Int?
   prerequisiteCourseIds Int[]                        @default([])
   competencyIds         Int[]                        @default([]) // competências-alvo (Fase 6)
   certificateEnabled    Boolean                      @default(false)
+  // Regras de conclusão para elegibilidade ao certificado (§4 «Certificação»).
+  certificateMinScore           Int?
+  certificateRequireAllSessions Boolean              @default(true)
   status                AvatarTrainingStatus         @default(DRAFT)
   version               Int                          @default(1)
   reviewSubmittedAt     DateTime?

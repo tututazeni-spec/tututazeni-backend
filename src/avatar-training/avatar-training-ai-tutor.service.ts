@@ -73,8 +73,15 @@ export class AvatarTrainingAiTutorService {
           include: {
             session: {
               include: {
-                program: { select: { id: true, title: true, courseId: true } },
-                avatar: { select: { language: true } },
+                program: {
+                  select: {
+                    id: true,
+                    title: true,
+                    courseId: true,
+                    avatar: { select: { language: true, knowledgeBase: true } },
+                  },
+                },
+                avatar: { select: { language: true, knowledgeBase: true } },
                 knowledgeSources: { where: { status: 'APPROVED' } },
               },
             },
@@ -110,12 +117,16 @@ export class AvatarTrainingAiTutorService {
       return this.respond(attemptId, step?.key, label, limited, 'LIMIT_REACHED', {});
     }
 
-    // Fontes autorizadas: conteúdo da própria sessão + fontes aprovadas.
+    // Fontes autorizadas: conteúdo da sessão + fontes da sessão + base de conhecimento do avatar.
+    const avatarSources = parseJson<{ sourceType: string; sourceId: string }[]>(
+      (session.avatar ?? session.program.avatar)?.knowledgeBase,
+      [],
+    );
     const excerpts = await this.gatherExcerpts(
       question || step?.title || session.title,
       steps,
       step,
-      session.knowledgeSources,
+      [...session.knowledgeSources, ...avatarSources],
       mode !== TutorRequestMode.ASK,
     );
     if (!excerpts.length) {

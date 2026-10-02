@@ -17,6 +17,7 @@ const TYPES = {
   OVERDUE: 'AVATAR_TRAINING_OVERDUE',
   COMPLETED: 'AVATAR_TRAINING_COMPLETED',
   FAILED: 'AVATAR_TRAINING_FAILED',
+  HELP: 'AVATAR_TRAINING_HELP_REQUEST',
 } as const;
 
 const fmt = (d: Date) => d.toLocaleDateString('pt-PT');
@@ -72,6 +73,25 @@ export class AvatarTrainingNotificationsService {
       select: { id: true },
     });
     return !!found;
+  }
+
+  /** Pedido de ajuda do formando — avisa o formador humano responsável pela formação. */
+  async helpRequested(input: {
+    responsibleId: number | null;
+    learnerId: number;
+    sessionTitle: string;
+    attemptId: number;
+    message: string;
+  }) {
+    if (!input.responsibleId || input.responsibleId === input.learnerId) return;
+    await this.safeSend(
+      input.responsibleId,
+      TYPES.HELP,
+      'Pedido de ajuda numa formação com avatar',
+      `Um formando pediu ajuda na sessão «${input.sessionTitle}»: ${input.message.slice(0, 200)}`,
+      'MEDIUM',
+      { attemptId: input.attemptId, learnerId: input.learnerId },
+    );
   }
 
   /** Nova atribuição (ou reatribuição) — avisa o formando. */

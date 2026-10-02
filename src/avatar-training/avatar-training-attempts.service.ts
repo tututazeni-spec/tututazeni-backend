@@ -29,6 +29,13 @@ import {
 } from './avatar-training.helpers';
 
 const OPEN_STATES = ['IN_PROGRESS', 'PAUSED'] as const;
+const AVATAR_PUBLIC = {
+  id: true,
+  name: true,
+  imageUrl: true,
+  avatarType: true,
+  language: true,
+} as const;
 
 @Injectable()
 export class AvatarTrainingAttemptsService {
@@ -57,7 +64,18 @@ export class AvatarTrainingAttemptsService {
   private async loadAttempt(id: number) {
     const attempt = await this.prisma.avatarTrainingAttempt.findUnique({
       where: { id },
-      include: { assignment: { include: { session: { include: { program: true } } } } },
+      include: {
+        assignment: {
+          include: {
+            session: {
+              include: {
+                program: { include: { avatar: { select: AVATAR_PUBLIC } } },
+                avatar: { select: AVATAR_PUBLIC },
+              },
+            },
+          },
+        },
+      },
     });
     return attempt;
   }
@@ -230,6 +248,8 @@ export class AvatarTrainingAttemptsService {
         title: assignment.session.title,
         version: assignment.session.version,
         program: { id: assignment.session.program.id, title: assignment.session.program.title },
+        // Avatar da sessão (ou o da formação) — só dados de apresentação.
+        avatar: assignment.session.avatar ?? assignment.session.program.avatar ?? null,
       },
       // Transparência: o interlocutor é sempre identificado como instrutor virtual.
       notice: 'Está a interagir com um instrutor virtual (IA).',
@@ -287,6 +307,16 @@ export class AvatarTrainingAttemptsService {
       }
       return { interaction, feedback };
     });
+    if (dto.interactionType === 'HELP_REQUEST') {
+      // Encaminhamento para um formador humano (§5): avisa o responsável da formação.
+      await this.notifications.helpRequested({
+        responsibleId: attempt.assignment.session.program.responsibleId,
+        learnerId: attempt.userId,
+        sessionTitle: attempt.assignment.session.title,
+        attemptId,
+        message: dto.content,
+      });
+    }
     return result;
   }
 

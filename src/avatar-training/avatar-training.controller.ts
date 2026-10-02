@@ -107,6 +107,13 @@ export class AvatarTrainingController {
     return this.avatars.getAvatar(id);
   }
 
+  @Get('avatars/:id/history')
+  @Roles(...AVATAR_AUTHOR_ROLES)
+  @ApiOperation({ summary: 'Histórico do avatar (criação, alterações, testes, estado)' })
+  avatarHistory(@Param('id', ParseIntPipe) id: number) {
+    return this.avatars.avatarHistory(id);
+  }
+
   @Patch('avatars/:id')
   @Roles(...AVATAR_ADMIN_ROLES)
   updateAvatar(
@@ -165,6 +172,13 @@ export class AvatarTrainingController {
     @Body() dto: UpdateAvatarProgramDto,
   ) {
     return this.programs.updateProgram(user, id, dto);
+  }
+
+  @Get('programs/:id/certification')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Elegibilidade do utilizador ao certificado da formação' })
+  certificationStatus(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
+    return this.programs.certificationStatus(user, id);
   }
 
   @Post('programs/:id/submit-review')

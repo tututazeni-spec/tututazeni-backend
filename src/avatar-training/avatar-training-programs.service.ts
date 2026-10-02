@@ -35,6 +35,8 @@ import {
   stripAnswers,
 } from './avatar-training.helpers';
 
+const isNumber = (v: number | null): v is number => typeof v === 'number';
+
 @Injectable()
 export class AvatarTrainingProgramsService {
   constructor(
@@ -110,6 +112,13 @@ export class AvatarTrainingProgramsService {
             mandatory: true,
             status: true,
             version: true,
+            // Resumo ao nível da ficha: método de avaliação e fontes aprovadas por sessão.
+            assessment: {
+              select: { passingScore: true, maxAttempts: true, requireFormalAssessment: true },
+            },
+            knowledgeSources: {
+              select: { id: true, sourceType: true, sourceId: true, title: true, version: true },
+            },
           },
         },
       },
@@ -120,7 +129,90 @@ export class AvatarTrainingProgramsService {
     const enrollmentId = program.courseId
       ? await this.integrations.resolveEnrollment(program.courseId, user.id)
       : null;
-    return { ...program, myCourseEnrollment: await this.integrations.courseStatus(enrollmentId) };
+    const people = await this.prisma.user.findMany({
+      where: { id: { in: [program.responsibleId, program.approvedById].filter(isNumber) } },
+      select: { id: true, fullName: true },
+    });
+    const nameOf = (id: number | null) => people.find(p => p.id === id)?.fullName ?? null;
+    return {
+      ...program,
+      responsibleName: nameOf(program.responsibleId),
+      approvedByName: nameOf(program.approvedById),
+      myCourseEnrollment: await this.integrations.courseStatus(enrollmentId),
+    };
+  }
+
+  /**
+   * Elegibilidade ao certificado segundo as regras da ficha (§4 «Certificação»):
+   * sessões obrigatórias concluídas e nota média mínima. Só leitura — a emissão
+   * continua no módulo de Certificados/Cursos.
+   */
+  async certificationStatus(user: CurrentUserData, programId: number) {
+    const program = await this.prisma.avatarTrainingProgram.findUnique({
+      where: { id: programId },
+      select: {
+        id: true,
+        status: true,
+        certificateEnabled: true,
+        certificateMinScore: true,
+        certificateRequireAllSessions: true,
+        sessions: {
+          where: { status: 'PUBLISHED' },
+          select: {
+            id: true,
+            title: true,
+            mandatory: true,
+            assignments: {
+              where: { userId: user.id },
+              select: {
+                status: true,
+                attempts: {
+                  where: { passed: true },
+                  select: { score: true },
+                  orderBy: { score: 'desc' },
+                  take: 1,
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!program || program.status !== 'PUBLISHED') {
+      throw new NotFoundException('Formação não encontrada');
+    }
+    if (!program.certificateEnabled) {
+      return { enabled: false, eligible: false, reasons: ['Esta formação não emite certificado'] };
+    }
+    const reasons: string[] = [];
+    const scores: number[] = [];
+    for (const s of program.sessions) {
+      const a = s.assignments[0];
+      const done = a?.status === 'COMPLETED';
+      const best = a?.attempts[0]?.score;
+      if (typeof best === 'number') scores.push(best);
+      if (program.certificateRequireAllSessions && s.mandatory && !done) {
+        reasons.push(`Sessão obrigatória por concluir: ${s.title}`);
+      }
+    }
+    const average = scores.length
+      ? Math.round((scores.reduce((x, y) => x + y, 0) / scores.length) * 10) / 10
+      : null;
+    if (program.certificateMinScore != null) {
+      if (average === null) reasons.push('Sem nota registada');
+      else if (average < program.certificateMinScore) {
+        reasons.push(`Nota média ${average} abaixo do mínimo (${program.certificateMinScore})`);
+      }
+    }
+    if (!program.sessions.length) reasons.push('A formação não tem sessões publicadas');
+    return {
+      enabled: true,
+      eligible: reasons.length === 0,
+      reasons,
+      average,
+      minScore: program.certificateMinScore,
+      requireAllSessions: program.certificateRequireAllSessions,
+    };
   }
 
   async createProgram(userId: number, dto: CreateAvatarProgramDto) {
