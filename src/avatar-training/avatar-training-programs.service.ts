@@ -13,6 +13,7 @@ import { AuditService } from '../common/services/audit.service';
 import { CurrentUserData } from '../common/decorators';
 import { isPrivileged } from '../common/authz/ownership';
 import { AvatarTrainingIntegrationsService } from './avatar-training-integrations.service';
+import { AvatarTrainingNotificationsService } from './avatar-training-notifications.service';
 import {
   AddKnowledgeSourceDto,
   AssignAvatarSessionDto,
@@ -40,6 +41,7 @@ export class AvatarTrainingProgramsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly integrations: AvatarTrainingIntegrationsService,
+    private readonly notifications: AvatarTrainingNotificationsService,
   ) {}
 
   // ── Programas ──────────────────────────────────────────────────────────────
@@ -537,6 +539,8 @@ export class AvatarTrainingProgramsService {
     const dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
     const mandatory = dto.mandatory ?? session.mandatory;
     const created: number[] = [];
+    const createdRows: { id: number; userId: number; dueDate: Date | null; mandatory: boolean }[] =
+      [];
     const skipped: { userId: number; reason: string }[] = [];
 
     for (const userId of userIds) {
@@ -576,6 +580,7 @@ export class AvatarTrainingProgramsService {
             data: { sessionId, userId, ...data },
           });
       created.push(row.id);
+      createdRows.push({ id: row.id, userId, dueDate, mandatory });
     }
     await this.audit.log({
       userId: user.id,
@@ -584,6 +589,7 @@ export class AvatarTrainingProgramsService {
       entityId: sessionId,
       metadata: { assigned: created.length, skipped: skipped.length },
     });
+    await this.notifications.assigned(createdRows, { id: session.id, title: session.title });
     return { assigned: created.length, assignmentIds: created, skipped };
   }
 

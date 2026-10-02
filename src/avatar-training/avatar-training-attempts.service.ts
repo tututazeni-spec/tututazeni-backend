@@ -11,6 +11,7 @@ import { Role } from '../auth/enums/role.enum';
 import { AvatarTrainingIntegrationsService } from './avatar-training-integrations.service';
 import { AvatarTrainingAssessmentsService } from './avatar-training-assessments.service';
 import { AvatarTrainingDevelopmentService } from './avatar-training-development.service';
+import { AvatarTrainingNotificationsService } from './avatar-training-notifications.service';
 import {
   AvatarProgressFilterDto,
   RecordInteractionDto,
@@ -37,6 +38,7 @@ export class AvatarTrainingAttemptsService {
     private readonly integrations: AvatarTrainingIntegrationsService,
     private readonly assessments: AvatarTrainingAssessmentsService,
     private readonly development: AvatarTrainingDevelopmentService,
+    private readonly notifications: AvatarTrainingNotificationsService,
   ) {}
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -479,6 +481,14 @@ export class AvatarTrainingAttemptsService {
       entity: 'AvatarTrainingAttempt',
       entityId: attemptId,
       metadata: { status, score: attempt.score, passed },
+    });
+    await this.notifications.finished({
+      assignmentId: assignment.id,
+      userId: attempt.userId,
+      assignedById: assignment.assignedById,
+      sessionTitle: assignment.session.title,
+      passed: status === 'COMPLETED',
+      score: attempt.score,
     });
     // Só uma sessão aprovada alimenta Competências, PDI e Onboarding.
     const development =

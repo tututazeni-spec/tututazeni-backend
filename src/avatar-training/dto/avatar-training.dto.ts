@@ -782,3 +782,52 @@ export class UsageSummaryQueryDto {
   @IsDateString()
   to?: string;
 }
+
+// ── Relatórios e indicadores (fase 7) ────────────────────────────────────────
+
+export enum AvatarReportType {
+  USAGE = 'USAGE',
+  PARTICIPATION = 'PARTICIPATION',
+  PERFORMANCE = 'PERFORMANCE',
+  SIMULATIONS = 'SIMULATIONS',
+  COMPETENCIES = 'COMPETENCIES',
+  MANDATORY = 'MANDATORY',
+  ONBOARDING = 'ONBOARDING',
+  DEPARTMENTS = 'DEPARTMENTS',
+  EFFECTIVENESS = 'EFFECTIVENESS',
+  ANSWER_QUALITY = 'ANSWER_QUALITY',
+  AI_TUTOR = 'AI_TUTOR',
+  COSTS = 'COSTS',
+  INCIDENTS = 'INCIDENTS',
+}
+
+export class AvatarReportFilterDto {
+  @ApiPropertyOptional({ description: 'Início do período (ISO); por omissão, últimos 30 dias' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Fim do período (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  departmentId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  programId?: number;
+}
+
+export class AvatarReportQueryDto extends AvatarReportFilterDto {
+  @ApiPropertyOptional({ enum: AvatarReportType, description: 'Sem tipo: devolve o catálogo' })
+  @IsOptional()
+  @IsEnum(AvatarReportType)
+  type?: AvatarReportType;
+}

@@ -29,11 +29,14 @@ import { AvatarTrainingAttemptsService } from './avatar-training-attempts.servic
 import { AvatarTrainingProvidersService } from './avatar-training-providers.service';
 import { AvatarTrainingAiTutorService } from './avatar-training-ai-tutor.service';
 import { AvatarTrainingDevelopmentService } from './avatar-training-development.service';
+import { AvatarTrainingReportsService } from './avatar-training-reports.service';
 import {
   AddKnowledgeSourceDto,
   AskTutorDto,
   AssignAvatarSessionDto,
   AvatarFilterDto,
+  AvatarReportFilterDto,
+  AvatarReportQueryDto,
   AvatarProgramFilterDto,
   AvatarProgressFilterDto,
   AvatarTrainingProviderService,
@@ -62,6 +65,7 @@ import {
   AVATAR_ADMIN_ROLES,
   AVATAR_ASSIGN_ROLES,
   AVATAR_AUTHOR_ROLES,
+  AVATAR_PROGRESS_ROLES,
 } from './avatar-training.helpers';
 
 @ApiTags('Avatar Training')
@@ -76,6 +80,7 @@ export class AvatarTrainingController {
     private readonly aiTutor: AvatarTrainingAiTutorService,
     private readonly providers: AvatarTrainingProvidersService,
     private readonly development: AvatarTrainingDevelopmentService,
+    private readonly reports: AvatarTrainingReportsService,
   ) {}
 
   // ── Avatares (fase 1) ──────────────────────────────────────────────────────
@@ -514,5 +519,24 @@ export class AvatarTrainingController {
     @Body() dto: LinkAvatarSessionDto,
   ) {
     return this.development.assignForOnboardingTask(user, taskId, dto.sessionId);
+  }
+
+  // ── Indicadores e relatórios (fase 7) ──────────────────────────────────────
+
+  @Get('overview')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({
+    summary: 'Visão Geral: indicadores com fórmula/fonte/período e alertas (âmbito por perfil)',
+  })
+  overview(@CurrentUser() user: CurrentUserData, @Query() filters: AvatarReportFilterDto) {
+    return this.reports.overview(user, filters);
+  }
+
+  @Get('reports')
+  @Roles(...AVATAR_PROGRESS_ROLES)
+  @ApiOperation({ summary: 'Relatório por tipo; sem tipo devolve o catálogo permitido' })
+  report(@CurrentUser() user: CurrentUserData, @Query() query: AvatarReportQueryDto) {
+    if (!query.type) return this.reports.catalog(user);
+    return this.reports.report(user, query.type, query);
   }
 }
