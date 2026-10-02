@@ -44,7 +44,11 @@ describe('AvatarTrainingRetentionService', () => {
     const r = await svc.purgeExpiredTranscripts(7, NOW);
     const arg = prisma.avatarTrainingInteraction.updateMany.mock.calls[0][0];
 
-    expect(arg.where.interactionType.in).toEqual(['USER_MESSAGE', 'HELP_REQUEST', 'AVATAR_MESSAGE']);
+    expect(arg.where.interactionType.in).toEqual([
+      'USER_MESSAGE',
+      'HELP_REQUEST',
+      'AVATAR_MESSAGE',
+    ]);
     expect(arg.where.interactionType.in).not.toContain('USER_ANSWER');
     expect(arg.where.attempt.status.notIn).toEqual(['IN_PROGRESS', 'PAUSED']);
     expect(arg.where.content).toEqual({ not: REDACTED_CONTENT }); // idempotente
