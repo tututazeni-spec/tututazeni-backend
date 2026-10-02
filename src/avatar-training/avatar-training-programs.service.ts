@@ -321,6 +321,20 @@ export class AvatarTrainingProgramsService {
     if (program.createdById === user.id && !isPrivileged(user, [...AVATAR_ADMIN_ROLES])) {
       throw new ForbiddenException('A aprovação tem de ser feita por outra pessoa');
     }
+    const unvalidated = await this.prisma.avatarTrainingAssessment.findMany({
+      where: {
+        rubricValidatedAt: null,
+        rubricConfig: { not: null },
+        session: { programId: id, status: { not: 'ARCHIVED' } },
+      },
+      select: { rubricConfig: true, session: { select: { title: true } } },
+    });
+    const pending = unvalidated.filter(a => parseJson<unknown[]>(a.rubricConfig, []).length > 0);
+    if (pending.length) {
+      throw new ConflictException(
+        `Rubrica por validar pelo responsável pedagógico: ${pending.map(a => a.session.title).join(', ')}`,
+      );
+    }
     const [row] = await this.prisma.$transaction([
       this.prisma.avatarTrainingProgram.update({
         where: { id },
@@ -594,7 +608,19 @@ export class AvatarTrainingProgramsService {
         throw new BadRequestException('requireFormalAssessment exige assessmentId');
       }
     }
+    // Alterar a rubrica invalida a validação anterior: tem de ser validada de novo.
+    let rubricReset = {};
+    if (dto.rubric !== undefined) {
+      const current = await this.prisma.avatarTrainingAssessment.findUnique({
+        where: { sessionId },
+        select: { rubricConfig: true },
+      });
+      if (JSON.stringify(parseJson(current?.rubricConfig, [])) !== JSON.stringify(dto.rubric)) {
+        rubricReset = { rubricValidatedById: null, rubricValidatedAt: null };
+      }
+    }
     const data = {
+      ...rubricReset,
       ...(dto.assessmentId !== undefined ? { assessmentId: dto.assessmentId } : {}),
       ...(dto.rubric !== undefined ? { rubricConfig: JSON.stringify(dto.rubric) } : {}),
       ...(dto.passingScore !== undefined ? { passingScore: dto.passingScore } : {}),
@@ -616,6 +642,37 @@ export class AvatarTrainingProgramsService {
       metadata: { sessionId },
     });
     return { ...row, rubricConfig: parseJson(row.rubricConfig, []) };
+  }
+
+  /**
+   * §10 — a rubrica das simulações é validada pelo responsável pedagógico da formação
+   * (ou por um perfil administrativo) antes de a formação poder ser publicada.
+   */
+  async validateRubric(user: CurrentUserData, sessionId: number) {
+    const session = await this.prisma.avatarTrainingSession.findUnique({
+      where: { id: sessionId },
+      include: { program: true, assessment: true },
+    });
+    if (!session) throw new NotFoundException('Sessão não encontrada');
+    if (!isPrivileged(user, AVATAR_ADMIN_ROLES) && user.id !== session.program.responsibleId) {
+      throw new ForbiddenException(
+        'Só o responsável pedagógico da formação pode validar a rubrica',
+      );
+    }
+    const rubric = parseJson<unknown[]>(session.assessment?.rubricConfig, []);
+    if (!rubric.length) throw new ConflictException('Esta sessão não tem rubrica para validar');
+    const row = await this.prisma.avatarTrainingAssessment.update({
+      where: { sessionId },
+      data: { rubricValidatedById: user.id, rubricValidatedAt: new Date() },
+    });
+    await this.audit.log({
+      userId: user.id,
+      action: 'VALIDATE_RUBRIC',
+      entity: 'AvatarTrainingAssessment',
+      entityId: row.id,
+      metadata: { sessionId },
+    });
+    return { ...row, rubricConfig: rubric };
   }
 
   async addSource(user: CurrentUserData, sessionId: number, dto: AddKnowledgeSourceDto) {

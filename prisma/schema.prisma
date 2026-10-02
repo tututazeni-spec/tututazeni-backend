@@ -12634,6 +12634,8 @@ model AvatarTrainingAssessment {
   passingScore            Int                   @default(70)
   maxAttempts             Int                   @default(0)
   requireFormalAssessment Boolean               @default(false)
+  rubricValidatedById     Int? // responsável pedagógico que validou a rubrica (§10); limpo ao alterar a rubrica
+  rubricValidatedAt       DateTime?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
   session                 AvatarTrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)

@@ -1,5 +1,6 @@
 // src/avatar-training/avatar-training.controller.ts
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -261,6 +262,17 @@ export class AvatarTrainingController {
     @Body() dto: UpsertSessionAssessmentDto,
   ) {
     return this.programs.upsertAssessment(user, id, dto);
+  }
+
+  @Post('sessions/:id/assessment/validate-rubric')
+  @Roles(...AVATAR_AUTHOR_ROLES)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Validação da rubrica pelo responsável pedagógico (§10)' })
+  validateRubric(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.programs.validateRubric(user, id);
   }
 
   @Post('sessions/:id/sources')
@@ -573,6 +585,21 @@ export class AvatarTrainingController {
   report(@CurrentUser() user: CurrentUserData, @Query() query: AvatarReportQueryDto) {
     if (!query.type) return this.reports.catalog(user);
     return this.reports.report(user, query.type, query);
+  }
+
+  @Get('reports/export')
+  @Roles(...AVATAR_PROGRESS_ROLES)
+  @ApiOperation({ summary: 'Exporta um relatório em CSV (mesmas permissões e âmbito do relatório)' })
+  async exportReport(
+    @CurrentUser() user: CurrentUserData,
+    @Query() query: AvatarReportQueryDto,
+    @Res() res: Response,
+  ) {
+    if (!query.type) throw new BadRequestException('Indique o tipo de relatório');
+    const file = await this.reports.exportCsv(user, query.type, query);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.send(file.content);
   }
 
   // ── Privacidade (fase 8) ───────────────────────────────────────────────────
