@@ -26,10 +26,12 @@ import {
   AvatarTrainingAttemptStatus,
   AvatarTrainingInteractionType,
   AvatarTrainingSourceType,
+  AvatarTrainingProviderService,
   Difficulty,
 } from '@prisma/client';
 
 export {
+  AvatarTrainingProviderService,
   AvatarTrainingAvatarType,
   AvatarTrainingAvatarStatus,
   AvatarTrainingStatus,
@@ -665,4 +667,97 @@ export class AvatarProgressFilterDto {
   @Min(1)
   @Max(100)
   limit?: number;
+}
+
+// ── Fase 5 — voz e vídeo ─────────────────────────────────────────────────────
+
+export class SetMediaPreferencesDto {
+  @ApiProperty({ description: 'true activa a voz; false volta ao modo só texto' })
+  @IsBoolean()
+  voiceEnabled: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Obrigatório ao activar a voz: o formando reconhece a utilização de voz sintetizada, microfone opcional e serviços de IA',
+  })
+  @IsOptional()
+  @IsBoolean()
+  acknowledgedNotice?: boolean;
+
+  @ApiPropertyOptional({ description: 'Legendas sincronizadas (por omissão sempre activas)' })
+  @IsOptional()
+  @IsBoolean()
+  captions?: boolean;
+}
+
+export class SynthesizeSpeechDto {
+  @ApiPropertyOptional({ description: 'Etapa da sessão cujo texto será lido' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  stepKey?: string;
+
+  @ApiPropertyOptional({ description: 'Resposta do AI-Tutor (aiMessageId) a ler em voz' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  aiMessageId?: number;
+}
+
+export class CaptionsQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  stepKey?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  aiMessageId?: number;
+}
+
+export class UpsertProviderConfigDto {
+  @ApiPropertyOptional({ enum: ['ACTIVE', 'DISABLED'] })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  status?: 'ACTIVE' | 'DISABLED';
+
+  @ApiPropertyOptional({ description: 'Custo estimado por unidade (carácter para TTS)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  costPerUnit?: number;
+
+  @ApiPropertyOptional({ description: 'Limite de unidades (caracteres) por tentativa' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  unitLimitPerAttempt?: number;
+
+  @ApiPropertyOptional({ description: 'Limite mensal de custo estimado' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  monthlyCostLimit?: number;
+
+  @ApiPropertyOptional({ description: 'Parâmetros não secretos (modelo, estabilidade, …)' })
+  @IsOptional()
+  @IsObject()
+  configuration?: Record<string, unknown>;
+}
+
+export class UsageSummaryQueryDto {
+  @ApiPropertyOptional({ description: 'Início do período (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Fim do período (ISO)' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
 }

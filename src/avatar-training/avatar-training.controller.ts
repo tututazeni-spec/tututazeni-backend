@@ -7,13 +7,16 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseEnumPipe,
   ParseIntPipe,
   Patch,
   Post,
   Put,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -23,6 +26,7 @@ import { isPrivileged } from '../common/authz/ownership';
 import { AvatarTrainingService } from './avatar-training.service';
 import { AvatarTrainingProgramsService } from './avatar-training-programs.service';
 import { AvatarTrainingAttemptsService } from './avatar-training-attempts.service';
+import { AvatarTrainingProvidersService } from './avatar-training-providers.service';
 import { AvatarTrainingAiTutorService } from './avatar-training-ai-tutor.service';
 import {
   AddKnowledgeSourceDto,
@@ -31,6 +35,8 @@ import {
   AvatarFilterDto,
   AvatarProgramFilterDto,
   AvatarProgressFilterDto,
+  AvatarTrainingProviderService,
+  CaptionsQueryDto,
   AvatarSessionFilterDto,
   CreateAvatarProgramDto,
   CreateAvatarSessionDto,
@@ -38,11 +44,15 @@ import {
   RecordInteractionDto,
   ReviewAttemptDto,
   SetAvatarStatusDto,
+  SetMediaPreferencesDto,
+  SynthesizeSpeechDto,
   StartAttemptDto,
   SubmitAttemptDto,
   UpdateAvatarProgramDto,
   UpdateAvatarSessionDto,
   UpdateTrainingAvatarDto,
+  UpsertProviderConfigDto,
+  UsageSummaryQueryDto,
   UpsertSessionAssessmentDto,
 } from './dto/avatar-training.dto';
 import {
@@ -61,6 +71,7 @@ export class AvatarTrainingController {
     private readonly programs: AvatarTrainingProgramsService,
     private readonly attempts: AvatarTrainingAttemptsService,
     private readonly aiTutor: AvatarTrainingAiTutorService,
+    private readonly providers: AvatarTrainingProvidersService,
   ) {}
 
   // ── Avatares (fase 1) ──────────────────────────────────────────────────────
@@ -322,6 +333,77 @@ export class AvatarTrainingController {
   @ApiOperation({ summary: 'Conversa com o AI-Tutor nesta tentativa' })
   tutorTranscript(@CurrentUser() user: CurrentUserData, @Param('id', ParseIntPipe) id: number) {
     return this.aiTutor.transcript(user, id);
+  }
+
+  // ── Voz e vídeo (fase 5) ───────────────────────────────────────────────────
+
+  @Get('providers/health')
+  @Roles(...AVATAR_AUTHOR_ROLES)
+  @ApiOperation({ summary: 'Estado dos fornecedores de voz/vídeo (sem segredos)' })
+  providersHealth() {
+    return this.providers.health();
+  }
+
+  @Get('providers/usage')
+  @Roles(...AVATAR_ADMIN_ROLES)
+  @ApiOperation({ summary: 'Consumo, custo estimado e incidentes de voz/vídeo' })
+  providersUsage(@Query() q: UsageSummaryQueryDto) {
+    return this.providers.usageSummary(q.from, q.to);
+  }
+
+  @Put('providers/:provider/:serviceType')
+  @Roles(...AVATAR_ADMIN_ROLES)
+  @ApiOperation({ summary: 'Estado, tarifa e limites de um fornecedor (não aceita segredos)' })
+  upsertProviderConfig(
+    @CurrentUser() user: CurrentUserData,
+    @Param('provider') provider: string,
+    @Param('serviceType', new ParseEnumPipe(AvatarTrainingProviderService))
+    serviceType: AvatarTrainingProviderService,
+    @Body() dto: UpsertProviderConfigDto,
+  ) {
+    return this.providers.upsertConfig(user.id, provider, serviceType, dto);
+  }
+
+  @Post('attempts/:id/media')
+  @HttpCode(HttpStatus.OK)
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Activar/desactivar voz (aviso obrigatório) e legendas' })
+  setMedia(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SetMediaPreferencesDto,
+  ) {
+    return this.providers.setMedia(user, id, dto);
+  }
+
+  @Get('attempts/:id/captions')
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Texto e legendas sincronizadas de uma etapa ou resposta do tutor' })
+  captions(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Query() q: CaptionsQueryDto,
+  ) {
+    return this.providers.captions(user, id, q);
+  }
+
+  @Post('attempts/:id/speech')
+  @HttpCode(HttpStatus.OK)
+  @Roles(...AUTHENTICATED_ROLES)
+  @ApiOperation({ summary: 'Áudio sintetizado (proxy — chave só no backend, com limites)' })
+  async speech(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SynthesizeSpeechDto,
+    @Res() res: Response,
+  ) {
+    const audio = await this.providers.synthesize(user, id, dto);
+    res.set({
+      'Content-Type': 'audio/mpeg',
+      'Content-Length': audio.length,
+      'Cache-Control': 'private, no-store',
+    });
+    res.end(audio);
   }
 
   @Post('attempts/:id/pause')

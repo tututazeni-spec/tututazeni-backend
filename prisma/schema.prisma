@@ -12641,3 +12641,44 @@ model AvatarTrainingKnowledgeSource {
 
   @@unique([sessionId, sourceType, sourceId])
 }
+
+enum AvatarTrainingProviderService {
+  TTS
+  STT
+  VIDEO
+}
+
+// Fase 5 — voz/vídeo. Sem segredos: as chaves ficam em variáveis de ambiente.
+model AvatarTrainingProviderConfig {
+  id                  Int                           @id @default(autoincrement())
+  provider            String
+  serviceType         AvatarTrainingProviderService
+  configuration       String?                       @db.Text // JSON.stringify (não-secreto)
+  status              String                        @default("ACTIVE")
+  costPerUnit         Float                         @default(0) // por carácter (TTS) ou segundo (STT/VIDEO)
+  unitLimitPerAttempt Int?
+  monthlyCostLimit    Float?
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+
+  @@unique([provider, serviceType])
+}
+
+// Consumo e incidentes de voz/vídeo, medidos separadamente do AI-Tutor.
+model AvatarTrainingUsage {
+  id            Int                           @id @default(autoincrement())
+  attemptId     Int?
+  userId        Int
+  provider      String
+  serviceType   AvatarTrainingProviderService
+  units         Int                           @default(0)
+  estimatedCost Float                         @default(0)
+  success       Boolean                       @default(true)
+  errorCode     String?
+  latencyMs     Int?
+  createdAt     DateTime                      @default(now())
+
+  @@index([attemptId])
+  @@index([provider, createdAt])
+  @@index([userId])
+}
