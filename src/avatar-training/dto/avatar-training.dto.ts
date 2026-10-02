@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsDateString,
   IsObject,
   Min,
@@ -981,4 +982,11 @@ export class AvatarReportQueryDto extends AvatarReportFilterDto {
   @IsOptional()
   @IsEnum(AvatarReportType)
   type?: AvatarReportType;
+}
+
+export class AvatarReportExportQueryDto extends AvatarReportQueryDto {
+  @ApiPropertyOptional({ enum: ['csv', 'pdf'], description: 'Formato; por omissão csv' })
+  @IsOptional()
+  @IsIn(['csv', 'pdf'])
+  format?: 'csv' | 'pdf';
 }

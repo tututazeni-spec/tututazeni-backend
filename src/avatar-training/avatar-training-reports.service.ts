@@ -5,6 +5,7 @@
 // fórmula, fonte e data de actualização.
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import PDFDocument from 'pdfkit';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUserData } from '../common/decorators';
 import { isPrivileged } from '../common/authz/ownership';
@@ -628,6 +629,84 @@ export class AvatarTrainingReportsService {
     return {
       filename: `avatar-training-${type.toLowerCase()}-${day(report.period.from)}_${day(report.period.to)}.csv`,
       content: `\uFEFF${lines.join('\r\n')}\r\n`,
+    };
+  }
+
+  /** Exportação PDF (A4 horizontal) com as mesmas regras de acesso e âmbito do relatório. */
+  async exportPdf(user: CurrentUserData, type: AvatarReportType, f: AvatarReportFilterDto) {
+    const report = await this.report(user, type, f);
+    const rows = report.rows as Record<string, unknown>[];
+    const columns = [...new Set(rows.flatMap(r => Object.keys(r)))];
+    const text = (v: unknown) =>
+      v === null || v === undefined
+        ? '—'
+        : v instanceof Date
+          ? v.toISOString()
+          : typeof v === 'object'
+            ? JSON.stringify(v)
+            : String(v);
+    const day = (d: string) => d.slice(0, 10);
+
+    const buffer = await new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 36, size: 'A4', layout: 'landscape' });
+      const chunks: Buffer[] = [];
+      doc.on('data', (d: Buffer) => chunks.push(d));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const left = doc.page.margins.left;
+      const width = doc.page.width - left - doc.page.margins.right;
+      const bottom = () => doc.page.height - doc.page.margins.bottom;
+
+      doc.font('Helvetica-Bold').fontSize(16).text(report.title ?? `Avatar Training — ${type}`);
+      doc
+        .font('Helvetica')
+        .fontSize(8)
+        .fillColor('#555555')
+        .text(
+          `Período ${day(report.period.from)} – ${day(report.period.to)} · Gerado em ${report.generatedAt.slice(0, 19).replace('T', ' ')}`,
+        );
+      const meta = report as unknown as { source?: string; formula?: string; truncated?: boolean };
+      if (meta.source) doc.text(`Fonte: ${meta.source}`);
+      if (meta.formula) doc.text(`Fórmula: ${meta.formula}`);
+      doc.fillColor('#000000').moveDown();
+
+      if (rows.length === 0) {
+        doc.fontSize(10).text('Sem dados');
+      } else {
+        const colW = width / columns.length;
+        const drawRow = (cells: string[], bold: boolean) => {
+          doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(7);
+          const h =
+            Math.max(...cells.map(c => doc.heightOfString(c, { width: colW - 4 }))) + 4;
+          if (doc.y + h > bottom()) {
+            doc.addPage();
+            drawRow(columns, true);
+          }
+          const y = doc.y;
+          cells.forEach((c, i) =>
+            doc.text(c, left + i * colW, y, { width: colW - 4, height: h, lineBreak: true }),
+          );
+          doc.x = left;
+          doc.y = y + h;
+          doc
+            .moveTo(left, doc.y - 2)
+            .lineTo(left + width, doc.y - 2)
+            .strokeColor('#dddddd')
+            .stroke();
+        };
+        drawRow(columns, true);
+        for (const r of rows) drawRow(columns.map(c => text(r[c]).slice(0, 300)), false);
+      }
+      if (meta.truncated) {
+        doc.moveDown().font('Helvetica-Oblique').fontSize(8).text('Resultados truncados');
+      }
+      doc.end();
+    });
+
+    return {
+      filename: `avatar-training-${type.toLowerCase()}-${day(report.period.from)}_${day(report.period.to)}.pdf`,
+      content: buffer,
     };
   }
 

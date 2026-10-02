@@ -40,6 +40,7 @@ import {
   AvatarFilterDto,
   AvatarReportFilterDto,
   AvatarReportQueryDto,
+  AvatarReportExportQueryDto,
   AvatarProgramFilterDto,
   AvatarProgressFilterDto,
   AvatarTrainingProviderService,
@@ -587,14 +588,21 @@ export class AvatarTrainingController {
   @Get('reports/export')
   @Roles(...AVATAR_PROGRESS_ROLES)
   @ApiOperation({
-    summary: 'Exporta um relatório em CSV (mesmas permissões e âmbito do relatório)',
+    summary: 'Exporta um relatório em CSV ou PDF (mesmas permissões e âmbito do relatório)',
   })
   async exportReport(
     @CurrentUser() user: CurrentUserData,
-    @Query() query: AvatarReportQueryDto,
+    @Query() query: AvatarReportExportQueryDto,
     @Res() res: Response,
   ) {
     if (!query.type) throw new BadRequestException('Indique o tipo de relatório');
+    if (query.format === 'pdf') {
+      const pdf = await this.reports.exportPdf(user, query.type, query);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${pdf.filename}"`);
+      res.send(pdf.content);
+      return;
+    }
     const file = await this.reports.exportCsv(user, query.type, query);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
