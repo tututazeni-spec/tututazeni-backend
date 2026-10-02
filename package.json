@@ -206,7 +206,8 @@
           "diagnostics": false,
           "moduleNameMapper": {
             "^.prisma/client/wasm$": "<rootDir>/../node_modules/.prisma/client/default.js"
-          }
+          },
+          "isolatedModules": true
         }
       ]
     },
