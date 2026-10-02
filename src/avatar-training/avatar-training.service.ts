@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/services/audit.service';
 import { AvatarTrainingIntegrationsService } from './avatar-training-integrations.service';
+import { AvatarTrainingProvidersService } from './avatar-training-providers.service';
 import {
   AvatarFilterDto,
   AvatarTrainingAvatarStatus,
@@ -21,6 +22,7 @@ export class AvatarTrainingService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly integrations: AvatarTrainingIntegrationsService,
+    private readonly providers: AvatarTrainingProvidersService,
   ) {}
 
   private present(a: AvatarRow) {
@@ -90,8 +92,8 @@ export class AvatarTrainingService {
   }
 
   /**
-   * Teste do avatar: o serviço de voz/vídeo só é ligado na fase 5, por isso o teste
-   * valida a configuração e confirma o modo texto (alternativa obrigatória à voz).
+   * Teste do avatar: valida a configuração, confirma o modo texto (alternativa
+   * obrigatória à voz) e reporta o estado do fornecedor de voz (fase 5).
    */
   async testAvatar(userId: number, id: number) {
     const avatar = await this.getAvatar(id);
@@ -114,7 +116,17 @@ export class AvatarTrainingService {
       entityId: id,
       metadata: { ok },
     });
-    return { id, ok, checks, voiceProvider: 'Não ligado (fase 5) — sessões funcionam por texto' };
+    const health = await this.providers.health();
+    const server = health.providers.find(p => p.provider === 'ELEVENLABS');
+    return {
+      id,
+      ok,
+      checks,
+      voiceProvider:
+        server?.status === 'AVAILABLE'
+          ? 'Voz do servidor disponível (com voz do navegador e modo texto como alternativa)'
+          : 'Voz do navegador e modo texto (voz do servidor não disponível)',
+    };
   }
 
   async setStatus(userId: number, id: number, status: AvatarTrainingAvatarStatus) {

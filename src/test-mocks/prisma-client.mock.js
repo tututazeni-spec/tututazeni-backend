@@ -2474,6 +2474,12 @@ const AvatarTrainingSourceType = {
   LIBRARY_ITEM: 'LIBRARY_ITEM',
 };
 
+const AvatarTrainingProviderService = {
+  TTS: 'TTS',
+  STT: 'STT',
+  VIDEO: 'VIDEO',
+};
+
 module.exports = {
   PrismaClient,
   Prisma,
@@ -2814,4 +2820,5 @@ module.exports = {
   AvatarTrainingAttemptStatus,
   AvatarTrainingInteractionType,
   AvatarTrainingSourceType,
+  AvatarTrainingProviderService,
 };
