@@ -613,6 +613,7 @@ export class AvatarTrainingController {
   }
 
   @Delete('my/transcripts')
+  @Roles(...AUTHENTICATED_ROLES)
   @ApiOperation({ summary: 'Elimina (anonimiza) as minhas transcrições de tentativas fechadas' })
   eraseMyTranscripts(@CurrentUser() user: CurrentUserData) {
     return this.retention.eraseUserTranscripts(user.id, user.id);

@@ -23,6 +23,11 @@ describe('AvatarTrainingController — permissões', () => {
     expect(rolesOf('purgeTranscripts').sort()).toEqual(AVATAR_ADMIN_ROLES.map(String).sort());
   });
 
+  it('eraseUserTranscripts é só ADMIN/RH e eraseMyTranscripts está aberta a todos os autenticados', () => {
+    expect(rolesOf('eraseUserTranscripts').sort()).toEqual(AVATAR_ADMIN_ROLES.map(String).sort());
+    expect(rolesOf('eraseMyTranscripts').length).toBe(AUTHENTICATED_ROLES.length);
+  });
+
   it.each(['createAvatar', 'publishProgram', 'upsertProviderConfig'])(
     '%s (se existir) não está aberta a todos os autenticados',
     name => {
