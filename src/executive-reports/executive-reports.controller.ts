@@ -34,6 +34,9 @@ import { ExecutiveFiltersDto } from './dto/executive-filters.dto';
 import { ExecutiveReportsGenerationService } from './executive-reports.generation.service';
 import { ExecutiveReportsSchedulerService } from './executive-reports.scheduler.service';
 import { ExecutiveReportsAlertsService } from './executive-reports.alerts.service';
+import { ExecutiveReportsAuditService } from './executive-reports.audit.service';
+import { ExecutiveReportsDataService } from './executive-reports.data.service';
+import { AuditQueryDto, UpdateKpiDefinitionDto } from './dto/executive-audit.dto';
 import {
   ArchiveFilterDto,
   CreateScheduleDto,
@@ -66,7 +69,20 @@ export class ExecutiveReportsController {
     private readonly generation: ExecutiveReportsGenerationService,
     private readonly schedules: ExecutiveReportsSchedulerService,
     private readonly alerts: ExecutiveReportsAlertsService,
+    private readonly audit: ExecutiveReportsAuditService,
+    private readonly data: ExecutiveReportsDataService,
   ) {}
+
+  private async auditSchedule<T>(
+    user: CurrentUserData,
+    action: 'SCHEDULE_CREATE' | 'SCHEDULE_UPDATE' | 'SCHEDULE_DELETE',
+    scheduleId: number,
+    dto: object,
+    result: T,
+  ): Promise<T> {
+    await this.audit.record({ userId: user.id, action, filters: { scheduleId, ...dto } });
+    return result;
+  }
 
   // ── Dashboard executivo (docs/Executive_Reports.md §1-3) ──────────────────
   // Declarados antes de `:id` para não serem apanhados pelo ParseIntPipe.
@@ -135,6 +151,68 @@ export class ExecutiveReportsController {
   }
 
   // ── Modelos, geração e relatórios personalizados (§7/§8) ──────────────────
+
+  @Patch('kpis/definitions/:code')
+  @Roles(Role.ADMIN, Role.DIRECTOR)
+  @ApiOperation({ summary: 'Alterar meta, limiares e responsável de um KPI (fórmula imutável)' })
+  updateKpiDefinition(
+    @Param('code') code: string,
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: UpdateKpiDefinitionDto,
+  ) {
+    return this.svc.updateKpiDefinition(code, dto, user);
+  }
+
+  // ── Vistas por domínio (§10) ──────────────────────────────────────────────
+
+  @Get('workforce')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Colaboradores: quadro, movimentos e onboarding' })
+  workforce(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.data.domain(user, 'workforce', filters);
+  }
+
+  @Get('training')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Formação: inscrições, conclusão e horas' })
+  training(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.data.domain(user, 'training', filters);
+  }
+
+  @Get('performance')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Desempenho e talento: avaliações, competências e PDI' })
+  performance(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.data.domain(user, 'performance', filters);
+  }
+
+  @Get('attendance')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Assiduidade e ausências' })
+  attendance(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.data.domain(user, 'attendance', filters);
+  }
+
+  @Get('organization')
+  @Roles(...EXEC_MGMT)
+  @ApiOperation({ summary: 'Comparação entre unidades/departamentos' })
+  organization(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.data.domain(user, 'organization', filters);
+  }
+
+  @Get('costs')
+  @Roles(Role.ADMIN, Role.DIRECTOR)
+  @ApiOperation({ summary: 'Custos autorizados (acesso restrito)' })
+  costs(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveFiltersDto) {
+    return this.data.domain(user, 'costs', filters);
+  }
+
+  @Get('audit')
+  @Roles(Role.ADMIN, Role.DIRECTOR)
+  @ApiOperation({ summary: 'Auditoria: gerações, consultas, exportações e falhas' })
+  auditLog(@Query() q: AuditQueryDto) {
+    return this.audit.list(q);
+  }
 
   @Get('report-templates')
   @Roles(...EXEC_MGMT)
@@ -221,7 +299,9 @@ export class ExecutiveReportsController {
   @Roles(...EXEC_FULL)
   @ApiOperation({ summary: 'Criar agendamento' })
   createSchedule(@CurrentUser() user: CurrentUserData, @Body() dto: CreateScheduleDto) {
-    return this.schedules.create(user, dto);
+    return this.schedules
+      .create(user, dto)
+      .then(r => this.auditSchedule(user, 'SCHEDULE_CREATE', r.id, dto, r));
   }
 
   @Get('schedules/:id')
@@ -239,14 +319,18 @@ export class ExecutiveReportsController {
     @CurrentUser() user: CurrentUserData,
     @Body() dto: UpdateScheduleDto,
   ) {
-    return this.schedules.update(id, user, dto);
+    return this.schedules
+      .update(id, user, dto)
+      .then(r => this.auditSchedule(user, 'SCHEDULE_UPDATE', id, dto, r));
   }
 
   @Delete('schedules/:id')
   @Roles(...EXEC_FULL)
   @ApiOperation({ summary: 'Eliminar agendamento' })
   deleteSchedule(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
-    return this.schedules.remove(id, user);
+    return this.schedules
+      .remove(id, user)
+      .then(r => this.auditSchedule(user, 'SCHEDULE_DELETE', id, {}, r));
   }
 
   @Post('schedules/:id/run')
@@ -363,8 +447,8 @@ export class ExecutiveReportsController {
 
   @Get()
   @ApiOperation({ summary: 'Listar relatórios executivos com filtros' })
-  findAll(@Query() filters: ExecutiveReportsReportFilterDto) {
-    return this.svc.findAll(filters);
+  findAll(@CurrentUser() user: CurrentUserData, @Query() filters: ExecutiveReportsReportFilterDto) {
+    return this.svc.findAll(filters, user.role?.name);
   }
 
   @Get('stats')
@@ -419,7 +503,7 @@ export class ExecutiveReportsController {
   @Get(':id')
   @ApiOperation({ summary: 'Detalhe do relatório (regista acesso)' })
   findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: CurrentUserData) {
-    return this.svc.findOne(id, user.id);
+    return this.svc.findOne(id, user.id, user.role?.name);
   }
 
   // ── Gestão ────────────────────────────────────────────────────────────────

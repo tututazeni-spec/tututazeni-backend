@@ -9,6 +9,8 @@ import { ExecutiveReportsBuilderService } from './executive-reports.builder.serv
 import { ExecutiveReportsExportService } from './executive-reports.export.service';
 import { ExecutiveReportsGenerationService } from './executive-reports.generation.service';
 import { ExecutiveReportsSchedulerService } from './executive-reports.scheduler.service';
+import { ExecutiveReportsAuditService } from './executive-reports.audit.service';
+import { ExecutiveReportsDataService } from './executive-reports.data.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma/prisma.module';
 
@@ -23,6 +25,8 @@ import { PrismaModule } from '../prisma/prisma.module';
     ExecutiveReportsExportService,
     ExecutiveReportsGenerationService,
     ExecutiveReportsSchedulerService,
+    ExecutiveReportsAuditService,
+    ExecutiveReportsDataService,
   ],
   controllers: [ExecutiveReportsController],
   exports: [ExecutiveReportsService],

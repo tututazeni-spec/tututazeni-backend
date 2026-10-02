@@ -5,6 +5,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { ReportType } from './executive-reports.dto';
 import { ExecutiveReportsGenerationService } from './executive-reports.generation.service';
+import { ExecutiveReportsAuditService } from './executive-reports.audit.service';
+import { ExecutiveReportsDataService } from './executive-reports.data.service';
 import { ExecutiveReportsSchedulerService } from './executive-reports.scheduler.service';
 import { ExecutiveReportsAlertsService } from './executive-reports.alerts.service';
 
@@ -38,6 +40,8 @@ describe('ExecutiveReportsController', () => {
         { provide: ExecutiveReportsGenerationService, useValue: {} },
         { provide: ExecutiveReportsSchedulerService, useValue: {} },
         { provide: ExecutiveReportsAlertsService, useValue: {} },
+        { provide: ExecutiveReportsAuditService, useValue: {} },
+        { provide: ExecutiveReportsDataService, useValue: {} },
       ],
     })
       .overrideGuard(JwtAuthGuard)

@@ -731,6 +731,8 @@ model User {
   execAlertsOwned           ExecutiveAlert[]          @relation("ExecAlertOwner")
   execAlertEvents           ExecutiveAlertEvent[]     @relation("ExecAlertEventUser")
   execAlertRulesOwned       ExecutiveAlertRule[]      @relation("ExecAlertRuleOwner")
+  execKpiDefinitionsOwned   ExecutiveKPIDefinition[]  @relation("ExecKpiDefinitionOwner")
+  execReportAudits          ExecutiveReportAudit[]    @relation("ExecReportAuditUser")
   savedReports              SavedReport[]             @relation("UserSavedReports")
   reportSchedules           ReportSchedule[]          @relation("UserReportSchedules")
   notificationPreference    NotificationPreference?
@@ -7352,6 +7354,7 @@ model ExecutiveReport {
   metrics         ExecutiveMetric[]
   approvals       ReportApproval[]
   accessLogs      ReportAccessLog[]
+  audits          ExecutiveReportAudit[]
 
   @@index([generatedById])
   @@index([departmentId])
@@ -7548,6 +7551,38 @@ model ExecutiveAlertEvent {
   user      User?          @relation("ExecAlertEventUser", fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([alertId])
+}
+
+// Sobreposição configurável de meta/limiares de um KPI (§11, §12.1). A fórmula
+// e a fonte continuam a viver no catálogo em código (definição única).
+model ExecutiveKPIDefinition {
+  id                Int      @id @default(autoincrement())
+  code              String   @unique
+  target            Float?
+  warningThreshold  Float?
+  criticalThreshold Float?
+  ownerId           Int?
+  active            Boolean  @default(true)
+  updatedAt         DateTime @updatedAt
+  owner             User?    @relation("ExecKpiDefinitionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+}
+
+// Auditoria de geração, consulta, exportação e falhas (§11, §12.7/12.10).
+model ExecutiveReportAudit {
+  id           Int              @id @default(autoincrement())
+  userId       Int?
+  reportId     Int?
+  action       String
+  filters      Json?
+  status       String           @default("SUCCESS")
+  errorMessage String?
+  createdAt    DateTime         @default(now())
+  user         User?            @relation("ExecReportAuditUser", fields: [userId], references: [id], onDelete: SetNull)
+  report       ExecutiveReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([reportId])
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
 }
 
 model Organization {

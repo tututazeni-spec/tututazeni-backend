@@ -9,6 +9,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { ExecutiveReportsMetricsService } from './executive-reports.metrics.service';
 import { ExecutiveReportsChartsService } from './executive-reports.charts.service';
+import { ExecutiveReportsAuditService } from './executive-reports.audit.service';
+import { UpdateKpiDefinitionDto } from './dto/executive-audit.dto';
 import { EXECUTIVE_TABS, KPI_CATALOG, PRIMARY_KPI_CODES } from './executive-reports.kpi-catalog';
 import type { KpiCode } from './executive-reports.kpi-catalog';
 import { EXECUTIVE_KPI_STATES, type ExecutiveFiltersDto } from './dto/executive-filters.dto';
@@ -31,6 +33,7 @@ export class ExecutiveReportsService {
     private prisma: PrismaService,
     private metrics: ExecutiveReportsMetricsService,
     private charts: ExecutiveReportsChartsService,
+    private audit: ExecutiveReportsAuditService,
   ) {}
 
   // ─── DASHBOARD EXECUTIVO (docs/Executive_Reports.md §1-3) ─────────────────
@@ -89,9 +92,75 @@ export class ExecutiveReportsService {
     return { context: this.contextOf(f), kpis };
   }
 
-  /** Catálogo de definições (fórmula, fonte, meta e limiares) — definição única por KPI. */
-  getKpiDefinitions() {
-    return Object.values(KPI_CATALOG);
+  /** Definições (fórmula, fonte, meta e limiares) — definição única por KPI, com metas configuradas. */
+  async getKpiDefinitions() {
+    const defs = await this.metrics.effectiveDefinitions();
+    const rows = await this.prisma.read.executiveKPIDefinition.findMany({
+      select: { code: true, ownerId: true, updatedAt: true },
+    });
+    const meta = new Map(rows.map(r => [r.code, r]));
+    return Object.values(defs).map(d => ({
+      ...d,
+      ownerId: meta.get(d.code)?.ownerId ?? null,
+      configuredAt: meta.get(d.code)?.updatedAt ?? null,
+    }));
+  }
+
+  /**
+   * Meta, limiares e responsável de um KPI (§11). A fórmula não é editável:
+   * é uma só em todos os relatórios (§12.1).
+   */
+  async updateKpiDefinition(code: string, dto: UpdateKpiDefinitionDto, user: CurrentUserData) {
+    const base = KPI_CATALOG[code as KpiCode];
+    if (!base) throw new NotFoundException(`KPI "${code}" não existe no catálogo`);
+    if (base.direction === 'NEUTRAL') {
+      throw new BadRequestException('Este KPI não tem meta (indicador neutro)');
+    }
+
+    const current = (await this.metrics.effectiveDefinitions())[base.code];
+    const target = dto.target !== undefined ? dto.target : current.target;
+    const warning =
+      dto.warningThreshold !== undefined ? dto.warningThreshold : current.warningThreshold;
+    const critical =
+      dto.criticalThreshold !== undefined ? dto.criticalThreshold : current.criticalThreshold;
+
+    // Ordem coerente com o sentido do KPI: crítico ≤ alerta ≤ meta (ou o inverso).
+    const seq = (
+      base.direction === 'HIGHER_IS_BETTER'
+        ? [critical, warning, target]
+        : [target, warning, critical]
+    ).filter((v): v is number => v !== null);
+    if (seq.some((v, i) => i > 0 && v < seq[i - 1])) {
+      throw new BadRequestException(
+        base.direction === 'HIGHER_IS_BETTER'
+          ? 'Limiares incoerentes: crítico ≤ alerta ≤ meta'
+          : 'Limiares incoerentes: meta ≤ alerta ≤ crítico',
+      );
+    }
+    if (dto.ownerId) {
+      const owner = await this.prisma.read.user.count({ where: { id: dto.ownerId } });
+      if (!owner) throw new BadRequestException('Responsável inexistente');
+    }
+
+    const data = {
+      target,
+      warningThreshold: warning,
+      criticalThreshold: critical,
+      ...(dto.ownerId !== undefined ? { ownerId: dto.ownerId } : {}),
+      active: true,
+    };
+    await this.prisma.executiveKPIDefinition.upsert({
+      where: { code: base.code },
+      create: { code: base.code, ...data },
+      update: data,
+    });
+    this.metrics.invalidateDefinitions();
+    await this.audit.record({
+      userId: user.id,
+      action: 'KPI_DEFINITION_UPDATE',
+      filters: { code: base.code, target, warningThreshold: warning, criticalThreshold: critical },
+    });
+    return (await this.getKpiDefinitions()).find(d => d.code === base.code);
   }
 
   /** Visão Executiva: KPIs + indicadores complementares + alertas derivados dos KPIs. */
@@ -172,7 +241,7 @@ export class ExecutiveReportsService {
 
   // ─── LISTAGEM ─────────────────────────────────────────────────────────────
 
-  async findAll(filters: ExecutiveReportsReportFilterDto) {
+  async findAll(filters: ExecutiveReportsReportFilterDto, role?: string) {
     const { page = 1, limit = 20, type, status, departmentId, period } = filters;
     const skip = (page - 1) * limit;
     const where: Prisma.ExecutiveReportWhereInput = {};
@@ -180,6 +249,9 @@ export class ExecutiveReportsService {
     if (status) where.status = status;
     if (departmentId) where.departmentId = departmentId;
     if (period) where.period = period;
+    // Relatórios restritos só são listados a ADMIN/DIRECTOR (§12.5).
+    if (role && !['ADMIN', 'DIRECTOR'].includes(role))
+      where.confidentiality = { not: 'RESTRICTED' };
 
     const [data, total] = await Promise.all([
       this.prisma.read.executiveReport.findMany({
@@ -202,7 +274,7 @@ export class ExecutiveReportsService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOne(id: number, userId?: number) {
+  async findOne(id: number, userId?: number, role?: string) {
     // `content` (conteúdo gerado, pode incluir secções restritas) só sai pelo
     // endpoint dedicado, que filtra pelas permissões do utilizador.
     const r = await this.prisma.read.executiveReport.findUnique({
@@ -220,6 +292,9 @@ export class ExecutiveReportsService {
       },
     });
     if (!r) throw new NotFoundException('Relatório não encontrado');
+    if (role && r.confidentiality === 'RESTRICTED' && !['ADMIN', 'DIRECTOR'].includes(role)) {
+      throw new ForbiddenException('Relatório de acesso restrito (ADMIN/DIRECTOR)');
+    }
 
     // Registar acesso
     if (userId) {

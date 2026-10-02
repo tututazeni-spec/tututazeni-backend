@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ExecutiveReportsAuditService } from './executive-reports.audit.service';
 import type { CurrentUserData } from '../common/decorators';
 import { ExecutiveReportsService } from './executive-reports.service';
 import {
@@ -75,6 +76,7 @@ export class ExecutiveReportsGenerationService {
     private readonly executive: ExecutiveReportsService,
     private readonly builder: ExecutiveReportsBuilderService,
     private readonly exporter: ExecutiveReportsExportService,
+    private readonly audit: ExecutiveReportsAuditService,
   ) {}
 
   // ─── Modelos ──────────────────────────────────────────────────────────────
@@ -303,6 +305,34 @@ export class ExecutiveReportsGenerationService {
    * modelo + versão, versão das fórmulas, autor, data e conteúdo gerado.
    */
   async run(user: CurrentUserData, spec: ReportSpec, opts: GenerateOptions) {
+    const auditFilters = {
+      templateCode: spec.code,
+      scheduleId: opts.scheduleId ?? null,
+      ...opts.filters,
+    };
+    try {
+      const report = await this.runInner(user, spec, opts);
+      await this.audit.record({
+        userId: user.id,
+        reportId: report.id,
+        action: 'REPORT_GENERATE',
+        filters: auditFilters,
+      });
+      return report;
+    } catch (err) {
+      // Falhas de geração ficam registadas (§12.10) e voltam a ser lançadas.
+      await this.audit.record({
+        userId: user.id,
+        action: 'REPORT_GENERATE',
+        filters: auditFilters,
+        status: 'FAILED',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
+  }
+
+  private async runInner(user: CurrentUserData, spec: ReportSpec, opts: GenerateOptions) {
     const built = await this.buildContent(user, spec, opts.filters);
     const author = await this.prisma.read.user.findUnique({
       where: { id: user.id },
@@ -466,13 +496,33 @@ export class ExecutiveReportsGenerationService {
   async getContent(id: number, user: CurrentUserData) {
     const { content } = await this.loadContent(id, user);
     await this.logAccess(id, user.id);
+    await this.audit.record({ userId: user.id, reportId: id, action: 'REPORT_VIEW' });
     return content;
   }
 
   async exportReport(id: number, user: CurrentUserData, format: ExportFormat = 'PDF') {
     const { content, report } = await this.loadContent(id, user);
-    const file = await this.exporter.export(content, format);
+    let file: Awaited<ReturnType<ExecutiveReportsExportService['export']>>;
+    try {
+      file = await this.exporter.export(content, format);
+    } catch (err) {
+      await this.audit.record({
+        userId: user.id,
+        reportId: id,
+        action: 'REPORT_EXPORT',
+        filters: { format },
+        status: 'FAILED',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
     await this.logAccess(id, user.id);
+    await this.audit.record({
+      userId: user.id,
+      reportId: id,
+      action: 'REPORT_EXPORT',
+      filters: { format },
+    });
     const safe = report.title.replace(/[^\p{L}\p{N}]+/gu, '_').slice(0, 60) || `relatorio_${id}`;
     return { ...file, filename: `${safe}.${file.extension}` };
   }

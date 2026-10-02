@@ -67,11 +67,50 @@ const PRESENT_STATUSES = [
 ] as const;
 const EXCLUDED_FROM_EXPECTED = ['ON_LEAVE', 'HOLIDAY', 'RECORDED'] as const;
 
+type KpiOverride = {
+  target: number | null;
+  warningThreshold: number | null;
+  criticalThreshold: number | null;
+};
+const OVERRIDE_TTL_MS = 60_000;
+
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 @Injectable()
 export class ExecutiveReportsMetricsService {
+  private overrides: { at: number; map: Map<string, KpiOverride> } | null = null;
+
   constructor(private readonly prisma: PrismaService) {}
+
+  // ─── Definições efectivas (catálogo + sobreposições configuráveis, §11) ───
+
+  /** Metas/limiares configurados na BD sobrepõem os do catálogo; a fórmula nunca muda (§12.1). */
+  async effectiveDefinitions(): Promise<Record<KpiCode, KpiDefinition>> {
+    const now = Date.now();
+    if (!this.overrides || now - this.overrides.at > OVERRIDE_TTL_MS) {
+      const rows = await this.prisma.read.executiveKPIDefinition.findMany({
+        where: { active: true },
+      });
+      this.overrides = { at: now, map: new Map(rows.map(r => [r.code, r])) };
+    }
+    const out = {} as Record<KpiCode, KpiDefinition>;
+    for (const def of Object.values(KPI_CATALOG)) {
+      const o = this.overrides.map.get(def.code);
+      out[def.code] = o
+        ? {
+            ...def,
+            target: o.target,
+            warningThreshold: o.warningThreshold,
+            criticalThreshold: o.criticalThreshold,
+          }
+        : def;
+    }
+    return out;
+  }
+
+  invalidateDefinitions() {
+    this.overrides = null;
+  }
 
   // ─── Períodos ─────────────────────────────────────────────────────────────
 
@@ -291,10 +330,11 @@ export class ExecutiveReportsMetricsService {
     const scope = this.userScope(f);
     const lastUpdatedAt = new Date().toISOString();
     const months = opts.withTrend ? this.monthRanges(f.current.end, 6) : [];
+    const defs = await this.effectiveDefinitions();
 
     return Promise.all(
       codes.map(async code => {
-        const def = KPI_CATALOG[code];
+        const def = defs[code];
         const [value, previousValue, trend] = await Promise.all([
           this.computeValue(code, f.current, scope, f.courseId),
           f.comparison
